@@ -1,95 +1,69 @@
-// Source unique de l'offre technique et financière.
-// Ce fichier décrit le contenu ; build.js le rend en .docx et en .md.
-// Les montants sont dérivés des hypothèses ci-dessous : modifier TJM ou les
-// charges par lot suffit à recalculer toute l'offre.
+// Source unique des hypothèses de l'offre technique et financière.
+// build.js rend le document en .docx et en .md à partir de ce fichier.
+// Tous les montants sont en francs guinéens (GNF), hors taxes.
 
 const HYP = {
-  prestataire: '[Nom du prestataire]',
-  contact: '[Nom, téléphone, e-mail du contact commercial]',
+  prestataire: 'E-VOLUTION XP',
+  slogan: 'Transformation Numérique',
+  contact: '[Téléphone et e-mail E-VOLUTION XP]',
   client: 'EGUITRA GROUP SARLU',
   client2: 'MB AxisPro Consulting',
   dg: 'M. Mohamed Nimaga, Directeur Général',
   dateOffre: '15 septembre 2026',
   reference: 'OTF-EGUITRA-2026-01',
   validiteJours: 60,
-  tjm: 250, // EUR HT par jour-homme, taux mixte
-  tauxGNF: 9450, // GNF pour 1 EUR, taux indicatif du dossier au 15/08/2026
-  forfaitExploitationMois: 1100, // EUR HT / mois
-  hebergementInclus: 'VPS de production 8 vCPU / 32 Go RAM / 400 Go NVMe, VPS de recette, stockage de sauvegarde hors site',
+  dureeSemaines: 4,
   garantieMois: 3,
+  vps: 'VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site',
+  // Logo : docs/offre/logo.png s'il existe, sinon le rendu vectoriel logo-rendu.png
+  logoFichiers: ['logo.png', 'logo-rendu.png'],
 };
 
-// Charges par lot, en jours-homme.
-const LOTS = [
-  {
-    code: 'Lot 0',
-    titre: 'Cadrage et preuve de concept',
-    duree: 'Semaines 1 à 3',
-    postes: [
-      ['Ateliers de cadrage (finance, transport, BTP, immobilier, AxisPro)', 6],
-      ['Instance de démonstration chargée avec le dossier 2026', 5],
-      ['Dossier de conception et charte des écrans', 4],
-    ],
-  },
-  {
-    code: 'Lot 1',
-    titre: 'Socle et application EGUITRA Finance',
-    duree: 'Semaines 3 à 18',
-    postes: [
-      ['Infrastructure VPS, environnements, sauvegardes, supervision', 8],
-      ['Paramétrage du noyau : SYSCOHADA, sociétés, devises, journaux, axes analytiques, modules OCA', 25],
-      ['Développements noyau : API de la surcouche, règles de gestion, contrôles de clôture, alertes, exports', 20],
-      ['Surcouche EGUITRA Finance : 18 écrans web', 55],
-      ['États financiers SYSCOHADA et rapport mensuel de gestion', 10],
-      ['Reprise du dossier 2026 et validation face au classeur', 8],
-      ['Recette, formation, mise en production', 12],
-    ],
-  },
-  {
-    code: 'Lot 2',
-    titre: 'Transport pétrolier et BTP',
-    duree: 'Semaines 16 à 28',
-    postes: [
-      ['Module rotations, flotte, routes, volumes et taxes spécifiques', 15],
-      ['Écrans transport et application mobile de saisie des rotations (hors ligne)', 25],
-      ['Module chantiers : situations d\'avancement, retenues de garantie, coûts', 8],
-      ['Écrans BTP', 12],
-      ['Recette, formation, mise en production', 7],
-    ],
-  },
-  {
-    code: 'Lot 3',
-    titre: 'Immobilier, fiscalité, consolidation groupe',
-    duree: 'Semaines 27 à 36',
-    postes: [
-      ['Module biens, baux, quittancement, valorisation du patrimoine', 8],
-      ['Écrans immobilier', 12],
-      ['Déclarations fiscales guinéennes (TVA, retenues, états annuels)', 8],
-      ['Consolidation groupe et tableaux de bord multi-sociétés', 8],
-      ['Passerelle SYSCOHADA vers IFRS et provisionnement IFRS 9', 6],
-      ['Recette, formation, mise en production', 5],
-    ],
-  },
-  {
-    code: 'Lot 4',
-    titre: 'AxisPro Suite : accompagnement des porteurs de projets',
-    duree: 'Semaines 34 à 48',
-    postes: [
-      ['Modèle de données : grille de critères, gates, knock-outs, politique d\'évaluation, scoring', 12],
-      ['Data room, pièces à fournir, portail des porteurs de projets', 12],
-      ['Revues de comité, verrouillage, rapports PDF promoteur et comité', 8],
-      ['Surcouche AxisPro Suite : 10 écrans web et portail', 30],
-      ['Import de la grille de 111 critères et reprise des dossiers en cours', 3],
-      ['Recette, formation, mise en production', 6],
-    ],
-  },
+// Proposition 1 : plateforme intégrée sur noyau Odoo Community, invisible pour l'utilisateur.
+const P1 = {
+  code: 'Proposition 1',
+  titre: 'Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion',
+  total: 92000000,
+  maintenanceAn: 18000000, // à partir de la deuxième année, hébergement compris
+  postes: [
+    ['Cadrage, conception et charte graphique des applications', 6000000],
+    ['Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision', 8000000],
+    ['EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans', 32000000],
+    ['Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie', 14000000],
+    ['Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS', 8000000],
+    ['AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 14000000],
+    ['Reprise du dossier 2026, recette, formation, mise en production', 6000000],
+    ['Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois', 4000000],
+  ],
+};
+
+// Proposition 2 : deux applications indépendantes, développées de zéro, sur le même VPS.
+const P2 = {
+  code: 'Proposition 2',
+  titre: 'Deux applications indépendantes, EGUITRA Finance et AxisPro Suite, sur un VPS commun',
+  total: 80000000,
+  maintenanceAn: 15000000,
+  postes: [
+    ['Cadrage, conception et charte graphique des applications', 5000000],
+    ['Socle technique commun : VPS, base de données, authentification, sauvegardes, supervision', 7000000],
+    ['Application EGUITRA Finance : moteur comptable SYSCOHADA, ventes, achats, trésorerie, immobilisations, budget, clôtures, états, rotations transport, chantiers, gestion locative', 42000000],
+    ['Application AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 18000000],
+    ['Reprise du dossier 2026, recette, formation, mise en production', 4000000],
+    ['Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois', 4000000],
+  ],
+};
+
+for (const p of [P1, P2]) {
+  const somme = p.postes.reduce((s, x) => s + x[1], 0);
+  if (somme !== p.total) throw new Error(`${p.code} : la somme des postes (${somme}) diffère du total (${p.total})`);
+}
+
+// Planning commun aux deux propositions, en quatre semaines.
+const PLANNING = [
+  ['Semaine 1', 'Cadrage et socle', 'Ateliers de cadrage avec la finance, l\'exploitation, les chantiers, l\'immobilier et le cabinet. Charte graphique validée. VPS en ligne, socle installé, comptes utilisateurs créés.', 'Dossier de conception signé, plateforme accessible'],
+  ['Semaine 2', 'Finance et AxisPro', 'Paramétrage SYSCOHADA, axes analytiques, trésorerie, immobilisations, budget, approbations. Écrans EGUITRA Finance. Grille AxisPro importée et modèle de scoring en place. Reprise des référentiels et des soldes d\'ouverture.', 'Écrans finance en recette interne'],
+  ['Semaine 3', 'Métiers et portail', 'Rotations, flotte, rentabilité, application mobile. Chantiers, retenues de garantie. Biens et baux. Déclarations fiscales. Écrans AxisPro Suite et portail des porteurs. Fin de la reprise des écritures 2026.', 'Périmètre complet livré en recette'],
+  ['Semaine 4', 'Recette et mise en production', 'Recette avec vos équipes sur vos données, corrections, formation par profil, mise en production, exercice 2026 consultable et exercice 2027 prêt à l\'ouverture.', 'Procès-verbal de mise en production'],
 ];
 
-const OPTIONS = [
-  ['Serveur de secours à Conakry avec réplication de la base', 'Matériel estimé 3 500 EUR + 5 jours', 5, 3500],
-  ['Astreinte 7 jours sur 7 pour les incidents bloquants', '400 EUR HT par mois', 0, 0],
-  ['Journée de formation complémentaire', 'Au TJM', 1, 0],
-  ['Archivage des relevés bancaires par import automatique (selon formats des banques)', '6 jours', 6, 0],
-];
-
-module.exports = { HYP, LOTS, OPTIONS };
+module.exports = { HYP, P1, P2, PLANNING };

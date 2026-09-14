@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <!-- Rendu vectoriel provisoire du logo E-VOLUTION XP. Déposer le fichier
+       original sous docs/offre/logo.png : il remplace automatiquement ce rendu. -->
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1B1F6B"/>
+      <stop offset="1" stop-color="#0E8C8C"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E8C8C"/>
+      <stop offset="1" stop-color="#1B1F6B"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B1F6B"/>
+      <stop offset="1" stop-color="#12A0A0"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1F6B"/>
+      <stop offset="1" stop-color="#12A0A0"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(330,10)">
+    <!-- barre supérieure du E -->
+    <path d="M40 0 H330 a40 40 0 0 1 0 80 H40 a40 40 0 0 1 0 -80 Z" fill="url(#g1)"/>
+    <!-- barre médiane du E -->
+    <path d="M40 235 H210 a40 40 0 0 1 0 80 H40 Z" fill="url(#g1)"/>
+    <!-- montant vertical du E -->
+    <path d="M0 275 a40 40 0 0 1 80 0 V460 H0 Z" fill="url(#g2)"/>
+    <!-- barre inférieure du E -->
+    <path d="M0 460 H320 a45 45 0 0 1 0 90 H90 a90 90 0 0 1 -90 -90 Z" fill="url(#g1)"/>
+    <!-- diagonale du X, du haut gauche vers le bas droit -->
+    <path d="M330 0 L440 0 L720 470 L620 500 Z" fill="url(#g3)"/>
+    <!-- diagonale du X, du bas gauche vers le haut droit -->
+    <path d="M300 460 L640 30 a55 55 0 0 1 90 45 L400 520 Z" fill="url(#g4)"/>
+    <circle cx="690" cy="55" r="60" fill="url(#g1)"/>
+    <circle cx="690" cy="505" r="60" fill="url(#g1)"/>
+  </g>
+  <text x="700" y="705" text-anchor="middle" font-family="Montserrat, 'Segoe UI', Arial, sans-serif" font-size="118" font-weight="700" letter-spacing="10" fill="#1C1E6B">E-VOLUTION XP</text>
+  <text x="700" y="800" text-anchor="middle" font-family="Montserrat, 'Segoe UI', Arial, sans-serif" font-size="44" font-weight="400" letter-spacing="14" fill="#1A9E9E">Transformation Numérique</text>
+</svg>

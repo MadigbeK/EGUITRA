@@ -2,79 +2,60 @@
 // Usage : node docs/offre/build.js
 const fs = require('fs');
 const path = require('path');
-const { HYP, LOTS, OPTIONS } = require('./contenu');
+const { HYP, P1, P2, PLANNING } = require('./contenu');
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType,
   ShadingType, HeadingLevel, AlignmentType, BorderStyle, LevelFormat, PageBreak,
-  TableOfContents, Header, Footer, PageNumber, VerticalAlign,
+  TableOfContents, Header, Footer, PageNumber, VerticalAlign, ImageRun,
 } = require('docx');
 
 // ---------------------------------------------------------------- calculs
-const fmtEUR = (n) => Math.round(n).toLocaleString('fr-FR').replace(/ | /g, ' ') + ' EUR';
-const fmtGNF = (n) => {
-  const m = n / 1e6;
-  const v = m < 100 ? Math.round(m * 10) / 10 : Math.round(m);
-  return v.toLocaleString('fr-FR').replace(/ | /g, ' ') + ' M GNF';
-};
-const eurToGnf = (e) => e * HYP.tauxGNF;
+const NBSP = ' ';
+const gnf = (n) => Math.round(n).toLocaleString('fr-FR').replace(/[   ]/g, NBSP) + NBSP + 'GNF';
+const gnfHT = (n) => `${gnf(n)} HT`;
+const pct = (n, tot) => `${Math.round((n / tot) * 100)}${NBSP}%`;
 
-for (const lot of LOTS) {
-  lot.jours = lot.postes.reduce((s, p) => s + p[1], 0);
-  lot.montant = lot.jours * HYP.tjm;
-}
-const totalJours = LOTS.reduce((s, l) => s + l.jours, 0);
-const totalMontant = LOTS.reduce((s, l) => s + l.montant, 0);
-const exploitationAn = HYP.forfaitExploitationMois * 12;
-const premiereAnnee = totalMontant + exploitationAn;
+const logoPath = HYP.logoFichiers.map((f) => path.join(__dirname, f)).find((f) => fs.existsSync(f));
 
 // ---------------------------------------------------------------- contenu
-// Blocs : h1, h2, h3, p, ul, ol, table, callout, pagebreak, toc
+// Blocs : h1, h2, h3, p, ul, table, callout, pagebreak, toc, cover
 const B = [];
 const h1 = (t) => B.push({ t: 'h1', v: t });
 const h2 = (t) => B.push({ t: 'h2', v: t });
 const h3 = (t) => B.push({ t: 'h3', v: t });
 const p = (t) => B.push({ t: 'p', v: t });
 const ul = (items) => B.push({ t: 'ul', v: items });
-const ol = (items) => B.push({ t: 'ol', v: items });
 const table = (head, rows, widths, opts = {}) => B.push({ t: 'table', head, rows, widths, opts });
 const callout = (t) => B.push({ t: 'callout', v: t });
 const pagebreak = () => B.push({ t: 'pagebreak' });
 
-// ---- Page de garde
 B.push({ t: 'cover' });
 pagebreak();
 B.push({ t: 'toc' });
 pagebreak();
 
-// ---- 1. Synthèse
+// ================================================================ 1. Synthèse
 h1('1. Synthèse de l\'offre');
-p(`${HYP.client} et ${HYP.client2} partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. La présente offre répond aux deux projets par une plateforme unique, composée d'un noyau de gestion éprouvé et d'applications métier conçues sur mesure pour vos équipes.`);
-p('Ce que nous proposons :');
-ul([
-  'Un noyau de gestion open source, mature, multi-sociétés et multi-devises, qui porte la comptabilité SYSCOHADA, l\'analytique, la trésorerie, les immobilisations, le budget, les workflows d\'approbation et la piste d\'audit. Ce noyau n\'a aucun coût de licence.',
-  'Des applications métier à votre image, EGUITRA Finance et AxisPro Suite, qui constituent la seule interface vue par vos utilisateurs : tableau de bord dirigeant, saisie guidée, rentabilité par camion et par route, suivi de chantiers, gestion locative, scoring de bancabilité, portail des porteurs de projets.',
-  'Un hébergement sur serveur virtuel privé dédié, avec sauvegardes quotidiennes hors site, supervision et engagement de disponibilité.',
-  'Une démarche par lots avec une mise en production de la finance pour l\'ouverture de l\'exercice 2027, puis transport et BTP, immobilier et fiscalité, et enfin AxisPro Suite.',
-]);
-p('Chiffres clés de l\'offre :');
+p(`${HYP.client} et ${HYP.client2} partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. ${HYP.prestataire} présente deux propositions qui répondent toutes deux à ces deux projets, dans le même délai de ${HYP.dureeSemaines} semaines et sur le même hébergement.`);
 table(
-  ['Élément', 'Valeur'],
+  ['', P1.code, P2.code],
   [
-    ['Charge totale de réalisation', `${totalJours} jours-homme`],
-    ['Investissement de réalisation, cinq lots', `${fmtEUR(totalMontant)} HT, soit ${fmtGNF(eurToGnf(totalMontant))}`],
-    ['Forfait exploitation et support', `${fmtEUR(HYP.forfaitExploitationMois)} HT par mois, hébergement inclus`],
-    ['Coût de licence logicielle', '0 EUR, noyau et modules communautaires open source'],
-    ['Durée totale', '48 semaines, Finance en production à la semaine 18'],
-    ['Garantie corrective', `${HYP.garantieMois} mois après chaque mise en production`],
-    ['Validité de l\'offre', `${HYP.validiteJours} jours à compter du ${HYP.dateOffre}`],
+    ['Approche', 'Une plateforme unique : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite.', 'Deux applications indépendantes développées entièrement sur mesure, EGUITRA Finance et AxisPro Suite, déployées sur un même serveur.'],
+    ['Attentes du département Finance couvertes', 'Vingt sur vingt', 'Quatorze en totalité, six en partie'],
+    ['Délai de mise en production', `${HYP.dureeSemaines} semaines`, `${HYP.dureeSemaines} semaines`],
+    ['Investissement, hébergement de la première année compris', gnfHT(P1.total), gnfHT(P2.total)],
+    ['Hébergement, maintenance et support à partir de la deuxième année', `${gnfHT(P1.maintenanceAn)} par an`, `${gnfHT(P2.maintenanceAn)} par an`],
+    ['Licences logicielles', 'Aucune', 'Aucune'],
+    ['Garantie corrective', `${HYP.garantieMois} mois`, `${HYP.garantieMois} mois`],
   ],
-  [4200, 5438],
+  [2600, 3519, 3519],
 );
-callout(`Les montants en GNF sont donnés à titre indicatif au taux de ${HYP.tauxGNF.toLocaleString('fr-FR')} GNF pour 1 EUR. La facturation est établie en EUR ou en GNF au taux du jour de facturation, au choix du client fixé au contrat.`);
+callout(`Notre recommandation est la proposition 1. Pour ${gnf(P1.total - P2.total)} de plus, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.`);
+p(`Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}. Tous les montants sont exprimés en francs guinéens, hors taxes.`);
 
 pagebreak();
 
-// ---- 2. Compréhension du besoin
+// ================================================================ 2. Compréhension
 h1('2. Notre compréhension de votre besoin');
 h2('2.1 Le groupe et ses activités');
 p(`${HYP.client} opère sur trois secteurs : le transport et la logistique de produits pétroliers, le BTP et l'immobilier, complétés par une activité de négoce. Le transport d'hydrocarbures constitue le cœur de métier, avec une flotte de quinze ensembles citernes et des clients tels que les distributeurs pétroliers et les sociétés minières. ${HYP.client2}, cabinet de conseil du même groupe, accompagne des porteurs de projets vers le financement bancaire et l'investissement.`);
@@ -89,79 +70,47 @@ table(
     ['Factures de vente et pièces d\'achat', '147 et 169'],
     ['Opérations de trésorerie', '412'],
     ['Immobilisations et financements', '24 immobilisations, 4 emprunts et crédits-bails'],
-    ['Chiffre d\'affaires cumulé', 'Environ 20,6 milliards GNF, dont 70 % en transport d\'hydrocarbures'],
+    ['Chiffre d\'affaires cumulé', `Environ 20,6 milliards${NBSP}GNF, dont 70${NBSP}% en transport d'hydrocarbures`],
   ],
   [4200, 5438],
 );
-
 h2('2.2 Les deux projets');
-p('Projet 1 : la digitalisation du département Finance. Le courrier du responsable financier liste vingt attentes, de la comptabilité SYSCOHADA révisée à la rentabilité par trajet, en passant par la consolidation groupe, les workflows d\'approbation, la piste d\'audit et la disponibilité garantie. Le tableau de couverture du chapitre 3.3 répond point par point.');
+p('Projet 1 : la digitalisation du département Finance. Le courrier du responsable financier liste vingt attentes, de la comptabilité SYSCOHADA révisée à la rentabilité par trajet, en passant par la consolidation groupe, les workflows d\'approbation, la piste d\'audit et la disponibilité garantie. Le tableau du chapitre 5.1 répond point par point pour chaque proposition.');
 p('Projet 2 : la digitalisation de l\'accompagnement des porteurs de projets. Le prototype MB AxisPro décrit une méthode d\'évaluation de la maturité et de la bancabilité : 111 critères répartis sur 15 domaines, huit stage gates, des critères éliminatoires, une data room de 42 pièces, des revues de comité et des rapports de décision.');
-
 h2('2.3 Ce que nous retenons des prototypes existants');
-p('Les deux prototypes générés par la direction constituent une spécification fonctionnelle de grande qualité. Nous les reprenons comme cahier des charges de référence, et notamment :');
+p('Les deux prototypes générés par la direction constituent une spécification fonctionnelle de grande qualité. Nous les reprenons comme cahier des charges de référence dans les deux propositions, et notamment :');
 ul([
   'Le principe de saisie unique : chaque donnée n\'est saisie qu\'une fois, tout le reste est calculé.',
   'Les règles de contrôle : équilibre débit et crédit, équilibre actif et passif, compte de passage des virements internes soldé, clôture refusée tant qu\'une alerte bloquante est active.',
   'Les indicateurs du dirigeant : chiffre d\'affaires et résultat par activité, trésorerie fin de mois, ancienneté des créances, service de la dette et DSCR, marge par rotation, écarts budgétaires.',
   'La méthode d\'évaluation AxisPro : pondération, critères critiques et éliminatoires, gaps prioritaires, historique des revues, politique d\'évaluation tracée dans chaque export.',
 ]);
-p('Ces prototypes sont conçus pour un utilisateur unique, sans authentification, avec un fichier local comme seule sauvegarde. La plateforme proposée conserve leurs règles et leur ergonomie, et y ajoute ce qui manque à un outil d\'entreprise : multi-utilisateurs, droits par profil, piste d\'audit, sauvegardes, disponibilité et évolutivité.');
+p('Ces prototypes sont conçus pour un utilisateur unique, sans authentification, avec un fichier local comme seule sauvegarde. Les deux propositions conservent leurs règles et leur ergonomie, et y ajoutent ce qui manque à un outil d\'entreprise : multi-utilisateurs, droits par profil, piste d\'audit, sauvegardes, disponibilité et évolutivité.');
 
 pagebreak();
 
-// ---- 3. Solution
-h1('3. La solution proposée');
+// ================================================================ 3. Proposition 1
+h1('3. Proposition 1 : plateforme intégrée sur noyau de gestion');
 h2('3.1 Principe : un noyau invisible, des applications à votre image');
 p('La plateforme repose sur deux couches strictement séparées.');
-p('Le noyau de gestion est Odoo Community, complété par les modules de l\'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les droits d\'accès et la traçabilité. Il est publié sous licence libre LGPL : aucune redevance, aucune limite de nombre d\'utilisateurs, aucun éditeur à contacter pour une évolution.');
-p('Les applications métier sont développées sur mesure et constituent la seule interface utilisée par vos équipes : EGUITRA Finance pour le groupe, AxisPro Suite pour le cabinet. Elles reprennent votre identité visuelle, votre vocabulaire et vos parcours de saisie. Le client web du noyau n\'est jamais exposé aux utilisateurs finaux ; il reste accessible à la seule équipe technique, sur un accès réseau restreint. Cette approche est celle que nous avons mise en œuvre pour SOGUIPREM.');
-callout('Pour vos utilisateurs, il n\'existe qu\'EGUITRA Finance et AxisPro Suite. Le noyau reste un composant technique, comme la base de données.');
+p('Le noyau de gestion est Odoo Community, complété par les modules de l\'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les droits d\'accès et la traçabilité. Il est publié sous licence libre : aucune redevance, aucune limite de nombre d\'utilisateurs, aucun éditeur à contacter pour une évolution.');
+p(`Les applications métier sont développées sur mesure et constituent la seule interface utilisée par vos équipes : EGUITRA Finance pour le groupe, AxisPro Suite pour le cabinet. Elles reprennent votre identité visuelle, votre vocabulaire et vos parcours de saisie. Le client web du noyau n'est jamais exposé aux utilisateurs ; il reste accessible à la seule équipe technique de ${HYP.prestataire}, sur un accès réseau restreint. Cette approche est celle que nous avons mise en œuvre pour SOGUIPREM.`);
+callout('Pour vos utilisateurs, il n\'existe qu\'EGUITRA Finance et AxisPro Suite. Le noyau reste un composant technique, au même titre que la base de données.');
 
-h2('3.2 Architecture d\'ensemble');
+h2('3.2 Architecture');
 table(
   ['Couche', 'Composants', 'Rôle'],
   [
     ['Interface utilisateur', 'Applications web EGUITRA Finance et AxisPro Suite, application mobile de saisie des rotations, portail des porteurs de projets', 'Seule surface visible. Charte graphique du groupe, navigation métier, tableaux de bord, saisie guidée, exports.'],
-    ['API métier', 'Modules spécifiques exposant une API REST sécurisée, authentification par jeton, double authentification', 'Traduit les actions métier en opérations du noyau, applique les règles de gestion, journalise.'],
+    ['API métier', 'Modules spécifiques exposant une API sécurisée, authentification par jeton, double authentification', 'Traduit les actions métier en opérations du noyau, applique les règles de gestion, journalise.'],
     ['Noyau de gestion', 'Odoo Community, modules OCA, modules spécifiques du groupe', 'Comptabilité, analytique, trésorerie, immobilisations, budget, workflows, droits, audit.'],
-    ['Données et documents', 'PostgreSQL, stockage de fichiers, index de recherche', 'Persistance, pièces justificatives, data room.'],
-    ['Exploitation', 'Serveur VPS, conteneurs, proxy TLS, supervision, sauvegardes chiffrées hors site', 'Disponibilité, sécurité, restauration.'],
+    ['Données et documents', 'PostgreSQL, stockage de fichiers', 'Persistance, pièces justificatives, data room.'],
+    ['Exploitation', 'VPS, conteneurs, proxy TLS, supervision, sauvegardes chiffrées hors site', 'Disponibilité, sécurité, restauration.'],
   ],
   [2000, 3900, 3738],
 );
 
-h2('3.3 Couverture des attentes du département Finance');
-p('Chaque attente exprimée dans votre courrier est couverte selon l\'un des trois modes suivants : natif dans le noyau, module OCA, ou développement spécifique réalisé par nos soins.');
-table(
-  ['Attente exprimée', 'Mode', 'Réponse apportée'],
-  [
-    ['Visibilité globale et temps réel sur CA, résultat, trésorerie, indicateurs', 'Spécifique', 'Tableau de bord dirigeant d\'EGUITRA Finance, alimenté en direct par le noyau.'],
-    ['Vue consolidée du groupe, décomposable par activité, filiale, projet, ligne logistique', 'Natif + OCA', 'Multi-sociétés natif, plans analytiques multi-axes, rapports consolidés OCA mis_builder.'],
-    ['Comptabilité générale SYSCOHADA révisé', 'Natif', 'Plan de comptes SYSCOHADA du noyau, adapté à votre plan et validé avec votre expert-comptable.'],
-    ['Comptabilité analytique par centre de coût, projet, chantier, activité', 'Natif', 'Plans analytiques Activité, Centre de coût, Chantier, Véhicule, Bien immobilier.'],
-    ['Trésorerie et rapprochement bancaire', 'OCA', 'Import des relevés, rapprochement assisté, position de trésorerie par compte et par devise.'],
-    ['Immobilisations et amortissements', 'OCA', 'Fiches d\'immobilisation, plans d\'amortissement, dotations automatiques, cessions.'],
-    ['Gestion budgétaire, écarts réalisé et prévisionnel', 'OCA', 'Budgets mensuels par ligne et par activité, écarts calculés, seuils d\'alerte.'],
-    ['Facturation client et fournisseur', 'Natif', 'Factures, avoirs, échéances, relances, lettrage.'],
-    ['Gestion fiscale, TVA, déclarations locales', 'Natif + Spécifique', 'Taxes natives, états de déclaration au format guinéen développés au lot 3.'],
-    ['Workflow d\'approbation des engagements et paiements', 'OCA', 'Circuits de validation à plusieurs niveaux sur les achats, factures et paiements, avec seuils par montant.'],
-    ['Coûts et rentabilité par trajet et véhicule, volumes, taxes spécifiques', 'Spécifique', 'Module rotations lié à la flotte : volume, route, tarif, carburant, péages, frais chauffeur, maintenance, taxes ; marge par camion et par route.'],
-    ['Chantiers, facturation à l\'avancement, retenues de garantie', 'Natif + Spécifique', 'Facturation par jalons, retenue de garantie par condition de paiement à deux échéances, état des retenues à libérer.'],
-    ['Gestion locative et valorisation du patrimoine', 'OCA + Spécifique', 'Contrats récurrents pour les loyers, module biens et baux, valorisation du patrimoine.'],
-    ['Traçabilité complète, piste d\'audit', 'Natif + OCA', 'Verrouillage des écritures par empreinte, dates de verrouillage, journal d\'audit de chaque modification.'],
-    ['Sécurisation des données et des accès par profil', 'Natif + Spécifique', 'Rôles par profil, double authentification, chiffrement en transit et des sauvegardes.'],
-    ['Disponibilité garantie et sauvegardes', 'Exploitation', 'Engagement de disponibilité, sauvegardes quotidiennes hors site, restauration testée chaque trimestre.'],
-    ['Interface simple et formation', 'Spécifique', 'Applications conçues avec vos équipes, formation par profil incluse dans chaque lot.'],
-    ['Support réactif et accompagnement', 'Exploitation', 'Forfait exploitation et support avec délais d\'intervention contractuels.'],
-    ['Solution évolutive', 'Natif', 'Ajout de sociétés, d\'activités et d\'utilisateurs sans licence supplémentaire.'],
-    ['Tarification claire, sans coûts cachés', 'Offre', 'Pas de licence ; prix forfaitaire par lot ; forfait mensuel unique pour l\'exploitation.'],
-  ],
-  [3300, 1500, 4838],
-);
-
-h2('3.4 EGUITRA Finance : les écrans');
-p('L\'application reprend la structure du prototype de la direction et l\'étend. Les écrans du lot 1 :');
+h2('3.3 EGUITRA Finance : les écrans');
 table(
   ['Écran', 'Contenu'],
   [
@@ -181,17 +130,17 @@ table(
     ['Contrôles d\'intégrité', 'Équilibres, compte de passage, cohérence des références, empreinte des écritures.'],
     ['États financiers', 'Bilan, compte de résultat, tableau des flux au format SYSCOHADA, rapport mensuel de gestion.'],
     ['Approbations', 'Corbeille des engagements et paiements à valider par niveau.'],
-    ['Exports', 'CSV et XLSX de tous les journaux, états, export d\'audit.'],
+    ['Exports', 'CSV et XLSX de tous les journaux et états, export d\'audit.'],
     ['Paramètres et utilisateurs', 'Référentiels, seuils, taux de change, profils et droits.'],
   ],
   [2800, 6838],
 );
-p('Les lots 2 et 3 ajoutent les écrans Flotte, Chauffeurs, Routes et tarifs, Rotations, Rentabilité par ensemble routier, Chantiers, Situations d\'avancement, Retenues de garantie, Biens, Baux, Quittancement, Patrimoine, Déclarations fiscales, Consolidation groupe et Passerelle IFRS.');
+p('S\'y ajoutent les écrans métier : Flotte, Chauffeurs, Routes et tarifs, Rotations, Rentabilité par ensemble routier, Chantiers, Situations d\'avancement, Retenues de garantie, Biens, Baux, Quittancement, Patrimoine, Déclarations fiscales, Consolidation groupe et Passerelle IFRS.');
 
-h2('3.5 Transport pétrolier : la rotation comme source unique');
+h2('3.4 Transport pétrolier : la rotation comme source unique');
 p('Une rotation est saisie une seule fois, depuis le bureau ou depuis l\'application mobile au parc, y compris sans connexion : la saisie est mise en file et synchronisée dès que le réseau revient. Chaque rotation porte le camion, le chauffeur, le client, le produit, le volume, la route, le tarif, le carburant, les péages, les frais de chauffeur, la maintenance et les taxes spécifiques. Le noyau en déduit la ligne de facturation, les coûts analytiques par véhicule et par route, et la marge. Le seuil de marge transport du dossier devient une alerte automatique.');
 
-h2('3.6 AxisPro Suite : l\'accompagnement des porteurs de projets');
+h2('3.5 AxisPro Suite');
 p('AxisPro Suite industrialise la méthode du prototype MB AxisPro dans un outil multi-utilisateurs, avec un portail pour les porteurs de projets. La grille d\'évaluation est importée comme données et reste modifiable par le cabinet, sans intervention technique.');
 table(
   ['Écran', 'Contenu'],
@@ -209,203 +158,13 @@ table(
   ],
   [2800, 6838],
 );
-p('Le cabinet dispose en outre, dans le même outil et sans coût supplémentaire, de la facturation de ses prestations et du suivi de ses temps par dossier.');
+p('Le cabinet dispose en outre, dans la même plateforme et sans coût supplémentaire, de la facturation de ses prestations et du suivi de ses temps par dossier.');
 
-pagebreak();
-
-// ---- 4. Infrastructure
-h1('4. Hébergement, sécurité et exploitation');
-h2('4.1 Infrastructure');
-ul([
-  `Hébergement sur serveur virtuel privé dédié : ${HYP.hebergementInclus}.`,
-  'Déploiement en conteneurs, proxy avec certificats TLS renouvelés automatiquement, base PostgreSQL dédiée.',
-  'Deux environnements : production et recette. La recette reçoit chaque évolution avant la production.',
-  'Nom de domaine du groupe pour chaque application, par exemple finance.eguitragroup.com.',
-]);
-h2('4.2 Sauvegardes et continuité');
-table(
-  ['Mesure', 'Engagement'],
-  [
-    ['Sauvegarde complète', 'Quotidienne, chiffrée, copiée hors site chez un second fournisseur'],
-    ['Rétention', '30 sauvegardes quotidiennes, 12 sauvegardes mensuelles'],
-    ['Perte de données maximale', '24 heures en standard ; 1 heure avec l\'archivage continu en option'],
-    ['Délai de reprise', '4 heures ouvrées après déclaration de sinistre'],
-    ['Test de restauration', 'Chaque trimestre, avec compte rendu remis au client'],
-    ['Disponibilité cible', '99,5 % par mois, hors fenêtre de maintenance annoncée 48 heures à l\'avance'],
-  ],
-  [3600, 6038],
-);
-h2('4.3 Sécurité et conformité');
-ul([
-  'Authentification par mot de passe robuste et double authentification pour tous les utilisateurs.',
-  'Droits par profil : direction, finance, exploitation transport, chantiers, immobilier, cabinet, porteur de projet. Chaque profil ne voit que son périmètre.',
-  'Piste d\'audit : chaque création, modification et suppression est journalisée avec l\'utilisateur, la date et les valeurs avant et après.',
-  'Écritures comptables verrouillées par empreinte après validation, dates de verrouillage par période.',
-  'Chiffrement des échanges et des sauvegardes, journaux d\'accès conservés 12 mois.',
-  'Mises à jour de sécurité du système et du noyau appliquées chaque mois en recette puis en production.',
-]);
-h2('4.4 Réversibilité');
-p('Le client est propriétaire de ses données. À tout moment, sur simple demande, nous remettons une copie complète de la base, des pièces jointes et du code des modules spécifiques, dans des formats ouverts. La documentation d\'installation permet à un tiers de reprendre l\'exploitation.');
-
-pagebreak();
-
-// ---- 5. Démarche
-h1('5. Démarche et planning');
-h2('5.1 Une réalisation par lots');
-p('Chaque lot est livré, recetté et mis en production indépendamment. Le groupe utilise la finance dès la semaine 18, sans attendre les lots suivants.');
-table(
-  ['Lot', 'Contenu', 'Période', 'Jalon'],
-  [
-    ['Lot 0', 'Cadrage et preuve de concept sur vos données 2026', 'Semaines 1 à 3', 'Dossier de conception validé'],
-    ['Lot 1', 'Socle et EGUITRA Finance', 'Semaines 3 à 18', 'Exercice 2027 ouvert dans EGUITRA Finance'],
-    ['Lot 2', 'Transport pétrolier et BTP', 'Semaines 16 à 28', 'Rotations et chantiers en production'],
-    ['Lot 3', 'Immobilier, fiscalité, consolidation, IFRS', 'Semaines 27 à 36', 'Première déclaration produite par l\'outil'],
-    ['Lot 4', 'AxisPro Suite', 'Semaines 34 à 48', 'Premier comité tenu dans AxisPro Suite'],
-  ],
-  [1200, 4238, 2000, 2200],
-);
-h2('5.2 Reprise des données');
-p('Le dossier 2026 est repris intégralement : référentiels, tiers, plan de comptes, immobilisations, financements, budget, ventes, achats, trésorerie, rotations et OD. Les balances obtenues sont confrontées au classeur d\'origine et validées par votre responsable financier avant la mise en production. L\'exercice 2026 est ainsi consultable dans l\'outil dès le premier jour.');
-h2('5.3 Recette et formation');
-ul([
-  'Chaque lot fait l\'objet d\'un cahier de recette rédigé avec vos équipes, puis d\'une recette en environnement dédié.',
-  'Formation par profil : direction, finance, exploitation, chantiers, immobilier, cabinet. Supports et guides utilisateur remis en français.',
-  'Accompagnement renforcé pendant les quatre semaines suivant chaque mise en production.',
-]);
-h2('5.4 Gouvernance');
-ul([
-  'Un comité de pilotage mensuel avec la direction générale et le responsable financier.',
-  'Un point d\'avancement hebdomadaire avec le référent de chaque lot.',
-  'Un espace partagé de suivi des demandes, accessible au client.',
-]);
-h2('5.5 Équipe');
-table(
-  ['Rôle', 'Mission'],
-  [
-    ['Directeur de projet et architecte', 'Interlocuteur unique, conception, arbitrages, qualité des livraisons.'],
-    ['Consultant fonctionnel finance', 'Paramétrage SYSCOHADA, analytique, états financiers, reprise des données, formation.'],
-    ['Développeurs noyau', 'Modules spécifiques, API, règles de gestion, intégration des modules OCA.'],
-    ['Développeurs interface', 'Applications EGUITRA Finance et AxisPro Suite, application mobile, portail.'],
-    ['Ingénieur exploitation', 'Infrastructure, sécurité, sauvegardes, supervision, support.'],
-    ['Expert-comptable partenaire', 'Validation du plan de comptes, des états financiers et des déclarations fiscales guinéennes.'],
-  ],
-  [3200, 6438],
-);
-h2('5.6 Prérequis côté client');
-ul([
-  'Un référent par domaine disponible environ une demi-journée par semaine pendant son lot.',
-  'La charte graphique du groupe et du cabinet, ou à défaut un atelier de définition au lot 0.',
-  'Les accès aux relevés bancaires électroniques et les modèles de déclarations fiscales en vigueur.',
-  'La validation du plan de comptes par votre expert-comptable au lot 1.',
-]);
-
-pagebreak();
-
-// ---- 6. Offre financière
-h1('6. Offre financière');
-h2('6.1 Hypothèses');
-ul([
-  `Taux journalier moyen de ${fmtEUR(HYP.tjm)} HT, identique pour tous les profils.`,
-  'Prix forfaitaires par lot, sur la base des charges détaillées ci-dessous. Toute évolution de périmètre fait l\'objet d\'un avenant chiffré au même taux.',
-  'Aucun coût de licence : noyau et modules communautaires sous licence libre.',
-  `Montants en GNF indicatifs au taux de ${HYP.tauxGNF.toLocaleString('fr-FR')} GNF pour 1 EUR.`,
-  'Montants hors taxes ; la TVA et les retenues applicables en Guinée sont ajoutées selon la réglementation en vigueur.',
-]);
-
-h2('6.2 Réalisation : détail par lot');
-for (const lot of LOTS) {
-  h3(`${lot.code} : ${lot.titre}`);
-  table(
-    ['Poste', 'Jours'],
-    [...lot.postes.map(([l, j]) => [l, String(j)]), [`Total ${lot.code}`, `${lot.jours} jours, ${fmtEUR(lot.montant)} HT`]],
-    [7638, 2000],
-    { lastBold: true },
-  );
-}
-
-h2('6.3 Récapitulatif de la réalisation');
-table(
-  ['Lot', 'Jours', 'Montant HT', 'Équivalent GNF'],
-  [
-    ...LOTS.map((l) => [`${l.code} : ${l.titre}`, String(l.jours), fmtEUR(l.montant), fmtGNF(eurToGnf(l.montant))]),
-    ['Total réalisation', String(totalJours), fmtEUR(totalMontant), fmtGNF(eurToGnf(totalMontant))],
-  ],
-  [4438, 1200, 2000, 2000],
-  { lastBold: true },
-);
-
-h2('6.4 Exploitation et support');
-p('Le forfait mensuel couvre l\'ensemble de l\'exploitation. Il démarre à la mise en production du lot 1.');
-table(
-  ['Prestation incluse', 'Détail'],
-  [
-    ['Hébergement', HYP.hebergementInclus],
-    ['Exploitation', 'Supervision, sauvegardes, tests de restauration, mises à jour de sécurité, renouvellement des certificats'],
-    ['Support', 'Assistance utilisateurs du lundi au vendredi, de 8 h à 18 h, heure de Conakry, par messagerie, e-mail et téléphone'],
-    ['Maintenance corrective', 'Correction de toute anomalie, sans limite'],
-    ['Maintenance évolutive', 'Deux jours par mois de petites évolutions, cumulables sur le trimestre'],
-    ['Forfait mensuel', `${fmtEUR(HYP.forfaitExploitationMois)} HT, soit ${fmtGNF(eurToGnf(HYP.forfaitExploitationMois))}, facturé par trimestre d'avance`],
-  ],
-  [2600, 7038],
-  { lastBold: true },
-);
-p('Délais d\'intervention du support :');
-table(
-  ['Gravité', 'Définition', 'Prise en charge', 'Résolution ou contournement'],
-  [
-    ['Bloquante', 'Application inaccessible ou saisie impossible pour tous', '2 heures ouvrées', '8 heures ouvrées'],
-    ['Majeure', 'Fonction essentielle indisponible pour un profil', '4 heures ouvrées', '2 jours ouvrés'],
-    ['Mineure', 'Gêne sans blocage', '1 jour ouvré', 'Prochaine livraison planifiée'],
-  ],
-  [1600, 3838, 2000, 2200],
-);
-
-h2('6.5 Options');
-table(
-  ['Option', 'Prix'],
-  OPTIONS.map(([l, prix]) => [l, prix]),
-  [6638, 3000],
-);
-
-h2('6.6 Synthèse financière');
-table(
-  ['Poste', 'Montant HT', 'Équivalent GNF'],
-  [
-    ['Réalisation des cinq lots', fmtEUR(totalMontant), fmtGNF(eurToGnf(totalMontant))],
-    ['Exploitation et support, 12 mois', fmtEUR(exploitationAn), fmtGNF(eurToGnf(exploitationAn))],
-    ['Total première année', fmtEUR(premiereAnnee), fmtGNF(eurToGnf(premiereAnnee))],
-    ['Années suivantes, exploitation et support', `${fmtEUR(exploitationAn)} par an`, `${fmtGNF(eurToGnf(exploitationAn))} par an`],
-  ],
-  [4438, 2600, 2600],
-  { lastBold: false, boldRows: [2] },
-);
-
-h2('6.7 Conditions de paiement');
-ul([
-  'Par lot : 40 % à la commande du lot, 40 % à la recette, 20 % à la mise en production.',
-  'Forfait exploitation et support : par trimestre d\'avance.',
-  'Options : à la commande.',
-  'Règlement à 30 jours date de facture, par virement.',
-]);
-
-h2('6.8 Engagements contractuels');
-ul([
-  `Garantie corrective de ${HYP.garantieMois} mois après chaque mise en production, incluse dans le prix du lot.`,
-  'Propriété du client sur ses données et sur le code des modules spécifiques développés pour lui ; les composants génériques du prestataire restent réutilisables par celui-ci.',
-  'Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 4.4.',
-  'Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.',
-  `Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}.`,
-]);
-
-pagebreak();
-
-// ---- 7. Annexes
-h1('7. Annexes');
-h2('7.1 Modules communautaires OCA retenus');
+h2('3.6 Modules communautaires retenus');
 table(
   ['Besoin', 'Module OCA'],
   [
-    ['Rapprochement bancaire', 'account_reconcile_oca, account_statement_import_file et formats associés'],
+    ['Rapprochement bancaire', 'account_reconcile_oca, account_statement_import_file'],
     ['Immobilisations', 'account_asset_management'],
     ['Budgets et états de gestion', 'mis_builder, mis_builder_budget'],
     ['États financiers et grand livre', 'account_financial_report'],
@@ -417,31 +176,273 @@ table(
   ],
   [3600, 6038],
 );
-p('La liste définitive est arrêtée au lot 0, module par module, sur la version du noyau retenue. Les besoins non couverts par un module communautaire sont réalisés en spécifique, sans surcoût par rapport à la présente offre.');
-h2('7.2 Modules spécifiques développés pour le groupe');
+p('La liste définitive est arrêtée en semaine 1, module par module. Les besoins non couverts par un module communautaire sont réalisés en spécifique, sans surcoût par rapport à la présente offre.');
+
+pagebreak();
+
+// ================================================================ 4. Proposition 2
+h1('4. Proposition 2 : deux applications indépendantes');
+h2('4.1 Principe');
+p(`Deux applications web distinctes sont développées entièrement sur mesure par ${HYP.prestataire}, chacune avec sa base de données, ses utilisateurs et ses droits. Elles sont déployées sur le même VPS, derrière le même proxy sécurisé, et partagent les mêmes mécanismes de sauvegarde et de supervision. Il n'y a pas de noyau de gestion tiers : chaque fonction est écrite pour vous, à partir des prototypes de la direction.`);
+h2('4.2 Application EGUITRA Finance');
+p('L\'application reprend le moteur comptable du prototype de la direction et le transpose en application multi-utilisateurs :');
 ul([
-  'eguitra_core : référentiels, règles de gestion communes, API de la surcouche, alertes.',
-  'eguitra_finance : contrôles de clôture, compte de passage, rapport mensuel, exports d\'audit.',
-  'eguitra_transport : rotations, routes, tarifs, volumes, taxes, rentabilité par véhicule.',
-  'eguitra_btp : chantiers, situations d\'avancement, retenues de garantie.',
-  'eguitra_immo : biens, baux, quittancement, patrimoine.',
-  'eguitra_fiscal : déclarations guinéennes, passerelle IFRS.',
-  'axispro_suite : critères, gates, scoring, data room, revues, rapports, portail.',
+  'Référentiels : plan de comptes SYSCOHADA, activités, centres de coût, tiers, devises, catégories de dépense, types d\'opération, comptes de trésorerie.',
+  'Journaux : ventes, achats et dépenses, trésorerie, rotations de transport, immobilisations, OD. Comptes de contrepartie déduits automatiquement, TVA calculée.',
+  'Trésorerie : position par compte et devise, virements internes par compte de passage, pointage des opérations rapprochées.',
+  'Immobilisations : registre, dotations mensuelles générées, cessions.',
+  'Budget : lignes mensuelles par nature, écarts face au réalisé, seuils d\'alerte.',
+  'Clôtures mensuelles : contrôles bloquants, registre, scellement du dossier par empreinte.',
+  'États : balance, grand livre, bilan et compte de résultat SYSCOHADA, rapport mensuel de gestion, exports CSV et XLSX.',
+  'Métiers : rentabilité par camion et par route à partir des rotations ; suivi des chantiers avec situations d\'avancement et retenues de garantie ; biens, baux et loyers pour l\'immobilier.',
+  'Tableau de bord du dirigeant, alertes de gestion, dette et DSCR.',
+  'Utilisateurs, profils, journal des modifications.',
 ]);
-h2('7.3 Glossaire');
+h2('4.3 Application AxisPro Suite');
+p('L\'application reprend le prototype MB AxisPro avec le même périmètre fonctionnel que dans la proposition 1 : portefeuille de dossiers, fiche projet, saisie guidée par gate, score et knock-outs, gaps prioritaires, data room, revues de comité, rapports PDF et XLSX, politique d\'évaluation, portail des porteurs de projets.');
+h2('4.4 Limites à connaître');
+p('Cette proposition est plus légère et moins coûteuse. Elle comporte des limites que nous préférons énoncer avant la signature :');
+ul([
+  'Le moteur comptable est développé pour vous : il n\'a pas l\'historique d\'un noyau utilisé par des dizaines de milliers d\'entreprises. La recette avec votre expert-comptable est d\'autant plus importante.',
+  'Pas de multi-sociétés ni de consolidation automatique : la vue groupe se fait par activité, dans une seule entité juridique.',
+  'Rapprochement bancaire par pointage manuel, sans import de relevés électroniques.',
+  'Circuit d\'approbation à un seul niveau de validation.',
+  'Chaque nouvelle fonction est un développement : l\'évolutivité dépend entièrement du prestataire.',
+]);
+
+pagebreak();
+
+// ================================================================ 5. Comparaison
+h1('5. Comparaison et recommandation');
+h2('5.1 Couverture des attentes du département Finance');
+table(
+  ['Attente exprimée', P1.code, P2.code],
+  [
+    ['Visibilité globale et temps réel sur CA, résultat, trésorerie, indicateurs', 'Couverte', 'Couverte'],
+    ['Vue consolidée du groupe, décomposable par activité, filiale, projet, ligne logistique', 'Couverte, multi-sociétés natif', 'Partielle : par activité, une seule société'],
+    ['Comptabilité générale SYSCOHADA révisé', 'Couverte, plan de comptes du noyau', 'Couverte, moteur développé pour vous'],
+    ['Comptabilité analytique par centre de coût, projet, chantier, activité', 'Couverte, plans analytiques multi-axes', 'Couverte'],
+    ['Trésorerie et rapprochement bancaire', 'Couverte, import des relevés', 'Partielle : pointage manuel'],
+    ['Immobilisations et amortissements', 'Couverte', 'Couverte'],
+    ['Gestion budgétaire, écarts réalisé et prévisionnel', 'Couverte', 'Couverte'],
+    ['Facturation client et fournisseur', 'Couverte, avec relances', 'Couverte, sans relances automatiques'],
+    ['Gestion fiscale, TVA, déclarations locales', 'Couverte', 'Partielle : TVA ; déclarations en option'],
+    ['Workflow d\'approbation des engagements et paiements', 'Couverte, plusieurs niveaux et seuils', 'Partielle : un niveau'],
+    ['Coûts et rentabilité par trajet et véhicule, volumes, taxes spécifiques', 'Couverte', 'Couverte'],
+    ['Chantiers, facturation à l\'avancement, retenues de garantie', 'Couverte', 'Couverte'],
+    ['Gestion locative et valorisation du patrimoine', 'Couverte', 'Partielle : baux et loyers, sans quittancement automatique'],
+    ['Traçabilité complète, piste d\'audit', 'Couverte, verrouillage par empreinte et journal d\'audit', 'Couverte, journal des modifications et empreinte'],
+    ['Sécurisation des données et des accès par profil', 'Couverte', 'Couverte'],
+    ['Disponibilité garantie et sauvegardes', 'Couverte', 'Couverte'],
+    ['Interface simple et formation', 'Couverte', 'Couverte'],
+    ['Support réactif et accompagnement', 'Couverte', 'Couverte'],
+    ['Solution évolutive', 'Couverte, ajout de modules sans développement', 'Partielle : chaque évolution est un développement'],
+    ['Tarification claire, sans coûts cachés', 'Couverte', 'Couverte'],
+  ],
+  [3838, 2900, 2900],
+);
+h2('5.2 Critères de choix');
+table(
+  ['Critère', P1.code, P2.code],
+  [
+    ['Investissement, première année', gnfHT(P1.total), gnfHT(P2.total)],
+    ['Coût annuel à partir de la deuxième année', gnfHT(P1.maintenanceAn), gnfHT(P2.maintenanceAn)],
+    ['Délai', `${HYP.dureeSemaines} semaines`, `${HYP.dureeSemaines} semaines`],
+    ['Robustesse comptable', 'Noyau éprouvé, mis à jour par une communauté mondiale', 'Moteur écrit pour le groupe, éprouvé par la recette'],
+    ['Périmètre', 'Vingt attentes sur vingt', 'Quatorze complètes, six partielles'],
+    ['Évolutivité', 'Modules existants pour la paie, les stocks, les achats, la GMAO', 'Développement spécifique à chaque besoin'],
+    ['Dépendance au prestataire', 'Faible : code ouvert, communauté, autres intégrateurs possibles', 'Forte : seul le prestataire connaît le code'],
+    ['Simplicité technique', 'Plus de composants à exploiter', 'Deux applications légères'],
+  ],
+  [2600, 3519, 3519],
+);
+h2('5.3 Notre recommandation');
+p(`Nous recommandons la proposition 1. L'écart de ${gnf(P1.total - P2.total)} finance un noyau comptable dont la fiabilité n'a plus à être démontrée, et évite au groupe de payer, dans deux ans, le développement de fonctions que le noyau apporte déjà. La proposition 2 reste pertinente si la direction privilégie un outil minimal et un budget plus serré ; elle est présentée avec ses limites pour que la décision soit prise en connaissance de cause.`);
+
+pagebreak();
+
+// ================================================================ 6. Hébergement
+h1('6. Hébergement, sécurité et exploitation');
+p('Ce chapitre s\'applique aux deux propositions.');
+h2('6.1 Infrastructure');
+ul([
+  `Hébergement sur serveur virtuel privé dédié au groupe : ${HYP.vps}.`,
+  'Déploiement en conteneurs, proxy avec certificats TLS renouvelés automatiquement, base de données dédiée.',
+  'Deux environnements : production et recette. Chaque évolution passe en recette avant la production.',
+  'Nom de domaine du groupe pour chaque application, par exemple finance.eguitragroup.com et axispro.mbaxisproconsulting.com.',
+]);
+h2('6.2 Sauvegardes et continuité');
+table(
+  ['Mesure', 'Engagement'],
+  [
+    ['Sauvegarde complète', 'Quotidienne, chiffrée, copiée hors site chez un second fournisseur'],
+    ['Rétention', '30 sauvegardes quotidiennes, 12 sauvegardes mensuelles'],
+    ['Perte de données maximale', '24 heures'],
+    ['Délai de reprise', '4 heures ouvrées après déclaration de sinistre'],
+    ['Test de restauration', 'Chaque trimestre, avec compte rendu remis au client'],
+    ['Disponibilité cible', '99,5 % par mois, hors fenêtre de maintenance annoncée 48 heures à l\'avance'],
+  ],
+  [3600, 6038],
+);
+h2('6.3 Sécurité');
+ul([
+  'Authentification par mot de passe robuste et double authentification pour tous les utilisateurs.',
+  'Droits par profil : direction, finance, exploitation transport, chantiers, immobilier, cabinet, porteur de projet. Chaque profil ne voit que son périmètre.',
+  'Piste d\'audit : chaque création, modification et suppression est journalisée avec l\'utilisateur, la date et les valeurs avant et après.',
+  'Écritures comptables verrouillées après clôture, avec empreinte de chaînage.',
+  'Chiffrement des échanges et des sauvegardes, journaux d\'accès conservés 12 mois.',
+  'Mises à jour de sécurité appliquées chaque mois en recette puis en production.',
+]);
+h2('6.4 Réversibilité');
+p('Le client est propriétaire de ses données. À tout moment, sur simple demande, nous remettons une copie complète de la base, des pièces jointes et du code développé pour lui, dans des formats ouverts, avec la documentation d\'installation.');
+
+pagebreak();
+
+// ================================================================ 7. Démarche
+h1('7. Démarche et planning en quatre semaines');
+h2('7.1 Planning');
+p(`Les deux propositions sont réalisées en ${HYP.dureeSemaines} semaines à compter de la commande, par une équipe dédiée à temps plein. Ce délai repose sur trois conditions : les prototypes de la direction servent de spécification, les composants d'interface déjà développés par ${HYP.prestataire} sont réutilisés, et les référents du client sont disponibles chaque semaine.`);
+table(
+  ['Semaine', 'Objet', 'Travaux', 'Jalon'],
+  PLANNING,
+  [1200, 1800, 4438, 2200],
+);
+p(`À l'issue de la semaine 4, ${HYP.prestataire} assure quatre semaines d'accompagnement renforcé sur site et à distance, puis la garantie corrective de ${HYP.garantieMois} mois.`);
+h2('7.2 Reprise des données');
+p('Le dossier 2026 est repris intégralement : référentiels, tiers, plan de comptes, immobilisations, financements, budget, ventes, achats, trésorerie, rotations et OD. Les balances obtenues sont confrontées au classeur d\'origine et validées par votre responsable financier avant la mise en production. L\'exercice 2026 est ainsi consultable dans l\'outil dès le premier jour, et l\'exercice 2027 s\'ouvre directement dans l\'outil.');
+h2('7.3 Recette et formation');
+ul([
+  'Cahier de recette rédigé avec vos équipes en semaine 3, recette en semaine 4 sur vos données.',
+  'Formation par profil : direction, finance, exploitation, chantiers, immobilier, cabinet. Supports et guides utilisateur remis en français.',
+  'Accompagnement renforcé pendant les quatre semaines suivant la mise en production.',
+]);
+h2('7.4 Gouvernance');
+ul([
+  'Un comité de pilotage hebdomadaire avec la direction générale et le responsable financier.',
+  'Un point d\'avancement quotidien de quinze minutes avec le référent du client.',
+  'Un espace partagé de suivi des demandes, accessible au client.',
+]);
+h2('7.5 Équipe E-VOLUTION XP');
+table(
+  ['Rôle', 'Mission'],
+  [
+    ['Directeur de projet et architecte', 'Interlocuteur unique, conception, arbitrages, qualité des livraisons.'],
+    ['Consultant fonctionnel finance', 'Paramétrage SYSCOHADA, analytique, états financiers, reprise des données, formation.'],
+    ['Développeurs', 'Noyau et API dans la proposition 1, moteur comptable dans la proposition 2 ; applications EGUITRA Finance et AxisPro Suite, application mobile, portail.'],
+    ['Ingénieur exploitation', 'VPS, sécurité, sauvegardes, supervision, support.'],
+    ['Expert-comptable partenaire', 'Validation du plan de comptes, des états financiers et des déclarations fiscales guinéennes.'],
+  ],
+  [3200, 6438],
+);
+h2('7.6 Prérequis côté client');
+ul([
+  'Un référent par domaine disponible une demi-journée par jour pendant les quatre semaines.',
+  'La charte graphique du groupe et du cabinet, ou un atelier de définition en semaine 1.',
+  'Les relevés bancaires et les modèles de déclarations fiscales en vigueur.',
+  'La validation du plan de comptes par votre expert-comptable en semaine 2.',
+]);
+
+pagebreak();
+
+// ================================================================ 8. Offre financière
+h1('8. Offre financière');
+h2('8.1 Hypothèses');
+ul([
+  'Tous les montants sont en francs guinéens, hors taxes. La TVA et les retenues applicables en Guinée sont ajoutées selon la réglementation en vigueur.',
+  'Prix forfaitaires : le montant de chaque proposition est ferme pour le périmètre décrit. Toute évolution de périmètre fait l\'objet d\'un avenant chiffré.',
+  'Aucun coût de licence dans les deux propositions.',
+  'L\'hébergement de la première année est compris dans le montant de chaque proposition.',
+]);
+
+for (const P of [P1, P2]) {
+  h2(`8.${P === P1 ? 2 : 3} ${P.code} : ${P.titre}`);
+  table(
+    ['Poste', 'Montant HT', 'Part'],
+    [...P.postes.map(([l, m]) => [l, gnf(m), pct(m, P.total)]), [`Total ${P.code.toLowerCase()}`, gnf(P.total), `100${NBSP}%`]],
+    [6238, 2200, 1200],
+    { lastBold: true },
+  );
+}
+
+h2('8.4 Hébergement, maintenance et support à partir de la deuxième année');
+p('La première année d\'hébergement est comprise dans chaque proposition. À partir de la deuxième année, un forfait annuel unique couvre :');
+table(
+  ['Prestation', 'Détail'],
+  [
+    ['Hébergement', HYP.vps],
+    ['Exploitation', 'Supervision, sauvegardes, tests de restauration, mises à jour de sécurité, renouvellement des certificats'],
+    ['Support', 'Assistance des utilisateurs du lundi au vendredi, de 8 h à 18 h, par messagerie, e-mail et téléphone'],
+    ['Maintenance corrective', 'Correction de toute anomalie, sans limite'],
+    ['Maintenance évolutive', 'Deux jours par mois de petites évolutions, cumulables sur le trimestre'],
+    [`Forfait annuel, ${P1.code.toLowerCase()}`, `${gnfHT(P1.maintenanceAn)}, facturé par semestre d'avance`],
+    [`Forfait annuel, ${P2.code.toLowerCase()}`, `${gnfHT(P2.maintenanceAn)}, facturé par semestre d'avance`],
+  ],
+  [2600, 7038],
+  { boldRows: [5, 6] },
+);
+p('Délais d\'intervention du support, applicables dès la mise en production :');
+table(
+  ['Gravité', 'Définition', 'Prise en charge', 'Résolution ou contournement'],
+  [
+    ['Bloquante', 'Application inaccessible ou saisie impossible pour tous', '2 heures ouvrées', '8 heures ouvrées'],
+    ['Majeure', 'Fonction essentielle indisponible pour un profil', '4 heures ouvrées', '2 jours ouvrés'],
+    ['Mineure', 'Gêne sans blocage', '1 jour ouvré', 'Prochaine livraison planifiée'],
+  ],
+  [1600, 3838, 2000, 2200],
+);
+
+h2('8.5 Synthèse financière');
+table(
+  ['', P1.code, P2.code],
+  [
+    ['Réalisation et hébergement, première année', gnfHT(P1.total), gnfHT(P2.total)],
+    ['Hébergement, maintenance et support, par an à partir de la deuxième année', gnfHT(P1.maintenanceAn), gnfHT(P2.maintenanceAn)],
+    ['Coût cumulé sur trois ans', gnfHT(P1.total + 2 * P1.maintenanceAn), gnfHT(P2.total + 2 * P2.maintenanceAn)],
+  ],
+  [3838, 2900, 2900],
+  { boldRows: [0] },
+);
+
+h2('8.6 Conditions de paiement');
+ul([
+  '50 % à la commande, 30 % à la recette en semaine 4, 20 % au procès-verbal de mise en production.',
+  'Forfait annuel d\'hébergement, maintenance et support : par semestre d\'avance, à compter du treizième mois.',
+  'Règlement à 30 jours date de facture, par virement bancaire.',
+]);
+
+h2('8.7 Engagements contractuels');
+ul([
+  `Garantie corrective de ${HYP.garantieMois} mois après la mise en production, incluse dans le prix.`,
+  'Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d\'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.',
+  'Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 6.4.',
+  'Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.',
+  `Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}.`,
+]);
+
+pagebreak();
+
+// ================================================================ 9. Annexes
+h1('9. Annexes');
+h2('9.1 Glossaire');
 table(
   ['Terme', 'Définition'],
   [
-    ['OCA', 'Odoo Community Association, association qui publie des modules libres pour le noyau.'],
+    ['OCA', 'Odoo Community Association, association qui publie des modules libres pour le noyau de gestion.'],
     ['SYSCOHADA', 'Système comptable de l\'Organisation pour l\'harmonisation en Afrique du droit des affaires, version révisée.'],
     ['DSCR', 'Ratio de couverture du service de la dette.'],
     ['Stage gate', 'Étape de décision d\'un projet, avec ses règles de passage.'],
     ['Knock-out', 'Critère éliminatoire imposant un NO-GO quel que soit le score.'],
     ['VPS', 'Serveur virtuel privé, dédié au client chez un hébergeur.'],
-    ['TJM', 'Taux journalier moyen, prix d\'une journée de travail.'],
+    ['TLS', 'Chiffrement des échanges entre le navigateur et le serveur.'],
   ],
   [2000, 7638],
 );
+h2('9.2 Signature');
+p(`Pour ${HYP.prestataire} :`);
+p('Nom, qualité, date et signature');
+p(`Pour ${HYP.client} et ${HYP.client2}, bon pour accord sur la proposition retenue :`);
+p('Proposition retenue :  1    2');
+p('Nom, qualité, date, signature et cachet');
 
 // ---------------------------------------------------------------- rendu MD
 function toMarkdown() {
@@ -449,11 +450,12 @@ function toMarkdown() {
   for (const b of B) {
     switch (b.t) {
       case 'cover':
-        out.push(`# Offre technique et financière`, '',
-          `**Digitalisation du département Finance et de l'accompagnement des porteurs de projets**`, '',
+        out.push(`![${HYP.prestataire}](${path.basename(logoPath || 'logo.png')})`, '',
+          '# Offre technique et financière', '',
+          '**Digitalisation du département Finance et de l\'accompagnement des porteurs de projets**', '',
           `Pour ${HYP.client} et ${HYP.client2}, à l'attention de ${HYP.dg}`, '',
           `Référence ${HYP.reference}, ${HYP.dateOffre}, valable ${HYP.validiteJours} jours`, '',
-          `Émise par ${HYP.prestataire}. Contact : ${HYP.contact}`, '');
+          `Émise par ${HYP.prestataire}, ${HYP.slogan}. Contact : ${HYP.contact}`, '');
         break;
       case 'toc': out.push('_Sommaire : voir la version Word, table des matières automatique._', ''); break;
       case 'pagebreak': out.push('', '---', ''); break;
@@ -463,7 +465,6 @@ function toMarkdown() {
       case 'p': out.push(b.v, ''); break;
       case 'callout': out.push(`> ${b.v}`, ''); break;
       case 'ul': out.push(...b.v.map((i) => `- ${i}`), ''); break;
-      case 'ol': out.push(...b.v.map((i, k) => `${k + 1}. ${i}`), ''); break;
       case 'table': {
         const esc = (s) => String(s).replace(/\|/g, '\\|');
         out.push(`| ${b.head.map(esc).join(' | ')} |`, `|${b.head.map(() => '---').join('|')}|`);
@@ -476,20 +477,19 @@ function toMarkdown() {
       }
     }
   }
-  // supprime les séparateurs consécutifs (couverture puis sommaire)
   return out.join('\n').replace(/(\n---\n){2,}/g, '\n---\n');
 }
 
 // ---------------------------------------------------------------- rendu DOCX
-const NAVY = '1F3A5F';
-const GOLD = 'B8860B';
+const NAVY = '1C1E6B'; // bleu du logo
+const TEAL = '1A9E9E'; // vert-bleu du logo
 const GREY = 'F2F4F7';
 const FONT = 'Calibri';
 const CONTENT_W = 9638; // A4 moins marges de 2 cm
 
 const run = (text, o = {}) => new TextRun({ text, font: FONT, size: o.size || 22, bold: o.bold, color: o.color, italics: o.italics });
 const para = (text, o = {}) => new Paragraph({
-  children: [run(text, o)], spacing: { after: o.after ?? 120, before: o.before ?? 0 }, alignment: o.align, style: o.style,
+  children: [run(text, o)], spacing: { after: o.after ?? 120, before: o.before ?? 0 }, alignment: o.align,
 });
 const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: 'C9CFD8' };
 const borders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
@@ -510,25 +510,33 @@ function docTable(head, rows, widths, opts = {}) {
   });
   const bodyRows = rows.map((r, ri) => {
     const bold = (opts.lastBold && ri === rows.length - 1) || (opts.boldRows || []).includes(ri);
-    return new TableRow({ children: r.map((c, i) => mk(c, i, { bold, shade: bold ? 'E8EDF5' : (ri % 2 ? GREY : undefined) })) });
+    return new TableRow({ children: r.map((c, i) => mk(c, i, { bold, shade: bold ? 'E6F4F4' : (ri % 2 ? GREY : undefined) })) });
   });
   return new Table({ width: { size: CONTENT_W, type: WidthType.DXA }, columnWidths: w, rows: [headRow, ...bodyRows] });
 }
 
+function logoRun(widthPx) {
+  if (!logoPath) return null;
+  const data = fs.readFileSync(logoPath);
+  const h = Math.round(widthPx * 820 / 1400); // proportions du logo
+  return new ImageRun({ type: 'png', data, transformation: { width: widthPx, height: h }, altText: { title: HYP.prestataire, description: `Logo ${HYP.prestataire}`, name: 'logo' } });
+}
+
 function coverPage() {
   const c = [];
-  c.push(new Paragraph({ spacing: { before: 2400 }, children: [] }));
-  c.push(para(HYP.prestataire, { size: 24, color: GOLD, bold: true, after: 1200 }));
+  const logo = logoRun(300);
+  if (logo) c.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 600, after: 900 }, children: [logo] }));
+  else c.push(para(HYP.prestataire, { size: 40, bold: true, color: NAVY, align: AlignmentType.CENTER, before: 600, after: 900 }));
   c.push(para('Offre technique et financière', { size: 52, bold: true, color: NAVY, after: 240 }));
-  c.push(para('Digitalisation du département Finance et de l\'accompagnement des porteurs de projets', { size: 28, color: '444444', after: 900 }));
-  c.push(new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: GOLD, space: 1 } }, spacing: { after: 600 }, children: [] }));
+  c.push(para('Digitalisation du département Finance et de l\'accompagnement des porteurs de projets', { size: 28, color: '444444', after: 700 }));
+  c.push(new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: TEAL, space: 1 } }, spacing: { after: 500 }, children: [] }));
   c.push(para(`Pour ${HYP.client}`, { size: 26, bold: true, after: 60 }));
   c.push(para(`et ${HYP.client2}`, { size: 26, bold: true, after: 60 }));
-  c.push(para(`À l'attention de ${HYP.dg}`, { size: 22, after: 900 }));
+  c.push(para(`À l'attention de ${HYP.dg}`, { size: 22, after: 700 }));
   c.push(para(`Référence ${HYP.reference}`, { size: 20, color: '666666', after: 40 }));
   c.push(para(`${HYP.dateOffre}, offre valable ${HYP.validiteJours} jours`, { size: 20, color: '666666', after: 40 }));
-  c.push(para(`Contact : ${HYP.contact}`, { size: 20, color: '666666', after: 40 }));
-  c.push(para('Document confidentiel, destiné exclusivement à ses destinataires.', { size: 18, italics: true, color: '888888', before: 1800 }));
+  c.push(para(`${HYP.prestataire}, ${HYP.slogan}. Contact : ${HYP.contact}`, { size: 20, color: '666666', after: 40 }));
+  c.push(para('Document confidentiel, destiné exclusivement à ses destinataires.', { size: 18, italics: true, color: '888888', before: 1200 }));
   return c;
 }
 
@@ -549,13 +557,12 @@ function toDocx() {
       case 'callout':
         children.push(new Paragraph({
           children: [run(b.v, { size: 21, italics: true, color: NAVY })],
-          shading: { type: ShadingType.CLEAR, fill: 'EEF3FA', color: 'auto' },
-          border: { left: { style: BorderStyle.SINGLE, size: 24, color: GOLD, space: 8 } },
+          shading: { type: ShadingType.CLEAR, fill: 'E6F4F4', color: 'auto' },
+          border: { left: { style: BorderStyle.SINGLE, size: 24, color: TEAL, space: 8 } },
           spacing: { before: 120, after: 200 }, indent: { left: 200, right: 200 },
         }));
         break;
       case 'ul': b.v.forEach((i) => children.push(new Paragraph({ numbering: { reference: 'puces', level: 0 }, children: [run(i)], spacing: { after: 80 } }))); break;
-      case 'ol': b.v.forEach((i) => children.push(new Paragraph({ numbering: { reference: 'nums', level: 0 }, children: [run(i)], spacing: { after: 80 } }))); break;
       case 'table':
         children.push(docTable(b.head, b.rows, b.widths, b.opts));
         children.push(new Paragraph({ spacing: { after: 160 }, children: [] }));
@@ -563,6 +570,7 @@ function toDocx() {
     }
   }
 
+  const headerLogo = logoRun(70);
   return new Document({
     creator: HYP.prestataire,
     title: 'Offre technique et financière EGUITRA',
@@ -577,17 +585,20 @@ function toDocx() {
     numbering: {
       config: [
         { reference: 'puces', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 280 } } } }] },
-        { reference: 'nums', levels: [{ level: 0, format: LevelFormat.DECIMAL, text: '%1.', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 280 } } } }] },
       ],
     },
     features: { updateFields: true },
     sections: [{
       properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
       headers: {
-        default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'C9CFD8', space: 4 } }, children: [run(`Offre technique et financière, ${HYP.client} et ${HYP.client2}`, { size: 16, color: '888888' })] })] }),
+        default: new Header({ children: [new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'C9CFD8', space: 4 } },
+          children: [...(headerLogo ? [headerLogo, run('    ', { size: 16 })] : []), run(`Offre technique et financière, ${HYP.client} et ${HYP.client2}`, { size: 16, color: '888888' })],
+        })] }),
       },
       footers: {
-        default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [run(`${HYP.prestataire}, réf. ${HYP.reference}, confidentiel. Page `, { size: 16, color: '888888' }), new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 16, color: '888888' })] })] }),
+        default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [run(`${HYP.prestataire}, ${HYP.slogan}. Réf. ${HYP.reference}, confidentiel. Page `, { size: 16, color: '888888' }), new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 16, color: '888888' })] })] }),
       },
       children,
     }],
@@ -596,10 +607,9 @@ function toDocx() {
 
 // ---------------------------------------------------------------- sortie
 (async () => {
-  const outDir = __dirname;
   const base = 'Offre_technique_financiere_EGUITRA';
-  fs.writeFileSync(path.join(outDir, `${base}.md`), toMarkdown());
+  fs.writeFileSync(path.join(__dirname, `${base}.md`), toMarkdown());
   const buf = await Packer.toBuffer(toDocx());
-  fs.writeFileSync(path.join(outDir, `${base}.docx`), buf);
-  console.log(`OK : ${totalJours} jours, ${fmtEUR(totalMontant)} réalisation, ${fmtEUR(premiereAnnee)} première année`);
+  fs.writeFileSync(path.join(__dirname, `${base}.docx`), buf);
+  console.log(`OK : logo ${logoPath ? path.basename(logoPath) : 'absent'} ; P1 ${gnf(P1.total)} ; P2 ${gnf(P2.total)}`);
 })();
