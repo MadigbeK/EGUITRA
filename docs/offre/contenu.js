@@ -5,12 +5,15 @@
 const HYP = {
   prestataire: 'E-VOLUTION XP',
   slogan: 'Transformation Numérique',
-  contact: '[Téléphone et e-mail E-VOLUTION XP]',
+  contact: '+224 628 86 22 55 / emkouyate@e-volutionxp.com',
   client: 'EGUITRA GROUP SARLU',
   client2: 'MB AxisPro Consulting',
   dg: 'M. Mohamed Nimaga, Directeur Général',
+  signataire: 'Madigbè KOUYATÉ',
+  qualiteSignataire: 'Gérant',
+  raisonSociale: 'E-volution Experience',
   dateOffre: '15 septembre 2026',
-  reference: 'OTF-EGUITRA-2026-01',
+  reference: 'OTF-EGUITRA-2026-36',
   validiteJours: 60,
   dureeSemaines: 4,
   garantieMois: 3,
@@ -24,7 +27,7 @@ const P1 = {
   code: 'Proposition 1',
   titre: 'Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion',
   total: 92000000,
-  maintenanceAn: 18000000, // à partir de la deuxième année, hébergement compris
+  maintenanceAn: 9000000, // à partir de la deuxième année, hébergement compris
   postes: [
     ['Cadrage, conception et charte graphique des applications', 6000000],
     ['Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision', 8000000],
@@ -42,7 +45,7 @@ const P2 = {
   code: 'Proposition 2',
   titre: 'Deux applications indépendantes, EGUITRA Finance et AxisPro Suite, sur un VPS commun',
   total: 80000000,
-  maintenanceAn: 15000000,
+  maintenanceAn: 9000000,
   postes: [
     ['Cadrage, conception et charte graphique des applications', 5000000],
     ['Socle technique commun : VPS, base de données, authentification, sauvegardes, supervision', 7000000],

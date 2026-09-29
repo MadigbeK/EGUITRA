@@ -6,9 +6,9 @@
 
 Pour EGUITRA GROUP SARLU et MB AxisPro Consulting, à l'attention de M. Mohamed Nimaga, Directeur Général
 
-Référence OTF-EGUITRA-2026-01, 15 septembre 2026, valable 60 jours
+Référence OTF-EGUITRA-2026-36, 15 septembre 2026, valable 60 jours
 
-Émise par E-VOLUTION XP, Transformation Numérique. Contact : [Téléphone et e-mail E-VOLUTION XP]
+Émise par E-VOLUTION XP, Transformation Numérique. Contact : +224 628 86 22 55 / emkouyate@e-volutionxp.com
 
 
 ---
@@ -29,13 +29,13 @@ EGUITRA GROUP SARLU et MB AxisPro Consulting partagent une direction générale,
 | Attentes du département Finance couvertes | Vingt sur vingt | Quatorze en totalité, six en partie |
 | Délai de mise en production | 4 semaines | 4 semaines |
 | Investissement, hébergement de la première année compris | 92 000 000 GNF HT | 80 000 000 GNF HT |
-| Hébergement, maintenance et support à partir de la deuxième année | 18 000 000 GNF HT par an | 15 000 000 GNF HT par an |
+| Hébergement, maintenance et support à partir de la deuxième année | 9 000 000 GNF HT par an | 9 000 000 GNF HT par an |
 | Licences logicielles | Aucune | Aucune |
 | Garantie corrective | 3 mois | 3 mois |
 
-> Notre recommandation est la proposition 1. Pour 12 000 000 GNF de plus, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.
+> Notre recommandation est la proposition 1. Pour 12 000 000 GNF de plus, le groupe obtient un noyau ERP utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.
 
-Validité de l'offre : 60 jours à compter du 15 septembre 2026. Tous les montants sont exprimés en francs guinéens, hors taxes.
+Validité de l'offre : 30 jours à compter du 15 septembre 2026. Tous les montants sont exprimés en francs guinéens.
 
 
 ---
@@ -257,7 +257,7 @@ Cette proposition est plus légère et moins coûteuse. Elle comporte des limite
 | Critère | Proposition 1 | Proposition 2 |
 |---|---|---|
 | Investissement, première année | 92 000 000 GNF HT | 80 000 000 GNF HT |
-| Coût annuel à partir de la deuxième année | 18 000 000 GNF HT | 15 000 000 GNF HT |
+| Coût annuel à partir de la deuxième année | 9 000 000 GNF HT | 9 000 000 GNF HT |
 | Délai | 4 semaines | 4 semaines |
 | Robustesse comptable | Noyau éprouvé, mis à jour par une communauté mondiale | Moteur écrit pour le groupe, éprouvé par la recette |
 | Périmètre | Vingt attentes sur vingt | Quatorze complètes, six partielles |
@@ -353,18 +353,7 @@ Le dossier 2026 est repris intégralement : référentiels, tiers, plan de compt
 - Un espace partagé de suivi des demandes, accessible au client.
 
 
-### 7.5 Équipe E-VOLUTION XP
-
-| Rôle | Mission |
-|---|---|
-| Directeur de projet et architecte | Interlocuteur unique, conception, arbitrages, qualité des livraisons. |
-| Consultant fonctionnel finance | Paramétrage SYSCOHADA, analytique, états financiers, reprise des données, formation. |
-| Développeurs | Noyau et API dans la proposition 1, moteur comptable dans la proposition 2 ; applications EGUITRA Finance et AxisPro Suite, application mobile, portail. |
-| Ingénieur exploitation | VPS, sécurité, sauvegardes, supervision, support. |
-| Expert-comptable partenaire | Validation du plan de comptes, des états financiers et des déclarations fiscales guinéennes. |
-
-
-### 7.6 Prérequis côté client
+### 7.5 Prérequis côté client
 
 - Un référent par domaine disponible une demi-journée par jour pendant les quatre semaines.
 - La charte graphique du groupe et du cabinet, ou un atelier de définition en semaine 1.
@@ -425,8 +414,8 @@ La première année d'hébergement est comprise dans chaque proposition. À part
 | Support | Assistance des utilisateurs du lundi au vendredi, de 8 h à 18 h, par messagerie, e-mail et téléphone |
 | Maintenance corrective | Correction de toute anomalie, sans limite |
 | Maintenance évolutive | Deux jours par mois de petites évolutions, cumulables sur le trimestre |
-| **Forfait annuel, proposition 1** | **18 000 000 GNF HT, facturé par semestre d'avance** |
-| **Forfait annuel, proposition 2** | **15 000 000 GNF HT, facturé par semestre d'avance** |
+| **Forfait annuel, proposition 1** | **9 000 000 GNF HT, facturé par semestre d'avance** |
+| **Forfait annuel, proposition 2** | **9 000 000 GNF HT, facturé par semestre d'avance** |
 
 Délais d'intervention du support, applicables dès la mise en production :
 
@@ -437,23 +426,14 @@ Délais d'intervention du support, applicables dès la mise en production :
 | Mineure | Gêne sans blocage | 1 jour ouvré | Prochaine livraison planifiée |
 
 
-### 8.5 Synthèse financière
-
-|  | Proposition 1 | Proposition 2 |
-|---|---|---|
-| **Réalisation et hébergement, première année** | **92 000 000 GNF HT** | **80 000 000 GNF HT** |
-| Hébergement, maintenance et support, par an à partir de la deuxième année | 18 000 000 GNF HT | 15 000 000 GNF HT |
-| Coût cumulé sur trois ans | 128 000 000 GNF HT | 110 000 000 GNF HT |
-
-
-### 8.6 Conditions de paiement
+### 8.5 Conditions de paiement
 
 - 50 % à la commande, 30 % à la recette en semaine 4, 20 % au procès-verbal de mise en production.
 - Forfait annuel d'hébergement, maintenance et support : par semestre d'avance, à compter du treizième mois.
 - Règlement à 30 jours date de facture, par virement bancaire.
 
 
-### 8.7 Engagements contractuels
+### 8.6 Engagements contractuels
 
 - Garantie corrective de 3 mois après la mise en production, incluse dans le prix.
 - Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.
@@ -483,12 +463,24 @@ Délais d'intervention du support, applicables dès la mise en production :
 
 ### 9.2 Signature
 
-Pour E-VOLUTION XP :
+Pour E-volution Experience
 
-Nom, qualité, date et signature
+Madigbè KOUYATÉ
 
-Pour EGUITRA GROUP SARLU et MB AxisPro Consulting, bon pour accord sur la proposition retenue :
+Gérant
 
-Proposition retenue :  1    2
+Signature : ________________
 
-Nom, qualité, date, signature et cachet
+
+
+Pour EGUITRA GROUP SARLU et MB AxisPro Consulting
+
+Date : ________________
+
+Proposition retenue :        1                  2
+
+Signature et cachet : ________________
+
+Mention manuscrite obligatoire :
+
+« Lu et approuvé. Bon pour accord »

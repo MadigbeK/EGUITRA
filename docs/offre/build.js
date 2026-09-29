@@ -50,8 +50,8 @@ table(
   ],
   [2600, 3519, 3519],
 );
-callout(`Notre recommandation est la proposition 1. Pour ${gnf(P1.total - P2.total)} de plus, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.`);
-p(`Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}. Tous les montants sont exprimés en francs guinéens, hors taxes.`);
+callout(`Notre recommandation est la proposition 1. Pour ${gnf(P1.total - P2.total)} de plus, le groupe obtient un noyau ERP utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.`);
+p(`Validité de l'offre : 30 jours à compter du ${HYP.dateOffre}. Tous les montants sont exprimés en francs guinéens.`);
 
 pagebreak();
 
@@ -322,19 +322,7 @@ ul([
   'Un point d\'avancement quotidien de quinze minutes avec le référent du client.',
   'Un espace partagé de suivi des demandes, accessible au client.',
 ]);
-h2('7.5 Équipe E-VOLUTION XP');
-table(
-  ['Rôle', 'Mission'],
-  [
-    ['Directeur de projet et architecte', 'Interlocuteur unique, conception, arbitrages, qualité des livraisons.'],
-    ['Consultant fonctionnel finance', 'Paramétrage SYSCOHADA, analytique, états financiers, reprise des données, formation.'],
-    ['Développeurs', 'Noyau et API dans la proposition 1, moteur comptable dans la proposition 2 ; applications EGUITRA Finance et AxisPro Suite, application mobile, portail.'],
-    ['Ingénieur exploitation', 'VPS, sécurité, sauvegardes, supervision, support.'],
-    ['Expert-comptable partenaire', 'Validation du plan de comptes, des états financiers et des déclarations fiscales guinéennes.'],
-  ],
-  [3200, 6438],
-);
-h2('7.6 Prérequis côté client');
+h2('7.5 Prérequis côté client');
 ul([
   'Un référent par domaine disponible une demi-journée par jour pendant les quatre semaines.',
   'La charte graphique du groupe et du cabinet, ou un atelier de définition en semaine 1.',
@@ -391,26 +379,14 @@ table(
   [1600, 3838, 2000, 2200],
 );
 
-h2('8.5 Synthèse financière');
-table(
-  ['', P1.code, P2.code],
-  [
-    ['Réalisation et hébergement, première année', gnfHT(P1.total), gnfHT(P2.total)],
-    ['Hébergement, maintenance et support, par an à partir de la deuxième année', gnfHT(P1.maintenanceAn), gnfHT(P2.maintenanceAn)],
-    ['Coût cumulé sur trois ans', gnfHT(P1.total + 2 * P1.maintenanceAn), gnfHT(P2.total + 2 * P2.maintenanceAn)],
-  ],
-  [3838, 2900, 2900],
-  { boldRows: [0] },
-);
-
-h2('8.6 Conditions de paiement');
+h2('8.5 Conditions de paiement');
 ul([
   '50 % à la commande, 30 % à la recette en semaine 4, 20 % au procès-verbal de mise en production.',
   'Forfait annuel d\'hébergement, maintenance et support : par semestre d\'avance, à compter du treizième mois.',
   'Règlement à 30 jours date de facture, par virement bancaire.',
 ]);
 
-h2('8.7 Engagements contractuels');
+h2('8.6 Engagements contractuels');
 ul([
   `Garantie corrective de ${HYP.garantieMois} mois après la mise en production, incluse dans le prix.`,
   'Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d\'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.',
@@ -438,11 +414,17 @@ table(
   [2000, 7638],
 );
 h2('9.2 Signature');
-p(`Pour ${HYP.prestataire} :`);
-p('Nom, qualité, date et signature');
-p(`Pour ${HYP.client} et ${HYP.client2}, bon pour accord sur la proposition retenue :`);
-p('Proposition retenue :  1    2');
-p('Nom, qualité, date, signature et cachet');
+p(`Pour ${HYP.raisonSociale}`);
+p(HYP.signataire);
+p(HYP.qualiteSignataire);
+p('Signature : ________________');
+p('');
+p(`Pour ${HYP.client} et ${HYP.client2}`);
+p('Date : ________________');
+p('Proposition retenue :        1                  2');
+p('Signature et cachet : ________________');
+p('Mention manuscrite obligatoire :');
+p('« Lu et approuvé. Bon pour accord »');
 
 // ---------------------------------------------------------------- rendu MD
 function toMarkdown() {
