@@ -1,9 +1,6 @@
-// Source unique des hypothèses de l'offre technique et financière du 29 septembre 2026.
+// Hypothèses de l'offre technique et financière du 29 septembre 2026.
 // build.js rend le document en .docx et en .md à partir de ce fichier.
 // Tous les montants sont en francs guinéens (GNF), hors taxes.
-//
-// La version envoyée le 15 septembre 2026 est conservée dans envoyes/ (PDF)
-// et dans l'historique git (commit « Aligne la source sur la version envoyée »).
 
 const HYP = {
   prestataire: 'E-VOLUTION XP',
@@ -15,19 +12,19 @@ const HYP = {
   client: 'EGUITRA GROUP SARLU',
   client2: 'MB AxisPro Consulting',
   dg: 'M. Mohamed Nimaga, Directeur Général',
-  reference: 'OTF-EGUITRA-2026-36',
+  reference: 'OTF-EGUITRA-2026-37',
   dateOffre: '29 septembre 2026',
-  dateOffreInitiale: '15 septembre 2026', // offre annulée et remplacée par la présente
   dateOffreISO: '2026-09-29',
+  dateOffrePrecedente: '15 septembre 2026', // offre annulée et remplacée par la présente
   validiteJours: 30,
   dureeSemaines: 4,
+  accompagnementSemaines: 4,
   garantieMois: 6,
   vps: 'VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site',
   // Logo : docs/offre/logo.png s'il existe, sinon le rendu vectoriel logo-rendu.png
   logoFichiers: ['logo.png', 'logo-rendu.png'],
 };
 
-// Sauvegardes.
 const SAUVEGARDE = {
   rpoMinutes: 15, // perte de données maximale
   rtoHeuresOuvrees: 4, // délai de reprise
@@ -37,49 +34,41 @@ const SAUVEGARDE = {
   disponibilite: '99,5 %',
 };
 
-// Pénalités de retard.
 const PENALITE = {
-  tauxJourPct: 0.1, // pourcent du montant HT de la commande par jour calendaire de retard
-  plafondPct: 5, // pourcent du montant HT de la commande
+  tauxJourPct: 0.1, // pourcent du montant HT par jour calendaire de retard imputable au prestataire
+  plafondPct: 5,
 };
 
-// Maintenance évolutive.
 const EVOLUTIONS = {
   joursParMois: 2,
   joursParTrimestre: 6,
-  seuilJoursIncluse: 2, // charge maximale d'une évolution incluse
+  seuilJoursIncluse: 2,
   delaiQualificationJoursOuvres: 2,
-  tarifJourHT: 750000, // tarif d'un jour-homme pour les évolutions facturables
+  tarifJourHT: 750000,
 };
 
-// Proposition : plateforme intégrée sur noyau Odoo Community, invisible pour l'utilisateur.
-const P1 = {
-  code: 'Proposition 1',
-  titre: 'Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion',
+const OFFRE = {
   total: 50000000,
-  maintenanceAn: 9000000, // à partir de la deuxième année, hébergement compris
+  maintenanceAn: 9000000, // hébergement, exploitation, support et maintenance, à partir de la deuxième année
   postes: [
-    ['Cadrage, conception et charte graphique des applications', 3000000],
-    ['Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision', 4000000],
-    ['EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans', 17000000],
-    ['Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie', 7500000],
-    ['Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS', 4000000],
-    ['AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 7500000],
-    ['Reprise du dossier 2026, recette, formation, mise en production', 3000000],
-    ['Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois', 4000000],
+    ['Cadrage, conception des parcours utilisateurs et charte graphique', 3000000],
+    ['Socle technique et hébergement de la première année : VPS, noyau de gestion, sécurité, sauvegardes, supervision', 8000000],
+    ['EGUITRA Finance : comptabilité SYSCOHADA, analytique, trésorerie, immobilisations, budget, approbations, clôtures et états', 17000000],
+    ['Modules métier : transport pétrolier et application mobile, chantiers, immobilier, fiscalité, consolidation et passerelle IFRS', 11500000],
+    ['AxisPro Suite et portail des porteurs de projets', 7500000],
+    ['Reprise de l\'exercice 2026, recette, formation et mise en production', 3000000],
   ],
 };
 {
-  const somme = P1.postes.reduce((s, x) => s + x[1], 0);
-  if (somme !== P1.total) throw new Error(`${P1.code} : la somme des postes (${somme}) diffère du total (${P1.total})`);
+  const somme = OFFRE.postes.reduce((s, x) => s + x[1], 0);
+  if (somme !== OFFRE.total) throw new Error(`La somme des postes (${somme}) diffère du total (${OFFRE.total})`);
 }
 
-// Planning en quatre semaines.
 const PLANNING = [
-  ['Semaine 1', 'Cadrage et socle', 'Ateliers de cadrage avec la finance, l\'exploitation, les chantiers, l\'immobilier et le cabinet. Charte graphique validée. VPS en ligne, socle installé, comptes utilisateurs créés.', 'Dossier de conception signé, plateforme accessible'],
-  ['Semaine 2', 'Finance et AxisPro', 'Paramétrage SYSCOHADA, axes analytiques, trésorerie, immobilisations, budget, approbations. Écrans EGUITRA Finance. Grille AxisPro importée et modèle de scoring en place. Reprise des référentiels et des soldes d\'ouverture.', 'Écrans finance en recette interne'],
-  ['Semaine 3', 'Métiers et portail', 'Rotations, flotte, rentabilité, application mobile. Chantiers, retenues de garantie. Biens et baux. Déclarations fiscales. Écrans AxisPro Suite et portail des porteurs. Fin de la reprise des écritures 2026.', 'Périmètre complet livré en recette'],
-  ['Semaine 4', 'Recette et mise en production', 'Recette avec vos équipes sur vos données, corrections, formation par profil, mise en production, exercice 2026 consultable et exercice 2027 prêt à l\'ouverture.', 'Procès-verbal de mise en production'],
+  ['Semaine 1', 'Cadrage et socle', 'Ateliers avec la direction, la finance, l\'exploitation transport, les chantiers, l\'immobilier et le cabinet. Validation des parcours et de la charte graphique. Serveur en ligne, noyau installé, comptes créés.', 'Dossier de conception signé, plateforme accessible en recette'],
+  ['Semaine 2', 'Cœur financier', 'Plan de comptes SYSCOHADA, axes analytiques, comptes de trésorerie, immobilisations, budget, circuits d\'approbation. Écrans EGUITRA Finance. Grille AxisPro chargée, moteur de scoring en place. Reprise des référentiels et des soldes d\'ouverture.', 'Écrans financiers en recette interne'],
+  ['Semaine 3', 'Modules métier et portail', 'Rotations, flotte, rentabilité, application mobile. Chantiers et retenues de garantie. Biens, baux, loyers. Déclarations fiscales. Écrans AxisPro Suite et portail des porteurs. Reprise des écritures 2026 achevée.', 'Périmètre complet livré en recette'],
+  ['Semaine 4', 'Recette et mise en production', 'Recette avec vos équipes sur vos données, corrections, formation par profil, bascule en production. Exercice 2026 consultable, exercice 2027 prêt à l\'ouverture.', 'Procès-verbal de mise en production'],
 ];
 
-module.exports = { HYP, SAUVEGARDE, PENALITE, EVOLUTIONS, P1, PLANNING };
+module.exports = { HYP, SAUVEGARDE, PENALITE, EVOLUTIONS, OFFRE, PLANNING };

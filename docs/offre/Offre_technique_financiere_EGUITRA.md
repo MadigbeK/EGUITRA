@@ -2,11 +2,13 @@
 
 # Offre technique et financière
 
-**Digitalisation du département Finance et de l'accompagnement des porteurs de projets**
+**Plateforme de gestion intégrée EGUITRA Finance et AxisPro Suite**
+
+Digitalisation du département Finance et de l'accompagnement des porteurs de projets
 
 Pour EGUITRA GROUP SARLU et MB AxisPro Consulting, à l'attention de M. Mohamed Nimaga, Directeur Général
 
-Référence OTF-EGUITRA-2026-36, 29 septembre 2026, valable 30 jours
+Référence OTF-EGUITRA-2026-37, 29 septembre 2026, valable 30 jours
 
 Émise par E-VOLUTION XP, Transformation Numérique. Contact : +224 628 86 22 55 / emkouyate@e-volutionxp.com
 
@@ -19,344 +21,305 @@ _Sommaire : voir la version Word, table des matières automatique._
 ---
 
 
-## 1. Synthèse de l'offre
+## 1. L'essentiel de notre offre
 
-EGUITRA GROUP SARLU et MB AxisPro Consulting partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. E-VOLUTION XP propose une plateforme unique qui répond à ces deux projets : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite, mises en production en 4 semaines sur un hébergement dédié au groupe. C'est la proposition 1 de notre offre du 15 septembre 2026, que la direction a retenue ; la présente offre la reprend seule et en précise les conditions.
+EGUITRA GROUP SARLU conduit trois métiers exigeants, le transport d'hydrocarbures, le BTP et l'immobilier, et partage sa direction avec MB AxisPro Consulting, cabinet qui accompagne des porteurs de projets vers le financement. Les deux structures ont aujourd'hui des outils de gestion conçus pour un seul utilisateur, sans partage, sans droits d'accès et sans sauvegarde d'entreprise. Elles veulent un système unique, fiable, à leur image, qui donne au dirigeant une vision consolidée en temps réel et aux équipes des parcours de saisie simples.
 
-|  | Proposition 1 |
+E-VOLUTION XP propose de mettre en production, en 4 semaines, une plateforme de gestion intégrée composée de deux applications métier, EGUITRA Finance pour le groupe et AxisPro Suite pour le cabinet, bâties sur un noyau comptable open source éprouvé, Odoo Community, que les utilisateurs ne voient jamais. Le groupe bénéficie ainsi de la robustesse d'un moteur utilisé par des dizaines de milliers d'entreprises, sans licence ni redevance, et d'interfaces conçues pour ses métiers, son vocabulaire et sa charte.
+
+| Engagement | Contenu |
 |---|---|
-| Solution | Une plateforme unique : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite. |
-| Attentes du département Finance couvertes | Vingt sur vingt |
-| Délai de mise en production | 4 semaines à compter du démarrage, avec pénalités de retard |
-| Investissement, hébergement de la première année compris | 50 000 000 GNF HT |
-| Hébergement, maintenance et support à partir de la deuxième année | 9 000 000 GNF HT par an |
-| Licences logicielles | Aucune |
-| Garantie corrective | 6 mois, couvrant la première clôture annuelle |
-| Perte de données maximale | 15 minutes |
-| Disponibilité cible | 99,5 % par mois |
+| Périmètre | Comptabilité SYSCOHADA révisé, analytique, trésorerie et rapprochement bancaire, immobilisations, budget, fiscalité guinéenne, consolidation groupe, transport pétrolier avec application mobile, chantiers, immobilier, évaluation et suivi des porteurs de projets, portail des porteurs |
+| Attentes du département Finance | Les vingt attentes du courrier du responsable financier sont couvertes, chapitre 4 |
+| Délai | 4 semaines à compter du démarrage, sous pénalités de retard |
+| Investissement | 50 000 000 GNF HT, hébergement de la première année compris |
+| À partir de la deuxième année | 9 000 000 GNF HT par an, hébergement, exploitation, support et maintenance |
+| Licences | Aucune, ni à l'achat ni par utilisateur |
+| Garantie corrective | 6 mois à compter de la réception, couvrant la première clôture annuelle |
+| Protection des données | Perte de données maximale de 15 minutes, reprise sous 4 heures ouvrées, disponibilité 99,5 % |
+| Propriété | Données et code développé pour vous, réversibilité complète sur demande |
 
-> Pour 50 000 000 GNF HT, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux, une évolutivité sans nouveau développement, et deux applications conçues pour ses équipes. Aucune licence, aucune limite de nombre d'utilisateurs.
+> Un seul système, deux applications, aucune licence : le groupe et le cabinet disposent d'un outil de gestion complet pour 50 000 000 GNF HT, puis 9 000 000 GNF HT par an, avec des engagements écrits sur le délai, la garantie, la sauvegarde et le support.
 
-Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. Tous les montants sont exprimés en francs guinéens, hors taxes.
+Cette offre est valable 30 jours, jusqu'au 29 octobre 2026. Tous les montants sont exprimés en francs guinéens, hors taxes.
 
 
 ---
 
 
-## 2. Notre compréhension de votre besoin
+## 2. Votre contexte et vos enjeux
 
 
-### 2.1 Le groupe et ses activités
+### 2.1 Deux structures, une direction, trois métiers
 
-EGUITRA GROUP SARLU opère sur trois secteurs : le transport et la logistique de produits pétroliers, le BTP et l'immobilier, complétés par une activité de négoce. Le transport d'hydrocarbures constitue le cœur de métier, avec une flotte de quinze ensembles citernes et des clients tels que les distributeurs pétroliers et les sociétés minières. MB AxisPro Consulting, cabinet de conseil du même groupe, accompagne des porteurs de projets vers le financement bancaire et l'investissement.
+EGUITRA GROUP SARLU exploite une flotte de quinze ensembles citernes pour le compte de distributeurs pétroliers et de sociétés minières, réalise des chantiers de BTP et gère un patrimoine immobilier, auxquels s'ajoute une activité de négoce. Le transport d'hydrocarbures représente environ 70 % d'un chiffre d'affaires cumulé de 20,6 milliards GNF au 15 août 2026. MB AxisPro Consulting évalue la maturité et la bancabilité de projets, accompagne leurs promoteurs et prépare les dossiers présentés aux banques et aux investisseurs.
 
-Le dossier de l'exercice 2026 que vous nous avez transmis, arrêté au 15 août, donne la mesure du périmètre :
+Le dossier de l'exercice 2026 que vous nous avez transmis donne la mesure de l'activité à reprendre dans l'outil :
 
 | Donnée | Volume au 15 août 2026 |
 |---|---|
 | Activités et centres de coût | 7 activités, 9 centres de coût |
-| Comptes de trésorerie | 3 banques dont un compte USD, 2 caisses |
-| Flotte et chauffeurs | 15 ensembles citernes, 15 chauffeurs, 9 routes tarifées |
-| Rotations de transport enregistrées | 383 |
+| Comptes de trésorerie | 3 banques dont un compte en USD, 2 caisses |
+| Flotte | 15 ensembles citernes, 15 chauffeurs, 9 routes tarifées |
+| Rotations de transport | 383 |
 | Factures de vente et pièces d'achat | 147 et 169 |
 | Opérations de trésorerie | 412 |
 | Immobilisations et financements | 24 immobilisations, 4 emprunts et crédits-bails |
-| Chiffre d'affaires cumulé | Environ 20,6 milliards GNF, dont 70 % en transport d'hydrocarbures |
 
 
-### 2.2 Les deux projets
+### 2.2 Ce que la direction attend
 
-Projet 1 : la digitalisation du département Finance. Le courrier du responsable financier liste vingt attentes, de la comptabilité SYSCOHADA révisée à la rentabilité par trajet, en passant par la consolidation groupe, les workflows d'approbation, la piste d'audit et la disponibilité garantie. Le tableau du chapitre 4 répond point par point.
+Le courrier du responsable financier formule vingt attentes pour le département Finance. Elles se regroupent en quatre familles : voir, avec une visibilité globale et en temps réel sur le chiffre d'affaires, le résultat et la trésorerie, consolidée au niveau du groupe et décomposable par activité ; tenir, avec une comptabilité générale et analytique conforme au SYSCOHADA révisé, une gestion budgétaire, fiscale, des immobilisations et de la facturation ; piloter les métiers, avec la rentabilité par trajet et par véhicule, le suivi des chantiers et la gestion locative ; sécuriser, avec des circuits d'approbation, une piste d'audit complète, des accès par profil, une disponibilité garantie et une tarification sans coûts cachés.
 
-Projet 2 : la digitalisation de l'accompagnement des porteurs de projets. Le prototype MB AxisPro décrit une méthode d'évaluation de la maturité et de la bancabilité : 111 critères répartis sur 15 domaines, huit stage gates, des critères éliminatoires, une data room de 42 pièces, des revues de comité et des rapports de décision.
+Pour le cabinet, le besoin est d'industrialiser une méthode d'évaluation déjà formalisée : 111 critères sur 15 domaines, huit stage gates, des critères éliminatoires, une data room de 42 pièces, des revues de comité et des rapports de décision, aujourd'hui portés par un prototype à utilisateur unique.
 
 
-### 2.3 Ce que nous retenons des prototypes existants
+### 2.3 Ce que nous retenons de vos prototypes
 
-Les deux prototypes générés par la direction constituent une spécification fonctionnelle de grande qualité. Nous les reprenons comme cahier des charges de référence, et notamment :
+Les deux prototypes conçus par la direction sont une spécification fonctionnelle de grande qualité. Nous les adoptons comme cahier des charges et nous en conservons les principes fondateurs :
 
-- Le principe de saisie unique : chaque donnée n'est saisie qu'une fois, tout le reste est calculé.
-- Les règles de contrôle : équilibre débit et crédit, équilibre actif et passif, compte de passage des virements internes soldé, clôture refusée tant qu'une alerte bloquante est active.
-- Les indicateurs du dirigeant : chiffre d'affaires et résultat par activité, trésorerie fin de mois, ancienneté des créances, service de la dette et DSCR, marge par rotation, écarts budgétaires.
-- La méthode d'évaluation AxisPro : pondération, critères critiques et éliminatoires, gaps prioritaires, historique des revues, politique d'évaluation tracée dans chaque export.
+- Chaque donnée est saisie une seule fois ; tout le reste est calculé.
+- Les contrôles sont bloquants : équilibre débit et crédit, équilibre actif et passif, compte de passage des virements internes soldé, clôture refusée tant qu'une alerte bloquante est active.
+- Le dirigeant dispose d'indicateurs de décision : chiffre d'affaires et résultat par activité, trésorerie fin de mois, ancienneté des créances, service de la dette et DSCR, marge par rotation, écarts budgétaires.
+- L'évaluation des projets suit une politique explicite et versionnée : pondérations, critères critiques et éliminatoires, gaps prioritaires, historique des revues, rappel de la politique dans chaque rapport.
 
-Ces prototypes sont conçus pour un utilisateur unique, sans authentification, avec un fichier local comme seule sauvegarde. La plateforme conserve leurs règles et leur ergonomie, et y ajoute ce qui manque à un outil d'entreprise : multi-utilisateurs, droits par profil, piste d'audit, sauvegardes, disponibilité et évolutivité.
+Ce qui manque à ces prototypes pour devenir un outil d'entreprise, et que la plateforme apporte : le travail simultané de plusieurs utilisateurs, des droits par profil, une piste d'audit, des sauvegardes et une disponibilité garanties, et la capacité d'évoluer sans redéveloppement.
 
 
 ---
 
 
-## 3. Proposition 1 : plateforme intégrée sur noyau de gestion
+## 3. La plateforme EGUITRA Finance et AxisPro Suite
 
 
-### 3.1 Principe : un noyau invisible, des applications à votre image
+### 3.1 Principes de conception
 
-La plateforme repose sur deux couches strictement séparées.
+La plateforme sépare strictement ce que les utilisateurs voient de ce qui tient les comptes.
 
-Le noyau de gestion est Odoo Community, complété par les modules de l'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les droits d'accès et la traçabilité. Il est publié sous licence libre : aucune redevance, aucune limite de nombre d'utilisateurs, aucun éditeur à contacter pour une évolution.
+Les applications métier, EGUITRA Finance et AxisPro Suite, sont développées sur mesure par E-VOLUTION XP. Elles constituent la seule interface de vos équipes : navigation par métier, écrans de saisie guidée, tableaux de bord, exports, dans la charte graphique du groupe et du cabinet et avec votre vocabulaire. Une application mobile de saisie des rotations et un portail pour les porteurs de projets les complètent.
 
-Les applications métier sont développées sur mesure et constituent la seule interface utilisée par vos équipes : EGUITRA Finance pour le groupe, AxisPro Suite pour le cabinet. Elles reprennent votre identité visuelle, votre vocabulaire et vos parcours de saisie. Le client web du noyau n'est jamais exposé aux utilisateurs ; il reste accessible à la seule équipe technique de E-VOLUTION XP, sur un accès réseau restreint. Cette approche est celle que nous avons mise en œuvre pour SOGUIPREM.
+Le noyau de gestion est Odoo Community, complété par les modules de l'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les circuits d'approbation, les droits d'accès et la traçabilité. Publié sous licence libre, il n'entraîne aucune redevance, aucune limite de nombre d'utilisateurs et aucune dépendance à un éditeur. Son interface d'administration n'est jamais exposée aux utilisateurs ; elle reste accessible à la seule équipe technique de E-VOLUTION XP, sur un accès réseau restreint. Nous avons déployé cette architecture pour SOGUIPREM.
 
-> Pour vos utilisateurs, il n'existe qu'EGUITRA Finance et AxisPro Suite. Le noyau reste un composant technique, au même titre que la base de données.
+> Pour vos équipes, il n'existe qu'EGUITRA Finance et AxisPro Suite. Le noyau est un composant technique, au même titre que la base de données.
 
 
-### 3.2 Architecture
+### 3.2 Architecture technique
 
 | Couche | Composants | Rôle |
 |---|---|---|
-| Interface utilisateur | Applications web EGUITRA Finance et AxisPro Suite, application mobile de saisie des rotations, portail des porteurs de projets | Seule surface visible. Charte graphique du groupe, navigation métier, tableaux de bord, saisie guidée, exports. |
+| Interface utilisateur | Applications web EGUITRA Finance et AxisPro Suite, application mobile de saisie des rotations, portail des porteurs de projets | Seule surface visible. Charte graphique, navigation métier, tableaux de bord, saisie guidée, exports. |
 | API métier | Modules spécifiques exposant une API sécurisée, authentification par jeton, double authentification | Traduit les actions métier en opérations du noyau, applique les règles de gestion, journalise. |
 | Noyau de gestion | Odoo Community, modules OCA, modules spécifiques du groupe | Comptabilité, analytique, trésorerie, immobilisations, budget, workflows, droits, audit. |
 | Données et documents | PostgreSQL, stockage de fichiers | Persistance, pièces justificatives, data room. |
-| Exploitation | VPS, conteneurs, proxy TLS, supervision, sauvegardes chiffrées hors site | Disponibilité, sécurité, restauration. |
+| Exploitation | VPS dédié, conteneurs, proxy TLS, supervision, sauvegardes chiffrées hors site | Disponibilité, sécurité, restauration. |
 
 
-### 3.3 EGUITRA Finance : les écrans
+### 3.3 EGUITRA Finance : le cycle comptable
 
-| Écran | Contenu |
+EGUITRA Finance reprend le moteur comptable du prototype de la direction et le porte sur le noyau. Le cycle est le suivant :
+
+- Saisie à la source : facture de vente, pièce d'achat, opération de trésorerie, rotation de transport, situation de chantier ou quittance de loyer. Les comptes de contrepartie, la TVA et l'imputation analytique sont déduits automatiquement.
+- Approbation : les engagements et les paiements passent par une corbeille de validation à plusieurs niveaux, avec des seuils par montant et par nature.
+- Contrôles permanents : équilibres, compte de passage, cohérence des références, empreinte de chaînage des écritures.
+- Clôture mensuelle : contrôles bloquants, registre des clôtures, réouverture contrôlée, verrouillage des écritures.
+- États : balance, grand livre par compte et par tiers, bilan, compte de résultat et tableau des flux au format SYSCOHADA, rapport mensuel de gestion, exports CSV et XLSX de tous les journaux et états.
+
+
+### 3.4 EGUITRA Finance : les écrans par profil
+
+| Profil | Écrans |
 |---|---|
-| Tableau de bord du dirigeant | CA facturé, résultat, trésorerie fin de mois, encours clients, service de la dette, alertes actives, questions du dirigeant. |
-| Pilotage par activité | Répartition du CA, marge et charges par activité et par centre de coût, comparaison budget. |
-| Ventes | Factures de vente, avoirs, litiges, échéances, relances. |
-| Achats et dépenses | Pièces d'achat par catégorie, TVA récupérable, justificatifs, circuit d'approbation. |
-| Trésorerie | Encaissements, paiements, virements internes, position par compte et devise, rapprochement bancaire. |
-| Tiers | Clients et fournisseurs, conditions, limites de crédit, ancienneté des créances et des dettes. |
-| Immobilisations | Registre, amortissements, dotations mensuelles, cessions. |
-| Journaux et OD | Journaux de ventes, achats, banque, caisse, OD ; saisie d'OD guidée. |
-| Balance et grand livre | Balance générale, grand livre par compte et par tiers, filtres par période et par activité. |
-| Budget face au réalisé | Lignes budgétaires mensuelles, écarts, seuils. |
-| Dette et financement | Emprunts et crédits-bails, échéanciers, DSCR. |
-| Alertes de gestion | Seuils de trésorerie, marge transport, écarts budgétaires, délais de recouvrement. |
-| Clôtures | Clôture mensuelle avec contrôles bloquants, registre des clôtures, réouverture contrôlée. |
-| Contrôles d'intégrité | Équilibres, compte de passage, cohérence des références, empreinte des écritures. |
-| États financiers | Bilan, compte de résultat, tableau des flux au format SYSCOHADA, rapport mensuel de gestion. |
-| Approbations | Corbeille des engagements et paiements à valider par niveau. |
-| Exports | CSV et XLSX de tous les journaux et états, export d'audit. |
-| Paramètres et utilisateurs | Référentiels, seuils, taux de change, profils et droits. |
-
-S'y ajoutent les écrans métier : Flotte, Chauffeurs, Routes et tarifs, Rotations, Rentabilité par ensemble routier, Chantiers, Situations d'avancement, Retenues de garantie, Biens, Baux, Quittancement, Patrimoine, Déclarations fiscales, Consolidation groupe et Passerelle IFRS.
+| Direction générale | Tableau de bord du dirigeant : CA facturé, résultat, trésorerie fin de mois, encours clients, service de la dette et DSCR, alertes actives. Pilotage par activité et par centre de coût, comparaison au budget. Consolidation groupe. |
+| Finance et comptabilité | Ventes, achats et dépenses, trésorerie et rapprochement bancaire, tiers et limites de crédit, immobilisations et amortissements, journaux et OD guidées, balance et grand livre, budget face au réalisé, dette et financement, clôtures, contrôles d'intégrité, états financiers, déclarations fiscales, passerelle IFRS, exports d'audit. |
+| Exploitation transport | Flotte, chauffeurs, routes et tarifs, rotations, rentabilité par ensemble routier et par route, application mobile de saisie au parc. |
+| Chantiers | Chantiers, situations d'avancement, facturation à l'avancement, retenues de garantie. |
+| Immobilier | Biens, baux, loyers et quittancement, valorisation du patrimoine. |
+| Administration | Référentiels, seuils d'alerte, taux de change, profils et droits, journal d'audit. |
 
 
-### 3.4 Transport pétrolier : la rotation comme source unique
+### 3.5 Transport pétrolier : la rotation, source unique
 
-Une rotation est saisie une seule fois, depuis le bureau ou depuis l'application mobile au parc, y compris sans connexion : la saisie est mise en file et synchronisée dès que le réseau revient. Chaque rotation porte le camion, le chauffeur, le client, le produit, le volume, la route, le tarif, le carburant, les péages, les frais de chauffeur, la maintenance et les taxes spécifiques. Le noyau en déduit la ligne de facturation, les coûts analytiques par véhicule et par route, et la marge. Le seuil de marge transport du dossier devient une alerte automatique.
+Une rotation est saisie une seule fois, au bureau ou depuis l'application mobile au parc, y compris sans réseau : la saisie est mise en file et synchronisée dès que la connexion revient. Elle porte le camion, le chauffeur, le client, le produit, le volume, la route, le tarif, le carburant, les péages, les frais de chauffeur, la maintenance et les taxes spécifiques. La plateforme en déduit la ligne de facturation, les coûts analytiques par véhicule et par route, et la marge. Le seuil de marge transport du dossier devient une alerte automatique sur le tableau de bord du dirigeant.
 
 
-### 3.5 AxisPro Suite
+### 3.6 Chantiers, immobilier, fiscalité et consolidation
 
-AxisPro Suite industrialise la méthode du prototype MB AxisPro dans un outil multi-utilisateurs, avec un portail pour les porteurs de projets. La grille d'évaluation est importée comme données et reste modifiable par le cabinet, sans intervention technique.
+- Chantiers : chaque chantier est un axe analytique. Les situations d'avancement génèrent la facturation, les retenues de garantie sont suivies jusqu'à leur libération.
+- Immobilier : biens, baux et loyers sont gérés par contrats récurrents ; le quittancement et les relances sont automatiques, le patrimoine est valorisé.
+- Fiscalité guinéenne : TVA collectée et récupérable, retenues, déclarations locales préparées à partir des écritures, modèles validés avec votre expert-comptable.
+- Consolidation : le multi-sociétés du noyau permet une vue groupe décomposable par entité, activité, chantier et ligne logistique, avec une passerelle vers un reporting IFRS.
 
-| Écran | Contenu |
+
+### 3.7 AxisPro Suite : de la grille d'évaluation au comité
+
+AxisPro Suite industrialise la méthode du cabinet dans un outil multi-utilisateurs. La grille d'évaluation est importée comme donnée et reste modifiable par le cabinet sans intervention technique. Le parcours d'un dossier est le suivant :
+
+- Ouverture du dossier : identification du projet, du promoteur, de la localisation, de la capacité et du calendrier ; hypothèses de décision.
+- Saisie guidée par stage gate : critères du gate courant, statut, preuve jointe, commentaire.
+- Score et knock-outs : score par domaine, critères éliminatoires actifs, recommandation GO, NO-GO ou conditionnelle.
+- Gaps prioritaires : classement selon le poids, la criticité et les knock-outs ; les cinq actions à mener par le promoteur.
+- Data room : index des pièces standard, disponibilité, versions, accès du promoteur.
+- Revue de comité : enregistrement, historique, comparaison entre deux revues, verrouillage de la décision.
+- Rapports : rapport de décision pour le comité, liste des pièces à fournir pour le promoteur, export XLSX. La politique d'évaluation, versionnée, est rappelée dans chaque rapport.
+
+Le portail des porteurs de projets leur permet de déposer leurs pièces, de suivre l'avancement de leur dossier et d'échanger avec le cabinet. Le cabinet dispose en outre, dans la même plateforme, de la facturation de ses prestations et du suivi de ses temps par dossier.
+
+
+### 3.8 Composants du noyau retenus
+
+| Fonction | Module communautaire |
 |---|---|
-| Portefeuille de dossiers | Liste des projets par gate, secteur, promoteur, score et décision. |
-| Fiche projet | Identification, promoteur, localisation, capacité, calendrier, hypothèses de décision. |
-| Saisie guidée par gate | Critères du gate courant, statut, preuve jointe, commentaire. |
-| Score et knock-outs | Score par domaine, critères éliminatoires actifs, recommandation GO, NO-GO ou conditionnel. |
-| Gaps prioritaires | Classement selon poids, criticité et knock-out ; les cinq actions à mener. |
-| Data room | Index des pièces standard, disponibilité, versions, accès promoteur. |
-| Revues de comité | Enregistrement d'une revue, historique, comparaison entre deux revues, verrouillage. |
-| Rapports | Rapport de décision pour le comité, liste des pièces à fournir pour le promoteur, export XLSX. |
-| Politique d'évaluation | Réglages de pondération et de seuils, versionnés et rappelés dans chaque rapport. |
-| Portail du porteur de projet | Dépôt des pièces, avancement du dossier, échanges avec le cabinet. |
-
-Le cabinet dispose en outre, dans la même plateforme et sans coût supplémentaire, de la facturation de ses prestations et du suivi de ses temps par dossier.
-
-
-### 3.6 Modules communautaires retenus
-
-| Besoin | Module OCA |
-|---|---|
-| Rapprochement bancaire | account_reconcile_oca, account_statement_import_file |
-| Immobilisations | account_asset_management |
+| Rapprochement bancaire et import des relevés | account_reconcile_oca, account_statement_import_file |
+| Immobilisations et amortissements | account_asset_management |
 | Budgets et états de gestion | mis_builder, mis_builder_budget |
 | États financiers et grand livre | account_financial_report |
-| Workflows d'approbation | base_tier_validation, purchase_tier_validation, account_move_tier_validation |
+| Circuits d'approbation à plusieurs niveaux | base_tier_validation, purchase_tier_validation, account_move_tier_validation |
 | Piste d'audit | auditlog |
-| Contrats récurrents, loyers | contract |
+| Contrats récurrents et loyers | contract |
 | Taux de change | currency_rate_update |
 | Gestion documentaire | dms |
 
-La liste définitive est arrêtée en semaine 1, module par module. Les besoins non couverts par un module communautaire sont réalisés en spécifique, sans surcoût par rapport à la présente offre.
+La liste définitive est arrêtée en semaine 1, module par module. Tout besoin non couvert par un module communautaire est réalisé en spécifique, sans surcoût par rapport à la présente offre.
 
 
 ---
 
 
-## 4. Couverture des attentes du département Finance
-
-Les vingt attentes exprimées dans le courrier du responsable financier sont couvertes. Le tableau précise, pour chacune, le mécanisme retenu.
+## 4. Réponse aux vingt attentes du département Finance
 
 | Attente exprimée | Réponse de la plateforme |
 |---|---|
-| Visibilité globale et temps réel sur CA, résultat, trésorerie, indicateurs | Couverte : tableau de bord du dirigeant et pilotage par activité |
-| Vue consolidée du groupe, décomposable par activité, filiale, projet, ligne logistique | Couverte : multi-sociétés natif, consolidation groupe |
-| Comptabilité générale SYSCOHADA révisé | Couverte : plan de comptes du noyau, validé par votre expert-comptable |
-| Comptabilité analytique par centre de coût, projet, chantier, activité | Couverte : plans analytiques multi-axes |
-| Trésorerie et rapprochement bancaire | Couverte : import des relevés, rapprochement assisté |
-| Immobilisations et amortissements | Couverte : registre, dotations mensuelles, cessions |
-| Gestion budgétaire, écarts réalisé et prévisionnel | Couverte : lignes mensuelles, écarts, seuils |
-| Facturation client et fournisseur | Couverte : factures, avoirs, échéances, relances |
-| Gestion fiscale, TVA, déclarations locales | Couverte : TVA et déclarations guinéennes |
-| Workflow d'approbation des engagements et paiements | Couverte : plusieurs niveaux et seuils |
-| Coûts et rentabilité par trajet et véhicule, volumes, taxes spécifiques | Couverte : rotation comme source unique |
-| Chantiers, facturation à l'avancement, retenues de garantie | Couverte : situations d'avancement, retenues |
-| Gestion locative et valorisation du patrimoine | Couverte : biens, baux, quittancement, patrimoine |
-| Traçabilité complète, piste d'audit | Couverte : verrouillage par empreinte et journal d'audit |
-| Sécurisation des données et des accès par profil | Couverte : double authentification, droits par profil |
-| Disponibilité garantie et sauvegardes | Couverte : 99,5 %, perte de données maximale 15 minutes |
-| Interface simple et formation | Couverte : applications à votre image, formation par profil |
-| Support réactif et accompagnement | Couverte : délais d'intervention engagés, accompagnement renforcé |
-| Solution évolutive | Couverte : ajout de modules sans développement |
-| Tarification claire, sans coûts cachés | Couverte : forfait ferme, aucune licence, forfait annuel unique |
+| Visibilité globale et temps réel sur CA, résultat, trésorerie, indicateurs | Tableau de bord du dirigeant, pilotage par activité, indicateurs calculés à chaque saisie |
+| Vue consolidée du groupe, décomposable par activité, filiale, projet, ligne logistique | Multi-sociétés natif, axes analytiques multiples, consolidation groupe |
+| Comptabilité générale SYSCOHADA révisé | Plan de comptes SYSCOHADA du noyau, validé avec votre expert-comptable |
+| Comptabilité analytique par centre de coût, projet, chantier, activité | Plans analytiques multi-axes, imputation automatique à la saisie |
+| Trésorerie et rapprochement bancaire | Position par compte et devise, import des relevés, rapprochement assisté |
+| Immobilisations et amortissements | Registre, dotations mensuelles automatiques, cessions |
+| Gestion budgétaire, écarts réalisé et prévisionnel | Lignes budgétaires mensuelles, écarts, seuils d'alerte |
+| Facturation client et fournisseur | Factures, avoirs, échéances, relances automatiques |
+| Gestion fiscale, TVA, déclarations locales | TVA et retenues calculées, déclarations préparées à partir des écritures |
+| Workflow d'approbation des engagements et paiements | Corbeille de validation à plusieurs niveaux et seuils |
+| Coûts et rentabilité par trajet et véhicule, volumes, taxes spécifiques | Rotation comme source unique, marge par rotation, par véhicule et par route |
+| Chantiers, facturation à l'avancement, retenues de garantie | Situations d'avancement, facturation générée, retenues suivies |
+| Gestion locative et valorisation du patrimoine | Biens, baux, quittancement automatique, patrimoine |
+| Traçabilité complète, piste d'audit | Journal d'audit avec valeurs avant et après, empreinte de chaînage des écritures |
+| Sécurisation des données et des accès par profil | Double authentification, droits par profil, chiffrement |
+| Disponibilité garantie et sauvegardes | Disponibilité 99,5 %, perte de données maximale 15 minutes, tests de restauration trimestriels |
+| Interface simple et formation | Applications à votre image, saisie guidée, formation par profil, guides en français |
+| Support réactif et accompagnement | Délais d'intervention engagés, 4 semaines d'accompagnement renforcé |
+| Solution évolutive | Ajout de modules du noyau sans développement, évolutions incluses dans le forfait annuel |
+| Tarification claire, sans coûts cachés | Forfait ferme, aucune licence, forfait annuel unique |
 
 
 ---
 
 
-## 5. Hébergement, sécurité et exploitation
+## 5. Hébergement, sécurité et continuité d'activité
 
 
-### 5.1 Infrastructure
+### 5.1 Hébergement
 
-- Hébergement sur serveur virtuel privé dédié au groupe : VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site.
+- Serveur virtuel privé dédié au groupe : VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site.
 - Déploiement en conteneurs, proxy avec certificats TLS renouvelés automatiquement, base de données dédiée.
-- Deux environnements : production et recette. Chaque évolution passe en recette avant la production.
-- Nom de domaine du groupe pour chaque application, par exemple finance.eguitragroup.com et axispro.mbaxisproconsulting.com.
+- Deux environnements, recette et production : toute évolution est validée en recette avant d'être mise en production.
+- Noms de domaine du groupe et du cabinet, par exemple finance.eguitragroup.com et axispro.mbaxisproconsulting.com.
 
 
-### 5.2 Sauvegardes et continuité
+### 5.2 Sauvegardes et reprise après sinistre
 
-La base de données est unique pour l'ensemble des modules : le dispositif de sauvegarde s'applique à la comptabilité comme aux modules métier et à AxisPro Suite, sans distinction. Il est inclus dans le montant de l'offre la première année, puis dans le forfait annuel.
+La base de données est unique pour l'ensemble des modules : les engagements ci-dessous s'appliquent à la comptabilité, aux modules métier et à AxisPro Suite sans distinction. Ils sont compris dans le montant de l'offre la première année, puis dans le forfait annuel.
 
 | Mesure | Engagement |
 |---|---|
-| Journalisation continue des transactions | Le journal des transactions de la base est copié hors site, chiffré, toutes les 15 minutes. Il permet de restaurer la base à un instant donné quelconque des 14 jours précédents. |
+| Journalisation continue | Le journal des transactions de la base est copié hors site, chiffré, toutes les 15 minutes. Il permet de restaurer la base à n'importe quel instant des 14 jours précédents. |
 | Sauvegarde complète | Quotidienne, chiffrée, copiée hors site chez un second fournisseur |
 | Pièces jointes et documents | Synchronisés hors site toutes les heures |
 | Rétention | 30 sauvegardes quotidiennes, 12 sauvegardes mensuelles, journaux de transactions sur 14 jours |
 | Perte de données maximale | 15 minutes |
 | Délai de reprise | 4 heures ouvrées après déclaration de sinistre |
-| Test de restauration | Chaque trimestre, avec compte rendu remis au client, dont un test de restauration à un instant donné |
-| Disponibilité cible | 99,5 % par mois, hors fenêtre de maintenance annoncée 48 heures à l'avance |
+| Test de restauration | Chaque trimestre, dont une restauration à un instant donné, avec compte rendu remis au client |
+| Disponibilité | 99,5 % par mois, hors fenêtre de maintenance annoncée 48 heures à l'avance |
 
 
-### 5.3 Sécurité
+### 5.3 Contrôle des accès et piste d'audit
 
-- Authentification par mot de passe robuste et double authentification pour tous les utilisateurs.
-- Droits par profil : direction, finance, exploitation transport, chantiers, immobilier, cabinet, porteur de projet. Chaque profil ne voit que son périmètre.
+- Mot de passe robuste et double authentification pour tous les utilisateurs.
+- Profils : direction, finance, exploitation transport, chantiers, immobilier, cabinet, porteur de projet. Chaque profil ne voit que son périmètre.
 - Piste d'audit : chaque création, modification et suppression est journalisée avec l'utilisateur, la date et les valeurs avant et après.
-- Écritures comptables verrouillées après clôture, avec empreinte de chaînage.
+- Écritures verrouillées après clôture, avec empreinte de chaînage.
 - Chiffrement des échanges et des sauvegardes, journaux d'accès conservés 12 mois.
 - Mises à jour de sécurité appliquées chaque mois en recette puis en production.
 
 
-### 5.4 Réversibilité
+### 5.4 Propriété et réversibilité
 
-Le client est propriétaire de ses données. À tout moment, sur simple demande, nous remettons une copie complète de la base, des pièces jointes et du code développé pour lui, dans des formats ouverts, avec la documentation d'installation.
+Le client est propriétaire de ses données et du code développé pour lui. À tout moment, sur simple demande et sans frais, nous remettons une copie complète de la base, des pièces jointes et du code, dans des formats ouverts, avec la documentation d'installation. Les composants génériques d'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.
 
 
 ---
 
 
-## 6. Démarche et planning en quatre semaines
+## 6. Mise en œuvre en quatre semaines
 
 
-### 6.1 Planning
+### 6.1 Démarrage et date contractuelle
 
-La plateforme est mise en production en 4 semaines à compter du démarrage, par une équipe dédiée à temps plein. Le démarrage, noté T0, est la date à laquelle l'acompte de commande est encaissé et les prérequis du chapitre 6.5 sont remis ; la date contractuelle de mise en production est T0 plus 4 semaines. Ce délai repose sur trois conditions : les prototypes de la direction servent de spécification, les composants d'interface déjà développés par E-VOLUTION XP sont réutilisés, et les référents du client sont disponibles chaque semaine.
+Le démarrage, noté T0, est la date à laquelle l'acompte de commande est encaissé et les prérequis du chapitre 6.5 sont remis. La date contractuelle de mise en production est T0 plus 4 semaines. Ce délai est tenu par une équipe dédiée à temps plein et repose sur trois conditions : vos prototypes servent de spécification, les composants d'interface déjà développés par E-VOLUTION XP sont réutilisés, et vos référents sont disponibles chaque semaine.
+
+
+### 6.2 Planning
 
 | Semaine | Objet | Travaux | Jalon |
 |---|---|---|---|
-| Semaine 1 | Cadrage et socle | Ateliers de cadrage avec la finance, l'exploitation, les chantiers, l'immobilier et le cabinet. Charte graphique validée. VPS en ligne, socle installé, comptes utilisateurs créés. | Dossier de conception signé, plateforme accessible |
-| Semaine 2 | Finance et AxisPro | Paramétrage SYSCOHADA, axes analytiques, trésorerie, immobilisations, budget, approbations. Écrans EGUITRA Finance. Grille AxisPro importée et modèle de scoring en place. Reprise des référentiels et des soldes d'ouverture. | Écrans finance en recette interne |
-| Semaine 3 | Métiers et portail | Rotations, flotte, rentabilité, application mobile. Chantiers, retenues de garantie. Biens et baux. Déclarations fiscales. Écrans AxisPro Suite et portail des porteurs. Fin de la reprise des écritures 2026. | Périmètre complet livré en recette |
-| Semaine 4 | Recette et mise en production | Recette avec vos équipes sur vos données, corrections, formation par profil, mise en production, exercice 2026 consultable et exercice 2027 prêt à l'ouverture. | Procès-verbal de mise en production |
-
-À l'issue de la semaine 4, E-VOLUTION XP assure quatre semaines d'accompagnement renforcé sur site et à distance, puis la garantie corrective de 6 mois décrite au chapitre 7.6.
+| Semaine 1 | Cadrage et socle | Ateliers avec la direction, la finance, l'exploitation transport, les chantiers, l'immobilier et le cabinet. Validation des parcours et de la charte graphique. Serveur en ligne, noyau installé, comptes créés. | Dossier de conception signé, plateforme accessible en recette |
+| Semaine 2 | Cœur financier | Plan de comptes SYSCOHADA, axes analytiques, comptes de trésorerie, immobilisations, budget, circuits d'approbation. Écrans EGUITRA Finance. Grille AxisPro chargée, moteur de scoring en place. Reprise des référentiels et des soldes d'ouverture. | Écrans financiers en recette interne |
+| Semaine 3 | Modules métier et portail | Rotations, flotte, rentabilité, application mobile. Chantiers et retenues de garantie. Biens, baux, loyers. Déclarations fiscales. Écrans AxisPro Suite et portail des porteurs. Reprise des écritures 2026 achevée. | Périmètre complet livré en recette |
+| Semaine 4 | Recette et mise en production | Recette avec vos équipes sur vos données, corrections, formation par profil, bascule en production. Exercice 2026 consultable, exercice 2027 prêt à l'ouverture. | Procès-verbal de mise en production |
 
 
-### 6.2 Reprise des données
+### 6.3 Reprise de l'exercice 2026
 
-Le dossier 2026 est repris intégralement : référentiels, tiers, plan de comptes, immobilisations, financements, budget, ventes, achats, trésorerie, rotations et OD. Les balances obtenues sont confrontées au classeur d'origine et validées par votre responsable financier avant la mise en production. L'exercice 2026 est ainsi consultable dans l'outil dès le premier jour, et l'exercice 2027 s'ouvre directement dans l'outil.
+Le dossier 2026 est repris intégralement : référentiels, tiers, plan de comptes, immobilisations, financements, budget, ventes, achats, trésorerie, rotations et OD. Les balances obtenues sont confrontées au classeur d'origine et validées par votre responsable financier avant la mise en production. L'exercice 2026 est consultable dans l'outil dès le premier jour ; l'exercice 2027 s'y ouvre directement.
 
 
-### 6.3 Recette et formation
+### 6.4 Recette, formation et accompagnement
 
 - Cahier de recette rédigé avec vos équipes en semaine 3, recette en semaine 4 sur vos données.
 - Formation par profil : direction, finance, exploitation, chantiers, immobilier, cabinet. Supports et guides utilisateur remis en français.
-- Accompagnement renforcé pendant les quatre semaines suivant la mise en production.
-
-
-### 6.4 Gouvernance
-
-- Un comité de pilotage hebdomadaire avec la direction générale et le responsable financier. Son compte rendu constate l'avancement, les décisions et, le cas échéant, les événements qui décalent la date contractuelle.
-- Un point d'avancement quotidien de quinze minutes avec le référent du client.
-- Un espace partagé de suivi des demandes, accessible au client.
+- 4 semaines d'accompagnement renforcé, sur site et à distance, après la mise en production.
+- Gouvernance : comité de pilotage hebdomadaire avec la direction générale et le responsable financier, point quotidien de quinze minutes avec le référent du client, espace partagé de suivi des demandes. Le compte rendu du comité constate l'avancement, les décisions et les événements qui décalent la date contractuelle.
 
 
 ### 6.5 Prérequis côté client
 
-- Un référent par domaine disponible une demi-journée par jour pendant les quatre semaines.
+- Un référent par domaine, disponible une demi-journée par jour pendant les quatre semaines.
 - La charte graphique du groupe et du cabinet, ou un atelier de définition en semaine 1.
 - Les relevés bancaires et les modèles de déclarations fiscales en vigueur.
 - La validation du plan de comptes par votre expert-comptable en semaine 2.
 
 
-### 6.6 Respect du délai et pénalités de retard
+### 6.6 Engagement de délai et pénalités de retard
 
-E-VOLUTION XP s'engage sur la date contractuelle de mise en production selon les règles suivantes :
-
-- Si le procès-verbal de mise en production est signé après la date contractuelle et que le retard est imputable à E-VOLUTION XP, une pénalité de 0,1 % du montant HT de la commande est due par jour calendaire de retard, soit 50 000 GNF par jour.
-- Les pénalités sont plafonnées à 5 % du montant HT de la commande, soit 2 500 000 GNF.
-- Ne sont pas imputables au prestataire, et décalent la date contractuelle d'autant : l'indisponibilité des référents, la remise tardive des prérequis, les délais de validation du client au-delà de deux jours ouvrés, les demandes hors périmètre, et les cas de force majeure. Ces événements sont constatés au comité de pilotage hebdomadaire.
-- Les pénalités sont déduites du dernier terme de paiement. Elles constituent la seule indemnité due au titre du retard.
+- Si le procès-verbal de mise en production est signé après la date contractuelle et que le retard est imputable à E-VOLUTION XP, une pénalité de 0,1 % du montant HT de la commande est due par jour calendaire de retard, soit 50 000 GNF par jour.
+- Les pénalités sont plafonnées à 5 % du montant HT de la commande, soit 2 500 000 GNF.
+- Ne sont pas imputables au prestataire et décalent la date contractuelle d'autant : l'indisponibilité des référents, la remise tardive des prérequis, les validations du client au-delà de deux jours ouvrés, les demandes hors périmètre et les cas de force majeure, constatés au comité de pilotage.
+- Les pénalités sont déduites du dernier terme de paiement et constituent la seule indemnité due au titre du retard.
 
 
 ---
 
 
-## 7. Offre financière
+## 7. Garantie, support et maintenance
 
 
-### 7.1 Hypothèses
+### 7.1 Garantie corrective
 
-- Tous les montants sont en francs guinéens, hors taxes. La TVA et les retenues applicables en Guinée sont ajoutées selon la réglementation en vigueur.
-- Prix forfaitaire : le montant est ferme pour le périmètre décrit aux chapitres 3 et 4. Toute évolution de périmètre fait l'objet d'un avenant chiffré.
-- Aucun coût de licence.
-- L'hébergement de la première année, avec le dispositif de sauvegarde du chapitre 5.2, est compris dans le montant.
+La plateforme est garantie 6 mois à compter de la réception, constatée par le procès-verbal de mise en production. Pendant cette période, toute anomalie par rapport au périmètre recetté est corrigée sans frais, dans les délais d'intervention du chapitre 7.2, y compris les anomalies révélées lors de la clôture de l'exercice, de l'établissement des états financiers annuels et des déclarations fiscales de fin d'exercice. La garantie ne couvre pas les évolutions de périmètre, qui relèvent du chapitre 7.4, ni les erreurs de saisie, qui relèvent du support.
 
 
-### 7.2 Proposition 1 : Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion
+### 7.2 Support et délais d'intervention
 
-Prix forfaitaire, hébergement de la première année compris.
-
-| Poste | Montant HT | Part |
-|---|---|---|
-| Cadrage, conception et charte graphique des applications | 3 000 000 GNF | 6 % |
-| Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision | 4 000 000 GNF | 8 % |
-| EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans | 17 000 000 GNF | 34 % |
-| Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie | 7 500 000 GNF | 15 % |
-| Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS | 4 000 000 GNF | 8 % |
-| AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 7 500 000 GNF | 15 % |
-| Reprise du dossier 2026, recette, formation, mise en production | 3 000 000 GNF | 6 % |
-| Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 4 000 000 GNF | 8 % |
-| **Total proposition 1, hébergement de la première année compris** | **50 000 000 GNF HT** | **100 %** |
-
-
-### 7.3 Hébergement, maintenance et support à partir de la deuxième année
-
-La première année d'hébergement est comprise dans le montant ci-dessus. À partir de la deuxième année, un forfait annuel unique couvre :
-
-| Prestation | Détail |
-|---|---|
-| Hébergement | VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site |
-| Exploitation | Supervision, sauvegardes quotidiennes et journalisation continue toutes les 15 minutes, tests de restauration, mises à jour de sécurité, renouvellement des certificats |
-| Support | Assistance des utilisateurs du lundi au vendredi, de 8 h à 18 h, par messagerie, e-mail et téléphone |
-| Maintenance corrective | Correction de toute anomalie, sans limite |
-| Maintenance évolutive | 2 jours par mois d'évolutions incluses, cumulables sur le trimestre (6 jours par trimestre), selon les règles du chapitre 7.4 |
-| **Forfait annuel** | **9 000 000 GNF HT, facturé par semestre d'avance** |
-
-Délais d'intervention du support, applicables dès la mise en production :
+Le support est assuré du lundi au vendredi, de 8 h à 18 h, par messagerie, e-mail et téléphone, dès la mise en production. Les délais suivants sont engagés :
 
 | Gravité | Définition | Prise en charge | Résolution ou contournement |
 |---|---|---|---|
@@ -365,70 +328,96 @@ Délais d'intervention du support, applicables dès la mise en production :
 | Mineure | Gêne sans blocage | 1 jour ouvré | Prochaine livraison planifiée |
 
 
-### 7.4 Maintenance évolutive : évolutions incluses et facturables
+### 7.3 Forfait annuel à partir de la deuxième année
 
-Une évolution est une demande de modification ou d'ajout qui ne corrige pas une anomalie. Les anomalies relèvent de la maintenance corrective et sont traitées sans limite. Une évolution est incluse dans le forfait annuel lorsqu'elle remplit les trois critères suivants :
+La première année d'hébergement, d'exploitation et de support est comprise dans l'investissement. À partir du treizième mois, un forfait annuel unique de 9 000 000 GNF HT couvre :
 
-- Sa charge totale, spécification, réalisation, test et livraison comprises, est estimée à 2 jours-homme au plus.
-- Elle s'appuie sur les écrans, les données et les états existants : elle n'ajoute ni module ni écran complet, ni interface avec un système externe, ni modification du modèle de données nécessitant une reprise de données.
-- Elle s'inscrit dans le crédit du trimestre en cours : 6 jours, cumulables à l'intérieur du trimestre, non reportables au-delà.
-
-| Évolutions incluses, exemples | Évolutions facturables, exemples |
+| Prestation | Détail |
 |---|---|
-| Ajout d'un champ, d'une colonne, d'un filtre ou d'un tri sur un écran existant | Nouveau module ou nouvel écran complet, par exemple la paie ou la gestion des stocks |
-| Nouvel état ou nouvel export construit à partir des données existantes | Interface avec un système externe : banque, opérateur de paiement mobile, logiciel tiers |
-| Modification d'une règle d'alerte, d'un seuil, d'un niveau ou d'un montant dans un circuit d'approbation | Ajout d'une société au périmètre avec reprise de son historique |
-| Création d'un profil utilisateur, d'une activité, d'un centre de coût, d'une route tarifée | Refonte d'un parcours de saisie ou d'un tableau de bord complet |
-| Adaptation d'une maquette d'impression ou d'un modèle de document | Changement réglementaire majeur, tel qu'une nouvelle version du référentiel SYSCOHADA |
-| Ajustement de la grille de critères ou des pondérations AxisPro au-delà de ce que le cabinet paramètre lui-même | Montée de version majeure du noyau, formation complémentaire |
+| Hébergement | VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site |
+| Exploitation | Supervision, sauvegardes quotidiennes et journalisation continue toutes les 15 minutes, tests de restauration, mises à jour de sécurité, renouvellement des certificats |
+| Support | Assistance des utilisateurs du lundi au vendredi, de 8 h à 18 h, selon les délais du chapitre 7.2 |
+| Maintenance corrective | Correction de toute anomalie, sans limite |
+| Maintenance évolutive | 2 jours par mois d'évolutions incluses, cumulables sur le trimestre, selon les règles du chapitre 7.4 |
 
-Procédure :
+
+### 7.4 Évolutions incluses et évolutions facturables
+
+Une évolution est une demande de modification ou d'ajout qui ne corrige pas une anomalie. Elle est incluse dans le forfait annuel lorsqu'elle remplit les trois conditions suivantes :
+
+- sa charge totale, spécification, réalisation, test et livraison comprises, est estimée à 2 jours-homme au plus ;
+- elle s'appuie sur les écrans, les données et les états existants, sans ajouter de module ni d'écran complet, sans interface avec un système externe et sans modification du modèle de données nécessitant une reprise ;
+- elle s'inscrit dans le crédit du trimestre en cours, 6 jours, cumulables à l'intérieur du trimestre et non reportables au-delà.
+
+| Incluses, par exemple | Facturables, par exemple |
+|---|---|
+| Ajout d'un champ, d'une colonne, d'un filtre ou d'un tri sur un écran existant | Nouveau module ou nouvel écran complet, par exemple la paie ou les stocks |
+| Nouvel état ou nouvel export construit à partir des données existantes | Interface avec un système externe : banque, opérateur de paiement mobile, logiciel tiers |
+| Modification d'une règle d'alerte, d'un seuil ou d'un niveau d'approbation | Ajout d'une société au périmètre avec reprise de son historique |
+| Création d'un profil, d'une activité, d'un centre de coût, d'une route tarifée | Refonte d'un parcours de saisie ou d'un tableau de bord complet |
+| Adaptation d'une maquette d'impression ou d'un modèle de document | Changement réglementaire majeur, tel qu'une nouvelle version du référentiel SYSCOHADA |
+| Ajustement de la grille ou des pondérations AxisPro au-delà du paramétrage accessible au cabinet | Montée de version majeure du noyau, formation complémentaire |
 
 - Le client dépose sa demande dans l'espace partagé de suivi.
-- E-VOLUTION XP qualifie la demande par écrit sous 2 jours ouvrés : incluse ou facturable, charge estimée, date de livraison proposée.
+- E-VOLUTION XP la qualifie par écrit sous 2 jours ouvrés : incluse ou facturable, charge estimée, date de livraison proposée.
 - Une évolution incluse est imputée sur le crédit du trimestre, livrée en recette puis en production. Un décompte du crédit consommé et restant est communiqué chaque trimestre.
-- Une évolution facturable fait l'objet d'un devis au tarif de 750 000 GNF HT par jour-homme, tarif ferme pendant les deux premières années. Elle n'est engagée qu'après accord écrit du client.
-- En cas de désaccord sur la qualification, le point est arbitré au comité de suivi ; à défaut d'accord, une demande dont la charge estimée ne dépasse pas le seuil est traitée comme incluse.
-
-
-### 7.5 Conditions de paiement
-
-- 50 % à la commande, 30 % à la recette en semaine 4, 20 % au procès-verbal de mise en production, déduction faite des pénalités éventuelles.
-- Forfait annuel d'hébergement, maintenance et support : par semestre d'avance, à compter du treizième mois.
-- Règlement à 30 jours date de facture, par virement bancaire.
-
-
-### 7.6 Engagements contractuels
-
-- Garantie corrective de 6 mois à compter du procès-verbal de mise en production, incluse dans le prix. Elle couvre la correction, sans frais et dans les délais d'intervention du chapitre 7.3, de toute anomalie de la plateforme par rapport au périmètre recetté, y compris les anomalies révélées lors de la clôture de l'exercice, de l'établissement des états financiers annuels et des déclarations fiscales de fin d'exercice. Elle ne couvre pas les évolutions de périmètre ni les erreurs de saisie, qui relèvent respectivement du chapitre 7.4 et du support.
-- Pénalités de retard imputable à E-VOLUTION XP selon le chapitre 6.6 : 0,1 % du montant HT par jour calendaire, plafonnées à 5 %.
-- Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.
-- Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 5.4.
-- Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.
-- Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. La présente offre annule et remplace notre offre du 15 septembre 2026.
+- Une évolution facturable fait l'objet d'un devis au tarif de 750 000 GNF HT par jour-homme, ferme pendant les deux premières années, et n'est engagée qu'après accord écrit du client.
+- En cas de désaccord sur la qualification, le comité de suivi arbitre ; à défaut d'accord, une demande dont la charge ne dépasse pas le seuil est traitée comme incluse.
 
 
 ---
 
 
-## 8. Annexes
+## 8. Conditions financières
 
 
-### 8.1 Glossaire
+### 8.1 Investissement
 
-| Terme | Définition |
+Prix forfaitaire et ferme pour le périmètre décrit aux chapitres 3 et 4. Toute évolution de périmètre fait l'objet d'un avenant chiffré. Aucun coût de licence.
+
+| Poste | Montant HT | Part |
+|---|---|---|
+| Cadrage, conception des parcours utilisateurs et charte graphique | 3 000 000 GNF | 6 % |
+| Socle technique et hébergement de la première année : VPS, noyau de gestion, sécurité, sauvegardes, supervision | 8 000 000 GNF | 16 % |
+| EGUITRA Finance : comptabilité SYSCOHADA, analytique, trésorerie, immobilisations, budget, approbations, clôtures et états | 17 000 000 GNF | 34 % |
+| Modules métier : transport pétrolier et application mobile, chantiers, immobilier, fiscalité, consolidation et passerelle IFRS | 11 500 000 GNF | 23 % |
+| AxisPro Suite et portail des porteurs de projets | 7 500 000 GNF | 15 % |
+| Reprise de l'exercice 2026, recette, formation et mise en production | 3 000 000 GNF | 6 % |
+| **Total, hébergement de la première année compris** | **50 000 000 GNF HT** | **100 %** |
+
+
+### 8.2 Coût total de possession sur trois ans
+
+|  | Montant HT |
 |---|---|
-| OCA | Odoo Community Association, association qui publie des modules libres pour le noyau de gestion. |
-| SYSCOHADA | Système comptable de l'Organisation pour l'harmonisation en Afrique du droit des affaires, version révisée. |
-| DSCR | Ratio de couverture du service de la dette. |
-| Stage gate | Étape de décision d'un projet, avec ses règles de passage. |
-| Knock-out | Critère éliminatoire imposant un NO-GO quel que soit le score. |
-| VPS | Serveur virtuel privé, dédié au client chez un hébergeur. |
-| TLS | Chiffrement des échanges entre le navigateur et le serveur. |
-| Journal des transactions | Enregistrement continu de chaque modification de la base de données, qui permet de la restaurer à un instant donné. |
+| Réalisation, mise en production et première année d'exploitation | 50 000 000 GNF HT |
+| Deuxième année : hébergement, exploitation, support, maintenance | 9 000 000 GNF HT |
+| Troisième année : hébergement, exploitation, support, maintenance | 9 000 000 GNF HT |
+| **Total sur trois ans** | **68 000 000 GNF HT** |
 
 
-### 8.2 Signature
+### 8.3 Conditions de paiement
+
+- 50 % à la commande, 30 % à la recette en semaine 4, 20 % au procès-verbal de mise en production, déduction faite des pénalités éventuelles.
+- Forfait annuel : par semestre d'avance, à compter du treizième mois.
+- Règlement à 30 jours date de facture, par virement bancaire.
+- La TVA et les retenues applicables en Guinée sont ajoutées selon la réglementation en vigueur.
+
+
+### 8.4 Validité et engagements
+
+- Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. La présente offre annule et remplace notre offre du 15 septembre 2026.
+- Garantie corrective de 6 mois à compter de la réception, chapitre 7.1.
+- Pénalités de retard : 0,1 % du montant HT par jour calendaire de retard imputable à E-VOLUTION XP, plafonnées à 5 %, chapitre 6.6.
+- Perte de données maximale de 15 minutes, reprise sous 4 heures ouvrées, disponibilité 99,5 %, chapitre 5.2.
+- Propriété du client sur ses données et sur le code développé pour lui, réversibilité complète sans frais, chapitre 5.4.
+- Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.
+
+
+---
+
+
+## 9. Acceptation
 
 Pour E-volution Experience
 
@@ -442,7 +431,7 @@ Signature : ________________
 
 Pour EGUITRA GROUP SARLU et MB AxisPro Consulting
 
-Bon pour accord sur la proposition 1, offre OTF-EGUITRA-2026-36 du 29 septembre 2026, d'un montant de 50 000 000 GNF HT
+Bon pour accord sur l'offre OTF-EGUITRA-2026-37 du 29 septembre 2026, d'un montant de 50 000 000 GNF HT
 
 Date : ________________
 
@@ -451,3 +440,18 @@ Signature et cachet : ________________
 Mention manuscrite obligatoire :
 
 « Lu et approuvé. Bon pour accord »
+
+
+## Annexe. Glossaire
+
+| Terme | Définition |
+|---|---|
+| SYSCOHADA | Système comptable de l'Organisation pour l'harmonisation en Afrique du droit des affaires, version révisée. |
+| OCA | Odoo Community Association, association qui publie des modules libres pour le noyau de gestion. |
+| DSCR | Ratio de couverture du service de la dette. |
+| Stage gate | Étape de décision d'un projet, avec ses règles de passage. |
+| Knock-out | Critère éliminatoire imposant un NO-GO quel que soit le score. |
+| Data room | Espace documentaire structuré d'un dossier de projet. |
+| VPS | Serveur virtuel privé, dédié au client chez un hébergeur. |
+| TLS | Chiffrement des échanges entre le navigateur et le serveur. |
+| Journal des transactions | Enregistrement continu de chaque modification de la base de données, qui permet de la restaurer à un instant donné. |
