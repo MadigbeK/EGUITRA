@@ -6,7 +6,7 @@
 
 Pour EGUITRA GROUP SARLU et MB AxisPro Consulting, à l'attention de M. Mohamed Nimaga, Directeur Général
 
-Référence OTF-EGUITRA-2026-36-R1, révision 1 du 29 septembre 2026, valable 30 jours
+Référence OTF-EGUITRA-2026-36, 29 septembre 2026, valable 30 jours
 
 Émise par E-VOLUTION XP, Transformation Numérique. Contact : +224 628 86 22 55 / emkouyate@e-volutionxp.com
 
@@ -21,9 +21,9 @@ _Sommaire : voir la version Word, table des matières automatique._
 
 ## 1. Synthèse de l'offre
 
-EGUITRA GROUP SARLU et MB AxisPro Consulting partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. E-VOLUTION XP propose une plateforme unique qui répond à ces deux projets : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite, mises en production en 4 semaines sur un hébergement dédié au groupe.
+EGUITRA GROUP SARLU et MB AxisPro Consulting partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. E-VOLUTION XP propose une plateforme unique qui répond à ces deux projets : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite, mises en production en 4 semaines sur un hébergement dédié au groupe. C'est la proposition 1 de notre offre du 15 septembre 2026, que la direction a retenue ; la présente offre la reprend seule et en précise les conditions.
 
-|  | Offre |
+|  | Proposition 1 |
 |---|---|
 | Solution | Une plateforme unique : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite. |
 | Attentes du département Finance couvertes | Vingt sur vingt |
@@ -86,7 +86,7 @@ Ces prototypes sont conçus pour un utilisateur unique, sans authentification, a
 ---
 
 
-## 3. La solution : plateforme intégrée sur noyau de gestion
+## 3. Proposition 1 : plateforme intégrée sur noyau de gestion
 
 
 ### 3.1 Principe : un noyau invisible, des applications à votre image
@@ -326,9 +326,9 @@ E-VOLUTION XP s'engage sur la date contractuelle de mise en production selon les
 - L'hébergement de la première année, avec le dispositif de sauvegarde du chapitre 5.2, est compris dans le montant.
 
 
-### 7.2 Décomposition du montant
+### 7.2 Proposition 1 : Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion
 
-Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion. Prix forfaitaire, hébergement de la première année compris.
+Prix forfaitaire, hébergement de la première année compris.
 
 | Poste | Montant HT | Part |
 |---|---|---|
@@ -340,7 +340,7 @@ Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion. Pri
 | AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 7 500 000 GNF | 15 % |
 | Reprise du dossier 2026, recette, formation, mise en production | 3 000 000 GNF | 6 % |
 | Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 4 000 000 GNF | 8 % |
-| **Total, hébergement de la première année compris** | **50 000 000 GNF HT** | **100 %** |
+| **Total proposition 1, hébergement de la première année compris** | **50 000 000 GNF HT** | **100 %** |
 
 
 ### 7.3 Hébergement, maintenance et support à partir de la deuxième année
@@ -405,7 +405,7 @@ Procédure :
 - Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.
 - Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 5.4.
 - Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.
-- Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. La présente révision remplace l'offre OTF-EGUITRA-2026-36 du 15 septembre 2026.
+- Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. La présente offre annule et remplace notre offre du 15 septembre 2026.
 
 
 ---
@@ -442,7 +442,7 @@ Signature : ________________
 
 Pour EGUITRA GROUP SARLU et MB AxisPro Consulting
 
-Bon pour accord sur l'offre OTF-EGUITRA-2026-36-R1, d'un montant de 50 000 000 GNF HT
+Bon pour accord sur la proposition 1, offre OTF-EGUITRA-2026-36 du 29 septembre 2026, d'un montant de 50 000 000 GNF HT
 
 Date : ________________
 

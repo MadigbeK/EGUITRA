@@ -1,4 +1,4 @@
-// Source unique des hypothèses de l'offre technique et financière (révision 1, 29 septembre 2026).
+// Source unique des hypothèses de l'offre technique et financière du 29 septembre 2026.
 // build.js rend le document en .docx et en .md à partir de ce fichier.
 // Tous les montants sont en francs guinéens (GNF), hors taxes.
 //
@@ -15,12 +15,9 @@ const HYP = {
   client: 'EGUITRA GROUP SARLU',
   client2: 'MB AxisPro Consulting',
   dg: 'M. Mohamed Nimaga, Directeur Général',
-  // Offre initiale et révision
-  referenceInitiale: 'OTF-EGUITRA-2026-36',
-  dateOffreInitiale: '15 septembre 2026',
-  reference: 'OTF-EGUITRA-2026-36-R1',
-  revision: 1,
+  reference: 'OTF-EGUITRA-2026-36',
   dateOffre: '29 septembre 2026',
+  dateOffreInitiale: '15 septembre 2026', // offre annulée et remplacée par la présente
   dateOffreISO: '2026-09-29',
   validiteJours: 30,
   dureeSemaines: 4,
@@ -57,7 +54,7 @@ const EVOLUTIONS = {
 
 // Proposition : plateforme intégrée sur noyau Odoo Community, invisible pour l'utilisateur.
 const P1 = {
-  code: 'Proposition',
+  code: 'Proposition 1',
   titre: 'Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion',
   total: 50000000,
   maintenanceAn: 9000000, // à partir de la deuxième année, hébergement compris

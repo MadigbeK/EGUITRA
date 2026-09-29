@@ -1,4 +1,4 @@
-// Génère docs/offre/Offre_technique_financiere_EGUITRA.docx et .md (révision 1)
+// Génère docs/offre/Offre_technique_financiere_EGUITRA.docx et .md
 // Usage : node docs/offre/build.js
 const fs = require('fs');
 const path = require('path');
@@ -39,9 +39,9 @@ pagebreak();
 
 // ================================================================ 1. Synthèse
 h1('1. Synthèse de l\'offre');
-p(`${HYP.client} et ${HYP.client2} partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. ${HYP.prestataire} propose une plateforme unique qui répond à ces deux projets : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite, mises en production en ${HYP.dureeSemaines} semaines sur un hébergement dédié au groupe.`);
+p(`${HYP.client} et ${HYP.client2} partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. ${HYP.prestataire} propose une plateforme unique qui répond à ces deux projets : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite, mises en production en ${HYP.dureeSemaines} semaines sur un hébergement dédié au groupe. C'est la ${P1.code.toLowerCase()} de notre offre du ${HYP.dateOffreInitiale}, que la direction a retenue ; la présente offre la reprend seule et en précise les conditions.`);
 table(
-  ['', 'Offre'],
+  ['', P1.code],
   [
     ['Solution', 'Une plateforme unique : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite.'],
     ['Attentes du département Finance couvertes', 'Vingt sur vingt'],
@@ -95,7 +95,7 @@ p('Ces prototypes sont conçus pour un utilisateur unique, sans authentification
 pagebreak();
 
 // ================================================================ 4. La solution
-h1('3. La solution : plateforme intégrée sur noyau de gestion');
+h1(`3. ${P1.code} : plateforme intégrée sur noyau de gestion`);
 h2('3.1 Principe : un noyau invisible, des applications à votre image');
 p('La plateforme repose sur deux couches strictement séparées.');
 p('Le noyau de gestion est Odoo Community, complété par les modules de l\'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les droits d\'accès et la traçabilité. Il est publié sous licence libre : aucune redevance, aucune limite de nombre d\'utilisateurs, aucun éditeur à contacter pour une évolution.');
@@ -308,11 +308,11 @@ ul([
   'L\'hébergement de la première année, avec le dispositif de sauvegarde du chapitre 5.2, est compris dans le montant.',
 ]);
 
-h2(`7.2 Décomposition du montant`);
-p(`${P1.titre}. Prix forfaitaire, hébergement de la première année compris.`);
+h2(`7.2 ${P1.code} : ${P1.titre}`);
+p('Prix forfaitaire, hébergement de la première année compris.');
 table(
   ['Poste', 'Montant HT', 'Part'],
-  [...P1.postes.map(([l, m]) => [l, gnf(m), pct(m, P1.total)]), ['Total, hébergement de la première année compris', gnfHT(P1.total), `100${NBSP}%`]],
+  [...P1.postes.map(([l, m]) => [l, gnf(m), pct(m, P1.total)]), [`Total ${P1.code.toLowerCase()}, hébergement de la première année compris`, gnfHT(P1.total), `100${NBSP}%`]],
   [6238, 2200, 1200],
   { lastBold: true },
 );
@@ -385,7 +385,7 @@ ul([
   'Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d\'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.',
   'Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 5.4.',
   'Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.',
-  `Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}, soit jusqu'au ${dateFin}. La présente révision remplace l'offre ${HYP.referenceInitiale} du ${HYP.dateOffreInitiale}.`,
+  `Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}, soit jusqu'au ${dateFin}. La présente offre annule et remplace notre offre du ${HYP.dateOffreInitiale}.`,
 ]);
 
 pagebreak();
@@ -414,7 +414,7 @@ p(HYP.qualiteSignataire);
 p('Signature : ________________');
 p('');
 p(`Pour ${HYP.client} et ${HYP.client2}`);
-p(`Bon pour accord sur l'offre ${HYP.reference}, d'un montant de ${gnfHT(P1.total)}`);
+p(`Bon pour accord sur la ${P1.code.toLowerCase()}, offre ${HYP.reference} du ${HYP.dateOffre}, d'un montant de ${gnfHT(P1.total)}`);
 p('Date : ________________');
 p('Signature et cachet : ________________');
 p('Mention manuscrite obligatoire :');
@@ -430,7 +430,7 @@ function toMarkdown() {
           '# Offre technique et financière', '',
           '**Digitalisation du département Finance et de l\'accompagnement des porteurs de projets**', '',
           `Pour ${HYP.client} et ${HYP.client2}, à l'attention de ${HYP.dg}`, '',
-          `Référence ${HYP.reference}, révision ${HYP.revision} du ${HYP.dateOffre}, valable ${HYP.validiteJours} jours`, '',
+          `Référence ${HYP.reference}, ${HYP.dateOffre}, valable ${HYP.validiteJours} jours`, '',
           `Émise par ${HYP.prestataire}, ${HYP.slogan}. Contact : ${HYP.contact}`, '');
         break;
       case 'toc': out.push('_Sommaire : voir la version Word, table des matières automatique._', ''); break;
@@ -510,7 +510,7 @@ function coverPage() {
   c.push(para(`et ${HYP.client2}`, { size: 26, bold: true, after: 60 }));
   c.push(para(`À l'attention de ${HYP.dg}`, { size: 22, after: 700 }));
   c.push(para(`Référence ${HYP.reference}`, { size: 20, color: '666666', after: 40 }));
-  c.push(para(`Révision ${HYP.revision} du ${HYP.dateOffre}, offre valable ${HYP.validiteJours} jours`, { size: 20, color: '666666', after: 40 }));
+  c.push(para(`${HYP.dateOffre}, offre valable ${HYP.validiteJours} jours`, { size: 20, color: '666666', after: 40 }));
   c.push(para(`${HYP.prestataire}, ${HYP.slogan}. Contact : ${HYP.contact}`, { size: 20, color: '666666', after: 40 }));
   c.push(para('Document confidentiel, destiné exclusivement à ses destinataires.', { size: 18, italics: true, color: '888888', before: 1200 }));
   return c;
@@ -549,7 +549,7 @@ function toDocx() {
   const headerLogo = logoRun(70);
   return new Document({
     creator: HYP.prestataire,
-    title: `Offre technique et financière EGUITRA, révision ${HYP.revision}`,
+    title: 'Offre technique et financière EGUITRA',
     styles: {
       default: { document: { run: { font: FONT, size: 22 } } },
       paragraphStyles: [
