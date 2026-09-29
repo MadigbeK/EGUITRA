@@ -13,6 +13,7 @@ const {
 const NBSP = ' ';
 const gnf = (n) => Math.round(n).toLocaleString('fr-FR').replace(/[   ]/g, NBSP) + NBSP + 'GNF';
 const gnfHT = (n) => `${gnf(n)} HT`;
+const pct = (n, tot) => `${Math.round((n / tot) * 100)}${NBSP}%`;
 const fmtPct = (n) => `${String(n).replace('.', ',')}${NBSP}%`;
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const dateFin = (() => { const d = new Date(`${HYP.dateOffreISO}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + HYP.validiteJours); return `${d.getUTCDate()} ${MOIS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; })();
@@ -37,50 +38,31 @@ B.push({ t: 'toc' });
 pagebreak();
 
 // ================================================================ 1. Synthèse
-h1('1. Synthèse de l\'offre révisée');
-p(`Par courrier reçu à la suite de notre offre ${HYP.referenceInitiale} du ${HYP.dateOffreInitiale}, ${HYP.client} et ${HYP.client2} ont retenu la proposition 1, plateforme intégrée sur noyau de gestion, et nous ont demandé de clarifier ou de réviser six points : la validité de l'offre, la durée de la garantie corrective, la fréquence des sauvegardes, une clause de pénalité de retard, la définition des évolutions incluses dans la maintenance, et le montant de l'investissement.`);
-p(`La présente révision remplace l'offre du ${HYP.dateOffreInitiale}. Elle porte sur la seule proposition 1, pour un périmètre fonctionnel strictement inchangé, et répond à chacun des six points. Le chapitre 2 en donne la synthèse, les chapitres suivants le détail.`);
+h1('1. Synthèse de l\'offre');
+p(`${HYP.client} et ${HYP.client2} partagent une direction générale, des locaux et deux projets de digitalisation : le département Finance d'une part, l'accompagnement des porteurs de projets d'autre part. ${HYP.prestataire} propose une plateforme unique qui répond à ces deux projets : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite, mises en production en ${HYP.dureeSemaines} semaines sur un hébergement dédié au groupe.`);
 table(
-  ['', 'Offre révisée'],
+  ['', 'Offre'],
   [
     ['Solution', 'Une plateforme unique : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite.'],
     ['Attentes du département Finance couvertes', 'Vingt sur vingt'],
-    ['Délai de mise en production', `${HYP.dureeSemaines} semaines, avec pénalités de retard`],
+    ['Délai de mise en production', `${HYP.dureeSemaines} semaines à compter du démarrage, avec pénalités de retard`],
     ['Investissement, hébergement de la première année compris', gnfHT(P1.total)],
     ['Hébergement, maintenance et support à partir de la deuxième année', `${gnfHT(P1.maintenanceAn)} par an`],
     ['Licences logicielles', 'Aucune'],
     ['Garantie corrective', `${HYP.garantieMois} mois, couvrant la première clôture annuelle`],
     ['Perte de données maximale', `${SAUVEGARDE.rpoMinutes} minutes`],
+    ['Disponibilité cible', `${SAUVEGARDE.disponibilite} par mois`],
   ],
   [3600, 6038],
 );
-callout(`Le montant de ${gnfHT(P1.total)} résulte d'un effort commercial de ${gnf(P1.effortCommercial)} sur la valeur des prestations, que nous consentons pour accompagner le groupe dans un projet structurant et inscrire notre relation dans la durée. Le périmètre, le planning et les engagements de service ne sont pas réduits.`);
+callout(`Pour ${gnfHT(P1.total)}, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux, une évolutivité sans nouveau développement, et deux applications conçues pour ses équipes. Aucune licence, aucune limite de nombre d'utilisateurs.`);
 p(`Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}, soit jusqu'au ${dateFin}. Tous les montants sont exprimés en francs guinéens, hors taxes.`);
 
 pagebreak();
 
-// ================================================================ 2. Suite donnée aux observations
-h1('2. Suite donnée à vos observations');
-p('Le tableau reprend, dans l\'ordre de votre courrier, chaque point soulevé et la réponse apportée dans cette révision.');
-table(
-  ['Point', 'Votre demande', 'Notre réponse', 'Chapitre'],
-  [
-    ['1. Validité de l\'offre', 'Trois durées différentes dans le document ; confirmer la durée applicable.', `La durée applicable est de ${HYP.validiteJours} jours. Les mentions de 60 jours en page de garde et au chapitre 8.6 de l'offre initiale étaient une erreur matérielle. La présente révision indique ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}, soit jusqu'au ${dateFin}, en page de garde, en synthèse et dans les engagements contractuels.`, '1, 8.6'],
-    ['3. Garantie corrective', 'Six mois au minimum, couvrant la première clôture annuelle complète.', `Garantie portée de 3 à ${HYP.garantieMois} mois à compter du procès-verbal de mise en production, sans surcoût. Elle couvre expressément les anomalies révélées lors de la clôture de l'exercice et des déclarations de fin d'exercice. Pour une commande passée avant fin octobre 2026, elle court au moins jusqu'en mai 2027, donc au-delà de la clôture 2026 et du dépôt des états financiers annuels.`, '7.1, 8.6'],
-    ['5. Sauvegardes', 'Une sauvegarde plus fréquente, au moins pour les modules comptables, et ses conditions.', `Journalisation continue des transactions de la base, copiée hors site toutes les ${SAUVEGARDE.rpoMinutes} minutes, en plus de la sauvegarde complète quotidienne. La perte de données maximale passe de 24 heures à ${SAUVEGARDE.rpoMinutes} minutes, pour tous les modules puisque la plateforme repose sur une base unique. Incluse sans surcoût, la première année comme dans le forfait annuel.`, '6.2'],
-    ['6. Calendrier', 'Insertion d\'une clause de pénalité de retard imputable au prestataire.', `Clause insérée : ${fmtPct(PENALITE.tauxJourPct)} du montant HT de la commande par jour calendaire de retard imputable à ${HYP.prestataire}, plafonnée à ${fmtPct(PENALITE.plafondPct)}, avec une date contractuelle de mise en production fixée au démarrage et des règles de neutralisation des retards non imputables.`, '7.6, 8.6'],
-    ['7. Maintenance évolutive', 'Critères permettant de qualifier une évolution comme incluse ou facturable.', `Définition précise d'une évolution incluse (charge au plus égale à ${EVOLUTIONS.seuilJoursIncluse} jours, sans nouveau module ni interface externe), liste d'exemples inclus et facturables, procédure de qualification écrite sous ${EVOLUTIONS.delaiQualificationJoursOuvres} jours ouvrés, décompte trimestriel et tarif journalier des évolutions facturables.`, '8.4'],
-    ['8. Conditions financières', `Offre à 40 000 000 GNF HT pour un périmètre inchangé.`, `Le périmètre est maintenu dans son intégralité. La valeur des prestations, détaillée au chapitre 8.2, s'établit à ${gnfHT(P1.valeurPostes)}. Nous consentons un effort commercial de ${gnf(P1.effortCommercial)} qui ramène l'investissement à ${gnfHT(P1.total)}, hébergement de la première année compris. Ce montant constitue notre meilleure offre pour le périmètre complet ; en dessous, nous devrions réduire le périmètre ou le niveau d'engagement, ce que nous ne recommandons pas pour un outil comptable de groupe.`, '8.2'],
-  ],
-  [1700, 2500, 4238, 1200],
-);
-p(`La proposition 2, deux applications indépendantes, n'est pas reprise dans cette révision, votre analyse portant sur la proposition 1. Elle reste disponible sur demande.`);
-
-pagebreak();
-
 // ================================================================ 3. Compréhension
-h1('3. Notre compréhension de votre besoin');
-h2('3.1 Le groupe et ses activités');
+h1('2. Notre compréhension de votre besoin');
+h2('2.1 Le groupe et ses activités');
 p(`${HYP.client} opère sur trois secteurs : le transport et la logistique de produits pétroliers, le BTP et l'immobilier, complétés par une activité de négoce. Le transport d'hydrocarbures constitue le cœur de métier, avec une flotte de quinze ensembles citernes et des clients tels que les distributeurs pétroliers et les sociétés minières. ${HYP.client2}, cabinet de conseil du même groupe, accompagne des porteurs de projets vers le financement bancaire et l'investissement.`);
 p('Le dossier de l\'exercice 2026 que vous nous avez transmis, arrêté au 15 août, donne la mesure du périmètre :');
 table(
@@ -97,10 +79,10 @@ table(
   ],
   [4200, 5438],
 );
-h2('3.2 Les deux projets');
-p('Projet 1 : la digitalisation du département Finance. Le courrier du responsable financier liste vingt attentes, de la comptabilité SYSCOHADA révisée à la rentabilité par trajet, en passant par la consolidation groupe, les workflows d\'approbation, la piste d\'audit et la disponibilité garantie. Le tableau du chapitre 5 répond point par point.');
+h2('2.2 Les deux projets');
+p('Projet 1 : la digitalisation du département Finance. Le courrier du responsable financier liste vingt attentes, de la comptabilité SYSCOHADA révisée à la rentabilité par trajet, en passant par la consolidation groupe, les workflows d\'approbation, la piste d\'audit et la disponibilité garantie. Le tableau du chapitre 4 répond point par point.');
 p('Projet 2 : la digitalisation de l\'accompagnement des porteurs de projets. Le prototype MB AxisPro décrit une méthode d\'évaluation de la maturité et de la bancabilité : 111 critères répartis sur 15 domaines, huit stage gates, des critères éliminatoires, une data room de 42 pièces, des revues de comité et des rapports de décision.');
-h2('3.3 Ce que nous retenons des prototypes existants');
+h2('2.3 Ce que nous retenons des prototypes existants');
 p('Les deux prototypes générés par la direction constituent une spécification fonctionnelle de grande qualité. Nous les reprenons comme cahier des charges de référence, et notamment :');
 ul([
   'Le principe de saisie unique : chaque donnée n\'est saisie qu\'une fois, tout le reste est calculé.',
@@ -113,14 +95,14 @@ p('Ces prototypes sont conçus pour un utilisateur unique, sans authentification
 pagebreak();
 
 // ================================================================ 4. La solution
-h1('4. La solution : plateforme intégrée sur noyau de gestion');
-h2('4.1 Principe : un noyau invisible, des applications à votre image');
+h1('3. La solution : plateforme intégrée sur noyau de gestion');
+h2('3.1 Principe : un noyau invisible, des applications à votre image');
 p('La plateforme repose sur deux couches strictement séparées.');
 p('Le noyau de gestion est Odoo Community, complété par les modules de l\'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les droits d\'accès et la traçabilité. Il est publié sous licence libre : aucune redevance, aucune limite de nombre d\'utilisateurs, aucun éditeur à contacter pour une évolution.');
 p(`Les applications métier sont développées sur mesure et constituent la seule interface utilisée par vos équipes : EGUITRA Finance pour le groupe, AxisPro Suite pour le cabinet. Elles reprennent votre identité visuelle, votre vocabulaire et vos parcours de saisie. Le client web du noyau n'est jamais exposé aux utilisateurs ; il reste accessible à la seule équipe technique de ${HYP.prestataire}, sur un accès réseau restreint. Cette approche est celle que nous avons mise en œuvre pour SOGUIPREM.`);
 callout('Pour vos utilisateurs, il n\'existe qu\'EGUITRA Finance et AxisPro Suite. Le noyau reste un composant technique, au même titre que la base de données.');
 
-h2('4.2 Architecture');
+h2('3.2 Architecture');
 table(
   ['Couche', 'Composants', 'Rôle'],
   [
@@ -133,7 +115,7 @@ table(
   [2000, 3900, 3738],
 );
 
-h2('4.3 EGUITRA Finance : les écrans');
+h2('3.3 EGUITRA Finance : les écrans');
 table(
   ['Écran', 'Contenu'],
   [
@@ -160,10 +142,10 @@ table(
 );
 p('S\'y ajoutent les écrans métier : Flotte, Chauffeurs, Routes et tarifs, Rotations, Rentabilité par ensemble routier, Chantiers, Situations d\'avancement, Retenues de garantie, Biens, Baux, Quittancement, Patrimoine, Déclarations fiscales, Consolidation groupe et Passerelle IFRS.');
 
-h2('4.4 Transport pétrolier : la rotation comme source unique');
+h2('3.4 Transport pétrolier : la rotation comme source unique');
 p('Une rotation est saisie une seule fois, depuis le bureau ou depuis l\'application mobile au parc, y compris sans connexion : la saisie est mise en file et synchronisée dès que le réseau revient. Chaque rotation porte le camion, le chauffeur, le client, le produit, le volume, la route, le tarif, le carburant, les péages, les frais de chauffeur, la maintenance et les taxes spécifiques. Le noyau en déduit la ligne de facturation, les coûts analytiques par véhicule et par route, et la marge. Le seuil de marge transport du dossier devient une alerte automatique.');
 
-h2('4.5 AxisPro Suite');
+h2('3.5 AxisPro Suite');
 p('AxisPro Suite industrialise la méthode du prototype MB AxisPro dans un outil multi-utilisateurs, avec un portail pour les porteurs de projets. La grille d\'évaluation est importée comme données et reste modifiable par le cabinet, sans intervention technique.');
 table(
   ['Écran', 'Contenu'],
@@ -183,7 +165,7 @@ table(
 );
 p('Le cabinet dispose en outre, dans la même plateforme et sans coût supplémentaire, de la facturation de ses prestations et du suivi de ses temps par dossier.');
 
-h2('4.6 Modules communautaires retenus');
+h2('3.6 Modules communautaires retenus');
 table(
   ['Besoin', 'Module OCA'],
   [
@@ -204,8 +186,8 @@ p('La liste définitive est arrêtée en semaine 1, module par module. Les besoi
 pagebreak();
 
 // ================================================================ 5. Couverture
-h1('5. Couverture des attentes du département Finance');
-p('Les vingt attentes du courrier du responsable financier sont couvertes. Le tableau précise, pour chacune, le mécanisme retenu.');
+h1('4. Couverture des attentes du département Finance');
+p('Les vingt attentes exprimées dans le courrier du responsable financier sont couvertes. Le tableau précise, pour chacune, le mécanisme retenu.');
 table(
   ['Attente exprimée', 'Réponse de la plateforme'],
   [
@@ -236,16 +218,16 @@ table(
 pagebreak();
 
 // ================================================================ 6. Hébergement
-h1('6. Hébergement, sécurité et exploitation');
-h2('6.1 Infrastructure');
+h1('5. Hébergement, sécurité et exploitation');
+h2('5.1 Infrastructure');
 ul([
   `Hébergement sur serveur virtuel privé dédié au groupe : ${HYP.vps}.`,
   'Déploiement en conteneurs, proxy avec certificats TLS renouvelés automatiquement, base de données dédiée.',
   'Deux environnements : production et recette. Chaque évolution passe en recette avant la production.',
   'Nom de domaine du groupe pour chaque application, par exemple finance.eguitragroup.com et axispro.mbaxisproconsulting.com.',
 ]);
-h2('6.2 Sauvegardes et continuité');
-p(`En réponse à votre point 5, le dispositif de sauvegarde est renforcé. La base de données est unique pour l'ensemble des modules : le renforcement s'applique donc à la comptabilité comme aux modules métier et à AxisPro Suite, sans distinction. Il est inclus sans surcoût, la première année comme dans le forfait annuel.`);
+h2('5.2 Sauvegardes et continuité');
+p(`La base de données est unique pour l'ensemble des modules : le dispositif de sauvegarde s'applique à la comptabilité comme aux modules métier et à AxisPro Suite, sans distinction. Il est inclus dans le montant de l'offre la première année, puis dans le forfait annuel.`);
 table(
   ['Mesure', 'Engagement'],
   [
@@ -253,14 +235,14 @@ table(
     ['Sauvegarde complète', 'Quotidienne, chiffrée, copiée hors site chez un second fournisseur'],
     ['Pièces jointes et documents', 'Synchronisés hors site toutes les heures'],
     ['Rétention', `${SAUVEGARDE.retentionQuotidienne} sauvegardes quotidiennes, ${SAUVEGARDE.retentionMensuelle} sauvegardes mensuelles, journaux de transactions sur ${SAUVEGARDE.retentionJournaux}`],
-    ['Perte de données maximale', `${SAUVEGARDE.rpoMinutes} minutes (24 heures dans l'offre initiale)`],
+    ['Perte de données maximale', `${SAUVEGARDE.rpoMinutes} minutes`],
     ['Délai de reprise', `${SAUVEGARDE.rtoHeuresOuvrees} heures ouvrées après déclaration de sinistre`],
     ['Test de restauration', 'Chaque trimestre, avec compte rendu remis au client, dont un test de restauration à un instant donné'],
     ['Disponibilité cible', `${SAUVEGARDE.disponibilite} par mois, hors fenêtre de maintenance annoncée 48 heures à l'avance`],
   ],
   [3200, 6438],
 );
-h2('6.3 Sécurité');
+h2('5.3 Sécurité');
 ul([
   'Authentification par mot de passe robuste et double authentification pour tous les utilisateurs.',
   'Droits par profil : direction, finance, exploitation transport, chantiers, immobilier, cabinet, porteur de projet. Chaque profil ne voit que son périmètre.',
@@ -269,44 +251,44 @@ ul([
   'Chiffrement des échanges et des sauvegardes, journaux d\'accès conservés 12 mois.',
   'Mises à jour de sécurité appliquées chaque mois en recette puis en production.',
 ]);
-h2('6.4 Réversibilité');
+h2('5.4 Réversibilité');
 p('Le client est propriétaire de ses données. À tout moment, sur simple demande, nous remettons une copie complète de la base, des pièces jointes et du code développé pour lui, dans des formats ouverts, avec la documentation d\'installation.');
 
 pagebreak();
 
 // ================================================================ 7. Démarche
-h1('7. Démarche et planning en quatre semaines');
-h2('7.1 Planning');
-p(`La plateforme est mise en production en ${HYP.dureeSemaines} semaines à compter du démarrage, par une équipe dédiée à temps plein. Le démarrage, noté T0, est la date à laquelle l'acompte de commande est encaissé et les prérequis du chapitre 7.5 sont remis ; la date contractuelle de mise en production est T0 plus ${HYP.dureeSemaines} semaines. Ce délai repose sur trois conditions : les prototypes de la direction servent de spécification, les composants d'interface déjà développés par ${HYP.prestataire} sont réutilisés, et les référents du client sont disponibles chaque semaine.`);
+h1('6. Démarche et planning en quatre semaines');
+h2('6.1 Planning');
+p(`La plateforme est mise en production en ${HYP.dureeSemaines} semaines à compter du démarrage, par une équipe dédiée à temps plein. Le démarrage, noté T0, est la date à laquelle l'acompte de commande est encaissé et les prérequis du chapitre 6.5 sont remis ; la date contractuelle de mise en production est T0 plus ${HYP.dureeSemaines} semaines. Ce délai repose sur trois conditions : les prototypes de la direction servent de spécification, les composants d'interface déjà développés par ${HYP.prestataire} sont réutilisés, et les référents du client sont disponibles chaque semaine.`);
 table(
   ['Semaine', 'Objet', 'Travaux', 'Jalon'],
   PLANNING,
   [1200, 1800, 4438, 2200],
 );
-p(`À l'issue de la semaine 4, ${HYP.prestataire} assure quatre semaines d'accompagnement renforcé sur site et à distance, puis la garantie corrective de ${HYP.garantieMois} mois décrite au chapitre 8.6.`);
-h2('7.2 Reprise des données');
+p(`À l'issue de la semaine 4, ${HYP.prestataire} assure quatre semaines d'accompagnement renforcé sur site et à distance, puis la garantie corrective de ${HYP.garantieMois} mois décrite au chapitre 7.6.`);
+h2('6.2 Reprise des données');
 p('Le dossier 2026 est repris intégralement : référentiels, tiers, plan de comptes, immobilisations, financements, budget, ventes, achats, trésorerie, rotations et OD. Les balances obtenues sont confrontées au classeur d\'origine et validées par votre responsable financier avant la mise en production. L\'exercice 2026 est ainsi consultable dans l\'outil dès le premier jour, et l\'exercice 2027 s\'ouvre directement dans l\'outil.');
-h2('7.3 Recette et formation');
+h2('6.3 Recette et formation');
 ul([
   'Cahier de recette rédigé avec vos équipes en semaine 3, recette en semaine 4 sur vos données.',
   'Formation par profil : direction, finance, exploitation, chantiers, immobilier, cabinet. Supports et guides utilisateur remis en français.',
   'Accompagnement renforcé pendant les quatre semaines suivant la mise en production.',
 ]);
-h2('7.4 Gouvernance');
+h2('6.4 Gouvernance');
 ul([
   'Un comité de pilotage hebdomadaire avec la direction générale et le responsable financier. Son compte rendu constate l\'avancement, les décisions et, le cas échéant, les événements qui décalent la date contractuelle.',
   'Un point d\'avancement quotidien de quinze minutes avec le référent du client.',
   'Un espace partagé de suivi des demandes, accessible au client.',
 ]);
-h2('7.5 Prérequis côté client');
+h2('6.5 Prérequis côté client');
 ul([
   'Un référent par domaine disponible une demi-journée par jour pendant les quatre semaines.',
   'La charte graphique du groupe et du cabinet, ou un atelier de définition en semaine 1.',
   'Les relevés bancaires et les modèles de déclarations fiscales en vigueur.',
   'La validation du plan de comptes par votre expert-comptable en semaine 2.',
 ]);
-h2('7.6 Respect du délai et pénalités de retard');
-p(`En réponse à votre point 6, ${HYP.prestataire} s'engage sur la date contractuelle de mise en production selon les règles suivantes :`);
+h2('6.6 Respect du délai et pénalités de retard');
+p(`${HYP.prestataire} s'engage sur la date contractuelle de mise en production selon les règles suivantes :`);
 ul([
   `Si le procès-verbal de mise en production est signé après la date contractuelle et que le retard est imputable à ${HYP.prestataire}, une pénalité de ${fmtPct(PENALITE.tauxJourPct)} du montant HT de la commande est due par jour calendaire de retard, soit ${gnf(P1.total * PENALITE.tauxJourPct / 100)} par jour.`,
   `Les pénalités sont plafonnées à ${fmtPct(PENALITE.plafondPct)} du montant HT de la commande, soit ${gnf(P1.total * PENALITE.plafondPct / 100)}.`,
@@ -317,30 +299,25 @@ ul([
 pagebreak();
 
 // ================================================================ 8. Offre financière
-h1('8. Offre financière');
-h2('8.1 Hypothèses');
+h1('7. Offre financière');
+h2('7.1 Hypothèses');
 ul([
   'Tous les montants sont en francs guinéens, hors taxes. La TVA et les retenues applicables en Guinée sont ajoutées selon la réglementation en vigueur.',
-  'Prix forfaitaire : le montant est ferme pour le périmètre décrit aux chapitres 4 et 5. Toute évolution de périmètre fait l\'objet d\'un avenant chiffré.',
+  'Prix forfaitaire : le montant est ferme pour le périmètre décrit aux chapitres 3 et 4. Toute évolution de périmètre fait l\'objet d\'un avenant chiffré.',
   'Aucun coût de licence.',
-  'L\'hébergement de la première année, avec le dispositif de sauvegarde renforcé du chapitre 6.2, est compris dans le montant.',
+  'L\'hébergement de la première année, avec le dispositif de sauvegarde du chapitre 5.2, est compris dans le montant.',
 ]);
 
-h2(`8.2 ${P1.code} : ${P1.titre}`);
-p(`Les postes sont valorisés comme dans l'offre initiale. L'effort commercial demandé au point 8 de votre courrier est appliqué sur le total, pour un périmètre inchangé.`);
+h2(`7.2 Décomposition du montant`);
+p(`${P1.titre}. Prix forfaitaire, hébergement de la première année compris.`);
 table(
-  ['Poste', 'Montant HT'],
-  [
-    ...P1.postes.map(([l, m]) => [l, gnf(m)]),
-    ['Valeur des prestations', gnf(P1.valeurPostes)],
-    ['Effort commercial consenti dans le cadre de la présente révision', `− ${gnf(P1.effortCommercial)}`],
-    [`Total ${P1.code.toLowerCase()}, hébergement de la première année compris`, gnfHT(P1.total)],
-  ],
-  [7238, 2400],
-  { boldRows: [P1.postes.length, P1.postes.length + 2] },
+  ['Poste', 'Montant HT', 'Part'],
+  [...P1.postes.map(([l, m]) => [l, gnf(m), pct(m, P1.total)]), ['Total, hébergement de la première année compris', gnfHT(P1.total), `100${NBSP}%`]],
+  [6238, 2200, 1200],
+  { lastBold: true },
 );
 
-h2('8.3 Hébergement, maintenance et support à partir de la deuxième année');
+h2('7.3 Hébergement, maintenance et support à partir de la deuxième année');
 p('La première année d\'hébergement est comprise dans le montant ci-dessus. À partir de la deuxième année, un forfait annuel unique couvre :');
 table(
   ['Prestation', 'Détail'],
@@ -349,7 +326,7 @@ table(
     ['Exploitation', `Supervision, sauvegardes quotidiennes et journalisation continue toutes les ${SAUVEGARDE.rpoMinutes} minutes, tests de restauration, mises à jour de sécurité, renouvellement des certificats`],
     ['Support', 'Assistance des utilisateurs du lundi au vendredi, de 8 h à 18 h, par messagerie, e-mail et téléphone'],
     ['Maintenance corrective', 'Correction de toute anomalie, sans limite'],
-    ['Maintenance évolutive', `${EVOLUTIONS.joursParMois} jours par mois d'évolutions incluses, cumulables sur le trimestre (${EVOLUTIONS.joursParTrimestre} jours par trimestre), selon les règles du chapitre 8.4`],
+    ['Maintenance évolutive', `${EVOLUTIONS.joursParMois} jours par mois d'évolutions incluses, cumulables sur le trimestre (${EVOLUTIONS.joursParTrimestre} jours par trimestre), selon les règles du chapitre 7.4`],
     ['Forfait annuel', `${gnfHT(P1.maintenanceAn)}, facturé par semestre d'avance`],
   ],
   [2600, 7038],
@@ -366,8 +343,8 @@ table(
   [1600, 3838, 2000, 2200],
 );
 
-h2('8.4 Qualification des évolutions : incluses ou facturables');
-p('En réponse à votre point 7, une évolution est une demande de modification ou d\'ajout qui ne corrige pas une anomalie. Les anomalies relèvent de la maintenance corrective et sont traitées sans limite. Une évolution est incluse dans le forfait annuel lorsqu\'elle remplit les trois critères suivants :');
+h2('7.4 Maintenance évolutive : évolutions incluses et facturables');
+p('Une évolution est une demande de modification ou d\'ajout qui ne corrige pas une anomalie. Les anomalies relèvent de la maintenance corrective et sont traitées sans limite. Une évolution est incluse dans le forfait annuel lorsqu\'elle remplit les trois critères suivants :');
 ul([
   `Sa charge totale, spécification, réalisation, test et livraison comprises, est estimée à ${EVOLUTIONS.seuilJoursIncluse} jours-homme au plus.`,
   'Elle s\'appuie sur les écrans, les données et les états existants : elle n\'ajoute ni module ni écran complet, ni interface avec un système externe, ni modification du modèle de données nécessitant une reprise de données.',
@@ -394,19 +371,19 @@ ul([
   'En cas de désaccord sur la qualification, le point est arbitré au comité de suivi ; à défaut d\'accord, une demande dont la charge estimée ne dépasse pas le seuil est traitée comme incluse.',
 ]);
 
-h2('8.5 Conditions de paiement');
+h2('7.5 Conditions de paiement');
 ul([
   '50 % à la commande, 30 % à la recette en semaine 4, 20 % au procès-verbal de mise en production, déduction faite des pénalités éventuelles.',
   'Forfait annuel d\'hébergement, maintenance et support : par semestre d\'avance, à compter du treizième mois.',
   'Règlement à 30 jours date de facture, par virement bancaire.',
 ]);
 
-h2('8.6 Engagements contractuels');
+h2('7.6 Engagements contractuels');
 ul([
-  `Garantie corrective de ${HYP.garantieMois} mois à compter du procès-verbal de mise en production, incluse dans le prix. Elle couvre la correction, sans frais et dans les délais d'intervention du chapitre 8.3, de toute anomalie de la plateforme par rapport au périmètre recetté, y compris les anomalies révélées lors de la clôture de l'exercice, de l'établissement des états financiers annuels et des déclarations fiscales de fin d'exercice. Elle ne couvre pas les évolutions de périmètre ni les erreurs de saisie, qui relèvent respectivement du chapitre 8.4 et du support.`,
-  `Pénalités de retard imputable à ${HYP.prestataire} selon le chapitre 7.6 : ${fmtPct(PENALITE.tauxJourPct)} du montant HT par jour calendaire, plafonnées à ${fmtPct(PENALITE.plafondPct)}.`,
+  `Garantie corrective de ${HYP.garantieMois} mois à compter du procès-verbal de mise en production, incluse dans le prix. Elle couvre la correction, sans frais et dans les délais d'intervention du chapitre 7.3, de toute anomalie de la plateforme par rapport au périmètre recetté, y compris les anomalies révélées lors de la clôture de l'exercice, de l'établissement des états financiers annuels et des déclarations fiscales de fin d'exercice. Elle ne couvre pas les évolutions de périmètre ni les erreurs de saisie, qui relèvent respectivement du chapitre 7.4 et du support.`,
+  `Pénalités de retard imputable à ${HYP.prestataire} selon le chapitre 6.6 : ${fmtPct(PENALITE.tauxJourPct)} du montant HT par jour calendaire, plafonnées à ${fmtPct(PENALITE.plafondPct)}.`,
   'Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d\'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.',
-  'Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 6.4.',
+  'Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 5.4.',
   'Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.',
   `Validité de l'offre : ${HYP.validiteJours} jours à compter du ${HYP.dateOffre}, soit jusqu'au ${dateFin}. La présente révision remplace l'offre ${HYP.referenceInitiale} du ${HYP.dateOffreInitiale}.`,
 ]);
@@ -414,8 +391,8 @@ ul([
 pagebreak();
 
 // ================================================================ 9. Annexes
-h1('9. Annexes');
-h2('9.1 Glossaire');
+h1('8. Annexes');
+h2('8.1 Glossaire');
 table(
   ['Terme', 'Définition'],
   [
@@ -430,14 +407,14 @@ table(
   ],
   [2600, 7038],
 );
-h2('9.2 Signature');
+h2('8.2 Signature');
 p(`Pour ${HYP.raisonSociale}`);
 p(HYP.signataire);
 p(HYP.qualiteSignataire);
 p('Signature : ________________');
 p('');
 p(`Pour ${HYP.client} et ${HYP.client2}`);
-p(`Bon pour accord sur l'offre ${HYP.reference}, ${P1.code}, d'un montant de ${gnfHT(P1.total)}`);
+p(`Bon pour accord sur l'offre ${HYP.reference}, d'un montant de ${gnfHT(P1.total)}`);
 p('Date : ________________');
 p('Signature et cachet : ________________');
 p('Mention manuscrite obligatoire :');
@@ -454,7 +431,6 @@ function toMarkdown() {
           '**Digitalisation du département Finance et de l\'accompagnement des porteurs de projets**', '',
           `Pour ${HYP.client} et ${HYP.client2}, à l'attention de ${HYP.dg}`, '',
           `Référence ${HYP.reference}, révision ${HYP.revision} du ${HYP.dateOffre}, valable ${HYP.validiteJours} jours`, '',
-          `Remplace l'offre ${HYP.referenceInitiale} du ${HYP.dateOffreInitiale}`, '',
           `Émise par ${HYP.prestataire}, ${HYP.slogan}. Contact : ${HYP.contact}`, '');
         break;
       case 'toc': out.push('_Sommaire : voir la version Word, table des matières automatique._', ''); break;
@@ -535,7 +511,6 @@ function coverPage() {
   c.push(para(`À l'attention de ${HYP.dg}`, { size: 22, after: 700 }));
   c.push(para(`Référence ${HYP.reference}`, { size: 20, color: '666666', after: 40 }));
   c.push(para(`Révision ${HYP.revision} du ${HYP.dateOffre}, offre valable ${HYP.validiteJours} jours`, { size: 20, color: '666666', after: 40 }));
-  c.push(para(`Remplace l'offre ${HYP.referenceInitiale} du ${HYP.dateOffreInitiale}`, { size: 20, color: '666666', after: 40 }));
   c.push(para(`${HYP.prestataire}, ${HYP.slogan}. Contact : ${HYP.contact}`, { size: 20, color: '666666', after: 40 }));
   c.push(para('Document confidentiel, destiné exclusivement à ses destinataires.', { size: 18, italics: true, color: '888888', before: 1200 }));
   return c;
@@ -612,5 +587,5 @@ function toDocx() {
   fs.writeFileSync(path.join(__dirname, `${base}.md`), toMarkdown());
   const buf = await Packer.toBuffer(toDocx());
   fs.writeFileSync(path.join(__dirname, `${base}.docx`), buf);
-  console.log(`OK : logo ${logoPath ? path.basename(logoPath) : 'absent'} ; ${P1.code} ${gnf(P1.total)} (valeur ${gnf(P1.valeurPostes)}, effort ${gnf(P1.effortCommercial)}) ; validité jusqu'au ${dateFin}`);
+  console.log(`OK : logo ${logoPath ? path.basename(logoPath) : 'absent'} ; total ${gnf(P1.total)} ; validité jusqu'au ${dateFin}`);
 })();

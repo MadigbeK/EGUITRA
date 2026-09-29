@@ -1,4 +1,4 @@
-// Source unique des hypothèses de l'offre technique et financière, révision 1.
+// Source unique des hypothèses de l'offre technique et financière (révision 1, 29 septembre 2026).
 // build.js rend le document en .docx et en .md à partir de ce fichier.
 // Tous les montants sont en francs guinéens (GNF), hors taxes.
 //
@@ -30,7 +30,7 @@ const HYP = {
   logoFichiers: ['logo.png', 'logo-rendu.png'],
 };
 
-// Sauvegardes : réponse au point 5 du client (perte de données maximale de 24 h jugée excessive).
+// Sauvegardes.
 const SAUVEGARDE = {
   rpoMinutes: 15, // perte de données maximale
   rtoHeuresOuvrees: 4, // délai de reprise
@@ -40,13 +40,13 @@ const SAUVEGARDE = {
   disponibilite: '99,5 %',
 };
 
-// Pénalités de retard : réponse au point 6 du client.
+// Pénalités de retard.
 const PENALITE = {
   tauxJourPct: 0.1, // pourcent du montant HT de la commande par jour calendaire de retard
   plafondPct: 5, // pourcent du montant HT de la commande
 };
 
-// Maintenance évolutive : réponse au point 7 du client.
+// Maintenance évolutive.
 const EVOLUTIONS = {
   joursParMois: 2,
   joursParTrimestre: 6,
@@ -55,28 +55,27 @@ const EVOLUTIONS = {
   tarifJourHT: 750000, // tarif d'un jour-homme pour les évolutions facturables
 };
 
-// Proposition 1 : plateforme intégrée sur noyau Odoo Community, invisible pour l'utilisateur.
-// Les postes restent valorisés comme dans l'offre initiale ; l'effort commercial
-// ramène le total au montant convenu, pour un périmètre inchangé.
+// Proposition : plateforme intégrée sur noyau Odoo Community, invisible pour l'utilisateur.
 const P1 = {
-  code: 'Proposition 1',
+  code: 'Proposition',
   titre: 'Plateforme intégrée EGUITRA Finance et AxisPro Suite sur noyau de gestion',
   total: 50000000,
   maintenanceAn: 9000000, // à partir de la deuxième année, hébergement compris
   postes: [
-    ['Cadrage, conception et charte graphique des applications', 6000000],
-    ['Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision', 8000000],
-    ['EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans', 32000000],
-    ['Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie', 14000000],
-    ['Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS', 8000000],
-    ['AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 14000000],
-    ['Reprise du dossier 2026, recette, formation, mise en production', 6000000],
+    ['Cadrage, conception et charte graphique des applications', 3000000],
+    ['Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision', 4000000],
+    ['EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans', 17000000],
+    ['Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie', 7500000],
+    ['Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS', 4000000],
+    ['AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 7500000],
+    ['Reprise du dossier 2026, recette, formation, mise en production', 3000000],
     ['Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois', 4000000],
   ],
 };
-P1.valeurPostes = P1.postes.reduce((s, x) => s + x[1], 0);
-P1.effortCommercial = P1.valeurPostes - P1.total;
-if (P1.effortCommercial < 0) throw new Error(`${P1.code} : le total (${P1.total}) dépasse la somme des postes (${P1.valeurPostes})`);
+{
+  const somme = P1.postes.reduce((s, x) => s + x[1], 0);
+  if (somme !== P1.total) throw new Error(`${P1.code} : la somme des postes (${somme}) diffère du total (${P1.total})`);
+}
 
 // Planning en quatre semaines.
 const PLANNING = [
