@@ -22,7 +22,7 @@ const HYP = {
   revision: 1,
   dateOffre: '29 septembre 2026',
   dateOffreISO: '2026-09-29',
-  validiteJours: 60,
+  validiteJours: 30,
   dureeSemaines: 4,
   garantieMois: 6,
   vps: 'VPS 4 vCPU, 8 Go de mémoire, 160 Go de disque NVMe, adresse IP dédiée, nom de domaine, stockage de sauvegarde hors site',

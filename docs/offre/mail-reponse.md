@@ -6,7 +6,7 @@ Nous vous remercions pour l'examen attentif de notre offre du 15 septembre 2026 
 
 Vous trouverez ci-joint l'offre révisée, référence OTF-EGUITRA-2026-36-R1, qui remplace l'offre initiale. Elle porte sur la seule proposition 1, pour un périmètre fonctionnel strictement inchangé, et répond à chacun de vos points. Son chapitre 2 les reprend un à un ; en résumé :
 
-1. **Validité de l'offre.** La durée applicable est de 60 jours. La mention de 30 jours en synthèse était une erreur matérielle, nous vous prions de nous en excuser. L'offre révisée indique 60 jours à compter du 29 septembre 2026, soit jusqu'au 28 novembre 2026, de façon uniforme.
+1. **Validité de l'offre.** La durée applicable est de 30 jours. Les mentions de 60 jours en page de garde et au chapitre 8.6 étaient une erreur matérielle, nous vous prions de nous en excuser. L'offre révisée indique 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026, de façon uniforme.
 
 3. **Garantie corrective.** Nous la portons de 3 à 6 mois à compter du procès-verbal de mise en production, sans surcoût. Elle couvre expressément les anomalies révélées lors de la clôture de l'exercice et des déclarations de fin d'exercice. Pour une commande avant fin octobre, elle court au moins jusqu'en mai 2027, donc au-delà de la clôture 2026 et du dépôt des états financiers annuels.
 

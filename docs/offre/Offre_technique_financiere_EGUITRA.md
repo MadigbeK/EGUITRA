@@ -6,7 +6,7 @@
 
 Pour EGUITRA GROUP SARLU et MB AxisPro Consulting, à l'attention de M. Mohamed Nimaga, Directeur Général
 
-Référence OTF-EGUITRA-2026-36-R1, révision 1 du 29 septembre 2026, valable 60 jours
+Référence OTF-EGUITRA-2026-36-R1, révision 1 du 29 septembre 2026, valable 30 jours
 
 Remplace l'offre OTF-EGUITRA-2026-36 du 15 septembre 2026
 
@@ -40,7 +40,7 @@ La présente révision remplace l'offre du 15 septembre 2026. Elle porte sur la 
 
 > Le montant de 50 000 000 GNF HT résulte d'un effort commercial de 42 000 000 GNF sur la valeur des prestations, que nous consentons pour accompagner le groupe dans un projet structurant et inscrire notre relation dans la durée. Le périmètre, le planning et les engagements de service ne sont pas réduits.
 
-Validité de l'offre : 60 jours à compter du 29 septembre 2026, soit jusqu'au 28 novembre 2026. Tous les montants sont exprimés en francs guinéens, hors taxes.
+Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. Tous les montants sont exprimés en francs guinéens, hors taxes.
 
 
 ---
@@ -52,7 +52,7 @@ Le tableau reprend, dans l'ordre de votre courrier, chaque point soulevé et la 
 
 | Point | Votre demande | Notre réponse | Chapitre |
 |---|---|---|---|
-| 1. Validité de l'offre | Trois durées différentes dans le document ; confirmer la durée applicable. | La durée applicable est de 60 jours. La mention de 30 jours en synthèse de l'offre initiale était une erreur matérielle. La présente révision indique 60 jours à compter du 29 septembre 2026 en page de garde, en synthèse et dans les engagements contractuels. | 1, 8.6 |
+| 1. Validité de l'offre | Trois durées différentes dans le document ; confirmer la durée applicable. | La durée applicable est de 30 jours. Les mentions de 60 jours en page de garde et au chapitre 8.6 de l'offre initiale étaient une erreur matérielle. La présente révision indique 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026, en page de garde, en synthèse et dans les engagements contractuels. | 1, 8.6 |
 | 3. Garantie corrective | Six mois au minimum, couvrant la première clôture annuelle complète. | Garantie portée de 3 à 6 mois à compter du procès-verbal de mise en production, sans surcoût. Elle couvre expressément les anomalies révélées lors de la clôture de l'exercice et des déclarations de fin d'exercice. Pour une commande passée avant fin octobre 2026, elle court au moins jusqu'en mai 2027, donc au-delà de la clôture 2026 et du dépôt des états financiers annuels. | 7.1, 8.6 |
 | 5. Sauvegardes | Une sauvegarde plus fréquente, au moins pour les modules comptables, et ses conditions. | Journalisation continue des transactions de la base, copiée hors site toutes les 15 minutes, en plus de la sauvegarde complète quotidienne. La perte de données maximale passe de 24 heures à 15 minutes, pour tous les modules puisque la plateforme repose sur une base unique. Incluse sans surcoût, la première année comme dans le forfait annuel. | 6.2 |
 | 6. Calendrier | Insertion d'une clause de pénalité de retard imputable au prestataire. | Clause insérée : 0,1 % du montant HT de la commande par jour calendaire de retard imputable à E-VOLUTION XP, plafonnée à 5 %, avec une date contractuelle de mise en production fixée au démarrage et des règles de neutralisation des retards non imputables. | 7.6, 8.6 |
@@ -429,7 +429,7 @@ Procédure :
 - Propriété du client sur ses données et sur le code développé pour lui ; les composants génériques d'E-VOLUTION XP restent réutilisables par E-VOLUTION XP.
 - Réversibilité complète sur demande, sans frais, dans les formats ouverts décrits au chapitre 6.4.
 - Confidentialité des données financières et des dossiers des porteurs de projets, y compris après la fin du contrat.
-- Validité de l'offre : 60 jours à compter du 29 septembre 2026, soit jusqu'au 28 novembre 2026. La présente révision remplace l'offre OTF-EGUITRA-2026-36 du 15 septembre 2026.
+- Validité de l'offre : 30 jours à compter du 29 septembre 2026, soit jusqu'au 29 octobre 2026. La présente révision remplace l'offre OTF-EGUITRA-2026-36 du 15 septembre 2026.
 
 
 ---
