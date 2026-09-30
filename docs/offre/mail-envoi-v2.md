@@ -2,20 +2,25 @@
 
 Bonjour Monsieur [Nom],
 
-Nous vous remercions pour votre analyse et pour le choix de la plateforme intégrée sur noyau de gestion.
+Merci pour votre retour détaillé, et pour le temps que vous avez pris à analyser notre proposition. Vos remarques étaient justes, en particulier sur la validité qui n'était effectivement pas cohérente d'une page à l'autre, et sur la garantie.
 
-Vous trouverez ci-joint notre nouvelle offre, référence OTF-EGUITRA-2026-37, qui intègre chacun de vos points :
+Nous avons donc repris l'offre dans son ensemble plutôt que de la corriger par endroits. Vous la trouverez en pièce jointe, sous la référence OTF-EGUITRA-2026-37.
 
-- **Validité** : une durée unique de 30 jours, reprise à l'identique en page de garde, en synthèse et dans les engagements contractuels.
-- **Garantie corrective** : portée à 6 mois, et en tout état de cause jusqu'à la production des états financiers annuels et de la déclaration fiscale de fin d'exercice (chapitre 7.6).
-- **Sauvegardes** : en plus de la sauvegarde complète quotidienne, archivage continu de la base toutes les 15 minutes et des pièces jointes toutes les heures, pour l'ensemble des modules et sans supplément. La perte de données maximale passe de 24 heures à 15 minutes (chapitre 5.2).
-- **Calendrier** : le délai de 4 semaines est maintenu et assorti d'une pénalité de retard imputable au prestataire de 0,5 % du montant HT par jour ouvré, plafonnée à 10 % (chapitre 6.2).
-- **Maintenance évolutive** : les critères qui distinguent une évolution incluse d'une évolution facturable sont précisés, avec le tarif applicable au-delà du forfait (chapitre 7.3).
-- **Conditions financières** : nous avons repris chaque poste et ramenons le montant à 50 000 000 GNF HT, hébergement de la première année compris, pour un périmètre fonctionnel inchangé (chapitre 7.2).
+Pour l'essentiel :
 
-Sur ce dernier point, nous avons été aussi loin que possible. Descendre à 40 000 000 GNF nous obligerait à réduire le périmètre ou à renoncer aux engagements que vous avez demandés, ce que nous ne souhaitons pas. Ce montant constitue notre meilleure offre.
+La validité est désormais de 30 jours, partout dans le document.
 
-Nous restons à votre disposition pour en discuter et convenir d'une date de démarrage.
+Sur la garantie, vous avez raison qu'un outil comptable se juge à la clôture. Nous la portons à 6 mois, et si la clôture annuelle ou la déclaration fiscale tombent après ce terme, la garantie court jusqu'à ce qu'elles soient produites.
+
+Sur les sauvegardes, nous ajoutons un archivage continu de la base toutes les 15 minutes, en plus de la sauvegarde complète de chaque nuit. C'est compris dans le prix, il n'y a pas de condition particulière.
+
+Sur le calendrier, nous maintenons les 4 semaines et nous acceptons une pénalité de retard de 0,5 % par jour ouvré, plafonnée à 10 %, dès lors que le retard nous est imputable. Le détail des cas est au chapitre 6.2.
+
+Sur la maintenance évolutive, le chapitre 7.3 précise ce qui entre dans les deux jours mensuels et ce qui relève d'un devis. En résumé : tout ce qui adapte l'existant est inclus, tout ce qui crée quelque chose de nouveau est chiffré.
+
+Reste la question du prix. Nous avons repris chaque poste et nous descendons à 50 000 000 GNF HT, hébergement de la première année compris, sans rien retirer du périmètre. Je préfère être franc : à 40 000 000, nous ne pourrions pas tenir à la fois le périmètre complet, le délai de 4 semaines et les engagements que vous demandez par ailleurs. Nous avons donc fait le maximum que nous pouvions faire proprement.
+
+Je reste disponible pour en parler de vive voix si vous le souhaitez, et pour caler ensemble une date de démarrage.
 
 Bien cordialement,
 
