@@ -28,12 +28,12 @@ EGUITRA GROUP SARLU et MB AxisPro Consulting partagent une direction générale,
 | Approche | Une plateforme unique : un noyau de gestion open source éprouvé, invisible pour les utilisateurs, et deux applications à votre image, EGUITRA Finance et AxisPro Suite. | Deux applications indépendantes développées entièrement sur mesure, EGUITRA Finance et AxisPro Suite, déployées sur un même serveur. |
 | Attentes du département Finance couvertes | Vingt sur vingt | Quatorze en totalité, six en partie |
 | Délai de mise en production | 4 semaines | 4 semaines |
-| Investissement, hébergement de la première année compris | 92 000 000 GNF HT | 80 000 000 GNF HT |
-| Hébergement, maintenance et support à partir de la deuxième année | 18 000 000 GNF HT par an | 15 000 000 GNF HT par an |
+| Investissement, hébergement de la première année compris | 92 000 000 GNF HT | 80 000 000 GNF HT |
+| Hébergement, maintenance et support à partir de la deuxième année | 18 000 000 GNF HT par an | 15 000 000 GNF HT par an |
 | Licences logicielles | Aucune | Aucune |
 | Garantie corrective | 3 mois | 3 mois |
 
-> Notre recommandation est la proposition 1. Pour 12 000 000 GNF de plus, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.
+> Notre recommandation est la proposition 1. Pour 12 000 000 GNF de plus, le groupe obtient un noyau comptable utilisé par des dizaines de milliers d'entreprises, le multi-sociétés, le rapprochement bancaire, les circuits d'approbation à plusieurs niveaux et une évolutivité sans nouveau développement. Les deux propositions sont détaillées et chiffrées ; le choix appartient à la direction.
 
 Validité de l'offre : 60 jours à compter du 15 septembre 2026. Tous les montants sont exprimés en francs guinéens, hors taxes.
 
@@ -59,7 +59,7 @@ Le dossier de l'exercice 2026 que vous nous avez transmis, arrêté au 15 août,
 | Factures de vente et pièces d'achat | 147 et 169 |
 | Opérations de trésorerie | 412 |
 | Immobilisations et financements | 24 immobilisations, 4 emprunts et crédits-bails |
-| Chiffre d'affaires cumulé | Environ 20,6 milliards GNF, dont 70 % en transport d'hydrocarbures |
+| Chiffre d'affaires cumulé | Environ 20,6 milliards GNF, dont 70 % en transport d'hydrocarbures |
 
 
 ### 2.2 Les deux projets
@@ -256,8 +256,8 @@ Cette proposition est plus légère et moins coûteuse. Elle comporte des limite
 
 | Critère | Proposition 1 | Proposition 2 |
 |---|---|---|
-| Investissement, première année | 92 000 000 GNF HT | 80 000 000 GNF HT |
-| Coût annuel à partir de la deuxième année | 18 000 000 GNF HT | 15 000 000 GNF HT |
+| Investissement, première année | 92 000 000 GNF HT | 80 000 000 GNF HT |
+| Coût annuel à partir de la deuxième année | 18 000 000 GNF HT | 15 000 000 GNF HT |
 | Délai | 4 semaines | 4 semaines |
 | Robustesse comptable | Noyau éprouvé, mis à jour par une communauté mondiale | Moteur écrit pour le groupe, éprouvé par la recette |
 | Périmètre | Vingt attentes sur vingt | Quatorze complètes, six partielles |
@@ -268,7 +268,7 @@ Cette proposition est plus légère et moins coûteuse. Elle comporte des limite
 
 ### 5.3 Notre recommandation
 
-Nous recommandons la proposition 1. L'écart de 12 000 000 GNF finance un noyau comptable dont la fiabilité n'a plus à être démontrée, et évite au groupe de payer, dans deux ans, le développement de fonctions que le noyau apporte déjà. La proposition 2 reste pertinente si la direction privilégie un outil minimal et un budget plus serré ; elle est présentée avec ses limites pour que la décision soit prise en connaissance de cause.
+Nous recommandons la proposition 1. L'écart de 12 000 000 GNF finance un noyau comptable dont la fiabilité n'a plus à être démontrée, et évite au groupe de payer, dans deux ans, le développement de fonctions que le noyau apporte déjà. La proposition 2 reste pertinente si la direction privilégie un outil minimal et un budget plus serré ; elle est présentée avec ses limites pour que la décision soit prise en connaissance de cause.
 
 
 ---
@@ -390,28 +390,28 @@ Le dossier 2026 est repris intégralement : référentiels, tiers, plan de compt
 
 | Poste | Montant HT | Part |
 |---|---|---|
-| Cadrage, conception et charte graphique des applications | 6 000 000 GNF | 7 % |
-| Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision | 8 000 000 GNF | 9 % |
-| EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans | 32 000 000 GNF | 35 % |
-| Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie | 14 000 000 GNF | 15 % |
-| Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS | 8 000 000 GNF | 9 % |
-| AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 14 000 000 GNF | 15 % |
-| Reprise du dossier 2026, recette, formation, mise en production | 6 000 000 GNF | 7 % |
-| Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 4 000 000 GNF | 4 % |
-| **Total proposition 1** | **92 000 000 GNF** | **100 %** |
+| Cadrage, conception et charte graphique des applications | 6 000 000 GNF | 7 % |
+| Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision | 8 000 000 GNF | 9 % |
+| EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans | 32 000 000 GNF | 35 % |
+| Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie | 14 000 000 GNF | 15 % |
+| Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS | 8 000 000 GNF | 9 % |
+| AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 14 000 000 GNF | 15 % |
+| Reprise du dossier 2026, recette, formation, mise en production | 6 000 000 GNF | 7 % |
+| Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 4 000 000 GNF | 4 % |
+| **Total proposition 1** | **92 000 000 GNF** | **100 %** |
 
 
 ### 8.3 Proposition 2 : Deux applications indépendantes, EGUITRA Finance et AxisPro Suite, sur un VPS commun
 
 | Poste | Montant HT | Part |
 |---|---|---|
-| Cadrage, conception et charte graphique des applications | 5 000 000 GNF | 6 % |
-| Socle technique commun : VPS, base de données, authentification, sauvegardes, supervision | 7 000 000 GNF | 9 % |
-| Application EGUITRA Finance : moteur comptable SYSCOHADA, ventes, achats, trésorerie, immobilisations, budget, clôtures, états, rotations transport, chantiers, gestion locative | 42 000 000 GNF | 53 % |
-| Application AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 18 000 000 GNF | 23 % |
-| Reprise du dossier 2026, recette, formation, mise en production | 4 000 000 GNF | 5 % |
-| Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 4 000 000 GNF | 5 % |
-| **Total proposition 2** | **80 000 000 GNF** | **100 %** |
+| Cadrage, conception et charte graphique des applications | 5 000 000 GNF | 6 % |
+| Socle technique commun : VPS, base de données, authentification, sauvegardes, supervision | 7 000 000 GNF | 9 % |
+| Application EGUITRA Finance : moteur comptable SYSCOHADA, ventes, achats, trésorerie, immobilisations, budget, clôtures, états, rotations transport, chantiers, gestion locative | 42 000 000 GNF | 53 % |
+| Application AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 18 000 000 GNF | 23 % |
+| Reprise du dossier 2026, recette, formation, mise en production | 4 000 000 GNF | 5 % |
+| Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 4 000 000 GNF | 5 % |
+| **Total proposition 2** | **80 000 000 GNF** | **100 %** |
 
 
 ### 8.4 Hébergement, maintenance et support à partir de la deuxième année
@@ -425,8 +425,8 @@ La première année d'hébergement est comprise dans chaque proposition. À part
 | Support | Assistance des utilisateurs du lundi au vendredi, de 8 h à 18 h, par messagerie, e-mail et téléphone |
 | Maintenance corrective | Correction de toute anomalie, sans limite |
 | Maintenance évolutive | Deux jours par mois de petites évolutions, cumulables sur le trimestre |
-| **Forfait annuel, proposition 1** | **18 000 000 GNF HT, facturé par semestre d'avance** |
-| **Forfait annuel, proposition 2** | **15 000 000 GNF HT, facturé par semestre d'avance** |
+| **Forfait annuel, proposition 1** | **18 000 000 GNF HT, facturé par semestre d'avance** |
+| **Forfait annuel, proposition 2** | **15 000 000 GNF HT, facturé par semestre d'avance** |
 
 Délais d'intervention du support, applicables dès la mise en production :
 
@@ -441,9 +441,9 @@ Délais d'intervention du support, applicables dès la mise en production :
 
 |  | Proposition 1 | Proposition 2 |
 |---|---|---|
-| **Réalisation et hébergement, première année** | **92 000 000 GNF HT** | **80 000 000 GNF HT** |
-| Hébergement, maintenance et support, par an à partir de la deuxième année | 18 000 000 GNF HT | 15 000 000 GNF HT |
-| Coût cumulé sur trois ans | 128 000 000 GNF HT | 110 000 000 GNF HT |
+| **Réalisation et hébergement, première année** | **92 000 000 GNF HT** | **80 000 000 GNF HT** |
+| Hébergement, maintenance et support, par an à partir de la deuxième année | 18 000 000 GNF HT | 15 000 000 GNF HT |
+| Coût cumulé sur trois ans | 128 000 000 GNF HT | 110 000 000 GNF HT |
 
 
 ### 8.6 Conditions de paiement
