@@ -5,7 +5,9 @@ Deux versions cohabitent :
 - **Offre initiale** (15 septembre 2026, deux propositions) : `contenu.js` + `build.js` → `Offre_technique_financiere_EGUITRA.docx`.
 - **Offre révisée R1** (30 septembre 2026, proposition 1 seule, réponse aux observations du client) : `contenu-r1.js` + `build-r1.js` → `Offre_revisee_R1_EGUITRA.docx`. Texte du mail de réponse : `mail-reponse-r1.md`.
 
-Le rendu (.docx et .md) est commun aux deux versions : `rendu.js`.
+- **Offre finale v2** (30 septembre 2026, proposition unique, présentée comme une offre originale, sans donnée du JSON de test) : `contenu-v2.js` + `build-v2.js` → `Offre_technique_financiere_EGUITRA_v2.docx`. C'est la version à envoyer.
+
+Le rendu (.docx et .md) est commun à toutes les versions : `rendu.js`.
 
 ## Offre initiale
 
@@ -21,6 +23,7 @@ Régénérer :
 npm install docx
 node docs/offre/build.js      # offre initiale
 node docs/offre/build-r1.js   # offre révisée R1
+node docs/offre/build-v2.js   # offre finale v2
 ```
 
 Le Word contient une table des matières automatique : à l'ouverture, accepter la mise à jour des champs.
