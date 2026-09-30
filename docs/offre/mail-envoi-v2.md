@@ -8,7 +8,9 @@ Vous trouverez en pièce jointe la nouvelle version de l'offre, référence OTF-
 
 Sur le prix, nous descendons à 50 000 000 GNF HT, hébergement de la première année compris, sans rien retirer du périmètre. À 40 000 000, nous ne pourrions pas tenir à la fois le périmètre, le délai et les engagements demandés. C'est notre meilleure offre.
 
-Je reste disponible pour en parler de vive voix et fixer une date de démarrage.
+Si cette version vous convient, je vous propose de tenir la réunion de cadrage dès demain, jeudi 1er octobre. Nous mettrions ainsi à profit le long week-end du 2 octobre pour l'analyse, et la semaine 1 démarrerait sur des bases déjà posées.
+
+Je reste disponible pour en parler de vive voix.
 
 Bien cordialement,
 
