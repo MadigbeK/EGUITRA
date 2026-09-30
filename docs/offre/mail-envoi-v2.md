@@ -2,13 +2,13 @@
 
 Bonjour Monsieur [Nom],
 
-Merci pour votre retour détaillé, et pour le temps que vous avez pris à analyser notre proposition. Vos remarques étaient justes, en particulier sur la validité qui n'était effectivement pas cohérente d'une page à l'autre, et sur la garantie.
+Merci pour votre retour et pour le choix de la plateforme intégrée, qui est aussi la solution que nous vous recommandions.
 
-Nous avons donc repris l'offre dans son ensemble plutôt que de la corriger par endroits. Vous la trouverez en pièce jointe, sous la référence OTF-EGUITRA-2026-37.
+Vos points ont chacun trouvé leur place dans une nouvelle version de l'offre, que vous trouverez en pièce jointe sous la référence OTF-EGUITRA-2026-37.
 
 Pour l'essentiel :
 
-La validité est désormais de 30 jours, partout dans le document.
+La validité de l'offre est fixée à 30 jours.
 
 Sur la garantie, vous avez raison qu'un outil comptable se juge à la clôture. Nous la portons à 6 mois, et si la clôture annuelle ou la déclaration fiscale tombent après ce terme, la garantie court jusqu'à ce qu'elles soient produites.
 
