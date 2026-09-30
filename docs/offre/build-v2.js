@@ -69,7 +69,7 @@ pagebreak();
 h1('3. La solution : plateforme intégrée sur noyau de gestion');
 h2('3.1 Principe : un noyau invisible, des applications à votre image');
 p('La plateforme repose sur deux couches strictement séparées. Le noyau de gestion est Odoo Community, complété par les modules de l\'Odoo Community Association (OCA) et par nos modules spécifiques. Il assure la tenue des écritures, la cohérence comptable, le multi-sociétés, le multi-devises, les droits d\'accès et la traçabilité. Il est publié sous licence libre : aucune redevance, aucune limite de nombre d\'utilisateurs, aucun éditeur à contacter pour une évolution.');
-p(`Les applications métier sont développées sur mesure et constituent la seule interface utilisée par vos équipes : EGUITRA Finance pour le groupe, AxisPro Suite pour le cabinet. Elles reprennent votre identité visuelle, votre vocabulaire et vos parcours de saisie. Le client web du noyau n'est jamais exposé aux utilisateurs ; il reste accessible à la seule équipe technique de ${HYP.prestataire}, sur un accès réseau restreint. Cette approche est celle que nous avons mise en œuvre pour SOGUIPREM.`);
+p(`Les applications métier sont développées sur mesure et constituent la seule interface utilisée par vos équipes : EGUITRA Finance pour le groupe, AxisPro Suite pour le cabinet. Elles reprennent votre identité visuelle, votre vocabulaire et vos parcours de saisie. Le client web du noyau n'est jamais exposé aux utilisateurs ; il reste accessible à la seule équipe technique d'E-VOLUTION XP, sur un accès réseau restreint. Cette approche est celle que nous avons mise en œuvre pour SOGUIPREM.`);
 callout('Pour vos utilisateurs, il n\'existe qu\'EGUITRA Finance et AxisPro Suite. Le noyau reste un composant technique, au même titre que la base de données.');
 
 h2('3.2 Architecture');
@@ -277,7 +277,7 @@ ul([
   'Prix forfaitaire : le montant est ferme pour le périmètre décrit. Toute évolution de périmètre fait l\'objet d\'un avenant chiffré.',
   'Aucun coût de licence.',
   'L\'hébergement de la première année, avec le dispositif de sauvegarde renforcé, est compris dans le montant.',
-  `La garantie corrective de ${HYP.garantieMois} mois et les pénalités de retard sont comprises dans le montant.`,
+  `La garantie corrective de ${HYP.garantieMois} mois est comprise dans le montant. L'engagement de délai et les pénalités de retard qui l'accompagnent n'entraînent aucun surcoût.`,
 ]);
 h2('7.2 Détail par poste');
 table(
@@ -372,6 +372,8 @@ table(
     ['OCA', 'Odoo Community Association, association qui publie des modules libres pour le noyau de gestion.'],
     ['SYSCOHADA', 'Système comptable de l\'Organisation pour l\'harmonisation en Afrique du droit des affaires, version révisée.'],
     ['DSCR', 'Ratio de couverture du service de la dette.'],
+    ['OD', 'Opérations diverses : écritures comptables qui ne relèvent ni des ventes, ni des achats, ni de la trésorerie.'],
+    ['IFRS', 'Normes internationales d\'information financière, utilisées par les banques et investisseurs étrangers.'],
     ['Stage gate', 'Étape de décision d\'un projet, avec ses règles de passage.'],
     ['Knock-out', 'Critère éliminatoire imposant un NO-GO quel que soit le score.'],
     ['VPS', 'Serveur virtuel privé, dédié au client chez un hébergeur.'],
