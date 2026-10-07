@@ -7,6 +7,8 @@ Deux versions cohabitent :
 
 - **Offre finale v2** (30 septembre 2026, proposition unique, présentée comme une offre originale, sans donnée du JSON de test) : `contenu-v2.js` + `build-v2.js` → `Offre_technique_financiere_EGUITRA_v2.docx`. C'est la version à envoyer.
 
+- **Annexe détail par poste** (7 octobre 2026, demandée par le client avant le cadrage) : `build-annexe-postes.js` → `Annexe_detail_par_poste_EGUITRA.docx`. Mail : `mail-reponse-annexe.md`.
+
 Le rendu (.docx et .md) est commun à toutes les versions : `rendu.js`.
 
 ## Offre initiale
