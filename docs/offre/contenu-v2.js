@@ -38,7 +38,7 @@ const P1 = {
     ['Nom de domaine et certificats TLS', 0],
     ['Installation et paramétrage du noyau et des modules communautaires : plan SYSCOHADA, sociétés, devises, journaux, axes analytiques', 5000000],
     ['Module EGUITRA Finance : API métier, règles de gestion, contrôles de clôture, alertes, états financiers, 18 écrans', 14000000],
-    ['Module transport pétrolier : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile', 6000000],
+    ['Module transport et logistique : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile', 6000000],
     ['Module BTP : chantiers, situations d\'avancement, retenues de garantie', 3000000],
     ['Module immobilier : biens, baux, quittancement, patrimoine', 2500000],
     ['Module fiscalité guinéenne, consolidation groupe et passerelle IFRS', 2500000],

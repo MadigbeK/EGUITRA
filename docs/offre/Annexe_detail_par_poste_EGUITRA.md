@@ -10,7 +10,7 @@
 | Nom de domaine et certificats TLS | Offert | 0 % |
 | Installation et paramétrage du noyau et des modules communautaires : plan SYSCOHADA, sociétés, devises, journaux, axes analytiques | 5 000 000 GNF | 10 % |
 | Module EGUITRA Finance : API métier, règles de gestion, contrôles de clôture, alertes, états financiers, 18 écrans | 14 000 000 GNF | 28 % |
-| Module transport pétrolier : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile | 6 000 000 GNF | 12 % |
+| Module transport et logistique : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile | 6 000 000 GNF | 12 % |
 | Module BTP : chantiers, situations d'avancement, retenues de garantie | 3 000 000 GNF | 6 % |
 | Module immobilier : biens, baux, quittancement, patrimoine | 2 500 000 GNF | 5 % |
 | Module fiscalité guinéenne, consolidation groupe et passerelle IFRS | 2 500 000 GNF | 5 % |
