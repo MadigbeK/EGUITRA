@@ -9,7 +9,7 @@ const logoPath = trouverLogo(__dirname, HYP.logoFichiers);
 const { B, h1, p, table, ul } = blocs();
 
 h1('Détail du montant par poste');
-p(`À la demande d'EGUITRA GROUP SARLU, le présent document détaille la répartition du montant de l'offre ${HYP.reference}, soit ${gnfHT(P1.total)}, dans la présentation par poste de l'offre initiale du 15 septembre 2026. Le périmètre fonctionnel est inchangé ; la ventilation distingue le serveur, le paramétrage du noyau et chacun des modules développés.`);
+p(`À la demande d'EGUITRA GROUP SARLU, le présent document détaille la répartition du montant de l'offre ${HYP.reference}, soit ${gnfHT(P1.total)}, dans la présentation par poste de l'offre initiale du 15 septembre 2026. Le périmètre fonctionnel est inchangé.`);
 table(
   ['Poste', 'Montant HT', 'Part'],
   [
@@ -19,12 +19,9 @@ table(
   [6238, 2200, 1200],
   { lastBold: true },
 );
-p('Lecture de la répartition :');
 ul([
-  'Les postes techniques, serveur, paramétrage du noyau et développement des modules, représentent 90 % du montant.',
-  'Le nom de domaine et les certificats sont offerts. Si le groupe dispose déjà d\'un nom de domaine, il est utilisé tel quel.',
-  'Le cadrage, la reprise des données, la recette et la formation sont réduits au strict nécessaire grâce aux prototypes de la direction et à des fichiers de gestion déjà structurés.',
-  'L\'hébergement de la première année est facturé à son coût, sans marge.',
+  'Les postes techniques, infrastructure, noyau et développement des applications, représentent 92 % du montant.',
+  'Le nom de domaine et les certificats sont offerts ; si le groupe dispose déjà d\'un nom de domaine, il est utilisé tel quel.',
 ]);
 p(`Montants en francs guinéens, hors taxes. La garantie corrective de ${HYP.garantieMois} mois, les sauvegardes renforcées et l'engagement de délai avec pénalités sont compris dans le total, sans poste distinct.`);
 

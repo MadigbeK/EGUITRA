@@ -325,18 +325,10 @@ Les données de l'exercice en cours sont reprises à partir de vos fichiers actu
 | Poste | Montant HT | Part |
 |---|---|---|
 | Cadrage, conception et charte graphique des applications | 1 500 000 GNF | 3 % |
-| Serveur VPS : acquisition et configuration complète (système, conteneurs, proxy TLS, base de données, supervision, sauvegardes renforcées) | 5 000 000 GNF | 10 % |
-| Nom de domaine et certificats TLS | Offert | 0 % |
-| Installation et paramétrage du noyau et des modules communautaires : plan SYSCOHADA, sociétés, devises, journaux, axes analytiques | 5 000 000 GNF | 10 % |
-| Module EGUITRA Finance : API métier, règles de gestion, contrôles de clôture, alertes, états financiers, 18 écrans | 14 000 000 GNF | 28 % |
-| Module transport et logistique : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile | 6 000 000 GNF | 12 % |
-| Module BTP : chantiers, situations d'avancement, retenues de garantie | 3 000 000 GNF | 6 % |
-| Module immobilier : biens, baux, quittancement, patrimoine | 2 500 000 GNF | 5 % |
-| Module fiscalité guinéenne, consolidation groupe et passerelle IFRS | 2 500 000 GNF | 5 % |
-| Module AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 7 000 000 GNF | 14 % |
-| Reprise des données de l'exercice en cours | 1 000 000 GNF | 2 % |
-| Recette, formation par profil, mise en production | 1 500 000 GNF | 3 % |
-| Hébergement VPS et sauvegardes hors site pendant 12 mois | 1 000 000 GNF | 2 % |
+| Infrastructure : acquisition et configuration du serveur VPS, sécurité, supervision, sauvegardes renforcées, hébergement 12 mois ; nom de domaine et certificats offerts | 6 000 000 GNF | 12 % |
+| Noyau de gestion : installation, paramétrage SYSCOHADA, sociétés, devises, axes analytiques, modules communautaires | 5 000 000 GNF | 10 % |
+| Développement des applications EGUITRA Finance et AxisPro Suite : ensemble des modules métier, API, écrans web, application mobile et portail | 35 000 000 GNF | 70 % |
+| Reprise des données, recette, formation, mise en production | 2 500 000 GNF | 5 % |
 | **Total** | **50 000 000 GNF** | **100 %** |
 
 

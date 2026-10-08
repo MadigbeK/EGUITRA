@@ -34,18 +34,10 @@ const P1 = {
   total: 50000000,
   postes: [
     ['Cadrage, conception et charte graphique des applications', 1500000],
-    ['Serveur VPS : acquisition et configuration complète (système, conteneurs, proxy TLS, base de données, supervision, sauvegardes renforcées)', 5000000],
-    ['Nom de domaine et certificats TLS', 0],
-    ['Installation et paramétrage du noyau et des modules communautaires : plan SYSCOHADA, sociétés, devises, journaux, axes analytiques', 5000000],
-    ['Module EGUITRA Finance : API métier, règles de gestion, contrôles de clôture, alertes, états financiers, 18 écrans', 14000000],
-    ['Module transport et logistique : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile', 6000000],
-    ['Module BTP : chantiers, situations d\'avancement, retenues de garantie', 3000000],
-    ['Module immobilier : biens, baux, quittancement, patrimoine', 2500000],
-    ['Module fiscalité guinéenne, consolidation groupe et passerelle IFRS', 2500000],
-    ['Module AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 7000000],
-    ['Reprise des données de l\'exercice en cours', 1000000],
-    ['Recette, formation par profil, mise en production', 1500000],
-    ['Hébergement VPS et sauvegardes hors site pendant 12 mois', 1000000],
+    ['Infrastructure : acquisition et configuration du serveur VPS, sécurité, supervision, sauvegardes renforcées, hébergement 12 mois ; nom de domaine et certificats offerts', 6000000],
+    ['Noyau de gestion : installation, paramétrage SYSCOHADA, sociétés, devises, axes analytiques, modules communautaires', 5000000],
+    ['Développement des applications EGUITRA Finance et AxisPro Suite : ensemble des modules métier, API, écrans web, application mobile et portail', 35000000],
+    ['Reprise des données, recette, formation, mise en production', 2500000],
   ],
 };
 {
