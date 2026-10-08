@@ -324,14 +324,19 @@ Les données de l'exercice en cours sont reprises à partir de vos fichiers actu
 
 | Poste | Montant HT | Part |
 |---|---|---|
-| Cadrage, conception et charte graphique des applications | 3 000 000 GNF | 6 % |
-| Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision | 4 000 000 GNF | 8 % |
-| EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans | 17 000 000 GNF | 34 % |
-| Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie | 8 000 000 GNF | 16 % |
-| Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS | 4 000 000 GNF | 8 % |
-| AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 8 000 000 GNF | 16 % |
-| Reprise des données de l'exercice en cours, recette, formation, mise en production | 3 000 000 GNF | 6 % |
-| Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois | 3 000 000 GNF | 6 % |
+| Cadrage, conception et charte graphique des applications | 1 500 000 GNF | 3 % |
+| Serveur VPS : acquisition et configuration complète (système, conteneurs, proxy TLS, base de données, supervision, sauvegardes renforcées) | 5 000 000 GNF | 10 % |
+| Nom de domaine et certificats TLS | Offert | 0 % |
+| Installation et paramétrage du noyau et des modules communautaires : plan SYSCOHADA, sociétés, devises, journaux, axes analytiques | 5 000 000 GNF | 10 % |
+| Module EGUITRA Finance : API métier, règles de gestion, contrôles de clôture, alertes, états financiers, 18 écrans | 14 000 000 GNF | 28 % |
+| Module transport pétrolier : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile | 6 000 000 GNF | 12 % |
+| Module BTP : chantiers, situations d'avancement, retenues de garantie | 3 000 000 GNF | 6 % |
+| Module immobilier : biens, baux, quittancement, patrimoine | 2 500 000 GNF | 5 % |
+| Module fiscalité guinéenne, consolidation groupe et passerelle IFRS | 2 500 000 GNF | 5 % |
+| Module AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs | 7 000 000 GNF | 14 % |
+| Reprise des données de l'exercice en cours | 1 000 000 GNF | 2 % |
+| Recette, formation par profil, mise en production | 1 500 000 GNF | 3 % |
+| Hébergement VPS et sauvegardes hors site pendant 12 mois | 1 000 000 GNF | 2 % |
 | **Total** | **50 000 000 GNF** | **100 %** |
 
 

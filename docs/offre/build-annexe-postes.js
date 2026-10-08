@@ -3,33 +3,28 @@
 // Usage : node docs/offre/build-annexe-postes.js
 const path = require('path');
 const { HYP, P1 } = require('./contenu-v2');
-const { P1: INITIAL } = require('./contenu');
 const { blocs, ecrire, trouverLogo, gnf, gnfHT, pct, NBSP } = require('./rendu');
 
 const logoPath = trouverLogo(__dirname, HYP.logoFichiers);
 const { B, h1, p, table, ul } = blocs();
 
-// Les huit postes sont les mêmes dans les deux offres, dans le même ordre.
-if (INITIAL.postes.length !== P1.postes.length) throw new Error('Les deux offres n\'ont pas le même nombre de postes');
-
 h1('Détail du montant par poste');
-p(`À la demande d'EGUITRA GROUP SARLU, le présent document détaille la répartition du montant de l'offre ${HYP.reference}, soit ${gnfHT(P1.total)}, selon les huit postes de l'offre initiale du 15 septembre 2026. Le périmètre fonctionnel de chaque poste est inchangé.`);
+p(`À la demande d'EGUITRA GROUP SARLU, le présent document détaille la répartition du montant de l'offre ${HYP.reference}, soit ${gnfHT(P1.total)}, dans la présentation par poste de l'offre initiale du 15 septembre 2026. Le périmètre fonctionnel est inchangé ; la ventilation distingue le serveur, le paramétrage du noyau et chacun des modules développés.`);
 table(
-  ['Poste', 'Offre initiale', 'Offre en vigueur', 'Part'],
+  ['Poste', 'Montant HT', 'Part'],
   [
-    ...P1.postes.map(([l, m], i) => [l, gnf(INITIAL.postes[i][1]), gnf(m), pct(m, P1.total)]),
-    ['Total', gnf(INITIAL.total), gnf(P1.total), `100${NBSP}%`],
+    ...P1.postes.map(([l, m]) => [l, gnf(m), pct(m, P1.total)]),
+    ['Total', gnf(P1.total), `100${NBSP}%`],
   ],
-  [4838, 1700, 1800, 1300],
+  [6238, 2200, 1200],
   { lastBold: true },
 );
-p('Ce qui rend cette répartition possible, poste par poste :');
+p('Lecture de la répartition :');
 ul([
-  'Cadrage et conception : les prototypes de la direction tiennent lieu de spécification, les ateliers se limitent aux arbitrages.',
-  'Socle technique : installation industrialisée, déjà éprouvée sur nos déploiements précédents.',
-  'EGUITRA Finance, transport, BTP, immobilier et AxisPro Suite : réutilisation des composants d\'interface et des modules développés par E-VOLUTION XP pour SOGUIPREM ; seule l\'adaptation à vos règles et à votre charte est facturée.',
-  'Reprise des données, recette et formation : charge réduite grâce à des fichiers de gestion déjà structurés et à une formation par profil regroupée en semaine 4.',
-  'Hébergement de la première année : facturé à son coût, sans marge.',
+  'Les postes techniques, serveur, paramétrage du noyau et développement des modules, représentent 90 % du montant.',
+  'Le nom de domaine et les certificats sont offerts. Si le groupe dispose déjà d\'un nom de domaine, il est utilisé tel quel.',
+  'Le cadrage, la reprise des données, la recette et la formation sont réduits au strict nécessaire grâce aux prototypes de la direction et à des fichiers de gestion déjà structurés.',
+  'L\'hébergement de la première année est facturé à son coût, sans marge.',
 ]);
 p(`Montants en francs guinéens, hors taxes. La garantie corrective de ${HYP.garantieMois} mois, les sauvegardes renforcées et l'engagement de délai avec pénalités sont compris dans le total, sans poste distinct.`);
 

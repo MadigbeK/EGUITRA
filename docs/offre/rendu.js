@@ -9,9 +9,9 @@ const {
 } = require('docx');
 
 const NBSP = ' ';
-const gnf = (n) => Math.round(n).toLocaleString('fr-FR').replace(/[   ]/g, NBSP) + NBSP + 'GNF';
+const gnf = (n) => (n === 0 ? 'Offert' : Math.round(n).toLocaleString('fr-FR').replace(/[   ]/g, NBSP) + NBSP + 'GNF');
 const gnfHT = (n) => `${gnf(n)} HT`;
-const pct = (n, tot) => `${Math.round((n / tot) * 100)}${NBSP}%`;
+const pct = (n, tot) => (n === 0 ? '0' + NBSP + '%' : `${Math.round((n / tot) * 100)}${NBSP}%`);
 
 function blocs() {
   const B = [];

@@ -33,14 +33,19 @@ const HYP = {
 const P1 = {
   total: 50000000,
   postes: [
-    ['Cadrage, conception et charte graphique des applications', 3000000],
-    ['Socle technique : VPS, installation du noyau et des modules communautaires, sécurité, sauvegardes, supervision', 4000000],
-    ['EGUITRA Finance : paramétrage SYSCOHADA, analytique, trésorerie et rapprochement, immobilisations, budget, approbations, états financiers, 18 écrans', 17000000],
-    ['Transport pétrolier et BTP : rotations, flotte, rentabilité par camion et par route, application mobile, chantiers, retenues de garantie', 8000000],
-    ['Immobilier, fiscalité guinéenne, consolidation groupe, passerelle IFRS', 4000000],
-    ['AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 8000000],
-    ['Reprise des données de l\'exercice en cours, recette, formation, mise en production', 3000000],
-    ['Hébergement VPS, nom de domaine et sauvegardes hors site pendant 12 mois', 3000000],
+    ['Cadrage, conception et charte graphique des applications', 1500000],
+    ['Serveur VPS : acquisition et configuration complète (système, conteneurs, proxy TLS, base de données, supervision, sauvegardes renforcées)', 5000000],
+    ['Nom de domaine et certificats TLS', 0],
+    ['Installation et paramétrage du noyau et des modules communautaires : plan SYSCOHADA, sociétés, devises, journaux, axes analytiques', 5000000],
+    ['Module EGUITRA Finance : API métier, règles de gestion, contrôles de clôture, alertes, états financiers, 18 écrans', 14000000],
+    ['Module transport pétrolier : rotations, flotte, routes et tarifs, rentabilité par camion et par route, application mobile', 6000000],
+    ['Module BTP : chantiers, situations d\'avancement, retenues de garantie', 3000000],
+    ['Module immobilier : biens, baux, quittancement, patrimoine', 2500000],
+    ['Module fiscalité guinéenne, consolidation groupe et passerelle IFRS', 2500000],
+    ['Module AxisPro Suite : grille de critères, stage gates, scoring, data room, revues de comité, rapports, portail des porteurs', 7000000],
+    ['Reprise des données de l\'exercice en cours', 1000000],
+    ['Recette, formation par profil, mise en production', 1500000],
+    ['Hébergement VPS et sauvegardes hors site pendant 12 mois', 1000000],
   ],
 };
 {
