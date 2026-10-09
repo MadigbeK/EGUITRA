@@ -2,7 +2,7 @@
 
 # Kit de la réunion de cadrage
 
-**EGUITRA Finance et AxisPro Suite, lundi 12 octobre 2026**
+**EGUITRA Finance et AxisPro Suite, mardi 13 octobre 2026**
 
 Document interne E-VOLUTION XP, à ne pas transmettre au client.
 
@@ -245,7 +245,7 @@ Le compte rendu est court et n'a qu'un but : que personne ne puisse dire plus ta
 
 ### 6.2 Modèle de compte rendu
 
-> Objet : Compte rendu de la réunion de cadrage du 12 octobre 2026
+> Objet : Compte rendu de la réunion de cadrage du 13 octobre 2026
 
 Participants : [noms et fonctions].
 

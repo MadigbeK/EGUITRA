@@ -206,7 +206,7 @@ h1('6. Après la réunion');
 h2('6.1 Sous 24 heures : le compte rendu');
 p('Le compte rendu est court et n\'a qu\'un but : que personne ne puisse dire plus tard « ce n\'est pas ce que nous avions décidé ». Il reprend les décisions, les responsables, les dates et les questions ouvertes. Il part le lendemain matin au plus tard, à tous les participants, avec le Directeur Général en copie.');
 h2('6.2 Modèle de compte rendu');
-callout('Objet : Compte rendu de la réunion de cadrage du 12 octobre 2026');
+callout('Objet : Compte rendu de la réunion de cadrage du 13 octobre 2026');
 p('Participants : [noms et fonctions].');
 p('Décisions :');
 ul(['[Décision 1, responsable, date]', '[Décision 2, responsable, date]', '[...]']);
@@ -256,7 +256,7 @@ table(
 (async () => {
   await ecrire(B, {
     titre: 'Kit de la réunion de cadrage',
-    sousTitre: 'EGUITRA Finance et AxisPro Suite, lundi 12 octobre 2026',
+    sousTitre: 'EGUITRA Finance et AxisPro Suite, mardi 13 octobre 2026',
     mentionRevision: 'Document interne E-VOLUTION XP, à ne pas transmettre au client.',
     prestataire: HYP.prestataire, slogan: HYP.slogan, contact: HYP.contact,
     client: HYP.client, client2: HYP.client2, dg: HYP.dg,

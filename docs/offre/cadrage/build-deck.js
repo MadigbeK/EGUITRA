@@ -1,5 +1,5 @@
 // Génère docs/offre/cadrage/Reunion_de_cadrage_EGUITRA.pptx
-// Support de la réunion de cadrage du lundi 12 octobre 2026.
+// Support de la réunion de cadrage du mardi 13 octobre 2026.
 // Usage : node docs/offre/cadrage/build-deck.js
 const path = require('path');
 const fs = require('fs');
@@ -81,7 +81,7 @@ async function icon(name, hex) {
   let s = pres.addSlide({ masterName: 'DARK', sectionTitle: 'Ouverture' });
   if (LOGO) s.addImage({ path: LOGO, x: 0.6, y: 0.5, w: 1.7, h: 1.0 });
   s.addText('Réunion de cadrage', { placeholder: 'title' });
-  s.addText('EGUITRA Finance et AxisPro Suite\nLundi 12 octobre 2026, 10 h, locaux d\'EGUITRA GROUP', { placeholder: 'body' });
+  s.addText('EGUITRA Finance et AxisPro Suite\nMardi 13 octobre 2026, 10 h, locaux d\'EGUITRA GROUP', { placeholder: 'body' });
   s.addText(`${HYP.prestataire}, ${HYP.slogan}`, { x: 0.6, y: 4.9, w: 6, h: 0.3, fontSize: 11, color: C.accent1, margin: 0, isTextBox: true });
   s.addNotes('Accueil. Se présenter, présenter l\'équipe, remercier pour l\'accord de principe. Rappeler que la réunion dure une demi-journée et que l\'on sort avec des décisions, pas avec des idées.');
 
@@ -147,9 +147,9 @@ async function icon(name, hex) {
 
   // ================================================================ 6. Planning
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Le projet' });
-  s.addText('Quatre semaines, du 12 octobre au 6 novembre', { placeholder: 'title' });
+  s.addText('Quatre semaines, du 13 octobre au 6 novembre', { placeholder: 'title' });
   const weeks = [
-    ['Semaine 1', '12 au 16 oct.', 'Cadrage et socle', 'Ateliers, charte validée, serveur en ligne, comptes créés'],
+    ['Semaine 1', '13 au 16 oct.', 'Cadrage et socle', 'Ateliers, charte validée, serveur en ligne, comptes créés'],
     ['Semaine 2', '19 au 23 oct.', 'Finance et AxisPro', 'Paramétrage, écrans finance, grille AxisPro, soldes d\'ouverture'],
     ['Semaine 3', '26 au 30 oct.', 'Métiers et portail', 'Transport, BTP, immobilier, fiscal, AxisPro, fin de reprise'],
     ['Semaine 4', '2 au 6 nov.', 'Recette et mise en production', 'Recette sur vos données, formation, PV de mise en production'],
