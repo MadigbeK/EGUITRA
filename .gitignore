@@ -1,2 +1,8 @@
 node_modules/
 *.pdf
+.env
+infra/oca-src/
+infra/oca/
+infra/oca-requirements.txt
+frontend/node_modules/
+frontend/dist/

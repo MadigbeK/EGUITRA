@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command: >
+      postgres -c wal_level=replica -c archive_mode=on
+               -c archive_command='test ! -f /wal-archive/%f && cp %p /wal-archive/%f'
+               -c archive_timeout=900
+               -c shared_buffers=1GB -c work_mem=32MB -c maintenance_work_mem=256MB
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - wal-archive:/wal-archive
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  odoo:
+    image: odoo:${ODOO_VERSION}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: ${POSTGRES_USER}
+      PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./odoo.conf:/etc/odoo/odoo.conf:ro
+      - ../addons:/mnt/extra-addons/eguitra:ro
+      - ./oca:/mnt/extra-addons/oca:ro
+    expose:
+      - "8069"
+      - "8072"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      FINANCE_HOST: ${FINANCE_HOST}
+      AXISPRO_HOST: ${AXISPRO_HOST}
+      RECETTE_HOST: ${RECETTE_HOST}
+      ADMIN_IPS: ${ADMIN_IPS}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - ../frontend/dist:/srv/frontend:ro
+
+volumes:
+  db-data:
+  wal-archive:
+  odoo-data:
+  caddy-data:
+  caddy-config:
