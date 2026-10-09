@@ -2,7 +2,7 @@
 # Clone les dépôts OCA listés dans oca-repos.txt (branche ODOO_VERSION) et expose les modules dans ./oca
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${ODOO_VERSION:-$(grep -E '^ODOO_VERSION=' .env 2>/dev/null | cut -d= -f2 || echo 17.0)}"
+VERSION="${ODOO_VERSION:-$(grep -E '^ODOO_VERSION=' .env 2>/dev/null | cut -d= -f2 || echo 18.0)}"
 mkdir -p oca-src oca
 grep -vE '^\s*(#|$)' oca-repos.txt | while read -r repo modules; do
   if [ ! -d "oca-src/$repo" ]; then

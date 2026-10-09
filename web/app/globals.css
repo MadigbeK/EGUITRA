@@ -1,0 +1,289 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────────
+   EGUITRA Finance — Apothicaire Scientifique
+   Dark theme par défaut, tokens OKLCH ancrés sur le logo EGUITRA GROUP
+   ────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    /* Brand */
+    --brand-navy: oklch(30% 0.120 285);
+    --brand-navy-deep: oklch(22% 0.100 285);
+    --brand-green-vif: oklch(62% 0.110 195);
+    --brand-green-deep: oklch(48% 0.090 195);
+    --brand-orange: oklch(75% 0.150 80);
+    --brand-orange-soft: oklch(72% 0.180 55 / 0.15);
+    --brand-green-soft: oklch(60% 0.180 145 / 0.14);
+
+    /* Surfaces */
+    --bg: oklch(18% 0.030 250);
+    --bg-2: oklch(21% 0.030 250);
+    --panel: oklch(25% 0.035 250);
+    --line: oklch(33% 0.030 250);
+
+    /* Texte */
+    --ink: oklch(96% 0.005 250);
+    --ink-3: oklch(62% 0.014 250);
+
+    /* Sémantique */
+    --danger: oklch(64% 0.180 25);
+    --danger-soft: oklch(64% 0.180 25 / 0.15);
+    --warn: oklch(76% 0.135 80);
+
+    /* Tokens modern-animated-sign-in (alias dark theme EGUITRA Finance) */
+    --background: oklch(18% 0.030 250);     /* = --bg */
+    --foreground: oklch(96% 0.005 250);     /* = --ink */
+    --skeleton: oklch(28% 0.040 250);       /* = --panel (pour BoxReveal slide) */
+    --btn-border: oklch(33% 0.030 250);     /* = --line */
+    --input: oklch(25% 0.035 250);          /* = --panel */
+    --radius: 0.5rem;
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    background: var(--bg);
+  }
+
+  body {
+    @apply bg-bg text-ink antialiased;
+    font-family: var(--font-source-sans-3), system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-outfit), system-ui, sans-serif;
+    @apply text-ink;
+    letter-spacing: -0.015em;
+  }
+
+  /* Numbers : tabular pour alignement comptable */
+  .num, .mono, code, kbd {
+    font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Focus visible — orange capsule */
+  :focus-visible {
+    outline: 2px solid var(--brand-orange);
+    outline-offset: 2px;
+  }
+
+  /* Reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Scrollbars dark theme */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--bg-2);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(42% 0.030 250);
+  }
+
+  /* Selection */
+  ::selection {
+    background: var(--brand-orange-soft);
+    color: var(--ink);
+  }
+}
+
+@layer components {
+  /* Brand mark : carré arrondi 10px avec gradient navy + reflets orange/vert + microscope inline SVG */
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background:
+      radial-gradient(circle at 75% 25%, var(--brand-orange) 0%, transparent 20%),
+      radial-gradient(circle at 25% 75%, var(--brand-green-vif) 0%, transparent 28%),
+      linear-gradient(135deg, var(--brand-navy) 0%, var(--brand-navy-deep) 100%);
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / 0.14),
+      0 0 0 1px oklch(100% 0 0 / 0.06);
+    position: relative;
+    flex: none;
+  }
+  .brand-mark::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><g fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round'><circle cx='12' cy='15' r='3'/><path d='M12 12V8M9 8h6M12 18v6'/><path d='M19 13c1.5-1 3-1 4.5 0M22 11l1 2-1 2'/></g></svg>") center/26px no-repeat;
+  }
+
+  /* Pulse dot */
+  .pulse-dot {
+    @apply animate-pulse-soft;
+  }
+
+  /* Bouton style Google login (modern-animated-sign-in) */
+  .g-button {
+    @apply rounded-md border;
+    border-color: var(--btn-border);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   THEME FLUENT (Microsoft) — flip light pour app.eguitragroup.com
+   Police Segoe UI native (Windows) → Inter fallback. Surfaces blanches,
+   ombres douces, accent Fluent blue. Override des Tailwind utility classes
+   via !important sous .theme-fluent (même technique que theme-cream).
+   Police Inter importée en tête de fichier (règle CSS : @import en premier).
+   ══════════════════════════════════════════════════════════════════ */
+
+.theme-fluent {
+  --bg: #e4e7ee;
+  --bg-2: #ffffff;
+  --panel: #ffffff;
+  --line: #dce0e8;
+  --ink: #1b1b1b;
+  --ink-3: #5b6470;
+
+  font-family: "Segoe UI", "Segoe UI Variable", Inter, system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+  background: #e4e7ee;
+  color: #1b1b1b;
+}
+
+.theme-fluent ::selection {
+  background: #0067b8;
+  color: #ffffff;
+}
+
+/* Surfaces — fond gris Microsoft, cards blanches qui ressortent (profondeur) */
+.theme-fluent .bg-bg { background-color: #e4e7ee !important; }
+.theme-fluent .bg-bg-2 { background-color: #ffffff !important; }
+.theme-fluent .bg-panel { background-color: #ffffff !important; }
+.theme-fluent .bg-panel-2 { background-color: #eef1f6 !important; }
+.theme-fluent .hover\:bg-panel:hover { background-color: #f4f6fa !important; }
+.theme-fluent .hover\:bg-panel-2:hover { background-color: #eef1f6 !important; }
+
+/* Bordures */
+.theme-fluent .border-line { border-color: #dce0e8 !important; }
+.theme-fluent .border-line-strong { border-color: #c9cfda !important; }
+.theme-fluent .divide-line > * + * { border-color: #dce0e8 !important; }
+
+/* Texte */
+.theme-fluent .text-ink { color: #1b1b1b !important; }
+.theme-fluent .text-ink-2 { color: #2f2f2f !important; }
+.theme-fluent .text-ink-3 { color: #5b6470 !important; }
+.theme-fluent .text-ink-4 { color: #8a8f98 !important; }
+
+/* Cards : ombre douce Fluent (Soft UI) au lieu de bordure dure */
+.theme-fluent .rounded-lg.border.border-line,
+.theme-fluent .rounded-xl.border.border-line {
+  box-shadow: 0 1.6px 3.6px rgba(0, 0, 0, 0.08), 0 0.3px 0.9px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Sidebar / pill nav restent gérés par les hooks .sidebar-shell / .pill-nav
+   s'ils existent ; sinon surfaces blanches par défaut. */
+.theme-fluent .sidebar-shell {
+  background: #ffffff !important;
+  border-right-color: #e5e9ef !important;
+}
+
+/* Scrollbar light */
+.theme-fluent ::-webkit-scrollbar-track { background: #eef2f7; }
+.theme-fluent ::-webkit-scrollbar-thumb { background: #c8d0da; }
+.theme-fluent ::-webkit-scrollbar-thumb:hover { background: #aab4c0; }
+
+/* Chrome Shell (top bar + utility + sidebar) → blanc Fluent */
+.theme-fluent .chrome-utility {
+  background: #ffffff !important;
+  border-bottom-color: #e5e9ef !important;
+  color: #5b6470 !important;
+}
+.theme-fluent .chrome-topbar {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-bottom-color: #e5e9ef !important;
+}
+.theme-fluent .chrome-sidebar {
+  background: #ffffff !important;
+  border-right-color: #e5e9ef !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   THEME COCKPIT (Dire Wolf × vert sombre) — section /admin uniquement
+   Fond vert très sombre, mono, donuts colorés, table dense. Inspiré du
+   dashboard Form Bio "Dire Wolf Project". Override tokens + chrome.
+   ══════════════════════════════════════════════════════════════════ */
+
+.theme-cockpit {
+  --bg: #0a0c24;
+  --bg-2: #10133a;
+  --panel: #141a46;
+  --line: #262d6b;
+  --ink: #e7f2ea;
+  --ink-3: #7fa78d;
+
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace,
+    "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+  background: #0a0c24;
+  color: #e7f2ea;
+}
+
+.theme-cockpit ::selection {
+  background: #f5d90a;
+  color: #0a0c24;
+}
+
+/* Surfaces */
+.theme-cockpit .bg-bg { background-color: #0a0c24 !important; }
+.theme-cockpit .bg-bg-2 { background-color: #10133a !important; }
+.theme-cockpit .bg-panel { background-color: #141a46 !important; }
+.theme-cockpit .bg-panel-2 { background-color: #1a2156 !important; }
+.theme-cockpit .hover\:bg-panel:hover { background-color: #1a2156 !important; }
+.theme-cockpit .hover\:bg-panel-2:hover { background-color: #202866 !important; }
+
+/* Bordures */
+.theme-cockpit .border-line { border-color: #262d6b !important; }
+.theme-cockpit .border-line-strong { border-color: #36408a !important; }
+.theme-cockpit .divide-line > * + * { border-color: #262d6b !important; }
+
+/* Texte */
+.theme-cockpit .text-ink { color: #e7f2ea !important; }
+.theme-cockpit .text-ink-2 { color: #c4d6cb !important; }
+.theme-cockpit .text-ink-3 { color: #7fa78d !important; }
+.theme-cockpit .text-ink-4 { color: #5c7d68 !important; }
+
+/* Chrome Shell → vert sombre cockpit */
+.theme-cockpit .chrome-utility {
+  background: #061009 !important;
+  border-bottom-color: #262d6b !important;
+  color: #7fa78d !important;
+}
+.theme-cockpit .chrome-topbar {
+  background: rgba(8, 19, 13, 0.95) !important;
+  border-bottom-color: #262d6b !important;
+}
+.theme-cockpit .chrome-sidebar {
+  background: #061009 !important;
+  border-right-color: #262d6b !important;
+}
+
+/* Scrollbar */
+.theme-cockpit ::-webkit-scrollbar-track { background: #10133a; }
+.theme-cockpit ::-webkit-scrollbar-thumb { background: #262d6b; }
+.theme-cockpit ::-webkit-scrollbar-thumb:hover { background: #36408a; }

@@ -2,28 +2,31 @@
   email {$ACME_EMAIL}
 }
 
-# Surcouche EGUITRA Finance : fichiers statiques du front, API vers le noyau.
+# Applications EGUITRA Finance et AxisPro Suite : tout passe par le front Next.js,
+# qui proxifie lui-même l'API. Le client web du noyau n'est ouvert qu'aux IP d'administration.
 {$FINANCE_HOST}, {$AXISPRO_HOST}, {$RECETTE_HOST} {
   encode gzip
 
-  @admin {
-    path /web* /odoo* /website*
+  @noyau {
+    path /odoo* /web* /longpolling* /websocket*
+  }
+  @noyau_interdit {
+    path /odoo* /web* /longpolling* /websocket*
     not remote_ip {$ADMIN_IPS}
   }
-  respond @admin 404
+  respond @noyau_interdit 404
+  handle @noyau {
+    reverse_proxy odoo:8069
+  }
 
-  handle /api/* {
-    reverse_proxy odoo:8069
-  }
-  handle /longpolling/* {
-    reverse_proxy odoo:8072
-  }
-  handle /web* {
-    reverse_proxy odoo:8069
-  }
   handle {
-    root * /srv/frontend
-    try_files {path} /index.html
-    file_server
+    reverse_proxy web:3000
+  }
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
   }
 }
