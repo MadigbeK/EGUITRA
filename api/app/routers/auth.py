@@ -12,9 +12,8 @@ Endpoints :
 Rate limit Redis : géré dans `service.login()` (par IP + par account).
 Audit log : géré dans `service.*` (chaque event committé en DB).
 """
-from __future__ import annotations
 
-import uuid
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +42,7 @@ router = APIRouter()
 # Helpers
 # ──────────────────────────────────────────────────────────────────
 
+
 def _client_ip(request: Request) -> str | None:
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
@@ -69,9 +69,7 @@ _AUTH_ERROR_MAPPING = {
 
 
 def _raise_for_auth(e: AuthError, response: Response | None = None) -> None:
-    code, detail = _AUTH_ERROR_MAPPING.get(
-        e.code, (status.HTTP_401_UNAUTHORIZED, "auth_error")
-    )
+    code, detail = _AUTH_ERROR_MAPPING.get(e.code, (status.HTTP_401_UNAUTHORIZED, "auth_error"))
     headers = {}
     if e.code == "rate_limited" and e.retry_after is not None:
         headers["Retry-After"] = str(e.retry_after)
@@ -81,6 +79,7 @@ def _raise_for_auth(e: AuthError, response: Response | None = None) -> None:
 # ──────────────────────────────────────────────────────────────────
 # Endpoints publics
 # ──────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/login",
@@ -199,6 +198,7 @@ async def first_login(
 # Endpoints authentifiés
 # ──────────────────────────────────────────────────────────────────
 
+
 @router.get("/me", response_model=UserPublic, summary="Infos du user courant")
 async def me(user: User = Depends(get_current_user)) -> UserPublic:
     return UserPublic.model_validate(user)
@@ -235,7 +235,8 @@ async def logout_all(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     n = await service.logout_all(
-        session, user.id,
+        session,
+        user.id,
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
         request_id=_request_id(request),
@@ -280,9 +281,11 @@ async def list_sessions(
 # Admin — liste des utilisateurs plateforme
 # ──────────────────────────────────────────────────────────────────
 
-from pydantic import BaseModel as _BM
-from datetime import datetime as _dt
-from sqlalchemy import select as _select
+from datetime import datetime as _dt  # noqa: E402
+
+from pydantic import BaseModel as _BM  # noqa: E402
+from sqlalchemy import select as _select  # noqa: E402
+
 
 class _UserItem(_BM):
     id: str
@@ -294,6 +297,7 @@ class _UserItem(_BM):
     odoo_partner_id: int | None
     created_at: _dt
     last_login_at: _dt | None
+
 
 class _UserListResp(_BM):
     users: list[_UserItem]

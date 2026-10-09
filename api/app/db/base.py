@@ -1,4 +1,5 @@
 """Base SQLAlchemy 2.0 declarative + métadonnées schema `platform`."""
+
 from __future__ import annotations
 
 from sqlalchemy import MetaData

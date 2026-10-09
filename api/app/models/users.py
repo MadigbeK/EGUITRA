@@ -1,4 +1,5 @@
 """Modèles `users` et `refresh_tokens` — auth de la plateforme."""
+
 from __future__ import annotations
 
 import uuid
@@ -55,9 +56,7 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Workflow premier login (must_change_pwd + token d'invitation one-shot)
     # Le token en clair n'est jamais stocké — seul son SHA-256 est en DB.
@@ -74,9 +73,7 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
 
-    __table_args__ = (
-        Index("ix_users_role_active", "role", "is_active"),
-    )
+    __table_args__ = (Index("ix_users_role_active", "role", "is_active"),)
 
 
 class RefreshToken(Base):
@@ -124,6 +121,4 @@ class RefreshToken(Base):
     # Relation
     user: Mapped[User] = relationship(back_populates="refresh_tokens")
 
-    __table_args__ = (
-        Index("ix_refresh_tokens_user_active", "user_id", "revoked_at"),
-    )
+    __table_args__ = (Index("ix_refresh_tokens_user_active", "user_id", "revoked_at"),)

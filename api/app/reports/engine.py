@@ -6,6 +6,7 @@ Sécurité : aucune entrée client n'est interpolée en SQL brut.
 - période / filtres → valeurs liées en paramètres (:date_from, :f_xxx)
 Le seul SQL "libre" provient des exprs du registre (côté serveur, de confiance).
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -31,11 +32,19 @@ async def resolve_cost_expr(odoo: AsyncSession) -> str:
     if _cost_expr is not None:
         return _cost_expr
     try:
-        rows = (await odoo.execute(text(
-            "SELECT table_name FROM information_schema.columns "
-            "WHERE column_name='standard_price' "
-            "AND table_name IN ('product_template','product_product')"
-        ))).scalars().all()
+        rows = (
+            (
+                await odoo.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.columns "
+                        "WHERE column_name='standard_price' "
+                        "AND table_name IN ('product_template','product_product')"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         tables = set(rows)
         if "product_template" in tables:
             _cost_expr = "COALESCE(pt.standard_price,0)"
@@ -43,7 +52,7 @@ async def resolve_cost_expr(odoo: AsyncSession) -> str:
             _cost_expr = "COALESCE(pp.standard_price,0)"
         else:
             _cost_expr = "0"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.warning("reports.cost_detect_failed", error=str(e))
         _cost_expr = "0"
     return _cost_expr
@@ -195,15 +204,13 @@ async def run_report(
         try:
             if rep.mode == "group":
                 # SUM/COUNT sur la base brute (grand total, pas par groupe)
-                tsql = (
-                    f"SELECT {', '.join(tparts)} {rep.base} WHERE {where_sql}"
-                )
+                tsql = f"SELECT {', '.join(tparts)} {rep.base} WHERE {where_sql}"
             else:
                 tsql = f"SELECT {', '.join(tparts)} {rep.base} WHERE {where_sql}"
             trow = (await odoo.execute(text(tsql), params)).mappings().first()
             if trow:
                 totals = {k: (float(v) if v is not None else 0) for k, v in trow.items()}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.warning("reports.totals_failed", report=report_key, error=str(e))
             totals = {}
 
@@ -216,7 +223,7 @@ async def run_report(
         else:
             csql = f"SELECT COUNT(*) {rep.base} WHERE {where_sql}"
         total_count = (await odoo.execute(text(csql), params)).scalar()
-    except Exception:  # noqa: BLE001
+    except Exception:
         total_count = None
 
     return {

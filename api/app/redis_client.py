@@ -1,9 +1,10 @@
 """Client Redis async — utilisé pour cache, rate limiting, et broker Arq."""
+
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import redis.asyncio as aioredis
 

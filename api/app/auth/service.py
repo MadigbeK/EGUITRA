@@ -8,20 +8,20 @@ Toute la logique métier auth est ici. Le router HTTP ne fait que :
 Audit log applicatif câblé : chaque event auth produit une ligne dans
 `platform.audit_log` (atomique avec l'action métier, même commit).
 """
+
 from __future__ import annotations
 
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import audit
+from app.auth import audit, ratelimit
 from app.auth import jwt as jwt_mod
 from app.auth import password as pwd_mod
-from app.auth import ratelimit
 from app.auth import repository as repo
 from app.models.users import User
 
@@ -42,6 +42,7 @@ class AuthError(Exception):
 # Login (avec rate limit IP + account + audit)
 # ──────────────────────────────────────────────────────────────────
 
+
 async def login(
     session: AsyncSession,
     *,
@@ -61,9 +62,7 @@ async def login(
     """
     # 1. Rate limit IP : 5 essais / 15 min
     if ip_address:
-        rl_ip = await ratelimit.check_and_incr(
-            "login_ip", ip_address, limit=5, window_seconds=900
-        )
+        rl_ip = await ratelimit.check_and_incr("login_ip", ip_address, limit=5, window_seconds=900)
         if not rl_ip.allowed:
             raise AuthError("rate_limited", retry_after=rl_ip.retry_after_seconds)
 
@@ -171,6 +170,7 @@ async def login(
 # Refresh (avec rotation theft detection — ADR-009)
 # ──────────────────────────────────────────────────────────────────
 
+
 async def refresh(
     session: AsyncSession,
     *,
@@ -185,17 +185,25 @@ async def refresh(
 
     if rt is None:
         await audit.log_event(
-            session, action="auth.refresh.invalid", success=False,
-            ip_address=ip_address, user_agent=user_agent, request_id=request_id,
+            session,
+            action="auth.refresh.invalid",
+            success=False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
         )
         await session.commit()
         raise AuthError("invalid_refresh")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if rt.expires_at <= now:
         await audit.log_event(
-            session, action="auth.refresh.expired", success=False,
-            user_id=rt.user_id, ip_address=ip_address, user_agent=user_agent,
+            session,
+            action="auth.refresh.expired",
+            success=False,
+            user_id=rt.user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
             request_id=request_id,
         )
         await session.commit()
@@ -206,20 +214,30 @@ async def refresh(
         await repo.revoke_descendants_of(session, rt.id)
         n_killed = await repo.revoke_all_user_refreshes(session, rt.user_id)
         await audit.log_event(
-            session, action="auth.refresh.theft_detected", success=False,
-            user_id=rt.user_id, ip_address=ip_address, user_agent=user_agent,
+            session,
+            action="auth.refresh.theft_detected",
+            success=False,
+            user_id=rt.user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
             request_id=request_id,
             metadata={"sessions_killed": n_killed, "reused_refresh_id": str(rt.id)},
         )
         await session.commit()
-        log.warning("auth.refresh.theft_detected", user_id=str(rt.user_id), sessions_killed=n_killed)
+        log.warning(
+            "auth.refresh.theft_detected", user_id=str(rt.user_id), sessions_killed=n_killed
+        )
         raise AuthError("refresh_revoked")
 
     user = await repo.get_user_by_id(session, rt.user_id)
     if user is None or not user.is_active:
         await audit.log_event(
-            session, action="auth.refresh.account_disabled", success=False,
-            user_id=rt.user_id, ip_address=ip_address, user_agent=user_agent,
+            session,
+            action="auth.refresh.account_disabled",
+            success=False,
+            user_id=rt.user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
             request_id=request_id,
         )
         await session.commit()
@@ -238,8 +256,12 @@ async def refresh(
         rotated_from_id=rt.id,
     )
     await audit.log_event(
-        session, action="auth.refresh.success", success=True,
-        user_id=user.id, ip_address=ip_address, user_agent=user_agent,
+        session,
+        action="auth.refresh.success",
+        success=True,
+        user_id=user.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
         request_id=request_id,
     )
     await session.commit()
@@ -250,6 +272,7 @@ async def refresh(
 # ──────────────────────────────────────────────────────────────────
 # Logout
 # ──────────────────────────────────────────────────────────────────
+
 
 async def logout_one(
     session: AsyncSession,
@@ -264,8 +287,12 @@ async def logout_one(
     if rt is not None and rt.revoked_at is None:
         await repo.revoke_refresh(session, rt.id)
         await audit.log_event(
-            session, action="auth.logout", success=True,
-            user_id=rt.user_id, ip_address=ip_address, user_agent=user_agent,
+            session,
+            action="auth.logout",
+            success=True,
+            user_id=rt.user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
             request_id=request_id,
         )
         await session.commit()
@@ -282,8 +309,12 @@ async def logout_all(
 ) -> int:
     n = await repo.revoke_all_user_refreshes(session, user_id)
     await audit.log_event(
-        session, action="auth.logout_all", success=True,
-        user_id=user_id, ip_address=ip_address, user_agent=user_agent,
+        session,
+        action="auth.logout_all",
+        success=True,
+        user_id=user_id,
+        ip_address=ip_address,
+        user_agent=user_agent,
         request_id=request_id,
         metadata={"revoked_sessions": n},
     )
@@ -295,6 +326,7 @@ async def logout_all(
 # ──────────────────────────────────────────────────────────────────
 # First login (workflow must_change_pwd + token invitation one-shot)
 # ──────────────────────────────────────────────────────────────────
+
 
 def _hash_invitation_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -308,7 +340,7 @@ def generate_invitation_token() -> tuple[str, str, datetime]:
     """
     token = secrets.token_urlsafe(32)
     token_hash = _hash_invitation_token(token)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    expires_at = datetime.now(UTC) + timedelta(hours=24)
     return token, token_hash, expires_at
 
 
@@ -334,22 +366,31 @@ async def first_login(
     token_hash = _hash_invitation_token(invitation_token)
 
     from sqlalchemy import select
+
     stmt = select(User).where(User.invitation_token_hash == token_hash)
     user = (await session.execute(stmt)).scalar_one_or_none()
 
     if user is None:
         await audit.log_event(
-            session, action="auth.first_login.invalid_token", success=False,
-            ip_address=ip_address, user_agent=user_agent, request_id=request_id,
+            session,
+            action="auth.first_login.invalid_token",
+            success=False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
         )
         await session.commit()
         raise AuthError("invalid_invitation")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if user.invitation_expires_at is None or user.invitation_expires_at <= now:
         await audit.log_event(
-            session, action="auth.first_login.expired", success=False,
-            user_id=user.id, ip_address=ip_address, user_agent=user_agent,
+            session,
+            action="auth.first_login.expired",
+            success=False,
+            user_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
             request_id=request_id,
         )
         await session.commit()
@@ -373,8 +414,12 @@ async def first_login(
     )
     await repo.update_last_login(session, user.id)
     await audit.log_event(
-        session, action="auth.first_login.success", success=True,
-        user_id=user.id, ip_address=ip_address, user_agent=user_agent,
+        session,
+        action="auth.first_login.success",
+        success=True,
+        user_id=user.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
         request_id=request_id,
     )
     await session.commit()

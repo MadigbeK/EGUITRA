@@ -8,10 +8,11 @@ Le pool est facultatif : si Odoo n'est pas accessible au démarrage (config
 manquante, network down), l'app démarre quand même mais le check `db_odoo`
 de /health/ready passe à "ko".
 """
+
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import structlog
 from sqlalchemy.ext.asyncio import (
@@ -55,7 +56,7 @@ async def lifespan_odoo_db() -> AsyncIterator[None]:
         settings.odoo_dsn,
         poolclass=AsyncAdaptedQueuePool,
         pool_size=10,
-        max_overflow=10,           # plus de marge car les lectures catalogue peuvent burst
+        max_overflow=10,  # plus de marge car les lectures catalogue peuvent burst
         pool_pre_ping=True,
         pool_recycle=3600,
         echo=False,
@@ -83,6 +84,7 @@ async def get_odoo_session() -> AsyncIterator[AsyncSession]:
     """Dépendance FastAPI : yield une session DB Odoo (lecture seule)."""
     if _sessionmaker is None:
         from fastapi import HTTPException
+
         raise HTTPException(
             status_code=503,
             detail="odoo_db_unavailable",

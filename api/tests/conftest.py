@@ -5,10 +5,11 @@ une `app` de test qui n'invoque PAS le lifespan (donc pas de tentatives de
 connexion). Les tests d'INTÉGRATION qui ont besoin de DB/Redis sont en
 `tests/integration/` (à venir, requièrent docker compose up).
 """
+
 from __future__ import annotations
 
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient

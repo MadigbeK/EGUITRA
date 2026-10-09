@@ -5,7 +5,7 @@ export interface UserPublic {
   login: string;
   email: string | null;
   name: string;
-  role: "super_admin" | "dg" | "admin" | "commercial" | "caissier" | "magasinier" | "client";
+  role: "super_admin" | "dg" | "finance" | "exploitation" | "chantiers" | "immobilier" | "cabinet" | "porteur";
   must_change_pwd: boolean;
   is_active: boolean;
 }

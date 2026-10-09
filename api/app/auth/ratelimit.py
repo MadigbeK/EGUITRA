@@ -14,6 +14,7 @@ gap). Si la valeur dépasse le seuil → 429 + Retry-After (TTL restant).
 NB : un vrai sliding window log nécessiterait ZSET ; pour un endpoint d'auth,
 un simple compteur fenêtré est suffisant et bien plus rapide.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,7 +42,7 @@ class RateLimitResult:
     allowed: bool
     count: int
     limit: int
-    retry_after_seconds: int    # > 0 si bloqué, 0 sinon
+    retry_after_seconds: int  # > 0 si bloqué, 0 sinon
 
 
 async def check_and_incr(
@@ -60,7 +61,9 @@ async def check_and_incr(
     """
     if not identifier:
         # Pas d'IP / pas de login → on refuse plutôt que d'avoir un bucket "anonymous" partagé.
-        return RateLimitResult(allowed=False, count=0, limit=limit, retry_after_seconds=window_seconds)
+        return RateLimitResult(
+            allowed=False, count=0, limit=limit, retry_after_seconds=window_seconds
+        )
 
     redis = get_redis()
     key = f"rl:{bucket}:{identifier}"
@@ -79,7 +82,7 @@ async def check_and_incr(
         log.info(
             "ratelimit.blocked",
             bucket=bucket,
-            identifier_hash=identifier[:8] + "***",   # ne pas logger l'IP/login en entier
+            identifier_hash=identifier[:8] + "***",  # ne pas logger l'IP/login en entier
             count=count,
             limit=limit,
         )

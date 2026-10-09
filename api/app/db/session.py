@@ -5,11 +5,12 @@ Pattern :
 - Une `async_sessionmaker` qui fabrique des sessions courtes (1 par requête HTTP).
 - `get_session()` est une dépendance FastAPI qui yield une session puis ferme.
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -45,9 +46,9 @@ async def lifespan_db() -> AsyncIterator[None]:
         poolclass=AsyncAdaptedQueuePool,
         pool_size=10,
         max_overflow=5,
-        pool_pre_ping=True,         # vérifie la connexion avant chaque utilisation
-        pool_recycle=3600,          # recycle les connexions > 1h pour éviter timeouts firewall
-        echo=False,                 # passer à True pour debug SQL en dev
+        pool_pre_ping=True,  # vérifie la connexion avant chaque utilisation
+        pool_recycle=3600,  # recycle les connexions > 1h pour éviter timeouts firewall
+        echo=False,  # passer à True pour debug SQL en dev
         future=True,
     )
     _sessionmaker = async_sessionmaker(

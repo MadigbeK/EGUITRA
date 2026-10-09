@@ -3,6 +3,7 @@
 - GET /health         : liveness (le process est up et répond)
 - GET /health/ready   : readiness (toutes les deps externes sont OK)
 """
+
 from __future__ import annotations
 
 import time
@@ -126,10 +127,7 @@ async def readiness(response: Response) -> ReadinessStatus:
 
     # Critique : DB platform + Redis. db_odoo et odoo_rpc skipped = pas bloquant.
     critical_ok = (
-        db_platform == "ok"
-        and redis_status == "ok"
-        and db_odoo != "ko"
-        and odoo_rpc != "ko"
+        db_platform == "ok" and redis_status == "ok" and db_odoo != "ko" and odoo_rpc != "ko"
     )
     if not critical_ok:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

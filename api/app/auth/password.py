@@ -14,6 +14,7 @@ Si on doit migrer les params plus tard (ex: augmenter memory_cost), le
 PasswordHasher détecte automatiquement les anciens hashes et trigger un
 rehash transparent au prochain login (via `needs_rehash`).
 """
+
 from __future__ import annotations
 
 from argon2 import PasswordHasher, Type
@@ -26,8 +27,8 @@ def _make_hasher() -> PasswordHasher:
     settings = get_settings()
     return PasswordHasher(
         type=Type.ID,
-        memory_cost=settings.argon2_memory_cost,    # 65536 = 64 MiB
-        time_cost=settings.argon2_time_cost,        # 3
+        memory_cost=settings.argon2_memory_cost,  # 65536 = 64 MiB
+        time_cost=settings.argon2_time_cost,  # 3
         parallelism=1,
         hash_len=32,
         salt_len=16,

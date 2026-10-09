@@ -11,6 +11,7 @@ Convention de nommage des actions (séparateurs `.`) :
 - auth.first_login.success / auth.first_login.invalid_token
 - ... etc à mesure que des modules s'ajoutent (catalogue.product.update, etc.)
 """
+
 from __future__ import annotations
 
 import uuid

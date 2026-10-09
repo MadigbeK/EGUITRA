@@ -4,6 +4,7 @@
 - POST /reports/run            → exécute un rapport (filtres date/colonnes)
 - POST /reports/export         → même chose en CSV (UTF-8 BOM)
 """
+
 from __future__ import annotations
 
 import csv
@@ -13,13 +14,13 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.db.odoo_session import get_odoo_session
 from app.models.users import User
 from app.reports import engine
 from app.reports.registry import list_catalog
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -31,8 +32,8 @@ def _require_staff(user: User) -> None:
 
 class RunRequest(BaseModel):
     report: str
-    period: str | None = None                # token : today|month|12m|all...
-    date_from: date | None = None            # surcharge explicite
+    period: str | None = None  # token : today|month|12m|all...
+    date_from: date | None = None  # surcharge explicite
     date_to: date | None = None
     columns: list[str] | None = None
     filters: dict[str, str] | None = None
@@ -64,18 +65,25 @@ async def run(
     date_from, date_to = _resolve_dates(req)
     try:
         result = await engine.run_report(
-            odoo, req.report,
-            date_from=date_from, date_to=date_to,
-            columns=req.columns, filters=req.filters,
-            sort=req.sort, sort_dir=req.sort_dir,
-            limit=req.limit, offset=req.offset,
+            odoo,
+            req.report,
+            date_from=date_from,
+            date_to=date_to,
+            columns=req.columns,
+            filters=req.filters,
+            sort=req.sort,
+            sort_dir=req.sort_dir,
+            limit=req.limit,
+            offset=req.offset,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise HTTPException(status_code=400, detail=f"report_error: {e}")
-    result["period"] = {"from": date_from.isoformat() if date_from else None,
-                        "to": date_to.isoformat() if date_to else None}
+    result["period"] = {
+        "from": date_from.isoformat() if date_from else None,
+        "to": date_to.isoformat() if date_to else None,
+    }
     return result
 
 
@@ -89,11 +97,16 @@ async def export(
     date_from, date_to = _resolve_dates(req)
     try:
         result = await engine.run_report(
-            odoo, req.report,
-            date_from=date_from, date_to=date_to,
-            columns=req.columns, filters=req.filters,
-            sort=req.sort, sort_dir=req.sort_dir,
-            limit=5000, offset=0,
+            odoo,
+            req.report,
+            date_from=date_from,
+            date_to=date_to,
+            columns=req.columns,
+            filters=req.filters,
+            sort=req.sort,
+            sort_dir=req.sort_dir,
+            limit=5000,
+            offset=0,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

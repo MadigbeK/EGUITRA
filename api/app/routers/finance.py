@@ -4,6 +4,7 @@ Toutes les lectures passent par la base Odoo en lecture seule. Les écritures
 (factures, paiements, approbations) passeront par JSON-RPC dans les routers
 dédiés ventes / achats / trésorerie.
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -83,7 +84,8 @@ async def dashboard(
         "SELECT COALESCE(-SUM(amount_untaxed_signed),0) FROM account_move "
         "WHERE state='posted' AND move_type IN ('in_invoice','in_refund') "
         "AND invoice_date >= :d1 AND invoice_date <= :d2",
-        d1=debut_exercice, d2=today,
+        d1=debut_exercice,
+        d2=today,
     )
 
     # Résultat = produits - charges sur les comptes de classe 6 et 7 (SYSCOHADA) via les types Odoo
@@ -93,7 +95,8 @@ async def dashboard(
         "JOIN account_account aa ON aa.id = aml.account_id "
         "WHERE am.state='posted' AND aml.date >= :d1 AND aml.date <= :d2 "
         "AND aa.account_type IN ('income','income_other','expense','expense_depreciation','expense_direct_cost')",
-        d1=debut_exercice, d2=today,
+        d1=debut_exercice,
+        d2=today,
     )
 
     tresorerie = await scalar(
@@ -103,31 +106,64 @@ async def dashboard(
         "WHERE am.state='posted' AND aa.account_type = 'asset_cash'"
     )
 
-    enc = (await odoo.execute(text(
-        "SELECT COALESCE(SUM(amount_residual_signed),0) AS total, "
-        "COALESCE(SUM(CASE WHEN invoice_date_due < CURRENT_DATE THEN amount_residual_signed ELSE 0 END),0) AS echu, "
-        "COUNT(*) AS nb FROM account_move WHERE state='posted' AND move_type='out_invoice' "
-        "AND payment_state IN ('not_paid','partial')"
-    ))).mappings().first()
-    enf = (await odoo.execute(text(
-        "SELECT COALESCE(-SUM(amount_residual_signed),0) AS total, COUNT(*) AS nb FROM account_move "
-        "WHERE state='posted' AND move_type='in_invoice' AND payment_state IN ('not_paid','partial')"
-    ))).mappings().first()
+    enc = (
+        (
+            await odoo.execute(
+                text(
+                    "SELECT COALESCE(SUM(amount_residual_signed),0) AS total, "
+                    "COALESCE(SUM(CASE WHEN invoice_date_due < CURRENT_DATE THEN amount_residual_signed ELSE 0 END),0) AS echu, "
+                    "COUNT(*) AS nb FROM account_move WHERE state='posted' AND move_type='out_invoice' "
+                    "AND payment_state IN ('not_paid','partial')"
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+    enf = (
+        (
+            await odoo.execute(
+                text(
+                    "SELECT COALESCE(-SUM(amount_residual_signed),0) AS total, COUNT(*) AS nb FROM account_move "
+                    "WHERE state='posted' AND move_type='in_invoice' AND payment_state IN ('not_paid','partial')"
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
 
-    mois = (await odoo.execute(text(
-        "SELECT to_char(date_trunc('month', invoice_date),'YYYY-MM') AS mois, "
-        "COALESCE(SUM(amount_untaxed_signed),0) AS montant FROM account_move "
-        "WHERE state='posted' AND move_type IN ('out_invoice','out_refund') "
-        "AND invoice_date >= :d1 GROUP BY 1 ORDER BY 1"
-    ), {"d1": debut_exercice})).mappings().all()
+    mois = (
+        (
+            await odoo.execute(
+                text(
+                    "SELECT to_char(date_trunc('month', invoice_date),'YYYY-MM') AS mois, "
+                    "COALESCE(SUM(amount_untaxed_signed),0) AS montant FROM account_move "
+                    "WHERE state='posted' AND move_type IN ('out_invoice','out_refund') "
+                    "AND invoice_date >= :d1 GROUP BY 1 ORDER BY 1"
+                ),
+                {"d1": debut_exercice},
+            )
+        )
+        .mappings()
+        .all()
+    )
 
-    comptes = (await odoo.execute(text(
-        "SELECT COALESCE(aa.name->>'fr_FR', aa.name->>'en_US') AS libelle, "
-        "COALESCE(SUM(aml.balance),0) AS solde FROM account_move_line aml "
-        "JOIN account_move am ON am.id = aml.move_id "
-        "JOIN account_account aa ON aa.id = aml.account_id "
-        "WHERE am.state='posted' AND aa.account_type='asset_cash' GROUP BY 1 ORDER BY 2 DESC"
-    ))).mappings().all()
+    comptes = (
+        (
+            await odoo.execute(
+                text(
+                    "SELECT COALESCE(aa.name->>'fr_FR', aa.name->>'en_US') AS libelle, "
+                    "COALESCE(SUM(aml.balance),0) AS solde FROM account_move_line aml "
+                    "JOIN account_move am ON am.id = aml.move_id "
+                    "JOIN account_account aa ON aa.id = aml.account_id "
+                    "WHERE am.state='posted' AND aa.account_type='asset_cash' GROUP BY 1 ORDER BY 2 DESC"
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
 
     return DashboardDirigeant(
         exercice=today.year,
@@ -143,5 +179,7 @@ async def dashboard(
         nb_factures_clients_impayees=int(enc["nb"]) if enc else 0,
         nb_factures_fournisseurs_a_payer=int(enf["nb"]) if enf else 0,
         ca_par_mois=[MoisMontant(mois=m["mois"], montant=_num(m["montant"])) for m in mois],
-        tresorerie_par_compte=[{"libelle": c["libelle"], "solde": _num(c["solde"])} for c in comptes],
+        tresorerie_par_compte=[
+            {"libelle": c["libelle"], "solde": _num(c["solde"])} for c in comptes
+        ],
     )

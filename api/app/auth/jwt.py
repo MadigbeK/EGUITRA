@@ -8,13 +8,14 @@ Pattern :
   refresh, on rotate (nouveau token, ancien révoqué). Détection de vol si un
   refresh révoqué est représenté → révocation toute la chaîne (ADR-009).
 """
+
 from __future__ import annotations
 
 import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -24,17 +25,17 @@ from app.config import get_settings
 
 
 class TokenClaims(BaseModel):
-    sub: str            # user_id UUID en string
+    sub: str  # user_id UUID en string
     role: str
-    exp: int            # epoch seconds
+    exp: int  # epoch seconds
     iat: int
-    jti: str            # JWT ID (UUID) pour éventuelle blacklist
+    jti: str  # JWT ID (UUID) pour éventuelle blacklist
 
 
 @dataclass(frozen=True)
 class GeneratedTokens:
     access_token: str
-    refresh_token: str       # opaque (à envoyer au client, jamais re-utilisé après hash)
+    refresh_token: str  # opaque (à envoyer au client, jamais re-utilisé après hash)
     refresh_token_hash: str  # SHA-256 hex (à stocker en DB)
     access_expires_at: datetime
     refresh_expires_at: datetime
@@ -42,7 +43,7 @@ class GeneratedTokens:
 
 def _now_utc() -> datetime:
     """Datetime aware UTC — pas de naive datetime n'importe où dans l'app."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _hash_refresh(token: str) -> str:

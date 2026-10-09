@@ -1,4 +1,5 @@
 """Tests unitaires pour app.auth.password (Argon2id)."""
+
 from __future__ import annotations
 
 from app.auth.password import hash_password, needs_rehash, verify_password

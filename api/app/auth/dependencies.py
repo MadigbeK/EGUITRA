@@ -3,6 +3,7 @@
 `get_current_user` : extrait le Bearer token, le décode, retourne l'User en DB.
 Utilisable comme `Depends(get_current_user)` dans n'importe quel endpoint.
 """
+
 from __future__ import annotations
 
 import uuid

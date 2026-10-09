@@ -27,7 +27,7 @@ function InputSpotlight({
   type,
   hasError,
   ...props
-}: InputSpotlightProps & { ref?: React.RefObject<HTMLInputElement | null> }) {
+}: InputSpotlightProps & { ref?: React.Ref<HTMLInputElement> }) {
   const radius = 120; // rayon du halo
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const gradientRef = React.useRef<HTMLDivElement | null>(null);

@@ -3,6 +3,7 @@
 Sépare la logique d'accès DB de la logique métier (qui est dans `service.py`).
 Toutes les méthodes sont async et acceptent une `AsyncSession` injectée.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -13,10 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.users import RefreshToken, User
 
-
 # ──────────────────────────────────────────────────────────────────
 # Users
 # ──────────────────────────────────────────────────────────────────
+
 
 async def get_user_by_login(session: AsyncSession, login: str) -> User | None:
     """Recherche par `login` exact (insensible à la casse)."""
@@ -32,6 +33,7 @@ async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | No
 async def update_last_login(session: AsyncSession, user_id: uuid.UUID) -> None:
     """Marque le user comme s'étant connecté maintenant."""
     from sqlalchemy import func
+
     stmt = update(User).where(User.id == user_id).values(last_login_at=func.now())
     await session.execute(stmt)
 
@@ -39,6 +41,7 @@ async def update_last_login(session: AsyncSession, user_id: uuid.UUID) -> None:
 # ──────────────────────────────────────────────────────────────────
 # Refresh tokens
 # ──────────────────────────────────────────────────────────────────
+
 
 async def create_refresh_token(
     session: AsyncSession,
@@ -63,9 +66,7 @@ async def create_refresh_token(
     return rt
 
 
-async def get_refresh_by_hash(
-    session: AsyncSession, token_hash: str
-) -> RefreshToken | None:
+async def get_refresh_by_hash(session: AsyncSession, token_hash: str) -> RefreshToken | None:
     stmt = select(RefreshToken).where(RefreshToken.token_hash == token_hash)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
@@ -73,6 +74,7 @@ async def get_refresh_by_hash(
 
 async def revoke_refresh(session: AsyncSession, refresh_id: uuid.UUID) -> None:
     from sqlalchemy import func
+
     stmt = (
         update(RefreshToken)
         .where(RefreshToken.id == refresh_id)
@@ -82,15 +84,14 @@ async def revoke_refresh(session: AsyncSession, refresh_id: uuid.UUID) -> None:
     await session.execute(stmt)
 
 
-async def revoke_all_user_refreshes(
-    session: AsyncSession, user_id: uuid.UUID
-) -> int:
+async def revoke_all_user_refreshes(session: AsyncSession, user_id: uuid.UUID) -> int:
     """Révoque toutes les sessions actives d'un user — utilisé pour /auth/logout-all
     et pour la détection de vol (ADR-009).
 
     Retourne le nombre de sessions effectivement révoquées.
     """
     from sqlalchemy import func
+
     stmt = (
         update(RefreshToken)
         .where(RefreshToken.user_id == user_id)
@@ -101,19 +102,16 @@ async def revoke_all_user_refreshes(
     return result.rowcount or 0
 
 
-async def revoke_descendants_of(
-    session: AsyncSession, refresh_id: uuid.UUID
-) -> None:
+async def revoke_descendants_of(session: AsyncSession, refresh_id: uuid.UUID) -> None:
     """Révoque récursivement tous les refresh tokens descendants d'un token donné.
 
     Utilisé lorsqu'on détecte que `refresh_id` (déjà révoqué) a été représenté
     → on présume un vol et on coupe toute la chaîne enfant.
     """
     from sqlalchemy import func
+
     # Récupère les enfants directs
-    stmt_children = select(RefreshToken.id).where(
-        RefreshToken.rotated_from_id == refresh_id
-    )
+    stmt_children = select(RefreshToken.id).where(RefreshToken.rotated_from_id == refresh_id)
     children = (await session.execute(stmt_children)).scalars().all()
 
     if not children:
@@ -133,10 +131,9 @@ async def revoke_descendants_of(
         await revoke_descendants_of(session, child_id)
 
 
-async def list_active_sessions(
-    session: AsyncSession, user_id: uuid.UUID
-) -> list[RefreshToken]:
+async def list_active_sessions(session: AsyncSession, user_id: uuid.UUID) -> list[RefreshToken]:
     from sqlalchemy import func
+
     stmt = (
         select(RefreshToken)
         .where(RefreshToken.user_id == user_id)

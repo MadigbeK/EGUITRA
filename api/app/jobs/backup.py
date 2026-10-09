@@ -15,6 +15,7 @@ Format : SQL gzippé (pg_dump --format=plain | gzip).
 Fallback gracieux : si pg_dump échoue (ex: pg_dump non installé dans le container),
 on log et on retourne un statut d'erreur sans crasher le worker.
 """
+
 from __future__ import annotations
 
 import gzip
@@ -68,21 +69,26 @@ async def backup_platform_db(ctx: dict) -> dict:
 
     pg_dump = _get_pg_dump_path()
     if pg_dump is None:
-        log.warning("backup.pg_dump_not_found",
-                    hint="Install postgresql-client in the api Docker image")
+        log.warning(
+            "backup.pg_dump_not_found", hint="Install postgresql-client in the api Docker image"
+        )
         return {"status": "error", "detail": "pg_dump not found in PATH"}
 
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
     dest = BACKUP_DIR / filename
 
     try:
         # pg_dump retourne du SQL brut ; on gzippe à la volée
         pg_cmd = [
             pg_dump,
-            "--host", settings.pg_platform_host,
-            "--port", str(settings.pg_platform_port),
-            "--username", settings.pg_platform_user,
-            "--dbname", settings.pg_platform_db,
+            "--host",
+            settings.pg_platform_host,
+            "--port",
+            str(settings.pg_platform_port),
+            "--username",
+            settings.pg_platform_user,
+            "--dbname",
+            settings.pg_platform_db,
             "--no-password",
             "--format=plain",
             "--no-owner",
@@ -93,7 +99,7 @@ async def backup_platform_db(ctx: dict) -> dict:
             "PATH": "/usr/bin:/bin:/usr/local/bin",
         }
 
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: ASYNC221
             pg_cmd,
             capture_output=True,
             timeout=120,
@@ -118,6 +124,6 @@ async def backup_platform_db(ctx: dict) -> dict:
     except subprocess.TimeoutExpired:
         log.error("backup.timeout")
         return {"status": "error", "detail": "pg_dump timeout after 120s"}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.error("backup.unexpected_error", error=str(e))
         return {"status": "error", "detail": str(e)}

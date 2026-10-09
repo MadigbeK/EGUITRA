@@ -3,10 +3,11 @@
 Le worker tourne dans un container séparé. L'API utilise un pool Arq pour
 poser des jobs dans la queue Redis. Le pool est initialisé au lifespan startup.
 """
+
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import structlog
 from arq import ArqRedis, create_pool

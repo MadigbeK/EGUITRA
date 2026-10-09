@@ -3,6 +3,7 @@
 En dev/staging sans SMTP, l'email est juste loggué (channel='logged'). En prod
 avec smtp_host + smtp_user + smtp_password, envoi réel.
 """
+
 from __future__ import annotations
 
 from email.message import EmailMessage

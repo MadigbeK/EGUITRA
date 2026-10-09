@@ -2,6 +2,7 @@
 
 Pour /health/ready et les checks DB/Redis : voir tests/integration/ (à venir).
 """
+
 from __future__ import annotations
 
 import pytest

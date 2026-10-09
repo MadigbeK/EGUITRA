@@ -2,6 +2,7 @@
 
 Lance avec : arq app.jobs.worker.WorkerSettings
 """
+
 from __future__ import annotations
 
 from contextlib import AsyncExitStack

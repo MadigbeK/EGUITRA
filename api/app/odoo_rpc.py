@@ -5,10 +5,12 @@ Voir ADR-002 pour le rationale.
 
 Authentification : un user dédié `eguitra_bot` avec groupes minimaux + API key.
 """
+
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 
 import httpx
 import structlog
@@ -35,7 +37,7 @@ class OdooRPCError(Exception):
         super().__init__(f"{code}: {message}")
 
 
-_client: "OdooRPCClient | None" = None
+_client: OdooRPCClient | None = None
 
 
 class OdooRPCClient:
@@ -86,7 +88,8 @@ class OdooRPCClient:
         if self._uid is not None:
             return self._uid
         result = await self._jsonrpc(
-            "common", "authenticate",
+            "common",
+            "authenticate",
             [self.db, self.user, self.api_key, {}],
         )
         if not isinstance(result, int) or result <= 0:
@@ -105,7 +108,8 @@ class OdooRPCClient:
         """Appel d'une méthode Odoo. Réauth automatique si besoin."""
         uid = await self.authenticate()
         return await self._jsonrpc(
-            "object", "execute_kw",
+            "object",
+            "execute_kw",
             [self.db, uid, self.api_key, model, method, args or [], kwargs or {}],
         )
 
@@ -146,6 +150,7 @@ class OdooRPCClient:
 # Lifespan
 # ─────────────────────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan_odoo_rpc() -> AsyncIterator[None]:
     """Initialise le client RPC au startup (best-effort)."""
@@ -161,7 +166,9 @@ async def lifespan_odoo_rpc() -> AsyncIterator[None]:
             pass
         return
 
-    log.info("odoo_rpc.startup", url=settings.odoo_url, db=settings.odoo_db, user=settings.odoo_api_user)
+    log.info(
+        "odoo_rpc.startup", url=settings.odoo_url, db=settings.odoo_db, user=settings.odoo_api_user
+    )
     _client = OdooRPCClient(
         url=settings.odoo_url,
         db=settings.odoo_db,
@@ -188,6 +195,7 @@ def get_odoo_rpc() -> OdooRPCClient:
     """Retourne le client RPC (lève si pas initialisé)."""
     if _client is None:
         from fastapi import HTTPException
+
         raise HTTPException(
             status_code=503,
             detail="odoo_rpc_unavailable",
@@ -195,6 +203,6 @@ def get_odoo_rpc() -> OdooRPCClient:
     return _client
 
 
-def get_odoo_rpc_optional() -> "OdooRPCClient | None":
+def get_odoo_rpc_optional() -> OdooRPCClient | None:
     """Pour les healthchecks — None si pas dispo."""
     return _client

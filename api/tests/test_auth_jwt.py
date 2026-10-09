@@ -1,9 +1,10 @@
 """Tests unitaires pour app.auth.jwt."""
+
 from __future__ import annotations
 
 import time
 import uuid
-from datetime import timezone
+from datetime import UTC
 
 import pytest
 
@@ -25,8 +26,8 @@ def test_issue_tokens_returns_valid_pair() -> None:
     assert len(tokens.refresh_token_hash) == 64  # SHA-256 hex
     assert tokens.access_expires_at < tokens.refresh_expires_at
     # exp future
-    assert tokens.access_expires_at.tzinfo == timezone.utc
-    assert tokens.refresh_expires_at.tzinfo == timezone.utc
+    assert tokens.access_expires_at.tzinfo == UTC
+    assert tokens.refresh_expires_at.tzinfo == UTC
 
 
 def test_decode_access_token_round_trip() -> None:

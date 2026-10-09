@@ -1,4 +1,5 @@
 """Modèle `audit_log` — journal des actions sensibles (auth, écritures Odoo)."""
+
 from __future__ import annotations
 
 import uuid

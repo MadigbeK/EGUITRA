@@ -2,11 +2,12 @@
 
 Lance avec : uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI
@@ -33,7 +34,9 @@ def configure_logging(env: str, log_level: str) -> None:
         structlog.processors.format_exc_info,
     ]
     processors.append(
-        structlog.dev.ConsoleRenderer(colors=True) if env == "development" else structlog.processors.JSONRenderer()
+        structlog.dev.ConsoleRenderer(colors=True)
+        if env == "development"
+        else structlog.processors.JSONRenderer()
     )
     structlog.configure(
         processors=processors,
