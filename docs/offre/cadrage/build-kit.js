@@ -16,14 +16,14 @@ pagebreak();
 // ================================================================ 1
 h1('1. Ce qu\'est une réunion de cadrage');
 p('La réunion de cadrage est la première réunion de travail d\'un projet après sa signature. Elle ne sert ni à vendre ni à négocier : le contrat est acquis. Elle sert à transformer une offre, qui décrit un résultat, en un plan de travail que les deux parties exécutent dès le lendemain. On en sort avec trois choses : des décisions, des noms et des dates.');
-p('Concrètement, à la fin de la demi-journée, vous devez pouvoir répondre à ces questions sans hésiter :');
+p('Concrètement, à la fin des deux heures, vous devez pouvoir répondre à ces questions sans hésiter :');
 ul([
   'Quelles règles de gestion précises vont dans chaque module, et lesquelles attendent la version suivante.',
   'Qui, chez le client, répond à vos questions chaque jour, domaine par domaine, et à quelle heure.',
   'Quels fichiers, listes et accès vous recevez, de qui, et avant quelle date.',
   'Quand le dossier de conception est signé, ce qui clôt la semaine 1.',
 ]);
-callout('Le livrable de la réunion est le compte rendu envoyé sous 24 heures, puis le dossier de conception signé le vendredi 16 octobre. Tout ce qui n\'est pas écrit dans l\'un ou l\'autre n\'existe pas.');
+callout('Le livrable de la réunion est le compte rendu envoyé sous 24 heures, puis le dossier de conception signé le vendredi 16 octobre. La réunion dure deux heures ; les ateliers métiers transport, BTP et immobilier se tiennent dans la semaine, trente minutes chacun, avec le seul référent concerné. Tout ce qui n\'est pas écrit dans l\'un ou l\'autre n\'existe pas.');
 h2('1.1 Ce qu\'elle n\'est pas');
 ul([
   'Ce n\'est pas une démonstration commerciale. Si vous montrez quelque chose, c\'est pour faire réagir sur des règles de gestion, pas pour convaincre.',
@@ -38,8 +38,7 @@ table(
     ['Le Directeur Général, au moins à l\'ouverture et aux décisions', 'Il arbitre le périmètre et nomme les référents. Sans lui, les décisions sont provisoires.'],
     ['Le responsable financier', 'Il porte l\'atelier Finance, le plan de comptes, les états et les circuits d\'approbation.'],
     ['Le DGA auteur des prototypes', 'Il connaît les règles de gestion mieux que quiconque. Le valoriser : ses prototypes sont la spécification.'],
-    ['Un référent exploitation transport', 'Rotations, flotte, routes, coûts, conditions de saisie au parc.'],
-    ['Un référent chantiers et un référent immobilier', 'Peuvent être la même personne. Situations, retenues, baux, loyers.'],
+    ['Les référents transport, chantiers et immobilier', 'Présents à l\'ouverture si possible, pour être nommés et fixer leur atelier de trente minutes dans la semaine. Leur présence sur les deux heures n\'est pas nécessaire.'],
     ['Un référent du cabinet MB AxisPro', 'Grille, gates, data room, portail, dossiers en cours.'],
   ],
   [3600, 6038],
@@ -55,10 +54,10 @@ table(
   ['Action', 'Pourquoi'],
   [
     ['Obtenir le bon de commande signé et la facture d\'acompte de 50 % émise', 'La date de commande fait courir les quatre semaines et les pénalités. Sans commande, pas de cadrage : c\'est une réunion de vente qui ne dit pas son nom.'],
-    ['Envoyer l\'ordre du jour et la liste des participants attendus, nommément', 'Le client prépare ses personnes et ses documents. Vous saurez avant la réunion qui manque.'],
+    ['Envoyer l\'ordre du jour d\'une page et la liste des participants attendus, nommément', 'Le client prépare ses personnes et ses documents. Vous saurez avant la réunion qui manque.'],
     ['Envoyer la liste des éléments à remettre, en demandant d\'en apporter le maximum le jour même', 'Chaque document reçu en séance est un jour gagné sur la reprise des données.'],
     ['Relire les deux prototypes de la direction et noter vos questions', 'Vous devez connaître leurs règles mieux que le client ne s\'en souvient. C\'est ce qui installe votre crédibilité.'],
-    ['Préparer la démonstration de dix minutes sur votre socle SOGUIPREM', 'Montrer un tableau de bord et une saisie guidée rend concret ce que « noyau invisible » veut dire. Pas plus de dix minutes.'],
+    ['Préparer la démonstration de cinq minutes sur votre socle SOGUIPREM', 'Montrer un tableau de bord et une saisie guidée rend concret ce que « noyau invisible » veut dire. Pas plus de cinq minutes : le format de deux heures ne laisse pas de place à davantage.'],
     ['Commander le serveur VPS et réserver le nom de domaine de secours', 'Le jalon de la semaine 1 est « serveur en ligne ». Ne pas attendre la réunion pour le lancer.'],
     ['Imprimer les fiches d\'atelier du chapitre 4, une par domaine, et la fiche de décisions', 'Vous remplissez à la main pendant la réunion. Ce qui est écrit devant le client est validé par le client.'],
   ],
@@ -76,24 +75,25 @@ pagebreak();
 
 // ================================================================ 3
 h1('3. Pendant la réunion : déroulé et animation');
-h2('3.1 Déroulé');
+h2('3.1 Déroulé des deux heures');
 table(
   ['Heure', 'Séquence', 'Ce que vous faites', 'Ce que vous obtenez'],
   [
-    ['10 h 00', 'Ouverture, 15 min', 'Vous remerciez, vous présentez l\'équipe, vous posez les trois objectifs et la règle : chaque sujet finit par une décision ou une date.', 'L\'accord de tous sur la méthode.'],
-    ['10 h 15', 'Plateforme, planning, organisation, 30 min', 'Diapositives 4 à 7. Démonstration de dix minutes. Vous faites nommer les référents et fixer l\'heure du point quotidien.', 'Cinq noms, une heure, un jour de comité.'],
-    ['10 h 45', 'Atelier Finance, 60 min', 'Fiche Finance. Le responsable financier parle, vous questionnez, le collègue note. Vous demandez les documents en séance.', 'Plan de comptes et modèles d\'états en main ou datés.'],
-    ['11 h 45', 'Pause, 15 min', 'Vous relisez les décisions prises avec votre collègue.', 'Une liste propre.'],
-    ['12 h 00', 'Ateliers métiers, 45 min', 'Fiches Transport, BTP, Immobilier, quinze minutes chacune, un référent à la fois.', 'Les listes flotte, chantiers, biens, ou leur date.'],
-    ['12 h 45', 'Atelier AxisPro, 30 min', 'Fiche AxisPro avec le référent du cabinet et le DGA.', 'La grille de référence et les dossiers en cours.'],
-    ['13 h 15', 'Technique et charte, 20 min', 'Fiche Technique. Nom de domaine, logos, utilisateurs, relevés bancaires, expert-comptable.', 'Les accès et la charte, ou leur date.'],
-    ['13 h 35', 'Décisions et prochaines étapes, 25 min', 'Vous lisez les huit décisions et la liste des éléments à voix haute, un par un, et vous obtenez un oui ou une date pour chacun.', 'La fiche de décisions remplie et validée.'],
+    ['10 h 00', 'Ouverture, 10 min', 'Vous remerciez, vous présentez l\'équipe, vous posez les trois objectifs et la règle : chaque sujet finit par une décision ou une date.', 'L\'accord de tous sur la méthode.'],
+    ['10 h 10', 'Plateforme, planning, organisation, 20 min', 'Diapositives 4 à 7, démonstration de cinq minutes. Vous faites nommer les référents et fixer l\'heure du point quotidien.', 'Cinq noms, une heure, un jour de comité.'],
+    ['10 h 30', 'Finance, 35 min', 'Fiche Finance, en allant droit aux onze questions. Le responsable financier parle, vous questionnez, le collègue note. Vous demandez les documents en séance.', 'Plan de comptes et modèles d\'états en main ou datés.'],
+    ['11 h 05', 'AxisPro Suite, 15 min', 'Fiche AxisPro avec le référent du cabinet et le DGA, sur la grille, les gates, la data room et le portail.', 'La grille de référence et les dossiers en cours.'],
+    ['11 h 20', 'Technique et charte, 15 min', 'Fiche Technique. Nom de domaine, logos, utilisateurs, relevés bancaires, expert-comptable.', 'Les accès et la charte, ou leur date.'],
+    ['11 h 35', 'Décisions et prochaines étapes, 20 min', 'Vous lisez les huit décisions et la liste des éléments à voix haute, un par un, et vous obtenez un oui ou une date pour chacun. Vous fixez les créneaux des trois ateliers métiers.', 'La fiche de décisions remplie et validée.'],
+    ['11 h 55', 'Clôture, 5 min', 'Vous annoncez le compte rendu sous 24 heures et la signature du dossier de conception vendredi.', 'Une sortie nette, à l\'heure.'],
   ],
   [1000, 2200, 3838, 2600],
 );
-h2('3.2 Règles d\'animation');
+h2('3.2 Les ateliers métiers de la semaine');
+p('Transport, BTP et immobilier se traitent en trois ateliers de trente minutes, mercredi 14 ou jeudi 15 octobre, chacun avec le seul référent concerné, sur place ou à distance. Vous utilisez les fiches 4.2 à 4.4. Vous repartez avec les listes flotte, chantiers et biens, ou leur date de remise. Les créneaux sont fixés en séance le mardi, dans la séquence des décisions.');
+h2('3.3 Règles d\'animation');
 ul([
-  'Vous tenez l\'horaire. Un sujet qui déborde se termine par une question ouverte inscrite au compte rendu, avec un responsable et une date, pas par un dépassement.',
+  'Vous tenez l\'horaire, et en deux heures il est serré. Un sujet qui déborde se termine par une question ouverte inscrite au compte rendu, avec un responsable et une date, ou par un atelier de trente minutes fixé dans la semaine. Jamais par un dépassement.',
   'Vous reformulez chaque décision à voix haute avant de l\'écrire : « Donc nous retenons que… ». Le silence vaut accord, et vous le dites.',
   'Vous ne dites jamais « on verra ». Vous dites « qui, et quand ».',
   'Vous ne prenez pas de nouveau périmètre. Une demande hors offre va dans la liste des demandes, avec la mention « après mise en production, maintenance évolutive ou devis ». Vous le dites calmement, sans vous justifier.',

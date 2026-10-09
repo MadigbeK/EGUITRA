@@ -2,11 +2,9 @@
 
 Bonjour Monsieur [Nom],
 
-C'est noté pour le mardi 13 octobre à 10 h dans vos locaux, sur une demi-journée.
+C'est noté pour le mardi 13 octobre, de 10 h à 12 h, dans vos locaux. Vous trouverez l'ordre du jour en pièce jointe.
 
-Pour que la séance soit productive, merci de prévoir la présence du responsable financier, d'un référent pour le transport, les chantiers et l'immobilier, et d'un référent du cabinet, ainsi que M. Nimaga pour l'ouverture et les décisions. Si vous pouvez apporter le plan de comptes actuel et vos modèles d'états, nous gagnerons une semaine sur la reprise des données.
-
-Je vous envoie l'ordre du jour détaillé d'ici lundi.
+Pour que la séance soit productive, merci de prévoir la présence du responsable financier, d'un référent du cabinet et de M. Nimaga pour l'ouverture et les décisions. Les référents transport, chantiers et immobilier seront vus séparément dans la semaine, trente minutes chacun. Si vous pouvez apporter le plan de comptes actuel et vos modèles d'états, nous gagnerons une semaine sur la reprise des données.
 
 Bien cordialement,
 

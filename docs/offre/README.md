@@ -33,10 +33,12 @@ Le Word contient une table des matières automatique : à l'ouverture, accepter 
 ## Réunion de cadrage (`cadrage/`)
 
 - `build-deck.js` → `Reunion_de_cadrage_EGUITRA.pptx` : support projeté en réunion, 14 diapositives avec notes pour l'animateur.
+- `build-ordre-du-jour.js` → `Ordre_du_jour_cadrage_EGUITRA.docx` : ordre du jour d'une page à envoyer au client. Mail : `mail-confirmation-date.md`.
 - `build-kit.js` → `Kit_reunion_de_cadrage_EGUITRA.docx` : guide interne de préparation, fiches d'atelier, fiche de décisions, modèle de compte rendu, pièges. Ne pas transmettre au client.
 
 ```bash
 npm install pptxgenjs react-icons react react-dom sharp
 node docs/offre/cadrage/build-deck.js
 node docs/offre/cadrage/build-kit.js
+node docs/offre/cadrage/build-ordre-du-jour.js
 ```

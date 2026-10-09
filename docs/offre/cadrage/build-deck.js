@@ -81,13 +81,13 @@ async function icon(name, hex) {
   let s = pres.addSlide({ masterName: 'DARK', sectionTitle: 'Ouverture' });
   if (LOGO) s.addImage({ path: LOGO, x: 0.6, y: 0.5, w: 1.7, h: 1.0 });
   s.addText('Réunion de cadrage', { placeholder: 'title' });
-  s.addText('EGUITRA Finance et AxisPro Suite\nMardi 13 octobre 2026, 10 h, locaux d\'EGUITRA GROUP', { placeholder: 'body' });
+  s.addText('EGUITRA Finance et AxisPro Suite\nMardi 13 octobre 2026, de 10 h à 12 h, locaux d\'EGUITRA GROUP', { placeholder: 'body' });
   s.addText(`${HYP.prestataire}, ${HYP.slogan}`, { x: 0.6, y: 4.9, w: 6, h: 0.3, fontSize: 11, color: C.accent1, margin: 0, isTextBox: true });
-  s.addNotes('Accueil. Se présenter, présenter l\'équipe, remercier pour l\'accord de principe. Rappeler que la réunion dure une demi-journée et que l\'on sort avec des décisions, pas avec des idées.');
+  s.addNotes('Accueil. Se présenter, présenter l\'équipe, remercier pour l\'accord de principe. Rappeler que la réunion dure deux heures et que l\'on sort avec des décisions, pas avec des idées. Les ateliers métiers se tiennent dans la semaine, trente minutes chacun.');
 
   // ================================================================ 2. Objectifs
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Ouverture' });
-  s.addText('Ce que nous devons avoir décidé à 14 h', { placeholder: 'title' });
+  s.addText('Ce que nous devons avoir décidé à midi', { placeholder: 'title' });
   card(s, 0.5, 1.3, 2.9, 2.6, I.FiTarget, 'Le périmètre', 'Les règles de gestion de chaque module, les écrans prioritaires, ce qui entre dans la version du 6 novembre et ce qui attend.');
   card(s, 3.55, 1.3, 2.9, 2.6, I.FiUsers, 'Les personnes', 'Un référent par domaine, disponible une demi-journée par jour, et l\'heure du point quotidien.');
   card(s, 6.6, 1.3, 2.9, 2.6, I.FiInbox, 'Les éléments', 'Fichiers de gestion, plan de comptes, relevés bancaires, charte, grille AxisPro : qui remet quoi, et quand.');
@@ -98,22 +98,23 @@ async function icon(name, hex) {
 
   // ================================================================ 3. Ordre du jour
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Ouverture' });
-  s.addText('Ordre du jour, une demi-journée', { placeholder: 'title' });
+  s.addText('Ordre du jour, deux heures', { placeholder: 'title' });
   const agenda = [
-    ['10 h 00', 'Ouverture, objectifs, règles du jeu', '15 min'],
-    ['10 h 15', 'La plateforme, le planning, l\'organisation', '30 min'],
-    ['10 h 45', 'Atelier Finance', '60 min'],
-    ['11 h 45', 'Pause', '15 min'],
-    ['12 h 00', 'Ateliers Transport, BTP, Immobilier', '45 min'],
-    ['12 h 45', 'Atelier AxisPro Suite', '30 min'],
-    ['13 h 15', 'Technique, charte graphique, accès', '20 min'],
-    ['13 h 35', 'Décisions, référents, prochaines étapes', '25 min'],
+    ['10 h 00', 'Ouverture, objectifs, règles du jeu', '10 min'],
+    ['10 h 10', 'La plateforme, le planning, l\'organisation', '20 min'],
+    ['10 h 30', 'Finance : plan de comptes, axes, approbations, seuils, clôture, états', '35 min'],
+    ['11 h 05', 'AxisPro Suite : grille, gates, data room, portail', '15 min'],
+    ['11 h 20', 'Technique et charte : domaine, logos, utilisateurs, relevés', '15 min'],
+    ['11 h 35', 'Décisions, référents, éléments à remettre, prochaines étapes', '20 min'],
+    ['11 h 55', 'Clôture', '5 min'],
   ];
   s.addTable(agenda.map(([h, t, d], i) => [
     { text: h, options: { bold: true, color: C.accent1, fontSize: 13, align: 'left' } },
     { text: t, options: { color: C.text1, fontSize: 13 } },
     { text: d, options: { color: C.text2, fontSize: 12, align: 'right' } },
-  ]), { x: 0.5, y: 1.25, w: 9.0, colW: [1.2, 6.4, 1.4], rowH: 0.42, border: { type: 'solid', color: THEME.colors.lt2, pt: 1 }, fill: { color: 'FFFFFF' }, margin: 0.06 });
+  ]), { x: 0.5, y: 1.25, w: 9.0, colW: [1.2, 6.4, 1.4], rowH: 0.4, border: { type: 'solid', color: THEME.colors.lt2, pt: 1 }, fill: { color: 'FFFFFF' }, margin: 0.06 });
+  s.addImage({ data: I.FiCalendar, x: 0.5, y: 4.3, w: 0.35, h: 0.35 });
+  s.addText('Ateliers métiers transport, BTP et immobilier : 30 minutes chacun avec le référent concerné, mercredi 14 ou jeudi 15 octobre, sur place ou à distance.', { x: 1.0, y: 4.2, w: 8.5, h: 0.55, fontSize: 12.5, color: C.text2, margin: 0, isTextBox: true, valign: 'middle' });
   s.addNotes('Tenir l\'horaire. Un atelier qui déborde se termine par une liste de questions ouvertes à traiter dans la semaine, pas par un dépassement.');
 
   // ================================================================ 4. Le projet
@@ -189,7 +190,7 @@ async function icon(name, hex) {
   // ================================================================ 8. Atelier Finance
   pres.addSection({ title: 'Ateliers' });
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Ateliers' });
-  s.addText('Atelier Finance, 60 minutes', { placeholder: 'title' });
+  s.addText('Finance, 35 minutes', { placeholder: 'title' });
   circleIcon(s, I.FiFileText, 0.5, 1.3, 0.55, C.accent1);
   s.addText('Ce que nous devons trancher ensemble', { x: 1.2, y: 1.3, w: 8, h: 0.55, fontSize: 15, bold: true, color: C.text1, margin: 0, isTextBox: true, valign: 'middle' });
   s.addText(bullets([
@@ -206,15 +207,15 @@ async function icon(name, hex) {
 
   // ================================================================ 9. Ateliers métiers
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Ateliers' });
-  s.addText('Ateliers métiers, 45 minutes', { placeholder: 'title' });
+  s.addText('Ateliers métiers, 30 minutes chacun', { placeholder: 'title' });
   card(s, 0.5, 1.25, 2.9, 3.6, I.FiTruck, 'Transport', 'Liste des camions et chauffeurs. Routes, tarifs, distances. Produits transportés. Coûts d\'une rotation : carburant, péages, frais chauffeur, maintenance, taxes. Qui saisit, où, et avec quel réseau.');
   card(s, 3.55, 1.25, 2.9, 3.6, I.FiBriefcase, 'BTP', 'Chantiers en cours. Mode de facturation : jalons ou situations mensuelles. Taux et durée de la retenue de garantie. Coûts suivis par chantier.', { iconFill: C.accent2 });
   card(s, 6.6, 1.25, 2.9, 3.6, I.FiHome, 'Immobilier', 'Liste des biens et des baux. Périodicité des loyers, charges, dépôts. Quittances actuelles. Valeur du patrimoine et méthode.');
-  s.addNotes('Trois référents différents, quinze minutes chacun. Repartir avec les listes : flotte, chantiers, biens. Elles conditionnent la reprise des données.');
+  s.addNotes('Ces trois ateliers ne se tiennent pas aujourd\'hui : trente minutes chacun avec le référent concerné, mercredi 14 ou jeudi 15, sur place ou à distance. Aujourd\'hui on fixe les créneaux et on demande les listes.');
 
   // ================================================================ 10. Atelier AxisPro
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Ateliers' });
-  s.addText('Atelier AxisPro Suite, 30 minutes', { placeholder: 'title' });
+  s.addText('AxisPro Suite, 15 minutes', { placeholder: 'title' });
   circleIcon(s, I.FiCheckSquare, 0.5, 1.3, 0.55, C.accent2);
   s.addText('Industrialiser la méthode du cabinet sans la figer', { x: 1.2, y: 1.3, w: 8, h: 0.55, fontSize: 15, bold: true, color: C.text1, margin: 0, isTextBox: true, valign: 'middle' });
   s.addText(bullets([
@@ -230,7 +231,7 @@ async function icon(name, hex) {
 
   // ================================================================ 11. Technique et charte
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Ateliers' });
-  s.addText('Technique, charte et accès, 20 minutes', { placeholder: 'title' });
+  s.addText('Technique, charte et accès, 15 minutes', { placeholder: 'title' });
   card(s, 0.5, 1.25, 4.4, 2.05, I.FiServer, 'Serveur et accès', 'Nom de domaine : le vôtre ou le nôtre, offert. Liste des utilisateurs et profils. Adresses e-mail pour la double authentification. Qualité du réseau au parc et sur les chantiers.');
   card(s, 5.1, 1.25, 4.4, 2.05, I.FiPenTool, 'Charte graphique', 'Logos EGUITRA et MB AxisPro en haute définition, couleurs, polices. Sans charte formelle, nous la définissons ici en vingt minutes.', { iconFill: C.accent2 });
   card(s, 0.5, 3.45, 9.0, 1.5, I.FiInbox, 'Données à reprendre', 'Fichiers de gestion de l\'exercice en cours, relevés bancaires électroniques de chaque banque, modèles de déclarations fiscales, coordonnées de l\'expert-comptable.');
@@ -239,7 +240,7 @@ async function icon(name, hex) {
   // ================================================================ 12. Décisions
   pres.addSection({ title: 'Décisions' });
   s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Décisions' });
-  s.addText('Les décisions à prendre avant 14 h', { placeholder: 'title' });
+  s.addText('Les décisions à prendre avant midi', { placeholder: 'title' });
   const dec = [
     'Les cinq référents sont nommés, avec leurs créneaux de disponibilité',
     'L\'heure du point quotidien et le jour du comité hebdomadaire sont fixés',
