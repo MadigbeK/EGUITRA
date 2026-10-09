@@ -5,7 +5,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -49,6 +49,9 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    # Le schéma doit exister avant que la table de versions d'Alembic n'y soit créée.
+    connection.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
+    connection.commit()
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
