@@ -49,7 +49,7 @@ export function ExportButton({ exportPath, label = "Exporter CSV", qs }: Props) 
       type="button"
       onClick={handleExport}
       disabled={loading}
-      className="flex items-center gap-1.5 rounded-sm border border-[#1d3a28] px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#7fa78d] transition-colors hover:border-[#f5d90a] hover:text-[#f5d90a] disabled:opacity-50"
+      className="flex items-center gap-1.5 rounded-sm border border-[#262d6b] px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#8FA2C0] transition-colors hover:border-[#E0A83C] hover:text-[#E0A83C] disabled:opacity-50"
     >
       <Download className="h-3 w-3" />
       {loading ? "Export..." : label}

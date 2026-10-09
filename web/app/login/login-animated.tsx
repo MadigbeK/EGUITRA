@@ -106,23 +106,23 @@ export function LoginAnimated({
           />
           <div>
             <h1 className="font-semibold leading-[1.05] tracking-tight text-white text-[clamp(36px,3.4vw,56px)]">
-              Votre catalogue,
+              Votre comptabilité,
               <br />
-              vos commandes,
+              votre trésorerie,
               <br />
-              votre encours.
+              vos décisions.
             </h1>
             <p className="mt-6 max-w-md text-lg text-white/85">
-              Accès sécurisé à 6 738 références pharmaceutiques, historique Odoo en
-              temps réel, encours négocié. Réservé aux pharmacies agréées.
+              Pilotage financier du groupe EGUITRA : transport, BTP, immobilier.
+              Écritures SYSCOHADA, trésorerie et rentabilité par activité, en temps réel.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/75">
               <span className="inline-flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-[#4CC585]" />
-                Agréé Min. Santé
+                SYSCOHADA révisé
               </span>
-              <span>Conakry · J+1</span>
-              <span>Depuis 2014</span>
+              <span>Conakry</span>
+              <span>Exercice 2026</span>
             </div>
           </div>
         </div>
@@ -144,10 +144,10 @@ export function LoginAnimated({
           </div>
 
           <h2 className="text-[28px] font-semibold tracking-tight text-[#1b1b1b]">
-            Espace client
+            EGUITRA Finance
           </h2>
           <p className="mt-2 text-[15px] text-[#5b6470]">
-            Connectez-vous à votre espace pharmacie sécurisé.
+            Connectez-vous avec l'identifiant remis par votre administrateur.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4" noValidate>
@@ -166,7 +166,7 @@ export function LoginAnimated({
                 onChange={onChange("Identifiant")}
                 required
                 disabled={submitting}
-                placeholder="email ou pseudo (ex : ph-c712)"
+                placeholder="identifiant ou e-mail"
                 className="h-11 w-full rounded border border-[#8a8f98] bg-white px-3 text-[15px] text-[#1b1b1b] outline-none transition-colors placeholder:text-[#a0a4ab] focus:border-[#0067B8] focus:ring-2 focus:ring-[#0067B8]/25 disabled:opacity-60"
               />
             </div>
@@ -225,12 +225,7 @@ export function LoginAnimated({
               >
                 Mot de passe oublié ?
               </button>
-              <span className="text-[#5b6470]">
-                Pas de compte ?{" "}
-                <a href="https://eguitragroup.com/contact" className="font-semibold text-[#0067B8] hover:underline">
-                  Ouvrir
-                </a>
-              </span>
+              <span className="text-[#5b6470]">Accès réservé au groupe EGUITRA et au cabinet MB AxisPro</span>
             </div>
           </form>
 
@@ -240,7 +235,7 @@ export function LoginAnimated({
               Connexion chiffrée
             </span>
             <span>Argon2id · JWT</span>
-            <span>© 2026 EGUITRA GROUP SARL</span>
+            <span>© 2026 EGUITRA GROUP SARLU · E-VOLUTION XP</span>
           </div>
         </div>
       </div>

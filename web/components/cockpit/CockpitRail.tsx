@@ -67,7 +67,7 @@ const FOOTER: NavItem[] = [
 
 const BADGE_COLOR: Record<string, string> = {
   yellow: "#E0A83C",
-  magenta: "#FF4D9D",
+  magenta: "#F2777A",
   cyan: "#3DD6F5",
 };
 
@@ -132,16 +132,16 @@ export function CockpitRail({ initials, counts }: { initials: string; counts?: C
   };
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[76px] flex-none flex-col border-r border-[#1d3a28] bg-[#061009] py-3 font-mono">
+    <aside className="sticky top-0 flex h-screen w-[76px] flex-none flex-col border-r border-[#262d6b] bg-[#07091c] py-3 font-mono">
       {/* Logo + avatar */}
       <div className="flex flex-col items-center gap-2 px-2 pb-3">
-        <span className="brand-mark !h-9 !w-9" aria-hidden="true" />
+        <img src="/logo-mark.png" alt="EGUITRA Finance" className="h-9 w-9 rounded-md object-contain" />
         <div className="grid h-9 w-9 place-items-center rounded-md border border-[#E0A83C]/50 bg-[#141a46] text-xs font-bold text-[#E0A83C]">
           {initials}
         </div>
       </div>
 
-      <div className="mx-3 mb-2 border-t border-[#1d3a28]" />
+      <div className="mx-3 mb-2 border-t border-[#262d6b]" />
 
       {/* Nav principale */}
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2">
@@ -150,13 +150,13 @@ export function CockpitRail({ initials, counts }: { initials: string; counts?: C
 
       {/* Footer */}
       <div className="mt-2 flex flex-col gap-1 px-2">
-        <div className="mx-1 mb-1 border-t border-[#1d3a28]" />
+        <div className="mx-1 mb-1 border-t border-[#262d6b]" />
         {FOOT.map(renderItem)}
         <button
           type="button"
           onClick={logout}
           title="Se déconnecter"
-          className="flex h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md text-[#8FA2C0] transition-colors hover:bg-[#FF4D9D]/10 hover:text-[#FF4D9D]"
+          className="flex h-[58px] w-full flex-col items-center justify-center gap-1 rounded-md text-[#8FA2C0] transition-colors hover:bg-[#F2777A]/10 hover:text-[#F2777A]"
         >
           <LogOut className="h-[18px] w-[18px]" strokeWidth={1.8} />
           <span className="text-[9px] font-medium leading-none">Sortie</span>

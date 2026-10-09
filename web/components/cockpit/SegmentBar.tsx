@@ -20,8 +20,8 @@ export function SegmentBar({ segments }: { segments: BarSegment[] }) {
             style={{ backgroundColor: s.color }}
           />
           <div className="flex flex-col">
-            <span className="truncate text-[10px] font-medium text-[#7fa78d]">{s.label}</span>
-            <span className="text-sm font-bold tabular-nums text-[#e7f2ea]">{s.pct}%</span>
+            <span className="truncate text-[10px] font-medium text-[#8FA2C0]">{s.label}</span>
+            <span className="text-sm font-bold tabular-nums text-[#EEF3F6]">{s.pct}%</span>
             {s.amount && (
               <span className="truncate text-[10px] tabular-nums text-[#5c7d68]">{s.amount}</span>
             )}

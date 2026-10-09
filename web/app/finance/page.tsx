@@ -69,7 +69,7 @@ export default async function DashboardDirigeant() {
         <Carte label="Chiffre d'affaires de l'exercice" value={fmtCourt(d.ca_exercice)} meta={fmtGNF(d.ca_exercice)} tone="ok" />
         <Carte label="Chiffre d'affaires du mois" value={fmtCourt(d.ca_mois)} meta={`${variation >= 0 ? "▲" : "▼"} ${Math.abs(variation).toFixed(1)} % vs mois précédent`} tone={variation >= 0 ? "ok" : "warn"} />
         <Carte label="Résultat de l'exercice" value={fmtCourt(d.resultat_exercice)} meta={fmtGNF(d.resultat_exercice)} tone={d.resultat_exercice >= 0 ? "ok" : "danger"} />
-        <Carte label="Trésorerie" value={fmtCourt(d.tresorerie)} meta={`${d.tresorerie_par_compte.length} comptes`} tone={d.tresorerie >= 0 ? "neutral" : "danger"} />
+        <Carte label="Trésorerie" value={fmtCourt(d.tresorerie)} meta={`${d.tresorerie_par_compte.length} compte${d.tresorerie_par_compte.length > 1 ? "s" : ""}`} tone={d.tresorerie >= 0 ? "neutral" : "danger"} />
         <Carte label="Encours clients" value={fmtCourt(d.encours_clients)} meta={`${d.nb_factures_clients_impayees} factures, dont ${fmtCourt(d.encours_clients_echu)} échu`} tone={d.encours_clients_echu > 0 ? "warn" : "neutral"} />
         <Carte label="Encours fournisseurs" value={fmtCourt(d.encours_fournisseurs)} meta={`${d.nb_factures_fournisseurs_a_payer} factures à payer`} />
         <Carte label="Achats de l'exercice" value={fmtCourt(d.achats_exercice)} meta={fmtGNF(d.achats_exercice)} />
@@ -80,7 +80,7 @@ export default async function DashboardDirigeant() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-3">Chiffre d'affaires facturé par mois</h2>
           <div className="mt-4 flex h-48 items-end gap-2">
             {d.ca_par_mois.map((m) => (
-              <div key={m.mois} className="flex flex-1 flex-col items-center gap-1">
+              <div key={m.mois} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
                 <div className="w-full rounded-t bg-[#1A9E9E]" style={{ height: `${Math.max(2, (m.montant / maxMois) * 100)}%` }} title={fmtGNF(m.montant)} />
                 <span className="text-[10px] text-ink-4">{m.mois.slice(5)}</span>
               </div>

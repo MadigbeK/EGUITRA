@@ -9,10 +9,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // ESLint bypassé au build pour la même raison (warnings peer deps).
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // typedRoutes désactivé : exige un cast `as Route` partout, friction
   // disproportionnée pour un projet en phase P0. À ré-activer si on
   // recouvre toute l'app avec des tests d'intégration en P1+.

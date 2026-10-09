@@ -487,7 +487,7 @@ export function ReportBuilder({
 
   if (catalogError || !catalog) {
     return (
-      <main className="relative min-h-screen bg-[#08130d] font-mono">
+      <main className="relative min-h-screen bg-[#0a0c24] font-mono">
         <HeaderBar label={null} totalCount={0} live={false} />
         <div className="px-6 py-8 md:px-10">
           <div className="rounded-md border border-[#FF8A3D]/40 bg-[#FF8A3D]/10 px-4 py-3 text-sm text-[#FF8A3D]">
@@ -499,7 +499,7 @@ export function ReportBuilder({
   }
 
   return (
-    <main className="report-builder relative min-h-screen bg-[#08130d] font-mono">
+    <main className="report-builder relative min-h-screen bg-[#0a0c24] font-mono">
       <HeaderBar
         label={result?.label ?? currentReport?.label ?? null}
         totalCount={totalCount}
@@ -511,7 +511,7 @@ export function ReportBuilder({
         {presets.length > 0 && (
           <section className="print-hide mb-6">
             <div className="mb-2 flex items-center gap-2">
-              <Zap className="h-3.5 w-3.5 text-[#f5d90a]" />
+              <Zap className="h-3.5 w-3.5 text-[#E0A83C]" />
               <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#5c7d68]">
                 Vues rapides
               </h2>
@@ -527,8 +527,8 @@ export function ReportBuilder({
                     onClick={() => loadPreset(p)}
                     className={`rounded-md border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${
                       active
-                        ? "border-[#f5d90a] bg-[#f5d90a] text-[#08130d]"
-                        : "border-[#1d3a28] text-[#7fa78d] hover:border-[#f5d90a] hover:text-[#f5d90a]"
+                        ? "border-[#E0A83C] bg-[#E0A83C] text-[#0a0c24]"
+                        : "border-[#262d6b] text-[#8FA2C0] hover:border-[#E0A83C] hover:text-[#E0A83C]"
                     }`}
                   >
                     {p.label}
@@ -540,7 +540,7 @@ export function ReportBuilder({
         )}
 
         {/* ═══ BARRE D'OUTILS ══════════════════════════════════════════════ */}
-        <section className="print-hide mb-5 rounded-md border border-[#1d3a28] bg-[#0d1f15] p-4">
+        <section className="print-hide mb-5 rounded-md border border-[#262d6b] bg-[#10133a] p-4">
           <div className="flex flex-wrap items-end gap-4">
             {/* Sélecteur de rapport */}
             <div className="flex min-w-[220px] flex-col gap-1">
@@ -551,7 +551,7 @@ export function ReportBuilder({
                 <select
                   value={reportKey}
                   onChange={(e) => changeReport(e.target.value)}
-                  className="w-full appearance-none rounded-sm border border-[#1d3a28] bg-[#08130d] px-3 py-2 pr-8 text-[12px] font-bold text-[#e7f2ea] outline-none focus:border-[#f5d90a]"
+                  className="w-full appearance-none rounded-sm border border-[#262d6b] bg-[#0a0c24] px-3 py-2 pr-8 text-[12px] font-bold text-[#EEF3F6] outline-none focus:border-[#E0A83C]"
                 >
                   {catalog.groups.map((g) => (
                     <optgroup key={g.name} label={g.name}>
@@ -583,8 +583,8 @@ export function ReportBuilder({
                         onClick={() => onPeriod(p.key)}
                         className={`rounded-sm border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
                           active
-                            ? "border-[#f5d90a] bg-[#f5d90a] text-[#08130d]"
-                            : "border-[#1d3a28] text-[#7fa78d] hover:border-[#f5d90a] hover:text-[#f5d90a]"
+                            ? "border-[#E0A83C] bg-[#E0A83C] text-[#0a0c24]"
+                            : "border-[#262d6b] text-[#8FA2C0] hover:border-[#E0A83C] hover:text-[#E0A83C]"
                         }`}
                       >
                         {p.label}
@@ -596,8 +596,8 @@ export function ReportBuilder({
                     onClick={() => setUseCustomDates((v) => !v)}
                     className={`flex items-center gap-1 rounded-sm border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
                       useCustomDates
-                        ? "border-[#f5d90a] bg-[#f5d90a] text-[#08130d]"
-                        : "border-[#1d3a28] text-[#7fa78d] hover:border-[#f5d90a] hover:text-[#f5d90a]"
+                        ? "border-[#E0A83C] bg-[#E0A83C] text-[#0a0c24]"
+                        : "border-[#262d6b] text-[#8FA2C0] hover:border-[#E0A83C] hover:text-[#E0A83C]"
                     }`}
                   >
                     <Calendar className="h-3 w-3" />
@@ -610,20 +610,20 @@ export function ReportBuilder({
                       type="date"
                       value={dateFrom}
                       onChange={(e) => setDateFrom(e.target.value)}
-                      className="rounded-sm border border-[#1d3a28] bg-[#08130d] px-2 py-1 text-[11px] text-[#e7f2ea] outline-none focus:border-[#f5d90a]"
+                      className="rounded-sm border border-[#262d6b] bg-[#0a0c24] px-2 py-1 text-[11px] text-[#EEF3F6] outline-none focus:border-[#E0A83C]"
                     />
                     <span className="text-[10px] text-[#5c7d68]">→</span>
                     <input
                       type="date"
                       value={dateTo}
                       onChange={(e) => setDateTo(e.target.value)}
-                      className="rounded-sm border border-[#1d3a28] bg-[#08130d] px-2 py-1 text-[11px] text-[#e7f2ea] outline-none focus:border-[#f5d90a]"
+                      className="rounded-sm border border-[#262d6b] bg-[#0a0c24] px-2 py-1 text-[11px] text-[#EEF3F6] outline-none focus:border-[#E0A83C]"
                     />
                     <button
                       type="button"
                       onClick={onCustomDates}
                       disabled={!dateFrom || !dateTo}
-                      className="rounded-sm border border-[#1d3a28] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#7fa78d] transition-colors hover:border-[#f5d90a] hover:text-[#f5d90a] disabled:opacity-40"
+                      className="rounded-sm border border-[#262d6b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#8FA2C0] transition-colors hover:border-[#E0A83C] hover:text-[#E0A83C] disabled:opacity-40"
                     >
                       Appliquer
                     </button>
@@ -642,7 +642,7 @@ export function ReportBuilder({
                   <select
                     value={filters[f.key] ?? ""}
                     onChange={(e) => onFilter(f.key, e.target.value)}
-                    className="appearance-none rounded-sm border border-[#1d3a28] bg-[#08130d] px-3 py-2 pr-8 text-[12px] text-[#e7f2ea] outline-none focus:border-[#f5d90a]"
+                    className="appearance-none rounded-sm border border-[#262d6b] bg-[#0a0c24] px-3 py-2 pr-8 text-[12px] text-[#EEF3F6] outline-none focus:border-[#E0A83C]"
                   >
                     <option value="">Tous</option>
                     {f.options.map((o) => (
@@ -666,21 +666,21 @@ export function ReportBuilder({
                 <button
                   type="button"
                   onClick={() => setColsOpen((v) => !v)}
-                  className="flex items-center gap-1.5 rounded-sm border border-[#1d3a28] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#7fa78d] transition-colors hover:border-[#f5d90a] hover:text-[#f5d90a]"
+                  className="flex items-center gap-1.5 rounded-sm border border-[#262d6b] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#8FA2C0] transition-colors hover:border-[#E0A83C] hover:text-[#E0A83C]"
                 >
                   <Columns3 className="h-3.5 w-3.5" />
                   Colonnes ({selectedCols.length})
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 {colsOpen && currentReport && (
-                  <div className="absolute right-0 top-full z-20 mt-1 max-h-[320px] w-[240px] overflow-y-auto rounded-md border border-[#1d3a28] bg-[#0d1f15] p-2 shadow-xl">
+                  <div className="absolute right-0 top-full z-20 mt-1 max-h-[320px] w-[240px] overflow-y-auto rounded-md border border-[#262d6b] bg-[#10133a] p-2 shadow-xl">
                     {currentReport.columns.map((c) => {
                       const checked = selectedCols.includes(c.key);
                       const last = checked && selectedCols.length <= 1;
                       return (
                         <label
                           key={c.key}
-                          className={`flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] transition-colors hover:bg-[#102619] ${
+                          className={`flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] transition-colors hover:bg-[#141a46] ${
                             last ? "opacity-50" : ""
                           }`}
                         >
@@ -689,7 +689,7 @@ export function ReportBuilder({
                             checked={checked}
                             disabled={last}
                             onChange={() => onToggleCol(c.key)}
-                            className="h-3.5 w-3.5 accent-[#f5d90a]"
+                            className="h-3.5 w-3.5 accent-[#E0A83C]"
                           />
                           <span className="text-[#c4d6cb]">{c.label}</span>
                         </label>
@@ -708,7 +708,7 @@ export function ReportBuilder({
                   type="button"
                   onClick={onExport}
                   disabled={exporting}
-                  className="flex items-center gap-1.5 rounded-sm border border-[#1d3a28] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#7fa78d] transition-colors hover:border-[#f5d90a] hover:text-[#f5d90a] disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-sm border border-[#262d6b] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#8FA2C0] transition-colors hover:border-[#E0A83C] hover:text-[#E0A83C] disabled:opacity-50"
                 >
                   <Download className="h-3.5 w-3.5" />
                   {exporting ? "Export…" : "CSV"}
@@ -723,7 +723,7 @@ export function ReportBuilder({
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-sm border border-[#1d3a28] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#7fa78d] transition-colors hover:border-[#f5d90a] hover:text-[#f5d90a]"
+                  className="flex items-center gap-1.5 rounded-sm border border-[#262d6b] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#8FA2C0] transition-colors hover:border-[#E0A83C] hover:text-[#E0A83C]"
                 >
                   <Printer className="h-3.5 w-3.5" />
                   Imprimer
@@ -734,11 +734,11 @@ export function ReportBuilder({
         </section>
 
         {/* ═══ TABLEAU DE RÉSULTATS ════════════════════════════════════════ */}
-        <div className="overflow-hidden rounded-md border border-[#1d3a28] bg-[#0d1f15]">
+        <div className="overflow-hidden rounded-md border border-[#262d6b] bg-[#10133a]">
           {/* Titre tableau + plage de dates */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1d3a28] px-5 py-3">
-            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#e7f2ea]">
-              <FileBarChart className="h-3.5 w-3.5 text-[#f5d90a]" />
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#262d6b] px-5 py-3">
+            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#EEF3F6]">
+              <FileBarChart className="h-3.5 w-3.5 text-[#E0A83C]" />
               {result?.label ?? currentReport?.label ?? "Rapport"}
             </h2>
             <span className="text-[10px] text-[#5c7d68]">
@@ -750,7 +750,7 @@ export function ReportBuilder({
 
           {/* Erreur */}
           {runError && (
-            <div className="border-b border-[#1d3a28] bg-[#FF4D9D]/10 px-5 py-3 text-[12px] text-[#FF4D9D]">
+            <div className="border-b border-[#262d6b] bg-[#F2777A]/10 px-5 py-3 text-[12px] text-[#F2777A]">
               Erreur : {runError}
             </div>
           )}
@@ -758,8 +758,8 @@ export function ReportBuilder({
           {/* Table */}
           <div className="relative overflow-x-auto">
             {loading && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0d1f15]/60">
-                <Loader2 className="h-6 w-6 animate-spin text-[#f5d90a]" />
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#10133a]/60">
+                <Loader2 className="h-6 w-6 animate-spin text-[#E0A83C]" />
               </div>
             )}
             <table
@@ -773,14 +773,14 @@ export function ReportBuilder({
                       <th
                         key={c.key}
                         onClick={() => onSort(c.key)}
-                        className={`cursor-pointer select-none border-b border-[#1d3a28] px-3 py-2.5 font-medium transition-colors hover:text-[#f5d90a] ${alignClass(
+                        className={`cursor-pointer select-none border-b border-[#262d6b] px-3 py-2.5 font-medium transition-colors hover:text-[#E0A83C] ${alignClass(
                           c.align,
                         )}`}
                       >
                         <span
                           className={`inline-flex items-center gap-1 ${
                             c.align === "right" ? "flex-row-reverse" : ""
-                          } ${sorted ? "text-[#f5d90a]" : ""}`}
+                          } ${sorted ? "text-[#E0A83C]" : ""}`}
                         >
                           {c.label}
                           {sorted ? (
@@ -812,7 +812,7 @@ export function ReportBuilder({
                 {rows.map((row, i) => (
                   <tr
                     key={i}
-                    className="border-b border-[#143020] transition-colors last:border-0 hover:bg-[#102619]"
+                    className="border-b border-[#1a2156] transition-colors last:border-0 hover:bg-[#141a46]"
                   >
                     {cols.map((c) => (
                       <td
@@ -820,7 +820,7 @@ export function ReportBuilder({
                         className={`px-3 py-2 ${alignClass(c.align)} ${
                           c.type === "money" || c.type === "number" || c.type === "int"
                             ? "text-[#c4d6cb]"
-                            : "text-[#e7f2ea]"
+                            : "text-[#EEF3F6]"
                         }`}
                       >
                         {fmtValue(row[c.key], c.type)}
@@ -831,7 +831,7 @@ export function ReportBuilder({
               </tbody>
               {hasTotals && rows.length > 0 && (
                 <tfoot>
-                  <tr className="border-t-2 border-[#1d3a28] bg-[#102619] font-bold text-[#f5d90a]">
+                  <tr className="border-t-2 border-[#262d6b] bg-[#141a46] font-bold text-[#E0A83C]">
                     {cols.map((c, idx) => {
                       if (idx === 0 && totals[c.key] === undefined) {
                         return (
@@ -854,7 +854,7 @@ export function ReportBuilder({
           </div>
 
           {/* Pied : compteur + pagination */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1d3a28] px-5 py-3 text-[11px]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#262d6b] px-5 py-3 text-[11px]">
             <span className="text-[#5c7d68]">
               {rows.length.toLocaleString("fr-FR")} / {totalCount.toLocaleString("fr-FR")} lignes
             </span>
@@ -867,12 +867,12 @@ export function ReportBuilder({
                   <button
                     type="button"
                     onClick={() => onPage(Math.max(0, offset - LIMIT))}
-                    className="rounded-sm border border-[#1d3a28] px-3 py-1.5 text-[#c4d6cb] transition-colors hover:bg-[#102619]"
+                    className="rounded-sm border border-[#262d6b] px-3 py-1.5 text-[#c4d6cb] transition-colors hover:bg-[#141a46]"
                   >
                     ‹ Précédent
                   </button>
                 ) : (
-                  <span className="rounded-sm border border-[#143020] px-3 py-1.5 text-[#3a5244]">
+                  <span className="rounded-sm border border-[#1a2156] px-3 py-1.5 text-[#3a5244]">
                     ‹ Précédent
                   </span>
                 )}
@@ -880,12 +880,12 @@ export function ReportBuilder({
                   <button
                     type="button"
                     onClick={() => onPage(offset + LIMIT)}
-                    className="rounded-sm border border-[#1d3a28] px-3 py-1.5 text-[#c4d6cb] transition-colors hover:bg-[#102619]"
+                    className="rounded-sm border border-[#262d6b] px-3 py-1.5 text-[#c4d6cb] transition-colors hover:bg-[#141a46]"
                   >
                     Suivant ›
                   </button>
                 ) : (
-                  <span className="rounded-sm border border-[#143020] px-3 py-1.5 text-[#3a5244]">
+                  <span className="rounded-sm border border-[#1a2156] px-3 py-1.5 text-[#3a5244]">
                     Suivant ›
                   </span>
                 )}
@@ -925,32 +925,32 @@ function HeaderBar({
   live: boolean;
 }) {
   return (
-    <div className="relative border-b border-[#1d3a28] bg-[#f5d90a]">
+    <div className="relative border-b border-[#262d6b] bg-[#E0A83C]">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 md:px-10">
         <div className="flex items-center gap-2.5">
           <span className="brand-mark !h-7 !w-7" aria-hidden="true" />
-          <span className="text-sm font-bold tracking-tight text-[#08130d]">
-            EGUITRA <span className="text-[#08130d]/60">//</span> RAPPORTS
+          <span className="text-sm font-bold tracking-tight text-[#0a0c24]">
+            EGUITRA <span className="text-[#0a0c24]/60">//</span> RAPPORTS
           </span>
         </div>
         {label && (
           <div className="flex items-baseline gap-2">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-[#08130d]/60">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-[#0a0c24]/60">
               {label}
             </span>
-            <span className="text-lg font-bold tabular-nums text-[#08130d]">
+            <span className="text-lg font-bold tabular-nums text-[#0a0c24]">
               {totalCount.toLocaleString("fr-FR")} lignes
             </span>
           </div>
         )}
         <div className="ml-auto">
           <span
-            className="inline-flex items-center gap-1.5 rounded-sm bg-[#08130d] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
-            style={{ color: live ? "#4ADE80" : "#FF8A3D" }}
+            className="inline-flex items-center gap-1.5 rounded-sm bg-[#0a0c24] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
+            style={{ color: live ? "#33A98C" : "#FF8A3D" }}
           >
             <span
               className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: live ? "#4ADE80" : "#FF8A3D" }}
+              style={{ backgroundColor: live ? "#33A98C" : "#FF8A3D" }}
             />
             {live ? "LIVE · POSTGRES" : "EN ATTENTE"}
           </span>

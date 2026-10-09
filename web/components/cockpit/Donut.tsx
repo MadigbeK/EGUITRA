@@ -46,7 +46,7 @@ export function Donut({
           cy={cy}
           r={r}
           fill="none"
-          stroke="#143020"
+          stroke="#1a2156"
           strokeWidth={thickness}
         />
         {arcs.map((a, i) => (
@@ -70,7 +70,7 @@ export function Donut({
             y={cy - 2}
             textAnchor="middle"
             dominantBaseline="middle"
-            fill="#e7f2ea"
+            fill="#EEF3F6"
             style={{ fontSize: 19, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}
           >
             {centerLabel}
@@ -81,7 +81,7 @@ export function Donut({
               y={cy + 15}
               textAnchor="middle"
               dominantBaseline="middle"
-              fill="#7fa78d"
+              fill="#8FA2C0"
               style={{ fontSize: 8.5, letterSpacing: "0.12em" }}
             >
               {centerSub.toUpperCase()}
@@ -99,7 +99,7 @@ export function Donut({
               style={{ backgroundColor: a.color }}
             />
             <span className="text-[#c4d6cb]">{a.label}</span>
-            <span className="ml-auto tabular-nums font-bold text-[#e7f2ea]">
+            <span className="ml-auto tabular-nums font-bold text-[#EEF3F6]">
               {Math.round(a.frac * 100)}%
             </span>
           </li>

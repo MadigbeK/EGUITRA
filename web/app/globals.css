@@ -234,18 +234,18 @@
   --bg-2: #10133a;
   --panel: #141a46;
   --line: #262d6b;
-  --ink: #e7f2ea;
-  --ink-3: #7fa78d;
+  --ink: #EEF3F6;
+  --ink-3: #8FA2C0;
 
   font-family: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace,
     "SF Mono", Menlo, monospace;
   color-scheme: dark;
   background: #0a0c24;
-  color: #e7f2ea;
+  color: #EEF3F6;
 }
 
 .theme-cockpit ::selection {
-  background: #f5d90a;
+  background: #E0A83C;
   color: #0a0c24;
 }
 
@@ -263,23 +263,23 @@
 .theme-cockpit .divide-line > * + * { border-color: #262d6b !important; }
 
 /* Texte */
-.theme-cockpit .text-ink { color: #e7f2ea !important; }
+.theme-cockpit .text-ink { color: #EEF3F6 !important; }
 .theme-cockpit .text-ink-2 { color: #c4d6cb !important; }
-.theme-cockpit .text-ink-3 { color: #7fa78d !important; }
+.theme-cockpit .text-ink-3 { color: #8FA2C0 !important; }
 .theme-cockpit .text-ink-4 { color: #5c7d68 !important; }
 
 /* Chrome Shell → vert sombre cockpit */
 .theme-cockpit .chrome-utility {
-  background: #061009 !important;
+  background: #07091c !important;
   border-bottom-color: #262d6b !important;
-  color: #7fa78d !important;
+  color: #8FA2C0 !important;
 }
 .theme-cockpit .chrome-topbar {
   background: rgba(8, 19, 13, 0.95) !important;
   border-bottom-color: #262d6b !important;
 }
 .theme-cockpit .chrome-sidebar {
-  background: #061009 !important;
+  background: #07091c !important;
   border-right-color: #262d6b !important;
 }
 
