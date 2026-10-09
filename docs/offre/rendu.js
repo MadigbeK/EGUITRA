@@ -40,7 +40,7 @@ function toMarkdown(B, C) {
           `# ${C.titre}`, '', `**${C.sousTitre}**`, '',
           ...(C.mentionRevision ? [C.mentionRevision, ''] : []),
           `Pour ${C.client} et ${C.client2}, à l'attention de ${C.dg}`, '',
-          `Référence ${C.reference}, ${C.dateOffre}, valable ${C.validiteJours} jours`, '',
+          C.validiteJours ? `Référence ${C.reference}, ${C.dateOffre}, valable ${C.validiteJours} jours` : `Référence ${C.reference}, ${C.dateOffre}`, '',
           `Émise par ${C.prestataire}, ${C.slogan}. Contact : ${C.contact}`, '');
         break;
       case 'toc': out.push('_Sommaire : voir la version Word, table des matières automatique._', ''); break;
@@ -121,7 +121,7 @@ function coverPage(C) {
   c.push(para(`et ${C.client2}`, { size: 26, bold: true, after: 60 }));
   c.push(para(`À l'attention de ${C.dg}`, { size: 22, after: 700 }));
   c.push(para(`Référence ${C.reference}`, { size: 20, color: '666666', after: 40 }));
-  c.push(para(`${C.dateOffre}, offre valable ${C.validiteJours} jours`, { size: 20, color: '666666', after: 40 }));
+  c.push(para(C.validiteJours ? `${C.dateOffre}, offre valable ${C.validiteJours} jours` : C.dateOffre, { size: 20, color: '666666', after: 40 }));
   c.push(para(`${C.prestataire}, ${C.slogan}. Contact : ${C.contact}`, { size: 20, color: '666666', after: 40 }));
   c.push(para('Document confidentiel, destiné exclusivement à ses destinataires.', { size: 18, italics: true, color: '888888', before: 1200 }));
   return c;
