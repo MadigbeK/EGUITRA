@@ -95,15 +95,27 @@ modifiée, aucun contournement possible hors du moteur.
 | Clôture mensuelle | contrôles bloquants (équilibres, compte de passage, pièces en attente, relevés rapprochés), verrouillage et empreinte de chaînage des écritures, réouverture tracée |
 | Transport | tarif du client sur la route, à défaut tarif de la route ; facture par client, une ligne par rotation |
 | Chantiers | retenue de garantie (5 % par défaut) portée en 4117 jusqu'à sa libération |
+| Immobilier | quittancement chaque nuit : une facture par échéance passée, datée de l'échéance, validée aussitôt (rattrapage compris) ; impayés relancés comme les autres créances |
+| Pièces déposées | PDF, JPEG, PNG, Word .docx et Excel .xlsx, reconnus d'après leur contenu ; 20 Mo par fichier ; dossier d'un porteur limité à 400 pièces ou 1 Go, 50 messages par jour |
 | AxisPro | score par domaine pondéré ; éliminatoire non satisfait : NO-GO ; GO à partir de 70/100 sans critère critique ouvert ; conditionnel à partir de 50/100 ; preuve exigée pour les critères qui le demandent |
 
 ## 6. Sécurité
 
 Double authentification pour tous les utilisateurs (y compris le portail et l'application Rotations),
 mots de passe d'au moins 10 caractères, mot de passe provisoire à remplacer avant tout accès,
-sessions courtes et révocables, limitation des essais par identifiant et par adresse, journal des
-accès conservé 12 mois, piste d'audit avec valeurs avant et après, échanges chiffrés (TLS), noyau et
-base jamais exposés sur Internet, client web du noyau réservé aux adresses de l'équipe technique.
+sessions courtes et révocables (accès 15 minutes, session de 7 jours au plus, 90 jours pour les
+agents du parc dans Rotations), déconnexion qui ferme toute la session, limitation des essais par
+identifiant et par adresse, journal des accès conservé 12 mois, piste d'audit avec valeurs avant et
+après, échanges chiffrés (TLS), noyau et base jamais exposés sur Internet, client web du noyau
+réservé aux adresses de l'équipe technique.
+
+Chaque société ne voit que ses propres données, jusque dans les pièces de la data room, les revues
+de comité et les grilles du cabinet. Une pièce approuvée puis modifiée doit être approuvée à
+nouveau. Les fichiers déposés sont contrôlés d'après leur contenu (les documents à macros sont
+refusés) et toujours servis en téléchargement ; les exports pour tableur ne contiennent jamais de
+formule. Le téléphone d'un agent du parc ne garde ni tarifs ni marges, et s'efface à la déconnexion.
+Les applications appliquent une politique de sécurité du contenu (aucun script ni appel vers un
+site tiers).
 
 ## 7. Hébergement, sauvegardes et exploitation
 

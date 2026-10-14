@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 14 octobre 2026 (après-midi)
+# État du projet EGUITRA, au 14 octobre 2026 (fin d'après-midi)
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -18,6 +18,7 @@ Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre �
 | 13 oct. 2026 | Réunion de cadrage tenue (support : `Reunion_de_cadrage.docx`). VPS commandé. |
 | 14 oct. 2026 | VPS livré, installé et sécurisé. Dans la nuit : noyau Odoo 19 en recette, huit modules EGUITRA, applications web, sauvegardes continues avec restauration vérifiée, supervision, reprise des données, guides ; tout est déployé sur la recette. |
 | 14 oct. 2026, après-midi | Production et recette séparées en deux environnements complets ; base de production `eguitra` créée (deux sociétés, administrateur `m.kouyate`) ; deux mises en production par `release.sh` ; multi-sociétés vérifié de bout en bout (un compte, deux comptabilités) ; dossier de conception en Word, guides Word par profil, cahier de recette. |
+| 14 oct. 2026, fin d'après-midi | Écran Sociétés (identité, NIF, RCCM, logo, mentions légales des documents imprimés), paramétrage du courriel (`infra/mail-server.sh`), plan de bascule, copie nocturne de la recette ; quittancement automatique des loyers ; troisième revue de sécurité traitée (voir chapitre 5) ; mises en production successives par `release.sh`. |
 
 À compléter : date d'encaissement de l'acompte, T0, date contractuelle de mise en production (T0 + 4 semaines), noms des référents.
 
@@ -71,10 +72,13 @@ sociétés de chaque compte (ajouté le 14 octobre ; seule l'API le permettait).
 
 ### Architecture réalisée
 - **Noyau** : Odoo 19 Community + PostgreSQL 16 (Docker Compose). N'écoute que sur 127.0.0.1 ; jamais exposé aux utilisateurs.
-- **API métier dans le noyau** (`eguitra_api`) : routes `/api/v1/...` exécutées sous l'identité de l'utilisateur (droits et règles d'accès du noyau s'appliquent). Jetons opaques stockés hachés (accès 15 min, renouvellement 12 h, 30 jours pour Rotations), double authentification TOTP obligatoire pour tous, limitation des essais par identifiant et par adresse, journal des accès 12 mois, piste d'audit (`auditlog`). Mot de passe remis par l'administrateur : provisoire, à remplacer avant tout autre accès (contrôlé par l'API elle-même).
+- **API métier dans le noyau** (`eguitra_api`) : routes `/api/v1/...` exécutées sous l'identité de l'utilisateur (droits et règles d'accès du noyau s'appliquent). Jetons opaques stockés hachés (accès 15 min, renouvellement 12 h, 30 jours pour Rotations au seul profil exploitation ; durée totale d'une session 7 jours, 90 pour Rotations), double authentification TOTP obligatoire pour tous, limitation des essais (5 échecs par identifiant depuis une même adresse, 50 toutes adresses confondues, 50 par adresse ; l'ancien mot de passe compte aussi), journal des accès 12 mois, piste d'audit (`auditlog`). Mot de passe remis par l'administrateur : provisoire, à remplacer avant tout autre accès (contrôlé par l'API elle-même). La déconnexion révoque toute la session, même jeton d'accès expiré. Adresse réelle du client transmise par la passerelle (`X-Forwarded-For` avec `X-Forwarded-Host`, sans quoi le noyau ne voit que l'adresse du conteneur web).
+- **Fichiers reçus** (`eguitra_api/files.py`) : format reconnu au contenu (PDF, JPEG, PNG, DOCX, XLSX) pour la data room et les justificatifs ; macros, ZIP, .doc et .xls refusés ; nom ramené à l'extension reconnue. Quotas des dépôts du porteur (400 pièces, 1 Go par dossier, 50 messages par jour). Classeurs importés bornés (50 Mo décompressés, 20 000 lignes). Exports CSV et XLSX : un libellé ne devient jamais une formule.
+- **Approbations** : la demande garde l'empreinte de la pièce soumise (tiers, compte bancaire, comptes, montants, taxes, analytique) ; une pièce approuvée, remise en brouillon et modifiée doit être approuvée à nouveau.
 - **Une seule application Next.js** (`apps/web`) sert les quatre surfaces : `/finance`, `/axispro`, `/portail`, `/mobile`, chacune avec son thème (`data-app`). Raison : un seul déploiement, une seule passerelle de sécurité, des composants partagés ; les domaines (finance.*, axispro.*, portail.*) aiguillent vers la bonne surface. Remplace le découpage en quatre applications envisagé au cadrage.
-- **Passerelle** : le navigateur ne voit jamais les jetons (cookies httpOnly) ; `/api/odoo/...` relaie vers l'API avec renouvellement automatique ; protection CSRF par Origin et Sec-Fetch-Site. Société de travail mémorisée par application ; AxisPro Suite et le portail travaillent par défaut dans la société du cabinet.
-- **Rotations** : application web installable (manifeste, service worker), saisie hors réseau dans IndexedDB, envoi idempotent (`client_uuid`) dès le retour du réseau. Le tarif n'est pas saisi au parc : le noyau l'applique (tarif client, sinon tarif de la route).
+- **Passerelle** : le navigateur ne voit jamais les jetons (cookies httpOnly, préfixe `__Host-` en production) ; `/api/odoo/...` relaie vers l'API avec renouvellement automatique (chemins non normalisés refusés) ; protection CSRF par Origin et Sec-Fetch-Site ; politique de sécurité du contenu (CSP) en production. Société de travail mémorisée par application ; AxisPro Suite et le portail travaillent par défaut dans la société du cabinet.
+- **Rotations** : application web installable (manifeste, service worker), saisie hors réseau dans IndexedDB, envoi idempotent (`client_uuid`) dès le retour du réseau. Le tarif n'est pas saisi au parc : le noyau l'applique (tarif client, sinon tarif de la route). Le téléphone ne garde ni tarifs ni marges ; listes effacées quand un autre compte ouvre l'application ; page hors ligne et listes effacées à la déconnexion (les saisies en attente restent à leur auteur).
+- **Quittancement** : tâche de nuit « EGUITRA : quittancement des loyers » (facture de chaque échéance passée, datée de l'échéance, validée aussitôt) ; la génération du module `contract`, qui laissait des brouillons, est désactivée.
 - **Sauvegardes** : archivage continu des WAL (`archive_timeout` 15 min), sauvegarde de base chaque nuit, filestore toutes les 15 minutes, copie hors site chiffrée (rclone, distant `crypt`) avec les rétentions de l'offre (30 quotidiennes, 12 mensuelles, journaux sur 14 jours), contrôle de santé, test de restauration (y compris à un instant donné) vérifié le 14 octobre. Voir `infra/backup/README.md`.
 - **Supervision** : `infra/monitor.sh` toutes les 5 minutes (conteneurs, API, web, disque, sauvegardes), alertes vers un webhook ou ntfy à configurer dans `.env`.
 - **Journal des à-nouveaux** : code `AN`. Ses écritures forment la situation d'ouverture du tableau des flux ; la reprise des soldes d'ouverture l'utilise.
@@ -94,30 +98,34 @@ sociétés de chaque compte (ajouté le 14 octobre ; seule l'API le permettait).
 |---|---|
 | `infra/` | `setup-vps.sh` (sécurisation), `compose.yaml` (production et recette), `up.sh` (déploiement), `release.sh` (mise en production, retour arrière), `init-db.sh` et `admin-account.sh` (base et administrateurs, par environnement), `test.sh` (tests sur base jetable de recette), `monitor.sh` (supervision des deux environnements), `oca/` (modules OCA épinglés), `odoo/` (image et configuration), `backup/` (sauvegardes, restauration, copie de la recette), `caddy/` (proxy TLS, domaine de recette), `README.md` (exploitation). |
 | `addons/eguitra_base` | Sociétés (groupe, cabinet), huit profils, sept axes analytiques, règles d'audit. |
-| `addons/eguitra_api` | Cadre de l'API, authentification, double authentification, sessions, administration des utilisateurs, journaux. |
+| `addons/eguitra_api` | Cadre de l'API, authentification, double authentification, sessions, administration des utilisateurs et des sociétés (identité, NIF, RCCM, logo, mentions légales), journaux, contrôle des fichiers reçus (`files.py`). |
 | `addons/eguitra_finance` | Tableau de bord dirigeant, rapport mensuel de gestion, ventes, relances clients, achats, trésorerie (import de relevés, rapprochement), tiers, écritures et virements internes, bilan, compte de résultat et tableau des flux SYSCOHADA, balance et grand livre, clôtures avec contrôles, fiscalité (TVA, export pour l'auditeur, IFRS), dette et DSCR, immobilisations (dotations automatiques, cessions), budget, alertes, 12 rapports exportables. |
 | `addons/eguitra_approval` | Circuits d'approbation à plusieurs niveaux (pièces, paiements, OD), alertes de retard. |
 | `addons/eguitra_transport` | Flotte, chauffeurs, routes et tarifs, rotations, facturation, rentabilité, synchronisation mobile. |
 | `addons/eguitra_chantier` | Chantiers, situations d'avancement, facturation, retenues de garantie (4117) et leur libération. |
-| `addons/eguitra_immobilier` | Biens, baux, loyers récurrents (module OCA `contract`), impayés, quittances. |
+| `addons/eguitra_immobilier` | Biens, baux, loyers récurrents (module OCA `contract`) facturés et validés chaque nuit, impayés, quittances. |
 | `addons/eguitra_axispro` | Politique d'évaluation versionnée (grille importée), dossiers, évaluation par gate, score, éliminatoires, recommandation, écarts, data room, comités verrouillés et comparés, rapports, temps et honoraires, portail des porteurs. |
 | `apps/web` | Les quatre surfaces web (33 écrans), la passerelle sécurisée, l'application Rotations hors ligne. |
 | `scripts/dev/sync.sh` | Envoi du code sur le serveur de recette. |
 | `scripts/recette/donnees_demo.py` | Données fictives « Démo » pour la recette (transport, achats, chantier, biens, AxisPro). |
 | `scripts/reprise/` | Reprise contrôlée depuis des CSV (tiers, soldes d'ouverture, écritures de l'exercice avec lettrage, budget, rotations 2026), modèles de fichiers ; vérifiée sur une base jetable. |
 | `docs/guides/` | Guides des utilisateurs par profil en Markdown et en Word (`word/`, générés par `build.js`). |
-| `docs/projet/` | Dossier de conception (Markdown source et `Dossier_de_conception.docx` généré), cahier de recette (`Cahier_de_recette.xlsx`, 55 scénarios, généré par `cahier-de-recette.py`), accord de confidentialité (ajouté par une autre session), support de cadrage. |
+| `docs/projet/` | Dossier de conception (Markdown source et `Dossier_de_conception.docx` généré), cahier de recette (`Cahier_de_recette.xlsx`, 59 scénarios, généré par `cahier-de-recette.py`), plan de bascule vers la production (`Plan_de_bascule.docx`), accord de confidentialité (ajouté par une autre session), support de cadrage. |
 | `docs/outils/md-docx.js` | Conversion Markdown vers Word aux couleurs du projet. |
 | `docs/` | Offre contractuelle, support de cadrage, ce fichier. |
 
-Tests : 80 tests automatisés sur les huit modules (`infra/test.sh`), tous au vert le 14 octobre ; lint Python (`ruff.toml`) et TypeScript propres. Parcours vérifiés dans le navigateur sur la recette : connexion avec double authentification et mot de passe provisoire, AxisPro de bout en bout (grille, évaluation avec preuves, data room, comités, honoraires), portail du porteur, Rotations hors réseau puis synchronisation, rapport mensuel, tableau des flux, relances. Deux revues de sécurité automatiques ont été traitées (téléchargements servis en pièce jointe, redirection après connexion, adresse du client, relances et journaux d'administration bornés aux sociétés de l'utilisateur, demandes d'approbation visibles selon le profil).
+Tests : 97 tests automatisés sur les huit modules (`infra/test.sh`), tous au vert le 14 octobre en fin d'après-midi ; lint Python (`ruff.toml`) et TypeScript propres, construction Next.js réussie. Parcours vérifiés dans le navigateur sur la recette : connexion avec double authentification et mot de passe provisoire, AxisPro de bout en bout (grille, évaluation avec preuves, data room, comités, honoraires), portail du porteur, Rotations hors réseau puis synchronisation, rapport mensuel, tableau des flux, relances ; après la troisième revue, connexion avec les cookies `__Host-`, politique de contenu sans violation, écrans finance et métiers.
+
+Revues de sécurité : trois revues automatiques traitées. La troisième (14 octobre) a relevé et fait corriger : une lecture inter-sociétés dans AxisPro (pièces, revues, grilles du cabinet lisibles par un profil direction d'une autre société), des dépôts contrôlés sur le seul type annoncé, une approbation rejouable après remise en brouillon, le cloisonnement du téléphone dans Rotations, l'injection de formules dans les exports, un chemin « /./auth » de la passerelle, la déconnexion sans révocation, le blocage d'un compte par un tiers, les classeurs piégés, la piste d'audit d'un administrateur partiel, les cookies et la CSP. En passant : le noyau ne voyait que l'adresse du conteneur web (20 échecs de connexion auraient bloqué tout le monde), le sélecteur de tiers échouait pour les profils chantiers, immobilier, exploitation et cabinet, et la tâche OCA des contrats restait active en production (corrigé par un appel rejoué à chaque mise à jour).
 
 ## 6. Les environnements aujourd'hui
 
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Base `eguitra`, huit modules, deux sociétés, vide de données (en attente de la reprise). Version en service et historique : `infra/release.sh --list`.
+- Base `eguitra`, huit modules, deux sociétés, vide de données (en attente de la reprise). Version en service : 20261014-1502 (commit 8ffd456) ; historique : `infra/release.sh --list`.
+- Tâches de nuit actives : quittancement des loyers, dotations aux amortissements, relances des clients, purges (jetons, journaux d'accès, tentatives). La génération du module `contract` est désactivée.
+- Identité des sociétés (adresse, NIF, RCCM, logo) à saisir dans Administration > Sociétés dès réception des informations du client : elles figurent en tête et au pied des factures.
 - Administrateur `m.kouyate` (Madigbè Kouyaté), ouvert aux deux sociétés. Mot de passe provisoire dans `~/eguitra/infra/secrets/production-admin.txt` sur le serveur (lisible du seul utilisateur `deploy`) : à la première connexion, activer la double authentification puis choisir le mot de passe ; supprimer ensuite ce fichier.
 - Restauration de la base de production vérifiée le 14 octobre (sauvegarde de 13 h 21).
 
@@ -138,7 +146,9 @@ Tests : 80 tests automatisés sur les huit modules (`infra/test.sh`), tous au ve
 6. Première connexion du gérant à la production (`m.kouyate`), puis création des comptes du client avec leurs sociétés ; jamais de données de démonstration en production.
 7. Dossier de conception : relire `docs/projet/Dossier_de_conception.docx` (régénérer après modification du Markdown : `node docs/projet/dossier-de-conception.js`) et le faire signer.
 8. Formation des référents (guides Word de `docs/guides/word/`) et recette avec `docs/projet/Cahier_de_recette.xlsx`.
-9. Destinations des alertes de supervision (`ALERT_WEBHOOK_URL` ou `ALERT_NTFY_URL`) et serveur d'envoi de courriel (relances par courriel, comptes rendus) : à obtenir du client.
+9. Destinations des alertes de supervision (`ALERT_WEBHOOK_URL` ou `ALERT_NTFY_URL`) et serveur d'envoi de courriel (relances par courriel, comptes rendus) : à obtenir du client, puis `infra/mail-server.sh production`.
+10. Annoncer aux porteurs les formats acceptés pour la data room (PDF, JPEG, PNG, DOCX, XLSX) : les anciens .doc et .xls, les ZIP et les fichiers à macros sont désormais refusés.
+11. Avant la bascule : suivre `docs/projet/Plan_de_bascule.docx` (gel de la recette, reprise définitive, contrôles, annonce 48 heures à l'avance).
 
 ## 8. Points ouverts et risques
 

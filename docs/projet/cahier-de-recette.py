@@ -76,7 +76,7 @@ SCENARIOS = [
     ("R32", "11", "Direction", "Transport > Rentabilité", "Marge par ensemble routier, par route et par mois.", "—", "Marges cohérentes ; alerte si la marge passe sous le seuil."),
     ("R33", "12", "Chantiers", "Chantiers", "Créer un chantier ; saisir une situation en pourcentage ; la facturer.", "Marché, retenue de 5 %", "Facture de la période ; retenue portée en 4117."),
     ("R34", "12", "Chantiers et finance", "Chantiers", "Libérer les retenues à la réception.", "—", "Retenues redevenues exigibles du client."),
-    ("R35", "13", "Immobilier", "Immobilier", "Créer un bien et un bail ; activer le bail.", "Loyer mensuel", "Loyers générés depuis la prise d'effet."),
+    ("R35", "13", "Immobilier", "Immobilier", "Créer un bien et un bail ; activer le bail ; revenir le lendemain.", "Loyer mensuel, prise d'effet passée", "Chaque nuit, loyers échus depuis la prise d'effet facturés et validés sans intervention (une facture par échéance, datée de l'échéance)."),
     ("R36", "13", "Immobilier", "Immobilier > Impayés et quittances", "Encaisser un loyer ; imprimer la quittance ; consulter les impayés.", "—", "Quittance délivrée seulement pour un loyer réglé ; impayés à jour."),
     ("R37", "14", "Administration", "Journal d'audit", "Modifier une fiche client, puis consulter le journal.", "—", "Utilisateur, date, valeurs avant et après."),
     ("R38", "14", "Finance", "Clôtures et contrôles", "Clôturer un mois ; tenter une saisie dans le mois clôturé ; rouvrir.", "—", "Contrôles exécutés ; saisie refusée dans la période close ; réouverture tracée au registre."),
@@ -88,6 +88,8 @@ SCENARIOS = [
     ("R44", "17", "Chaque profil", "Guide du profil", "Réaliser les tâches du guide sans assistance.", "Guide remis en formation", "Tâches réalisées ; remarques notées."),
     ("R45", "18", "Référent", "Suivi des demandes", "Déclarer une anomalie de recette.", "—", "Prise en compte dans les délais de l'offre (chapitre 7.2)."),
     ("R46", "19", "Prestataire", "Recette puis production", "Installer une évolution en recette, la faire valider, la mettre en production.", "—", "Procédure de mise en production suivie ; interruption limitée à quelques minutes, annoncée."),
+    ("R47", "10", "Finance", "Achats et dépenses", "Remettre en brouillon une pièce approuvée ; changer le fournisseur ; la valider.", "Pièce approuvée", "Validation refusée : la pièce modifiée repart au circuit d'approbation."),
+    ("R48", "15", "Exploitation", "Application Rotations", "Se déconnecter ; passer en mode avion ; rouvrir l'application.", "Saisie en attente", "L'application ne s'ouvre plus sous l'identité de l'agent parti ; sa saisie en attente reste et part à sa prochaine connexion."),
     ("A01", "AX", "Cabinet", "AxisPro > Grille d'évaluation", "Importer la grille officielle ; la vérifier ; la mettre en vigueur.", "Classeur du cabinet", "Gates, domaines, 111 critères et pièces chargés ; version 1 en vigueur."),
     ("A02", "AX", "Cabinet", "AxisPro > Dossiers", "Ouvrir un dossier.", "Projet réel anonymisé", "Référence attribuée ; critères du premier gate à évaluer."),
     ("A03", "AX", "Cabinet", "Dossier > Évaluation", "Évaluer les critères ; joindre une preuve pour un critère qui l'exige.", "—", "Sans preuve, refus ; score et recommandation recalculés."),
@@ -97,6 +99,8 @@ SCENARIOS = [
     ("A07", "AX", "Cabinet", "Dossier > Temps et facturation", "Saisir des temps ; facturer les honoraires.", "Taux horaire", "Facture d'honoraires en brouillon dans la comptabilité du cabinet."),
     ("A08", "AX", "Porteur de projet", "Portail", "Première connexion ; déposer une pièce ; écrire au cabinet.", "Accès ouvert par le cabinet", "Pièce visible du cabinet ; notes internes du cabinet invisibles du porteur."),
     ("A09", "AX", "Cabinet", "Dossier > Data room", "Valider une pièce ; en refuser une autre avec un motif.", "—", "Le porteur voit l'état de chaque pièce et le motif du refus."),
+    ("A10", "AX", "Porteur de projet", "Portail > Pièces", "Déposer un programme renommé en .pdf, puis un document Word à macros.", "Fichiers d'essai fournis par le prestataire", "Dépôts refusés, formats acceptés rappelés (PDF, JPEG, PNG, DOCX, XLSX)."),
+    ("A11", "AX", "Direction (société du groupe seule)", "AxisPro Suite", "Ouvrir AxisPro Suite avec un compte de direction ouvert à la seule société du groupe.", "—", "Aucun dossier, aucune pièce, revue ni grille du cabinet visible."),
 ]
 
 COLUMNS = [("N°", 7), ("Attente", 9), ("Profil", 18), ("Écran", 24), ("Scénario", 46), ("Données d'essai", 20),
