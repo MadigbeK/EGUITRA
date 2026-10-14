@@ -77,7 +77,7 @@ Localisation : `l10n_gn` (plan SYSCOHADA en GNF, 1 142 comptes). À valider avec
 | `docs/projet/dossier-de-conception.md` | Projet de dossier de conception (liste définitive des composants, écarts, règles et valeurs de départ, cahier de recette des vingt attentes), à relire avant envoi. |
 | `docs/` | Offre contractuelle, support de cadrage, ce fichier. |
 
-Tests : 78 tests automatisés sur les huit modules (`infra/test.sh`), tous au vert le 14 octobre ; lint Python (`ruff.toml`) et TypeScript propres. Parcours vérifiés dans le navigateur sur la recette : connexion avec double authentification et mot de passe provisoire, AxisPro de bout en bout (grille, évaluation avec preuves, data room, comités, honoraires), portail du porteur, Rotations hors réseau puis synchronisation, rapport mensuel, tableau des flux, relances. Deux revues de sécurité automatiques ont été traitées (téléchargements servis en pièce jointe, redirection après connexion, adresse du client, relances bornées à la société).
+Tests : 79 tests automatisés sur les huit modules (`infra/test.sh`), tous au vert le 14 octobre ; lint Python (`ruff.toml`) et TypeScript propres. Parcours vérifiés dans le navigateur sur la recette : connexion avec double authentification et mot de passe provisoire, AxisPro de bout en bout (grille, évaluation avec preuves, data room, comités, honoraires), portail du porteur, Rotations hors réseau puis synchronisation, rapport mensuel, tableau des flux, relances. Deux revues de sécurité automatiques ont été traitées (téléchargements servis en pièce jointe, redirection après connexion, adresse du client, relances et journaux d'administration bornés aux sociétés de l'utilisateur).
 
 ## 6. La recette aujourd'hui
 
