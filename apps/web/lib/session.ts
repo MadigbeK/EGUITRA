@@ -11,7 +11,13 @@ import { APPS, type AppCode } from "./config";
  * Préfixe des cookies, propre à chaque environnement (eg en production, egr en recette) : les
  * sessions de production et de recette ne se mélangent pas dans un même navigateur.
  */
-const PREFIX = /^[a-z]{1,8}$/.test(process.env.COOKIE_PREFIX ?? "") ? process.env.COOKIE_PREFIX! : "eg";
+const ENV_PREFIX = /^[a-z]{1,8}$/.test(process.env.COOKIE_PREFIX ?? "") ? process.env.COOKIE_PREFIX! : "eg";
+const SECURE = process.env.NODE_ENV === "production";
+/**
+ * « __Host- » : le navigateur n'accepte ces cookies que sécurisés, sans domaine et pour tout le site ;
+ * un autre site du même domaine (www, messagerie...) ne peut donc pas imposer sa propre session.
+ */
+const PREFIX = `${SECURE ? "__Host-" : ""}${ENV_PREFIX}`;
 
 export const COOKIES = {
   access: `${PREFIX}_at`,
@@ -24,7 +30,6 @@ export const COOKIES = {
 } as const;
 
 export const ODOO_URL = process.env.ODOO_URL ?? "http://localhost:8069";
-const SECURE = process.env.NODE_ENV === "production";
 
 export interface SessionTokens {
   access_token: string;
@@ -47,8 +52,9 @@ export function setSessionCookies(jar: CookieJar, tokens: SessionTokens, app?: s
 }
 
 export function clearSessionCookies(jar: CookieJar) {
-  for (const name of Object.values(COOKIES)) jar.delete(name);
-  for (const app of Object.keys(APPS)) jar.delete(companyCookie(app as AppCode));
+  // Effacement par un cookie expiré aux mêmes attributs : un cookie « __Host- » sans Secure serait refusé.
+  const names = [...Object.values(COOKIES), ...Object.keys(APPS).map((app) => companyCookie(app as AppCode))];
+  for (const name of names) jar.set(name, "", base(0));
 }
 
 /** Société de travail mémorisée par application : la finance et AxisPro Suite ne se contaminent pas. */
@@ -84,7 +90,13 @@ export async function odooFetch(path: string, opts: OdooCallOptions = {}): Promi
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
   if (opts.company) headers["X-Eguitra-Company"] = opts.company;
   if (opts.app) headers["X-Eguitra-App"] = opts.app;
-  if (opts.clientIp) headers["X-Forwarded-For"] = opts.clientIp;
+  if (opts.clientIp) {
+    // Le noyau (proxy_mode) ne lit X-Forwarded-For qu'en présence de X-Forwarded-Host : sans lui, toutes
+    // les connexions sembleraient venir de la passerelle et les limites d'essais par adresse vaudraient
+    // pour tous les utilisateurs à la fois.
+    headers["X-Forwarded-For"] = opts.clientIp;
+    headers["X-Forwarded-Host"] = "eguitra-web";
+  }
   if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
   let body: BodyInit | undefined;
   if (opts.rawBody !== undefined && opts.rawBody !== null) {

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { forbiddenOrigin, readJson, sameOrigin } from "@/lib/route-helpers";
-import { COOKIES, clientIpFrom, odooFetch, setSessionCookies, type SessionTokens } from "@/lib/session";
+import { COOKIES, clientIpFrom, odooFetch, setSessionCookies, setStepCookie, type SessionTokens } from "@/lib/session";
 
 /** Première connexion : activation de la double authentification avec le premier code. */
 export async function POST(req: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) return NextResponse.json(data, { status: res.status });
   const out = NextResponse.json({ status: "ok" });
-  out.cookies.delete(COOKIES.mfaSetup);
+  setStepCookie(out.cookies, COOKIES.mfaSetup, "", 0); // effacé (mêmes attributs que le cookie posé)
   setSessionCookies(out.cookies, data as unknown as SessionTokens, app);
   return out;
 }
