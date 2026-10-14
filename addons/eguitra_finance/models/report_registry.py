@@ -15,6 +15,8 @@ from datetime import date
 
 from odoo import api, models
 
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text
+
 ACC_CODE = "COALESCE(aa.code_store->>(aml.company_id::text), '')"
 ACC_NAME = "COALESCE(aa.name->>'fr_FR', aa.name->>'en_US', '')"
 JRN_NAME = "COALESCE(aj.name->>'fr_FR', aj.name->>'en_US', aj.code)"
@@ -394,7 +396,7 @@ class EguitraReportEngine(models.AbstractModel):
         import xlsxwriter
 
         out = io.BytesIO()
-        book = xlsxwriter.Workbook(out, {"in_memory": True})
+        book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
         sheet = book.add_worksheet(title[:31])
         bold = book.add_format({"bold": True, "bg_color": "#10133A", "font_color": "#FFFFFF", "border": 1})
         money = book.add_format({"num_format": "# ##0"})
@@ -429,6 +431,8 @@ def _cell(value, kind):
         return ""
     if kind in ("money", "int"):
         return f"{float(value):.0f}"
+    if kind in ("number", "percent"):
+        return str(value)
     if kind == "date" and isinstance(value, date):
         return value.strftime("%d/%m/%Y")
-    return str(value)
+    return csv_text(value)

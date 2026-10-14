@@ -18,6 +18,10 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 EXTENSIONS = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png", DOCX: ".docx", XLSX: ".xlsx"}
 ACCEPTED = "PDF, JPEG, PNG, Word (.docx) ou Excel (.xlsx)"
+# Exports vers les tableurs : un libellé (tiers, référence, motif d'un virement) qui commencerait par
+# = + - @ serait exécuté comme formule à l'ouverture du fichier.
+XLSX_OPTIONS = {"in_memory": True, "strings_to_formulas": False, "strings_to_urls": False}
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 MAX_UNCOMPRESSED = 50 * 1024 * 1024
 MAX_ROWS = 20000
 ZIP_ERRORS = (zipfile.BadZipFile, zipfile.LargeZipFile, ValueError, EOFError, OSError, NotImplementedError)
@@ -57,6 +61,12 @@ def checked_name(filename, mimetype, default="piece"):
     if ext.lower() == expected or (mimetype == "image/jpeg" and ext.lower() == ".jpeg"):
         return name
     return (stem or default) + expected
+
+
+def csv_text(value):
+    """Cellule texte d'un export CSV : une valeur qui commencerait une formule est précédée d'une apostrophe."""
+    text = "" if value is None else str(value)
+    return "'" + text if text.startswith(FORMULA_START) else text
 
 
 def workbook_rows(content, max_rows=MAX_ROWS):

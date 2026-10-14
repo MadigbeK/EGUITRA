@@ -6,6 +6,7 @@ from odoo import fields, http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
 from ..models.dossier import RECOMMENDATIONS, STATUSES
@@ -345,7 +346,7 @@ class EguitraAxispro(http.Controller):
         dossier = _dossier(dossier_id)
         scoring = dossier.scoring()
         out = io.BytesIO()
-        book = xlsxwriter.Workbook(out, {"in_memory": True})
+        book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
         bold = book.add_format({"bold": True})
         head = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
         sheet = book.add_worksheet("Synthèse")

@@ -4,7 +4,7 @@ import zipfile
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
-from odoo.addons.eguitra_api.files import DOCX, XLSX, checked_name, detect_type, workbook_rows
+from odoo.addons.eguitra_api.files import DOCX, XLSX, XLSX_OPTIONS, checked_name, csv_text, detect_type, workbook_rows
 
 
 def _zip(members):
@@ -56,3 +56,17 @@ class TestFiles(TransactionCase):
             workbook_rows(bombe)
         with self.assertRaises(UserError):
             workbook_rows(b"pas un classeur")
+
+    def test_exports_sans_formule(self):
+        self.assertEqual(csv_text('=HYPERLINK("http://exemple.com")'), '\'=HYPERLINK("http://exemple.com")')
+        self.assertEqual(csv_text("@SOMME(A1)"), "'@SOMME(A1)")
+        self.assertEqual(csv_text("Transport Conakry - Siguiri"), "Transport Conakry - Siguiri")
+        self.assertEqual(csv_text(None), "")
+        import xlsxwriter
+
+        out = io.BytesIO()
+        book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
+        book.add_worksheet().write(0, 0, '=HYPERLINK("http://exemple.com")')
+        book.close()
+        sheet = zipfile.ZipFile(io.BytesIO(out.getvalue())).read("xl/worksheets/sheet1.xml")
+        self.assertNotIn(b"<f>", sheet, "Le libellé reste un texte dans le classeur")

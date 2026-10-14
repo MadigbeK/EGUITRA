@@ -9,6 +9,7 @@ from odoo import http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text
 
 from ..models.report_registry import ACC_CODE, ACC_NAME, JRN_NAME
 from .common import FIN_READ, companies, parse_date, today
@@ -123,7 +124,7 @@ class EguitraFinanceFiscal(http.Controller):
             import xlsxwriter
 
             out = io.BytesIO()
-            book = xlsxwriter.Workbook(out, {"in_memory": True})
+            book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
             sheet = book.add_worksheet("Écritures")
             bold = book.add_format({"bold": True})
             money = book.add_format({"num_format": "# ##0"})
@@ -146,8 +147,9 @@ class EguitraFinanceFiscal(http.Controller):
             writer.writerow(headers)
             for row in rows:
                 writer.writerow([
-                    row[0], row[1], row[2], row[3].strftime("%d/%m/%Y"), row[4], row[5], row[6], row[7], row[8],
-                    f"{row[9]:.0f}", f"{row[10]:.0f}", row[11], f"{row[12]:.2f}", row[13], row[14], row[15],
+                    csv_text(row[0]), csv_text(row[1]), csv_text(row[2]), row[3].strftime("%d/%m/%Y"), csv_text(row[4]),
+                    csv_text(row[5]), csv_text(row[6]), csv_text(row[7]), csv_text(row[8]),
+                    f"{row[9]:.0f}", f"{row[10]:.0f}", csv_text(row[11]), f"{row[12]:.2f}", row[13], row[14], row[15],
                 ])
             content, mime, ext = buf.getvalue().encode("utf-8"), "text/csv; charset=utf-8", "csv"
         return request.make_response(content, headers=[

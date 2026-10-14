@@ -11,7 +11,7 @@ import io
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
-from odoo.addons.eguitra_api.files import workbook_rows
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows
 
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
@@ -166,7 +166,7 @@ def grid_template():
     import xlsxwriter
 
     out = io.BytesIO()
-    book = xlsxwriter.Workbook(out, {"in_memory": True})
+    book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
     sheet = book.add_worksheet("Grille")
     bold = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
     sheet.write_row(0, 0, GRID_COLUMNS, bold)
