@@ -16,7 +16,7 @@ Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre �
 | fin sept. 2026 | Courrier du client : proposition 1 retenue, six demandes (validité, garantie 6 mois, sauvegardes plus fréquentes, pénalités de retard, définition des évolutions incluses, prix à 40 M). |
 | 29 sept. 2026 | Offre OTF-EGUITRA-2026-37 : offre unique et complète, 50 000 000 GNF HT, intégrant les six demandes. Annule et remplace l'offre du 15 septembre. Validité 30 jours, jusqu'au 29 octobre 2026. |
 | 13 oct. 2026 | Réunion de cadrage tenue (support : `Reunion_de_cadrage.docx`). VPS commandé. |
-| 14 oct. 2026 | VPS livré et installé. Poursuite du travail en session locale. |
+| 14 oct. 2026 | VPS livré, installé et sécurisé. Poursuite du travail en session locale. |
 
 À compléter : date d'encaissement de l'acompte, T0, date contractuelle de mise en production (T0 + 4 semaines), noms des référents.
 
@@ -53,9 +53,11 @@ Porte de sortie : si en fin de semaine 1 les dix autres modules OCA ne s'install
 Localisations présentes dans Odoo 19 Community : `l10n_syscohada`, `l10n_gn`.
 
 ### Serveur
-- Commandé : VPS-3 2027 (6 vCore, 12 Go, 100 Go NVMe), Europe Royaume-Uni (Erith), engagement 12 mois, Ubuntu 26.04 LTS, option de sauvegarde automatique de l'hébergeur activée (gratuite). Le VPS-4 était indisponible dans tous les centres de données.
+- Commandé : VPS-3 2027 (6 vCore, 12 Go, 100 Go NVMe), OVHcloud Gravelines (France), engagement 12 mois, Ubuntu 26.04 LTS, option de sauvegarde automatique de l'hébergeur activée (gratuite). Le VPS-4 était indisponible dans tous les centres de données.
 - Écart avec l'offre : 100 Go de disque au lieu de 160. À traiter : ajouter un disque de 100 Go si l'hébergeur le propose ; sinon inscrire la configuration réelle dans le dossier de conception avec engagement d'ajouter du disque sans surcoût au besoin. Processeur et mémoire sont supérieurs à l'offre (4 vCPU, 8 Go).
-- Reste à faire côté hébergement : espace de stockage objet chez un second hébergeur pour les sauvegardes hors site (environ 100 Go) ; pointer les deux noms de domaine (type finance.eguitragroup.com, axispro.mbaxisproconsulting.com) vers l'adresse IP ; accès SSH par clé, pare-feu, mises à jour automatiques.
+- Sécurisé le 14 octobre 2026 par `infra/setup-vps.sh`, vérifié après redémarrage : utilisateur `deploy`, SSH par clé uniquement, root interdit, pare-feu (22, 80, 443), fail2ban, mises à jour de sécurité automatiques sans redémarrage automatique, Docker et Compose du dépôt officiel, swap 4 Go, fuseau Africa/Conakry. Adresse et accès : chez le gérant, hors dépôt.
+- Attention : Docker contourne le pare-feu pour les ports publiés. Dans le compose, ne publier que 80 et 443 (proxy) ; PostgreSQL et Odoo restent sur le réseau interne.
+- Reste à faire côté hébergement : espace de stockage objet chez un second hébergeur pour les sauvegardes hors site (environ 100 Go) ; pointer les deux noms de domaine (type finance.eguitragroup.com, axispro.mbaxisproconsulting.com) vers l'adresse IP.
 - Ubuntu 26.04 LTS retenu plutôt que 24.04 : maintenu jusqu'en avril 2031 ; le dépôt officiel Docker publie déjà ses paquets pour 26.04 (vérifié).
 
 ### Architecture cible
@@ -73,7 +75,7 @@ Localisations présentes dans Odoo 19 Community : `l10n_syscohada`, `l10n_gn`.
 ## 6. Prochaines étapes, semaine 1
 
 - [ ] Compléter la section 2 : acompte, T0, date contractuelle, référents, jour du comité de pilotage.
-- [ ] Sécuriser le VPS : utilisateur non root, clé SSH, pare-feu (22, 80, 443), mises à jour automatiques, Docker.
+- [x] Sécuriser le VPS : utilisateur non root, clé SSH, pare-feu (22, 80, 443), mises à jour automatiques, Docker (14 octobre).
 - [ ] Structure du dépôt : `infra/` (compose, proxy, sauvegardes), `addons/` (modules Odoo spécifiques et OCA épinglés), `apps/finance-web`, `apps/axispro-web`, `apps/portail`, `apps/mobile`, `scripts/reprise/`.
 - [ ] Monter Odoo 19 + PostgreSQL + les dix modules OCA en recette ; lancer leurs tests.
 - [ ] Moteur d'approbation : portage de base_tier_validation, deux jours maximum, sinon moteur spécifique.
