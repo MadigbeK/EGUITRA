@@ -10,6 +10,7 @@
     "data": [
         "security/ir.model.access.csv",
         "security/immobilier_rules.xml",
+        "data/ir_cron.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,

@@ -5,10 +5,14 @@ Un bail actif porte un contrat récurrent (module OCA contract) qui produit les 
 l'axe du bien et l'activité immobilière. Le produit « Loyer » porte le compte 7073 « Loyers ».
 """
 
+import logging
+
 from dateutil.relativedelta import relativedelta
 
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
+
+_logger = logging.getLogger(__name__)
 
 KINDS = [
     ("appartement", "Appartement"),
@@ -169,13 +173,35 @@ class EguitraLease(models.Model):
         leases = self.search([("state", "=", "active"), ("company_id", "in", companies.ids)])
         invoices = self.env["account.move"]
         for lease in leases:
-            contract = lease.contract_id.sudo()
-            guard = 0
-            while contract.recurring_next_date and contract.recurring_next_date <= until and guard < 36:
-                invoices |= contract._recurring_create_invoice()
-                guard += 1
+            invoices |= lease._generate_rents(until)
+        return invoices
+
+    def _generate_rents(self, until):
+        """Une facture par échéance passée, datée de l'échéance ; 36 au plus par passage."""
+        self.ensure_one()
+        contract = self.contract_id.sudo().with_company(self.company_id)
+        invoices = self.env["account.move"]
+        for _ in range(36):
+            if not contract.recurring_next_date or contract.recurring_next_date > until:
+                break
+            created = contract._recurring_create_invoice()
+            if not created:
+                break  # bail échu ou sans ligne à facturer
+            invoices |= created
         invoices.filtered(lambda m: m.state == "draft").action_post()
         return invoices
+
+    @api.model
+    def _cron_generate_rents(self):
+        """Quittancement de chaque nuit, toutes sociétés. Remplace la génération du module contract,
+        qui laisserait des brouillons datés du jour, sans rattrapage. Un bail en erreur est journalisé
+        sans bloquer les autres."""
+        for lease in self.search([("state", "=", "active")]):
+            try:
+                with self.env.cr.savepoint():
+                    lease._generate_rents(fields.Date.context_today(lease))
+            except Exception:
+                _logger.exception("Quittancement impossible pour le bail %s (id %s)", lease.name, lease.id)
 
     @api.model
     def unpaid_rents(self, companies, today=None):

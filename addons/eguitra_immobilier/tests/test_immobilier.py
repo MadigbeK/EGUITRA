@@ -45,6 +45,19 @@ class TestImmobilier(FinanceDataMixin, TransactionCase):
         again = self.env["eguitra.lease"].generate_rents(self.company, self.today)
         self.assertFalse(again, "Aucun loyer facturé deux fois")
 
+    def test_quittancement_de_nuit(self):
+        start = (self.today - relativedelta(months=1)).replace(day=1)
+        self._lease(start).action_activate()
+        self.env["eguitra.lease"]._cron_generate_rents()
+        invoices = self.env["account.move"].search([("partner_id", "=", self.tenant.id), ("move_type", "=", "out_invoice")])
+        self.assertEqual(set(invoices.mapped("state")), {"posted"}, "Loyers validés sans intervention")
+        self.assertEqual(sorted(invoices.mapped("invoice_date")), [start, start + relativedelta(months=1)],
+                         "Une facture par échéance, datée de l'échéance")
+        self.env["eguitra.lease"]._cron_generate_rents()
+        self.assertEqual(self.env["account.move"].search_count([("partner_id", "=", self.tenant.id)]), 2)
+        self.assertTrue(self.env.ref("eguitra_immobilier.cron_rents").active)
+        self.assertFalse(self.env.ref("contract.contract_cron_for_invoice").active, "Génération du module contract remplacée")
+
     def test_un_seul_bail_en_cours_par_bien(self):
         self._lease(self.today).action_activate()
         with self.assertRaises(UserError):

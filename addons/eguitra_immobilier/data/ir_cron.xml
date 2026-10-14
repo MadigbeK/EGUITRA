@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Quittancement automatique : loyers échus facturés et validés chaque nuit, rattrapage compris. -->
+    <record id="cron_rents" model="ir.cron">
+        <field name="name">EGUITRA : quittancement des loyers</field>
+        <field name="model_id" ref="model_eguitra_lease"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_generate_rents()</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+    <!-- La génération du module contract laisserait des brouillons datés du jour, sans rattrapage :
+         le quittancement ci-dessus la remplace (les baux sont les seuls contrats récurrents). -->
+    <record id="contract.contract_cron_for_invoice" model="ir.cron">
+        <field name="active" eval="False"/>
+    </record>
+</odoo>
