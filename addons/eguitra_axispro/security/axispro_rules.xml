@@ -7,6 +7,69 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
+    <!-- Une règle ne s'étend pas aux enregistrements liés : chaque modèle du dossier et de la grille
+         porte la sienne, sans quoi un profil direction d'une autre société lirait pièces, revues et
+         grilles du cabinet par leur identifiant. -->
+    <record id="rule_evaluation_company" model="ir.rule">
+        <field name="name">Évaluations : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_evaluation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_document_company" model="ir.rule">
+        <field name="name">Data room : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_document"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_message_company" model="ir.rule">
+        <field name="name">Échanges : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_message"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_review_company" model="ir.rule">
+        <field name="name">Comités : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_review"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_timesheet_company" model="ir.rule">
+        <field name="name">Temps passés : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_timesheet"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_policy_company" model="ir.rule">
+        <field name="name">Grilles d'évaluation : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_policy"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_gate_company" model="ir.rule">
+        <field name="name">Étapes de la grille : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_gate"/>
+        <field name="domain_force">[('policy_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_domain_company" model="ir.rule">
+        <field name="name">Domaines de la grille : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_domain"/>
+        <field name="domain_force">[('policy_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_criterion_company" model="ir.rule">
+        <field name="name">Critères de la grille : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_criterion"/>
+        <field name="domain_force">[('policy_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_document_type_company" model="ir.rule">
+        <field name="name">Pièces attendues : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_document_type"/>
+        <field name="domain_force">[('policy_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
     <!-- Porteur de projet : uniquement ses dossiers, ses pièces visibles et les échanges non internes. -->
     <record id="rule_dossier_porteur" model="ir.rule">
         <field name="name">Dossiers : le porteur ne voit que les siens</field>

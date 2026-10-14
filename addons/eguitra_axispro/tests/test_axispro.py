@@ -126,6 +126,30 @@ class TestAxispro(ApiCase):
         self.assertNotIn(r2.id, [r["id"] for r in body])
         self.assertEqual(next(r for r in body if r["id"] == r1.id)["dossier"]["id"], dossier.id)
 
+    def test_cloisonnement_entre_societes(self):
+        """Un profil direction sans la société du cabinet ne lit rien du cabinet, même par identifiant."""
+        dossier = self._dossier()
+        attachment = self.env["ir.attachment"].create({"name": "statuts.pdf", "raw": b"%PDF-1.4 statuts"})
+        doc = self.env["axispro.document"].create({"dossier_id": dossier.id, "name": "Statuts",
+                                                   "attachment_id": attachment.id})
+        r1, r2 = self.env["axispro.review"].create([
+            {"dossier_id": dossier.id, "decision": "go", "snapshot": dossier.scoring()} for _ in range(2)
+        ])
+        groupe = self.env.ref("base.main_company")
+        self._create_user("dg.groupe", "direction", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
+        token = self.open_session("dg.groupe", app="axispro")["access_token"]
+        status, _b = self.call("GET", f"/axispro/documents/{doc.id}/download", token=token)
+        self.assertEqual(status, 403, "Pièce de la data room du cabinet")
+        status, _b = self.call("GET", f"/axispro/reviews/compare?a={r1.id}&b={r2.id}", token=token)
+        self.assertEqual(status, 403, "Revues de comité du cabinet")
+        status, policies = self.call("GET", "/axispro/policies", token=token)
+        self.assertEqual((status, policies), (200, []), "Grilles du cabinet")
+        status, _b = self.call("GET", f"/axispro/policies/{self.policy.id}", token=token)
+        self.assertEqual(status, 403)
+        status, consultant = self.call("GET", "/axispro/policies",
+                                       token=self.open_session("consultant", app="axispro")["access_token"])
+        self.assertIn(self.policy.id, [p["id"] for p in consultant], "Le cabinet garde l'accès à sa grille")
+
     def test_portail_du_porteur(self):
         dossier = self._dossier()
         autre = self._dossier()
