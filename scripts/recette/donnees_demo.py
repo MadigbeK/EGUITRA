@@ -13,6 +13,8 @@ Relancé, le script ne crée rien en double.
 
 from datetime import date, timedelta
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import Command
 
 TODAY = date.today()
@@ -120,6 +122,17 @@ if not Property.search([("name", "=like", "%(démo)")]):
         {"name": "Villa Kipé (démo)", "kind": "villa", "area_m2": 320, "acquisition_value": 2_100_000_000},
     ])
     print("Biens immobiliers de démonstration créés.")
+Lease = genv["eguitra.lease"]
+if not Lease.search([("name", "=", "BAIL-DEMO-01")]):
+    bureaux = Property.search([("name", "=", "Bureaux Kaloum, 2e étage (démo)")], limit=1)
+    tenant = partner("Démo - Locataire des bureaux", customer_rank=1)
+    # Prise d'effet il y a deux mois : le quittancement de la nuit facture les échéances passées.
+    lease = Lease.create({
+        "name": "BAIL-DEMO-01", "property_id": bureaux.id, "partner_id": tenant.id, "rent": 25_000_000, "vat": True,
+        "date_start": (TODAY - relativedelta(months=2)).replace(day=1),
+    })
+    lease.action_activate()
+    print("Bail de démonstration activé ; loyers facturés à la prochaine nuit.")
 
 # ─── AxisPro Suite (MB AxisPro Consulting) ────────────────────────────────
 cenv = env(context=dict(env.context, allowed_company_ids=cabinet.ids))
