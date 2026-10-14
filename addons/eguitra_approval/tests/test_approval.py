@@ -15,6 +15,7 @@ class TestApproval(FinanceDataMixin, ApiCase):
         cls.comptable = cls._create_user("comptable", "finance")
         cls.chef_comptable = cls._create_user("chef.comptable", "finance")
         cls.dg = cls._create_user("dg", "direction")
+        cls.chef_chantier = cls._create_user("chef.chantier", "chantiers")
 
     def _bill(self, amount, user=None):
         Move = self.env["account.move"].with_user(user or self.comptable)
@@ -150,3 +151,16 @@ class TestApproval(FinanceDataMixin, ApiCase):
         status, moves = self.call("GET", f"/finance/moves/{bill.id}", token=token_requester)
         self.assertEqual(moves["approval"]["state"], "pending")
         self.assertEqual(moves["approval"]["pending_with"], "Direction générale")
+
+    def test_demandes_visibles_selon_le_profil(self):
+        bill = self._bill(100_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        req = self._request(bill)
+        token = self.open_session("chef.chantier")["access_token"]
+        status, rows = self.call("GET", "/approvals/requests", token=token)
+        self.assertEqual(status, 200, rows)
+        self.assertNotIn(req.id, [r["id"] for r in rows], "Un chef de chantier ne voit pas les achats de la finance")
+        status, _b = self.call("GET", f"/approvals/{req.id}", token=token)
+        self.assertEqual(status, 404)
+        status, rows = self.call("GET", "/approvals/requests", token=self.open_session("dg")["access_token"])
+        self.assertIn(req.id, [r["id"] for r in rows], "La direction voit toutes les demandes de ses sociétés")

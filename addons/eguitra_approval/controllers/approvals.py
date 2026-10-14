@@ -6,11 +6,24 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
 INTERNAL = ("admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet")
+# Profils qui voient toutes les demandes de leurs sociétés ; les autres ne voient que les leurs et
+# celles dont une étape revient à l'un de leurs profils.
+FULL_VIEW = ("admin", "direction", "finance")
+
+
+def _visible(user):
+    profiles = user._eguitra_profiles()
+    domain = [("company_id", "in", user.company_ids.ids)]
+    if not set(profiles) & set(FULL_VIEW):
+        domain += ["|", ("requested_by", "=", user.id), ("step_ids.profile", "in", profiles)]
+    return domain
 
 
 def _req(request_id):
-    rec = request.env["eguitra.approval.request"].sudo().browse(request_id).exists()
-    if not rec or rec.company_id not in request.env.user.company_ids:
+    rec = request.env["eguitra.approval.request"].sudo().search(
+        [("id", "=", request_id)] + _visible(request.env.user), limit=1
+    )
+    if not rec:
         raise ApiError(404, "not_found", "Demande introuvable.")
     return rec
 
@@ -66,7 +79,7 @@ class EguitraApprovals(http.Controller):
 
     @api_route("/approvals/requests", profiles=INTERNAL)
     def requests(self, **kw):
-        domain = [("company_id", "in", request.env.user.company_ids.ids)]
+        domain = _visible(request.env.user)
         if kw.get("state"):
             domain.append(("state", "in", kw["state"].split(",")))
         if kw.get("mine") == "1":
