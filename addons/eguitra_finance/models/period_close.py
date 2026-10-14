@@ -1,0 +1,198 @@
+"""Clôture mensuelle : contrôles bloquants, verrouillage, empreinte de chaînage, réouverture tracée.
+
+Offre, chapitre 3.3 : « contrôles bloquants, registre des clôtures, réouverture contrôlée,
+verrouillage des écritures ». Une période se clôture si tous les contrôles bloquants passent ;
+les écritures jusqu'à la fin du mois sont alors verrouillées (date de verrouillage de l'exercice)
+et chaînées par empreinte (journaux sécurisés du noyau).
+"""
+
+from dateutil.relativedelta import relativedelta
+
+from odoo import api, fields, models
+from odoo.exceptions import UserError
+
+SECURED_JOURNAL_TYPES = ("sale", "purchase", "general", "bank", "cash")
+
+
+class EguitraPeriodClose(models.Model):
+    _name = "eguitra.period.close"
+    _description = "Clôture mensuelle"
+    _order = "company_id, period desc"
+
+    company_id = fields.Many2one("res.company", required=True, index=True)
+    period = fields.Date("Mois", required=True, help="Premier jour du mois clôturé.")
+    state = fields.Selection([("open", "Ouverte"), ("closed", "Clôturée")], default="open", required=True)
+    closed_by = fields.Many2one("res.users", readonly=True)
+    closed_at = fields.Datetime(readonly=True)
+    last_check = fields.Json("Derniers contrôles", readonly=True)
+    event_ids = fields.One2many("eguitra.period.close.event", "close_id", "Historique")
+
+    _period_unique = models.Constraint("unique(company_id, period)", "Une seule clôture par mois et par société.")
+
+    @api.model
+    def _get(self, company, period):
+        period = period.replace(day=1)
+        record = self.sudo().search([("company_id", "=", company.id), ("period", "=", period)], limit=1)
+        return record or self.sudo().create({"company_id": company.id, "period": period})
+
+    def _bounds(self):
+        self.ensure_one()
+        return self.period, self.period + relativedelta(months=1, days=-1)
+
+    # ─── Contrôles ────────────────────────────────────────────────────────
+
+    def _check(self, code, label, ok, blocking, detail=None, count=None):
+        return {
+            "code": code,
+            "label": label,
+            "status": "ok" if ok else ("blocking" if blocking else "warning"),
+            "detail": None if ok else detail,
+            "count": count,
+        }
+
+    def _run_controls(self):
+        """Contrôles de la période ; les modules métier en ajoutent par héritage."""
+        self.ensure_one()
+        company = self.company_id
+        start, end = self._bounds()
+        self.env.flush_all()
+        cr = self.env.cr
+        checks = []
+
+        # Les mois se clôturent dans l'ordre, depuis le premier mois comportant des écritures.
+        first_move = self.env["account.move"].sudo().search(
+            [("company_id", "=", company.id), ("state", "=", "posted")], order="date asc", limit=1
+        )
+        closed = set(self.sudo().search([
+            ("company_id", "=", company.id), ("state", "=", "closed"), ("period", "<", start),
+        ]).mapped("period"))
+        missing = []
+        month = first_move.date.replace(day=1) if first_move else start
+        while month < start:
+            if month not in closed:
+                missing.append(month)
+            month += relativedelta(months=1)
+        checks.append(self._check(
+            "previous_closed", "Mois précédents clôturés", not missing, True,
+            "À clôturer d'abord : " + ", ".join(f"{m:%m/%Y}" for m in missing[:6]), len(missing),
+        ))
+
+        drafts = self.env["account.move"].sudo().search_count([
+            ("company_id", "=", company.id), ("state", "=", "draft"), ("date", "<=", end),
+        ])
+        checks.append(self._check("draft_moves", "Aucune pièce en brouillon", not drafts, True,
+                                  f"{drafts} pièce(s) en brouillon jusqu'au {end:%d/%m/%Y}.", drafts))
+
+        cr.execute(
+            """SELECT COUNT(*) FROM (
+                 SELECT aml.move_id FROM account_move_line aml
+                  WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date BETWEEN %s AND %s
+               GROUP BY aml.move_id HAVING ABS(SUM(aml.debit) - SUM(aml.credit)) > 0.01) t""",
+            (company.id, start, end),
+        )
+        unbalanced = cr.fetchone()[0]
+        checks.append(self._check("move_balance", "Équilibre débit et crédit de chaque pièce", not unbalanced, True,
+                                  f"{unbalanced} pièce(s) déséquilibrée(s).", unbalanced))
+
+        cr.execute(
+            """SELECT COALESCE(SUM(debit), 0), COALESCE(SUM(credit), 0) FROM account_move_line
+                WHERE company_id = %s AND parent_state = 'posted' AND date <= %s""",
+            (company.id, end),
+        )
+        debit, credit = (float(v) for v in cr.fetchone())
+        checks.append(self._check("ledger_balance", "Équilibre général débit et crédit", abs(debit - credit) < 0.5, True,
+                                  f"Écart de {debit - credit:,.0f} GNF.".replace(",", " ")))
+
+        metrics = self.env["eguitra.finance.metrics"]
+        transit = metrics._sum_balance(company, ["585"], None, end)
+        checks.append(self._check("transit_account", "Compte de passage 585 soldé", abs(transit) < 0.5, True,
+                                  f"Solde de {transit:,.0f} GNF au {end:%d/%m/%Y}.".replace(",", " ")))
+
+        sheet = self.env["eguitra.syscohada"].balance_sheet(company, end)
+        checks.append(self._check("balance_sheet", "Équilibre actif et passif", abs(sheet["difference"]) < 1, True,
+                                  f"Écart de {sheet['difference']:,.0f} GNF.".replace(",", " ")))
+
+        unreconciled = self.env["account.bank.statement.line"].sudo().search_count([
+            ("company_id", "=", company.id), ("is_reconciled", "=", False), ("date", "<=", end),
+        ])
+        checks.append(self._check("bank_reconciliation", "Relevés bancaires rapprochés", not unreconciled, True,
+                                  f"{unreconciled} ligne(s) de relevé à rapprocher.", unreconciled))
+
+        unmapped = sheet["unmapped_accounts"]
+        checks.append(self._check("statement_mapping", "Tous les comptes figurent dans les états", not unmapped, False,
+                                  "Comptes hors états SYSCOHADA : " + ", ".join(sorted(unmapped)[:10]), len(unmapped)))
+
+        blocking_alerts = [
+            a for a in self.env["eguitra.alert.threshold"]._company_alerts(company, end + relativedelta(days=1))
+            if a["severity"] == "blocking"
+        ]
+        checks.append(self._check("blocking_alerts", "Aucune alerte bloquante active", not blocking_alerts, True,
+                                  "; ".join(a["title"] for a in blocking_alerts), len(blocking_alerts)))
+        return checks
+
+    def action_check(self):
+        self.ensure_one()
+        checks = self._run_controls()
+        self.sudo().last_check = {"date": fields.Datetime.now().isoformat(), "checks": checks}
+        return checks
+
+    def action_close(self):
+        self.ensure_one()
+        if self.state == "closed":
+            raise UserError("Ce mois est déjà clôturé.")
+        checks = self.action_check()
+        blocking = [c for c in checks if c["status"] == "blocking"]
+        if blocking:
+            raise UserError("Clôture refusée : " + " ; ".join(f"{c['label']} ({c['detail']})" for c in blocking))
+        company = self.company_id.sudo()
+        _start, end = self._bounds()
+        journals = self.env["account.journal"].sudo().search([
+            ("company_id", "=", company.id), ("type", "in", SECURED_JOURNAL_TYPES), ("restrict_mode_hash_table", "=", False),
+        ])
+        journals.write({"restrict_mode_hash_table": True})
+        if not company.fiscalyear_lock_date or company.fiscalyear_lock_date < end:
+            company.fiscalyear_lock_date = end
+        wizard = self.env["account.secure.entries.wizard"].sudo().create({"company_id": company.id, "hash_date": end})
+        wizard.action_secure_entries()
+        self.sudo().write({"state": "closed", "closed_by": self.env.user.id, "closed_at": fields.Datetime.now()})
+        self._event("close")
+        return True
+
+    def action_reopen(self, reason):
+        self.ensure_one()
+        if self.state != "closed":
+            raise UserError("Ce mois n'est pas clôturé.")
+        if not (reason or "").strip():
+            raise UserError("Le motif de réouverture est obligatoire.")
+        company = self.company_id.sudo()
+        start, end = self._bounds()
+        later = self.sudo().search([("company_id", "=", company.id), ("period", ">", start), ("state", "=", "closed")])
+        if later:
+            raise UserError("Rouvrez d'abord les mois suivants, du plus récent au plus ancien.")
+        if company.hard_lock_date and company.hard_lock_date >= start:
+            raise UserError("Ce mois appartient à un exercice définitivement clôturé.")
+        previous_end = start - relativedelta(days=1)
+        previous_closed = self.sudo().search_count([
+            ("company_id", "=", company.id), ("period", "=", previous_end.replace(day=1)), ("state", "=", "closed"),
+        ])
+        company.fiscalyear_lock_date = previous_end if previous_closed else False
+        self.sudo().write({"state": "open"})
+        self._event("reopen", reason)
+        return True
+
+    def _event(self, action, reason=None):
+        self.env["eguitra.period.close.event"].sudo().create({
+            "close_id": self.id, "action": action, "user_id": self.env.user.id, "reason": reason,
+        })
+
+
+class EguitraPeriodCloseEvent(models.Model):
+    _name = "eguitra.period.close.event"
+    _description = "Événement du registre des clôtures"
+    _order = "id desc"
+
+    close_id = fields.Many2one("eguitra.period.close", required=True, ondelete="cascade", index=True)
+    action = fields.Selection([("close", "Clôture"), ("reopen", "Réouverture")], required=True)
+    user_id = fields.Many2one("res.users", required=True)
+    date = fields.Datetime(default=fields.Datetime.now, required=True)
+    reason = fields.Text("Motif")

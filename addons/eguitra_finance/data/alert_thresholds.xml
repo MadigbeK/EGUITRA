@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Seuils par défaut de chaque société, à ajuster dans l'écran d'administration. -->
+    <function model="eguitra.alert.threshold" name="ensure_defaults_all"/>
+</odoo>

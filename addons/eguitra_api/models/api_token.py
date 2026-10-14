@@ -5,6 +5,10 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
+# Délai pendant lequel un jeton de renouvellement déjà remplacé est encore accepté : plusieurs
+# appels parallèles d'un même écran renouvellent la session en même temps.
+REUSE_GRACE_SECONDS = 30
+
 # Durées de vie en secondes, surchargeables par paramètre système eguitra_api.ttl_<type>[_<app>].
 DEFAULT_TTL = {
     "access": 15 * 60,
@@ -44,6 +48,7 @@ class EguitraApiToken(models.Model):
     ip = fields.Char()
     user_agent = fields.Char()
     last_used_at = fields.Datetime()
+    rotated_at = fields.Datetime(help="Date de remplacement d'un jeton de renouvellement par le suivant.")
 
     _token_hash_unique = models.Constraint("unique(token_hash)", "Jeton déjà existant.")
 

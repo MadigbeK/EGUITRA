@@ -1,0 +1,24 @@
+{
+    "name": "EGUITRA - Finance",
+    "summary": "Tableau de bord du dirigeant, pièces, tiers, trésorerie, états SYSCOHADA, clôtures, dette, budget",
+    "version": "19.0.1.0.0",
+    "category": "Accounting/Accounting",
+    "author": "E-VOLUTION XP",
+    "website": "https://e-volutionxp.com",
+    "license": "LGPL-3",
+    "depends": [
+        "eguitra_api",
+        "account_asset_management",
+        "account_reconcile_oca",
+        "account_statement_import_file",
+        "mis_builder_budget",
+    ],
+    "external_dependencies": {"python": ["xlsxwriter"]},
+    "data": [
+        "security/ir.model.access.csv",
+        "security/finance_rules.xml",
+        "data/alert_thresholds.xml",
+    ],
+    "post_init_hook": "post_init_hook",
+    "installable": True,
+}

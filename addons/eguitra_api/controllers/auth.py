@@ -4,10 +4,11 @@ import base64
 import os
 from urllib.parse import quote
 
-from odoo import http
+from odoo import fields, http
 from odoo.exceptions import AccessDenied
 from odoo.http import request
 
+from ..models.api_token import REUSE_GRACE_SECONDS
 from .framework import ApiError, api_route, client_ip, json_response, read_json, require, sudo_env
 
 MAX_MFA_ATTEMPTS = 5
@@ -144,21 +145,27 @@ class EguitraAuthController(http.Controller):
         token = env["eguitra.api.token"]._find(raw, "refresh")
         if not token:
             raise ApiError(401, "invalid_token", "Session expirée.")
+        now = fields.Datetime.now()
         if token.revoked:
-            # Jeton déjà utilisé : vol probable, toute la lignée est révoquée (et la révocation conservée).
-            token._revoke_family()
-            return _refusal(401, "token_reused", "Session révoquée par sécurité. Reconnectez-vous.")
-        if not token._is_valid():
+            in_grace = (
+                token.rotated_at
+                and (now - token.rotated_at).total_seconds() <= REUSE_GRACE_SECONDS
+                and token.expires_at > now
+            )
+            if not in_grace:
+                # Jeton déjà utilisé hors du délai de grâce : vol probable, la lignée est révoquée.
+                token._revoke_family()
+                return _refusal(401, "token_reused", "Session révoquée par sécurité. Reconnectez-vous.")
+        elif not token._is_valid():
             raise ApiError(401, "invalid_token", "Session expirée.")
         user = token.user_id
+        if not user.active:
+            raise ApiError(401, "invalid_token", "Session expirée.")
         if token.app not in user._eguitra_apps():
             token._revoke_family()
             return _refusal(403, "app_forbidden", "Votre profil ne donne plus accès à cette application.")
-        token.revoked = True
-        # Les jetons d'accès de la lignée sont remplacés par le nouveau.
-        env["eguitra.api.token"].search([
-            ("family", "=", token.family), ("kind", "=", "access"), ("revoked", "=", False),
-        ]).write({"revoked": True})
+        if not token.revoked:
+            token.write({"revoked": True, "rotated_at": now})
         return _session_payload(env, user, token.app, family=token.family)
 
     @api_route("/auth/logout", methods=("POST",))
@@ -170,7 +177,9 @@ class EguitraAuthController(http.Controller):
 
     @api_route("/auth/me", methods=("GET",))
     def me(self, **_kw):
-        return request.env.user._eguitra_public()
+        data = request.env.user._eguitra_public()
+        data["company_id"] = request.env.company.id  # société de travail (en-tête X-Eguitra-Company)
+        return data
 
     @api_route("/auth/password", methods=("POST",))
     def change_password(self, **_kw):

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from odoo.tests import tagged
 
 from .common import PASSWORD, ApiCase
@@ -77,18 +79,23 @@ class TestAuth(ApiCase):
         self.assertEqual(status, 200, nouvelle)
         self.assertNotEqual(nouvelle["access_token"], session["access_token"])
 
-        # L'ancien jeton d'accès est remplacé.
-        status, _b = self.call("GET", "/auth/me", token=session["access_token"])
-        self.assertEqual(status, 401)
         status, _b = self.call("GET", "/auth/me", token=nouvelle["access_token"])
         self.assertEqual(status, 200)
 
-        # Réutiliser l'ancien jeton de renouvellement révoque toute la lignée.
+        # Appels parallèles : l'ancien jeton reste accepté pendant le délai de grâce.
+        status, parallele = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200, parallele)
+
+        # Hors délai de grâce, la réutilisation révoque toute la lignée.
+        ancien = self.env["eguitra.api.token"]._find(session["refresh_token"], "refresh")
+        ancien.rotated_at = ancien.rotated_at - timedelta(minutes=5)
         status, body = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
         self.assertEqual(status, 401)
         self.assertEqual(body["error"], "token_reused")
         status, _b = self.call("GET", "/auth/me", token=nouvelle["access_token"])
         self.assertEqual(status, 401, "La session volée doit être fermée")
+        status, _b = self.call("POST", "/auth/refresh", {"refresh_token": parallele["refresh_token"]})
+        self.assertEqual(status, 401)
 
     def test_fin_de_session(self):
         session = self.open_session("fatou")

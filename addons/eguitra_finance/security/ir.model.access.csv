@@ -1,0 +1,12 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_alert_threshold_read,seuils lecture,model_eguitra_alert_threshold,eguitra_base.group_profile_direction,1,0,0,0
+access_alert_threshold_finance,seuils finance,model_eguitra_alert_threshold,eguitra_base.group_profile_finance,1,0,0,0
+access_alert_threshold_admin,seuils administration,model_eguitra_alert_threshold,eguitra_base.group_profile_admin,1,1,1,1
+access_loan_direction,financements lecture,model_eguitra_loan,eguitra_base.group_profile_direction,1,0,0,0
+access_loan_finance,financements finance,model_eguitra_loan,eguitra_base.group_profile_finance,1,1,1,1
+access_loan_line_direction,échéances lecture,model_eguitra_loan_line,eguitra_base.group_profile_direction,1,0,0,0
+access_loan_line_finance,échéances finance,model_eguitra_loan_line,eguitra_base.group_profile_finance,1,1,1,1
+access_period_close_direction,clôtures lecture,model_eguitra_period_close,eguitra_base.group_profile_direction,1,0,0,0
+access_period_close_finance,clôtures finance,model_eguitra_period_close,eguitra_base.group_profile_finance,1,1,1,0
+access_period_close_event_direction,registre lecture,model_eguitra_period_close_event,eguitra_base.group_profile_direction,1,0,0,0
+access_period_close_event_finance,registre finance,model_eguitra_period_close_event,eguitra_base.group_profile_finance,1,0,1,0

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Chaque utilisateur ne voit que les données des sociétés auxquelles il a accès. -->
+    <record id="rule_alert_threshold_company" model="ir.rule">
+        <field name="name">Seuils d'alerte : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_alert_threshold"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_loan_company" model="ir.rule">
+        <field name="name">Financements : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_loan"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_loan_line_company" model="ir.rule">
+        <field name="name">Échéances : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_loan_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_period_close_company" model="ir.rule">
+        <field name="name">Clôtures : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_period_close"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>
