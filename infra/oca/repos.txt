@@ -1,0 +1,15 @@
+# Dépôts OCA utilisés par la plateforme, branche 19.0.
+# Commits épinglés dans infra/oca/lock.txt, mis à jour par : oca/fetch.sh --update
+# Les modules retenus par l'offre sont listés dans infra/oca/modules.txt.
+account-reconcile
+bank-statement-import
+account-financial-tools
+mis-builder
+account-financial-reporting
+server-tools
+contract
+currency
+dms
+reporting-engine
+server-ux
+web

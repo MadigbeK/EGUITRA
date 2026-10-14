@@ -1,0 +1,13 @@
+# Commits OCA épinglés (branche 19.0). Généré par oca/fetch.sh.
+account-reconcile 8fc48a4beff3203241c0f61c4d3bc15631f75a4d
+bank-statement-import 65316c38d7a5586456bc751d8939b84f1cf0bc2e
+account-financial-tools ddcabb93373382148826f97bf9935424d03ddea5
+mis-builder 7d519f31e1a553d7a5499571a9146f7e3ea49ea4
+account-financial-reporting 0078bc03f234d1caa8b9f40324678ce9dbed2a72
+server-tools ff085d56f10e5d1dc68ef85482eb3fc34a5b62d2
+contract 8cd0f4d29b520333c43848a140153c307bca757a
+currency 2e53026930455187b7acbe1961ab0b524f29dbd6
+dms 1a3098d1d6bbce6a38d06d9f361db319e7858fa3
+reporting-engine b9e8c6cdd2d106614eddaf81bd78f487ae35db45
+server-ux 2e040168c4ed27ac6e732c68516ca47781eb1a0f
+web 38f20be30764750a76c868d199c1d9f390bd49ec

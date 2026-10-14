@@ -1,0 +1,26 @@
+; Configuration du noyau, rendue par infra/up.sh (envsubst) dans infra/odoo/odoo.conf.
+; Ne pas éditer odoo.conf à la main : il contient des secrets et n'est pas versionné.
+[options]
+db_host = db
+db_port = 5432
+db_user = ${POSTGRES_USER}
+db_password = ${POSTGRES_PASSWORD}
+admin_passwd = ${ODOO_ADMIN_PASSWD}
+addons_path = /mnt/extra-addons,${OCA_ADDONS_PATH}
+data_dir = /var/lib/odoo
+
+; Le gestionnaire de bases n'est jamais exposé ; chaque base est servie par son nom d'hôte.
+list_db = False
+dbfilter = ${ODOO_DBFILTER}
+proxy_mode = True
+
+; Dimensionnement pour 6 vCPU / 12 Go, production et recette sur le même serveur.
+workers = 4
+max_cron_threads = 1
+limit_memory_soft = 1073741824
+limit_memory_hard = 1610612736
+limit_time_cpu = 600
+limit_time_real = 1200
+
+log_level = info
+without_demo = True

@@ -1,0 +1,56 @@
+# Plateforme EGUITRA : noyau Odoo 19 + PostgreSQL 16.
+# Lancement : infra/up.sh (rend odoo.conf, récupère OCA, construit, démarre).
+# Aucun port n'est publié sur l'extérieur : Docker contourne le pare-feu pour les ports
+# publiés, donc le noyau n'écoute que sur 127.0.0.1 (accès par tunnel SSH ou par le proxy).
+name: eguitra
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=4GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=100
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  odoo:
+    build:
+      context: .
+      dockerfile: odoo/Dockerfile
+    image: eguitra/odoo:19.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
+    ports:
+      - "127.0.0.1:8069:8069"
+      - "127.0.0.1:8072:8072"
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./odoo/odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./oca-src:/mnt/oca:ro
+      - ../addons:/mnt/extra-addons:ro
+
+volumes:
+  db-data:
+  odoo-data:

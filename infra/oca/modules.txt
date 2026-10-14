@@ -1,0 +1,13 @@
+# Les dix modules OCA retenus (offre, chapitre 4), installés en recette.
+# Les trois modules d'approbation (base_tier_validation et ses deux modules de glu)
+# n'existent pas en 19.0 : portage ou moteur spécifique, voir docs/projet/ETAT.md.
+account_reconcile_oca
+account_statement_import_file
+account_asset_management
+mis_builder
+mis_builder_budget
+account_financial_report
+auditlog
+contract
+currency_rate_update
+dms
