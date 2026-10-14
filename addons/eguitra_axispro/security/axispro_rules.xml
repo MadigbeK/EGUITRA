@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cabinet et direction : sociétés autorisées. -->
+    <record id="rule_dossier_company" model="ir.rule">
+        <field name="name">Dossiers : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_dossier"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <!-- Porteur de projet : uniquement ses dossiers, ses pièces visibles et les échanges non internes. -->
+    <record id="rule_dossier_porteur" model="ir.rule">
+        <field name="name">Dossiers : le porteur ne voit que les siens</field>
+        <field name="model_id" ref="model_axispro_dossier"/>
+        <field name="domain_force">[('portal_user_ids', 'in', user.id)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_porteur'))]"/>
+    </record>
+    <record id="rule_document_porteur" model="ir.rule">
+        <field name="name">Data room : le porteur ne voit que ses pièces visibles</field>
+        <field name="model_id" ref="model_axispro_document"/>
+        <field name="domain_force">[('dossier_id.portal_user_ids', 'in', user.id), ('portal_visible', '=', True)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_porteur'))]"/>
+    </record>
+    <record id="rule_message_porteur" model="ir.rule">
+        <field name="name">Échanges : le porteur ne voit pas les notes internes</field>
+        <field name="model_id" ref="model_axispro_message"/>
+        <field name="domain_force">[('dossier_id.portal_user_ids', 'in', user.id), ('internal', '=', False)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_porteur'))]"/>
+    </record>
+</odoo>

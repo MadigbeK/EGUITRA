@@ -1,0 +1,26 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_policy_cabinet,politique cabinet,model_axispro_policy,eguitra_base.group_profile_cabinet,1,1,1,1
+access_policy_direction,politique direction,model_axispro_policy,eguitra_base.group_profile_direction,1,0,0,0
+access_gate_cabinet,gates cabinet,model_axispro_gate,eguitra_base.group_profile_cabinet,1,1,1,1
+access_gate_direction,gates direction,model_axispro_gate,eguitra_base.group_profile_direction,1,0,0,0
+access_domain_cabinet,domaines cabinet,model_axispro_domain,eguitra_base.group_profile_cabinet,1,1,1,1
+access_domain_direction,domaines direction,model_axispro_domain,eguitra_base.group_profile_direction,1,0,0,0
+access_criterion_cabinet,critères cabinet,model_axispro_criterion,eguitra_base.group_profile_cabinet,1,1,1,1
+access_criterion_direction,critères direction,model_axispro_criterion,eguitra_base.group_profile_direction,1,0,0,0
+access_doctype_cabinet,pièces standard cabinet,model_axispro_document_type,eguitra_base.group_profile_cabinet,1,1,1,1
+access_doctype_direction,pièces standard direction,model_axispro_document_type,eguitra_base.group_profile_direction,1,0,0,0
+access_dossier_cabinet,dossiers cabinet,model_axispro_dossier,eguitra_base.group_profile_cabinet,1,1,1,0
+access_dossier_direction,dossiers direction,model_axispro_dossier,eguitra_base.group_profile_direction,1,0,0,0
+access_dossier_porteur,dossiers porteur,model_axispro_dossier,eguitra_base.group_profile_porteur,1,0,0,0
+access_evaluation_cabinet,évaluations cabinet,model_axispro_evaluation,eguitra_base.group_profile_cabinet,1,1,1,0
+access_evaluation_direction,évaluations direction,model_axispro_evaluation,eguitra_base.group_profile_direction,1,0,0,0
+access_document_cabinet,data room cabinet,model_axispro_document,eguitra_base.group_profile_cabinet,1,1,1,1
+access_document_direction,data room direction,model_axispro_document,eguitra_base.group_profile_direction,1,0,0,0
+access_document_porteur,data room porteur,model_axispro_document,eguitra_base.group_profile_porteur,1,0,1,0
+access_message_cabinet,échanges cabinet,model_axispro_message,eguitra_base.group_profile_cabinet,1,1,1,0
+access_message_direction,échanges direction,model_axispro_message,eguitra_base.group_profile_direction,1,0,0,0
+access_message_porteur,échanges porteur,model_axispro_message,eguitra_base.group_profile_porteur,1,0,1,0
+access_review_cabinet,comités cabinet,model_axispro_review,eguitra_base.group_profile_cabinet,1,1,1,1
+access_review_direction,comités direction,model_axispro_review,eguitra_base.group_profile_direction,1,0,0,0
+access_timesheet_cabinet,temps cabinet,model_axispro_timesheet,eguitra_base.group_profile_cabinet,1,1,1,1
+access_timesheet_direction,temps direction,model_axispro_timesheet,eguitra_base.group_profile_direction,1,0,0,0
