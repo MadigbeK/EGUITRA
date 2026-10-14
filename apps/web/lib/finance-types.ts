@@ -159,8 +159,9 @@ export interface Partner {
   city: string | null;
   customer: boolean;
   supplier: boolean;
-  receivable: number;
-  payable: number;
+  /** Soldes : null pour les profils hors finance et direction. */
+  receivable: number | null;
+  payable: number | null;
   credit_limit: number | null;
 }
 

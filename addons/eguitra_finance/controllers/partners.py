@@ -8,6 +8,13 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from .common import FIN_READ, FIN_WRITE, as_float, move_summary, today
 
 FIELDS = ("name", "vat", "phone", "email", "street", "city", "comment")
+# Les métiers et le cabinet choisissent ou créent un tiers (maître d'ouvrage, locataire, client d'une
+# rotation, promoteur) sans voir ses soldes, réservés à la finance et à la direction.
+PICKERS = ("exploitation", "chantiers", "immobilier", "cabinet")
+
+
+def _balances_visible():
+    return bool(set(request.env.user._eguitra_profiles()) & set(FIN_READ))
 
 
 def _partner(partner_id):
@@ -17,8 +24,8 @@ def _partner(partner_id):
     return partner
 
 
-def _row(p):
-    return {
+def _row(p, balances=True):
+    row = {
         "id": p.id,
         "name": p.name,
         "is_company": p.is_company,
@@ -28,14 +35,21 @@ def _row(p):
         "city": p.city or None,
         "customer": p.customer_rank > 0,
         "supplier": p.supplier_rank > 0,
-        "receivable": p.credit,
-        "payable": p.debit,
-        "credit_limit": p.credit_limit if p.use_partner_credit_limit else None,
+        "receivable": None,
+        "payable": None,
+        "credit_limit": None,
     }
+    if balances:  # champs du noyau réservés aux groupes comptables
+        row.update({
+            "receivable": p.credit,
+            "payable": p.debit,
+            "credit_limit": p.credit_limit if p.use_partner_credit_limit else None,
+        })
+    return row
 
 
 class EguitraFinancePartners(http.Controller):
-    @api_route("/finance/partners", profiles=FIN_READ + ("exploitation", "chantiers", "immobilier"))
+    @api_route("/finance/partners", profiles=FIN_READ + PICKERS)
     def list_partners(self, **kw):
         domain = [("parent_id", "=", False), ("active", "=", True)]
         if kw.get("kind") == "customer":
@@ -48,7 +62,8 @@ class EguitraFinancePartners(http.Controller):
         Partner = request.env["res.partner"]
         partners = Partner.search(domain, limit=int_arg(kw, "limit", 100, 1, 1000), offset=int_arg(kw, "offset", 0, 0),
                                   order="name")
-        return {"items": [_row(p) for p in partners], "total_count": Partner.search_count(domain)}
+        balances = _balances_visible()
+        return {"items": [_row(p, balances) for p in partners], "total_count": Partner.search_count(domain)}
 
     @api_route("/finance/partners/<int:partner_id>", profiles=FIN_READ)
     def get_partner(self, partner_id, **_kw):
@@ -104,14 +119,20 @@ class EguitraFinancePartners(http.Controller):
             values["credit_limit"] = as_float(limit, "credit_limit") if limit else 0.0
         return values
 
-    @api_route("/finance/partners", methods=("POST",), profiles=FIN_WRITE + ("exploitation",))
+    @api_route("/finance/partners", methods=("POST",), profiles=FIN_WRITE + PICKERS)
     def create_partner(self, **_kw):
         data = read_json()
         require(data, "name")
         values = self._values(data)
         values.setdefault("is_company", True)
-        partner = request.env["res.partner"].create(values)
-        return _row(partner)
+        finance = bool(set(request.env.user._eguitra_profiles()) & set(FIN_WRITE))
+        if not finance:  # la limite de crédit relève de la finance
+            values.pop("credit_limit", None)
+            values.pop("use_partner_credit_limit", None)
+        # Création réservée dans le noyau au gestionnaire des contacts : la route borne les profils et
+        # les champs (FIELDS), l'auteur reste l'utilisateur.
+        partner = request.env["res.partner"].sudo().create(values)
+        return _row(partner.sudo(False), _balances_visible())
 
     @api_route("/finance/partners/<int:partner_id>", methods=("PATCH",), profiles=FIN_WRITE)
     def update_partner(self, partner_id, **_kw):

@@ -25,6 +25,28 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, _b = self.call("GET", "/finance/dashboard", token=token)
         self.assertEqual(status, 403)
 
+    def test_tiers_choisis_par_les_metiers_et_le_cabinet(self):
+        """Sélecteur de tiers des chantiers, de l'immobilier, du parc et du cabinet : liste et création,
+        sans les soldes réservés à la finance."""
+        for login, profile, app in (("chef.chantier", "chantiers", "finance"), ("gestion.immo", "immobilier", "finance"),
+                                    ("ibrahima", "exploitation", "finance"), ("consultant", "cabinet", "axispro")):
+            if login != "ibrahima":
+                self._create_user(login, profile)
+            token = self.open_session(login, app=app)["access_token"]
+            status, body = self.call("GET", "/finance/partners?limit=5", token=token)
+            self.assertEqual(status, 200, (profile, body))
+            self.assertTrue(body["items"])
+            self.assertIsNone(body["items"][0]["receivable"], "Soldes réservés à la finance")
+            status, created = self.call("POST", "/finance/partners", {"name": f"Tiers de {login}", "customer": True,
+                                                                     "credit_limit": 1_000_000}, token=token)
+            self.assertEqual(status, 200, (profile, created))
+            partner = self.env["res.partner"].browse(created["id"])
+            self.assertFalse(partner.use_partner_credit_limit, "Limite de crédit fixée par la finance seule")
+            self.assertEqual(partner.create_uid.login, login, "L'auteur de la fiche reste l'utilisateur")
+        status, body = self.call("GET", "/finance/partners?limit=5", token=self.token)
+        self.assertIn("receivable", body["items"][0])
+        self.assertIsNotNone(body["items"][0]["receivable"], "La finance voit les soldes")
+
     def test_facture_de_vente_complete(self):
         status, move = self.call("POST", "/finance/moves", {
             "move_type": "out_invoice",
