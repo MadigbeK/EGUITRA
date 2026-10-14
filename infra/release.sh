@@ -81,6 +81,15 @@ echo "Version $id : code de la recette ($version)."
 # 1. Images construites depuis le code de la recette, puis code figé (sans historique git ; les
 #    fichiers OCA inchangés sont partagés avec la version précédente).
 docker compose build odoo-recette web-recette
+# La recette tourne sur les images qui viennent d'être construites : ce qui part en production est
+# exactement ce qui tourne en recette.
+for svc in odoo-recette web-recette; do
+  cid=$(docker compose ps -q "$svc")
+  [ -n "$cid" ] || continue
+  if [ "$(docker image inspect -f '{{.Id}}' "eguitra/${svc%-recette}:recette")" != "$(docker inspect -f '{{.Image}}' "$cid")" ]; then
+    docker compose up -d --force-recreate --no-deps "$svc"
+  fi
+done
 mkdir -p "$dir"
 rsync -a --exclude __pycache__ ../addons/ "$dir/addons/"
 if [ -n "$prev" ]; then
