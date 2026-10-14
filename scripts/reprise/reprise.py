@@ -5,6 +5,8 @@ Lancé par scripts/reprise/reprise.sh, qui monte le dossier des fichiers en /rep
 s'ils sont présents, dans cet ordre (modèles dans scripts/reprise/modeles/) :
   tiers.csv            clients, fournisseurs, prêteurs
   soldes_ouverture.csv une écriture d'à-nouveaux équilibrée, à la date d'ouverture
+  ecritures.csv        écritures de l'exercice, pièce par pièce, puis lettrage des comptes de tiers
+  budget.csv           budget mensuel par compte
   rotations.csv        rotations 2026 (facturées dans l'ancien système ou à facturer)
 
 Sans REPRISE_APPLIQUER=1, rien n'est enregistré : le script contrôle tout et affiche ce qu'il ferait.
@@ -161,6 +163,122 @@ if data is not None:
         })
         move.action_post()
         notes.append(f"Soldes d'ouverture : {len(lines)} lignes, {gnf(debit)} GNF au débit et au crédit, au {OPENING}.")
+
+# ─── Écritures de l'exercice ──────────────────────────────────────────────
+data = rows("ecritures.csv")
+if data is not None:
+    Account, Journal = env["account.account"], env["account.journal"]
+    journals = {j.code.upper(): j for j in Journal.search([("company_id", "=", company.id)])}
+    plan = env.ref("eguitra_base.analytic_plan_activite", raise_if_not_found=False)
+    activities = {a.name.lower(): a for a in env["account.analytic.account"].search(
+        [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])])} if plan else {}
+    pieces = {}
+    for line, r in data:
+        where = f"ecritures.csv ligne {line}"
+        key = (r.get("journal", "").upper(), r.get("piece", ""))
+        if not all(key):
+            errors.append(f"{where} : journal et numéro de pièce obligatoires.")
+            continue
+        pieces.setdefault(key, []).append((where, r))
+    created = skipped = 0
+    for (journal_code, piece), lines in pieces.items():
+        journal = journals.get(journal_code)
+        if not journal:
+            errors.append(f"{lines[0][0]} : journal « {journal_code} » inconnu "
+                          f"(journaux : {', '.join(sorted(journals))}).")
+            continue
+        if journal_code == "AN":
+            errors.append(f"{lines[0][0]} : les à-nouveaux passent par soldes_ouverture.csv.")
+            continue
+        ref = f"Reprise {piece}"
+        if env["account.move"].search_count([("journal_id", "=", journal.id), ("ref", "=", ref)]):
+            skipped += 1
+            continue
+        days = {day(r.get("date"), where) for where, r in lines}
+        if None in days or len(days) != 1:
+            errors.append(f"{lines[0][0]} : pièce {piece} sans date unique et lisible.")
+            continue
+        move_lines, debit, credit = [], 0.0, 0.0
+        for where, r in lines:
+            account = Account.search([("code", "=", r.get("compte", "")), ("company_ids", "in", company.ids)], limit=1)
+            if not account:
+                errors.append(f"{where} : compte « {r.get('compte')} » absent du plan de comptes.")
+                continue
+            partner = Partner
+            if r.get("tiers"):
+                partner = find_partner(r["tiers"])
+                if not partner:
+                    errors.append(f"{where} : tiers « {r['tiers']} » inconnu (le déclarer dans tiers.csv).")
+                    continue
+            values = {"account_id": account.id, "partner_id": partner.id or False, "name": r.get("libelle") or piece,
+                      "debit": number(r.get("debit"), where), "credit": number(r.get("credit"), where)}
+            if r.get("activite") and plan:
+                activity = activities.get(r["activite"].lower())
+                if not activity:
+                    activity = activities[r["activite"].lower()] = env["account.analytic.account"].create(
+                        {"name": r["activite"], "plan_id": plan.id, "company_id": company.id})
+                    notes.append(f"{where} : activité « {r['activite']} » ajoutée au plan analytique.")
+                values["analytic_distribution"] = {str(activity.id): 100}
+            debit += values["debit"]
+            credit += values["credit"]
+            move_lines.append(Command.create(values))
+        if round(debit - credit, 2):
+            errors.append(f"{lines[0][0]} : pièce {piece} déséquilibrée (débit {gnf(debit)}, crédit {gnf(credit)}).")
+            continue
+        if len(move_lines) != len(lines):
+            continue
+        try:
+            with env.cr.savepoint():
+                env["account.move"].create({"move_type": "entry", "journal_id": journal.id, "date": days.pop(),
+                                            "ref": ref, "line_ids": move_lines}).action_post()
+                created += 1
+        except (UserError, ValidationError) as e:
+            errors.append(f"{lines[0][0]} : pièce {piece} refusée : {e.args[0]}")
+    # Lettrage des comptes de tiers : factures et règlements d'un même tiers se compensent.
+    lettered = 0
+    if created and not errors:
+        groups = env["account.move.line"]._read_group(
+            [("company_id", "=", company.id), ("parent_state", "=", "posted"), ("reconciled", "=", False),
+             ("account_id.account_type", "in", ("asset_receivable", "liability_payable")), ("partner_id", "!=", False)],
+            ["account_id", "partner_id"], ["id:recordset"])
+        for _account, _partner, amls in groups:
+            if amls.filtered(lambda a: a.balance > 0) and amls.filtered(lambda a: a.balance < 0):
+                amls.reconcile()
+                lettered += 1
+    notes.append(f"Écritures : {created} pièce(s) reprise(s), {skipped} déjà présente(s) ; {lettered} compte(s) de "
+                 "tiers lettré(s).")
+
+# ─── Budget ───────────────────────────────────────────────────────────────
+data = rows("budget.csv")
+if data is not None:
+    year = int(os.environ.get("REPRISE_BUDGET_ANNEE") or date.today().year)
+    Budget, Item = env["mis.budget.by.account"], env["mis.budget.by.account.item"]
+    budget = Budget.search([("company_id", "=", company.id), ("date_from", "=", f"{year}-01-01")], limit=1)
+    budget = budget or Budget.create({"name": f"Budget {year}", "date_from": f"{year}-01-01",
+                                      "date_to": f"{year}-12-31", "company_id": company.id})
+    count = 0
+    for line, r in data:
+        where = f"budget.csv ligne {line}"
+        account = env["account.account"].search([("code", "=", r.get("compte", "")), ("company_ids", "in", company.ids)],
+                                                limit=1)
+        month = int(r.get("mois") or 0) if (r.get("mois") or "").isdigit() else 0
+        if not account or not 1 <= month <= 12:
+            errors.append(f"{where} : compte inconnu ou mois hors 1 à 12.")
+            continue
+        amount = number(r.get("montant"), where)
+        start = date(year, month, 1)
+        end = date(year + (month == 12), month % 12 + 1, 1).toordinal() - 1
+        income = account.code.startswith("7")
+        values = {"debit": 0.0 if income else max(amount, 0.0), "credit": max(amount, 0.0) if income else 0.0}
+        item = Item.search([("budget_id", "=", budget.id), ("account_id", "=", account.id), ("date_from", "=", start)],
+                           limit=1)
+        if item:
+            item.write(values)
+        else:
+            Item.create(dict(values, budget_id=budget.id, account_id=account.id, date_from=start,
+                             date_to=date.fromordinal(end), name=account.name, company_id=company.id))
+        count += 1
+    notes.append(f"Budget {year} : {count} ligne(s) mensuelle(s).")
 
 # ─── Rotations ────────────────────────────────────────────────────────────
 data = rows("rotations.csv")

@@ -13,9 +13,13 @@ Modèles dans `modeles/` (séparateur point-virgule, montants en GNF, dates JJ/M
 |---|---|---|
 | `tiers.csv` | `type;nom;nif;rccm;telephone;email;adresse;ville` | type : client, fournisseur, client_fournisseur, preteur. Un tiers existant (même nom) est mis à jour. |
 | `soldes_ouverture.csv` | `compte;libelle;tiers;debit;credit` | Une seule écriture d'à-nouveaux, équilibrée, à la date d'ouverture. Comptes de tiers (411, 401…) : nom du tiers obligatoire, une ligne par tiers. |
+| `ecritures.csv` | `piece;date;journal;compte;tiers;libelle;debit;credit;activite` | Écritures de l'exercice (ventes, achats, trésorerie, OD), une pièce par numéro et par journal (codes FAC, FACTU, BNK1, OD…), équilibrée et datée d'un seul jour. Les comptes de tiers sont ensuite lettrés : factures et règlements d'un même tiers se compensent. Une pièce déjà reprise est ignorée. |
+| `budget.csv` | `compte;mois;montant` | Budget mensuel par compte (charges et produits en montants positifs), année `REPRISE_BUDGET_ANNEE`. |
 | `rotations.csv` | `date_chargement;date_livraison;ensemble;chauffeur;client;route;produit;bl;volume_charge;volume_livre;tarif;carburant;peages;frais_chauffeur;entretien;taxes;autres;facturee;observations` | `facturee` = oui pour une rotation déjà facturée dans l'ancien système : elle sert à l'analyse de rentabilité, jamais refacturée. Les ensembles, chauffeurs et routes inconnus sont créés (le contrôle les signale). |
 
-Les relevés bancaires se chargent depuis l'écran Trésorerie (CSV ou XLSX), puis se rapprochent ;
+Ordre de chargement : tiers, soldes d'ouverture, écritures, budget, rotations (un seul passage
+suffit, le script les traite dans cet ordre). Les relevés bancaires se chargent depuis l'écran
+Trésorerie (CSV ou XLSX), puis se rapprochent ;
 les emprunts et les immobilisations, peu nombreux, se saisissent dans les écrans Dette et
 Immobilisations (échéanciers et plans d'amortissement calculés par la plateforme).
 
