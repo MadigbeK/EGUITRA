@@ -29,6 +29,41 @@ def _scope_domain(env):
     ]
 
 
+def _scoped_user_ids(env):
+    return env["res.users"].with_context(active_test=False).search(_scope_domain(env)).ids
+
+
+def _all_companies(env):
+    """L'administrateur a-t-il accès à toutes les sociétés de la plateforme ?"""
+    return not (env["res.company"].search([]) - request.env.user.company_ids)
+
+
+AUDIT_SCAN_MAX = 5000  # entrées examinées au plus par appel (pagination après filtrage)
+
+
+def _audit_visible(env, logs, user_ids):
+    """Entrées de la piste d'audit visibles par l'administrateur : enregistrements de ses sociétés
+    ou sans société ; enregistrement supprimé depuis : selon l'auteur de l'action."""
+    allowed = request.env.user.company_ids
+    company_of = {}
+    for model in set(logs.mapped("model_id.model")):
+        if model in env and "company_id" in env[model]._fields:
+            ids = logs.filtered(lambda log, m=model: log.model_id.model == m).mapped("res_id")
+            records = env[model].with_context(active_test=False).browse(ids).exists()
+            company_of[model] = {record.id: record.company_id for record in records}
+    visible = []
+    for log in logs:
+        companies = company_of.get(log.model_id.model)
+        if companies is None:
+            visible.append(log)  # modèle sans société : donnée partagée
+        elif log.res_id in companies:
+            if not companies[log.res_id] or companies[log.res_id] in allowed:
+                visible.append(log)
+        elif log.user_id.id in user_ids:
+            visible.append(log)
+    return visible
+
+
 class EguitraAdminController(http.Controller):
     def _get_user(self, user_id):
         env = sudo_env()
@@ -130,12 +165,17 @@ class EguitraAdminController(http.Controller):
 
     @api_route("/admin/access-log", methods=("GET",), profiles=ADMIN)
     def access_log(self, **kw):
-        domain = []
+        """Journal des accès des utilisateurs gérés par l'administrateur ; les accès anonymes
+        (connexions refusées, jetons invalides) seulement pour un administrateur de toutes les sociétés."""
+        env = sudo_env()
+        domain = [("user_id", "in", _scoped_user_ids(env))]
+        if _all_companies(env):
+            domain = ["|", ("user_id", "=", False)] + domain
         if kw.get("user_id"):
             domain.append(("user_id", "=", int_arg(kw, "user_id")))
         if kw.get("status_min"):
             domain.append(("status", ">=", int_arg(kw, "status_min")))
-        logs = sudo_env()["eguitra.api.access.log"].search(
+        logs = env["eguitra.api.access.log"].search(
             domain, limit=int_arg(kw, "limit", 200, 1, 1000), offset=int_arg(kw, "offset", 0, 0)
         )
         return [
@@ -154,9 +194,20 @@ class EguitraAdminController(http.Controller):
             domain.append(("user_id", "=", int_arg(kw, "user_id")))
         if kw.get("res_id"):
             domain.append(("res_id", "=", int_arg(kw, "res_id")))
-        logs = sudo_env()["auditlog.log"].search(
-            domain, limit=int_arg(kw, "limit", 100, 1, 500), offset=int_arg(kw, "offset", 0, 0), order="id desc"
-        )
+        env = sudo_env()
+        user_ids = set(_scoped_user_ids(env))
+        limit, offset = int_arg(kw, "limit", 100, 1, 500), int_arg(kw, "offset", 0, 0)
+        logs, skipped, scanned = [], 0, 0
+        while len(logs) < limit and scanned < AUDIT_SCAN_MAX:
+            batch = env["auditlog.log"].search(domain, limit=500, offset=scanned, order="id desc")
+            if not batch:
+                break
+            scanned += len(batch)
+            for log in _audit_visible(env, batch, user_ids):
+                if skipped < offset:
+                    skipped += 1
+                elif len(logs) < limit:
+                    logs.append(log)
         return [
             {
                 "id": log.id,

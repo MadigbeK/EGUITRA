@@ -73,3 +73,26 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 404)
         status, users = self.call("GET", "/admin/users", token=token)
         self.assertNotIn(admin_noyau.id, [u["id"] for u in users])
+
+    def test_journaux_bornes_aux_societes_de_l_administrateur(self):
+        other = self.env["res.company"].create({"name": "Société hors périmètre"})
+        bakary = self._create_user("bakary", "finance", company_id=other.id, company_ids=[(6, 0, other.ids)])
+        self.call("GET", "/auth/me", token=self.open_session("bakary")["access_token"])
+        token = self.open_session("aissatou")["access_token"]
+        status, logs = self.call("GET", "/admin/access-log", token=token)
+        self.assertEqual(status, 200, logs)
+        self.assertNotIn("Bakary", [log["user"] for log in logs], "Accès d'une société hors périmètre invisibles")
+
+        model = self.env["ir.model"]._get("res.partner")
+        inside = self.env["res.partner"].create({"name": "Client du groupe", "company_id": self.env.company.id})
+        outside = self.env["res.partner"].create({"name": "Client hors périmètre", "company_id": other.id})
+        Log = self.env["auditlog.log"]
+        seen = Log.create({"name": inside.name, "model_id": model.id, "res_id": inside.id, "user_id": bakary.id,
+                           "method": "write"})
+        hidden = Log.create({"name": outside.name, "model_id": model.id, "res_id": outside.id, "user_id": bakary.id,
+                             "method": "write"})
+        status, audit = self.call("GET", "/admin/audit?model=res.partner", token=token)
+        self.assertEqual(status, 200, audit)
+        ids = [entry["id"] for entry in audit]
+        self.assertIn(seen.id, ids)
+        self.assertNotIn(hidden.id, ids, "Piste d'audit d'une société hors périmètre invisible")
