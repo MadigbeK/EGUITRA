@@ -3,11 +3,14 @@
 Engagement de l'offre : sauvegardes toutes les 15 minutes, chiffrées et copiées hors site, avec
 restauration testée. Ce répertoire le met en œuvre ; `infra/up.sh` l'installe.
 
+Seule la production est sauvegardée : la recette (grappe `db-recette`) contient des données
+d'essai, reconstructibles par copie de la production ou par les scripts de reprise et de démonstration.
+
 ## Ce qui est sauvegardé, et quand
 
 | Quoi | Comment | Fréquence | Où |
 |---|---|---|---|
-| Base PostgreSQL (toutes les bases) | sauvegarde de base `pg_basebackup` | chaque nuit à 01 h 30 | `/srv/eguitra/backup/base/AAAAMMJJTHHMM/` |
+| Base PostgreSQL de production (grappe `db`) | sauvegarde de base `pg_basebackup` | chaque nuit à 01 h 30 | `/srv/eguitra/backup/base/AAAAMMJJTHHMM/` |
 | Modifications de la base | archivage continu des WAL (`archive-wal.sh`, `archive_timeout = 900`) | au fil de l'eau, au plus 15 minutes | `/srv/eguitra/backup/wal/` |
 | Pièces jointes (filestore) | miroir `rsync` + instantané quotidien en liens physiques | 15 minutes, instantané chaque nuit | `/srv/eguitra/backup/filestore/` |
 | Copie hors site | `rclone` vers un distant chiffré (`crypt`) | 15 minutes (WAL, pièces), chaque nuit (bases) | stockage objet, voir `backup.env.example` |
@@ -59,7 +62,7 @@ rejoue les WAL, affiche des contrôles (sociétés, utilisateurs, pièces compta
    par le script (`/srv/eguitra/restore-test.*`), en conservant le propriétaire 999:999 ; retirer
    de `postgresql.auto.conf` les lignes `restore_command`, `recovery_target_*` ajoutées par le script.
 5. Pièces jointes : recopier `/srv/eguitra/backup/filestore/current/` (ou l'instantané du jour
-   visé) dans le volume `eguitra_odoo-data`, sous `filestore/<base>/`, propriétaire 100:101.
+   visé) dans le volume `eguitra_odoo-prod-data`, sous `filestore/<base>/`, propriétaire 100:101.
 6. `docker rm -f eguitra-restore-test && docker compose up -d`, puis contrôler les écrans
    (tableau de bord, dernières pièces saisies) avant de rouvrir l'accès.
 7. Sans serveur (perte totale) : nouveau serveur avec `setup-vps.sh` et `up.sh`, récupérer les

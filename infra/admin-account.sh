@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Crée un compte d'administration de la plateforme, ouvert aux deux sociétés, au mot de passe
+# provisoire (à remplacer à la première connexion, avec activation de la double authentification).
+#   infra/admin-account.sh production|recette identifiant "Nom de l'administrateur"
+# Le mot de passe provisoire s'affiche une seule fois ; avec ADMIN_PASSWORD_FILE=chemin, il est
+# écrit dans ce fichier (lisible par le seul utilisateur courant) au lieu d'être affiché.
+set -euo pipefail
+cd "$(dirname "$0")"
+set -a; . ./.env; set +a
+
+[ $# -eq 3 ] || { echo "Usage : infra/admin-account.sh production|recette identifiant \"Nom de l'administrateur\"" >&2; exit 2; }
+case "$1" in
+  production) SERVICE=odoo; DB=${INIT_DB:-$ODOO_DB} ;;
+  recette) SERVICE=odoo-recette; DB=${INIT_DB:-$RECETTE_DB} ;;
+  *) echo "Environnement inconnu : $1 (production ou recette)." >&2; exit 2 ;;
+esac
+ADMIN_LOGIN=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+ADMIN_NAME=$3
+ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)-$(date +%Y)
+
+docker compose run --rm -T -e ADMIN_LOGIN="$ADMIN_LOGIN" -e ADMIN_NAME="$ADMIN_NAME" -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+  "$SERVICE" odoo shell -c /etc/odoo/odoo.conf -d "$DB" --no-http --log-level=warn <<'PY'
+import os
+import sys
+
+from odoo import Command
+
+login = os.environ["ADMIN_LOGIN"]
+if env["res.users"].with_context(active_test=False).search_count([("login", "=", login)]):
+    print(f"ÉCHEC : l'identifiant {login} existe déjà.")
+    sys.exit(1)
+companies = env["res.company"].search([])
+user = env["res.users"].with_context(no_reset_password=True).create({
+    "name": os.environ["ADMIN_NAME"],
+    "login": login,
+    "password": os.environ["ADMIN_PASSWORD"],
+    "eguitra_password_temporary": True,
+    "company_id": env.ref("base.main_company").id,
+    "company_ids": [Command.set(companies.ids)],
+})
+user._eguitra_set_profiles(["admin"])
+env.cr.commit()
+print("COMPTE CRÉÉ ; sociétés ouvertes : " + ", ".join(companies.mapped("name")))
+PY
+
+echo "Administrateur $ADMIN_LOGIN ($1, base $DB)."
+if [ -n "${ADMIN_PASSWORD_FILE:-}" ]; then
+  (umask 077; mkdir -p "$(dirname "$ADMIN_PASSWORD_FILE")"; printf '%s %s\n' "$ADMIN_LOGIN" "$ADMIN_PASSWORD" > "$ADMIN_PASSWORD_FILE")
+  echo "Mot de passe provisoire enregistré dans $ADMIN_PASSWORD_FILE (à supprimer une fois remis)."
+else
+  echo "Mot de passe provisoire (affiché une seule fois) : $ADMIN_PASSWORD"
+fi

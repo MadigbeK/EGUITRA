@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Supervision du serveur, toutes les 5 minutes (crontab de l'utilisateur deploy, voir monitor-install.sh) :
-# conteneurs en marche et en bonne santé, API du noyau, applications web, espace disque, sauvegardes.
+# conteneurs des deux environnements en marche et en bonne santé, API des noyaux, applications web,
+# espace disque, sauvegardes de la production.
 # Une alerte part au changement d'état (panne, retour à la normale), et toutes les 6 heures tant
 # que la panne dure, vers ALERT_WEBHOOK_URL (JSON {"text": …} : Slack, Teams, Google Chat) et/ou
 # ALERT_NTFY_URL (texte brut, application ntfy sur téléphone). Journal : ~/eguitra/logs/monitor.log.
@@ -13,7 +14,7 @@ STATE=$LOG_DIR/monitor.state
 mkdir -p "$LOG_DIR"
 problems=()
 
-for service in db odoo web backup; do
+for service in db odoo web backup db-recette odoo-recette web-recette; do
   status=$(docker compose ps --format '{{.State}} {{.Health}}' "$service" 2>/dev/null | head -1)
   case "$status" in
     "running healthy" | "running ") ;;
@@ -22,8 +23,10 @@ for service in db odoo web backup; do
     *) problems+=("service $service : $status") ;;
   esac
 done
-curl -fsS --max-time 10 http://127.0.0.1:8069/api/v1/health >/dev/null 2>&1 || problems+=("API du noyau sans réponse")
-curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3000/login 2>/dev/null || problems+=("applications web sans réponse")
+curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8069/api/v1/health 2>/dev/null || problems+=("production : noyau sans réponse")
+curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3000/login 2>/dev/null || problems+=("production : applications web sans réponse")
+curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8169/api/v1/health 2>/dev/null || problems+=("recette : noyau sans réponse")
+curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3100/login 2>/dev/null || problems+=("recette : applications web sans réponse")
 disk=$(df --output=pcent / | tail -1 | tr -dc '0-9')
 (( disk >= 85 )) && problems+=("disque plein à ${disk} %")
 backup=$(docker compose exec -T backup check.sh 2>/dev/null) || problems+=("sauvegardes : ${backup:-contrôle impossible}")

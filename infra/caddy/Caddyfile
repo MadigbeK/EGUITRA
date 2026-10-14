@@ -1,5 +1,6 @@
 # Proxy d'entrée : TLS automatique (Let's Encrypt), en-têtes de sécurité, journal d'accès.
-# Les domaines viennent de infra/.env (FINANCE_DOMAIN, AXISPRO_DOMAIN, PORTAIL_DOMAIN, CORE_DOMAIN).
+# Les domaines viennent de infra/.env (FINANCE_DOMAIN, AXISPRO_DOMAIN, PORTAIL_DOMAIN, RECETTE_DOMAIN,
+# CORE_DOMAIN).
 # Seules les applications web sont publiques ; l'API du noyau ne l'est jamais (la passerelle Next
 # l'appelle sur le réseau Docker) et le client web du noyau n'est ouvert qu'aux adresses ADMIN_IPS.
 {
@@ -34,7 +35,19 @@
 	}
 }
 
-# Noyau : administration technique seulement, depuis les adresses autorisées.
+# Recette : mêmes applications, environnement d'essai séparé (base, noyau et cookies distincts).
+{$RECETTE_DOMAIN} {
+	import commun
+	request_body {
+		max_size 25MB
+	}
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy web-recette:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# Noyau de production : administration technique seulement, depuis les adresses autorisées.
 {$CORE_DOMAIN} {
 	import commun
 	@admin remote_ip {$ADMIN_IPS}

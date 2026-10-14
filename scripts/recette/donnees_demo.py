@@ -2,9 +2,10 @@
 """Données de démonstration pour la base de recette : fictives, repérées par « Démo », jamais en production.
 
 Elles servent à la recette et aux démonstrations (écrans non vides) en attendant les données réelles
-du client (reprise). Lancement sur le serveur, depuis infra/ :
+du client (reprise). Lancement sur le serveur, depuis infra/, dans l'environnement de recette
+seulement (jamais sur le noyau de production) :
 
-  docker compose exec -T odoo odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \
+  docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \
       < ../scripts/recette/donnees_demo.py
 
 Relancé, le script ne crée rien en double.

@@ -7,14 +7,20 @@ import { APPS, type AppCode } from "./config";
  * ils vivent dans des cookies httpOnly, le navigateur ne peut ni les lire ni les envoyer ailleurs.
  */
 
+/**
+ * Préfixe des cookies, propre à chaque environnement (eg en production, egr en recette) : les
+ * sessions de production et de recette ne se mélangent pas dans un même navigateur.
+ */
+const PREFIX = /^[a-z]{1,8}$/.test(process.env.COOKIE_PREFIX ?? "") ? process.env.COOKIE_PREFIX! : "eg";
+
 export const COOKIES = {
-  access: "eg_at",
-  refresh: "eg_rt",
-  expires: "eg_exp",
-  app: "eg_app",
-  company: "eg_co",
-  mfa: "eg_mfa",
-  mfaSetup: "eg_mfa_setup",
+  access: `${PREFIX}_at`,
+  refresh: `${PREFIX}_rt`,
+  expires: `${PREFIX}_exp`,
+  app: `${PREFIX}_app`,
+  company: `${PREFIX}_co`,
+  mfa: `${PREFIX}_mfa`,
+  mfaSetup: `${PREFIX}_mfa_setup`,
 } as const;
 
 export const ODOO_URL = process.env.ODOO_URL ?? "http://localhost:8069";

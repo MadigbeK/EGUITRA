@@ -1,23 +1,24 @@
-; Configuration du noyau, rendue par infra/up.sh (envsubst) dans infra/odoo/odoo.conf.
-; Ne pas éditer odoo.conf à la main : il contient des secrets et n'est pas versionné.
+; Configuration d'un noyau, rendue par infra/up.sh (envsubst) dans infra/odoo/production.conf et
+; infra/odoo/recette.conf. Ne pas éditer ces fichiers à la main : ils contiennent des secrets et ne
+; sont pas versionnés.
 [options]
-db_host = db
+db_host = ${OD_DB_HOST}
 db_port = 5432
-db_user = ${POSTGRES_USER}
-db_password = ${POSTGRES_PASSWORD}
-admin_passwd = ${ODOO_ADMIN_PASSWD}
+db_user = ${OD_DB_USER}
+db_password = ${OD_DB_PASSWORD}
+admin_passwd = ${OD_ADMIN_PASSWD}
 addons_path = /mnt/extra-addons,${OCA_ADDONS_PATH}
 data_dir = /var/lib/odoo
 
 ; Le gestionnaire de bases n'est jamais exposé. db_name limite aussi les tâches planifiées
 ; à cette base : les bases de test créées à côté ne sont pas touchées.
 list_db = False
-db_name = ${ODOO_DB}
-dbfilter = ^${ODOO_DB}$
+db_name = ${OD_DB}
+dbfilter = ^${OD_DB}$
 proxy_mode = True
 
-; Dimensionnement pour 6 vCPU / 12 Go, production et recette sur le même serveur.
-workers = 4
+; Dimensionnement pour 6 vCPU / 12 Go : production à 4 processus, recette à 2.
+workers = ${OD_WORKERS}
 max_cron_threads = 1
 limit_memory_soft = 1073741824
 limit_memory_hard = 1610612736

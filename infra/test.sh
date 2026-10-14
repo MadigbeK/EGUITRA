@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Lance les tests de modules sur une base jetable, copiée d'une base modèle.
+# Lance les tests de modules sur une base jetable, copiée d'une base modèle, dans l'environnement de
+# recette (noyau odoo-recette, grappe db-recette) : la production n'est jamais sollicitée.
 #   infra/test.sh eguitra_base eguitra_api ...
 # La base modèle (noyau, localisation Guinée, modules OCA) est créée au premier appel ;
 # infra/test.sh --rebuild la reconstruit après une mise à jour du noyau ou des modules OCA.
@@ -9,7 +10,7 @@ set -a; . ./.env; set +a
 
 BASE=eguitra_ci_base
 CI=eguitra_ci
-ODOO=(docker compose run --rm -T odoo odoo)
+ODOO=(docker compose run --rm -T odoo-recette odoo)
 CONF=(-c /etc/odoo/odoo.conf)
 
 if [ "${1:-}" = "--rebuild" ]; then
@@ -19,7 +20,7 @@ fi
 [ $# -gt 0 ] || { echo "Usage : infra/test.sh [--rebuild] module..." >&2; exit 2; }
 
 db_exists() {
-  docker compose exec -T db psql -U "$POSTGRES_USER" -d postgres -Atc \
+  docker compose exec -T db-recette psql -U "$POSTGRES_USER" -d postgres -Atc \
     "SELECT 1 FROM pg_database WHERE datname = '$1'" | grep -q 1
 }
 

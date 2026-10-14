@@ -1,10 +1,23 @@
-# Plateforme EGUITRA : noyau Odoo 19, PostgreSQL 16 et applications web (Next.js).
-# Lancement : infra/up.sh (rend odoo.conf, récupère OCA, construit, démarre).
-# Aucun port n'est publié sur l'extérieur : Docker contourne le pare-feu pour les ports
-# publiés, donc le noyau n'écoute que sur 127.0.0.1 (accès par tunnel SSH ou par le proxy).
+# Plateforme EGUITRA : deux environnements complets et séparés sur le même serveur.
+#
+#   production   db, odoo, web            code figé par infra/release.sh (releases/current),
+#                                         base sauvegardée en continu (backup)
+#   recette      db-recette, odoo-recette, web-recette
+#                                         code de travail (../addons, ../apps/web), tests
+#
+# Les deux environnements n'ont en commun que le serveur et le proxy : ni base de données, ni
+# mot de passe, ni fichiers. Une erreur ou un test en recette ne peut pas toucher la production.
+# Lancement et mise à jour : infra/up.sh ; mise en production d'une version : infra/release.sh.
+# Un noyau démarré sans sa base la crée d'office, vide : créer d'abord la base (infra/init-db.sh),
+# up.sh ne démarre un noyau que si sa base existe.
+#
+# Aucun port n'est publié sur l'extérieur sauf ceux du proxy : Docker contourne le pare-feu pour
+# les ports publiés, donc noyaux et applications n'écoutent que sur 127.0.0.1 (tunnel SSH ou proxy).
 name: eguitra
 
 services:
+  # ─── Production ─────────────────────────────────────────────────────────
+
   db:
     image: postgres:16
     restart: unless-stopped
@@ -45,11 +58,11 @@ services:
       timeout: 5s
       retries: 10
 
+  # Noyau de production : image et code figés à la mise en production (infra/release.sh), connexion
+  # à la base par un rôle sans privilège de superutilisateur (ODOO_DB_USER).
   odoo:
-    build:
-      context: .
-      dockerfile: odoo/Dockerfile
-    image: eguitra/odoo:19.0
+    image: eguitra/odoo:production
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       db:
@@ -59,24 +72,31 @@ services:
       - "127.0.0.1:8069:8069"
       - "127.0.0.1:8072:8072"
     volumes:
-      - odoo-data:/var/lib/odoo
-      - ./odoo/odoo.conf:/etc/odoo/odoo.conf:ro
-      - ./oca-src:/mnt/oca:ro
-      - ../addons:/mnt/extra-addons:ro
+      - odoo-prod-data:/var/lib/odoo
+      - ./odoo/production.conf:/etc/odoo/odoo.conf:ro
+      - ./releases/current/oca:/mnt/oca:ro
+      - ./releases/current/addons:/mnt/extra-addons:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8069/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 2m
+      retries: 3
 
   web:
-    build:
-      context: ../apps/web
-    image: eguitra/web:latest
+    image: eguitra/web:production
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       - odoo
     environment:
       ODOO_URL: http://odoo:8069
+      COOKIE_PREFIX: eg
     ports:
       - "127.0.0.1:3000:3000"
 
-  # Sauvegardes : de base chaque nuit, filestore toutes les 15 minutes, copie hors site chiffrée.
+  # Sauvegardes de la production : de base chaque nuit, WAL en continu, filestore toutes les
+  # 15 minutes, copie hors site chiffrée.
   backup:
     build:
       context: ./backup
@@ -96,7 +116,7 @@ services:
         required: false
     volumes:
       - ${BACKUP_DIR:-/srv/eguitra/backup}:/backup
-      - odoo-data:/var/lib/odoo:ro
+      - odoo-prod-data:/var/lib/odoo:ro
     healthcheck:
       test: ["CMD", "/usr/local/bin/check.sh"]
       interval: 5m
@@ -104,8 +124,80 @@ services:
       start_period: 30m
       retries: 1
 
-  # Proxy d'entrée (TLS) : démarre avec « docker compose --profile proxy up -d » une fois les
-  # noms de domaine pointés vers le serveur (sinon Let's Encrypt refuse les certificats).
+  # ─── Recette ────────────────────────────────────────────────────────────
+
+  # Base de recette : grappe PostgreSQL distincte, sans archivage (les bases de test s'y créent
+  # et s'y suppriment sans alourdir les sauvegardes de la production).
+  db-recette:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${RECETTE_POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_connections=60
+    volumes:
+      - db-recette-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Noyau de recette : code de travail monté en direct, image reconstruite par infra/up.sh.
+  odoo-recette:
+    build:
+      context: .
+      dockerfile: odoo/Dockerfile
+    image: eguitra/odoo:recette
+    restart: unless-stopped
+    depends_on:
+      db-recette:
+        condition: service_healthy
+    command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
+    ports:
+      - "127.0.0.1:8169:8069"
+      - "127.0.0.1:8172:8072"
+    volumes:
+      - odoo-recette-data:/var/lib/odoo
+      - ./odoo/recette.conf:/etc/odoo/odoo.conf:ro
+      - ./oca-src:/mnt/oca:ro
+      - ../addons:/mnt/extra-addons:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8069/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 2m
+      retries: 3
+
+  web-recette:
+    build:
+      context: ../apps/web
+    image: eguitra/web:recette
+    restart: unless-stopped
+    depends_on:
+      - odoo-recette
+    environment:
+      ODOO_URL: http://odoo-recette:8069
+      # Cookies distincts de la production : une session de recette ne se mélange jamais à celle
+      # de la production, même ouvertes côte à côte dans le même navigateur.
+      COOKIE_PREFIX: egr
+    ports:
+      - "127.0.0.1:3100:3000"
+
+  # ─── Proxy d'entrée ─────────────────────────────────────────────────────
+
+  # TLS automatique : démarre avec « docker compose --profile proxy up -d » une fois les noms de
+  # domaine pointés vers le serveur (sinon Let's Encrypt refuse les certificats).
   caddy:
     image: caddy:2.10
     restart: unless-stopped
@@ -113,11 +205,13 @@ services:
     depends_on:
       - web
       - odoo
+      - web-recette
     environment:
       ACME_EMAIL: ${ACME_EMAIL:-}
       FINANCE_DOMAIN: ${FINANCE_DOMAIN:-}
       AXISPRO_DOMAIN: ${AXISPRO_DOMAIN:-}
       PORTAIL_DOMAIN: ${PORTAIL_DOMAIN:-}
+      RECETTE_DOMAIN: ${RECETTE_DOMAIN:-}
       CORE_DOMAIN: ${CORE_DOMAIN:-}
       ADMIN_IPS: ${ADMIN_IPS:-127.0.0.1/32}
     ports:
@@ -131,6 +225,10 @@ services:
 
 volumes:
   db-data:
-  odoo-data:
+  odoo-prod-data:
+  db-recette-data:
+  # Volume historique de la recette (pièces jointes de la base de recette), conservé tel quel.
+  odoo-recette-data:
+    name: eguitra_odoo-data
   caddy-data:
   caddy-config:
