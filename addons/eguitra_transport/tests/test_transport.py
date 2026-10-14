@@ -98,6 +98,16 @@ class TestTransport(FinanceDataMixin, ApiCase):
         self.assertEqual(rot.source, "mobile")
         self.assertEqual(rot.state, "draft", "Validée ensuite au bureau")
 
+        autre = self.env["res.company"].create({"name": "Société hors périmètre"})
+        camion = self.env["eguitra.transport.vehicle"].create({"name": "ER-99", "capacity_liters": 30000, "company_id": autre.id})
+        status, body = self.call("POST", "/transport/sync", {"rotations": ["texte", {
+            "client_uuid": "hors-societe", "vehicle_id": camion.id, "partner_id": self.customer.id, "route_id": self.route.id,
+            "volume_loaded": 30, "rate": 1_000_000, "date_loading": self.today.isoformat(),
+        }]}, token=token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual([r["status"] for r in body["results"]], ["error", "error"],
+                         "Saisie illisible, ou ensemble d'une autre société : refusées sans bloquer le lot")
+
     def test_api_facturation_reservee_finance(self):
         rot = self._rotation()
         rot.action_validate()

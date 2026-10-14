@@ -307,11 +307,15 @@ class EguitraTransport(http.Controller):
         Rotation = request.env["eguitra.transport.rotation"]
         results = []
         for item in items:
+            if not isinstance(item, dict):
+                results.append({"client_uuid": None, "status": "error", "message": "Saisie illisible."})
+                continue
             uuid = str(item.get("client_uuid") or "")[:64]
             if not uuid:
                 results.append({"client_uuid": None, "status": "error", "message": "Identifiant de saisie manquant."})
                 continue
-            existing = Rotation.sudo().search([("client_uuid", "=", uuid)], limit=1)
+            # Recherche sous les droits de l'agent : une saisie d'une autre société n'est pas révélée.
+            existing = Rotation.search([("client_uuid", "=", uuid)], limit=1)
             if existing:
                 results.append({"client_uuid": uuid, "status": "exists", "id": existing.id})
                 continue

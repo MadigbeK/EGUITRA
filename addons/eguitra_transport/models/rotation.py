@@ -27,6 +27,8 @@ class EguitraTransportRotation(models.Model):
     _name = "eguitra.transport.rotation"
     _description = "Rotation de transport"
     _order = "date_loading desc, id desc"
+    # Ensemble, chauffeur, client et route appartiennent à la société de la rotation.
+    _check_company_auto = True
 
     name = fields.Char("Numéro", default="/", copy=False, readonly=True, index=True)
     company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
@@ -40,10 +42,10 @@ class EguitraTransportRotation(models.Model):
     )
     date_loading = fields.Date("Chargement", required=True, default=fields.Date.context_today)
     date_delivery = fields.Date("Livraison")
-    vehicle_id = fields.Many2one("eguitra.transport.vehicle", "Ensemble routier", required=True)
-    driver_id = fields.Many2one("eguitra.transport.driver", "Chauffeur")
-    partner_id = fields.Many2one("res.partner", "Client", required=True)
-    route_id = fields.Many2one("eguitra.transport.route", "Route", required=True)
+    vehicle_id = fields.Many2one("eguitra.transport.vehicle", "Ensemble routier", required=True, check_company=True)
+    driver_id = fields.Many2one("eguitra.transport.driver", "Chauffeur", check_company=True)
+    partner_id = fields.Many2one("res.partner", "Client", required=True, check_company=True)
+    route_id = fields.Many2one("eguitra.transport.route", "Route", required=True, check_company=True)
     product = fields.Selection(PRODUCTS, "Produit", required=True, default="gasoil")
     delivery_note = fields.Char("Bon de livraison")
     volume_loaded = fields.Float("Volume chargé (m³)", digits=(12, 3))
