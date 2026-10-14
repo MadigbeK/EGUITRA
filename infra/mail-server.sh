@@ -46,8 +46,7 @@ env["ir.config_parameter"].set_param("mail.default.from", local)
 env["ir.config_parameter"].set_param("mail.catchall.domain", domain)
 env.cr.commit()
 try:
-    smtp = Server.connect(mail_server_id=server.id)
-    smtp.quit()
+    server.test_smtp_connection()  # simule un envoi sans rien envoyer ; erreur si refus
     print("Serveur d'envoi EGUITRA paramétré, connexion réussie.")
 except Exception as exc:  # noqa: BLE001 - on affiche la cause à l'exploitant
     print(f"Serveur d'envoi paramétré, mais la connexion échoue : {exc}")
