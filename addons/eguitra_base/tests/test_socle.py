@@ -69,3 +69,9 @@ class TestSocle(TransactionCase):
         self.assertTrue(lignes, "La modification doit être journalisée")
         self.assertIn("TOTAL GUINEE", lignes[0].old_value)
         self.assertIn("TOTALENERGIES GUINEE", lignes[0].new_value)
+
+    def test_logo_d_exemple_retire(self):
+        companies = self.env["res.company"].search([])
+        placeholder = self.env["res.company"]._get_logo()
+        self.assertFalse(companies.filtered(lambda c: c.logo == placeholder),
+                         "Aucune société ne garde le logo d'exemple « Your logo » du noyau")

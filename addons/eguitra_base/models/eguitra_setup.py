@@ -53,6 +53,16 @@ class EguitraSetup(models.AbstractModel):
                 )
 
     @api.model
+    def clear_placeholder_logos(self):
+        """Retire le logo d'exemple du noyau (« Your logo ») : sans logo, factures et lettres portent
+        la raison sociale ; le vrai logo se dépose dans Administration > Sociétés."""
+        Company = self.env["res.company"].sudo()
+        placeholder = Company._get_logo()
+        companies = Company.search([]).filtered(lambda c: c.logo and c.logo == placeholder)
+        companies.write({"logo": False})
+        return companies
+
+    @api.model
     def ensure_cabinet_company(self):
         """Crée MB AxisPro Consulting avec le plan SYSCOHADA Guinée, si elle n'existe pas."""
         Company = self.env["res.company"].sudo()
