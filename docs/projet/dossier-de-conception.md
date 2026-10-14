@@ -28,8 +28,15 @@ tient les comptes et n'est accessible qu'à l'équipe technique.
 | Passerelle | Le navigateur ne détient jamais les jetons d'accès (cookies protégés) ; contrôle d'origine contre la falsification de requêtes ; fichiers déposés toujours servis en téléchargement. |
 | API métier | Huit modules spécifiques ; chaque appel s'exécute sous l'identité de l'utilisateur, avec ses droits. Double authentification, sessions révocables, limitation des essais, journal des accès. |
 | Noyau | Odoo Community 19, localisation guinéenne (plan SYSCOHADA en GNF), dix modules OCA. |
-| Données | PostgreSQL 16, pièces jointes, une base par environnement. |
+| Données | PostgreSQL 16 et pièces jointes ; une base par environnement, contenant les deux sociétés. |
 | Exploitation | Serveur dédié, conteneurs, proxy TLS à certificats automatiques, sauvegardes continues chiffrées hors site, supervision. |
+
+**Deux environnements complets et séparés** sur le même serveur : la **production** (données
+réelles) et la **recette** (essais, formation, validation de chaque évolution). Chacun a sa propre
+base de données, son noyau, ses applications web et ses mots de passe ; ils ne partagent que le
+serveur. Une évolution est installée en recette, essayée par les référents, puis mise en production
+par une procédure qui fige la version validée, sauvegarde la base juste avant, met à jour le noyau
+et contrôle le résultat, avec retour automatique à la version précédente en cas d'échec.
 
 ## 3. Composants du noyau : liste définitive
 
@@ -56,8 +63,15 @@ modifiée, aucun contournement possible hors du moteur.
 
 ## 4. Organisation des données
 
-- **Sociétés** : EGUITRA GROUP SARLU (groupe) et MB AxisPro Consulting (cabinet), chacune avec son
-  plan de comptes SYSCOHADA ; vue consolidée du groupe dans le tableau de bord et les états.
+- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro Consulting (cabinet)
+  vivent dans la même base, avec des **comptabilités entièrement séparées** : chacune son plan de
+  comptes SYSCOHADA, ses journaux, ses taxes, sa numérotation des pièces, ses exercices et ses
+  clôtures. Les données sont cloisonnées par société : un utilisateur ne voit que les sociétés qui
+  lui sont ouvertes.
+- **Un compte pour les deux sociétés** : l'administration ouvre à chaque utilisateur une société ou
+  les deux. Un utilisateur ouvert aux deux passe de l'une à l'autre par le sélecteur en haut de
+  l'écran, sans se reconnecter ; la direction dispose en plus de la vue « Groupe consolidé »
+  (tableau de bord, états, pilotage). AxisPro Suite et le portail s'ouvrent sur la société du cabinet.
 - **Plan de comptes** : plan SYSCOHADA de la localisation guinéenne (1 142 comptes), **à valider par
   l'expert-comptable** (offre, chapitre 6.5), ainsi que la table de correspondance des rubriques du
   bilan, du compte de résultat et du tableau des flux.
@@ -96,12 +110,14 @@ base jamais exposés sur Internet, client web du noyau réservé aux adresses de
 - Serveur dédié OVHcloud (Gravelines, France), 6 vCPU, 12 Go de mémoire, **100 Go de disque**
   (l'offre annonçait 160 Go ; le modèle commandé n'en propose pas davantage). Engagement : disque
   supplémentaire ajouté sans surcoût dès que l'occupation l'exige (supervision à 85 %).
-- Deux environnements, recette et production, sur le même serveur.
+- Deux environnements séparés, recette et production, sur le même serveur (voir 2) ; la base de
+  production est accédée par un compte sans privilège d'administration de la base.
 - Sauvegardes conformes au chapitre 5.2 de l'offre : journalisation continue (perte maximale
   15 minutes), sauvegarde complète quotidienne, pièces jointes toutes les 15 minutes, copie hors
   site chiffrée chez un second fournisseur, rétention de 30 sauvegardes quotidiennes, 12 mensuelles
   et 14 jours de journaux ; test de restauration trimestriel, dont une restauration à un instant
-  donné, avec compte rendu. Restauration à un instant donné vérifiée le 14 octobre 2026 en recette.
+  donné, avec compte rendu. Restauration vérifiée le 14 octobre 2026, y compris à un instant donné.
+  La recette a en plus une copie logique chaque nuit, gardée 7 jours.
 - Supervision toutes les 5 minutes (services, disque, sauvegardes) avec alertes.
 
 ## 8. Reprise de l'exercice 2026
@@ -119,7 +135,7 @@ responsable financier avant la mise en production (offre, chapitre 6.3).
 | # | Attente | Où la vérifier | Vérification |
 |---|---|---|---|
 | 1 | Visibilité temps réel CA, résultat, trésorerie | Tableau de bord, Rapport mensuel | Saisir une facture : CA et encours à jour immédiatement |
-| 2 | Vue consolidée, décomposable | Bouton Groupe ; Activités et budget | Comparer société et groupe ; marge par activité, chantier, ensemble, route |
+| 2 | Vue consolidée, décomposable | Sélecteur de société, bouton Groupe ; Activités et budget | Un même compte passe d'une société à l'autre, comptabilités séparées ; vue groupe ; marge par activité, chantier, ensemble, route |
 | 3 | Comptabilité SYSCOHADA révisé | Balance et états | Bilan équilibré, compte de résultat, tableau des flux rapproché de la trésorerie |
 | 4 | Analytique multi-axes | Activités et budget | Imputation automatique depuis rotations, chantiers, loyers |
 | 5 | Trésorerie et rapprochement | Trésorerie | Import d'un relevé réel, rapprochement des lignes |
@@ -132,7 +148,7 @@ responsable financier avant la mise en production (offre, chapitre 6.3).
 | 12 | Chantiers, avancement, retenues | Chantiers | Situation facturée, retenue en 4117, libération |
 | 13 | Gestion locative et patrimoine | Immobilier | Bail, loyers générés, impayés, quittance |
 | 14 | Traçabilité, piste d'audit | Journal d'audit | Modification visible avec valeurs avant et après |
-| 15 | Sécurité des accès par profil | Utilisateurs | Double authentification, profil limité à son périmètre |
+| 15 | Sécurité des accès par profil | Utilisateurs | Double authentification, profil limité à son périmètre, sociétés ouvertes par utilisateur |
 | 16 | Disponibilité et sauvegardes | Compte rendu de restauration | Restauration à un instant donné réussie |
 | 17 | Interface simple, formation | Guides par profil | Formation de chaque profil sur ses écrans |
 | 18 | Support et accompagnement | Procédure de support | Délais d'intervention de l'offre, chapitre 7.2 |
@@ -144,9 +160,10 @@ responsable financier avant la mise en production (offre, chapitre 6.3).
 1. Plan de comptes et correspondances des états (expert-comptable, semaine 2).
 2. Seuils d'approbation et d'alerte (tableau du point 5).
 3. Charte graphique du groupe et du cabinet (couleurs et logos ; les couleurs actuelles sont provisoires).
-4. Noms de domaine et accès à leur gestion (finance, axispro, portail).
+4. Noms de domaine et accès à leur gestion (finance, axispro, portail, recette).
 5. Grille d'évaluation AxisPro officielle et liste des pièces de la data room.
-6. Liste des utilisateurs et de leurs profils ; téléphones des agents du parc (double authentification).
+6. Liste des utilisateurs, de leurs profils et des sociétés ouvertes à chacun (groupe, cabinet ou
+   les deux) ; téléphones des agents du parc (double authentification).
 7. Fournisseur de stockage hors site (second hébergeur) et serveur d'envoi de courriel.
 8. Classeur 2026 définitif, relevés bancaires 2026, modèles de déclarations fiscales.
 
