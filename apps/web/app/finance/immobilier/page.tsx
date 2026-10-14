@@ -9,7 +9,7 @@ import { PAYMENT_STATES, type MoveSummary } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
 interface Lease { id: number; name: string; property: { id: number; name: string }; tenant: { id: number; name: string }; date_start: string; date_end: string | null; rent: number; charges: number; periodicity: string; vat: boolean; deposit_amount: number; state: "draft" | "active" | "terminated"; next_invoice_date: string | null }
-interface Property { id: number; name: string; kind: string; address: string | null; city: string | null; area_m2: number; acquisition_value: number; current_value: number; occupied: boolean; lease: Lease | null }
+interface Property { id: number; name: string; kind: string; address: string | null; city: string | null; area_m2: number; acquisition_value: number; current_value: number; valuation_date: string | null; occupied: boolean; lease: Lease | null }
 interface Summary { properties: number; occupied: number; occupancy_rate: number | null; annual_rent: number; portfolio_value: number; gross_yield: number | null; unpaid_count: number; unpaid_amount: number; leases_expiring_3m: number }
 interface Receipt { number: string; date: string; company: string; company_address: string | null; tenant: string; property: string | null; property_address: string | null; lines: Array<{ name: string; amount: number }>; amount_total: number }
 
@@ -52,16 +52,21 @@ function Properties({ onChanged }: { onChanged: () => void }) {
   const [creating, setCreating] = useState(false);
   const [leasing, setLeasing] = useState<Property | null>(null);
   const [ending, setEnding] = useState<Property | null>(null);
+  const [editing, setEditing] = useState<Property | null>(null);
   return (
     <>
       <div className="mb-3 flex justify-end"><Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button></div>
       <Card padded={false}>
         {!data ? <Loading /> : (
           <DataTable rows={data.items} rowKey={(p) => p.id} empty="Aucun bien." columns={[
-            { key: "name", label: "Bien", render: (p) => <span className="flex items-center gap-2"><Building2 className="h-4 w-4 text-accent" />{p.name}</span> },
+            { key: "name", label: "Bien", render: (p) => (
+              <button type="button" className="flex items-center gap-2 text-left hover:text-accent" title="Modifier le bien" onClick={() => setEditing(p)}>
+                <Building2 className="h-4 w-4 text-accent" />{p.name}
+              </button>
+            ) },
             { key: "kind", label: "Nature", render: (p) => data.kinds.find((k) => k.code === p.kind)?.label ?? p.kind },
             { key: "area_m2", label: "Surface", align: "right", render: (p) => (p.area_m2 ? `${p.area_m2} m²` : "—") },
-            { key: "current_value", label: "Valeur", align: "right", render: (p) => fmtGNF(p.current_value || p.acquisition_value) },
+            { key: "current_value", label: "Valeur", align: "right", render: (p) => <span title={p.valuation_date ? `Évaluée le ${fmtDate(p.valuation_date)}` : "Valeur d'acquisition"}>{fmtGNF(p.current_value || p.acquisition_value)}</span> },
             { key: "lease", label: "Locataire", render: (p) => p.lease ? `${p.lease.tenant.name}, ${fmtGNF(p.lease.rent)} / ${p.lease.periodicity === "monthly" ? "mois" : p.lease.periodicity === "quarterly" ? "trimestre" : "an"}` : "—" },
             { key: "occupied", label: "", render: (p) => p.occupied ? (
               <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{p.lease && <Button className="px-2 py-1 text-xs" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
@@ -70,18 +75,35 @@ function Properties({ onChanged }: { onChanged: () => void }) {
         )}
       </Card>
       {creating && data && <PropertyForm kinds={data.kinds} onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); onChanged(); }} />}
+      {editing && data && <PropertyForm kinds={data.kinds} property={editing} onClose={() => setEditing(null)} onDone={() => { setEditing(null); void mutate(); onChanged(); }} />}
       {leasing && <LeaseForm property={leasing} onClose={() => setLeasing(null)} onDone={() => { setLeasing(null); void mutate(); onChanged(); }} />}
       {ending?.lease && <TerminateForm property={ending} lease={ending.lease} onClose={() => setEnding(null)} onDone={() => { setEnding(null); void mutate(); onChanged(); }} />}
     </>
   );
 }
 
-function PropertyForm({ kinds, onClose, onDone }: { kinds: Array<{ code: string; label: string }>; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: "", kind: "appartement", address: "", city: "Conakry", area_m2: "", acquisition_value: "", current_value: "" });
+/** Création d'un bien, ou modification (dont la valeur actuelle : valorisation du patrimoine). */
+function PropertyForm({ kinds, property, onClose, onDone }: { kinds: Array<{ code: string; label: string }>; property?: Property; onClose: () => void; onDone: () => void }) {
+  const text = (v: number | null | undefined) => (v ? String(v) : "");
+  const [f, setF] = useState({
+    name: property?.name ?? "", kind: property?.kind ?? "appartement", address: property?.address ?? "", city: property?.city ?? "Conakry",
+    area_m2: text(property?.area_m2), acquisition_value: text(property?.acquisition_value), current_value: text(property?.current_value),
+    valuation_date: property?.valuation_date ?? "",
+  });
   const [error, setError] = useState<string | null>(null);
   const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+  function save() {
+    const valued = num(f.current_value) !== (property?.current_value ?? 0);
+    const body = {
+      ...f, area_m2: num(f.area_m2), acquisition_value: num(f.acquisition_value), current_value: num(f.current_value),
+      // Une nouvelle valeur sans date d'évaluation est datée du jour.
+      valuation_date: f.valuation_date || (valued && num(f.current_value) ? new Date().toISOString().slice(0, 10) : null),
+    };
+    const call = property ? apiSend("PATCH", `/immobilier/properties/${property.id}`, body) : apiSend("POST", "/immobilier/properties", body);
+    call.then(onDone).catch((e) => setError(e instanceof ApiError ? e.message : "Erreur"));
+  }
   return (
-    <Modal open title="Nouveau bien" onClose={onClose} footer={<Button variant="primary" disabled={!f.name} onClick={() => apiSend("POST", "/immobilier/properties", { ...f, area_m2: num(f.area_m2), acquisition_value: num(f.acquisition_value), current_value: num(f.current_value) }).then(onDone).catch((e) => setError(e instanceof ApiError ? e.message : "Erreur"))}>Enregistrer</Button>}>
+    <Modal open title={property ? property.name : "Nouveau bien"} onClose={onClose} footer={<Button variant="primary" disabled={!f.name} onClick={save}>Enregistrer</Button>}>
       <div className="grid grid-cols-2 gap-3">
         {error && <div className="col-span-2"><Notice tone="danger">{error}</Notice></div>}
         <Field label="Désignation" className="col-span-2"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
@@ -90,6 +112,7 @@ function PropertyForm({ kinds, onClose, onDone }: { kinds: Array<{ code: string;
         <Field label="Adresse" className="col-span-2"><Input value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></Field>
         <Field label="Valeur d'acquisition"><Input inputMode="numeric" className="font-mono" value={f.acquisition_value} onChange={(e) => setF({ ...f, acquisition_value: e.target.value })} /></Field>
         <Field label="Valeur actuelle"><Input inputMode="numeric" className="font-mono" value={f.current_value} onChange={(e) => setF({ ...f, current_value: e.target.value })} /></Field>
+        <Field label="Date de l'évaluation" hint="Vide : date du jour pour une nouvelle valeur"><Input type="date" value={f.valuation_date} onChange={(e) => setF({ ...f, valuation_date: e.target.value })} /></Field>
       </div>
     </Modal>
   );
