@@ -11,10 +11,13 @@ set -a; . ./.env; set +a
 OCA_ADDONS_PATH="$(cat oca-src/addons_path)"
 export OCA_ADDONS_PATH
 
+# odoo.conf contient des secrets : lisible seulement par l'utilisateur odoo du conteneur
+# (uid 100, gid 101 dans l'image officielle).
 umask 077
-envsubst < odoo/odoo.conf.template > odoo/odoo.conf
-# L'utilisateur odoo du conteneur (uid 100 dans l'image officielle) doit pouvoir le lire.
-chmod 644 odoo/odoo.conf
+TMP_CONF="$(mktemp)"
+envsubst < odoo/odoo.conf.template > "$TMP_CONF"
+sudo install -o 100 -g 101 -m 640 "$TMP_CONF" odoo/odoo.conf
+rm -f "$TMP_CONF"
 
 docker compose build
 docker compose up -d

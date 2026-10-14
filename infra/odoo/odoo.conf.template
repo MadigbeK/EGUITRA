@@ -9,9 +9,11 @@ admin_passwd = ${ODOO_ADMIN_PASSWD}
 addons_path = /mnt/extra-addons,${OCA_ADDONS_PATH}
 data_dir = /var/lib/odoo
 
-; Le gestionnaire de bases n'est jamais exposé ; chaque base est servie par son nom d'hôte.
+; Le gestionnaire de bases n'est jamais exposé. db_name limite aussi les tâches planifiées
+; à cette base : les bases de test créées à côté ne sont pas touchées.
 list_db = False
-dbfilter = ${ODOO_DBFILTER}
+db_name = ${ODOO_DB}
+dbfilter = ^${ODOO_DB}$
 proxy_mode = True
 
 ; Dimensionnement pour 6 vCPU / 12 Go, production et recette sur le même serveur.

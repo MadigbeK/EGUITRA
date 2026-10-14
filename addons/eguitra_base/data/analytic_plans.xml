@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Axes analytiques (offre, chapitres 3.6 et 4) : la vue groupe se décompose par activité,
+    centre de coût, chantier, ensemble routier, route (ligne logistique), bien et dossier AxisPro.
+    Les valeurs de chaque axe viennent de la reprise des référentiels.
+-->
+<odoo noupdate="1">
+    <record id="analytic_plan_activite" model="account.analytic.plan">
+        <field name="name">Activité</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">1</field>
+    </record>
+    <record id="analytic_plan_centre_cout" model="account.analytic.plan">
+        <field name="name">Centre de coût</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">2</field>
+    </record>
+    <record id="analytic_plan_chantier" model="account.analytic.plan">
+        <field name="name">Chantier</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">3</field>
+    </record>
+    <record id="analytic_plan_vehicule" model="account.analytic.plan">
+        <field name="name">Ensemble routier</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">4</field>
+    </record>
+    <record id="analytic_plan_route" model="account.analytic.plan">
+        <field name="name">Route</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">5</field>
+    </record>
+    <record id="analytic_plan_bien" model="account.analytic.plan">
+        <field name="name">Bien immobilier</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">6</field>
+    </record>
+    <record id="analytic_plan_dossier" model="account.analytic.plan">
+        <field name="name">Dossier AxisPro</field>
+        <field name="default_applicability">optional</field>
+        <field name="color">7</field>
+    </record>
+</odoo>

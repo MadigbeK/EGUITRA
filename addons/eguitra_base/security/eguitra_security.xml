@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Profils de la plateforme (offre, chapitre 5.3). Chaque utilisateur reçoit un ou plusieurs
+    profils ; les applications EGUITRA Finance, AxisPro Suite et le portail n'affichent que le
+    périmètre correspondant. Les modules métier ajoutent leurs droits à ces groupes.
+-->
+<odoo>
+    <record id="module_category_eguitra" model="ir.module.category">
+        <field name="name">EGUITRA</field>
+        <field name="sequence">1</field>
+    </record>
+
+    <record id="privilege_eguitra_profiles" model="res.groups.privilege">
+        <field name="name">Profils de la plateforme</field>
+        <field name="category_id" ref="module_category_eguitra"/>
+        <field name="sequence">1</field>
+    </record>
+
+    <record id="group_profile_direction" model="res.groups">
+        <field name="name">Direction générale</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Tableau de bord du dirigeant, pilotage, consolidation, dernier niveau d'approbation.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user')), Command.link(ref('account.group_account_readonly'))]"/>
+    </record>
+
+    <record id="group_profile_finance" model="res.groups">
+        <field name="name">Finance et comptabilité</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Ventes, achats, trésorerie, immobilisations, budget, clôtures, états et déclarations.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user')), Command.link(ref('account.group_account_manager'))]"/>
+    </record>
+
+    <record id="group_profile_exploitation" model="res.groups">
+        <field name="name">Exploitation transport</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Flotte, chauffeurs, routes et tarifs, rotations, rentabilité.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
+    <record id="group_profile_chantiers" model="res.groups">
+        <field name="name">Chantiers</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Chantiers, situations d'avancement, retenues de garantie.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
+    <record id="group_profile_immobilier" model="res.groups">
+        <field name="name">Immobilier</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Biens, baux, loyers et quittancement, patrimoine.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
+    <record id="group_profile_cabinet" model="res.groups">
+        <field name="name">Cabinet AxisPro</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Dossiers de projets, évaluations, data room, comités, rapports.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
+    <record id="group_profile_admin" model="res.groups">
+        <field name="name">Administration</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Référentiels, seuils d'alerte, taux de change, profils et droits, journal d'audit.</field>
+        <field name="implied_ids" eval="[
+            Command.link(ref('group_profile_direction')),
+            Command.link(ref('group_profile_finance')),
+            Command.link(ref('base.group_erp_manager')),
+            Command.link(ref('base.group_multi_company')),
+        ]"/>
+    </record>
+
+    <!-- Porteur de projet : utilisateur du portail, sans accès interne. -->
+    <record id="group_profile_porteur" model="res.groups">
+        <field name="name">Porteur de projet</field>
+        <field name="comment">Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_portal'))]"/>
+    </record>
+</odoo>
