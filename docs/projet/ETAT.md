@@ -44,7 +44,7 @@ Localisation : `l10n_gn` (plan SYSCOHADA en GNF, 1 142 comptes). À valider avec
 - **Une seule application Next.js** (`apps/web`) sert les quatre surfaces : `/finance`, `/axispro`, `/portail`, `/mobile`, chacune avec son thème (`data-app`). Raison : un seul déploiement, une seule passerelle de sécurité, des composants partagés ; les domaines (finance.*, axispro.*, portail.*) aiguillent vers la bonne surface. Remplace le découpage en quatre applications envisagé au cadrage.
 - **Passerelle** : le navigateur ne voit jamais les jetons (cookies httpOnly) ; `/api/odoo/...` relaie vers l'API avec renouvellement automatique ; protection CSRF par Origin et Sec-Fetch-Site. Société de travail mémorisée par application ; AxisPro Suite et le portail travaillent par défaut dans la société du cabinet.
 - **Rotations** : application web installable (manifeste, service worker), saisie hors réseau dans IndexedDB, envoi idempotent (`client_uuid`) dès le retour du réseau. Le tarif n'est pas saisi au parc : le noyau l'applique (tarif client, sinon tarif de la route).
-- **Sauvegardes** : archivage continu des WAL (`archive_timeout` 15 min), sauvegarde de base chaque nuit, filestore toutes les 15 minutes, copie hors site chiffrée (rclone, distant `crypt`), contrôle de santé, test de restauration (y compris à un instant donné) vérifié le 14 octobre. Voir `infra/backup/README.md`.
+- **Sauvegardes** : archivage continu des WAL (`archive_timeout` 15 min), sauvegarde de base chaque nuit, filestore toutes les 15 minutes, copie hors site chiffrée (rclone, distant `crypt`) avec les rétentions de l'offre (30 quotidiennes, 12 mensuelles, journaux sur 14 jours), contrôle de santé, test de restauration (y compris à un instant donné) vérifié le 14 octobre. Voir `infra/backup/README.md`.
 - **Supervision** : `infra/monitor.sh` toutes les 5 minutes (conteneurs, API, web, disque, sauvegardes), alertes vers un webhook ou ntfy à configurer dans `.env`.
 - **Journal des à-nouveaux** : code `AN`. Ses écritures forment la situation d'ouverture du tableau des flux ; la reprise des soldes d'ouverture l'utilise.
 - **Proxy** : Caddy (TLS automatique), profil `proxy`, à démarrer quand les domaines pointeront vers le serveur. Client web du noyau ouvert aux seules adresses d'administration.
@@ -72,8 +72,9 @@ Localisation : `l10n_gn` (plan SYSCOHADA en GNF, 1 142 comptes). À valider avec
 | `apps/web` | Les quatre surfaces web (33 écrans), la passerelle sécurisée, l'application Rotations hors ligne. |
 | `scripts/dev/sync.sh` | Envoi du code sur le serveur de recette. |
 | `scripts/recette/donnees_demo.py` | Données fictives « Démo » pour la recette (transport, achats, chantier, biens, AxisPro). |
-| `scripts/reprise/` | Reprise contrôlée depuis des CSV (tiers, soldes d'ouverture, rotations 2026), modèles de fichiers ; vérifiée sur une base jetable. |
+| `scripts/reprise/` | Reprise contrôlée depuis des CSV (tiers, soldes d'ouverture, écritures de l'exercice avec lettrage, budget, rotations 2026), modèles de fichiers ; vérifiée sur une base jetable. |
 | `docs/guides/` | Guides des utilisateurs par profil (direction, finance, exploitation et Rotations, cabinet, porteurs, administration). |
+| `docs/projet/dossier-de-conception.md` | Projet de dossier de conception (liste définitive des composants, écarts, règles et valeurs de départ, cahier de recette des vingt attentes), à relire avant envoi. |
 | `docs/` | Offre contractuelle, support de cadrage, ce fichier. |
 
 Tests : 78 tests automatisés sur les huit modules (`infra/test.sh`), tous au vert le 14 octobre ; lint Python (`ruff.toml`) et TypeScript propres. Parcours vérifiés dans le navigateur sur la recette : connexion avec double authentification et mot de passe provisoire, AxisPro de bout en bout (grille, évaluation avec preuves, data room, comités, honoraires), portail du porteur, Rotations hors réseau puis synchronisation, rapport mensuel, tableau des flux, relances. Deux revues de sécurité automatiques ont été traitées (téléchargements servis en pièce jointe, redirection après connexion, adresse du client, relances bornées à la société).
@@ -91,10 +92,10 @@ Tests : 78 tests automatisés sur les huit modules (`infra/test.sh`), tous au ve
 1. Prérequis client à relancer (bloquants pour la reprise et la mise en production) : charte graphique et logos, classeur 2026 (dernière version), relevés bancaires 2026, plan de comptes et contact de l'expert-comptable, liste des utilisateurs par profil, grille AxisPro officielle (111 critères) et liste des pièces de la data room, accès aux noms de domaine.
 2. Stockage objet hors site (second hébergeur, environ 100 Go) : créer le bucket, remplir `infra/backup.env`.
 3. Noms de domaine : pointer finance.*, axispro.*, portail.* et le domaine technique vers le serveur, puis `docker compose --profile proxy up -d`.
-4. Reprise des données dès réception du classeur : remplir les modèles de `scripts/reprise/modeles/` (tiers, soldes d'ouverture, rotations 2026), contrôler puis appliquer sur la recette ; immobilisations et emprunts par les écrans. Relevés bancaires 2026 par l'écran Trésorerie.
+4. Reprise des données dès réception du classeur : remplir les modèles de `scripts/reprise/modeles/` (tiers, soldes d'ouverture, écritures, budget, rotations 2026), contrôler puis appliquer sur la recette ; immobilisations et emprunts par les écrans. Relevés bancaires 2026 par l'écran Trésorerie.
 5. Validation du plan de comptes et des correspondances des états SYSCOHADA avec l'expert-comptable ; paramétrage des seuils d'approbation et d'alerte avec le DG.
 6. Base de production `eguitra` avec `infra/init-db.sh`, après la recette ; ne jamais y charger les données de démonstration. Un noyau sert une seule base (`dbfilter`) : décider entre un second service Odoo pour la recette et la bascule de `ODOO_DB`.
-7. Dossier de conception à faire signer (liste définitive des modules, écarts : disque de 100 Go, moteur d'approbation spécifique, application web unique).
+7. Dossier de conception : relire le projet `docs/projet/dossier-de-conception.md`, le mettre en forme (générateur de `docs/offre/`) et le faire signer.
 8. Formation des référents (guides de `docs/guides/`) et recette fonctionnelle ligne à ligne des vingt attentes.
 9. Destinations des alertes de supervision (`ALERT_WEBHOOK_URL` ou `ALERT_NTFY_URL`) et serveur d'envoi de courriel (relances par courriel, comptes rendus) : à obtenir du client.
 
