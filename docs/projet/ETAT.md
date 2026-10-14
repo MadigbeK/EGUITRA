@@ -157,4 +157,5 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Les référents doivent être disponibles une demi-journée par jour ; toute absence se note au comité.
 - Expert-comptable attendu en semaine 2 pour valider le plan de comptes.
 - Charte graphique : les couleurs actuelles sont provisoires ; seules les variables de `apps/web/app/globals.css` changeront.
+- Annuaire des tiers : les profils chantiers, immobilier, exploitation et cabinet choisissent et créent des tiers dans une liste commune aux deux sociétés (nom, NIF, téléphone, courriel, ville ; jamais les soldes). C'est le fonctionnement ordinaire du noyau (fiches de tiers partagées) ; à confirmer avec le DG au regard des « comptabilités séparées », sinon séparer les fiches par société.
 - Référence de l'offre : la 37 a été attribuée par nous (la précédente portait -36 en pied de page et -01 en page de garde).

@@ -105,7 +105,9 @@ domaines publiés, ajouter une surveillance externe de disponibilité (sonde HTT
 
 - Noyaux et applications n'écoutent que sur 127.0.0.1 ; accès d'administration par tunnel SSH :
   `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 -L 8069:127.0.0.1:8069 -L 8169:127.0.0.1:8169 eguitra-vps`,
-  puis http://localhost:3000 (production) et http://localhost:3100 (recette).
+  puis http://localhost:3000 (production) et http://localhost:3100 (recette). Navigateur : Chrome,
+  Edge ou Firefox ; les cookies de session sont sécurisés (`__Host-`) et Safari les refuse sur
+  http://localhost.
 - Après activation du proxy, le client web du noyau de production (`CORE_DOMAIN`) n'est ouvert
   qu'aux adresses `ADMIN_IPS` ; l'API des noyaux n'est jamais publiée.
 - Journaux : `docker compose logs --tail 100 <service>` ; accès web dans le volume `caddy-data`
