@@ -5,7 +5,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import http
 from odoo.http import request
 
-from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route
+from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json
 
 from .common import FIN_READ, companies, parse_date, today
 
@@ -70,3 +70,32 @@ class EguitraFinanceDashboard(http.Controller):
             {"id": a.id, "name": a.name, "code": a.code or None, "plan": a.plan_id.name, "active": a.active}
             for a in accounts
         ]
+
+
+class EguitraFinanceThresholds(http.Controller):
+    @api_route("/finance/thresholds", profiles=FIN_READ)
+    def thresholds(self, **_kw):
+        Threshold = request.env["eguitra.alert.threshold"]
+        Threshold.sudo().ensure_defaults(request.env.company)
+        labels = dict(Threshold._fields["code"].selection)
+        return [
+            {"id": t.id, "code": t.code, "label": labels.get(t.code, t.code), "value": t.value,
+             "severity": t.severity, "active": t.active}
+            for t in Threshold.with_context(active_test=False).search([("company_id", "=", request.env.company.id)])
+        ]
+
+    @api_route("/finance/thresholds/<int:threshold_id>", methods=("PATCH",), profiles=("admin",))
+    def update_threshold(self, threshold_id, **_kw):
+        threshold = request.env["eguitra.alert.threshold"].with_context(active_test=False).browse(threshold_id).exists()
+        if not threshold or threshold.company_id != request.env.company:
+            raise ApiError(404, "not_found", "Seuil introuvable.")
+        data = read_json()
+        values = {}
+        if "value" in data:
+            values["value"] = float(data["value"] or 0)
+        if data.get("severity") in ("info", "warning", "blocking"):
+            values["severity"] = data["severity"]
+        if "active" in data:
+            values["active"] = bool(data["active"])
+        threshold.write(values)
+        return {"status": "ok"}

@@ -104,7 +104,10 @@ class EguitraAlertThreshold(models.Model):
             closed = self.env["eguitra.period.close"].sudo().search_count([
                 ("company_id", "=", company.id), ("period", "=", last_month_end.replace(day=1)), ("state", "=", "closed"),
             ])
-            if not closed and (today - last_month_end).days > t.value:
+            has_entries = self.env["account.move"].sudo().search_count([
+                ("company_id", "=", company.id), ("state", "=", "posted"), ("date", "<=", last_month_end),
+            ], limit=1)
+            if has_entries and not closed and (today - last_month_end).days > t.value:
                 alerts.append(self._alert(t, "Clôture en retard",
                                           f"Le mois de {last_month_end:%m/%Y} n'est pas clôturé.", None, "/finance/clotures"))
         return alerts

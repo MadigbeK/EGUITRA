@@ -47,5 +47,6 @@ class FinanceDataMixin:
             })],
         })
         if post:
-            move.action_post()
+            # Les tests de la finance ne portent pas sur le circuit d'approbation.
+            move.with_context(eguitra_approval_granted=True).action_post()
         return move

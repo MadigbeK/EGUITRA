@@ -69,6 +69,7 @@ def move_summary(move):
         "amount_residual": move.amount_residual,
         "payment_state": move.payment_state,
         "company": ref(move.company_id),
+        "approval": move._eguitra_approval_info(),
     }
 
 

@@ -57,7 +57,7 @@ class TestClosingAndLoans(FinanceDataMixin, TransactionCase):
         with self.assertRaises(UserError):
             close.action_close()
 
-        draft.action_post()
+        draft.with_context(eguitra_approval_granted=True).action_post()
         close.action_close()
         self.assertEqual(close.state, "closed")
         self.assertEqual(self.company.fiscalyear_lock_date, self.month + relativedelta(months=1, days=-1))

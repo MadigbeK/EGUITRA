@@ -4,3 +4,4 @@ from . import alert
 from . import loan
 from . import period_close
 from . import report_registry
+from . import account_move

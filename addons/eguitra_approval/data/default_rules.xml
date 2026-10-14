@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Les règles par défaut sont créées par le post_init_hook (une série par société). -->
+</odoo>

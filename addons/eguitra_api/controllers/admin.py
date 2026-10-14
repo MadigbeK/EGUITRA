@@ -143,3 +143,35 @@ class EguitraAdminController(http.Controller):
              "status": log.status, "duration_ms": log.duration_ms, "ip": log.ip, "app": log.app}
             for log in logs
         ]
+
+    @api_route("/admin/audit", methods=("GET",), profiles=ADMIN)
+    def audit(self, **kw):
+        """Piste d'audit : création, modification, suppression, avec valeurs avant et après."""
+        domain = []
+        if kw.get("model"):
+            domain.append(("model_id.model", "=", kw["model"]))
+        if kw.get("user_id"):
+            domain.append(("user_id", "=", int_arg(kw, "user_id")))
+        if kw.get("res_id"):
+            domain.append(("res_id", "=", int_arg(kw, "res_id")))
+        logs = sudo_env()["auditlog.log"].search(
+            domain, limit=int_arg(kw, "limit", 100, 1, 500), offset=int_arg(kw, "offset", 0, 0), order="id desc"
+        )
+        return [
+            {
+                "id": log.id,
+                "date": log.create_date,
+                "user": log.user_id.name or None,
+                "model": log.model_id.name,
+                "model_code": log.model_id.model,
+                "res_id": log.res_id,
+                "record": log.name or None,
+                "method": log.method,
+                "lines": [
+                    {"field": line.field_description or line.field_id.field_description, "old": line.old_value_text,
+                     "new": line.new_value_text}
+                    for line in log.line_ids
+                ],
+            }
+            for log in logs
+        ]

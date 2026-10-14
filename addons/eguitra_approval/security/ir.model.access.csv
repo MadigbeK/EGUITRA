@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_rule_user,règles lecture,model_eguitra_approval_rule,base.group_user,1,0,0,0
+access_rule_admin,règles administration,model_eguitra_approval_rule,eguitra_base.group_profile_admin,1,1,1,1
+access_request_user,demandes lecture,model_eguitra_approval_request,base.group_user,1,0,0,0
+access_step_user,étapes lecture,model_eguitra_approval_step,base.group_user,1,0,0,0
