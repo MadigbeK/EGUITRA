@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "lucide-react";
 import { Badge, Button, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
-import { cache, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
+import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
 import { fmtDate, fmtDec } from "@/lib/format";
 
 interface Referentials {
@@ -85,6 +85,27 @@ function fromPayload(item: QueuedRotation, costs: Referentials["costs"]): Form {
   };
 }
 
+/** Ce que le téléphone garde des listes : de quoi saisir, sans tarifs (appareil exposé au parc). */
+function keepReferentials(r: Referentials): Referentials {
+  return {
+    vehicles: r.vehicles.map(({ id, name, tractor_plate, capacity_liters, driver_id }) => ({ id, name, tractor_plate, capacity_liters, driver_id })),
+    drivers: r.drivers.map(({ id, name }) => ({ id, name })),
+    routes: r.routes.map(({ id, name, distance_km }) => ({ id, name, distance_km })),
+    clients: r.clients.map(({ id, name }) => ({ id, name })),
+    products: r.products.map(({ code, label }) => ({ code, label })),
+    costs: r.costs.map(({ code, label }) => ({ code, label })),
+  };
+}
+
+/** Rotations envoyées : suivi de l'agent, sans chiffre d'affaires, coûts ni marge. */
+function keepSent(r: SentRotation): SentRotation {
+  const ref = (x: { name: string } | null) => (x ? { name: x.name } : null);
+  return {
+    id: r.id, name: r.name, state: r.state, date_loading: r.date_loading, vehicle: ref(r.vehicle), client: ref(r.client),
+    route: ref(r.route), volume_loaded: r.volume_loaded, volume_delivered: r.volume_delivered, source: r.source,
+  };
+}
+
 export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const [online, setOnline] = useState(true);
   const [view, setView] = useState<View>("saisie");
@@ -115,7 +136,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       return;
     }
     try {
-      const fresh = await apiGet<Referentials>("/transport/referentials");
+      const fresh = keepReferentials(await apiGet<Referentials>("/transport/referentials"));
       setRefs(fresh);
       await cache.set("referentials", fresh);
     } catch {
@@ -129,8 +150,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     if (!navigator.onLine) return;
     try {
       const res = await apiGet<{ items: SentRotation[] }>("/transport/rotations?limit=30");
-      setSent(res.items);
-      await cache.set("sent", res.items);
+      const items = res.items.map(keepSent);
+      setSent(items);
+      await cache.set("sent", items);
     } catch {
       /* hors réseau : on garde la dernière liste connue */
     }
@@ -177,10 +199,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
   useEffect(() => {
     setOnline(navigator.onLine);
-    void loadQueue();
-    void loadRefs();
-    void loadSent();
-    void sync();
+    void (async () => {
+      await claimCache(me.id); // listes d'un autre compte effacées avant tout affichage
+      void loadQueue();
+      void loadRefs();
+      void loadSent();
+      void sync();
+    })();
     const up = () => {
       setOnline(true);
       void loadRefs();
@@ -195,7 +220,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       window.removeEventListener("offline", down);
       window.clearInterval(timer);
     };
-  }, [loadQueue, loadRefs, loadSent, sync]);
+  }, [loadQueue, loadRefs, loadSent, sync, me.id]);
 
   async function save() {
     setNotice(null);
@@ -232,6 +257,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
   async function logout() {
     if (mine.length && !window.confirm(`${mine.length} saisie(s) n'ont pas encore été transmises. Elles restent sur ce téléphone et partiront à votre prochaine connexion. Se déconnecter ?`)) return;
+    await forgetDevice();
     await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
     window.location.href = "/login?app=mobile";
   }

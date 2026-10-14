@@ -56,7 +56,32 @@ export const queue = {
 export const cache = {
   get: <T>(key: string) => run<T | undefined>("cache", "readonly", (s) => s.get(key) as IDBRequest<T | undefined>),
   set: (key: string, value: unknown) => run("cache", "readwrite", (s) => s.put(value, key)),
+  clear: () => run("cache", "readwrite", (s) => s.clear()),
 };
+
+/** Nom du cache du service worker (public/mobile-sw.js, constante VERSION). */
+const SHELL_CACHE = "rotations-v1";
+
+/**
+ * Les listes gardées sur le téléphone n'appartiennent qu'à un utilisateur : à l'ouverture par un autre
+ * compte, celles du précédent sont effacées. Les saisies en attente restent à leur auteur.
+ */
+export async function claimCache(userId: number): Promise<void> {
+  const owner = await cache.get<number>("owner").catch(() => undefined);
+  if (owner === userId) return;
+  await cache.clear().catch(() => undefined);
+  await cache.set("owner", userId).catch(() => undefined);
+}
+
+/**
+ * Déconnexion : listes locales et page gardée pour l'usage hors réseau sont effacées, pour que personne
+ * n'ouvre l'application sous l'identité de l'utilisateur parti. Ses saisies en attente restent et
+ * partiront à sa prochaine connexion.
+ */
+export async function forgetDevice(): Promise<void> {
+  await cache.clear().catch(() => undefined);
+  if (typeof caches !== "undefined") await caches.delete(SHELL_CACHE).catch(() => false);
+}
 
 /** Identifiant unique de saisie : la même rotation envoyée deux fois n'est créée qu'une fois. */
 export function newUuid(): string {
