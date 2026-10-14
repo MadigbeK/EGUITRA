@@ -10,10 +10,16 @@ Avant toute action, lire `docs/projet/ETAT.md` : décisions prises, état d'avan
 - Langue de travail : français. Montants en GNF hors taxes.
 
 ## Décisions techniques (raisons dans ETAT.md)
-- Odoo 19.0 Community + modules OCA 19.0. Les trois modules d'approbation OCA n'existent pas en 19.0 : porter `base_tier_validation` (limité à 2 jours) ou écrire un moteur spécifique. Porte de sortie vers Odoo 18.0 ouverte jusqu'à la fin de la semaine 1.
-- Déploiement en conteneurs (Docker Compose) sur un VPS Ubuntu 26.04 LTS, deux environnements (recette et production) sur le même serveur.
-- Sauvegardes : journalisation continue PostgreSQL copiée hors site toutes les 15 minutes chez un second hébergeur, sauvegarde complète quotidienne, pièces jointes synchronisées chaque heure.
-- Application mobile de saisie des rotations : application web progressive installable, fonctionnant hors ligne.
+- Odoo 19.0 Community + dix modules OCA 19.0 épinglés (`infra/oca/`), confirmé. Moteur d'approbation spécifique (`addons/eguitra_approval`) à la place de `base_tier_validation`, absent en 19.0.
+- Huit modules `addons/eguitra_*` ; l'API métier (`/api/v1`, `eguitra_api`) s'exécute dans le noyau sous l'identité de l'utilisateur. L'utilisateur ne voit jamais Odoo.
+- Une seule application Next.js (`apps/web`) pour les quatre surfaces : `/finance`, `/axispro`, `/portail`, `/mobile` (Rotations, application web progressive hors ligne). Le navigateur ne parle qu'à la passerelle `/api/odoo`.
+- Déploiement en conteneurs (Docker Compose) sur un VPS Ubuntu 26.04 LTS, deux environnements (recette et production) sur le même serveur. Exploitation : `infra/README.md`.
+- Sauvegardes : archivage continu des WAL (15 minutes au plus), sauvegarde de base quotidienne, pièces jointes toutes les 15 minutes, copie hors site chiffrée chez un second hébergeur (`infra/backup/README.md`).
+
+## Travailler sur le code
+- Tests des modules : `infra/test.sh module…` sur le serveur (base jetable). Lint Python : `ruff check addons scripts`. Web : `npx tsc --noEmit` et `npx next build` dans `apps/web`.
+- Envoi du code sur la recette : `scripts/dev/sync.sh`. Après installation ou mise à jour de modules, toujours redémarrer le noyau (module d'audit).
+- Écrire les fichiers en fins de ligne LF (les scripts shell en CRLF ne s'exécutent pas sur le serveur).
 
 ## Conventions
 - Commits en français, un sujet par commit. Branche de travail : `claude/bold-shannon-gpg2hv` (aucune branche main pour l'instant).
