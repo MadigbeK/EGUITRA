@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Test de restauration, à lancer sur le serveur depuis infra/ (au moins une fois par mois) :
+# Test de restauration, lancé chaque mois par la crontab (monitor-install.sh) et à la demande depuis
+# infra/ :
 # la dernière sauvegarde de base et les WAL archivés sont restaurés dans un PostgreSQL jetable,
 # isolé de la production (archives en lecture seule, port local 5433), puis contrôlés.
 #
@@ -79,6 +80,8 @@ echo "  pièces comptables   : $(sql 'select count(*) from account_move')"
 echo "  dernière écriture   : $(sql "select coalesce(max(write_date)::text, '-') from account_move")"
 echo "  dernier accès API   : $(sql "select coalesce(max(date)::text, '-') from eguitra_api_access_log")"
 echo "RÉUSSITE : restauration contrôlée."
+# Date du dernier test réussi, surveillée par monitor.sh (alerte au-delà de 40 jours).
+mkdir -p ../logs && date +%s > ../logs/restore-test.ok
 if (( keep )); then
   echo "Instance laissée en marche sur 127.0.0.1:5433 (conteneur $NAME, données dans $work)."
   echo "Pour l'arrêter : docker rm -f $NAME && sudo rm -rf $work"

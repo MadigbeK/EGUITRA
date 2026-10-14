@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Supervision du serveur, toutes les 5 minutes (crontab de l'utilisateur deploy, voir monitor-install.sh) :
 # conteneurs des deux environnements en marche et en bonne santé, API des noyaux, applications web,
-# espace disque, sauvegardes de la production.
+# espace disque, sauvegardes de la production, test de restauration mensuel.
 # Une alerte part au changement d'état (panne, retour à la normale), et toutes les 6 heures tant
 # que la panne dure, vers ALERT_WEBHOOK_URL (JSON {"text": …} : Slack, Teams, Google Chat) et/ou
 # ALERT_NTFY_URL (texte brut, application ntfy sur téléphone). Journal : ~/eguitra/logs/monitor.log.
@@ -30,6 +30,9 @@ curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3100/login 2>/dev/null || 
 disk=$(df --output=pcent / | tail -1 | tr -dc '0-9')
 (( disk >= 85 )) && problems+=("disque plein à ${disk} %")
 backup=$(docker compose exec -T backup check.sh 2>/dev/null) || problems+=("sauvegardes : ${backup:-contrôle impossible}")
+# Test de restauration mensuel (crontab) : le dernier réussi doit dater de moins de 40 jours.
+restored=$(cat "$LOG_DIR/restore-test.ok" 2>/dev/null || echo 0)
+(( $(date +%s) - restored > 40 * 86400 )) && problems+=("test de restauration : aucun réussi depuis plus de 40 jours (logs/restore-test.log)")
 
 now=$(date +%s)
 read -r last_state last_alert < "$STATE" 2>/dev/null || { last_state=ok; last_alert=0; }

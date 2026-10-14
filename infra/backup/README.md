@@ -42,6 +42,10 @@ docker compose exec backup check.sh
 
 ## Test de restauration (mensuel, et avant chaque mise en production)
 
+Lancé seul le 1er de chaque mois à 4 h 17 (crontab installée par `infra/monitor-install.sh`, compte
+rendu dans `~/eguitra/logs/restore-test.log`) ; la supervision alerte si aucun test n'a réussi depuis
+40 jours. L'offre demande un test trimestriel : le rythme mensuel le dépasse. À la demande :
+
 ```bash
 cd ~/eguitra/infra
 backup/restore-test.sh                                  # état le plus récent

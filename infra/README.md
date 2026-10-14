@@ -95,7 +95,8 @@ le script teste la connexion. Sans serveur, les relances s'impriment.
 ## Supervision
 
 `infra/monitor-install.sh` (une fois) planifie `monitor.sh` toutes les 5 minutes : conteneurs des
-deux environnements et leur santé, noyaux, applications web, disque (alerte à 85 %), sauvegardes.
+deux environnements et leur santé, noyaux, applications web, disque (alerte à 85 %), sauvegardes,
+test de restauration réussi depuis moins de 40 jours. Il planifie aussi ce test, le 1er de chaque mois.
 Les alertes partent au changement d'état et toutes les 6 heures pendant une panne, vers
 `ALERT_WEBHOOK_URL` et/ou `ALERT_NTFY_URL` (`.env`) ; journal dans `logs/monitor.log`. Une fois les
 domaines publiés, ajouter une surveillance externe de disponibilité (sonde HTTPS).
