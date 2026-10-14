@@ -1,4 +1,5 @@
 import io
+from datetime import timedelta
 
 from odoo.tests import tagged
 
@@ -190,6 +191,27 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
                                   {"period": self.today.replace(day=1).isoformat()}, token=self.token)
         self.assertEqual(status, 200, check)
         self.assertIn("checks", check)
+
+    def test_controles_d_integrite(self):
+        """Empreintes recalculées par le noyau : intactes après verrouillage, altération signalée."""
+        invoice = self.make_invoice(day=self.today - timedelta(days=1))
+        journal = invoice.journal_id.sudo()
+        journal.restrict_mode_hash_table = True
+        self.env["account.secure.entries.wizard"].sudo().create(
+            {"company_id": self.company.id, "hash_date": self.today}).action_secure_entries()
+        self.assertTrue(invoice.inalterable_hash)
+        status, body = self.call("GET", "/finance/integrity", token=self.token)
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body["checks"])
+        self.assertIn("verified", [c["status"] for c in body["hash_chains"]])
+        self.env.cr.execute("UPDATE account_move_line SET name = 'modifié hors plateforme' WHERE move_id = %s", invoice.ids)
+        self.env.invalidate_all()
+        status, body = self.call("GET", "/finance/integrity", token=self.token)
+        self.assertIn("corrupted", [c["status"] for c in body["hash_chains"]], "Écriture modifiée en base signalée")
+        self._create_user("dg", "direction")
+        status, body = self.call("GET", "/finance/integrity", token=self.open_session("dg")["access_token"])
+        self.assertEqual(status, 200, body)
+        self.assertIsNone(body["hash_chains"], "La direction voit les contrôles, la vérification reste aux comptables")
 
     def test_budget(self):
         status, budget = self.call("POST", "/finance/budgets", {"name": "Budget 2026", "year": self.today.year},

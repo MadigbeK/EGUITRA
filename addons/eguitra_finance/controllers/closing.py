@@ -72,18 +72,17 @@ class EguitraFinanceClosing(http.Controller):
 
     @api_route("/finance/integrity", profiles=FIN_READ)
     def integrity(self, **_kw):
-        """Contrôles permanents sur le mois écoulé et vérification des empreintes de chaînage."""
+        """Contrôles permanents sur le mois écoulé et vérification des empreintes de chaînage : chaque
+        écriture verrouillée est recalculée et comparée à son empreinte (calcul du noyau, que celui-ci
+        réserve aux comptables : la direction voit les contrôles sans la vérification)."""
         day = today()
         close = request.env["eguitra.period.close"]._get(request.env.company, day.replace(day=1) - relativedelta(months=1))
         checks = close._run_controls()
-        hashes = []
-        journals = request.env["account.journal"].sudo().search([
-            ("company_id", "=", request.env.company.id), ("restrict_mode_hash_table", "=", True),
-        ])
-        for journal in journals:
-            moves = request.env["account.move"].sudo().search(
-                [("journal_id", "=", journal.id), ("inalterable_hash", "!=", False)], order="secure_sequence_number"
-            )
-            hashes.append({"journal": journal.name, "secured_moves": len(moves),
-                           "last_secured": moves[-1:].date if moves else None})
-        return {"period": close.period, "checks": checks, "hash_chains": hashes}
+        chains = None
+        if request.env.user.has_group("account.group_account_user"):
+            report = request.env.company._check_hash_integrity()
+            chains = [{
+                "journal": r["journal_name"], "status": r["status"], "message": r.get("msg_cover"),
+                "first": r.get("first_move_name"), "last": r.get("last_move_name"), "last_date": r.get("last_move_date"),
+            } for r in report["results"]]
+        return {"period": close.period, "checks": checks, "hash_chains": chains}

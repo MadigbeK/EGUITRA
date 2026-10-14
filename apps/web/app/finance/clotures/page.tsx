@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Lock, LockOpen, ShieldAlert, TriangleAlert } from "lucide-react";
-import { Badge, Button, Card, ErrorBox, Field, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { MONTHS_FR, fmtDate, fmtDateTime } from "@/lib/format";
 
@@ -12,6 +12,14 @@ interface Check {
   status: "ok" | "warning" | "blocking";
   detail: string | null;
   count: number | null;
+}
+interface Chain {
+  journal: string;
+  status: "verified" | "corrupted" | "no_data";
+  message: string | null;
+  first: string | null;
+  last: string | null;
+  last_date: string | null;
 }
 interface Month {
   id: number | null;
@@ -57,8 +65,69 @@ export default function ClosingPage() {
           </div>
         </>
       )}
+      <Integrity />
       {month && <MonthModal month={month} onClose={() => setMonth(null)} onChanged={() => mutate()} />}
     </div>
+  );
+}
+
+const CHAIN = {
+  verified: { tone: "ok" as const, label: "Intactes" },
+  corrupted: { tone: "danger" as const, label: "Altération" },
+  no_data: { tone: "neutral" as const, label: "Aucune" },
+};
+
+/** Contrôles permanents du mois écoulé et vérification des empreintes des écritures verrouillées. */
+function Integrity() {
+  const { data, error } = useApi<{ period: string; checks: Check[]; hash_chains: Chain[] | null }>("/finance/integrity");
+  const label = data ? new Date(data.period).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) : "";
+  return (
+    <div className="mt-6">
+      <Card title="Contrôles d'intégrité">
+        {error && <ErrorBox error={error} />}
+        {!data && !error && <Loading />}
+        {data && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted">Contrôles permanents du mois écoulé ({label}), puis recalcul de l&apos;empreinte de chaque écriture verrouillée : une écriture modifiée hors de la plateforme serait signalée.</p>
+            <CheckList checks={data.checks} />
+            {data.hash_chains === null ? (
+              <Notice tone="accent">La vérification des empreintes est réservée aux profils de la finance.</Notice>
+            ) : data.hash_chains.length === 0 ? (
+              <Notice tone="accent">Aucune écriture encore chaînée : la première clôture mensuelle verrouille et chaîne les écritures du mois.</Notice>
+            ) : (
+              <DataTable dense rows={data.hash_chains} rowKey={(c) => c.journal} columns={[
+                { key: "journal", label: "Journal", render: (c) => c.journal },
+                { key: "status", label: "Écritures", render: (c) => <Badge tone={CHAIN[c.status]?.tone ?? "neutral"}>{CHAIN[c.status]?.label ?? c.status}</Badge> },
+                { key: "first", label: "Première pièce", render: (c) => c.first ?? "—" },
+                { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` (${c.last_date})` : ""}` : "—") },
+                { key: "message", label: "", render: (c) => (c.status === "corrupted" ? <span className="text-danger">{c.message}</span> : null) },
+              ]} />
+            )}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function CheckList({ checks }: { checks: Check[] }) {
+  return (
+    <ul className="space-y-2">
+      {checks.map((c) => {
+        const s = STATUS[c.status];
+        const Icon = s.icon;
+        return (
+          <li key={c.code} className="flex items-start gap-3 rounded-lg border border-line bg-panel-2 px-3 py-2">
+            <Icon className={cx("mt-0.5 h-4 w-4 flex-none", s.tone)} />
+            <div className="flex-1">
+              <div className="text-sm text-ink">{c.label}</div>
+              {c.detail && <div className="text-xs text-muted">{c.detail}</div>}
+            </div>
+            <Badge tone={c.status === "ok" ? "ok" : c.status === "warning" ? "warn" : "danger"}>{s.label}</Badge>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -135,24 +204,7 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
         ) : (
           <p className="text-sm text-muted">La clôture vérifie les équilibres, le compte de passage, les brouillons, le rapprochement bancaire et l&apos;ordre des mois. Elle est refusée tant qu&apos;un contrôle bloquant échoue.</p>
         )}
-        {checks && (
-          <ul className="space-y-2">
-            {checks.map((c) => {
-              const s = STATUS[c.status];
-              const Icon = s.icon;
-              return (
-                <li key={c.code} className="flex items-start gap-3 rounded-lg border border-line bg-panel-2 px-3 py-2">
-                  <Icon className={cx("mt-0.5 h-4 w-4 flex-none", s.tone)} />
-                  <div className="flex-1">
-                    <div className="text-sm text-ink">{c.label}</div>
-                    {c.detail && <div className="text-xs text-muted">{c.detail}</div>}
-                  </div>
-                  <Badge tone={c.status === "ok" ? "ok" : c.status === "warning" ? "warn" : "danger"}>{s.label}</Badge>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        {checks && <CheckList checks={checks} />}
         {month.events.length > 0 && (
           <Card title="Registre">
             <ul className="space-y-1 text-xs text-ink-2">
