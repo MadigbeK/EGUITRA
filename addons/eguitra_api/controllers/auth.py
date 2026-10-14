@@ -46,9 +46,9 @@ def _user_agent():
     return request.httprequest.headers.get("User-Agent", "")
 
 
-def _session_payload(env, user, app, family=None):
+def _session_payload(env, user, app, family=None, started=None):
     tokens = env["eguitra.api.token"]._issue_session(
-        user, app, family=family, ip=client_ip(), user_agent=_user_agent()
+        user, app, family=family, ip=client_ip(), user_agent=_user_agent(), started=started
     )
     return {"status": "ok", **tokens, "user": user.with_env(env)._eguitra_public()}
 
@@ -166,15 +166,22 @@ class EguitraAuthController(http.Controller):
         if token.app not in user._eguitra_apps():
             token._revoke_family()
             return _refusal(403, "app_forbidden", "Votre profil ne donne plus accès à cette application.")
+        if token._session_expired():
+            token._revoke_family("logout")
+            return _refusal(401, "session_expired", "Session expirée : reconnectez-vous.")
         if not token.revoked:
             token.write({"revoked": True, "revoke_reason": "rotation", "rotated_at": now})
-        return _session_payload(env, user, token.app, family=token.family)
+        return _session_payload(env, user, token.app, family=token.family, started=token._session_started())
 
-    @api_route("/auth/logout", methods=("POST",))
+    @api_route("/auth/logout", methods=("POST",), auth=False)
     def logout(self, **_kw):
+        """Fin de session : révoque la lignée du jeton d'accès ou du jeton de renouvellement présenté
+        (le jeton d'accès, de 15 minutes, a souvent expiré quand l'utilisateur se déconnecte)."""
         env = sudo_env()
+        Token = env["eguitra.api.token"]
         raw = request.httprequest.headers.get("Authorization", "")[7:].strip()
-        env["eguitra.api.token"]._find(raw, "access")._revoke_family("logout")
+        tokens = Token._find(raw, "access") | Token._find(read_json().get("refresh_token"), "refresh")
+        tokens._revoke_family("logout")
         return {"status": "ok"}
 
     @api_route("/auth/me", methods=("GET",))
@@ -188,10 +195,14 @@ class EguitraAuthController(http.Controller):
         data = read_json()
         old, new = require(data, "old_password", "new_password")
         user = request.env.user
+        env = sudo_env()
+        # L'ancien mot de passe compte comme une connexion : essais bornés, même avec un jeton volé.
+        _check_not_blocked(env, user.login)
         try:
             user._check_credentials({"type": "password", "password": old}, {"interactive": True})
         except AccessDenied:
-            raise ApiError(401, "invalid_credentials", "Mot de passe actuel incorrect.") from None
+            _record_attempt(env, user.login, False)
+            return _refusal(401, "invalid_credentials", "Mot de passe actuel incorrect.")
         if new == old:
             raise ApiError(422, "business_rule", "Le nouveau mot de passe doit être différent.")
         # Le contrôle de robustesse (auth_password_policy) s'applique à l'écriture.

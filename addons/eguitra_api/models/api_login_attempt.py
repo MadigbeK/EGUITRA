@@ -3,8 +3,12 @@ from datetime import timedelta
 from odoo import api, fields, models
 
 WINDOW_MINUTES = 15
-MAX_FAILURES_PER_LOGIN = 5
-MAX_FAILURES_PER_IP = 20
+# Un identifiant se bloque d'abord pour l'adresse d'où viennent les échecs : un tiers qui connaît
+# l'identifiant ne peut plus en interdire l'accès à son titulaire en quelques essais. Le seuil
+# toutes adresses confondues freine une attaque répartie ; la double authentification fait le reste.
+MAX_FAILURES_PER_LOGIN_IP = 5
+MAX_FAILURES_PER_LOGIN = 50
+MAX_FAILURES_PER_IP = 50  # un bureau entier sort souvent par une seule adresse
 
 
 class EguitraApiLoginAttempt(models.Model):
@@ -25,12 +29,18 @@ class EguitraApiLoginAttempt(models.Model):
 
     @api.model
     def _is_blocked(self, login, ip):
-        """Bloqué après 5 échecs (mot de passe ou code) sur l'identifiant, ou 20 sur l'adresse IP."""
+        """Bloqué 15 minutes après 5 échecs (mot de passe ou code) sur l'identifiant depuis une même
+        adresse, 50 sur l'identifiant toutes adresses confondues, ou 50 depuis l'adresse."""
         since = fields.Datetime.now() - timedelta(minutes=WINDOW_MINUTES)
+        Attempt = self.sudo()
         base = [("success", "=", False), ("date", ">=", since)]
-        if login and self.sudo().search_count(base + [("login", "=", login)]) >= MAX_FAILURES_PER_LOGIN:
-            return True
-        return bool(ip) and self.sudo().search_count(base + [("ip", "=", ip)]) >= MAX_FAILURES_PER_IP
+        if login:
+            same_ip = base + [("login", "=", login), ("ip", "=", ip or False)]
+            if Attempt.search_count(same_ip) >= MAX_FAILURES_PER_LOGIN_IP:
+                return True
+            if Attempt.search_count(base + [("login", "=", login)]) >= MAX_FAILURES_PER_LOGIN:
+                return True
+        return bool(ip) and Attempt.search_count(base + [("ip", "=", ip)]) >= MAX_FAILURES_PER_IP
 
     @api.model
     def _cron_purge(self):

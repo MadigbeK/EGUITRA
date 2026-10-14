@@ -5,8 +5,13 @@ import { COOKIES, clearSessionCookies, odooFetch } from "@/lib/session";
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return forbiddenOrigin();
   const token = req.cookies.get(COOKIES.access)?.value;
-  if (token) {
-    await odooFetch("/auth/logout", { method: "POST", token }).catch(() => undefined);
+  const refresh = req.cookies.get(COOKIES.refresh)?.value;
+  if (token || refresh) {
+    // Le jeton d'accès (15 minutes) a souvent expiré à la déconnexion : le jeton de renouvellement
+    // suffit au noyau pour fermer toute la session.
+    await odooFetch("/auth/logout", { method: "POST", token, body: refresh ? { refresh_token: refresh } : {} }).catch(
+      () => undefined,
+    );
   }
   const out = NextResponse.json({ status: "ok" });
   clearSessionCookies(out.cookies);

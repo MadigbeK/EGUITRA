@@ -14,6 +14,9 @@ DEFAULT_TTL = {
     "access": 15 * 60,
     "refresh": 12 * 3600,
     "refresh_mobile": 30 * 24 * 3600,  # saisie au parc, souvent sans réseau
+    # Durée totale d'une session, renouvellements compris : au-delà, nouvelle connexion.
+    "session": 7 * 24 * 3600,
+    "session_mobile": 90 * 24 * 3600,
     "mfa": 5 * 60,
     "mfa_setup": 10 * 60,
 }
@@ -40,6 +43,7 @@ class EguitraApiToken(models.Model):
     )
     token_hash = fields.Char(required=True, index=True)
     family = fields.Char(index=True, help="Lignée de jetons issue d'une même connexion.")
+    family_started_at = fields.Datetime(help="Connexion à l'origine de la lignée : borne la durée totale de la session.")
     app = fields.Char()
     payload = fields.Char(help="Donnée liée au jeton, par exemple le secret en cours d'activation.")
     expires_at = fields.Datetime(required=True, index=True)
@@ -65,19 +69,29 @@ class EguitraApiToken(models.Model):
         return int(value) if value else DEFAULT_TTL[key]
 
     @api.model
-    def _issue(self, user, kind, app=None, family=None, payload=None, ip=None, user_agent=None):
+    def _ttl_for(self, user, kind, app=None):
+        """Les longues durées de Rotations (saisie hors réseau) sont réservées au profil exploitation seul :
+        un compte doté d'autres droits, administrateur compris, garde les durées ordinaires."""
+        if app == "mobile" and set(user._eguitra_profiles()) - {"exploitation"}:
+            app = None
+        return self._ttl(kind, app)
+
+    @api.model
+    def _issue(self, user, kind, app=None, family=None, payload=None, ip=None, user_agent=None, started=None):
         """Crée un jeton et renvoie (valeur en clair, enregistrement). Seule l'empreinte est stockée."""
         raw = secrets.token_urlsafe(32)
-        ttl = self._ttl(kind, app)
+        ttl = self._ttl_for(user, kind, app)
+        now = fields.Datetime.now()
         record = self.sudo().create(
             {
                 "user_id": user.id,
                 "kind": kind,
                 "token_hash": hash_token(raw),
                 "family": family,
+                "family_started_at": started or now,
                 "app": app,
                 "payload": payload,
-                "expires_at": fields.Datetime.now() + timedelta(seconds=ttl),
+                "expires_at": now + timedelta(seconds=ttl),
                 "ip": ip,
                 "user_agent": (user_agent or "")[:250] or False,
             }
@@ -99,11 +113,22 @@ class EguitraApiToken(models.Model):
             and self.user_id.active
         )
 
+    def _session_started(self):
+        self.ensure_one()
+        return self.family_started_at or self.create_date
+
+    def _session_expired(self):
+        """La session a-t-elle dépassé sa durée totale (7 jours, 90 pour Rotations), renouvellements compris ?"""
+        self.ensure_one()
+        limit = timedelta(seconds=self._ttl_for(self.user_id, "session", self.app))
+        return fields.Datetime.now() - self._session_started() > limit
+
     @api.model
-    def _issue_session(self, user, app, family=None, ip=None, user_agent=None):
+    def _issue_session(self, user, app, family=None, ip=None, user_agent=None, started=None):
         family = family or uuid.uuid4().hex
-        access, access_rec = self._issue(user, "access", app, family, ip=ip, user_agent=user_agent)
-        refresh, refresh_rec = self._issue(user, "refresh", app, family, ip=ip, user_agent=user_agent)
+        started = started or fields.Datetime.now()
+        access, access_rec = self._issue(user, "access", app, family, ip=ip, user_agent=user_agent, started=started)
+        refresh, refresh_rec = self._issue(user, "refresh", app, family, ip=ip, user_agent=user_agent, started=started)
         now = fields.Datetime.now()
         return {
             "access_token": access,

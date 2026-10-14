@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from odoo import fields
 from odoo.tests import tagged
 
 from .common import PASSWORD, ApiCase
@@ -157,3 +158,51 @@ class TestAuth(ApiCase):
         # L'ancien jeton, remplacé il y a quelques secondes, ne rouvre pas la session fermée.
         status, body = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
         self.assertEqual(status, 401, body)
+
+    def test_deconnexion_par_le_jeton_de_renouvellement(self):
+        session = self.open_session("fatou")
+        status, _b = self.call("POST", "/auth/logout", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200)
+        status, body = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 401, body)
+        status, _b = self.call("GET", "/auth/me", token=session["access_token"])
+        self.assertEqual(status, 401, "Toute la session est fermée, même si le jeton d'accès a expiré")
+
+    def test_duree_totale_de_session(self):
+        session = self.open_session("fatou")
+        Token = self.env["eguitra.api.token"]
+        family = Token._find(session["refresh_token"], "refresh").family
+        Token.search([("family", "=", family)]).write({"family_started_at": fields.Datetime.now() - timedelta(days=8)})
+        status, body = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual((status, body["error"]), (401, "session_expired"), "Sept jours au plus, renouvellements compris")
+
+    def test_longue_session_de_rotations_reservee_a_l_exploitation(self):
+        self._create_user("ibrahima", "exploitation")
+        self._create_user("aissatou", "admin")
+        self.assertGreater(self.open_session("ibrahima", app="mobile")["refresh_expires_in"], 29 * 24 * 3600)
+        self.assertLessEqual(self.open_session("aissatou", app="mobile")["refresh_expires_in"], 12 * 3600,
+                             "Un administrateur garde la durée ordinaire dans Rotations")
+
+    def test_blocage_par_adresse(self):
+        self._create_user("mariama", "finance")
+
+        def essai(ip, password="faux"):
+            return self.call("POST", "/auth/login", {"login": "mariama", "password": password, "app": "finance"},
+                             headers={"X-Forwarded-For": ip, "X-Forwarded-Host": "eguitra-web"})
+
+        for _i in range(5):
+            self.assertEqual(essai("41.223.10.5")[0], 401)
+        self.assertEqual(essai("41.223.10.5", PASSWORD)[0], 429, "L'adresse des échecs est bloquée")
+        status, body = essai("102.176.4.20", PASSWORD)
+        self.assertEqual(status, 200, "Le titulaire se connecte encore depuis son adresse")
+        attempt = self.env["eguitra.api.login.attempt"].search([("login", "=", "mariama")], limit=1)
+        self.assertEqual(attempt.ip, "102.176.4.20", "Adresse réelle du client, transmise par la passerelle")
+
+    def test_changement_de_mot_de_passe_borne(self):
+        token = self.open_session("fatou")["access_token"]
+        payload = {"old_password": "faux", "new_password": "Nouveau-Mot-2026"}
+        for _i in range(5):
+            status, body = self.call("POST", "/auth/password", payload, token=token)
+            self.assertEqual((status, body["error"]), (401, "invalid_credentials"))
+        status, _b = self.call("POST", "/auth/password", dict(payload, old_password=PASSWORD), token=token)
+        self.assertEqual(status, 429, "Essais de l'ancien mot de passe bornés")
