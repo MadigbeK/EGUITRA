@@ -29,11 +29,16 @@ def _technical_user_ids(env):
 
 
 def _scope_domain(env):
-    """Utilisateurs gérables : hors comptes techniques, dans les sociétés de l'administrateur."""
-    return [
+    """Utilisateurs gérables : hors comptes techniques, dans les sociétés de l'administrateur et dans
+    elles seules (un compte ouvert aussi à une autre société relève d'un administrateur des deux)."""
+    domain = [
         ("id", "not in", _technical_user_ids(env)),
         ("company_ids", "in", request.env.user.company_ids.ids),
     ]
+    others = env["res.company"].search([]) - request.env.user.company_ids
+    if others:
+        domain.append(("company_ids", "not in", others.ids))
+    return domain
 
 
 def _scoped_user_ids(env):
@@ -48,23 +53,38 @@ def _all_companies(env):
 AUDIT_SCAN_MAX = 5000  # entrées examinées au plus par appel (pagination après filtrage)
 
 
+def _owner(record):
+    """Sociétés dont relève un enregistrement : la société elle-même pour sa fiche, sa société, ou celles
+    d'un compte du plan comptable (account.account n'a pas de company_id mais company_ids)."""
+    if record._name == "res.company":
+        return record
+    if "company_id" in record._fields:
+        return record.company_id
+    return record.company_ids
+
+
 def _audit_visible(env, logs, user_ids):
     """Entrées de la piste d'audit visibles par l'administrateur : enregistrements de ses sociétés
     ou sans société ; enregistrement supprimé depuis : selon l'auteur de l'action."""
     allowed = request.env.user.company_ids
     company_of = {}
     for model in set(logs.mapped("model_id.model")):
-        if model in env and "company_id" in env[model]._fields:
-            ids = logs.filtered(lambda log, m=model: log.model_id.model == m).mapped("res_id")
-            records = env[model].with_context(active_test=False).browse(ids).exists()
-            company_of[model] = {record.id: record.company_id for record in records}
+        if model not in env:
+            continue
+        fields = env[model]._fields
+        multi = "company_ids" in fields and fields["company_ids"].comodel_name == "res.company"
+        if model != "res.company" and "company_id" not in fields and not multi:
+            continue
+        ids = logs.filtered(lambda log, m=model: log.model_id.model == m).mapped("res_id")
+        records = env[model].with_context(active_test=False).browse(ids).exists()
+        company_of[model] = {record.id: _owner(record) for record in records}
     visible = []
     for log in logs:
         companies = company_of.get(log.model_id.model)
         if companies is None:
             visible.append(log)  # modèle sans société : donnée partagée
         elif log.res_id in companies:
-            if not companies[log.res_id] or companies[log.res_id] in allowed:
+            if not companies[log.res_id] or companies[log.res_id] & allowed:
                 visible.append(log)
         elif log.user_id.id in user_ids:
             visible.append(log)

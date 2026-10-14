@@ -97,6 +97,34 @@ class TestAdmin(ApiCase):
         self.assertIn(seen.id, ids)
         self.assertNotIn(hidden.id, ids, "Piste d'audit d'une société hors périmètre invisible")
 
+    def test_perimetre_d_un_administrateur_partiel(self):
+        """Comptes du plan, fiches société et comptes multi-sociétés hors du périmètre restent invisibles."""
+        other = self.env["res.company"].create({"name": "Société hors périmètre"})
+        Account = self.env["account.account"]
+        mine = Account.create({"name": "Compte du groupe", "code": "471901", "account_type": "asset_current",
+                               "company_ids": [(6, 0, self.env.company.ids)]})
+        foreign = Account.create({"name": "Compte hors périmètre", "code": "471902", "account_type": "asset_current",
+                                  "company_ids": [(6, 0, other.ids)]})
+        Log = self.env["auditlog.log"]
+
+        def log(record):
+            model = self.env["ir.model"]._get(record._name)
+            return Log.create({"name": record.display_name, "model_id": model.id, "res_id": record.id,
+                               "user_id": self.env.uid, "method": "write"})
+
+        seen, hidden, hidden_company = log(mine), log(foreign), log(other)
+        token = self.open_session("aissatou")["access_token"]
+        status, audit = self.call("GET", "/admin/audit?model=account.account", token=token)
+        self.assertEqual(status, 200, audit)
+        ids = [entry["id"] for entry in audit]
+        self.assertIn(seen.id, ids)
+        self.assertNotIn(hidden.id, ids, "Historique d'un compte d'une autre société")
+        status, audit = self.call("GET", "/admin/audit?model=res.company", token=token)
+        self.assertNotIn(hidden_company.id, [entry["id"] for entry in audit], "Fiche d'une autre société")
+        gerant = self._create_user("gerant", "direction", company_ids=[(6, 0, (self.env.company | other).ids)])
+        status, users = self.call("GET", "/admin/users", token=token)
+        self.assertNotIn(gerant.id, [u["id"] for u in users], "Compte ouvert aussi à une autre société")
+
     def test_identite_des_societes(self):
         token = self.open_session("aissatou")["access_token"]
         status, rows = self.call("GET", "/admin/companies", token=token)
