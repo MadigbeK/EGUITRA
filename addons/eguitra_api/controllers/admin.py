@@ -54,13 +54,24 @@ AUDIT_SCAN_MAX = 5000  # entrées examinées au plus par appel (pagination aprè
 
 
 def _owner(record):
-    """Sociétés dont relève un enregistrement : la société elle-même pour sa fiche, sa société, ou celles
-    d'un compte du plan comptable (account.account n'a pas de company_id mais company_ids)."""
+    """Sociétés dont relève un enregistrement : la société elle-même pour sa fiche, toutes les sociétés
+    d'un compte utilisateur (comme _scope_domain), sa société, ou celles d'un compte du plan comptable
+    (account.account n'a pas de company_id mais company_ids)."""
     if record._name == "res.company":
         return record
+    if record._name == "res.users":
+        return record.company_ids
     if "company_id" in record._fields:
         return record.company_id
     return record.company_ids
+
+
+def _owner_visible(record_name, owner, allowed):
+    """Un compte utilisateur ne relève que d'un administrateur de toutes ses sociétés ; un autre
+    enregistrement, d'un administrateur de l'une d'elles (compte du plan partagé)."""
+    if not owner:
+        return True
+    return owner <= allowed if record_name == "res.users" else bool(owner & allowed)
 
 
 def _audit_visible(env, logs, user_ids):
@@ -84,7 +95,7 @@ def _audit_visible(env, logs, user_ids):
         if companies is None:
             visible.append(log)  # modèle sans société : donnée partagée
         elif log.res_id in companies:
-            if not companies[log.res_id] or companies[log.res_id] & allowed:
+            if _owner_visible(log.model_id.model, companies[log.res_id], allowed):
                 visible.append(log)
         elif log.user_id.id in user_ids:
             visible.append(log)

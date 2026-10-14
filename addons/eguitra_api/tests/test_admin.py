@@ -124,6 +124,10 @@ class TestAdmin(ApiCase):
         gerant = self._create_user("gerant", "direction", company_ids=[(6, 0, (self.env.company | other).ids)])
         status, users = self.call("GET", "/admin/users", token=token)
         self.assertNotIn(gerant.id, [u["id"] for u in users], "Compte ouvert aussi à une autre société")
+        hidden_user = log(gerant)
+        status, audit = self.call("GET", "/admin/audit?model=res.users", token=token)
+        self.assertNotIn(hidden_user.id, [entry["id"] for entry in audit],
+                         "Historique d'un compte ouvert aussi à une autre société")
 
     def test_identite_des_societes(self):
         token = self.open_session("aissatou")["access_token"]
