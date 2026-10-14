@@ -62,6 +62,21 @@ class TestImmobilier(FinanceDataMixin, TransactionCase):
         self.env["eguitra.lease"]._disable_contract_cron()
         self.assertFalse(cron.active, "Désactivée à chaque mise à jour du module")
 
+    def test_fin_de_bail(self):
+        start = (self.today - relativedelta(months=2)).replace(day=1)
+        lease = self._lease(start)
+        lease.action_activate()
+        lease.action_terminate(start + relativedelta(months=1, days=-1))  # dernier jour du premier mois
+        self.assertEqual(lease.state, "terminated")
+        self.assertFalse(self.bien.occupied, "Le bien redevient libre")
+        Move = self.env["account.move"]
+        domain = [("partner_id", "=", self.tenant.id), ("move_type", "=", "out_invoice")]
+        self.assertEqual(Move.search(domain).mapped("invoice_date"), [start], "Échéances dues facturées, rien au-delà de la fin")
+        self.env["eguitra.lease"]._cron_generate_rents()
+        self.assertEqual(Move.search_count(domain), 1, "Un locataire parti n'est plus facturé")
+        with self.assertRaises(UserError):
+            self._lease(start, name="BAIL-2026-03").action_terminate(start)  # bail non activé
+
     def test_un_seul_bail_en_cours_par_bien(self):
         self._lease(self.today).action_activate()
         with self.assertRaises(UserError):

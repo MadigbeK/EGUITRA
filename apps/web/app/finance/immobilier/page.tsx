@@ -51,6 +51,7 @@ function Properties({ onChanged }: { onChanged: () => void }) {
   const { data, mutate } = useApi<{ items: Property[]; kinds: Array<{ code: string; label: string }> }>("/immobilier/properties");
   const [creating, setCreating] = useState(false);
   const [leasing, setLeasing] = useState<Property | null>(null);
+  const [ending, setEnding] = useState<Property | null>(null);
   return (
     <>
       <div className="mb-3 flex justify-end"><Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button></div>
@@ -62,12 +63,15 @@ function Properties({ onChanged }: { onChanged: () => void }) {
             { key: "area_m2", label: "Surface", align: "right", render: (p) => (p.area_m2 ? `${p.area_m2} m²` : "—") },
             { key: "current_value", label: "Valeur", align: "right", render: (p) => fmtGNF(p.current_value || p.acquisition_value) },
             { key: "lease", label: "Locataire", render: (p) => p.lease ? `${p.lease.tenant.name}, ${fmtGNF(p.lease.rent)} / ${p.lease.periodicity === "monthly" ? "mois" : p.lease.periodicity === "quarterly" ? "trimestre" : "an"}` : "—" },
-            { key: "occupied", label: "", render: (p) => p.occupied ? <Badge tone="ok">Loué</Badge> : <Button className="px-2 py-1 text-xs" onClick={() => setLeasing(p)}>Louer</Button> },
+            { key: "occupied", label: "", render: (p) => p.occupied ? (
+              <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{p.lease && <Button className="px-2 py-1 text-xs" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
+            ) : <Button className="px-2 py-1 text-xs" onClick={() => setLeasing(p)}>Louer</Button> },
           ]} />
         )}
       </Card>
       {creating && data && <PropertyForm kinds={data.kinds} onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); onChanged(); }} />}
       {leasing && <LeaseForm property={leasing} onClose={() => setLeasing(null)} onDone={() => { setLeasing(null); void mutate(); onChanged(); }} />}
+      {ending?.lease && <TerminateForm property={ending} lease={ending.lease} onClose={() => setEnding(null)} onDone={() => { setEnding(null); void mutate(); onChanged(); }} />}
     </>
   );
 }
@@ -133,6 +137,34 @@ function Rents() {
       </Card>
       {receipt !== null && <ReceiptModal id={receipt} onClose={() => setReceipt(null)} />}
     </>
+  );
+}
+
+/** Fin de bail : les loyers dus jusqu'à la date de fin sont émis, puis le quittancement s'arrête. */
+function TerminateForm({ property, lease, onClose, onDone }: { property: Property; lease: Lease; onClose: () => void; onDone: () => void }) {
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend("POST", `/immobilier/leases/${lease.id}/terminate`, { date });
+      onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Erreur");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal open title={`Fin de bail · ${property.name}`} onClose={onClose} footer={<Button variant="danger" loading={busy} disabled={!date} onClick={submit}>Mettre fin au bail</Button>}>
+      <div className="space-y-3 text-sm">
+        {error && <Notice tone="danger">{error}</Notice>}
+        <p>Bail {lease.name} de {lease.tenant.name}. Les loyers dus jusqu&apos;à la date de fin sont émis, puis le bien redevient libre et n&apos;est plus facturé. Un loyer déjà émis pour une période postérieure s&apos;annule par un avoir (finance).</p>
+        <Field label="Date de fin"><Input type="date" value={date} min={lease.date_start} onChange={(e) => setDate(e.target.value)} /></Field>
+      </div>
+    </Modal>
   );
 }
 

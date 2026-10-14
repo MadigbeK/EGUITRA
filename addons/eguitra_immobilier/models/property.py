@@ -157,10 +157,15 @@ class EguitraLease(models.Model):
         return True
 
     def action_terminate(self, date=None):
+        today = fields.Date.context_today(self)
         for lease in self:
             if lease.state != "active":
                 raise UserError("Seul un bail en cours peut être résilié.")
-            end = date or fields.Date.context_today(self)
+            end = date or today
+            if end < lease.date_start:
+                raise UserError("La fin du bail ne peut précéder sa prise d'effet.")
+            # Solde du bail : les échéances dues jusqu'à la fin sont facturées avant la clôture.
+            lease._generate_rents(min(end, today))
             if lease.contract_id:
                 lease.contract_id.sudo().write({"date_end": end})
             lease.write({"state": "terminated", "date_end": end})
