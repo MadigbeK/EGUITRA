@@ -86,6 +86,12 @@ Voir `backup/README.md` : archivage continu de la production (perte maximale 15 
 sauvegarde de base chaque nuit, pièces jointes, copie hors site chiffrée, test de restauration
 (`backup/restore-test.sh`).
 
+## Courriel
+
+Les relances des clients partent par courriel dès qu'un serveur d'envoi est paramétré : renseigner
+les variables `SMTP_*` de `.env`, puis `infra/mail-server.sh production` (et `recette` si besoin) ;
+le script teste la connexion. Sans serveur, les relances s'impriment.
+
 ## Supervision
 
 `infra/monitor-install.sh` (une fois) planifie `monitor.sh` toutes les 5 minutes : conteneurs des
