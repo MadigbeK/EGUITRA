@@ -56,7 +56,11 @@ class TestImmobilier(FinanceDataMixin, TransactionCase):
         self.env["eguitra.lease"]._cron_generate_rents()
         self.assertEqual(self.env["account.move"].search_count([("partner_id", "=", self.tenant.id)]), 2)
         self.assertTrue(self.env.ref("eguitra_immobilier.cron_rents").active)
-        self.assertFalse(self.env.ref("contract.contract_cron_for_invoice").active, "Génération du module contract remplacée")
+        cron = self.env.ref("contract.contract_cron_for_invoice")
+        self.assertFalse(cron.active, "Génération du module contract remplacée")
+        cron.active = True  # base existante : la fiche du module contract n'est pas rechargée à la mise à jour
+        self.env["eguitra.lease"]._disable_contract_cron()
+        self.assertFalse(cron.active, "Désactivée à chaque mise à jour du module")
 
     def test_un_seul_bail_en_cours_par_bien(self):
         self._lease(self.today).action_activate()

@@ -192,6 +192,13 @@ class EguitraLease(models.Model):
         return invoices
 
     @api.model
+    def _disable_contract_cron(self):
+        """Désactive la génération du module contract, remplacée par le quittancement (data/ir_cron.xml)."""
+        cron = self.env.ref("contract.contract_cron_for_invoice", raise_if_not_found=False)
+        if cron and cron.active:
+            cron.sudo().active = False
+
+    @api.model
     def _cron_generate_rents(self):
         """Quittancement de chaque nuit, toutes sociétés. Remplace la génération du module contract,
         qui laisserait des brouillons datés du jour, sans rattrapage. Un bail en erreur est journalisé

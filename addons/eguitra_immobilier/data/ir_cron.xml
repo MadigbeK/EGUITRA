@@ -12,8 +12,8 @@
         <field name="active" eval="True"/>
     </record>
     <!-- La génération du module contract laisserait des brouillons datés du jour, sans rattrapage :
-         le quittancement ci-dessus la remplace (les baux sont les seuls contrats récurrents). -->
-    <record id="contract.contract_cron_for_invoice" model="ir.cron">
-        <field name="active" eval="False"/>
-    </record>
+         le quittancement ci-dessus la remplace (les baux sont les seuls contrats récurrents). Sa fiche
+         est en « noupdate » dans le module contract : seul un appel, rejoué à chaque mise à jour, la
+         désactive aussi sur une base existante. -->
+    <function model="eguitra.lease" name="_disable_contract_cron"/>
 </odoo>
