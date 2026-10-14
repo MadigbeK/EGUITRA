@@ -96,3 +96,26 @@ class TestAdmin(ApiCase):
         ids = [entry["id"] for entry in audit]
         self.assertIn(seen.id, ids)
         self.assertNotIn(hidden.id, ids, "Piste d'audit d'une société hors périmètre invisible")
+
+    def test_identite_des_societes(self):
+        token = self.open_session("aissatou")["access_token"]
+        status, rows = self.call("GET", "/admin/companies", token=token)
+        self.assertEqual(status, 200, rows)
+        company = self.env.company
+        # Image PNG valide d'un pixel : le noyau vérifie que le logo est une vraie image.
+        png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        status, row = self.call("PATCH", f"/admin/companies/{company.id}", {
+            "street": "Kaloum, avenue de la République", "city": "Conakry", "vat": "123456789",
+            "company_registry": "GN.TCC.2020.B.00001", "email": "finance@exemple.gn", "logo": f"data:image/png;base64,{png}",
+        }, token=token)
+        self.assertEqual(status, 200, row)
+        self.assertEqual(row["company_registry"], "GN.TCC.2020.B.00001")
+        self.assertTrue(row["logo"].startswith("data:image/png;base64,"))
+        status, _b = self.call("PATCH", f"/admin/companies/{company.id}",
+                               {"logo": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}, token=token)
+        self.assertEqual(status, 415, "Logo SVG refusé")
+        other = self.env["res.company"].create({"name": "Société hors périmètre"})
+        status, _b = self.call("PATCH", f"/admin/companies/{other.id}", {"city": "Kindia"}, token=token)
+        self.assertEqual(status, 404, "Société hors du périmètre de l'administrateur")
+        status, _b = self.call("GET", "/admin/companies", token=self.open_session("fatou")["access_token"])
+        self.assertEqual(status, 403)

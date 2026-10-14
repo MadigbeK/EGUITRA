@@ -56,6 +56,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       label: "Administration",
       items: [
         { href: "/finance/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
+        { href: "/finance/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
         { href: "/finance/admin/parametres", label: "Seuils et taux", icon: "SlidersHorizontal", profiles: ["admin"] },
         { href: "/finance/admin/audit", label: "Journal d'audit", icon: "ScrollText", profiles: ["admin"] },
       ],
@@ -79,7 +80,10 @@ export const NAV: Record<AppCode, NavSection[]> = {
     },
     {
       label: "Administration",
-      items: [{ href: "/axispro/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] }],
+      items: [
+        { href: "/axispro/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
+        { href: "/axispro/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
+      ],
     },
   ],
   portail: [{ label: "Mon projet", items: [{ href: "/portail", label: "Mon dossier", icon: "FolderOpen" }] }],
