@@ -1,0 +1,4 @@
+type;nom;nif;rccm;telephone;email;adresse;ville
+client;Exemple Distribution SA;123456789;GN.TCC.2020.B.00001;+224 620 00 00 00;compta@exemple.gn;Kaloum;Conakry
+fournisseur;Exemple Carburants SARL;;;;;;Conakry
+preteur;Exemple Banque SA;;;;;;Conakry

@@ -1,0 +1,5 @@
+compte;libelle;tiers;debit;credit
+521001;Banque, solde au 31/12;;150 000 000;
+411100;Créance client;Exemple Distribution SA;45 000 000;
+401100;Dette fournisseur;Exemple Carburants SARL;;12 500 000
+101300;Capital;;;182 500 000
