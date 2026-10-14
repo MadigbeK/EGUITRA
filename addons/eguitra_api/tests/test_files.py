@@ -4,7 +4,16 @@ import zipfile
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
-from odoo.addons.eguitra_api.files import DOCX, XLSX, XLSX_OPTIONS, checked_name, csv_text, detect_type, workbook_rows
+from odoo.addons.eguitra_api.files import (
+    DOCX,
+    XLSX,
+    XLSX_OPTIONS,
+    checked_name,
+    csv_text,
+    detect_type,
+    workbook_rows,
+    xlsx_row,
+)
 
 
 def _zip(members):
@@ -66,7 +75,9 @@ class TestFiles(TransactionCase):
 
         out = io.BytesIO()
         book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
-        book.add_worksheet().write(0, 0, '=HYPERLINK("http://exemple.com")')
+        sheet = book.add_worksheet()
+        xlsx_row(sheet, 0, ['=HYPERLINK("http://exemple.com")', "{=cmd|' /C calc'!A0}", 42, None])
         book.close()
-        sheet = zipfile.ZipFile(io.BytesIO(out.getvalue())).read("xl/worksheets/sheet1.xml")
-        self.assertNotIn(b"<f>", sheet, "Le libellé reste un texte dans le classeur")
+        xml = zipfile.ZipFile(io.BytesIO(out.getvalue())).read("xl/worksheets/sheet1.xml")
+        self.assertNotIn(b"<f", xml, "Ni formule simple ni formule de tableau : le libellé reste un texte")
+        self.assertIn(b"<v>42</v>", xml, "Les nombres restent des nombres")

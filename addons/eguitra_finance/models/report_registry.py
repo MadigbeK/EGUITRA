@@ -412,7 +412,7 @@ class EguitraReportEngine(models.AbstractModel):
                 elif col["type"] == "date" and isinstance(value, date):
                     sheet.write_datetime(r, c_idx, value, day)
                 else:
-                    sheet.write(r, c_idx, "" if value is None else str(value))
+                    sheet.write_string(r, c_idx, "" if value is None else str(value))
         if result["totals"]:
             last = len(result["rows"]) + 1
             sheet.write(last, 0, "TOTAL", total)

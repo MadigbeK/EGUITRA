@@ -11,7 +11,7 @@ import io
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, xlsx_row
 
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
@@ -169,7 +169,7 @@ def grid_template():
     book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
     sheet = book.add_worksheet("Grille")
     bold = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
-    sheet.write_row(0, 0, GRID_COLUMNS, bold)
+    xlsx_row(sheet, 0, GRID_COLUMNS, bold)
     examples = [
         ("gate", "G0", "Idée et opportunité", "", "", "", "", "", "", "Le projet répond-il à un besoin avéré ?"),
         ("domaine", "D01", "Marché et demande", "", "", "10", "", "", "", ""),
@@ -177,7 +177,7 @@ def grid_template():
         ("piece", "P01", "Statuts de la société", "Juridique", "G0", "", "oui", "", "", "Copie certifiée."),
     ]
     for r, row in enumerate(examples, start=1):
-        sheet.write_row(r, 0, row)
+        xlsx_row(sheet, r, row)
     sheet.set_column(0, 1, 10)
     sheet.set_column(2, 2, 45)
     sheet.set_column(9, 9, 50)

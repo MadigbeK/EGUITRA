@@ -137,7 +137,7 @@ class EguitraFinanceFiscal(http.Controller):
                     elif c in (9, 10, 12):
                         sheet.write_number(r, c, float(value or 0), money)
                     else:
-                        sheet.write(r, c, "" if value is None else str(value))
+                        sheet.write_string(r, c, "" if value is None else str(value))
             book.close()
             content, mime, ext = out.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
         else:

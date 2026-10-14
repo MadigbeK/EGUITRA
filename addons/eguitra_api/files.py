@@ -19,7 +19,9 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 EXTENSIONS = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png", DOCX: ".docx", XLSX: ".xlsx"}
 ACCEPTED = "PDF, JPEG, PNG, Word (.docx) ou Excel (.xlsx)"
 # Exports vers les tableurs : un libellé (tiers, référence, motif d'un virement) qui commencerait par
-# = + - @ serait exécuté comme formule à l'ouverture du fichier.
+# = + - @ serait exécuté comme formule à l'ouverture du fichier. L'option strings_to_formulas ne
+# neutralise pas la formule de tableau « {=…} » : le texte s'écrit donc toujours par write_string
+# (xlsx_row ci-dessous).
 XLSX_OPTIONS = {"in_memory": True, "strings_to_formulas": False, "strings_to_urls": False}
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 MAX_UNCOMPRESSED = 50 * 1024 * 1024
@@ -61,6 +63,15 @@ def checked_name(filename, mimetype, default="piece"):
     if ext.lower() == expected or (mimetype == "image/jpeg" and ext.lower() == ".jpeg"):
         return name
     return (stem or default) + expected
+
+
+def xlsx_row(sheet, row, values, cell_format=None, col=0):
+    """Ligne de classeur : le texte reste du texte, jamais une formule ; les nombres restent des nombres."""
+    for offset, value in enumerate(values):
+        if value is None or isinstance(value, str):
+            sheet.write_string(row, col + offset, value or "", cell_format)
+        else:
+            sheet.write(row, col + offset, value, cell_format)
 
 
 def csv_text(value):

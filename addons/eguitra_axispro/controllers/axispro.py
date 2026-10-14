@@ -6,7 +6,7 @@ from odoo import fields, http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
 from ..models.dossier import RECOMMENDATIONS, STATUSES
@@ -359,26 +359,26 @@ class EguitraAxispro(http.Controller):
             ("Politique appliquée", f"{dossier.policy_id.name}, version {dossier.policy_id.version}"),
         ]
         for r, (k, v) in enumerate(rows):
-            sheet.write(r, 0, k, bold)
-            sheet.write(r, 1, v)
+            sheet.write_string(r, 0, k, bold)
+            xlsx_row(sheet, r, [v], col=1)
         sheet.set_column(0, 0, 32)
         sheet.set_column(1, 1, 70)
         dom = book.add_worksheet("Domaines")
-        dom.write_row(0, 0, ["Code", "Domaine", "Pondération", "Score /100", "Critères évalués"], head)
+        xlsx_row(dom, 0, ["Code", "Domaine", "Pondération", "Score /100", "Critères évalués"], head)
         for r, d in enumerate(scoring["domains"], start=1):
-            dom.write_row(r, 0, [d["code"], d["name"], d["weight"], round(d["score"], 1) if d["score"] is not None else "",
-                                 f"{d['assessed']}/{d['criteria']}"])
+            xlsx_row(dom, r, [d["code"], d["name"], d["weight"], round(d["score"], 1) if d["score"] is not None else "",
+                              f"{d['assessed']}/{d['criteria']}"])
         crit = book.add_worksheet("Critères")
-        crit.write_row(0, 0, ["Code", "Critère", "Domaine", "Gate", "Poids", "Critique", "Éliminatoire", "Statut", "Commentaire"], head)
+        xlsx_row(crit, 0, ["Code", "Critère", "Domaine", "Gate", "Poids", "Critique", "Éliminatoire", "Statut", "Commentaire"], head)
         statuses = dict(STATUSES)
         for r, e in enumerate(dossier.evaluation_ids, start=1):
             c = e.criterion_id
-            crit.write_row(r, 0, [c.code, c.name, c.domain_id.name, c.gate_id.code, c.weight, "oui" if c.critical else "",
-                                  "oui" if c.knockout else "", statuses[e.status], e.comment or ""])
+            xlsx_row(crit, r, [c.code, c.name, c.domain_id.name, c.gate_id.code, c.weight, "oui" if c.critical else "",
+                               "oui" if c.knockout else "", statuses[e.status], e.comment or ""])
         gaps = book.add_worksheet("Écarts prioritaires")
-        gaps.write_row(0, 0, ["Rang", "Critère", "Domaine", "Action attendue du promoteur"], head)
+        xlsx_row(gaps, 0, ["Rang", "Critère", "Domaine", "Action attendue du promoteur"], head)
         for r, g in enumerate(dossier.gaps(5), start=1):
-            gaps.write_row(r, 0, [r, f"{g['code']} {g['name']}", g["domain"], g["action"]])
+            xlsx_row(gaps, r, [r, f"{g['code']} {g['name']}", g["domain"], g["action"]])
         book.close()
         return request.make_response(out.getvalue(), headers=[
             ("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
