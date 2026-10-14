@@ -7,6 +7,8 @@ Un guide par profil, à remettre lors de la formation et à garder à portée de
 | Direction générale | [guide-direction.md](guide-direction.md) |
 | Finance et comptabilité | [guide-finance.md](guide-finance.md) |
 | Exploitation transport (bureau et parc) | [guide-exploitation.md](guide-exploitation.md) |
+| Chantiers | [guide-chantiers.md](guide-chantiers.md) |
+| Gestion immobilière | [guide-immobilier.md](guide-immobilier.md) |
 | Cabinet MB AxisPro Consulting | [guide-cabinet.md](guide-cabinet.md) |
 | Porteurs de projets | [guide-porteur.md](guide-porteur.md) |
 | Administration de la plateforme | [guide-administration.md](guide-administration.md) |
