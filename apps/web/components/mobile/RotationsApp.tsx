@@ -257,8 +257,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
   async function logout() {
     if (mine.length && !window.confirm(`${mine.length} saisie(s) n'ont pas encore été transmises. Elles restent sur ce téléphone et partiront à votre prochaine connexion. Se déconnecter ?`)) return;
+    // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
+    const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
+    if (!res?.ok) {
+      setNotice({ tone: "warn", text: "Déconnexion impossible sans réseau : réessayez au retour du réseau." });
+      return;
+    }
     await forgetDevice();
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
     window.location.href = "/login?app=mobile";
   }
 
