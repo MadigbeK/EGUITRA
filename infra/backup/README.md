@@ -12,8 +12,10 @@ restauration testée. Ce répertoire le met en œuvre ; `infra/up.sh` l'installe
 | Pièces jointes (filestore) | miroir `rsync` + instantané quotidien en liens physiques | 15 minutes, instantané chaque nuit | `/srv/eguitra/backup/filestore/` |
 | Copie hors site | `rclone` vers un distant chiffré (`crypt`) | 15 minutes (WAL, pièces), chaque nuit (bases) | stockage objet, voir `backup.env.example` |
 
-Perte de données maximale : 15 minutes. Rétention locale : 14 jours (`BACKUP_RETENTION_DAYS`) ;
-hors site : 30 jours (`OFFSITE_RETENTION_DAYS`).
+Perte de données maximale : 15 minutes. Rétention locale : 14 jours (`BACKUP_RETENTION_DAYS`).
+Hors site, conformément à l'offre : 30 sauvegardes quotidiennes, 12 sauvegardes mensuelles (la
+première de chaque mois, dossier `monthly/`) et 14 jours de journaux de transactions, soit une
+restauration possible à n'importe quel instant des 14 derniers jours.
 
 Le conteneur `backup` fait le travail (`scheduler.sh`) ; son état de santé (`check.sh`) passe à
 `unhealthy` si l'archivage des WAL échoue, si la dernière sauvegarde de base a plus de 26 heures

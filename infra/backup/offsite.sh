@@ -17,9 +17,17 @@ rclone copy "$BACKUP_DIR/wal" "$remote/wal" --exclude '*.tmp' "${opts[@]}"
 rclone copy "$BACKUP_DIR/filestore/current" "$remote/filestore" "${opts[@]}"
 if [[ "${1:-quick}" == "full" ]]; then
   rclone copy "$BACKUP_DIR/base" "$remote/base" --exclude '*.partial/**' "${opts[@]}"
+  # Sauvegarde mensuelle : la première sauvegarde de base de chaque mois, gardée 12 mois.
+  first=$(base_backups | xargs -r -n1 basename | grep "^$(date +%Y%m)" | head -1)
+  if [[ -n "$first" ]]; then
+    rclone copy "$BACKUP_DIR/base/$first" "$remote/monthly/$first" "${opts[@]}"
+  fi
+  # Rétentions de l'offre : 30 sauvegardes quotidiennes, 12 mensuelles, journaux sur 14 jours.
   rclone delete "$remote/base" --min-age "${OFFSITE_RETENTION_DAYS}d"
-  rclone delete "$remote/wal" --min-age "${OFFSITE_RETENTION_DAYS}d"
+  rclone delete "$remote/monthly" --min-age "${MONTHLY_RETENTION_DAYS}d"
+  rclone delete "$remote/wal" --min-age "${WAL_RETENTION_DAYS}d"
   rclone rmdirs "$remote/base" --leave-root
+  rclone rmdirs "$remote/monthly" --leave-root
   mark_ok offsite_full
 fi
 mark_ok offsite
