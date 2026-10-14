@@ -1,0 +1,48 @@
+# Proxy d'entrée : TLS automatique (Let's Encrypt), en-têtes de sécurité, journal d'accès.
+# Les domaines viennent de infra/.env (FINANCE_DOMAIN, AXISPRO_DOMAIN, PORTAIL_DOMAIN, CORE_DOMAIN).
+# Seules les applications web sont publiques ; l'API du noyau ne l'est jamais (la passerelle Next
+# l'appelle sur le réseau Docker) et le client web du noyau n'est ouvert qu'aux adresses ADMIN_IPS.
+{
+	email {$ACME_EMAIL}
+}
+
+(commun) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+		-X-Powered-By
+	}
+	log {
+		output file /data/logs/acces.log {
+			roll_size 50MiB
+			roll_keep 20
+		}
+	}
+}
+
+# EGUITRA Finance (et l'application mobile Rotations sous /mobile), AxisPro Suite, portail des porteurs.
+{$FINANCE_DOMAIN}, {$AXISPRO_DOMAIN}, {$PORTAIL_DOMAIN} {
+	import commun
+	request_body {
+		max_size 25MB
+	}
+	# X-Real-IP est réécrit à chaque requête : la passerelle n'a confiance qu'en lui pour
+	# connaître l'adresse du client (limitation des essais de connexion, journal des accès).
+	reverse_proxy web:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# Noyau : administration technique seulement, depuis les adresses autorisées.
+{$CORE_DOMAIN} {
+	import commun
+	@admin remote_ip {$ADMIN_IPS}
+	handle @admin {
+		reverse_proxy /websocket* odoo:8072
+		reverse_proxy odoo:8069
+	}
+	handle {
+		respond "Accès réservé." 403
+	}
+}

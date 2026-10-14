@@ -1,4 +1,4 @@
-# Plateforme EGUITRA : noyau Odoo 19 + PostgreSQL 16.
+# Plateforme EGUITRA : noyau Odoo 19, PostgreSQL 16 et applications web (Next.js).
 # Lancement : infra/up.sh (rend odoo.conf, récupère OCA, construit, démarre).
 # Aucun port n'est publié sur l'extérieur : Docker contourne le pare-feu pour les ports
 # publiés, donc le noyau n'écoute que sur 127.0.0.1 (accès par tunnel SSH ou par le proxy).
@@ -24,8 +24,21 @@ services:
       - maintenance_work_mem=256MB
       - -c
       - max_connections=100
+      # Archivage continu des WAL (backup/archive-wal.sh) : au plus 15 minutes de données
+      # exposées même en faible activité (archive_timeout), restauration à un instant donné.
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=900
+      - -c
+      - archive_command=sh /usr/local/bin/archive-wal.sh %p %f
     volumes:
       - db-data:/var/lib/postgresql/data
+      # Seul le répertoire des WAL est monté : le reste des sauvegardes reste inaccessible au serveur.
+      - ${BACKUP_DIR:-/srv/eguitra/backup}/wal:/backup/wal
+      - ./backup/archive-wal.sh:/usr/local/bin/archive-wal.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
       interval: 10s
@@ -51,6 +64,73 @@ services:
       - ./oca-src:/mnt/oca:ro
       - ../addons:/mnt/extra-addons:ro
 
+  web:
+    build:
+      context: ../apps/web
+    image: eguitra/web:latest
+    restart: unless-stopped
+    depends_on:
+      - odoo
+    environment:
+      ODOO_URL: http://odoo:8069
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # Sauvegardes : de base chaque nuit, filestore toutes les 15 minutes, copie hors site chiffrée.
+  backup:
+    build:
+      context: ./backup
+    image: eguitra/backup:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      ODOO_DB: ${ODOO_DB}
+      TZ: Africa/Conakry
+    env_file:
+      - path: ./backup.env
+        required: false
+    volumes:
+      - ${BACKUP_DIR:-/srv/eguitra/backup}:/backup
+      - odoo-data:/var/lib/odoo:ro
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/check.sh"]
+      interval: 5m
+      timeout: 30s
+      start_period: 30m
+      retries: 1
+
+  # Proxy d'entrée (TLS) : démarre avec « docker compose --profile proxy up -d » une fois les
+  # noms de domaine pointés vers le serveur (sinon Let's Encrypt refuse les certificats).
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    profiles: ["proxy"]
+    depends_on:
+      - web
+      - odoo
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      FINANCE_DOMAIN: ${FINANCE_DOMAIN:-}
+      AXISPRO_DOMAIN: ${AXISPRO_DOMAIN:-}
+      PORTAIL_DOMAIN: ${PORTAIL_DOMAIN:-}
+      CORE_DOMAIN: ${CORE_DOMAIN:-}
+      ADMIN_IPS: ${ADMIN_IPS:-127.0.0.1/32}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
 volumes:
   db-data:
   odoo-data:
+  caddy-data:
+  caddy-config:

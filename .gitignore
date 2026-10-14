@@ -12,3 +12,4 @@ secrets/
 .claude/settings.local.json
 infra/oca-src/
 infra/odoo/odoo.conf
+infra/backup.env
