@@ -8,7 +8,7 @@ pièces d'achat qu'il règle.
 from odoo import models
 from odoo.exceptions import UserError
 
-from .account_move import approval_granted
+from .account_move import approval_granted, fingerprint
 
 
 class AccountPayment(models.Model):
@@ -20,12 +20,19 @@ class AccountPayment(models.Model):
             return self.env["eguitra.approval.rule"]
         return self.env["eguitra.approval.rule"]._applicable("payment_out", self.company_id, abs(self.amount_company_currency_signed or self.amount))
 
+    def _eguitra_fingerprint(self):
+        """Bénéficiaire, son compte bancaire, montant, devise, journal et compte de contrepartie."""
+        self.ensure_one()
+        return fingerprint([self.payment_type, self.partner_type, self.partner_id.id, self.partner_bank_id.id,
+                            round(self.amount, 2), self.currency_id.id, self.journal_id.id,
+                            self.destination_account_id.id])
+
     def _eguitra_is_approved(self):
         request = self.env["eguitra.approval.request"].sudo().search(
             [("res_model", "=", "account.payment"), ("res_id", "=", self.id), ("state", "!=", "cancelled")],
             order="id desc", limit=1,
         )
-        return bool(request) and request.state == "approved"
+        return bool(request) and request.state == "approved" and request._matches(self)
 
     def action_post(self):
         if not approval_granted(self.env):

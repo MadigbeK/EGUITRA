@@ -114,6 +114,24 @@ class TestApproval(FinanceDataMixin, ApiCase):
         self.assertEqual(nouvelle.amount, 106_200_000)
         self.assertEqual(len(nouvelle.step_ids), 2, "Le nouveau montant appelle l'accord de la direction")
 
+    def test_piece_approuvee_puis_modifiee(self):
+        """Remise en brouillon après approbation : toute modification impose une nouvelle approbation."""
+        bill = self._bill(10_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        self._request(bill).with_user(self.chef_comptable).action_approve()
+        self.assertEqual(bill.state, "posted")
+        bill.with_user(self.comptable).button_draft()
+        bill.with_user(self.comptable).action_post()
+        self.assertEqual(bill.state, "posted", "Pièce inchangée : l'approbation tient")
+        bill.with_user(self.comptable).button_draft()
+        autre = self.env["res.partner"].create({"name": "Fournisseur substitué"})
+        bill.with_user(self.comptable).write({"partner_id": autre.id})
+        with self.assertRaises(UserError):
+            bill.with_user(self.comptable).action_post()
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        self.assertEqual(bill.state, "draft")
+        self.assertEqual(self._request(bill).state, "pending", "Une nouvelle demande est ouverte")
+
     def test_reglement_soumis_au_dela_du_seuil(self):
         bill = self._bill(150_000_000)
         bill.sudo().with_context(eguitra_approval_granted=True).action_post()
@@ -128,6 +146,10 @@ class TestApproval(FinanceDataMixin, ApiCase):
         request.with_user(self.dg).action_approve()
         self.assertEqual(payment.move_id.state, "posted")
         self.assertIn(bill.payment_state, ("paid", "in_payment"))
+        payment.with_user(self.comptable).action_draft()
+        payment.with_user(self.comptable).write({"amount": payment.amount + 1_000_000})
+        with self.assertRaises(UserError):
+            payment.with_user(self.comptable).action_post()  # règlement modifié après l'accord
 
     def test_corbeille_par_api(self):
         bill = self._bill(100_000_000)

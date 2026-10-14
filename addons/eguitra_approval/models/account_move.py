@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from odoo import models
 from odoo.exceptions import UserError
 
@@ -6,6 +9,11 @@ def approval_granted(env):
     """Contournement réservé au moteur lui-même : contexte posé ET mode superutilisateur,
     qu'un appel RPC d'utilisateur ne peut pas obtenir."""
     return env.su and env.context.get("eguitra_approval_granted")
+
+
+def fingerprint(data):
+    """Empreinte stable de ce que l'approbateur a vu (voir eguitra.approval.request.fingerprint)."""
+    return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
 
 class AccountMove(models.Model):
@@ -37,6 +45,19 @@ class AccountMove(models.Model):
             document, self.company_id, self._eguitra_approval_amount(), codes
         )
 
+    def _eguitra_fingerprint(self):
+        """Nature, tiers, compte bancaire du tiers, devise, journal et lignes (comptes, montants, taxes,
+        analytique) : la remise en brouillon puis la modification d'une pièce approuvée la font changer."""
+        self.ensure_one()
+        lines = sorted(
+            [line.account_id.id, line.partner_id.id, round(line.debit, 2), round(line.credit, 2),
+             round(line.amount_currency, 2), sorted(line.tax_ids.ids),
+             json.dumps(line.analytic_distribution or {}, sort_keys=True)]
+            for line in self.line_ids
+        )
+        return fingerprint([self.move_type, self.partner_id.id, self.partner_bank_id.id, self.currency_id.id,
+                            self.journal_id.id, lines])
+
     def _eguitra_last_request(self):
         self.ensure_one()
         return self.env["eguitra.approval.request"].sudo().search(
@@ -46,7 +67,7 @@ class AccountMove(models.Model):
 
     def _eguitra_is_approved(self):
         request = self._eguitra_last_request()
-        return bool(request) and request.state == "approved" and abs(request.amount - self._eguitra_approval_amount()) < 0.5
+        return bool(request) and request.state == "approved" and request._matches(self)
 
     def action_post(self):
         if not approval_granted(self.env):
@@ -68,7 +89,7 @@ class AccountMove(models.Model):
                 move.action_post()
                 continue
             pending = move._eguitra_last_request()
-            if pending.state == "pending" and abs(pending.amount - move._eguitra_approval_amount()) < 0.5:
+            if pending.state == "pending" and pending._matches(move):
                 continue
             self.env["eguitra.approval.request"]._open(
                 move, move._eguitra_approval_document(), rules, move._eguitra_approval_amount(), move.partner_id

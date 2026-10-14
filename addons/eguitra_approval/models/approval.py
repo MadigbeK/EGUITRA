@@ -88,6 +88,11 @@ class EguitraApprovalRequest(models.Model):
         [("pending", "En attente"), ("approved", "Approuvée"), ("rejected", "Refusée"), ("cancelled", "Annulée")],
         default="pending", required=True, index=True,
     )
+    fingerprint = fields.Char(
+        "Empreinte de la pièce soumise", readonly=True,
+        help="Tiers, compte bancaire, comptes et montants au moment de la soumission : une pièce approuvée "
+             "puis remise en brouillon et modifiée doit être approuvée à nouveau.",
+    )
     step_ids = fields.One2many("eguitra.approval.step", "request_id")
     current_step_id = fields.Many2one("eguitra.approval.step", compute="_compute_current_step", store=True)
     pending_profile = fields.Selection(APPROVER_PROFILES, compute="_compute_current_step", store=True, index=True)
@@ -119,6 +124,7 @@ class EguitraApprovalRequest(models.Model):
             "amount": amount,
             "currency_id": record.company_id.currency_id.id,
             "partner_id": partner.id if partner else False,
+            "fingerprint": record._eguitra_fingerprint(),
             "requested_by": self.env.user.id,
             "step_ids": [
                 (0, 0, {"sequence": i, "rule_id": rule.id, "profile": rule.approver_profile, "label": rule.name})
@@ -150,10 +156,21 @@ class EguitraApprovalRequest(models.Model):
             return record._eguitra_approval_amount()
         return abs(record.amount_company_currency_signed or record.amount)
 
+    def _matches(self, record=None):
+        """La pièce est-elle encore celle qui a été soumise ? Empreinte, ou montant pour une demande
+        antérieure à l'empreinte."""
+        self.ensure_one()
+        record = record or self._record()
+        if not record:
+            return False
+        if self.fingerprint:
+            return self.fingerprint == record._eguitra_fingerprint()
+        return abs(self._current_amount() - self.amount) < 0.5
+
     def action_approve(self, comment=None):
         self.ensure_one()
         self._check_can_decide()
-        if abs(self._current_amount() - self.amount) >= 0.5:
+        if not self._matches():
             raise UserError("La pièce a été modifiée depuis sa soumission : elle doit être soumise à nouveau.")
         self.current_step_id.sudo().write({
             "state": "approved", "decided_by": self.env.user.id, "decided_at": fields.Datetime.now(), "comment": comment,
