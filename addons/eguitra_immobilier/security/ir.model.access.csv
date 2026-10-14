@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_property_immobilier,biens immobilier,model_eguitra_property,eguitra_base.group_profile_immobilier,1,1,1,0
+access_property_finance,biens finance,model_eguitra_property,eguitra_base.group_profile_finance,1,1,1,0
+access_property_direction,biens direction,model_eguitra_property,eguitra_base.group_profile_direction,1,0,0,0
+access_lease_immobilier,baux immobilier,model_eguitra_lease,eguitra_base.group_profile_immobilier,1,1,1,0
+access_lease_finance,baux finance,model_eguitra_lease,eguitra_base.group_profile_finance,1,1,1,0
+access_lease_direction,baux direction,model_eguitra_lease,eguitra_base.group_profile_direction,1,0,0,0

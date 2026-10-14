@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_chantier_chantiers,chantiers conduite,model_eguitra_chantier,eguitra_base.group_profile_chantiers,1,1,1,0
+access_chantier_finance,chantiers finance,model_eguitra_chantier,eguitra_base.group_profile_finance,1,1,1,0
+access_chantier_direction,chantiers direction,model_eguitra_chantier,eguitra_base.group_profile_direction,1,0,0,0
+access_situation_chantiers,situations conduite,model_eguitra_chantier_situation,eguitra_base.group_profile_chantiers,1,1,1,0
+access_situation_finance,situations finance,model_eguitra_chantier_situation,eguitra_base.group_profile_finance,1,1,1,0
+access_situation_direction,situations direction,model_eguitra_chantier_situation,eguitra_base.group_profile_direction,1,0,0,0
