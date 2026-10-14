@@ -9,3 +9,4 @@ node_modules/
 id_rsa*
 id_ed25519*
 secrets/
+.claude/settings.local.json
