@@ -1,0 +1,111 @@
+"""Flotte : ensembles routiers (tracteur et citerne), chauffeurs, routes tarifées."""
+
+from odoo import api, fields, models
+
+PRODUCTS = [
+    ("gasoil", "Gasoil"),
+    ("essence", "Essence"),
+    ("jet", "Jet A1"),
+    ("petrole", "Pétrole lampant"),
+    ("fuel", "Fuel"),
+    ("autre", "Autre produit"),
+]
+
+
+def _analytic(env, plan_xmlid, name, company):
+    plan = env.ref(plan_xmlid)
+    account = env["account.analytic.account"].sudo().search(
+        [("plan_id", "=", plan.id), ("name", "=", name), ("company_id", "in", [False, company.id])], limit=1
+    )
+    return account or env["account.analytic.account"].sudo().create(
+        {"name": name, "plan_id": plan.id, "company_id": company.id}
+    )
+
+
+class EguitraTransportVehicle(models.Model):
+    _name = "eguitra.transport.vehicle"
+    _description = "Ensemble routier"
+    _order = "name"
+
+    name = fields.Char("Code", required=True, help="Code interne de l'ensemble, par exemple ER-01.")
+    company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
+    tractor_plate = fields.Char("Immatriculation du tracteur")
+    trailer_plate = fields.Char("Immatriculation de la citerne")
+    brand = fields.Char("Marque et modèle")
+    capacity_liters = fields.Integer("Capacité (litres)")
+    driver_id = fields.Many2one("eguitra.transport.driver", "Chauffeur habituel")
+    state = fields.Selection(
+        [("service", "En service"), ("maintenance", "En maintenance"), ("off", "Hors service")],
+        default="service", required=True,
+    )
+    analytic_account_id = fields.Many2one("account.analytic.account", "Compte analytique", readonly=True)
+    active = fields.Boolean(default=True)
+
+    _name_company_unique = models.Constraint("unique(name, company_id)", "Ce code d'ensemble existe déjà.")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        for record in records:
+            record.analytic_account_id = _analytic(
+                self.env, "eguitra_base.analytic_plan_vehicule", record.name, record.company_id
+            )
+        return records
+
+
+class EguitraTransportDriver(models.Model):
+    _name = "eguitra.transport.driver"
+    _description = "Chauffeur"
+    _order = "name"
+
+    name = fields.Char("Nom", required=True)
+    company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
+    phone = fields.Char("Téléphone")
+    license_number = fields.Char("Permis")
+    license_expiry = fields.Date("Validité du permis")
+    partner_id = fields.Many2one("res.partner", "Fiche tiers", help="Pour le règlement des frais de mission.")
+    active = fields.Boolean(default=True)
+
+
+class EguitraTransportRoute(models.Model):
+    _name = "eguitra.transport.route"
+    _description = "Route tarifée"
+    _order = "name"
+
+    name = fields.Char("Route", required=True, help="Par exemple Conakry - Siguiri.")
+    company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
+    origin = fields.Char("Départ")
+    destination = fields.Char("Arrivée")
+    distance_km = fields.Integer("Distance (km)")
+    default_rate = fields.Monetary("Tarif par m³", currency_field="currency_id")
+    currency_id = fields.Many2one(related="company_id.currency_id")
+    tariff_ids = fields.One2many("eguitra.transport.tariff", "route_id", "Tarifs par client")
+    analytic_account_id = fields.Many2one("account.analytic.account", "Compte analytique", readonly=True)
+    active = fields.Boolean(default=True)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        for record in records:
+            record.analytic_account_id = _analytic(
+                self.env, "eguitra_base.analytic_plan_route", record.name, record.company_id
+            )
+        return records
+
+    def _rate_for(self, partner, product):
+        """Tarif au m³ : tarif du client pour le produit, sinon du client, sinon tarif de la route."""
+        self.ensure_one()
+        tariffs = self.tariff_ids.filtered(lambda t: t.partner_id == partner)
+        exact = tariffs.filtered(lambda t: t.product == product)[:1] or tariffs.filtered(lambda t: not t.product)[:1]
+        return exact.rate if exact else self.default_rate
+
+
+class EguitraTransportTariff(models.Model):
+    _name = "eguitra.transport.tariff"
+    _description = "Tarif de transport par client"
+
+    route_id = fields.Many2one("eguitra.transport.route", required=True, ondelete="cascade", index=True)
+    partner_id = fields.Many2one("res.partner", "Client", required=True)
+    product = fields.Selection(PRODUCTS, "Produit", help="Vide : tous les produits.")
+    rate = fields.Monetary("Tarif par m³", currency_field="currency_id", required=True)
+    currency_id = fields.Many2one(related="route_id.currency_id")
