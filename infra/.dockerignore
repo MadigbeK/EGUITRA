@@ -1,0 +1,4 @@
+# Contexte de construction de l'image du noyau : seule la liste des dépendances Python des modules
+# OCA est utile. Tout le reste (secrets, configurations, versions figées, dépôts OCA) est exclu.
+*
+!oca-src/requirements.txt

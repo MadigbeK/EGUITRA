@@ -30,6 +30,7 @@ while true; do
     /usr/local/bin/base-backup.sh || log "ÉCHEC de la sauvegarde de base."
     /usr/local/bin/files-backup.sh --snapshot || log "ÉCHEC de l'instantané du filestore."
     /usr/local/bin/offsite.sh full || log "ÉCHEC de la copie hors site complète."
+    /usr/local/bin/recette-dump.sh || log "ÉCHEC de la copie de la recette."
   fi
   sleep $(( 60 - 10#$(date +%S) ))
 done

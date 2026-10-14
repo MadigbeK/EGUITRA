@@ -3,8 +3,11 @@
 Engagement de l'offre : sauvegardes toutes les 15 minutes, chiffrées et copiées hors site, avec
 restauration testée. Ce répertoire le met en œuvre ; `infra/up.sh` l'installe.
 
-Seule la production est sauvegardée : la recette (grappe `db-recette`) contient des données
-d'essai, reconstructibles par copie de la production ou par les scripts de reprise et de démonstration.
+Ces engagements portent sur la production. La recette (grappe `db-recette`, données d'essai) a
+seulement une copie logique chaque nuit, gardée 7 jours sur le serveur (`/srv/eguitra/backup/recette/`,
+`recette-dump.sh`), pour ne pas perdre les essais des référents ; restauration :
+`sudo cat <copie>.dump | docker compose exec -T db-recette pg_restore -U odoo -d postgres --create --no-owner`
+après suppression de la base abîmée.
 
 ## Ce qui est sauvegardé, et quand
 

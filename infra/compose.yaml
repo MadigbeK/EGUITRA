@@ -110,6 +110,9 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       ODOO_DB: ${ODOO_DB}
+      # Copie logique nocturne de la base de recette (7 jours, sur le serveur seulement).
+      RECETTE_DB: ${RECETTE_DB}
+      RECETTE_PGPASSWORD: ${RECETTE_POSTGRES_PASSWORD}
       TZ: Africa/Conakry
     env_file:
       - path: ./backup.env

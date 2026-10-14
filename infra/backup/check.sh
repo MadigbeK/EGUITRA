@@ -15,6 +15,9 @@ read -r archived failed < <(psql -d postgres -Atc \
 [[ "$failed" == "t" ]] && problems+=("dernier archivage WAL en échec")
 (( $(age_of base) > 93600 )) && problems+=("sauvegarde de base trop ancienne")
 (( $(age_of files) > 3600 )) && problems+=("copie du filestore trop ancienne")
+if [[ -n "${RECETTE_PGPASSWORD:-}" ]] && [[ -f "$BACKUP_DIR/status/recette" ]] && (( $(age_of recette) > 93600 )); then
+  problems+=("copie de la recette trop ancienne")
+fi
 if [[ -n "${RCLONE_REMOTE:-}" ]] && (( $(age_of offsite) > 3600 )); then
   problems+=("copie hors site en retard")
 fi
