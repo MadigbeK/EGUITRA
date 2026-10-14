@@ -51,6 +51,14 @@ et lance leurs tests ; `--rebuild` reconstruit le modèle (après un changement 
 Voir `backup/README.md` : archivage continu (perte maximale 15 minutes), sauvegarde de base chaque
 nuit, filestore, copie hors site chiffrée, test de restauration (`backup/restore-test.sh`).
 
+## Supervision
+
+`infra/monitor-install.sh` (une fois) planifie `monitor.sh` toutes les 5 minutes : conteneurs et
+leur santé, API du noyau, applications web, disque (alerte à 85 %), sauvegardes. Les alertes
+partent au changement d'état et toutes les 6 heures pendant une panne, vers `ALERT_WEBHOOK_URL`
+et/ou `ALERT_NTFY_URL` (`.env`) ; journal dans `logs/monitor.log`. Une fois les domaines publiés,
+ajouter une surveillance externe de disponibilité (sonde HTTPS sur l'adresse de connexion).
+
 ## Accès techniques
 
 - Noyau et applications n'écoutent que sur 127.0.0.1 ; accès d'administration par tunnel SSH :

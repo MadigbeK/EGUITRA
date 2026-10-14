@@ -9,7 +9,8 @@ from .common import FIN_READ, FIN_WRITE, companies, ref, today
 
 
 def _reminder(reminder_id):
-    reminder = request.env["eguitra.reminder"].browse(reminder_id).exists()
+    # Recherche soumise aux règles d'accès : une relance d'une autre société est introuvable.
+    reminder = request.env["eguitra.reminder"].search([("id", "=", reminder_id)], limit=1)
     if not reminder:
         raise ApiError(404, "not_found", "Relance introuvable.")
     return reminder
