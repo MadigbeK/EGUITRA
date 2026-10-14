@@ -134,7 +134,7 @@ class EguitraLoanLine(models.Model):
     due_date = fields.Date("Échéance", required=True)
     principal = fields.Monetary("Capital")
     interest = fields.Monetary("Intérêts")
-    total = fields.Monetary("Échéance", compute="_compute_total", store=True)
+    total = fields.Monetary("Montant de l'échéance", compute="_compute_total", store=True)
     remaining = fields.Monetary("Capital restant dû après échéance")
     paid = fields.Boolean("Réglée", readonly=True)
     move_id = fields.Many2one("account.move", "Écriture de règlement", readonly=True)
