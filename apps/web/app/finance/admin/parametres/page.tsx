@@ -23,7 +23,7 @@ export default function SettingsPage() {
   }
   return (
     <div className="space-y-6">
-      <PageHeader title="Seuils et taux" subtitle="Seuils d'alerte de la société de travail et taux de change." />
+      <PageHeader title="Seuils et taux" subtitle="Seuils d'alerte de la société de travail, taux de change, comptes de banque et de caisse." />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card title="Seuils d'alerte" padded={false}>
         {!thresholds ? (
@@ -50,6 +50,56 @@ export default function SettingsPage() {
       <Card title="Taux de change" padded={false}>
         {!currencies ? <Loading /> : <Rates currencies={currencies} onSaved={() => refreshRates()} />}
       </Card>
+      <Card title="Comptes de banque et de caisse" padded={false}>
+        {!currencies ? <Loading /> : <TreasuryAccounts currencies={currencies} />}
+      </Card>
+    </div>
+  );
+}
+
+interface TreasuryAccount { journal_id: number; name: string; type: "bank" | "cash"; company: string; currency: string }
+
+/** Nouveau compte de trésorerie de la société de travail : journal et compte 52x (banque) ou 57x (caisse). */
+function TreasuryAccounts({ currencies }: { currencies: Currency[] }) {
+  const { data, mutate } = useApi<{ accounts: TreasuryAccount[] }>("/finance/treasury");
+  const [f, setF] = useState({ name: "", type: "bank", code: "", bank_account_number: "", currency_id: "" });
+  const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  async function create() {
+    setMessage(null);
+    try {
+      const res = await apiSend<{ name: string; account: string | null }>("POST", "/finance/treasury/journals", {
+        name: f.name.trim(), type: f.type, code: f.code.trim(), bank_account_number: f.bank_account_number.trim() || undefined,
+        currency_id: f.currency_id ? Number(f.currency_id) : undefined,
+      });
+      setMessage({ tone: "ok", text: `Compte « ${res.name} » créé${res.account ? ` (compte ${res.account})` : ""}.` });
+      setF({ name: "", type: "bank", code: "", bank_account_number: "", currency_id: "" });
+      void mutate();
+    } catch (e) {
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
+    }
+  }
+  return (
+    <div>
+      <DataTable
+        rows={data?.accounts ?? []}
+        rowKey={(a) => a.journal_id}
+        empty="Aucun compte de trésorerie."
+        columns={[
+          { key: "name", label: "Compte" },
+          { key: "type", label: "Nature", render: (a) => (a.type === "bank" ? "Banque" : "Caisse") },
+          { key: "currency", label: "Devise" },
+          { key: "company", label: "Société" },
+        ]}
+      />
+      <div className="flex flex-wrap items-end gap-3 border-t border-line p-4">
+        {message && <div className="w-full"><Notice tone={message.tone}>{message.text}</Notice></div>}
+        <Field label="Intitulé"><Input value={f.name} placeholder="Banque, agence" onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Nature"><Select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} options={[{ value: "bank", label: "Banque" }, { value: "cash", label: "Caisse" }]} /></Field>
+        <Field label="Code (5 caractères)"><Input className="w-28 font-mono uppercase" maxLength={5} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} /></Field>
+        {f.type === "bank" && <Field label="Numéro de compte"><Input className="font-mono" value={f.bank_account_number} onChange={(e) => setF({ ...f, bank_account_number: e.target.value })} /></Field>}
+        <Field label="Devise"><Select value={f.currency_id} placeholder="Devise de la société" onChange={(e) => setF({ ...f, currency_id: e.target.value })} options={currencies.filter((c) => c.name !== "GNF").map((c) => ({ value: c.id, label: c.name }))} /></Field>
+        <Button variant="primary" disabled={!f.name.trim() || !f.code.trim()} onClick={create}>Créer le compte</Button>
+      </div>
     </div>
   );
 }

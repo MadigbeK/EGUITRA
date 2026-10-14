@@ -47,6 +47,10 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, body = self.call("GET", "/finance/partners?limit=5", token=self.token)
         self.assertIn("receivable", body["items"][0])
         self.assertIsNotNone(body["items"][0]["receivable"], "La finance voit les soldes")
+        status, updated = self.call("PATCH", f"/finance/partners/{partner.id}", {"credit_limit": 5_000_000, "phone": "620000001"},
+                                    token=self.token)
+        self.assertEqual(status, 200, updated)
+        self.assertEqual(updated["credit_limit"], 5_000_000, "La finance tient les fiches des tiers et leurs limites")
 
     def test_facture_de_vente_complete(self):
         status, move = self.call("POST", "/finance/moves", {
@@ -212,6 +216,19 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, body = self.call("GET", "/finance/integrity", token=self.open_session("dg")["access_token"])
         self.assertEqual(status, 200, body)
         self.assertIsNone(body["hash_chains"], "La direction voit les contrôles, la vérification reste aux comptables")
+
+    def test_nouveau_compte_de_tresorerie(self):
+        self._create_user("aissatou", "admin")
+        token = self.open_session("aissatou")["access_token"]
+        payload = {"name": "Banque de démonstration", "type": "bank", "code": "bdm1", "bank_account_number": "GN0001"}
+        status, journal = self.call("POST", "/finance/treasury/journals", payload, token=token)
+        self.assertEqual(status, 200, journal)
+        self.assertEqual(journal["code"], "BDM1")
+        self.assertTrue(journal["account"].startswith("52"), "Compte de banque en 52")
+        status, body = self.call("POST", "/finance/treasury/journals", payload, token=token)
+        self.assertEqual((status, body["error"]), (409, "conflict"), "Code déjà pris : refus explicite")
+        status, _b = self.call("POST", "/finance/treasury/journals", dict(payload, code="BDM2"), token=self.token)
+        self.assertEqual(status, 403, "Réservé à l'administration")
 
     def test_budget(self):
         status, budget = self.call("POST", "/finance/budgets", {"name": "Budget 2026", "year": self.today.year},

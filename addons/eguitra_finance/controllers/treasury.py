@@ -273,7 +273,11 @@ class EguitraFinanceTreasury(http.Controller):
         name, kind, code = require(data, "name", "type", "code")
         if kind not in ("bank", "cash"):
             raise ApiError(400, "invalid_parameter", "Type de journal invalide.")
-        values = {"name": name, "type": kind, "code": str(code)[:5].upper(), "company_id": request.env.company.id}
+        values = {"name": name, "type": kind, "code": str(code).strip()[:5].upper(), "company_id": request.env.company.id}
+        if request.env["account.journal"].search_count(
+            [("code", "=", values["code"]), ("company_id", "=", values["company_id"])]
+        ):
+            raise ApiError(409, "conflict", f"Le code {values['code']} est déjà pris par un autre journal de la société.")
         if data.get("currency_id"):
             values["currency_id"] = int(data["currency_id"])
         if data.get("bank_account_number"):
