@@ -2,6 +2,12 @@ from odoo import models
 from odoo.exceptions import UserError
 
 
+def approval_granted(env):
+    """Contournement réservé au moteur lui-même : contexte posé ET mode superutilisateur,
+    qu'un appel RPC d'utilisateur ne peut pas obtenir."""
+    return env.su and env.context.get("eguitra_approval_granted")
+
+
 class AccountMove(models.Model):
     _inherit = "account.move"
 
@@ -9,9 +15,9 @@ class AccountMove(models.Model):
         self.ensure_one()
         if self.move_type in ("in_invoice", "in_refund"):
             return "in_invoice"
-        # Seules les OD saisies dans les applications entrent dans le circuit ; les écritures produites
-        # par le noyau (dotations, relevés, règlements, extournes) n'y entrent jamais.
-        if self.move_type == "entry" and self.env.context.get("eguitra_manual_entry") and self.journal_id.type == "general":
+        # Seules les OD saisies dans les applications (marque stockée) entrent dans le circuit ; les
+        # écritures produites par le noyau (dotations, relevés, règlements, extournes) n'y entrent pas.
+        if self.move_type == "entry" and self.eguitra_manual_entry:
             return "entry"
         return None
 
@@ -43,20 +49,23 @@ class AccountMove(models.Model):
         return bool(request) and request.state == "approved" and abs(request.amount - self._eguitra_approval_amount()) < 0.5
 
     def action_post(self):
-        if not self.env.context.get("eguitra_approval_granted"):
+        if not approval_granted(self.env):
             for move in self:
                 if move._eguitra_required_rules() and not move._eguitra_is_approved():
                     raise UserError(
                         f"La pièce {move.display_name} doit être approuvée avant d'être validée : "
                         "soumettez-la au circuit d'approbation."
                     )
+                payment = move.origin_payment_id
+                if payment and payment._eguitra_required_rules() and not payment._eguitra_is_approved():
+                    raise UserError(f"Le règlement {payment.display_name} doit être approuvé avant d'être comptabilisé.")
         return super().action_post()
 
     def _eguitra_post_or_submit(self):
         for move in self:
             rules = move._eguitra_required_rules()
             if not rules or move._eguitra_is_approved():
-                move.with_context(eguitra_approval_granted=True).action_post()
+                move.action_post()
                 continue
             pending = move._eguitra_last_request()
             if pending.state == "pending" and abs(pending.amount - move._eguitra_approval_amount()) < 0.5:

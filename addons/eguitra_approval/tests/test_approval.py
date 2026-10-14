@@ -37,6 +37,27 @@ class TestApproval(FinanceDataMixin, ApiCase):
         bill = self._bill(10_000_000)
         with self.assertRaises(UserError):
             bill.with_user(self.comptable).action_post()
+        # Le drapeau de contournement n'a d'effet qu'en mode superutilisateur (pas par RPC).
+        with self.assertRaises(UserError):
+            bill.with_user(self.comptable).with_context(eguitra_approval_granted=True).action_post()
+
+    def test_od_saisie_soumise_au_circuit(self):
+        self.env["eguitra.approval.rule"].create({
+            "name": "OD : contrôle de la direction", "document": "entry", "sequence": 1, "min_amount": 1_000_000,
+            "approver_profile": "direction", "company_id": self.company.id,
+        })
+        journal = self.env["account.journal"].search([("company_id", "=", self.company.id), ("type", "=", "general")], limit=1)
+        lines = [
+            Command.create({"name": "Provision", "account_id": self.acc_purchase.id, "debit": 5_000_000}),
+            Command.create({"name": "Provision", "account_id": self.bank.default_account_id.id, "credit": 5_000_000}),
+        ]
+        od = self.env["account.move"].with_user(self.comptable).create(
+            {"move_type": "entry", "journal_id": journal.id, "line_ids": lines, "eguitra_manual_entry": True}
+        )
+        od.with_user(self.comptable)._eguitra_post_or_submit()
+        self.assertEqual(od.state, "draft")
+        self._request(od).with_user(self.dg).action_approve()
+        self.assertEqual(od.state, "posted")
 
     def test_circuit_un_niveau(self):
         bill = self._bill(10_000_000)
@@ -94,7 +115,7 @@ class TestApproval(FinanceDataMixin, ApiCase):
 
     def test_reglement_soumis_au_dela_du_seuil(self):
         bill = self._bill(150_000_000)
-        bill.with_context(eguitra_approval_granted=True).action_post()
+        bill.sudo().with_context(eguitra_approval_granted=True).action_post()
         wizard = self.env["account.payment.register"].with_user(self.comptable).with_context(
             active_model="account.move", active_ids=bill.ids
         ).create({"journal_id": self.bank.id})

@@ -163,6 +163,7 @@ class EguitraFinanceMoves(http.Controller):
                 raise ApiError(400, "missing_fields", "Journal requis.", fields=["journal_id"])
             values["date"] = parse_date(data, "date", today())
             values["line_ids"] = _entry_lines(data)
+            values["eguitra_manual_entry"] = True
         else:
             (partner_id,) = require(data, "partner_id")
             values.update({
@@ -176,7 +177,7 @@ class EguitraFinanceMoves(http.Controller):
                 values["currency_id"] = int(data["currency_id"])
         move = request.env["account.move"].create(values)
         if data.get("post"):
-            move.with_context(eguitra_manual_entry=move_type == "entry")._eguitra_post_or_submit()
+            move._eguitra_post_or_submit()
         return move_detail(move)
 
     @api_route("/finance/moves/<int:move_id>", methods=("PATCH",), profiles=FIN_WRITE)
@@ -217,7 +218,7 @@ class EguitraFinanceMoves(http.Controller):
         move = _move(move_id)
         if move.state != "draft":
             raise ApiError(422, "business_rule", "La pièce n'est pas en brouillon.")
-        move.with_context(eguitra_manual_entry=move.move_type == "entry")._eguitra_post_or_submit()
+        move._eguitra_post_or_submit()
         return move_detail(move)
 
     @api_route("/finance/moves/<int:move_id>/cancel", methods=("POST",), profiles=FIN_WRITE)

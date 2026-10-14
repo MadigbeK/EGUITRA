@@ -8,6 +8,8 @@ pièces d'achat qu'il règle.
 from odoo import models
 from odoo.exceptions import UserError
 
+from .account_move import approval_granted
+
 
 class AccountPayment(models.Model):
     _inherit = "account.payment"
@@ -26,7 +28,7 @@ class AccountPayment(models.Model):
         return bool(request) and request.state == "approved"
 
     def action_post(self):
-        if not self.env.context.get("eguitra_approval_granted"):
+        if not approval_granted(self.env):
             for payment in self:
                 if payment._eguitra_required_rules() and not payment._eguitra_is_approved():
                     raise UserError(f"Le règlement {payment.display_name} doit être approuvé avant d'être comptabilisé.")
