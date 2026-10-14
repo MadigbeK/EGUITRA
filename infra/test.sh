@@ -34,7 +34,7 @@ fi
 MODS=$(IFS=,; echo "$*")
 TAGS=$(printf '/%s,' "$@")
 LOG=$(mktemp)
-"${ODOO[@]}" "${CONF[@]}" -d "$CI" -i "$MODS" --test-enable --test-tags "${TAGS%,}" \
+"${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -i "$MODS" --test-enable --test-tags "${TAGS%,}" \
   --stop-after-init --workers 0 --log-level=test 2>&1 | tee "$LOG" | grep -E " (ERROR|CRITICAL) |FAIL|Ran |tests? in " || true
 
 if grep -qE " (ERROR|CRITICAL) " "$LOG"; then

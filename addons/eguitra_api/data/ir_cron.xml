@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="cron_purge_tokens" model="ir.cron">
+        <field name="name">EGUITRA : purge des jetons expirés</field>
+        <field name="model_id" ref="model_eguitra_api_token"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+    </record>
+    <record id="cron_purge_access_log" model="ir.cron">
+        <field name="name">EGUITRA : purge des journaux d'accès de plus de 12 mois</field>
+        <field name="model_id" ref="model_eguitra_api_access_log"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+    </record>
+    <record id="cron_purge_login_attempts" model="ir.cron">
+        <field name="name">EGUITRA : purge des tentatives de connexion</field>
+        <field name="model_id" ref="model_eguitra_api_login_attempt"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+    </record>
+</odoo>

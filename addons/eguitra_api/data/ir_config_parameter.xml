@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Double authentification obligatoire pour tous les utilisateurs (offre, chapitre 5.3). -->
+    <record id="param_mfa_required" model="ir.config_parameter">
+        <field name="key">eguitra_api.mfa_required</field>
+        <field name="value">1</field>
+    </record>
+    <!-- Mot de passe robuste : 10 caractères minimum (paramètre créé par auth_password_policy). -->
+    <function model="ir.config_parameter" name="set_param" eval="['auth_password_policy.minlength', '10']"/>
+</odoo>
