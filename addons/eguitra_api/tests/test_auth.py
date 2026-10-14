@@ -130,3 +130,13 @@ class TestAuth(ApiCase):
         log = self.env["eguitra.api.access.log"].search([("path", "=", "/api/v1/auth/me")], limit=1)
         self.assertTrue(log)
         self.assertEqual(log.status, 401)
+
+    def test_codes_faux_bloquent_le_compte(self):
+        self.open_session("fatou")
+        for _i in range(5):
+            status, body = self.call("POST", "/auth/login", {"login": "fatou", "password": PASSWORD, "app": "finance"})
+            self.assertEqual(body["status"], "mfa_required", body)
+            status, body = self.call("POST", "/auth/mfa", {"mfa_token": body["mfa_token"], "code": "000000"})
+            self.assertEqual(status, 401)
+        status, body = self.call("POST", "/auth/login", {"login": "fatou", "password": PASSWORD, "app": "finance"})
+        self.assertEqual(status, 429, "Les codes faux comptent par utilisateur, tous jetons confondus")

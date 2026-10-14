@@ -61,3 +61,13 @@ class TestAdmin(ApiCase):
         me = session["user"]
         status, _b = self.call("PATCH", f"/admin/users/{me['id']}", {"profiles": ["finance"]}, token=session["access_token"])
         self.assertEqual(status, 422)
+
+    def test_comptes_techniques_hors_portee(self):
+        token = self.open_session("aissatou")["access_token"]
+        admin_noyau = self.env.ref("base.user_admin")
+        status, _b = self.call(
+            "POST", f"/admin/users/{admin_noyau.id}/password", {"password": "Piratage-2026!"}, token=token
+        )
+        self.assertEqual(status, 404)
+        status, users = self.call("GET", "/admin/users", token=token)
+        self.assertNotIn(admin_noyau.id, [u["id"] for u in users])

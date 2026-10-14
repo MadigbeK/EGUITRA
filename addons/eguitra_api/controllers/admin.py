@@ -16,10 +16,26 @@ def _user_row(user):
     return data
 
 
+def _technical_user_ids(env):
+    """Comptes techniques du noyau, jamais gérés depuis les applications."""
+    return [env.ref("base.user_root").id, env.ref("base.user_admin").id, env.ref("base.public_user").id]
+
+
+def _scope_domain(env):
+    """Utilisateurs gérables : hors comptes techniques, dans les sociétés de l'administrateur."""
+    return [
+        ("id", "not in", _technical_user_ids(env)),
+        ("company_ids", "in", request.env.user.company_ids.ids),
+    ]
+
+
 class EguitraAdminController(http.Controller):
     def _get_user(self, user_id):
-        user = sudo_env()["res.users"].with_context(active_test=False).browse(user_id).exists()
-        if not user or user.id in (sudo_env().ref("base.user_root").id,):
+        env = sudo_env()
+        user = env["res.users"].with_context(active_test=False).search(
+            [("id", "=", user_id)] + _scope_domain(env), limit=1
+        )
+        if not user or set(user.company_ids.ids) - set(request.env.user.company_ids.ids):
             raise ApiError(404, "not_found", "Utilisateur introuvable.")
         return user
 
@@ -56,7 +72,7 @@ class EguitraAdminController(http.Controller):
     @api_route("/admin/users", methods=("GET",), profiles=ADMIN)
     def list_users(self, **kw):
         env = sudo_env()
-        domain = [("id", "!=", env.ref("base.user_root").id)]
+        domain = _scope_domain(env)
         if kw.get("search"):
             domain += ["|", ("name", "ilike", kw["search"]), ("login", "ilike", kw["search"])]
         users = env["res.users"].with_context(active_test=False).search(

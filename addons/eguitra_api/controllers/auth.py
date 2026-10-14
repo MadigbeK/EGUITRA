@@ -18,8 +18,15 @@ def _mfa_required(env):
     return env["ir.config_parameter"].sudo().get_param("eguitra_api.mfa_required", "1") != "0"
 
 
-def _record_attempt(env, login, success):
-    env["eguitra.api.login.attempt"].create({"login": login, "ip": client_ip(), "success": success})
+def _record_attempt(env, login, success, kind="password"):
+    env["eguitra.api.login.attempt"].create(
+        {"login": login, "ip": client_ip(), "success": success, "kind": kind}
+    )
+
+
+def _check_not_blocked(env, login):
+    if env["eguitra.api.login.attempt"]._is_blocked(login, client_ip()):
+        raise ApiError(429, "too_many_attempts", "Trop de tentatives. Réessayez dans 15 minutes.")
 
 
 def _refusal(status, code, message):
@@ -54,8 +61,7 @@ class EguitraAuthController(http.Controller):
         if app not in APPS:
             raise ApiError(400, "invalid_app", "Application inconnue.")
         env = sudo_env()
-        if env["eguitra.api.login.attempt"]._is_blocked(login, client_ip()):
-            raise ApiError(429, "too_many_attempts", "Trop de tentatives. Réessayez dans 15 minutes.")
+        _check_not_blocked(env, login)
 
         credential = {"type": "password", "login": login, "password": str(password)}
         try:
@@ -95,10 +101,13 @@ class EguitraAuthController(http.Controller):
             raise ApiError(401, "invalid_token", "Étape expirée : reconnectez-vous.")
         if token.attempts >= MAX_MFA_ATTEMPTS:
             raise ApiError(401, "invalid_token", "Trop d'essais : reconnectez-vous.")
+        # Les échecs de code comptent par utilisateur, tous jetons confondus.
+        _check_not_blocked(env, token.user_id.login)
         return token
 
-    def _wrong_code(self, token):
+    def _wrong_code(self, env, token):
         token.attempts += 1
+        _record_attempt(env, token.user_id.login, False, kind="mfa")
         return _refusal(401, "invalid_code", "Code incorrect.")
 
     @api_route("/auth/mfa", methods=("POST",), auth=False)
@@ -111,7 +120,7 @@ class EguitraAuthController(http.Controller):
         try:
             user.with_user(user)._check_credentials({"type": "totp", "token": _totp_code(code)}, {"interactive": True})
         except AccessDenied:
-            return self._wrong_code(token)
+            return self._wrong_code(env, token)
         token.revoked = True
         return _session_payload(env, user, token.app)
 
@@ -123,7 +132,7 @@ class EguitraAuthController(http.Controller):
         token = self._consume(env, raw, "mfa_setup")
         user = token.user_id
         if not user.with_user(user)._totp_try_setting(token.payload, _totp_code(code)):
-            return self._wrong_code(token)
+            return self._wrong_code(env, token)
         token.write({"revoked": True, "payload": False})
         return _session_payload(env, user, token.app)
 

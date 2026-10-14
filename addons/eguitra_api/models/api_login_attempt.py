@@ -17,9 +17,15 @@ class EguitraApiLoginAttempt(models.Model):
     login = fields.Char(index=True)
     ip = fields.Char(index=True)
     success = fields.Boolean()
+    kind = fields.Selection(
+        [("password", "Mot de passe"), ("mfa", "Code de double authentification")],
+        default="password",
+        required=True,
+    )
 
     @api.model
     def _is_blocked(self, login, ip):
+        """Bloqué après 5 échecs (mot de passe ou code) sur l'identifiant, ou 20 sur l'adresse IP."""
         since = fields.Datetime.now() - timedelta(minutes=WINDOW_MINUTES)
         base = [("success", "=", False), ("date", ">=", since)]
         if login and self.sudo().search_count(base + [("login", "=", login)]) >= MAX_FAILURES_PER_LOGIN:
