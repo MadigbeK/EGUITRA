@@ -16,6 +16,11 @@
         <field name="model_id" ref="model_eguitra_loan_line"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_reminder_company" model="ir.rule">
+        <field name="name">Relances : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_reminder"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_period_close_company" model="ir.rule">
         <field name="name">Clôtures : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_period_close"/>

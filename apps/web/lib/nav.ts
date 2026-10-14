@@ -23,6 +23,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/finance", label: "Tableau de bord", icon: "LayoutDashboard", profiles: FIN },
         { href: "/finance/pilotage", label: "Activités et budget", icon: "TrendingUp", profiles: FIN },
+        { href: "/finance/rapport", label: "Rapport mensuel", icon: "FileText", profiles: FIN },
         { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck" },
         { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN },
       ],
@@ -33,6 +34,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/ventes", label: "Ventes", icon: "Receipt", profiles: FIN },
         { href: "/finance/achats", label: "Achats et dépenses", icon: "ShoppingCart", profiles: FIN },
         { href: "/finance/tresorerie", label: "Trésorerie", icon: "Landmark", profiles: FIN },
+        { href: "/finance/relances", label: "Relances clients", icon: "Mail", profiles: FIN },
         { href: "/finance/tiers", label: "Tiers", icon: "Users", profiles: FIN },
         { href: "/finance/immobilisations", label: "Immobilisations", icon: "Boxes", profiles: FIN },
         { href: "/finance/dette", label: "Dette et financement", icon: "HandCoins", profiles: FIN },

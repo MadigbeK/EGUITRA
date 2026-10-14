@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Calculator, Plus } from "lucide-react";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import type { Account, Journal } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 
@@ -33,7 +34,7 @@ export default function AssetsPage() {
     <div>
       <PageHeader
         title="Immobilisations et amortissements"
-        subtitle="Registre des immobilisations, plans d'amortissement, dotations comptabilisées."
+        subtitle="Registre des immobilisations, plans d'amortissement ; les dotations échues sont comptabilisées chaque nuit."
         actions={
           <>
             <Button onClick={() => setModal("profile")}>Catégories</Button>
@@ -85,6 +86,7 @@ export default function AssetsPage() {
 function AssetModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
   const { data: asset, mutate } = useApi<Asset>(`/finance/assets/${id}`);
   const [error, setError] = useState<string | null>(null);
+  const [disposing, setDisposing] = useState(false);
   return (
     <Modal
       open
@@ -92,14 +94,20 @@ function AssetModal({ id, onClose, onChanged }: { id: number; onClose: () => voi
       title={asset?.name ?? "Immobilisation"}
       onClose={onClose}
       footer={
-        asset?.state === "draft" && (
-          <Button variant="primary" onClick={() => apiSend("POST", `/finance/assets/${id}/confirm`).then(() => { void mutate(); onChanged(); }).catch((e) => setError(e instanceof ApiError ? e.message : "Erreur"))}>
-            Mettre en service
-          </Button>
-        )
+        <>
+          {(asset?.state === "open" || asset?.state === "close") && !disposing && (
+            <Button onClick={() => setDisposing(true)}>Sortir de l&apos;actif</Button>
+          )}
+          {asset?.state === "draft" && (
+            <Button variant="primary" onClick={() => apiSend("POST", `/finance/assets/${id}/confirm`).then(() => { void mutate(); onChanged(); }).catch((e) => setError(e instanceof ApiError ? e.message : "Erreur"))}>
+              Mettre en service
+            </Button>
+          )}
+        </>
       }
     >
       {error && <Notice tone="danger">{error}</Notice>}
+      {disposing && asset && <DisposeForm asset={asset} onCancel={() => setDisposing(false)} onDone={() => { setDisposing(false); void mutate(); onChanged(); }} />}
       {!asset ? (
         <Loading />
       ) : (
@@ -119,6 +127,47 @@ function AssetModal({ id, onClose, onChanged }: { id: number; onClose: () => voi
         />
       )}
     </Modal>
+  );
+}
+
+/** Sortie de l'actif : cession (prix et acquéreur) ou mise au rebut (prix nul). */
+function DisposeForm({ asset, onCancel, onDone }: { asset: Asset; onCancel: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), sale_value: "", note: "" });
+  const [buyer, setBuyer] = useState<{ id: number; name: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend("POST", `/finance/assets/${asset.id}/dispose`, {
+        date: f.date, sale_value: Number(f.sale_value.replace(/\s/g, "")) || 0, partner_id: buyer?.id, note: f.note || undefined,
+      });
+      onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Sortie impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mb-4 space-y-3 rounded-lg border border-line bg-panel-2 p-4">
+      <p className="text-sm">
+        Sortie de l&apos;actif : dotation jusqu&apos;à la date de sortie, reprise des amortissements, valeur nette comptable en 81x.
+        En cas de vente, la créance sur l&apos;acquéreur (485) et le produit de cession (82x) sont comptabilisés.
+      </p>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Field label="Date de sortie"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+        <Field label="Prix de cession (0 si mise au rebut)"><Input inputMode="numeric" className="font-mono" value={f.sale_value} onChange={(e) => setF({ ...f, sale_value: e.target.value })} /></Field>
+        <Field label="Acquéreur"><PartnerPicker value={buyer} onChange={setBuyer} kind="customer" /></Field>
+        <Field label="Motif" className="md:col-span-3"><Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button onClick={onCancel}>Annuler</Button>
+        <Button variant="danger" loading={busy} onClick={() => window.confirm(`Sortir « ${asset.name} » de l'actif ? Les écritures seront comptabilisées.`) && submit()}>Confirmer la sortie</Button>
+      </div>
+    </div>
   );
 }
 

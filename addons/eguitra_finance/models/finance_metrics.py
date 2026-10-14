@@ -246,3 +246,47 @@ class EguitraFinanceMetrics(models.AbstractModel):
             "dscr": (ebe_12m / service_12m) if service_12m else None,
             "alerts": self.env["eguitra.alert.threshold"].active_alerts(companies, today),
         }
+
+    # ─── Rapport mensuel de gestion ───────────────────────────────────────
+
+    def management_report(self, companies, day):
+        """Rapport mensuel de gestion du mois contenant day : indicateurs, résultat du mois et
+        cumulé (comparé à l'an dernier), activités, trésorerie, flux, transport, alertes."""
+        m_start, m_end = month_bounds(day)
+        dash = self.dashboard(companies, m_end)
+        fy_start = dash["fiscal_year"]["start"]
+        syscohada = self.env["eguitra.syscohada"]
+        keys = ("XB", "XC", "XD", "XE", "XF", "XH", "XI")
+        labels = {"XB": "Chiffre d'affaires", "XC": "Valeur ajoutée", "XD": "Excédent brut d'exploitation",
+                  "XE": "Résultat d'exploitation", "XF": "Résultat financier", "XH": "Résultat HAO",
+                  "XI": "Résultat net"}
+        month = syscohada.income_statement(companies, m_start, m_end)["totals"]
+        month_ly = syscohada.income_statement(companies, m_start - relativedelta(years=1),
+                                              m_end - relativedelta(years=1))["totals"]
+        ytd = syscohada.income_statement(companies, fy_start, m_end)["totals"]
+        ytd_ly = syscohada.income_statement(companies, fy_start - relativedelta(years=1),
+                                            m_end - relativedelta(years=1))["totals"]
+        flows = {line["code"]: line["amount"] for line in syscohada.cash_flow(companies, fy_start, m_end)["lines"]}
+        transport = []
+        if "eguitra.transport.rotation" in self.env:
+            transport = self.env["eguitra.transport.rotation"].profitability(companies, m_start, m_end, "vehicle")
+        return {
+            "month": m_start.strftime("%Y-%m"),
+            "period": {"start": m_start, "end": m_end, "fiscal_year_start": fy_start},
+            "companies": dash["companies"],
+            "kpis": {
+                "revenue_month": dash["revenue_month"], "revenue_prev_month": dash["revenue_prev_month"],
+                "revenue_fy": dash["revenue_fy"], "net_result_fy": dash["net_result_fy"], "ebe_fy": dash["ebe_fy"],
+                "cash": dash["cash"], "receivables": dash["receivables"]["total"],
+                "receivables_overdue": dash["receivables"].get("overdue", 0.0), "payables": dash["payables"]["total"],
+                "dscr": dash["dscr"],
+            },
+            "income": [{"code": k, "label": labels[k], "month": month.get(k, 0.0), "month_last_year": month_ly.get(k, 0.0),
+                        "ytd": ytd.get(k, 0.0), "ytd_last_year": ytd_ly.get(k, 0.0)} for k in keys],
+            "by_activity": dash["by_activity"],
+            "cash_by_journal": dash["cash_by_journal"],
+            "cash_flow": {k: flows.get(k, 0.0) for k in ("ZA", "ZB", "ZC", "ZF", "ZG", "ZH")},
+            "transport": transport,
+            "debt": dash["debt"],
+            "alerts": dash["alerts"],
+        }

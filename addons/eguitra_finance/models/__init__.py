@@ -5,3 +5,5 @@ from . import loan
 from . import period_close
 from . import report_registry
 from . import account_move
+from . import account_asset
+from . import reminder

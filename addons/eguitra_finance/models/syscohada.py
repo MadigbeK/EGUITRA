@@ -1,4 +1,5 @@
-"""États financiers SYSCOHADA révisé (2017) : bilan et compte de résultat, système normal.
+"""États financiers SYSCOHADA révisé (2017) : bilan, compte de résultat et tableau des flux de
+trésorerie, système normal.
 
 Chaque rubrique est définie par des préfixes de comptes. Les comptes de tiers et de trésorerie
 qui peuvent être débiteurs ou créditeurs (40 à 47, 52, 53, 58) sont classés compte par compte
@@ -7,7 +8,14 @@ du client (offre, chapitre 6.5) ; les comptes non classés sont signalés par le
 « comptes hors états ».
 """
 
+from datetime import timedelta
+
 from odoo import api, models
+
+from .finance_metrics import ACC_CODE
+
+# Journal des à-nouveaux : ses écritures font partie de la situation d'ouverture, pas des flux.
+OPENING_JOURNAL = "AN"
 
 # (code, libellé, préfixes inclus, préfixes exclus, sens retenu : all | debit | credit[, préfixes
 # toujours inclus quel que soit le sens, par exemple les dépréciations des créances])
@@ -212,3 +220,129 @@ class EguitraSyscohada(models.AbstractModel):
             "difference": round(actif["BZ"] - passif["DZ"], 2),
             "unmapped_accounts": unmapped,
         }
+
+    # ─── Tableau des flux de trésorerie ───────────────────────────────────
+
+    def _period_lines(self, companies, date_from, date_to, opening):
+        """Mouvements de la période par compte : (débit, crédit) hors à-nouveaux, ou soldes des
+        seuls à-nouveaux (opening=True)."""
+        self.env.flush_all()
+        self.env.cr.execute(
+            f"""SELECT {ACC_CODE} AS code, SUM(aml.debit), SUM(aml.credit)
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                  JOIN account_journal aj ON aj.id = aml.journal_id
+                 WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
+                   AND aml.date >= %(date_from)s AND aml.date <= %(date_to)s
+                   AND (aj.code = %(journal)s) = %(opening)s
+              GROUP BY 1""",
+            {"companies": list(companies.ids), "date_from": date_from, "date_to": date_to,
+             "journal": OPENING_JOURNAL, "opening": opening},
+        )
+        return {code: (float(debit), float(credit)) for code, debit, credit in self.env.cr.fetchall() if code}
+
+    @api.model
+    def cash_flow(self, companies, date_from, date_to):
+        """Tableau des flux de trésorerie (méthode SYSCOHADA : CAFG puis variations du BFR).
+
+        Situation d'ouverture : soldes de la veille du début de période, plus les à-nouveaux
+        passés dans la période. Les flux d'investissement et de financement sont lus sur les
+        mouvements des comptes concernés ; l'écart avec la trésorerie du bilan, s'il existe,
+        est affiché pour analyse (écritures de reclassement, dettes sur immobilisations…).
+        """
+        metrics = self.env["eguitra.finance.metrics"]
+        start = metrics.account_balances(companies, date_from - timedelta(days=1))
+        for code, (debit, credit) in self._period_lines(companies, date_from, date_to, True).items():
+            start[code] = start.get(code, 0.0) + debit - credit
+        end = metrics.account_balances(companies, date_to)
+
+        def position(balances):
+            actif = _totals(_compute(balances, BILAN_ACTIF, 1)[0], BILAN_ACTIF_TOTALS)
+            passif = _totals(_compute(balances, BILAN_PASSIF, -1)[0], BILAN_PASSIF_TOTALS)
+            return actif, passif
+
+        a0, p0 = position(start)
+        a1, p1 = position(end)
+        result, _used = _compute(metrics.account_balances(companies, date_to, date_from), CR_LINES,
+                                 lambda code: -1 if code.startswith("T") else 1)
+        result = _totals(result, CR_TOTALS)
+        moves = self._period_lines(companies, date_from, date_to, False)
+
+        def debits(include, exclude=()):
+            return sum(d for code, (d, _c) in moves.items() if _match(code, include, exclude))
+
+        def credits(include, exclude=()):
+            return sum(c for code, (_d, c) in moves.items() if _match(code, include, exclude))
+
+        v = {
+            "ZA": (a0["BT"] - p0["DT"]),
+            # Capacité d'autofinancement globale (méthode additive).
+            "FA": result["XI"] + result["RL"] + result["RN"] - result["TJ"] - result["TL"] - result["TN"] + result["RO"],
+            "FB": -(a1["BA"] - a0["BA"]),
+            "FC": -(a1["BB"] - a0["BB"]),
+            "FD": -(a1["BG"] - a0["BG"]),
+            # Les dividendes à payer (465) relèvent du financement (FN), pas du passif circulant.
+            "FE": (p1["DP"] - p0["DP"]) - (_credit_side(end, "465") - _credit_side(start, "465")),
+            "FF": -debits(["21"]),
+            "FG": -debits(["22", "23", "24", "25"]),
+            "FH": -debits(["26", "27"]),
+            "FI": credits(["821", "822"]),
+            "FJ": credits(["826"]),
+            "FK": credits(["101", "102", "103", "104"]),
+            "FL": credits(["14"]),
+            "FM": -debits(["101", "102", "103", "104"]),
+            "FN": -debits(["465"]),
+            "FO": credits(["161", "162"]),
+            "FP": credits(["16", "17", "181", "182", "183", "184"], ["161", "162", "166"]),
+            "FQ": -debits(["16", "17", "181", "182", "183", "184"], ["166"]),
+        }
+        v["ZB"] = sum(v[c] for c in ("FA", "FB", "FC", "FD", "FE"))
+        v["ZC"] = sum(v[c] for c in ("FF", "FG", "FH", "FI", "FJ"))
+        v["ZD"] = sum(v[c] for c in ("FK", "FL", "FM", "FN"))
+        v["ZE"] = sum(v[c] for c in ("FO", "FP", "FQ"))
+        v["ZF"] = v["ZD"] + v["ZE"]
+        v["ZG"] = v["ZB"] + v["ZC"] + v["ZF"]
+        v["ZH"] = v["ZG"] + v["ZA"]
+        treasury_end = a1["BT"] - p1["DT"]
+        rows = [{"code": code, "label": label, "amount": v[code], "total": total} for code, label, total in TFT_ROWS]
+        return {
+            "date_from": date_from,
+            "date_to": date_to,
+            "lines": rows,
+            "treasury_end": treasury_end,
+            "difference": round(treasury_end - v["ZH"], 2),
+        }
+
+
+def _credit_side(balances, prefix):
+    """Total des soldes créditeurs des comptes commençant par prefix (montant positif)."""
+    return -sum(b for code, b in balances.items() if code.startswith(prefix) and b < 0)
+
+
+TFT_ROWS = [
+    ("ZA", "Trésorerie nette au début de la période", True),
+    ("FA", "Capacité d'autofinancement globale (CAFG)", False),
+    ("FB", "Actif circulant HAO (variation)", False),
+    ("FC", "Variation des stocks", False),
+    ("FD", "Variation des créances", False),
+    ("FE", "Variation du passif circulant", False),
+    ("ZB", "Flux de trésorerie provenant des activités opérationnelles", True),
+    ("FF", "Décaissements liés aux acquisitions d'immobilisations incorporelles", False),
+    ("FG", "Décaissements liés aux acquisitions d'immobilisations corporelles", False),
+    ("FH", "Décaissements liés aux acquisitions d'immobilisations financières", False),
+    ("FI", "Encaissements liés aux cessions d'immobilisations incorporelles et corporelles", False),
+    ("FJ", "Encaissements liés aux cessions d'immobilisations financières", False),
+    ("ZC", "Flux de trésorerie provenant des activités d'investissement", True),
+    ("FK", "Augmentations de capital par apports nouveaux", False),
+    ("FL", "Subventions d'investissement reçues", False),
+    ("FM", "Prélèvements sur le capital", False),
+    ("FN", "Dividendes versés", False),
+    ("ZD", "Flux provenant des capitaux propres", True),
+    ("FO", "Emprunts", False),
+    ("FP", "Autres dettes financières", False),
+    ("FQ", "Remboursements des emprunts et autres dettes financières", False),
+    ("ZE", "Flux provenant des capitaux étrangers", True),
+    ("ZF", "Flux de trésorerie provenant des activités de financement", True),
+    ("ZG", "Variation de la trésorerie nette de la période", True),
+    ("ZH", "Trésorerie nette à la fin de la période", True),
+]

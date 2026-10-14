@@ -7,7 +7,7 @@ import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt } from "@/lib/format";
 
-type Tab = "bilan" | "resultat" | "rapports" | "ifrs" | "export";
+type Tab = "bilan" | "resultat" | "flux" | "rapports" | "ifrs" | "export";
 interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -34,6 +34,7 @@ export default function StatementsPage() {
         tabs={[
           { key: "bilan", label: "Bilan" },
           { key: "resultat", label: "Compte de résultat" },
+          { key: "flux", label: "Tableau des flux" },
           { key: "rapports", label: "Balance, grand livre et rapports" },
           { key: "ifrs", label: "Passerelle IFRS" },
           { key: "export", label: "Export d'audit" },
@@ -43,6 +44,7 @@ export default function StatementsPage() {
       />
       {tab === "bilan" && <BalanceSheet scope={scope} />}
       {tab === "resultat" && <IncomeStatement scope={scope} />}
+      {tab === "flux" && <CashFlow scope={scope} />}
       {tab === "rapports" && <ReportBuilder scope={scope} />}
       {tab === "ifrs" && <Ifrs scope={scope} />}
       {tab === "export" && <AuditExport scope={scope} />}
@@ -129,6 +131,43 @@ function IncomeStatement({ scope }: { scope: string }) {
         <Card title="Compte de résultat (système normal)" padded={false}>
           <StatementTable lines={data.lines} compare />
         </Card>
+      )}
+    </div>
+  );
+}
+
+function CashFlow({ scope }: { scope: string }) {
+  const [from, setFrom] = useState(yearStart());
+  const [to, setTo] = useState(todayIso());
+  const { data, error } = useApi<{ lines: StatementLine[]; treasury_end: number; difference: number }>(
+    `/finance/statements/cash-flow?date_from=${from}&date_to=${to}&scope=${scope}`,
+  );
+  return (
+    <div className="space-y-4">
+      <div className="no-print flex flex-wrap items-end gap-3">
+        <Field label="Du">
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label="Au">
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </Field>
+      </div>
+      {error && <ErrorBox error={error} />}
+      {!data && !error && <Loading />}
+      {data && (
+        <>
+          {Math.abs(data.difference) < 1 ? (
+            <Notice tone="ok">Le tableau rejoint la trésorerie nette du bilan au {fmtDate(to)} : {fmtGNF(data.treasury_end)}.</Notice>
+          ) : (
+            <Notice tone="warn">
+              Écart de {fmtGNF(data.difference)} avec la trésorerie nette du bilan ({fmtGNF(data.treasury_end)}) : écritures de
+              reclassement ou intérêts courus à analyser avec l&apos;expert-comptable.
+            </Notice>
+          )}
+          <Card title="Tableau des flux de trésorerie (SYSCOHADA révisé)" padded={false}>
+            <StatementTable lines={data.lines} />
+          </Card>
+        </>
       )}
     </div>
   );

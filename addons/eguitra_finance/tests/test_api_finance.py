@@ -185,3 +185,22 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         self.assertEqual(line["budget"], 100_000_000)
         self.assertEqual(line["actual"], 150_000_000)
         self.assertTrue(line["alert"], "Dépassement de 50 % au-delà du seuil de 10 %")
+
+    def test_relances_clients(self):
+        from datetime import timedelta
+
+        late = self.make_invoice("out_invoice", 10_000_000, day=self.today - timedelta(days=40))
+        late.invoice_date_due = self.today - timedelta(days=40)
+        Reminder = self.env["eguitra.reminder"]
+        created = Reminder.generate(self.company, self.today)
+        mine = created.filtered(lambda r: r.partner_id == self.customer)
+        self.assertEqual(mine.level, "3", "Plus de 30 jours de retard : mise en demeure")
+        self.assertIn(late, mine.invoice_ids)
+        self.assertFalse(Reminder.generate(self.company, self.today).filtered(lambda r: r.partner_id == self.customer),
+                         "Pas de nouvelle relance au même niveau")
+        token = self.token
+        status, body = self.call("GET", f"/finance/reminders/{mine.id}", token=token)
+        self.assertEqual(status, 200, body)
+        self.assertIn("mettons en demeure", body["letter"]["intro"])
+        status, body = self.call("POST", f"/finance/reminders/{mine.id}/send", {"channel": "letter"}, token=token)
+        self.assertEqual((status, body["state"]), (200, "sent"))

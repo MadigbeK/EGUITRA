@@ -123,6 +123,21 @@ class EguitraFinanceAssets(http.Controller):
         asset.validate()
         return _row(asset, board=True)
 
+    @api_route("/finance/assets/<int:asset_id>/dispose", methods=("POST",), profiles=FIN_WRITE)
+    def dispose(self, asset_id, **_kw):
+        """Sortie de l'actif (mise au rebut ou cession), écritures SYSCOHADA 28/2x, 81x et, en cas
+        de vente, 485x/82x."""
+        asset = _asset(asset_id)
+        data = read_json()
+        partner = None
+        if data.get("partner_id"):
+            partner = request.env["res.partner"].browse(int(data["partner_id"])).exists()
+            if not partner:
+                raise ApiError(422, "business_rule", "Acquéreur inconnu.")
+        sale = asset.eguitra_dispose(parse_date(data, "date", today()), as_float(data.get("sale_value") or 0, "sale_value"),
+                                     partner, data.get("note"))
+        return dict(_row(asset, board=True), sale_move={"id": sale.id, "name": sale.name} if sale else None)
+
     @api_route("/finance/assets/depreciate", methods=("POST",), profiles=FIN_WRITE)
     def depreciate(self, **_kw):
         """Comptabilise les dotations aux amortissements jusqu'à la date donnée."""

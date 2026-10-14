@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
-  BadgeCheck, Bell, BookOpen, Boxes, Building2, ChevronDown, Clock, FileSpreadsheet, FileStack, FolderKanban,
-  FolderOpen, Gavel, HandCoins, HardHat, KeyRound, Landmark, LayoutDashboard, ListChecks, Lock, LogOut, Menu,
+  BadgeCheck, Bell, BookOpen, Boxes, Building2, ChevronDown, Clock, FileSpreadsheet, FileStack, FileText, FolderKanban,
+  FolderOpen, Gavel, HandCoins, HardHat, KeyRound, Landmark, LayoutDashboard, ListChecks, Lock, LogOut, Mail, Menu,
   Receipt, Scale, ScrollText, ShoppingCart, SlidersHorizontal, TrendingUp, Truck, UserCog, Users, X,
   type LucideIcon,
 } from "lucide-react";
@@ -15,8 +15,8 @@ import type { Me } from "@/lib/types";
 import { cx } from "@/components/ui";
 
 const ICONS: Record<string, LucideIcon> = {
-  BadgeCheck, Bell, BookOpen, Boxes, Building2, Clock, FileSpreadsheet, FileStack, FolderKanban, FolderOpen, Gavel,
-  HandCoins, HardHat, Landmark, LayoutDashboard, ListChecks, Lock, Receipt, Scale, ScrollText, ShoppingCart,
+  BadgeCheck, Bell, BookOpen, Boxes, Building2, Clock, FileSpreadsheet, FileStack, FileText, FolderKanban, FolderOpen, Gavel,
+  HandCoins, HardHat, Landmark, LayoutDashboard, ListChecks, Lock, Mail, Receipt, Scale, ScrollText, ShoppingCart,
   SlidersHorizontal, TrendingUp, Truck, UserCog, Users,
 };
 

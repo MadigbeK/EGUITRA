@@ -18,6 +18,7 @@
         "security/ir.model.access.csv",
         "security/finance_rules.xml",
         "data/alert_thresholds.xml",
+        "data/ir_cron.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Dotations aux amortissements échues, chaque nuit, pour toutes les sociétés. -->
+    <record id="cron_asset_depreciation" model="ir.cron">
+        <field name="name">EGUITRA : dotations aux amortissements</field>
+        <field name="model_id" ref="account_asset_management.model_account_asset"/>
+        <field name="state">code</field>
+        <field name="code">model._eguitra_cron_depreciate()</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+    <!-- Relances des clients : créées chaque nuit, envoyées seules si un serveur de courriel existe. -->
+    <record id="cron_reminders" model="ir.cron">
+        <field name="name">EGUITRA : relances des clients</field>
+        <field name="model_id" ref="model_eguitra_reminder"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_generate()</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>

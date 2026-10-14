@@ -151,7 +151,10 @@ if data is not None:
         errors.append("soldes_ouverture.csv : les soldes d'ouverture sont déjà repris. Annuler l'écriture existante "
                       "avant de les rejouer, ou retirer ce fichier du dossier.")
     elif lines:
-        journal = env["account.journal"].search([("company_id", "=", company.id), ("type", "=", "general")], limit=1)
+        # Journal des à-nouveaux : le tableau des flux le traite comme situation d'ouverture.
+        journal = env["account.journal"].search([("company_id", "=", company.id), ("code", "=", "AN")], limit=1)
+        journal = journal or env["account.journal"].create(
+            {"name": "À-nouveaux", "code": "AN", "type": "general", "company_id": company.id})
         move = env["account.move"].create({
             "move_type": "entry", "journal_id": journal.id, "date": OPENING, "ref": "Reprise : soldes d'ouverture",
             "line_ids": lines,

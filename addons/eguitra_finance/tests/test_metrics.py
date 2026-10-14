@@ -70,3 +70,50 @@ class TestMetrics(FinanceDataMixin, TransactionCase):
         alerts = self.env["eguitra.alert.threshold"].active_alerts(self.company, self.today)
         self.assertIn("transit_account", [a["code"] for a in alerts])
         self.assertEqual(alerts[0]["severity"], "blocking", "Les alertes bloquantes viennent en tête")
+
+    def test_tableau_des_flux(self):
+        env = self.env
+        start = self.today.replace(month=1, day=1)
+
+        def account(prefix):
+            return env["account.account"].search(
+                [("code", "=like", prefix + "%"), ("company_ids", "in", self.company.ids)], limit=1, order="code")
+
+        def entry(journal, lines, day=None):
+            move = env["account.move"].create({
+                "move_type": "entry", "journal_id": journal.id, "date": day or self.today,
+                "line_ids": [(0, 0, {"name": "Test", "account_id": acc.id, "debit": debit, "credit": credit,
+                                     "partner_id": partner.id if partner else False})
+                             for acc, debit, credit, partner in lines],
+            })
+            move.action_post()
+            return move
+
+        bank = self.bank.default_account_id
+        opening = env["account.journal"].create({"name": "À-nouveaux", "code": "AN", "type": "general",
+                                                 "company_id": self.company.id})
+        entry(opening, [(bank, 50_000_000, 0, None), (account("1013"), 0, 50_000_000, None)], start)
+        receivable = self.customer.property_account_receivable_id
+        entry(self.bank, [(bank, 400_000_000, 0, None), (receivable, 0, 400_000_000, self.customer)])
+        entry(self.bank, [(account("24"), 30_000_000, 0, None), (bank, 0, 30_000_000, None)])
+        entry(self.bank, [(bank, 100_000_000, 0, None), (self.acc_loan, 0, 100_000_000, None)])
+
+        flow = env["eguitra.syscohada"].cash_flow(self.company, start, self.today)
+        v = {line["code"]: line["amount"] for line in flow["lines"]}
+        self.assertAlmostEqual(v["ZA"], 50_000_000, 2, "Les à-nouveaux forment la trésorerie d'ouverture")
+        self.assertAlmostEqual(v["FK"], 0, 2, "L'apport repris en à-nouveaux n'est pas un flux de la période")
+        self.assertAlmostEqual(v["FA"], 800_000_000, 2, "CAFG = résultat, sans dotation")
+        self.assertAlmostEqual(v["ZB"], 400_000_000, 2, "Flux opérationnel = encaissement du client")
+        self.assertAlmostEqual(v["FG"], -30_000_000, 2)
+        self.assertAlmostEqual(v["FO"], 100_000_000, 2)
+        self.assertAlmostEqual(v["ZH"], 520_000_000, 2)
+        self.assertAlmostEqual(flow["difference"], 0, 2, "Le tableau rejoint la trésorerie du bilan")
+
+    def test_rapport_mensuel_de_gestion(self):
+        report = self.env["eguitra.finance.metrics"].management_report(self.company, self.today)
+        income = {line["code"]: line for line in report["income"]}
+        self.assertEqual(income["XB"]["month"], 1_000_000_000)
+        self.assertEqual(income["XI"]["ytd"], 800_000_000)
+        self.assertEqual(income["XB"]["month_last_year"], 0)
+        self.assertEqual(report["kpis"]["receivables"], 1_180_000_000)
+        self.assertIn("ZG", report["cash_flow"])

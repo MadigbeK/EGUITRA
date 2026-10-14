@@ -44,6 +44,26 @@ class EguitraFinanceDashboard(http.Controller):
                 line["previous"] = amounts.get(line["code"], 0.0)
         return current
 
+    @api_route("/finance/management-report", profiles=FIN_READ)
+    def management_report(self, **kw):
+        """Rapport mensuel de gestion ; month=AAAA-MM (mois en cours par défaut)."""
+        day = today()
+        if kw.get("month"):
+            try:
+                year, month = (int(x) for x in kw["month"].split("-"))
+                day = day.replace(year=year, month=month, day=1)
+            except ValueError as e:
+                raise ApiError(400, "invalid_parameter", "Mois invalide (AAAA-MM).") from e
+        return request.env["eguitra.finance.metrics"].sudo().management_report(companies(kw), day)
+
+    @api_route("/finance/statements/cash-flow", profiles=FIN_READ)
+    def cash_flow(self, **kw):
+        end = parse_date(kw, "date_to", today())
+        start = parse_date(kw, "date_from", end.replace(month=1, day=1))
+        if start > end:
+            raise ApiError(400, "invalid_parameter", "La période est inversée.")
+        return request.env["eguitra.syscohada"].sudo().cash_flow(companies(kw), start, end)
+
     @api_route("/finance/statements/balance-sheet", profiles=FIN_READ)
     def balance_sheet(self, **kw):
         end = parse_date(kw, "date", today())
