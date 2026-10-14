@@ -63,6 +63,14 @@ class EguitraSetup(models.AbstractModel):
         return companies
 
     @api.model
+    def ensure_document_settings(self):
+        """Documents imprimés en français : l'identifiant fiscal de Guinée s'intitule « NIF »
+        (sinon les factures afficheraient « Tax ID »)."""
+        guinea = self.env.ref("base.gn").sudo()
+        if not guinea.vat_label:
+            guinea.vat_label = "NIF"
+
+    @api.model
     def ensure_cabinet_company(self):
         """Crée MB AxisPro Consulting avec le plan SYSCOHADA Guinée, si elle n'existe pas."""
         Company = self.env["res.company"].sudo()

@@ -110,6 +110,8 @@ class TestAdmin(ApiCase):
         }, token=token)
         self.assertEqual(status, 200, row)
         self.assertEqual(row["company_registry"], "GN.TCC.2020.B.00001")
+        self.assertIn("RCCM GN.TCC.2020.B.00001", str(company.report_footer), "Mentions légales au pied des documents")
+        self.assertEqual(self.env.ref("base.gn").vat_label, "NIF")
         self.assertTrue(row["logo"].startswith("data:image/png;base64,"))
         status, _b = self.call("PATCH", f"/admin/companies/{company.id}",
                                {"logo": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}, token=token)

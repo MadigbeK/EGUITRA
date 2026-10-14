@@ -7,6 +7,8 @@ administrateur les modifie, pour les sociétés qui lui sont ouvertes.
 import base64
 import binascii
 
+from markupsafe import Markup, escape
+
 from odoo import http
 from odoo.http import request
 
@@ -60,6 +62,22 @@ def _decode_logo(value):
     return base64.b64encode(raw)
 
 
+def _footer(company):
+    """Pied des documents imprimés : mentions légales et coordonnées de la société."""
+    parts = [company.name]
+    if company.company_registry:
+        parts.append(f"RCCM {company.company_registry}")
+    if company.vat:
+        parts.append(f"NIF {company.vat}")
+    if company.phone:
+        parts.append(f"Tél. {company.phone}")
+    if company.email:
+        parts.append(company.email)
+    if company.website:
+        parts.append(company.website)
+    return Markup("<p>%s</p>") % Markup(" · ").join(escape(p) for p in parts)
+
+
 class EguitraCompanies(http.Controller):
     @api_route("/admin/companies", methods=("GET",), profiles=ADMIN)
     def companies(self, **_kw):
@@ -76,4 +94,5 @@ class EguitraCompanies(http.Controller):
         if "logo" in data:
             values["logo"] = _decode_logo(data["logo"]) if data["logo"] else False
         company.write(values)
+        company.report_footer = _footer(company)
         return _row(company)
