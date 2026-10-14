@@ -5,14 +5,13 @@ import base64
 from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError
+from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 MAX_FILE = 20 * 1024 * 1024
-ALLOWED_MIMETYPES = (
-    "application/pdf", "image/jpeg", "image/png", "application/zip",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel", "application/msword", "text/csv",
-)
+# Espace d'un dossier côté porteur : large pour une data room de 42 pièces et leurs versions,
+# borné pour qu'un compte porteur ne puisse pas remplir le disque du serveur.
+MAX_DOSSIER_FILES = 400
+MAX_DOSSIER_BYTES = 1024 * 1024 * 1024
 
 
 def dossier_summary(d):
@@ -70,28 +69,35 @@ def message_row(m):
             "date": m.date, "internal": m.internal}
 
 
-def store_upload(dossier, document_type_id=None, name=None, portal_visible=True):
-    """Enregistre le fichier reçu comme nouvelle version de pièce ; contrôle taille et type."""
+def store_upload(dossier, document_type_id=None, name=None, portal_visible=True, quota=False):
+    """Enregistre le fichier reçu comme nouvelle version de pièce ; contrôle taille, format réel et,
+    pour un dépôt du porteur (quota), l'espace occupé par le dossier."""
     upload = request.httprequest.files.get("file")
     if not upload:
         raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
-    content = upload.read()
+    content = upload.read(MAX_FILE + 1)
     if len(content) > MAX_FILE:
         raise ApiError(413, "too_large", "Fichier trop volumineux (20 Mo maximum).")
-    if upload.mimetype not in ALLOWED_MIMETYPES:
-        raise ApiError(415, "unsupported_type", "Formats acceptés : PDF, images, Word, Excel, CSV, ZIP.")
+    mimetype = detect_type(content)
+    if not mimetype:
+        raise ApiError(415, "unsupported_type", f"Formats acceptés : {ACCEPTED}. Enregistrez le document dans l'un de ces formats.")
+    if quota:
+        stored = dossier.sudo().document_ids
+        if len(stored) >= MAX_DOSSIER_FILES or sum(stored.attachment_id.mapped("file_size")) + len(content) > MAX_DOSSIER_BYTES:
+            raise ApiError(422, "quota_exceeded", "L'espace de ce dossier est plein (400 pièces ou 1 Go) : contactez votre consultant.")
     doc_type = None
     if document_type_id:
         doc_type = request.env["axispro.document.type"].sudo().browse(int(document_type_id)).exists()
         if not doc_type or doc_type.policy_id != dossier.policy_id:
             raise ApiError(422, "business_rule", "Pièce standard inconnue pour ce dossier.")
+    filename = checked_name(upload.filename, mimetype)
     attachment = request.env["ir.attachment"].sudo().create({
-        "name": upload.filename or "piece", "datas": base64.b64encode(content), "mimetype": upload.mimetype,
+        "name": filename, "datas": base64.b64encode(content), "mimetype": mimetype,
         "res_model": "axispro.dossier", "res_id": dossier.id,
     })
     return request.env["axispro.document"].sudo().create({
         "dossier_id": dossier.id, "document_type_id": doc_type.id if doc_type else False,
-        "name": name or (doc_type.name if doc_type else upload.filename) or "Pièce",
+        "name": name or (doc_type.name if doc_type else filename) or "Pièce",
         "attachment_id": attachment.id, "portal_visible": portal_visible, "uploaded_by": request.env.user.id,
     })
 

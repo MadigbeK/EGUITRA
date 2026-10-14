@@ -20,7 +20,10 @@ de financement, hypothèses de décision. La fiche du dossier comporte :
 - Évaluation : critères du gate, statut (satisfait, partiel, non satisfait, sans objet),
   commentaire et preuves tirées de la data room (obligatoires pour les critères qui l'exigent).
 - Data room : pièces standard attendues, dépôts du cabinet ou du porteur, versions, validation
-  ou demande de reprise avec motif.
+  ou demande de reprise avec motif. Formats acceptés : PDF, JPEG, PNG, Word .docx et Excel .xlsx,
+  reconnus d'après leur contenu ; les fichiers à macros, les archives ZIP et les anciens formats
+  .doc et .xls sont refusés. L'espace d'un dossier est limité à 400 pièces ou 1 Go pour les dépôts
+  du porteur.
 - Comités : revue avec décision, membres, conditions et compte rendu ; « Enregistrer et
   verrouiller » fige la décision ; cocher deux revues pour les comparer.
 - Échanges : messages au porteur, ou notes internes invisibles du porteur.

@@ -4,7 +4,9 @@ Le porteur n'accède qu'aux dossiers dont il est utilisateur du portail (règles
 et contrôle explicite ici) ; il ne voit ni le détail du scoring interne, ni les notes internes.
 """
 
-from odoo import http
+from datetime import timedelta
+
+from odoo import fields, http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
@@ -12,6 +14,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, r
 from .common import document_row, download, message_row, store_upload
 
 PORTEUR = ("porteur",)
+MAX_DAILY_MESSAGES = 50
 
 
 def _own(dossier_id):
@@ -60,7 +63,7 @@ class EguitraPortal(http.Controller):
         if dossier.state == "closed":
             raise ApiError(422, "business_rule", "Ce dossier est clos.")
         form = request.httprequest.form
-        return document_row(store_upload(dossier, form.get("document_type_id"), form.get("name")))
+        return document_row(store_upload(dossier, form.get("document_type_id"), form.get("name"), quota=True))
 
     @api_route("/portail/documents/<int:document_id>/download", profiles=PORTEUR)
     def download_document(self, document_id, **_kw):
@@ -79,7 +82,14 @@ class EguitraPortal(http.Controller):
     def post_message(self, dossier_id, **_kw):
         dossier = _own(dossier_id)
         (body,) = require(read_json(), "body")
-        message = request.env["axispro.message"].sudo().create(
+        Message = request.env["axispro.message"].sudo()
+        recent = Message.search_count([
+            ("dossier_id", "=", dossier.id), ("author_id", "=", request.env.user.id),
+            ("date", ">=", fields.Datetime.now() - timedelta(days=1)),
+        ])
+        if recent >= MAX_DAILY_MESSAGES:
+            raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
+        message = Message.create(
             {"dossier_id": dossier.id, "body": str(body)[:5000], "author_id": request.env.user.id, "internal": False}
         )
         return message_row(message)

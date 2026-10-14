@@ -1,9 +1,12 @@
 import io
+import zipfile
+from unittest.mock import patch
 
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import PASSWORD, ApiCase
+from odoo.addons.eguitra_axispro.controllers import common, portal
 
 GRID = (
     "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide\n"
@@ -199,6 +202,37 @@ class TestAxispro(ApiCase):
 
         status, _b = self.call("GET", f"/axispro/dossiers/{dossier.id}", token=porteur)
         self.assertEqual(status, 403, "Le porteur n'accède pas à l'API du cabinet")
+
+    def test_depots_du_porteur_controles(self):
+        dossier = self._dossier()
+        porteur = self._create_user("porteur.depots", "porteur")
+        dossier.portal_user_ids = [(4, porteur.id)]
+        token = self.open_session("porteur.depots", app="portail")["access_token"]
+
+        def deposer(name, content):
+            return self.url_open(
+                f"/api/v1/portail/dossiers/{dossier.id}/documents",
+                files={"file": (name, io.BytesIO(content), "application/octet-stream")},
+                headers={"Authorization": f"Bearer {token}"}, method="POST", timeout=60,
+            )
+
+        response = deposer("statuts.exe", b"%PDF-1.4 statuts")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual((response.json()["name"], response.json()["mimetype"]), ("statuts.pdf", "application/pdf"),
+                         "Format lu dans le contenu ; le nom prend l'extension du format reconnu")
+        self.assertEqual(deposer("facture.pdf", b"MZ\x90\x00 programme").status_code, 415,
+                         "Un exécutable nommé .pdf est refusé")
+        macros = io.BytesIO()
+        with zipfile.ZipFile(macros, "w") as archive:
+            archive.writestr("word/document.xml", "<w:document/>")
+            archive.writestr("word/vbaProject.bin", "macros")
+        self.assertEqual(deposer("rapport.docx", macros.getvalue()).status_code, 415, "Document à macros refusé")
+        with patch.object(common, "MAX_DOSSIER_FILES", 1):
+            self.assertEqual(deposer("bilan.pdf", b"%PDF-1.4 bilan").status_code, 422, "Espace du dossier borné")
+        with patch.object(portal, "MAX_DAILY_MESSAGES", 1):
+            path = f"/portail/dossiers/{dossier.id}/messages"
+            self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
+            self.assertEqual(self.call("POST", path, {"body": "Encore"}, token=token)[0], 429, "Messages bornés par jour")
 
     def test_rapport_xlsx_et_facturation(self):
         dossier = self._dossier()

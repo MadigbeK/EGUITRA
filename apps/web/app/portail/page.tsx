@@ -103,14 +103,14 @@ function Dossier({ d }: { d: PortalDossier }) {
           { key: "upload", label: "", render: (x) => closed || x.state === "validated" ? null : (
             <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-accent">
               <FileUp className="h-3.5 w-3.5" /> {x.state === "missing" ? "Déposer" : "Nouvelle version"}
-              <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.zip,.xlsx,.xls,.docx,.doc,.csv" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], x.document_type_id)} />
+              <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], x.document_type_id)} />
             </label>
           ) },
         ]} />
         {!closed && (
           <div className="border-t border-line px-5 py-3 text-xs">
-            <label className="inline-flex cursor-pointer items-center gap-1 text-accent"><FileUp className="h-3.5 w-3.5" /> Transmettre un autre document<input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} /></label>
-            <span className="ml-2 text-muted">PDF, images, Word, Excel, CSV ou ZIP ; 20 Mo maximum.</span>
+            <label className="inline-flex cursor-pointer items-center gap-1 text-accent"><FileUp className="h-3.5 w-3.5" /> Transmettre un autre document<input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} /></label>
+            <span className="ml-2 text-muted">PDF, JPEG, PNG, Word (.docx) ou Excel (.xlsx) ; 20 Mo maximum.</span>
           </div>
         )}
       </Card>

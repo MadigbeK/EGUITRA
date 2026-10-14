@@ -11,6 +11,8 @@ import io
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from odoo.addons.eguitra_api.files import workbook_rows
+
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
 
@@ -132,13 +134,7 @@ def _bool(value):
 
 def _read_rows(filename, content):
     if filename.lower().endswith((".xlsx", ".xlsm")):
-        import openpyxl
-
-        try:
-            sheet = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True).worksheets[0]
-            raw = [list(r) for r in sheet.iter_rows(values_only=True)]
-        except Exception as exc:  # classeur corrompu ou d'un autre format
-            raise UserError("Classeur illisible : enregistrez-le au format XLSX ou CSV.") from exc
+        raw = workbook_rows(content)
     else:
         import csv
 

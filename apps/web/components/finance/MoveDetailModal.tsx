@@ -88,6 +88,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 <input
                   type="file"
                   className="hidden"
+                  accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;

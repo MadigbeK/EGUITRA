@@ -10,6 +10,7 @@ from odoo import Command, http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
+from odoo.addons.eguitra_api.files import workbook_rows
 
 from .common import FIN_READ, FIN_WRITE, as_float, companies, parse_date, today
 
@@ -76,11 +77,7 @@ def _date(text):
 
 def _rows_from_file(name, content):
     if name.lower().endswith((".xlsx", ".xlsm")):
-        import openpyxl
-
-        book = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-        sheet = book.worksheets[0]
-        return [list(r) for r in sheet.iter_rows(values_only=True)]
+        return workbook_rows(content)
     text = content.decode("utf-8-sig", errors="replace")
     dialect = csv.Sniffer().sniff(text[:4096], delimiters=";,\t") if text else csv.excel
     return list(csv.reader(io.StringIO(text), dialect))

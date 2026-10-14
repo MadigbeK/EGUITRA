@@ -10,6 +10,7 @@ from odoo import Command, fields, http
 from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
+from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 from .common import FIN_READ, FIN_WRITE, as_float, move_detail, move_summary, parse_date, today
 
@@ -286,15 +287,18 @@ class EguitraFinanceMoves(http.Controller):
         upload = request.httprequest.files.get("file")
         if not upload:
             raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
-        content = upload.read()
+        content = upload.read(MAX_ATTACHMENT + 1)
         if len(content) > MAX_ATTACHMENT:
             raise ApiError(413, "too_large", "Fichier trop volumineux (15 Mo maximum).")
+        mimetype = detect_type(content)
+        if not mimetype:
+            raise ApiError(415, "unsupported_type", f"Justificatif au format {ACCEPTED}.")
         attachment = request.env["ir.attachment"].create({
-            "name": upload.filename or "piece-jointe",
+            "name": checked_name(upload.filename, mimetype, "piece-jointe"),
             "datas": base64.b64encode(content),
             "res_model": "account.move",
             "res_id": move.id,
-            "mimetype": upload.mimetype,
+            "mimetype": mimetype,
         })
         return {"id": attachment.id, "name": attachment.name, "mimetype": attachment.mimetype, "size": attachment.file_size}
 

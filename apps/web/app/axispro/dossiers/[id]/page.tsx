@@ -215,7 +215,7 @@ function DataRoom({ d }: { d: DossierDetail }) {
               {s.document_id && <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/axispro/documents/${s.document_id}/download`, s.name)}><Download className="h-3.5 w-3.5" /></Button>}
               {s.document_id && s.state === "received" && <Button className="px-2 py-1 text-xs" onClick={() => apiSend("PATCH", `/axispro/documents/${s.document_id}`, { state: "validated" }).then(() => mutate())}>Valider</Button>}
               {s.document_id && s.state === "received" && <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => { const comment = window.prompt("Motif de la reprise demandée au porteur :"); if (comment) void apiSend("PATCH", `/axispro/documents/${s.document_id}`, { state: "rejected", comment }).then(() => mutate()); }}>À reprendre</Button>}
-              <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-accent"><FileUp className="h-3.5 w-3.5" />Déposer<input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], s.document_type_id)} /></label>
+              <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-accent"><FileUp className="h-3.5 w-3.5" />Déposer<input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], s.document_type_id)} /></label>
             </div>
           ) },
         ]} />
