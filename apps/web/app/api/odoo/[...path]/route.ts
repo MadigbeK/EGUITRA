@@ -25,7 +25,10 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   if (!sameOrigin(req)) return forbiddenOrigin();
   const { path } = await ctx.params;
   const apiPath = "/" + path.join("/");
-  if (!ALLOWED_PATH.test(apiPath) || apiPath.includes("..") || apiPath.startsWith("/auth/")) {
+  // Le chemin doit être déjà normalisé : « /./auth/login » deviendrait « /auth/login » une fois relayé
+  // et contournerait le filtre des routes d'authentification.
+  const normalized = new URL(apiPath, "http://passerelle").pathname;
+  if (!ALLOWED_PATH.test(apiPath) || normalized !== apiPath || apiPath.includes("..") || apiPath.startsWith("/auth/")) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
