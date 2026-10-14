@@ -66,13 +66,26 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   if (res.status === 401) return unauthenticated();
 
   const headers = new Headers({ "Cache-Control": "no-store" });
-  for (const name of ["content-type", "content-disposition"]) {
-    const value = res.headers.get(name);
-    if (value) headers.set(name, value);
+  const type = res.headers.get("content-type") ?? "application/octet-stream";
+  if (type.startsWith("application/json")) {
+    headers.set("content-type", type);
+  } else {
+    // Pièce déposée par un utilisateur : téléchargement forcé, jamais affichée ni exécutée ici.
+    headers.set("content-type", /html|xml|svg|javascript/i.test(type) ? "application/octet-stream" : type);
+    headers.set("content-disposition", attachmentDisposition(res.headers.get("content-disposition")));
+    headers.set("content-security-policy", "sandbox; default-src 'none'");
   }
   const out = new NextResponse(res.body, { status: res.status, headers });
   if (renewed) setSessionCookies(out.cookies, renewed, app);
   return out;
+}
+
+/** Content-Disposition « attachment » en conservant le nom de fichier proposé par le noyau. */
+function attachmentDisposition(upstream: string | null): string {
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(upstream ?? "")?.[1];
+  if (star) return `attachment; filename*=UTF-8''${star}`;
+  const plain = /filename="?([^";]+)"?/i.exec(upstream ?? "")?.[1];
+  return plain ? `attachment; filename*=UTF-8''${encodeURIComponent(plain)}` : "attachment";
 }
 
 function unauthenticated() {

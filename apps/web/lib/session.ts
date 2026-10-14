@@ -109,8 +109,12 @@ export async function refreshSession(refreshToken: string, clientIp?: string | n
   }
 }
 
+/**
+ * Adresse du client telle que l'a vue notre proxy d'entrée (Caddy écrase X-Real-IP à chaque requête).
+ * X-Forwarded-For n'est pas lu : le navigateur peut l'inventer. Sans proxy (accès par tunnel
+ * d'administration), l'adresse reste inconnue et l'API retient celle de la passerelle.
+ */
 export function clientIpFrom(headers: Headers): string | null {
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() ?? null;
-  return headers.get("x-real-ip");
+  const ip = headers.get("x-real-ip")?.trim();
+  return ip && /^[0-9a-fA-F.:]{3,45}$/.test(ip) ? ip : null;
 }

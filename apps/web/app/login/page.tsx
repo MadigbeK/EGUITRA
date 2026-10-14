@@ -10,10 +10,24 @@ const MESSAGES: Record<string, string> = {
   password_changed: "Mot de passe modifié. Reconnectez-vous avec le nouveau mot de passe.",
 };
 
+/**
+ * Page de retour après connexion : uniquement un chemin de ce site. Les formes que les navigateurs
+ * interprètent comme une autre origine (« //hôte », « /\hôte », caractères de contrôle) sont refusées.
+ */
+function safeNext(value: string | undefined): string | null {
+  if (!value || !/^\/(?![\/\\])/.test(value) || /[\\\u0000-\u001f\u007f]/.test(value)) return null;
+  try {
+    const url = new URL(value, "http://interne.invalid");
+    return url.origin === "http://interne.invalid" ? url.pathname + url.search + url.hash : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
   const app = isAppCode(params.app) ? params.app : appFromHost((await headers()).get("host"));
-  const next = params.next && params.next.startsWith("/") && !params.next.startsWith("//") ? params.next : APPS[app].home;
+  const next = safeNext(params.next) ?? APPS[app].home;
   const message = (params.error && MESSAGES[params.error]) || (params.message && MESSAGES[params.message]) || null;
 
   return (
