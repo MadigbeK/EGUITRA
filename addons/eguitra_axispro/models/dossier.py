@@ -107,12 +107,16 @@ class AxisproDossier(models.Model):
                 total += score * domain.weight
                 total_weight += domain.weight
         global_score = total / total_weight if total_weight else None
+        # La recommandation porte sur les gates atteints : tant qu'un de leurs critères reste à
+        # évaluer, elle est « à compléter » (sauf éliminatoire déjà constaté).
+        reached = gate or self.current_gate_id
+        in_scope = evaluations.filtered(lambda e: not reached or e.criterion_id.gate_id.sequence <= reached.sequence)
         knockouts = evaluations.filtered(lambda e: e.criterion_id.knockout and e.status == "not_met")
-        critical = evaluations.filtered(lambda e: e.criterion_id.critical and e.status in ("not_met", "not_assessed"))
+        critical = in_scope.filtered(lambda e: e.criterion_id.critical and e.status in ("not_met", "not_assessed"))
         assessed = len(evaluations.filtered(lambda e: e.status != "not_assessed"))
         if knockouts:
             recommendation = "no_go"
-        elif global_score is None:
+        elif global_score is None or in_scope.filtered(lambda e: e.status == "not_assessed"):
             recommendation = "pending"
         elif global_score >= policy.go_threshold and not critical:
             recommendation = "go"

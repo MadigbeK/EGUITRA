@@ -43,8 +43,12 @@ class ApiCase(HttpCase):
         key = base64.b32decode(secret.replace(" ", ""))
         return f"{hotp(key, int(time.time() // 30) + step):06d}"
 
-    def open_session(self, login, app="finance", password=PASSWORD):
-        """Connexion complète, avec activation de la double authentification si nécessaire."""
+    def open_session(self, login, app="finance", password=PASSWORD, secret=None):
+        """Connexion complète, avec activation de la double authentification si nécessaire.
+
+        secret : clé de double authentification déjà activée (code du pas suivant, un code ne
+        servant qu'une fois).
+        """
         status, body = self.call("POST", "/auth/login", {"login": login, "password": password, "app": app})
         self.assertEqual(status, 200, body)
         if body["status"] == "mfa_setup_required":
@@ -54,5 +58,8 @@ class ApiCase(HttpCase):
             )
             self.assertEqual(status, 200, body)
             body["_secret"] = secret
+        elif body["status"] == "mfa_required" and secret:
+            status, body = self.call("POST", "/auth/mfa", {"mfa_token": body["mfa_token"], "code": self.totp_code(secret, 1)})
+            self.assertEqual(status, 200, body)
         self.assertEqual(body["status"], "ok", body)
         return body

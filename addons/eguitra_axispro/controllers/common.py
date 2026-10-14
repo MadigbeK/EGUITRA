@@ -2,7 +2,7 @@
 
 import base64
 
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 
@@ -100,6 +100,6 @@ def download(doc):
     att = doc.attachment_id.sudo()
     return request.make_response(att.raw or b"", headers=[
         ("Content-Type", att.mimetype or "application/octet-stream"),
-        ("Content-Disposition", f'attachment; filename="{att.name}"'),
+        ("Content-Disposition", content_disposition(att.name or "piece")),
         ("X-Content-Type-Options", "nosniff"),
     ])

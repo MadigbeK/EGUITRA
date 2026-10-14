@@ -11,7 +11,13 @@ from odoo.addons.eguitra_finance.controllers.common import as_float, move_summar
 from ..models.dossier import RECOMMENDATIONS, STATUSES
 from ..models.policy import grid_template
 from .common import (
-    document_row, dossier_detail, dossier_summary, download, message_row, review_row, store_upload,
+    document_row,
+    dossier_detail,
+    dossier_summary,
+    download,
+    message_row,
+    review_row,
+    store_upload,
 )
 
 READ = ("admin", "direction", "cabinet")
@@ -285,6 +291,18 @@ class EguitraAxispro(http.Controller):
         if data.get("lock"):
             review.action_lock()
         return review_row(review)
+
+    @api_route("/axispro/reviews", profiles=READ)
+    def reviews(self, **kw):
+        """Toutes les revues de comité, les plus récentes d'abord, avec leur dossier."""
+        domain = [("state", "=", kw["state"])] if kw.get("state") in ("draft", "locked") else []
+        reviews = request.env["axispro.review"].search(domain, order="date desc, id desc",
+                                                       limit=int_arg(kw, "limit", 200, 1, 1000))
+        return [
+            dict(review_row(r), dossier={"id": r.dossier_id.id, "reference": r.dossier_id.reference,
+                                         "name": r.dossier_id.name, "promoter": r.dossier_id.promoter_id.name})
+            for r in reviews
+        ]
 
     @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=WRITE)
     def lock_review(self, review_id, **_kw):

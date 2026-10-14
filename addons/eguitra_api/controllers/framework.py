@@ -22,6 +22,10 @@ _logger = logging.getLogger(__name__)
 API_PREFIX = "/api/v1"
 COMPANY_HEADER = "X-Eguitra-Company"
 APP_HEADER = "X-Eguitra-App"
+# Applications du cabinet : elles travaillent par défaut dans la société MB AxisPro Consulting.
+CABINET_APPS = ("axispro", "portail")
+# Seules routes ouvertes tant que le mot de passe provisoire (remis par l'administrateur) n'est pas changé.
+TEMPORARY_PASSWORD_ROUTES = ("/auth/me", "/auth/password", "/auth/logout")
 
 
 class ApiError(Exception):
@@ -123,10 +127,14 @@ def _authenticate():
 
 
 def _set_companies(user):
-    """Société courante : en-tête X-Eguitra-Company si autorisée, sinon celle de l'utilisateur."""
+    """Société courante : en-tête X-Eguitra-Company si autorisée, sinon la société par défaut de
+    l'application (le cabinet pour AxisPro Suite et le portail), sinon celle de l'utilisateur."""
     allowed = user.company_ids.ids
     wanted = request.httprequest.headers.get(COMPANY_HEADER)
     current = user.company_id.id
+    if request.httprequest.headers.get(APP_HEADER) in CABINET_APPS:
+        cabinet = user.company_ids.filtered(lambda c: c.eguitra_entity == "cabinet")[:1]
+        current = cabinet.id or current
     if wanted:
         try:
             wanted = int(wanted)
@@ -186,6 +194,9 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
                 if auth:
                     user, _token = _authenticate()
                     user_id = user.id
+                    if user.eguitra_password_temporary and route not in TEMPORARY_PASSWORD_ROUTES:
+                        raise ApiError(403, "password_change_required",
+                                       "Remplacez d'abord votre mot de passe provisoire.")
                     if profiles and not set(profiles) & set(user._eguitra_profiles()):
                         raise ApiError(403, "forbidden", "Accès non autorisé pour votre profil.")
                 result = func(self, **kwargs)

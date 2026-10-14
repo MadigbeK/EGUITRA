@@ -17,7 +17,7 @@ GRID = (
     "critere;C004;Plan de financement;D01;G1;2;non;non;non;Établir le plan de financement.\n"
     "piece;P01;Statuts de la société;Juridique;G0;;oui;;;Copie certifiée.\n"
     "piece;P02;Plan d'affaires;Projet;G1;;oui;;;\n"
-).encode("utf-8")
+).encode()
 
 
 @tagged("post_install", "-at_install")
@@ -56,12 +56,20 @@ class TestAxispro(ApiCase):
     def test_grille_invalide(self):
         with self.assertRaises(UserError):
             self.env["axispro.policy"].import_grid(self.cabinet, "X", "g.csv", b"type;code\ngate;G0\n")
+        with self.assertRaises(UserError):
+            self.env["axispro.policy"].import_grid(self.cabinet, "X", "g.xlsx", b"pas un classeur")
+
+    def test_grille_csv_virgules(self):
+        policy = self.env["axispro.policy"].import_grid(self.cabinet, "Virgules", "g.csv", GRID.replace(b";", b","))
+        self.assertEqual(len(policy.criterion_ids), 4)
+        self.assertEqual(policy.state, "draft", "Une grille importée attend son activation")
 
     def test_score_et_recommandation(self):
         dossier = self._dossier()
         self.assertEqual(len(dossier.evaluation_ids), 4)
         self.assertEqual(dossier.scoring()["recommendation"], "pending")
         self._set(dossier, "C001", "met")
+        self.assertEqual(dossier.scoring()["recommendation"], "pending", "Gate courant incomplet : à compléter")
         self._set(dossier, "C002", "partial")
         self._set(dossier, "C003", "met")
         score = dossier.scoring()
@@ -74,6 +82,18 @@ class TestAxispro(ApiCase):
         self.assertEqual(dossier.scoring()["recommendation"], "no_go", "Un éliminatoire non satisfait impose le NO-GO")
         gaps = dossier.gaps()
         self.assertEqual(gaps[0]["code"], "C003", "L'éliminatoire est l'écart prioritaire")
+
+    def test_societe_par_defaut_du_cabinet(self):
+        groupe = self.env["res.company"].search([("eguitra_entity", "=", "groupe")], limit=1)
+        self._create_user("dg", "direction", company_id=groupe.id, company_ids=[(6, 0, (groupe | self.cabinet).ids)])
+        token = self.open_session("dg", app="axispro")["access_token"]
+        status, body = self.call("GET", "/axispro/policy", token=token, headers={"X-Eguitra-App": "axispro"})
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["id"], self.policy.id, "AxisPro Suite travaille dans la société du cabinet")
+        status, body = self.call("GET", "/auth/me", token=token, headers={"X-Eguitra-App": "axispro"})
+        self.assertEqual(body["company_id"], self.cabinet.id)
+        status, body = self.call("GET", "/auth/me", token=token, headers={"X-Eguitra-App": "finance"})
+        self.assertEqual(body["company_id"], groupe.id, "La finance garde la société de l'utilisateur")
 
     def test_passage_de_gate(self):
         dossier = self._dossier()
@@ -99,6 +119,12 @@ class TestAxispro(ApiCase):
         marche = next(d for d in diff["domains"] if d["code"] == "D01")
         self.assertGreater(marche["delta"], 0)
         self.assertEqual(dossier.decision, "conditional", "Seule une décision verrouillée devient la décision du dossier")
+        token = self.open_session("consultant", app="axispro")["access_token"]
+        status, body = self.call("GET", "/axispro/reviews?state=locked", token=token)
+        self.assertEqual(status, 200, body)
+        self.assertIn(r1.id, [r["id"] for r in body])
+        self.assertNotIn(r2.id, [r["id"] for r in body])
+        self.assertEqual(next(r for r in body if r["id"] == r1.id)["dossier"]["id"], dossier.id)
 
     def test_portail_du_porteur(self):
         dossier = self._dossier()
@@ -110,7 +136,16 @@ class TestAxispro(ApiCase):
         self.call("POST", f"/axispro/dossiers/{dossier.id}/messages", {"body": "Note interne", "internal": True}, token=token)
         self.call("POST", f"/axispro/dossiers/{dossier.id}/messages", {"body": "Merci d'envoyer vos statuts."}, token=token)
 
-        porteur = self.open_session("promoteur.smn", app="portail")["access_token"]
+        first = self.open_session("promoteur.smn", app="portail")
+        porteur = first["access_token"]
+        status, body = self.call("GET", "/portail/dossiers", token=porteur)
+        self.assertEqual((status, body["error"]), (403, "password_change_required"),
+                         "Le mot de passe provisoire doit être remplacé avant tout accès")
+        status, body = self.call("POST", "/auth/password", {"old_password": PASSWORD, "new_password": "Porteur-Nouveau-2026"},
+                                 token=porteur)
+        self.assertEqual(status, 200, body)
+        porteur = self.open_session("promoteur.smn", app="portail", password="Porteur-Nouveau-2026",
+                                    secret=first["_secret"])["access_token"]
         status, mine = self.call("GET", "/portail/dossiers", token=porteur)
         self.assertEqual([d["id"] for d in mine], [dossier.id], "Le porteur ne voit que son dossier")
         status, _b = self.call("GET", f"/portail/dossiers/{autre.id}", token=porteur)

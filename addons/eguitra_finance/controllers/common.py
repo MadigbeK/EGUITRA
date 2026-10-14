@@ -53,7 +53,7 @@ def account_ref(account):
 def move_summary(move):
     return {
         "id": move.id,
-        "name": move.name if move.name != "/" else None,
+        "name": move.name if move.name and move.name != "/" else None,
         "move_type": move.move_type,
         "state": move.state,
         "partner": ref(move.partner_id),

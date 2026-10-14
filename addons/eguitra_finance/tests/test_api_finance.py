@@ -110,7 +110,7 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
             "Date;Libellé;Débit;Crédit\n"
             "02/10/2026;VIREMENT RECU TOTAL;;118 000 000\n"
             "03/10/2026;FRAIS DE TENUE DE COMPTE;25 000,00;\n"
-        ).encode("utf-8")
+        ).encode()
         response = self.url_open(
             f"/api/v1/finance/treasury/{self.bank.id}/import",
             files={"file": ("releve.csv", io.BytesIO(content), "text/csv")},

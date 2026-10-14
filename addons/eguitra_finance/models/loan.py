@@ -1,6 +1,5 @@
 """Emprunts et crédits-bails : échéancier, comptabilisation des échéances, service de la dette."""
 
-from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 

@@ -7,7 +7,7 @@ Les comptes de contrepartie, la TVA et l'échéance sont déduits par le noyau �
 import base64
 
 from odoo import Command, fields, http
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
@@ -275,7 +275,7 @@ class EguitraFinanceMoves(http.Controller):
         name = (move.name or "brouillon").replace("/", "-")
         return request.make_response(pdf, headers=[
             ("Content-Type", "application/pdf"),
-            ("Content-Disposition", f'attachment; filename="{name}.pdf"'),
+            ("Content-Disposition", content_disposition(f"{name}.pdf")),
         ])
 
     # ─── Pièces jointes ───────────────────────────────────────────────────
@@ -306,7 +306,8 @@ class EguitraFinanceMoves(http.Controller):
         _move(attachment.res_id)
         return request.make_response(attachment.raw or b"", headers=[
             ("Content-Type", attachment.mimetype or "application/octet-stream"),
-            ("Content-Disposition", f'attachment; filename="{attachment.name}"'),
+            ("Content-Disposition", content_disposition(attachment.name or "piece-jointe")),
+            ("X-Content-Type-Options", "nosniff"),
         ])
 
     # ─── Virement interne par le compte de passage 585 ─────────────────────

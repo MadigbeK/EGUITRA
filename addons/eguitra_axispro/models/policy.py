@@ -134,14 +134,20 @@ def _read_rows(filename, content):
     if filename.lower().endswith((".xlsx", ".xlsm")):
         import openpyxl
 
-        sheet = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True).worksheets[0]
-        raw = [list(r) for r in sheet.iter_rows(values_only=True)]
+        try:
+            sheet = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True).worksheets[0]
+            raw = [list(r) for r in sheet.iter_rows(values_only=True)]
+        except Exception as exc:  # classeur corrompu ou d'un autre format
+            raise UserError("Classeur illisible : enregistrez-le au format XLSX ou CSV.") from exc
     else:
         import csv
 
         text = content.decode("utf-8-sig", errors="replace")
-        dialect = csv.Sniffer().sniff(text[:2048], delimiters=";,\t")
-        raw = list(csv.reader(io.StringIO(text), dialect))
+        try:
+            delimiter = csv.Sniffer().sniff(text[:2048], delimiters=";,\t").delimiter
+        except csv.Error:  # une seule colonne ou séparateur ambigu
+            delimiter = ";" if text.count(";") >= text.count(",") else ","
+        raw = list(csv.reader(io.StringIO(text), delimiter=delimiter))
     if not raw:
         raise UserError("Classeur vide.")
     header = [str(h or "").strip().lower().replace("é", "e").replace("è", "e") for h in raw[0]]

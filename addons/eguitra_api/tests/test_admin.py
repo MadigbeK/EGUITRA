@@ -47,6 +47,8 @@ class TestAdmin(ApiCase):
         self.assertEqual(maj["profiles"], ["exploitation", "chantiers"])
 
         session = self.open_session("ibrahima", password="Provisoire-2026")
+        status, body = self.call("GET", "/admin/profiles", token=session["access_token"])
+        self.assertEqual((status, body["error"]), (403, "password_change_required"))
         status, _b = self.call("POST", f"/admin/users/{user['id']}/reset-mfa", token=token)
         self.assertEqual(status, 200)
         status, _b = self.call("GET", "/auth/me", token=session["access_token"])

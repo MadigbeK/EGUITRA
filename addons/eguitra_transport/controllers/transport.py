@@ -2,7 +2,7 @@
 
 import logging
 
-from odoo import http
+from odoo import fields, http
 from odoo.exceptions import UserError, ValidationError
 from odoo.http import request
 
@@ -85,7 +85,13 @@ class EguitraTransport(http.Controller):
         env = request.env
         vehicles = env["eguitra.transport.vehicle"].search([("state", "!=", "off")])
         routes = env["eguitra.transport.route"].search([])
-        clients = env["res.partner"].search([("customer_rank", ">", 0), ("parent_id", "=", False)], limit=500)
+        # Clients du transport : ceux qui ont un tarif ou une rotation dans l'année ; à défaut
+        # (démarrage), tous les clients. Les clients des autres activités n'encombrent pas la liste.
+        since = fields.Date.subtract(today(), years=1)
+        clients = (env["eguitra.transport.tariff"].search([]).partner_id
+                   | env["eguitra.transport.rotation"].search([("date_loading", ">=", since)]).partner_id)
+        clients = clients.sorted("name") if clients else env["res.partner"].search(
+            [("customer_rank", ">", 0), ("parent_id", "=", False)], limit=500)
         return {
             "vehicles": [{"id": v.id, "name": v.name, "tractor_plate": v.tractor_plate, "capacity_liters": v.capacity_liters,
                           "driver_id": v.driver_id.id or None, "state": v.state} for v in vehicles],

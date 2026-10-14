@@ -99,7 +99,7 @@ def _find(headers, candidates):
 def parse_statement(name, content):
     """Lignes (date, libellé, montant) d'un relevé CSV ou XLSX à en-têtes usuels."""
     rows = [r for r in _rows_from_file(name, content) if any(c not in (None, "") for c in r)]
-    for start, row in enumerate(rows[:15]):
+    for start, row in enumerate(rows[:15]):  # noqa: B007 (start sert après la boucle)
         headers = [str(c or "").strip().lower() for c in row]
         i_date, i_label = _find(headers, DATE_HEADERS), _find(headers, LABEL_HEADERS)
         i_amount = _find(headers, AMOUNT_HEADERS)

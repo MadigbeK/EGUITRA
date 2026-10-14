@@ -1,0 +1,21 @@
+# Règles de style des modules Odoo et des scripts Python (convention OCA pour l'ordre des imports).
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+# E741, B023 : « lambda l: ... » et filtered(lambda ...) dans une boucle sont des idiomes Odoo évalués sur-le-champ.
+ignore = ["E501", "UP031", "E741", "B023", "B905"]
+
+[lint.per-file-ignores]
+# Les __init__.py d'Odoo importent les sous-modules dans un ordre qui compte (héritages) : ne pas trier.
+"__init__.py" = ["F401", "I001"]
+# Les manifestes sont un dictionnaire nu.
+"__manifest__.py" = ["B018"]
+
+[lint.isort]
+section-order = ["future", "standard-library", "third-party", "odoo", "odoo-addons", "first-party", "local-folder"]
+
+[lint.isort.sections]
+"odoo" = ["odoo"]
+"odoo-addons" = ["odoo.addons"]

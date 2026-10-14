@@ -77,6 +77,12 @@ class TestTransport(FinanceDataMixin, ApiCase):
 
     def test_synchronisation_mobile_idempotente(self):
         token = self.open_session("ibrahima", app="mobile")["access_token"]
+        other = self.env["res.partner"].create({"name": "Client d'une autre activité", "customer_rank": 1})
+        status, refs = self.call("GET", "/transport/referentials", token=token)
+        self.assertEqual(status, 200, refs)
+        clients = [c["id"] for c in refs["clients"]]
+        self.assertIn(self.customer.id, clients)
+        self.assertNotIn(other.id, clients, "Seuls les clients du transport sont proposés au parc")
         payload = {"rotations": [{
             "client_uuid": "4b1d0c2e-telephone-parc-01", "vehicle_id": self.truck.id, "partner_id": self.customer.id,
             "route_id": self.route.id, "product": "gasoil", "volume_loaded": 40, "fuel_cost": 9_000_000,
