@@ -148,13 +148,15 @@ class EguitraAuthController(http.Controller):
         now = fields.Datetime.now()
         if token.revoked:
             in_grace = (
-                token.rotated_at
+                token.revoke_reason == "rotation"
+                and token.rotated_at
                 and (now - token.rotated_at).total_seconds() <= REUSE_GRACE_SECONDS
                 and token.expires_at > now
             )
             if not in_grace:
-                # Jeton déjà utilisé hors du délai de grâce : vol probable, la lignée est révoquée.
-                token._revoke_family()
+                # Jeton révoqué (fin de session, sécurité) ou réutilisé hors délai : la lignée est révoquée.
+                if token.revoke_reason in (False, "rotation"):
+                    token._revoke_family("reuse")
                 return _refusal(401, "token_reused", "Session révoquée par sécurité. Reconnectez-vous.")
         elif not token._is_valid():
             raise ApiError(401, "invalid_token", "Session expirée.")
@@ -165,14 +167,14 @@ class EguitraAuthController(http.Controller):
             token._revoke_family()
             return _refusal(403, "app_forbidden", "Votre profil ne donne plus accès à cette application.")
         if not token.revoked:
-            token.write({"revoked": True, "rotated_at": now})
+            token.write({"revoked": True, "revoke_reason": "rotation", "rotated_at": now})
         return _session_payload(env, user, token.app, family=token.family)
 
     @api_route("/auth/logout", methods=("POST",))
     def logout(self, **_kw):
         env = sudo_env()
         raw = request.httprequest.headers.get("Authorization", "")[7:].strip()
-        env["eguitra.api.token"]._find(raw, "access")._revoke_family()
+        env["eguitra.api.token"]._find(raw, "access")._revoke_family("logout")
         return {"status": "ok"}
 
     @api_route("/auth/me", methods=("GET",))

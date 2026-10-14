@@ -147,3 +147,13 @@ class TestAuth(ApiCase):
             self.assertEqual(status, 401)
         status, body = self.call("POST", "/auth/login", {"login": "fatou", "password": PASSWORD, "app": "finance"})
         self.assertEqual(status, 429, "Les codes faux comptent par utilisateur, tous jetons confondus")
+
+    def test_fin_de_session_sans_delai_de_grace(self):
+        session = self.open_session("fatou")
+        status, nouvelle = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200)
+        status, _b = self.call("POST", "/auth/logout", token=nouvelle["access_token"])
+        self.assertEqual(status, 200)
+        # L'ancien jeton, remplacé il y a quelques secondes, ne rouvre pas la session fermée.
+        status, body = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 401, body)

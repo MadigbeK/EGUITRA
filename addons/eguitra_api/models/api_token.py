@@ -44,6 +44,11 @@ class EguitraApiToken(models.Model):
     payload = fields.Char(help="Donnée liée au jeton, par exemple le secret en cours d'activation.")
     expires_at = fields.Datetime(required=True, index=True)
     revoked = fields.Boolean(index=True)
+    revoke_reason = fields.Selection(
+        [("rotation", "Remplacé par le suivant"), ("logout", "Fin de session"), ("reuse", "Réutilisation suspecte"),
+         ("security", "Mesure de sécurité")],
+        help="Seul un jeton remplacé par rotation bénéficie du délai de grâce.",
+    )
     attempts = fields.Integer()
     ip = fields.Char()
     user_agent = fields.Char()
@@ -107,14 +112,17 @@ class EguitraApiToken(models.Model):
             "refresh_expires_in": int((refresh_rec.expires_at - now).total_seconds()),
         }
 
-    def _revoke_family(self):
+    def _revoke_family(self, reason="security"):
+        """Révoque toute la lignée, y compris les jetons déjà remplacés : plus aucun délai de grâce."""
         families = [f for f in self.mapped("family") if f]
         tokens = self.sudo().search([("family", "in", families)]) if families else self.browse()
-        (tokens | self).sudo().write({"revoked": True})
+        (tokens | self).sudo().write({"revoked": True, "revoke_reason": reason})
 
     @api.model
-    def _revoke_user(self, user):
-        self.sudo().search([("user_id", "=", user.id), ("revoked", "=", False)]).write({"revoked": True})
+    def _revoke_user(self, user, reason="security"):
+        self.sudo().search([("user_id", "=", user.id), "|", ("revoked", "=", False), ("revoke_reason", "=", "rotation")]).write(
+            {"revoked": True, "revoke_reason": reason}
+        )
 
     @api.model
     def _cron_purge(self):
