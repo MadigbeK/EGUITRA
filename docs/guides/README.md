@@ -1,0 +1,26 @@
+# Guides des utilisateurs
+
+Un guide par profil, à remettre lors de la formation et à garder à portée de main.
+
+| Profil | Guide |
+|---|---|
+| Direction générale | [guide-direction.md](guide-direction.md) |
+| Finance et comptabilité | [guide-finance.md](guide-finance.md) |
+| Exploitation transport (bureau et parc) | [guide-exploitation.md](guide-exploitation.md) |
+| Cabinet MB AxisPro Consulting | [guide-cabinet.md](guide-cabinet.md) |
+| Porteurs de projets | [guide-porteur.md](guide-porteur.md) |
+| Administration de la plateforme | [guide-administration.md](guide-administration.md) |
+
+## Pour tous : se connecter
+
+1. Ouvrir l'adresse de l'application (EGUITRA Finance, AxisPro Suite ou le portail) dans un navigateur récent.
+2. Saisir l'identifiant et le mot de passe remis par l'administrateur.
+3. Première connexion : activer la double authentification (installer une application
+   d'authentification sur le téléphone, Google Authenticator, Microsoft Authenticator ou FreeOTP,
+   scanner le code affiché et saisir le code à 6 chiffres), puis remplacer le mot de passe
+   provisoire par un mot de passe personnel d'au moins 10 caractères.
+4. Connexions suivantes : identifiant, mot de passe, puis le code à 6 chiffres du téléphone.
+
+Téléphone perdu ou changé : demander à l'administrateur de réinitialiser la double
+authentification. Mot de passe oublié : l'administrateur en remet un nouveau, provisoire.
+Les sessions expirent d'elles-mêmes au bout de quelques heures ; toutes les connexions sont journalisées.
