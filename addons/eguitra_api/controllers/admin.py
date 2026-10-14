@@ -17,8 +17,15 @@ def _user_row(user):
 
 
 def _technical_user_ids(env):
-    """Comptes techniques du noyau, jamais gérés depuis les applications."""
-    return [env.ref("base.user_root").id, env.ref("base.user_admin").id, env.ref("base.public_user").id]
+    """Comptes techniques du noyau (dont le modèle des comptes du portail), jamais gérés depuis les applications."""
+    ids = [env.ref("base.user_root").id, env.ref("base.user_admin").id, env.ref("base.public_user").id]
+    template = env.ref("base.template_portal_user_id", raise_if_not_found=False)
+    if template:
+        ids.append(template.id)
+    param = env["ir.config_parameter"].sudo().get_param("base.template_portal_user_id") or ""
+    if param.isdigit():
+        ids.append(int(param))
+    return ids
 
 
 def _scope_domain(env):

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { KeyRound, Plus, ShieldOff } from "lucide-react";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import type { Me } from "@/lib/types";
+import type { Company, Me } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
 
 interface UserRow extends Me {
@@ -14,7 +14,7 @@ interface UserRow extends Me {
 interface ProfileDef { code: string; name: string; description: string | null }
 
 /** Utilisateurs : profils, sociétés, mot de passe provisoire, double authentification. */
-export function UsersAdmin() {
+export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]; defaultCompany: number }) {
   const { data: users, error, mutate } = useApi<UserRow[]>("/admin/users");
   const { data: profiles } = useApi<ProfileDef[]>("/admin/profiles");
   const [editing, setEditing] = useState<UserRow | "new" | null>(null);
@@ -23,7 +23,7 @@ export function UsersAdmin() {
     <div>
       <PageHeader
         title="Utilisateurs"
-        subtitle="Chaque utilisateur ne voit que le périmètre de ses profils. La double authentification est obligatoire."
+        subtitle="Chaque utilisateur ne voit que le périmètre de ses profils et les sociétés qui lui sont ouvertes ; un même compte peut travailler pour les deux sociétés. La double authentification est obligatoire."
         actions={
           <Button variant="primary" onClick={() => setEditing("new")}>
             <Plus className="h-4 w-4" /> Nouvel utilisateur
@@ -43,6 +43,7 @@ export function UsersAdmin() {
               { key: "name", label: "Nom" },
               { key: "login", label: "Identifiant" },
               { key: "profiles", label: "Profils", render: (u) => <div className="flex flex-wrap gap-1">{u.profiles.map((p) => <Badge key={p} tone="accent">{label(p)}</Badge>)}</div> },
+              { key: "companies", label: "Sociétés", render: (u) => <div className="flex flex-wrap gap-1">{u.companies.map((c) => <Badge key={c.id} tone={c.id === u.company_id ? "ok" : "neutral"}>{c.name}</Badge>)}</div> },
               { key: "mfa_enabled", label: "Double auth.", render: (u) => (u.mfa_enabled ? <Badge tone="ok">Activée</Badge> : <Badge tone="warn">À activer</Badge>) },
               { key: "last_login", label: "Dernière connexion", render: (u) => fmtDateTime(u.last_login) },
               { key: "active", label: "Statut", render: (u) => (u.active ? <Badge tone="ok">Actif</Badge> : <Badge>Désactivé</Badge>) },
@@ -50,13 +51,17 @@ export function UsersAdmin() {
           />
         )}
       </Card>
-      {editing && profiles && <UserForm user={editing === "new" ? null : editing} profiles={profiles} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
+      {editing && profiles && <UserForm user={editing === "new" ? null : editing} profiles={profiles} companies={companies} defaultCompany={defaultCompany} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
     </div>
   );
 }
 
-function UserForm({ user, profiles, onClose, onSaved }: { user: UserRow | null; profiles: ProfileDef[]; onClose: () => void; onSaved: () => void }) {
+function UserForm({ user, profiles, companies, defaultCompany, onClose, onSaved }: { user: UserRow | null; profiles: ProfileDef[]; companies: Company[]; defaultCompany: number; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ name: user?.name ?? "", login: user?.login ?? "", email: user?.email ?? "", password: "" });
+  const [companyIds, setCompanyIds] = useState<number[]>(user ? user.companies.map((c) => c.id) : [defaultCompany]);
+  const [mainCompany, setMainCompany] = useState<number>(user?.company_id ?? defaultCompany);
+  // Sociétés de l'utilisateur hors du périmètre de l'administrateur : conservées, non modifiables ici.
+  const foreign = user ? user.companies.filter((c) => !companies.some((m) => m.id === c.id)) : [];
   const [selected, setSelected] = useState<string[]>(user?.profiles.filter((p) => !(p === "direction" || p === "finance") || !user.profiles.includes("admin")) ?? []);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,13 +83,19 @@ function UserForm({ user, profiles, onClose, onSaved }: { user: UserRow | null; 
       setBusy(false);
     }
   }
+  function toggleCompany(id: number) {
+    const next = companyIds.includes(id) ? companyIds.filter((x) => x !== id) : [...companyIds, id];
+    setCompanyIds(next);
+    if (!next.includes(mainCompany) && next.length) setMainCompany(next[0]!);
+  }
+  const companyPayload = { company_ids: companyIds, company_id: companyIds.includes(mainCompany) ? mainCompany : companyIds[0] };
   const save = () =>
     user
-      ? run(() => apiSend("PATCH", `/admin/users/${user.id}`, { name: form.name, email: form.email, profiles: selected }), "", true)
-      : run(() => apiSend("POST", "/admin/users", { ...form, profiles: selected }), "", true);
+      ? run(() => apiSend("PATCH", `/admin/users/${user.id}`, { name: form.name, email: form.email, profiles: selected, ...(foreign.length ? {} : companyPayload) }), "", true)
+      : run(() => apiSend("POST", "/admin/users", { ...form, profiles: selected, ...companyPayload }), "", true);
 
   return (
-    <Modal open wide title={user ? user.name : "Nouvel utilisateur"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={save} disabled={!form.name || !form.login || !selected.length || (!user && form.password.length < 10)}>Enregistrer</Button>}>
+    <Modal open wide title={user ? user.name : "Nouvel utilisateur"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={save} disabled={!form.name || !form.login || !selected.length || !companyIds.length || (!user && form.password.length < 10)}>Enregistrer</Button>}>
       <div className="space-y-4">
         {message && <Notice tone={message.tone}>{message.text}</Notice>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -102,6 +113,27 @@ function UserForm({ user, profiles, onClose, onSaved }: { user: UserRow | null; 
               <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </Field>
           )}
+        </div>
+        <div>
+          <div className="mb-2 text-xs font-medium text-ink-2">Sociétés accessibles</div>
+          {foreign.length > 0 ? (
+            <Notice tone="warn">Cet utilisateur a aussi accès à {foreign.map((c) => c.name).join(", ")}, hors de votre périmètre : ses sociétés ne se modifient pas d&apos;ici.</Notice>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+              {companies.map((c) => (
+                <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-panel-2 px-3 py-2 text-sm">
+                  <input type="checkbox" checked={companyIds.includes(c.id)} onChange={() => toggleCompany(c.id)} />
+                  {c.name}
+                </label>
+              ))}
+              {companyIds.length > 1 && (
+                <Field label="Société à l'ouverture">
+                  <Select value={mainCompany} onChange={(e) => setMainCompany(Number(e.target.value))} options={companies.filter((c) => companyIds.includes(c.id)).map((c) => ({ value: c.id, label: c.name }))} />
+                </Field>
+              )}
+            </div>
+          )}
+          <p className="mt-1 text-[11px] text-muted">Comptabilités et données restent séparées par société ; l&apos;utilisateur passe de l&apos;une à l&apos;autre par le sélecteur en haut de l&apos;écran.</p>
         </div>
         <div>
           <div className="mb-2 text-xs font-medium text-ink-2">Profils</div>

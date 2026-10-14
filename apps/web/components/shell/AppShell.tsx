@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
   BadgeCheck, Bell, BookOpen, Boxes, Building2, ChevronDown, Clock, FileSpreadsheet, FileStack, FileText, FolderKanban,
@@ -29,7 +29,6 @@ function initials(name: string) {
 
 export function AppShell({ app, me, children }: { app: AppCode; me: Me; children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const sections = navFor(app, me.profiles);
@@ -42,12 +41,14 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   }
 
   async function switchCompany(id: number) {
-    await fetch("/api/session/company", {
+    const res = await fetch("/api/session/company", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ company_id: id, app }),
-    });
-    router.refresh();
+    }).catch(() => null);
+    // Rechargement complet : aucune donnée de l'autre société ne doit rester affichée (les écrans
+    // gardent en mémoire les réponses déjà reçues).
+    if (res?.ok) window.location.reload();
   }
 
   const nav = (
