@@ -139,6 +139,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+0. **Mis de côté le 15 octobre, à reprendre avec le gérant** : nouvelle identité du SIG, « NIMOVA », envoyée par le DG (« le fondamental reste », « l'outil doit être unique à nous ») et choix du nom de domaine (nimova.com, nimova.cloud ou nimovagroup.com). Message et fichiers : `docs/client/2026-10-15-identite-nimova/`.
 1. Prérequis client à relancer (bloquants pour la reprise et la mise en production) : charte graphique et logos, classeur 2026 (dernière version), relevés bancaires 2026, plan de comptes et contact de l'expert-comptable, liste des utilisateurs par profil, grille AxisPro officielle (111 critères) et liste des pièces de la data room, accès aux noms de domaine.
 2. Stockage objet hors site (second hébergeur, environ 100 Go) : créer le bucket, remplir `infra/backup.env`.
 3. Noms de domaine : pointer finance.*, axispro.*, portail.* et le domaine technique vers le serveur, puis `docker compose --profile proxy up -d`.
