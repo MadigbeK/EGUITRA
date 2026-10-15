@@ -32,3 +32,23 @@ Le DG a aussi demandé au gérant de choisir le nom de domaine parmi les proposi
   d'expédition des courriels.
 - Périmètre : vérifier dans la présentation ce qui relève de l'offre OTF-EGUITRA-2026-37 et ce qui
   serait une évolution.
+
+## Premiers constats (15 octobre)
+
+- Disponibilité des noms (interrogation RDAP des registres, 15 octobre) : nimova.com est déjà
+  enregistré par un tiers depuis le 12 décembre 2011 (expiration 12 décembre 2027) ; nimova.cloud
+  et nimovagroup.com sont libres. La disponibilité juridique du nom reste à vérifier (la note du DG
+  le rappelle).
+- Le « fondamental » de la note : le nom NIMOVA, la signature « La maîtrise intégrée de votre
+  performance », une marque interne commune aux deux structures sans vocation commerciale
+  immédiate, une plateforme commune avec deux espaces de gestion. Charte de la présentation : verts
+  profonds (#142F29, #22634C), vert d'eau (#A5E6C2), accent doré (#D3AA5B), fond crème (#F9F8F5),
+  police Aptos (Microsoft, non libre pour le web).
+- Écarts avec l'offre signée : la note liste aussi les stocks et le carburant, la maintenance
+  (plans préventifs, ordres de travail), les ressources humaines, les demandes d'achat, commandes
+  et réceptions, les devis. L'offre classe « un nouveau module ou un nouvel écran complet, par
+  exemple la paie ou les stocks » parmi les évolutions facturables : à clarifier avec le DG
+  avant tout engagement.
+- La note évoque une « éventuelle intégration avec Odoo » et une feuille de route en quatre phases :
+  elle semble rédigée sans tenir compte de ce qui est déjà construit. Un point d'alignement avec
+  le DG est à prévoir.
