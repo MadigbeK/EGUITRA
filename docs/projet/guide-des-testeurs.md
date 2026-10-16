@@ -11,16 +11,15 @@ pouvez tout essayer, y compris les erreurs.
    peut bloquer la session), dans Chrome sur téléphone.
 2. Saisissez votre identifiant et le mot de passe provisoire qui vous ont été remis, puis « Se
    connecter ».
-3. Double authentification : installez sur votre téléphone Google Authenticator ou Microsoft
-   Authenticator, touchez « + », scannez le code affiché à l'écran, puis tapez le code à 6 chiffres
-   que l'application affiche. Ensuite, à chaque connexion, le code de l'application vous sera demandé.
-4. Choisissez votre mot de passe définitif (10 caractères au moins), puis reconnectez-vous.
+3. Choisissez votre mot de passe définitif (10 caractères au moins), puis reconnectez-vous avec lui.
 
-Votre compte est personnel : il est lié à votre téléphone. Ne le prêtez pas ; si une autre personne
-doit tester, demandez-lui un compte.
+Votre compte est personnel : ne le prêtez pas ; si une autre personne doit tester, demandez-lui un
+compte. Mot de passe oublié : demandez à l'administrateur de vous en redonner un provisoire.
 
-Code refusé ? Attendez le code suivant : il change toutes les 30 secondes. Téléphone perdu ou
-changé : demandez à l'administrateur de remettre votre double authentification à zéro.
+Double authentification : pendant la période de test, elle est désactivée sur la recette. Elle sera
+obligatoire sur la plateforme réelle : à la première connexion, vous installerez Google
+Authenticator ou Microsoft Authenticator sur votre téléphone, scannerez le code affiché, puis
+taperez à chaque connexion le code à 6 chiffres de l'application.
 
 ## 2. Deux sociétés, plusieurs applications
 
