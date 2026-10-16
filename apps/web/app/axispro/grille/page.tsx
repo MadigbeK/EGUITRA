@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { CheckCircle2, Copy, Download, FileUp } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etapes, Field, Input, Loading, Modal, Notice, PageHeader, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etapes, Field, Input, Loading, Modal, Notice, PageHeader, Select, Textarea } from "@/components/ui";
+import type { IndicatorInfo } from "@/lib/axispro-types";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 
@@ -28,6 +29,9 @@ interface Criterion {
   knockout: boolean;
   evidence_required: boolean;
   guidance: string | null;
+  indicator: string | null;
+  indicator_threshold: number | null;
+  indicator_partial: number | null;
 }
 interface Policy {
   id: number;
@@ -41,6 +45,7 @@ interface Policy {
   gates: Array<{ id: number; code: string; name: string; description: string | null }>;
   domains: Array<{ id: number; code: string; name: string; weight: number }>;
   criteria: Criterion[];
+  indicators: Record<string, IndicatorInfo>;
 }
 
 const STATE = { draft: ["Brouillon", "warn"], active: ["En vigueur", "ok"], archived: ["Archivée", "neutral"] } as const;
@@ -111,6 +116,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
     }
   }
   const patch = (c: Criterion, values: Partial<Criterion>) => act(() => apiSend("PATCH", `/axispro/criteria/${c.id}`, values), `Critère ${c.code} mis à jour.`);
+  const nombre = (v: string) => (v.trim() === "" ? null : Number(v.replace(/\s/g, "").replace(",", ".")));
 
   return (
     <div className="space-y-4">
@@ -153,6 +159,25 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
               { key: "critical", label: "Critique", align: "center", render: (c) => <Flag on={c.critical} editable={editable} onToggle={() => patch(c, { critical: !c.critical })} /> },
               { key: "knockout", label: "Éliminatoire", align: "center", render: (c) => <Flag on={c.knockout} editable={editable} danger onToggle={() => patch(c, { knockout: !c.knockout })} /> },
               { key: "evidence_required", label: "Preuve", align: "center", render: (c) => <Flag on={c.evidence_required} editable={editable} onToggle={() => patch(c, { evidence_required: !c.evidence_required })} /> },
+              {
+                key: "indicator",
+                label: "Indicateur du modèle financier",
+                render: (c) => {
+                  const info = c.indicator ? p.indicators[c.indicator] : null;
+                  if (!editable) return info ? <span className="whitespace-nowrap text-[12.5px]">{info.label} {info.higher ? "≥" : "≤"} {c.indicator_threshold?.toLocaleString("fr-FR")}{c.indicator_partial !== null ? `, partiel ${c.indicator_partial.toLocaleString("fr-FR")}` : ""}</span> : <span className="text-muted">–</span>;
+                  return (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Select aria-label={`Indicateur du critère ${c.code}`} className="min-h-8 w-52 py-1 text-[12.5px]" value={c.indicator ?? ""} onChange={(e) => patch(c, { indicator: e.target.value || null })} options={[{ value: "", label: "Aucun" }, ...Object.entries(p.indicators).map(([value, i]) => ({ value, label: i.label }))]} />
+                      {info && (
+                        <>
+                          <Input aria-label="Seuil de satisfaction" title={`Seuil : ${info.higher ? "au moins" : "au plus"} (${info.unit})`} placeholder="Seuil" className="min-h-8 w-20 py-1 text-right text-[12.5px]" defaultValue={c.indicator_threshold?.toLocaleString("fr-FR") ?? ""} onBlur={(e) => nombre(e.target.value) !== c.indicator_threshold && patch(c, { indicator_threshold: nombre(e.target.value) ?? 0 })} />
+                          <Input aria-label="Seuil de satisfaction partielle" title="Seuil de satisfaction partielle (facultatif)" placeholder="Partiel" className="min-h-8 w-20 py-1 text-right text-[12.5px]" defaultValue={c.indicator_partial?.toLocaleString("fr-FR") ?? ""} onBlur={(e) => nombre(e.target.value) !== c.indicator_partial && patch(c, { indicator_partial: nombre(e.target.value) })} />
+                        </>
+                      )}
+                    </div>
+                  );
+                },
+              },
             ]} />
           </Card>
         );
@@ -191,7 +216,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (id: nu
     <Modal open title="Importer une grille" onClose={onClose} footer={<Button variant="primary" loading={busy} disabled={!file} onClick={submit}>Importer en brouillon</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger"><span className="whitespace-pre-wrap">{error}</span></Notice>}
-        <p className="text-xs text-muted">Classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide. Lignes de type gate, domaine, critere et piece. La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.</p>
+        <p className="text-xs text-muted">Classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide. Lignes de type gate, domaine, critere et piece. Colonnes facultatives indicateur, seuil et seuil_partiel : le critère est adossé à un indicateur du modèle financier (DSCR, TRI, apport…), et l'évaluateur reçoit un statut suggéré (liste des indicateurs dans le classeur modèle). La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.</p>
         <Field label="Classeur"><input type="file" accept=".xlsx,.xlsm,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" /></Field>
         <Field label="Intitulé"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-3">

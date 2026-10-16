@@ -7,7 +7,9 @@ import { Badge, Button, Card, DataTable, Donut, ErrorBox, Field, Input, Kpi, Loa
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { RECO, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
-import { fmtShort } from "@/lib/format";
+import { fmtPct, fmtShort } from "@/lib/format";
+import { Portefeuille } from "@/components/axispro/Portefeuille";
+import { ratio } from "@/components/axispro/cellules";
 
 type Vue = "tableau" | "liste";
 
@@ -102,6 +104,8 @@ export default function DossiersPage() {
           </Card>
         </div>
       )}
+
+      <Portefeuille />
 
       <Tabs
         tabs={[
@@ -276,6 +280,8 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
         },
         { key: "score", label: "Score", align: "right", sortValue: (d) => d.score, render: (d) => <span className={cx("inline-block min-w-16 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.score))}>{d.score === null ? "–" : `${Math.round(d.score)} / 100`}</span> },
         { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
+        { key: "irr", label: "TRI", align: "right", sortValue: (d) => d.financial?.irr_project ?? null, render: (d) => fmtPct(d.financial?.irr_project) },
+        { key: "dscr", label: "DSCR min.", align: "right", sortValue: (d) => d.financial?.dscr_min ?? null, render: (d) => ratio(d.financial?.dscr_min) },
         { key: "financing_need", label: "Besoin", align: "right", render: (d) => fmtShort(d.financing_need) },
         { key: "documents", label: "Pièces", align: "right", sortValue: (d) => d.documents.received / Math.max(1, d.documents.due), render: (d) => `${d.documents.received}/${d.documents.due}` },
       ]}

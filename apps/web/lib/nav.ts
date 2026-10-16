@@ -67,6 +67,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
       label: "Cabinet",
       items: [
         { href: "/axispro", label: "Dossiers", icon: "FolderKanban" },
+        { href: "/axispro/actions", label: "Plan d'actions", icon: "ListChecks" },
+        { href: "/axispro/financements", label: "Financements", icon: "HandCoins" },
         { href: "/axispro/comites", label: "Comités", icon: "Gavel" },
         { href: "/axispro/temps", label: "Temps et facturation", icon: "Clock" },
       ],

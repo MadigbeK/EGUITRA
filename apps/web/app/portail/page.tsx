@@ -5,7 +5,7 @@ import { Download, FileText, Flag, Send, Users } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, FileButton, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, RECO, type DocFile, type Message, type Recommendation, type StandardDoc } from "@/lib/axispro-types";
-import { fmtDateTime } from "@/lib/format";
+import { fmtDate, fmtDateTime } from "@/lib/format";
 
 interface PortalDossier {
   id: number;
@@ -18,8 +18,27 @@ interface PortalDossier {
   documents: StandardDoc[];
   documents_progress: { due: number; received: number };
   actions: Array<{ name: string; action: string }>;
+  tasks: Task[];
   decision: Recommendation | null;
 }
+
+/** Action confiée au porteur par le cabinet. */
+interface Task {
+  id: number;
+  name: string;
+  description: string | null;
+  due_date: string | null;
+  state: "todo" | "in_progress" | "submitted" | "done";
+  porteur_comment: string | null;
+  overdue: boolean;
+}
+
+const TASK_STATE: Record<Task["state"], { label: string; tone: "neutral" | "accent" | "warn" | "ok" }> = {
+  todo: { label: "À faire", tone: "neutral" },
+  in_progress: { label: "En cours", tone: "accent" },
+  submitted: { label: "Transmise au cabinet", tone: "warn" },
+  done: { label: "Validée par le cabinet", tone: "ok" },
+};
 
 const FORMATS = ".pdf,.jpg,.jpeg,.png,.docx,.xlsx";
 
@@ -87,7 +106,9 @@ function Dossier({ d }: { d: PortalDossier }) {
       </Card>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <Card title="Ce que le cabinet attend de vous" className="lg:col-span-7">
-          {d.actions.length === 0 ? <p className="text-sm text-muted">Rien pour le moment.</p> : (
+          {(d.tasks ?? []).length > 0 ? (
+            <Taches taches={d.tasks ?? []} closed={closed} onDone={(t) => { setMessage({ tone: "ok", text: `Merci : « ${t} » est transmise à votre consultant, qui la validera.` }); void refreshDossiers(); }} onError={(text) => setMessage({ tone: "danger", text })} />
+          ) : d.actions.length === 0 ? <p className="text-sm text-muted">Rien pour le moment.</p> : (
             <ol className="space-y-3">
               {d.actions.map((a, i) => (
                 <li key={i} className="flex gap-3 rounded-xl bg-panel-2 p-3 text-sm">
@@ -141,6 +162,57 @@ function Dossier({ d }: { d: PortalDossier }) {
       </Card>
       <Messages dossierId={d.id} closed={closed} />
     </div>
+  );
+}
+
+function Taches({ taches, closed, onDone, onError }: { taches: Task[]; closed: boolean; onDone: (name: string) => void; onError: (text: string) => void }) {
+  const [ouverte, setOuverte] = useState<number | null>(null);
+  const [compteRendu, setCompteRendu] = useState("");
+  async function declarer(t: Task) {
+    try {
+      await apiSend("POST", `/portail/actions/${t.id}/report`, { comment: compteRendu });
+      setOuverte(null);
+      setCompteRendu("");
+      onDone(t.name);
+    } catch (e) {
+      onError(e instanceof ApiError ? e.message : "Envoi impossible.");
+    }
+  }
+  return (
+    <ol className="space-y-3">
+      {taches.map((t, i) => (
+        <li key={t.id} className={cx("rounded-xl bg-panel-2 p-3 text-sm", t.state === "done" && "opacity-70")}>
+          <div className="flex gap-3">
+            <span className="n-degrade grid h-7 w-7 flex-none place-items-center rounded-full text-[12.5px] font-bold text-white">{i + 1}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-ink">{t.name}</span>
+                <Badge tone={TASK_STATE[t.state].tone}>{TASK_STATE[t.state].label}</Badge>
+                {t.overdue && <Badge tone="danger">Échéance dépassée</Badge>}
+              </div>
+              {t.description && t.description !== t.name && <div className="mt-0.5 leading-snug text-muted">{t.description}</div>}
+              {t.due_date && <div className="mt-0.5 text-[12.5px] text-muted">À faire avant le {fmtDate(t.due_date)}</div>}
+              {t.porteur_comment && <div className="mt-1 text-[12.5px] text-ink-2">Votre compte rendu : {t.porteur_comment}</div>}
+              {!closed && (t.state === "todo" || t.state === "in_progress" || t.state === "submitted") && (
+                ouverte === t.id ? (
+                  <div className="mt-2 space-y-2">
+                    <Textarea className="min-h-[60px]" value={compteRendu} placeholder="Ce que vous avez fait, et les pièces déposées s'il y en a" onChange={(e) => setCompteRendu(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Button variant="primary" disabled={!compteRendu.trim()} onClick={() => declarer(t)}>Transmettre au cabinet</Button>
+                      <Button variant="ghost" onClick={() => setOuverte(null)}>Annuler</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button className="mt-2 min-h-8 px-2.5 py-1 text-[13px]" onClick={() => { setOuverte(t.id); setCompteRendu(t.porteur_comment ?? ""); }}>
+                    {t.state === "submitted" ? "Compléter mon compte rendu" : "J'ai réalisé cette action"}
+                  </Button>
+                )
+              )}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 

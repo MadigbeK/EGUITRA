@@ -1,15 +1,20 @@
 "use client";
 
 import { use, useState } from "react";
-import { ChevronLeft, Coins, Download, FileText, Lock, MapPin, Printer, Send, ShieldAlert, Target } from "@/components/icons";
+import { ChevronLeft, Coins, Download, FileText, ListChecks, Lock, MapPin, Percent, Printer, Scale, Send, ShieldAlert, Target, TrendingUp } from "@/components/icons";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Etapes, FileButton, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Tabs, Tag, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import { DOC_STATE, RECO, STATUS_LABELS, type CriterionEval, type DocFile, type DossierDetail, type Message, type Recommendation, type StandardDoc } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtGNF, fmtShort } from "@/lib/format";
+import { ACTION_STATE, DOC_STATE, FUNDING_STATE, INSTRUMENTS, RECO, RISK_LEVEL, STATUS_LABELS, type ActionState, type CriterionEval, type DocFile, type DossierDetail, type FundingState, type Indicators, type Message, type Recommendation, type RiskLevel, type StandardDoc } from "@/lib/axispro-types";
+import { fmtDate, fmtDateTime, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { Financements } from "@/components/axispro/Financements";
+import { ModeleFinancier } from "@/components/axispro/ModeleFinancier";
+import { PlanActions } from "@/components/axispro/PlanActions";
+import { Risques } from "@/components/axispro/Risques";
+import { annees, ratio } from "@/components/axispro/cellules";
 
-type Tab = "synthese" | "evaluation" | "dataroom" | "comites" | "echanges" | "rapport" | "temps";
+type Tab = "synthese" | "evaluation" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "comites" | "echanges" | "rapport" | "temps";
 
 export default function DossierPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -69,17 +74,25 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
         tabs={[
           { key: "synthese", label: "Synthèse" },
           { key: "evaluation", label: "Évaluation", count: d.progress.criteria - d.progress.assessed },
+          { key: "modele", label: "Modèle financier" },
+          { key: "risques", label: "Risques", count: d.risks.open },
+          { key: "actions", label: "Actions", count: d.actions.open },
+          { key: "financements", label: "Financements" },
           { key: "dataroom", label: "Data room" },
           { key: "comites", label: "Comités", count: d.reviews.length },
           { key: "echanges", label: "Échanges" },
           { key: "rapport", label: "Rapport" },
-          { key: "temps", label: "Temps et facturation" },
+          { key: "temps", label: "Temps" },
         ]}
         value={tab}
         onChange={setTab}
       />
       {tab === "synthese" && <Synthesis d={d} onChanged={() => mutate()} />}
       {tab === "evaluation" && <Evaluation d={d} onChanged={() => mutate()} />}
+      {tab === "modele" && <ModeleFinancier dossierId={d.id} reference={d.reference} />}
+      {tab === "risques" && <Risques dossierId={d.id} />}
+      {tab === "actions" && <PlanActions dossierId={d.id} />}
+      {tab === "financements" && <Financements dossierId={d.id} besoin={d.financing_need} />}
       {tab === "dataroom" && <DataRoom d={d} />}
       {tab === "comites" && <Committees d={d} onChanged={() => mutate()} />}
       {tab === "echanges" && <Messages d={d} />}
@@ -113,6 +126,29 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
         <Kpi label="Éliminatoires actifs" value={String(s.knockouts.length)} icon={ShieldAlert} teinte={s.knockouts.length ? "danger" : "jade"} hint={s.knockouts.map((k) => k.code).join(", ") || "Aucun"} tone={s.knockouts.length ? "danger" : "ok"} />
         <Kpi label="Besoin de financement" value={fmtShort(d.financing_need)} icon={Coins} teinte="or" tone="accent" hint={`Investissement ${fmtShort(d.investment)}`} />
       </div>
+      <Card title="Rentabilité, risques et plan d'actions">
+        {d.financial ? (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Mesure icone={TrendingUp} titre="VAN du projet" valeur={fmtShort(d.financial.npv)} alerte={d.financial.npv < 0} />
+            <Mesure icone={Percent} titre="TRI du projet" valeur={fmtPct(d.financial.irr_project)} detail={`Fonds propres ${fmtPct(d.financial.irr_equity)}`} />
+            <Mesure icone={Scale} titre="DSCR minimal" valeur={ratio(d.financial.dscr_min)} detail={`Récupération : ${annees(d.financial.payback)}`} />
+            <Mesure icone={Coins} titre="Apport des promoteurs" valeur={fmtPct(d.financial.equity_share, 0)} alerte={d.financial.cash_min < 0} detail={d.financial.cash_min < 0 ? "Trésorerie négative à un moment" : "Trésorerie toujours positive"} />
+          </div>
+        ) : (
+          <p className="text-sm text-muted">Modèle financier non saisi : onglet « Modèle financier ».</p>
+        )}
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 text-[13px]">
+          <span className="inline-flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-muted" /> {d.risks.open} risque(s) ouvert(s)
+            {(["critical", "high"] as RiskLevel[]).map((l) => d.risks.levels[l] > 0 && <Badge key={l} tone={RISK_LEVEL[l].tone}>{d.risks.levels[l]} {RISK_LEVEL[l].label.toLowerCase()}</Badge>)}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <ListChecks className="h-4 w-4 text-muted" /> {d.actions.open} action(s) ouverte(s)
+            {d.actions.overdue > 0 && <Badge tone="danger">{d.actions.overdue} en retard</Badge>}
+            {d.actions.submitted > 0 && <Badge tone="warn">{d.actions.submitted} à valider</Badge>}
+          </span>
+        </div>
+      </Card>
       <Card
         title="Stage gates"
         actions={
@@ -187,6 +223,18 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
   );
 }
 
+function Mesure({ icone: I, titre, valeur, detail, alerte }: { icone: typeof Target; titre: string; valeur: string; detail?: string; alerte?: boolean }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-[12.5px] text-muted">
+        <I className="h-3.5 w-3.5" /> {titre}
+      </div>
+      <div className={cx("mt-0.5 font-display text-[22px] font-bold tabular", alerte ? "text-danger" : "text-ink")}>{valeur}</div>
+      {detail && <div className="text-[12px] text-muted">{detail}</div>}
+    </div>
+  );
+}
+
 /** Couleur de la puce d'état choisie. */
 const ETAT: Record<string, string> = {
   met: "border-transparent bg-jade text-white shadow-[0_6px_14px_-8px_rgb(18_149_106/0.8)]",
@@ -248,6 +296,7 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
               })}
             </div>
           </div>
+          {c.suggestion && <Suggestion c={c} onApply={(status) => save(c, { status, comment: c.comment || `Statut suggéré par le modèle financier : ${c.suggestion?.label} ${valeurIndicateur(c.suggestion?.value ?? null, c.suggestion?.unit ?? "")}.` })} />}
           <Textarea className="mt-2 min-h-[48px]" defaultValue={c.comment ?? ""} placeholder="Commentaire d'évaluation" onBlur={(e) => e.target.value !== (c.comment ?? "") && save(c, { comment: e.target.value })} />
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-muted">Preuves{c.evidence_required ? " (requises pour « Satisfait » ou « Partiel »)" : ""} :</span>
@@ -267,6 +316,41 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
           {c.assessed_by && <div className="mt-1 text-[11px] text-muted">Évalué par {c.assessed_by} le {fmtDateTime(c.assessed_at)}</div>}
         </Card>
       ))}
+    </div>
+  );
+}
+
+function valeurIndicateur(v: number | null, unite: string) {
+  if (v === null) return "non calculable";
+  if (unite === "GNF") return `${fmtShort(v)} GNF`;
+  if (unite === "%") return fmtPct(v);
+  if (unite === "ans") return annees(v);
+  return ratio(v);
+}
+
+/** Statut suggéré pour un critère adossé à un indicateur du modèle financier. */
+function Suggestion({ c, onApply }: { c: CriterionEval; onApply: (status: string) => void }) {
+  const s = c.suggestion!;
+  const seuil = `${s.higher ? "au moins" : "au plus"} ${valeurIndicateur(s.threshold, s.unit)}${s.partial !== null ? `, partiel à ${valeurIndicateur(s.partial, s.unit)}` : ""}`;
+  return (
+    <div className={cx("mt-2 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-[12.5px]", s.status === "met" ? "border-jade/30 bg-ok-doux/50" : s.status === "partial" ? "border-ambre/30 bg-warn-doux/50" : s.status === "not_met" ? "border-danger/30 bg-danger-doux/40" : "border-line bg-panel-2")}>
+      <TrendingUp className="h-4 w-4 text-muted" />
+      <span className="text-ink-2">
+        Modèle financier : <b>{s.label}</b> {valeurIndicateur(s.value, s.unit)} (exigé {seuil}).
+      </span>
+      {s.status ? (
+        <>
+          <span className="text-muted">Statut suggéré :</span>
+          <b>{STATUS_LABELS[s.status]}</b>
+          {c.status !== s.status && (
+            <Button className="ml-auto min-h-7 px-2.5 py-0.5 text-[12px]" onClick={() => onApply(s.status!)}>
+              Appliquer
+            </Button>
+          )}
+        </>
+      ) : (
+        <span className="text-muted">Complétez le modèle financier pour obtenir une suggestion.</span>
+      )}
     </div>
   );
 }
@@ -326,7 +410,7 @@ function Committees({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
     decision: d.scoring.recommendation === "pending" ? "postponed" : d.scoring.recommendation, members: "", conditions: "", minutes: "",
   });
   const [compare, setCompare] = useState<number[]>([]);
-  const { data: diff } = useApi<{ from: { date: string; score: number | null; decision: string }; to: { date: string; score: number | null; decision: string }; domains: Array<{ code: string; name: string; before: number | null; after: number | null; delta: number | null }> }>(compare.length === 2 ? `/axispro/reviews/compare?a=${compare[0]}&b=${compare[1]}` : null);
+  const { data: diff } = useApi<{ from: { date: string; score: number | null; decision: string }; to: { date: string; score: number | null; decision: string }; domains: Array<{ code: string; name: string; before: number | null; after: number | null; delta: number | null }>; financial: Array<{ key: string; before: number | null; after: number | null }> }>(compare.length === 2 ? `/axispro/reviews/compare?a=${compare[0]}&b=${compare[1]}` : null);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   async function create(lock: boolean) {
     setMessage(null);
@@ -369,11 +453,27 @@ function Committees({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
             { key: "after", label: "Après", align: "right", render: (x) => (x.after === null ? "–" : Math.round(x.after)) },
             { key: "delta", label: "Évolution", align: "right", render: (x) => (x.delta === null ? "–" : <span className={x.delta >= 0 ? "text-ok" : "text-danger"}>{x.delta >= 0 ? "+" : ""}{Math.round(x.delta)}</span>) },
           ]} />
+          {diff.financial.length > 0 && (
+            <DataTable dense rows={diff.financial} rowKey={(x) => x.key} columns={[
+              { key: "key", label: "Indicateur financier", render: (x) => INDICATEURS_COMITE[x.key]?.[0] ?? x.key },
+              { key: "before", label: "Avant", align: "right", render: (x) => valeurIndicateur(x.before, INDICATEURS_COMITE[x.key]?.[1] ?? "") },
+              { key: "after", label: "Après", align: "right", render: (x) => valeurIndicateur(x.after, INDICATEURS_COMITE[x.key]?.[1] ?? "") },
+            ]} />
+          )}
         </Card>
       )}
     </div>
   );
 }
+
+const INDICATEURS_COMITE: Record<string, [string, string]> = {
+  npv: ["VAN du projet", "GNF"],
+  irr_project: ["TRI du projet", "%"],
+  irr_equity: ["TRI des fonds propres", "%"],
+  dscr_min: ["DSCR minimal", "x"],
+  payback: ["Délai de récupération", "ans"],
+  equity_share: ["Apport des promoteurs", "%"],
+};
 
 function Messages({ d }: { d: DossierDetail }) {
   const { data, mutate } = useApi<Message[]>(`/axispro/dossiers/${d.id}/messages`);
@@ -402,7 +502,15 @@ function Messages({ d }: { d: DossierDetail }) {
 }
 
 function Report({ d }: { d: DossierDetail }) {
-  const { data } = useApi<{ policy: { name: string; version: number; date_active: string | null; notes: string | null; go_threshold: number; conditional_threshold: number }; documents: StandardDoc[]; generated_at: string }>(`/axispro/dossiers/${d.id}/report`);
+  const { data } = useApi<{
+    policy: { name: string; version: number; date_active: string | null; notes: string | null; go_threshold: number; conditional_threshold: number };
+    documents: StandardDoc[];
+    generated_at: string;
+    financial: { indicators: Indicators; financing_plan: { uses_total: number; resources_total: number; gap: number }; alerts: string[]; params: { discount_rate: number; dscr_target: number } } | null;
+    risks: Array<{ name: string; category: string; score: number; level: RiskLevel; mitigation: string | null; state: string }>;
+    actions: Array<{ name: string; assignee: string; due_date: string | null; state: ActionState }>;
+    fundings: Array<{ funder: string; instrument: string; amount_requested: number; amount_granted: number; state: FundingState }>;
+  }>(`/axispro/dossiers/${d.id}/report`);
   if (!data) return <Loading />;
   const s = d.scoring;
   const missing = data.documents.filter((x) => x.required && x.due && x.state !== "validated" && x.state !== "received");
@@ -428,6 +536,30 @@ function Report({ d }: { d: DossierDetail }) {
             <b>Écarts prioritaires.</b>
             <ol className="ml-5 list-decimal">{d.gaps.map((g) => <li key={g.criterion_id}>{g.code} {g.name} : {g.action}</li>)}</ol>
           </div>
+          {data.financial && (
+            <div>
+              <b>Modèle financier.</b> VAN {fmtShort(data.financial.indicators.npv)} GNF au taux de {fmtPct(data.financial.params.discount_rate, 1)}, TRI du projet {fmtPct(data.financial.indicators.irr_project)}, TRI des fonds propres {fmtPct(data.financial.indicators.irr_equity)}, DSCR minimal {ratio(data.financial.indicators.dscr_min)} (exigé {ratio(data.financial.params.dscr_target)}), délai de récupération {annees(data.financial.indicators.payback)}, apport des promoteurs {fmtPct(data.financial.indicators.equity_share, 0)}. Plan de financement initial {data.financial.financing_plan.gap >= 0 ? "équilibré" : `déséquilibré de ${fmtShort(-data.financial.financing_plan.gap)} GNF`}.
+              {data.financial.alerts.length > 0 && <ul className="ml-5 mt-1 list-disc text-danger">{data.financial.alerts.map((a) => <li key={a}>{a}</li>)}</ul>}
+            </div>
+          )}
+          {data.risks.length > 0 && (
+            <div>
+              <b>Principaux risques.</b>
+              <ul className="ml-5 list-disc">{data.risks.slice(0, 6).map((r) => <li key={r.name}>{r.name} ({RISK_LEVEL[r.level].label.toLowerCase()}, criticité {r.score}){r.mitigation ? ` : ${r.mitigation}` : ""}</li>)}</ul>
+            </div>
+          )}
+          {data.actions.length > 0 && (
+            <div>
+              <b>Plan d&apos;actions en cours.</b>
+              <ul className="ml-5 list-disc">{data.actions.map((a) => <li key={a.name}>{a.name} ({a.assignee === "porteur" ? "porteur" : "cabinet"}{a.due_date ? `, échéance ${fmtDate(a.due_date)}` : ""}, {ACTION_STATE[a.state].label.toLowerCase()})</li>)}</ul>
+            </div>
+          )}
+          {data.fundings.length > 0 && (
+            <div>
+              <b>Financements recherchés.</b>
+              <ul className="ml-5 list-disc">{data.fundings.map((f, i) => <li key={i}>{f.funder}, {INSTRUMENTS[f.instrument] ?? f.instrument} : {fmtShort(f.amount_requested)} GNF sollicités{f.amount_granted ? `, ${fmtShort(f.amount_granted)} GNF accordés` : ""} ({FUNDING_STATE[f.state].label.toLowerCase()})</li>)}</ul>
+            </div>
+          )}
           <div>
             <b>Pièces à fournir par le promoteur.</b>
             {missing.length === 0 ? " Aucune." : <ul className="ml-5 list-disc">{missing.map((m) => <li key={m.document_type_id}>{m.name}{m.guidance ? ` (${m.guidance})` : ""}</li>)}</ul>}

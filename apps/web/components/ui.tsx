@@ -267,7 +267,7 @@ export function Tag({ children }: { children: ReactNode }) {
  * Les classes passées par un écran l'emportent sur celles du composant pour la taille du texte, la
  * hauteur minimale et les marges intérieures ; sans cela, l'ordre du CSS généré déciderait seul.
  */
-const GROUPES = [/^text-(xs|sm|base|lg|xl|[2-9]xl|\[\d[^\]]*\])$/, /^min-h-/, /^px-/, /^py-/];
+const GROUPES = [/^text-(xs|sm|base|lg|xl|[2-9]xl|\[\d[^\]]*\])$/, /^min-h-/, /^px-/, /^py-/, /^w-/];
 
 function ajuste(base: string, extra?: string): string {
   if (!extra) return base;
