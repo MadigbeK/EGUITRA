@@ -18,6 +18,14 @@ class AxisproTimesheet(models.Model):
     billable = fields.Boolean("Facturable", default=True)
     invoice_id = fields.Many2one("account.move", "Facture", readonly=True, copy=False)
 
+    def _activity_account(self, company):
+        plan = self.env.ref("eguitra_base.analytic_plan_activite")
+        Analytic = self.env["account.analytic.account"].sudo()
+        name = "Conseil et accompagnement de projets"
+        account = Analytic.search([("plan_id", "=", plan.id), ("name", "=", name),
+                                   ("company_id", "in", [False, company.id])], limit=1)
+        return account or Analytic.create({"name": name, "plan_id": plan.id, "company_id": company.id})
+
     def action_invoice(self, hourly_rate, extra_lines=None):
         """Facture d'honoraires du cabinet : une ligne par consultant, au taux horaire indiqué."""
         lines = self.filtered(lambda t: t.billable and not t.invoice_id)
@@ -28,7 +36,8 @@ class AxisproTimesheet(models.Model):
         income = self.env["account.account"].search(
             [("code", "=like", "706%"), ("company_ids", "in", company.ids)], limit=1
         )
-        distribution = {str(dossier.analytic_account_id.id): 100}
+        # Axe dossier et axe activité : le compte de résultat du cabinet se lit aussi par activité.
+        distribution = {str(dossier.analytic_account_id.id): 100, str(self._activity_account(company).id): 100}
         invoice_lines = []
         for user in lines.user_id:
             hours = sum(lines.filtered(lambda t, u=user: t.user_id == u).mapped("hours"))
