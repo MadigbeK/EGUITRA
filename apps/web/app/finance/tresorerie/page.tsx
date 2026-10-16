@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftRight, Check, FileUp, Link2, Plus, Undo2 } from "@/components/icons";
+import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Plus, Undo2, Wallet } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi } from "@/lib/api-client";
@@ -68,26 +68,42 @@ export default function TreasuryPage() {
       {position && (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} tone="accent" />
-            {position.accounts.map((a) => (
-              <button
-                key={a.journal_id}
-                type="button"
-                onClick={() => setJournalId(a.journal_id)}
-                aria-pressed={current?.journal_id === a.journal_id}
-                className={cx("min-w-0 rounded-xl bg-panel p-5 text-left transition-shadow", current?.journal_id === a.journal_id ? "ring-2 ring-inset ring-accent" : "hover:ring-1 hover:ring-inset hover:ring-line-strong/60")}
-              >
-                <div className="flex items-center justify-between gap-2 text-[12.5px] font-medium text-muted">
-                  <span>{a.type === "cash" ? "Caisse" : "Banque"}</span>
-                  {a.unreconciled ? <Badge tone="warn">{a.unreconciled} à rapprocher</Badge> : <Badge tone="ok">À jour</Badge>}
-                </div>
-                <div className="mt-1.5 truncate text-sm text-ink-2">{a.name}</div>
-                <div className="mt-1.5 font-display text-[21px] font-semibold text-ink">
-                  {a.currency !== "GNF" ? `${fmtDec(a.balance_currency)} ${a.currency}` : fmtGNF(a.balance)}
-                </div>
-                {a.currency !== "GNF" && <div className="mt-0.5 text-[12px] text-muted">Contre-valeur {fmtGNF(a.balance)}</div>}
-              </button>
-            ))}
+            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} icon={Landmark} teinte="jade" tone="ok" />
+            {position.accounts.map((a) => {
+              const choisi = current?.journal_id === a.journal_id;
+              const I = a.type === "cash" ? Wallet : Landmark;
+              return (
+                <button
+                  key={a.journal_id}
+                  type="button"
+                  onClick={() => setJournalId(a.journal_id)}
+                  aria-pressed={choisi}
+                  className={cx(
+                    "n-kpi n-levable relative min-w-0 overflow-hidden rounded-2xl border p-4 text-left",
+                    choisi ? "n-degrade border-transparent text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : "border-line bg-panel shadow-[var(--ombre-carte)]",
+                  )}
+                >
+                  <div className="relative flex items-center justify-between gap-2">
+                    <span className={cx("grid h-9 w-9 place-items-center rounded-[10px]", choisi ? "bg-white/15 text-white" : "bg-accent-doux text-accent")}>
+                      <I className="h-[18px] w-[18px]" />
+                    </span>
+                    {a.unreconciled ? (
+                      <span className={cx("rounded-full px-2 py-0.5 text-[11.5px] font-semibold", choisi ? "bg-white/20 text-white" : "bg-warn-doux text-warn")}>{a.unreconciled} à rapprocher</span>
+                    ) : (
+                      <span className={cx("rounded-full px-2 py-0.5 text-[11.5px] font-semibold", choisi ? "bg-white/20 text-white" : "bg-ok-doux text-ok-texte")}>À jour</span>
+                    )}
+                  </div>
+                  <div className={cx("relative mt-3 truncate text-[13px] font-medium", choisi ? "text-white/85" : "text-ink-2")}>
+                    {a.name}
+                    <span className={cx("ml-1.5 text-[12px]", choisi ? "text-white/70" : "text-muted")}>{a.type === "cash" ? "Caisse" : "Banque"}</span>
+                  </div>
+                  <div className={cx("relative mt-1 font-display text-[22px] font-bold tabular", choisi ? "text-white" : a.balance < 0 ? "text-danger" : "text-ink")}>
+                    {a.currency !== "GNF" ? `${fmtDec(a.balance_currency)} ${a.currency}` : fmtGNF(a.balance)}
+                  </div>
+                  {a.currency !== "GNF" && <div className={cx("relative mt-0.5 text-[12px]", choisi ? "text-white/75" : "text-muted")}>Contre-valeur {fmtGNF(a.balance)}</div>}
+                </button>
+              );
+            })}
           </div>
           {current && (
             <Card title={`Opérations, ${current.name}`} padded={false}>
@@ -112,7 +128,7 @@ export default function TreasuryPage() {
                     { key: "date", label: "Date", render: (l) => fmtDate(l.date) },
                     { key: "label", label: "Libellé" },
                     { key: "partner", label: "Tiers", render: (l) => l.partner?.name ?? "–" },
-                    { key: "amount", label: "Montant", align: "right", render: (l) => <span className={l.amount < 0 ? "text-danger" : "text-ok"}>{fmtGNF(l.amount)}</span> },
+                    { key: "amount", label: "Montant", align: "right", render: (l) => <span className={cx("font-semibold", l.amount < 0 ? "text-danger" : "text-ok")}>{l.amount > 0 ? "+" : ""}{fmtGNF(l.amount)}</span> },
                     {
                       key: "reconciled",
                       label: "",

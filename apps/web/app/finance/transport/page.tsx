@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { CheckCheck, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
+import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
@@ -49,19 +49,38 @@ export default function TransportPage() {
       <PageHeader title="Transport pétrolier" subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge." />
       {summary && (
         <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
-          {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne. */}
-          <section className="min-w-0 rounded-xl bg-panel p-6 xl:col-span-5">
-            <h2 className="font-display text-[17px] font-semibold text-ink">Volume livré ce mois</h2>
-            <Compteur value={summary.volume} unit="m³" className="mt-5 text-[40px] text-ink sm:text-[48px]" />
-            <p className="mt-4 text-[13px] text-muted">
-              {summary.rotations} rotation{summary.rotations > 1 ? "s" : ""}, {fmtDec(summary.volume)} m³ au total
-            </p>
+          {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne ; l'état de la flotte dessous. */}
+          <section className="min-w-0 rounded-2xl border border-line bg-panel p-6 shadow-[var(--ombre-carte)] xl:col-span-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-[16.5px] font-semibold text-ink">Volume livré ce mois</h2>
+                <p className="mt-0.5 text-[12.5px] text-muted">
+                  {summary.rotations} rotation{summary.rotations > 1 ? "s" : ""}, {fmtDec(summary.volume)} m³ au total
+                </p>
+              </div>
+              <IconTile icon={Droplet} teinte="corail" />
+            </div>
+            <Compteur value={summary.volume} unit="m³" className="mt-5 text-[42px] text-ink sm:text-[50px]" />
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between text-[13px]">
+                <span className="font-semibold text-ink-2">Flotte</span>
+                <span className="text-muted">{(summary.fleet.service ?? 0) + (summary.fleet.maintenance ?? 0) + (summary.fleet.off ?? 0)} ensembles</span>
+              </div>
+              <Repartition
+                parts={[
+                  { key: "service", label: "En service", value: summary.fleet.service ?? 0, color: "#12956a" },
+                  { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: "#df8f17" },
+                  { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: "#ec4f49" },
+                ]}
+                format={(v) => `${v}`}
+              />
+            </div>
           </section>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:col-span-7">
-            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} tone="ok" />
-            <Kpi label="Marge du mois" value={fmtShort(summary.margin)} hint={fmtPct(summary.margin_rate)} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} />
-            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} hint={`${summary.to_invoice.count} rotation(s) validée(s)`} tone="accent" />
-            <Kpi label="Flotte" value={`${summary.fleet.service ?? 0} en service`} hint={`${summary.fleet.maintenance ?? 0} en maintenance, ${summary.drafts} saisie(s) à valider`} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
+            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} icon={TrendingUp} teinte="jade" hint="Rotations validées et facturées" />
+            <Kpi label="Marge du mois" value={fmtShort(summary.margin)} icon={Percent} teinte={(summary.margin_rate ?? 0) < 15 ? "ambre" : "jade"} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} hint={`Taux de marge ${fmtPct(summary.margin_rate)}`} />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={`${summary.to_invoice.count} rotation(s) validée(s)`} />
+            <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>
         </div>
       )}
@@ -139,7 +158,7 @@ function Rotations() {
               { key: "volume", label: "Livré (m³)", align: "right", render: (r) => fmtDec(r.volume_delivered || r.volume_loaded) },
               { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
               { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span> },
-              { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]}>{STATE[r.state][0]}</Badge> },
+              { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]} vivant={r.state === "draft"}>{STATE[r.state][0]}</Badge> },
             ]}
             footer={
               data.items.length > 0 ? (
