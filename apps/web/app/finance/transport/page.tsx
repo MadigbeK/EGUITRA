@@ -126,7 +126,7 @@ function Rotations() {
         <Field label="Statut">
           <Select value={state} onChange={(e) => setState(e.target.value)} options={[{ value: "draft,done", label: "À traiter (saisies et validées)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "Validées, à facturer" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
         </Field>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("validate")}>
             <CheckCheck className="h-4 w-4" /> Valider la sélection
           </Button>

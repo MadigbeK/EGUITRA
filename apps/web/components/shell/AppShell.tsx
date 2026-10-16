@@ -745,7 +745,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
                     <I className="h-4 w-4" />
                   </span>
                   <span className="flex-1 font-medium">{c.libelle}</span>
-                  {i === actif && <span className="text-[12px] font-semibold text-accent">Entrée</span>}
+                  {i === actif && <span aria-hidden className="text-[12px] font-semibold text-accent">Entrée</span>}
                 </div>
               </li>
             );

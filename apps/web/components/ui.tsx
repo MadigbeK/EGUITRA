@@ -587,7 +587,7 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
 /** Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire. */
 export function FileButton({ label, accept, onFile, small }: { label: string; accept?: string; onFile: (file: File) => void; small?: boolean }) {
   return (
-    <label className={cx("inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif", small ? "px-2.5 py-1 text-[12.5px]" : "min-h-9 px-3.5 py-1.5 text-sm")}>
+    <label className={cx("relative inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif", small ? "px-2.5 py-1 text-[12.5px]" : "min-h-9 px-3.5 py-1.5 text-sm")}>
       <FileUpIcon className={small ? "h-3.5 w-3.5" : "h-4 w-4"} />
       {label}
       <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />

@@ -408,7 +408,7 @@ function Report({ d }: { d: DossierDetail }) {
   const missing = data.documents.filter((x) => x.required && x.due && x.state !== "validated" && x.state !== "received");
   return (
     <div className="space-y-4">
-      <div className="no-print flex gap-2">
+      <div className="no-print flex flex-wrap gap-2">
         <Button onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimer le rapport de décision</Button>
         <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/report.xlsx`, `${d.reference}.xlsx`)}><Download className="h-4 w-4" /> Export XLSX</Button>
       </div>

@@ -118,7 +118,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
       <Card
         title={`${p.name}, version ${p.version}`}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {editable && (
               <Button variant="primary" onClick={() => window.confirm(`Mettre la version ${p.version} en vigueur ? La version actuelle sera archivée ; les dossiers ouverts gardent leur version.`) && act(() => apiSend("POST", `/axispro/policies/${p.id}/activate`), "Version mise en vigueur.")}>
                 <CheckCircle2 className="h-4 w-4" /> Mettre en vigueur
