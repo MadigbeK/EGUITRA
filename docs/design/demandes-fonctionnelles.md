@@ -30,3 +30,6 @@ installés garderont les anciennes icônes tant que cette version ne change pas.
 passer `VERSION` à `rotations-v2` dans `public/mobile-sw.js` et dans `lib/offline-store.ts` (le
 commentaire du fichier indique les deux emplacements). Ce fichier est hors du périmètre de la
 session design, d'où cette demande.
+
+Fait par la session fonctionnelle (commit 8b3e66e, `rotations-v2`). Toute nouvelle retouche des
+icônes ou du manifeste de Rotations demandera de passer à `rotations-v3`.

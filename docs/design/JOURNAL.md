@@ -112,9 +112,9 @@ même branche, sans toucher à la logique des écrans :
   double navigation dans la liste AxisPro, impression des bandeaux et des courbes, étiquettes de
   mois serrées sur téléphone, graduations d'une série nulle, focus rendu par la recherche Ctrl K
   et raccourci laissé au navigateur sur le portail, contrastes du texte blanc sur les dégradés.
-- Reste pour la session fonctionnelle : passer la version du cache de Rotations
-  (`public/mobile-sw.js`, `VERSION`) pour que les téléphones déjà équipés reçoivent le nouveau
-  manifeste et les nouvelles icônes.
+- Version du cache de Rotations passée à `rotations-v2` par la session fonctionnelle (commit
+  8b3e66e) : les téléphones déjà équipés reçoivent le nouveau manifeste et les nouvelles icônes.
+  Toute nouvelle retouche de ces icônes ou du manifeste demandera `rotations-v3`.
 - Accueil NIMOVA (`/accueil`), refait sur le modèle exact de l'accueil d'Odoo fourni par le gérant :
   fond clair aux rubans de lumière, grille d'applications sans titre ni bandeau, tuiles blanches
   portant chacune une icône illustrée en aplats de couleur dessinée pour son module
@@ -133,7 +133,8 @@ même branche, sans toucher à la logique des écrans :
     clavier passent d'une tuile à sa voisine ;
   - fond : rubans qui dérivent lentement et lumière qui suit le curseur.
   Tout s'arrête net avec la préférence « réduire les animations » du système. Classes
-  `.tuile*`, `.ic .a-*` et `.accueil-ruban*` dans `app/globals.css`.
+  `.tuile*`, `.ic .a-*` et `.accueil-ruban*` dans `app/globals.css`. En recette le 16 octobre
+  (commit 8be3967, fusionné dans `claude/bold-shannon-gpg2hv`).
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
@@ -171,7 +172,7 @@ même branche, sans toucher à la logique des écrans :
 
 ## Pour la session fonctionnelle
 
-- Voir `demandes-fonctionnelles.md` : domaine nimovagroup.com, version du cache de Rotations.
+- Voir `demandes-fonctionnelles.md` : domaine nimovagroup.com (le cache de Rotations est réglé).
 - À la fusion : les écrans ont été retouchés pour leur seule présentation (imports d'icônes,
   libellés, classes) ; en cas de conflit avec une évolution fonctionnelle, garder la logique de
   la session fonctionnelle et réappliquer la présentation.
