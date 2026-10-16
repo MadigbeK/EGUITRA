@@ -70,6 +70,29 @@ l'écran), vue « Groupe consolidé ». L'écran Administration > Utilisateurs p
 sociétés de chaque compte (ajouté le 14 octobre ; seule l'API le permettait). Vérifié en recette avec
 `comptable.demo` (ouvert aux deux sociétés).
 
+### Organisation des sociétés et des applications (rappel du gérant, 16 octobre)
+EGUITRA GROUP SARLU et MB AxisPro Consulting sont deux entreprises différentes du même groupe (même
+DG, mêmes locaux, métiers distincts) ; le département finance tient les deux comptabilités,
+séparément. Règles, décrites en un seul endroit, `addons/eguitra_api/organisation.py` (pendant web :
+`apps/web/lib/config.ts`) :
+- EGUITRA Finance sert les deux sociétés (société de travail choisie à l'écran ; vue consolidée pour
+  la direction et la finance). Ses modules métier (transport, chantiers, immobilier) ne servent
+  qu'EGUITRA GROUP : menus masqués et API refusée (422 `wrong_company`) dans les livres de MB AxisPro.
+- AxisPro Suite et le portail des porteurs ne servent que MB AxisPro Consulting ; Rotations, qu'EGUITRA
+  GROUP. L'application y travaille toujours, même pour un compte ouvert aux deux sociétés ; un compte
+  qui n'est pas ouvert à cette société ne peut pas l'ouvrir. Les routes d'AxisPro refusent de
+  travailler dans EGUITRA GROUP, quelle que soit l'application qui les appelle.
+- Profils et applications : un profil ouvre une ou plusieurs applications (administration et
+  direction : tout ; finance : Finance ; cabinet : AxisPro ; exploitation : Finance et Rotations ;
+  porteur : portail). Un profil propre à une société exige que le compte y soit ouvert (exploitation,
+  chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro) : contrôlé à l'enregistrement du
+  compte, la société est cochée d'office à l'écran.
+- Nouvelle application ou nouveau module : une ligne dans `organisation.py` (APPS, MODULE_ENTITY,
+  PROFILE_ENTITY) et dans `config.ts`.
+- Honoraires du cabinet ventilés aussi sur l'activité « Conseil et accompagnement de projets » ; axes
+  analytiques proposés selon la société (dossiers pour le cabinet ; chantiers, ensembles routiers,
+  routes, biens pour le groupe).
+
 ### Architecture réalisée
 - **Noyau** : Odoo 19 Community + PostgreSQL 16 (Docker Compose). N'écoute que sur 127.0.0.1 ; jamais exposé aux utilisateurs.
 - **API métier dans le noyau** (`eguitra_api`) : routes `/api/v1/...` exécutées sous l'identité de l'utilisateur (droits et règles d'accès du noyau s'appliquent). Jetons opaques stockés hachés (accès 15 min, renouvellement 12 h, 30 jours pour Rotations au seul profil exploitation ; durée totale d'une session 7 jours, 90 pour Rotations), double authentification TOTP obligatoire pour tous, limitation des essais (5 échecs par identifiant depuis une même adresse, 50 toutes adresses confondues, 50 par adresse ; l'ancien mot de passe compte aussi), journal des accès 12 mois, piste d'audit (`auditlog`). Mot de passe remis par l'administrateur : provisoire, à remplacer avant tout autre accès (contrôlé par l'API elle-même). La déconnexion révoque toute la session, même jeton d'accès expiré. Adresse réelle du client transmise par la passerelle (`X-Forwarded-For` avec `X-Forwarded-Host`, sans quoi le noyau ne voit que l'adresse du conteneur web).
@@ -135,6 +158,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Compte d'administration de recette `recette.admin` : mot de passe et clé de double authentification dans `infra/.env` du serveur (`RECETTE_ADMIN_PASSWORD`, `RECETTE_ADMIN_TOTP`, à saisir dans une application d'authentification), jamais dans le dépôt. Il dispose aussi des profils cabinet et exploitation pour les démonstrations.
 - Compte porteur de démonstration `porteur.demo` (« Démo - Porteur Briqueterie de Kindia »), rattaché au seul dossier AX/2026/0002, profil porteur, ouvert au portail uniquement (AxisPro Suite et Finance refusés, vérifié le 16 octobre) : mot de passe définitif `RECETTE_PORTEUR_PASSWORD` dans le même fichier ; double authentification remise à zéro le 16 octobre, à activer à la première connexion (code QR).
 - Compte `emkouyate` présent aussi en recette (mot de passe provisoire, double authentification à activer).
+- Comptes de test pour les utilisateurs réels (16 octobre) : test.dg (direction, deux sociétés), test.daf et test.comptable (finance, deux sociétés), test.exploitation et test.parc (exploitation, EGUITRA GROUP), test.chantiers, test.immobilier (EGUITRA GROUP), test.consultant (cabinet, MB AxisPro), test.admin (administration, deux sociétés), test.porteur (portail, dossier « Unité de séchage de mangues (démo) »). Créés par scripts/recette/comptes_test.py (recette seulement) ; mots de passe provisoires dans infra/secrets/comptes-test-recette.tsv du serveur (lisible du seul utilisateur deploy), double authentification à activer à la première connexion. Accès vérifiés : chaque compte n'ouvre que ses applications. Guide des testeurs (docs/projet/Guide_des_testeurs.docx) et fiche de retours (docs/projet/Fiche_de_retours.xlsx) remis au gérant.
 - Compte `comptable.demo` (profil finance, ouvert aux deux sociétés) pour montrer le multi-sociétés : `RECETTE_COMPTABLE_PASSWORD` et `RECETTE_COMPTABLE_TOTP`.
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
