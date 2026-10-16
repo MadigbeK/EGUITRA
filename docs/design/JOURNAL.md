@@ -88,6 +88,17 @@ même branche, sans toucher à la logique des écrans :
   Couleur du navigateur de Rotations passée au corail (`app/mobile/layout.tsx`, manifeste).
 - Contrôles : `npx tsc --noEmit` et `npx next build` ; rendu vérifié sur la maquette d'API
   (grand écran et téléphone de 390 px).
+- AxisPro refait à la demande du gérant (« le design d'AxisPro est laid ») : accueil en portefeuille
+  (chiffres clés, entonnoir des dossiers par étape, anneau des recommandations, tableau en
+  colonnes par étape avec cartes de dossier, vue liste au choix mémorisée), fiche dossier
+  (bandeau azur avec anneau de score, domaines avec les seuils GO et sous conditions, écarts
+  numérotés, état des critères choisi par puces colorées, échanges en bulles), comités (dossiers
+  à présenter en cartes à anneau de score), temps (heures par dossier en classement), pièces
+  standard (étapes numérotées).
+- Coque : bascule « Finance | AxisPro » en tête de la colonne de navigation, pour passer d'un
+  espace de gestion à l'autre d'un clic (comptes ouverts aux deux).
+- Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
+  partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
