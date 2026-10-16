@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Tabs, Textarea } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -40,9 +40,9 @@ export default function DossiersPage() {
               { key: "reference", label: "Réf.", render: (d) => <Link className="font-mono text-xs text-accent hover:underline" href={`/axispro/dossiers/${d.id}`}>{d.reference}</Link> },
               { key: "name", label: "Projet", render: (d) => <Link href={`/axispro/dossiers/${d.id}`} className="hover:underline">{d.name}</Link> },
               { key: "promoter", label: "Promoteur", render: (d) => d.promoter.name },
-              { key: "gate", label: "Gate", render: (d) => d.current_gate?.code ?? "—" },
+              { key: "gate", label: "Gate", render: (d) => d.current_gate?.code ?? "–" },
               { key: "progress", label: "Évaluation", render: (d) => <div className="w-28"><ProgressBar value={(d.progress.assessed / Math.max(1, d.progress.criteria)) * 100} /><span className="text-[11px] text-muted">{d.progress.assessed}/{d.progress.criteria}</span></div> },
-              { key: "score", label: "Score", align: "right", render: (d) => (d.score === null ? "—" : `${Math.round(d.score)} / 100`) },
+              { key: "score", label: "Score", align: "right", render: (d) => (d.score === null ? "–" : `${Math.round(d.score)} / 100`) },
               { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
               { key: "financing_need", label: "Besoin", align: "right", render: (d) => fmtShort(d.financing_need) },
               { key: "documents", label: "Pièces", render: (d) => `${d.documents.received}/${d.documents.due}` },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, FileCheck2, Plus, Printer, RefreshCw } from "lucide-react";
+import { Building2, FileCheck2, Plus, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -36,7 +36,7 @@ export default function RealEstatePage() {
           <Kpi label="Loyers annuels" value={fmtShort(summary.annual_rent)} tone="ok" />
           <Kpi label="Valeur du patrimoine" value={fmtShort(summary.portfolio_value)} />
           <Kpi label="Rendement brut" value={fmtPct(summary.gross_yield)} tone="accent" />
-          <Kpi label="Loyers impayés" value={fmtShort(summary.unpaid_amount)} hint={`${summary.unpaid_count} échéance(s) · ${summary.leases_expiring_3m} bail(aux) à échéance sous 3 mois`} tone={summary.unpaid_count ? "warn" : "neutral"} />
+          <Kpi label="Loyers impayés" value={fmtShort(summary.unpaid_amount)} hint={`${summary.unpaid_count} échéance(s), ${summary.leases_expiring_3m} bail(aux) à échéance sous 3 mois`} tone={summary.unpaid_count ? "warn" : "neutral"} />
         </div>
       )}
       <Tabs tabs={[{ key: "biens", label: "Biens et baux" }, { key: "loyers", label: "Loyers émis" }, { key: "impayes", label: "Impayés et relances" }]} value={tab} onChange={setTab} />
@@ -65,9 +65,9 @@ function Properties({ onChanged }: { onChanged: () => void }) {
               </button>
             ) },
             { key: "kind", label: "Nature", render: (p) => data.kinds.find((k) => k.code === p.kind)?.label ?? p.kind },
-            { key: "area_m2", label: "Surface", align: "right", render: (p) => (p.area_m2 ? `${p.area_m2} m²` : "—") },
+            { key: "area_m2", label: "Surface", align: "right", render: (p) => (p.area_m2 ? `${p.area_m2} m²` : "–") },
             { key: "current_value", label: "Valeur", align: "right", render: (p) => <span title={p.valuation_date ? `Évaluée le ${fmtDate(p.valuation_date)}` : "Valeur d'acquisition"}>{fmtGNF(p.current_value || p.acquisition_value)}</span> },
-            { key: "lease", label: "Locataire", render: (p) => p.lease ? `${p.lease.tenant.name}, ${fmtGNF(p.lease.rent)} / ${p.lease.periodicity === "monthly" ? "mois" : p.lease.periodicity === "quarterly" ? "trimestre" : "an"}` : "—" },
+            { key: "lease", label: "Locataire", render: (p) => p.lease ? `${p.lease.tenant.name}, ${fmtGNF(p.lease.rent)} / ${p.lease.periodicity === "monthly" ? "mois" : p.lease.periodicity === "quarterly" ? "trimestre" : "an"}` : "–" },
             { key: "occupied", label: "", render: (p) => p.occupied ? (
               <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{p.lease && <Button className="px-2 py-1 text-xs" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
             ) : <Button className="px-2 py-1 text-xs" onClick={() => setLeasing(p)}>Louer</Button> },
@@ -124,7 +124,7 @@ function LeaseForm({ property, onClose, onDone }: { property: Property; onClose:
   const [error, setError] = useState<string | null>(null);
   const num = (v: string) => Number(v.replace(/\s/g, "")) || 0;
   return (
-    <Modal open title={`Bail · ${property.name}`} onClose={onClose} footer={<Button variant="primary" disabled={!f.name || !tenant || !f.rent} onClick={() => apiSend("POST", "/immobilier/leases", { ...f, property_id: property.id, partner_id: tenant?.id, rent: num(f.rent), charges: num(f.charges), deposit_amount: num(f.deposit_amount), date_end: f.date_end || undefined, activate: true }).then(onDone).catch((e) => setError(e instanceof ApiError ? e.message : "Erreur"))}>Signer et activer le bail</Button>}>
+    <Modal open title={`Bail, ${property.name}`} onClose={onClose} footer={<Button variant="primary" disabled={!f.name || !tenant || !f.rent} onClick={() => apiSend("POST", "/immobilier/leases", { ...f, property_id: property.id, partner_id: tenant?.id, rent: num(f.rent), charges: num(f.charges), deposit_amount: num(f.deposit_amount), date_end: f.date_end || undefined, activate: true }).then(onDone).catch((e) => setError(e instanceof ApiError ? e.message : "Erreur"))}>Signer et activer le bail</Button>}>
       <div className="grid grid-cols-2 gap-3">
         {error && <div className="col-span-2"><Notice tone="danger">{error}</Notice></div>}
         <Field label="Référence du bail"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
@@ -151,7 +151,7 @@ function Rents() {
           <DataTable rows={data} rowKey={(m) => m.id} empty="Aucun loyer émis." columns={[
             { key: "name", label: "Quittance", render: (m) => <span className="font-mono text-xs">{m.name}</span> },
             { key: "invoice_date", label: "Date", render: (m) => fmtDate(m.invoice_date) },
-            { key: "partner", label: "Locataire", render: (m) => m.partner?.name ?? "—" },
+            { key: "partner", label: "Locataire", render: (m) => m.partner?.name ?? "–" },
             { key: "amount_total", label: "Montant", align: "right", render: (m) => fmtGNF(m.amount_total) },
             { key: "payment_state", label: "Règlement", render: (m) => <Badge tone={PAYMENT_STATES[m.payment_state]?.tone}>{PAYMENT_STATES[m.payment_state]?.label ?? m.payment_state}</Badge> },
             { key: "x", label: "", render: (m) => (m.payment_state === "paid" || m.payment_state === "in_payment") ? <Button className="px-2 py-1 text-xs" onClick={() => setReceipt(m.id)}><FileCheck2 className="h-3.5 w-3.5" /> Quittance</Button> : null },
@@ -181,7 +181,7 @@ function TerminateForm({ property, lease, onClose, onDone }: { property: Propert
     }
   }
   return (
-    <Modal open title={`Fin de bail · ${property.name}`} onClose={onClose} footer={<Button variant="danger" loading={busy} disabled={!date} onClick={submit}>Mettre fin au bail</Button>}>
+    <Modal open title={`Fin de bail, ${property.name}`} onClose={onClose} footer={<Button variant="danger" loading={busy} disabled={!date} onClick={submit}>Mettre fin au bail</Button>}>
       <div className="space-y-3 text-sm">
         {error && <Notice tone="danger">{error}</Notice>}
         <p>Bail {lease.name} de {lease.tenant.name}. Les loyers dus jusqu&apos;à la date de fin sont émis, puis le bien redevient libre et n&apos;est plus facturé. Un loyer déjà émis pour une période postérieure s&apos;annule par un avoir (finance).</p>
@@ -197,7 +197,7 @@ function ReceiptModal({ id, onClose }: { id: number; onClose: () => void }) {
     <Modal open title="Quittance de loyer" onClose={onClose} footer={<Button onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimer</Button>}>
       {error && <Notice tone="danger">{error.message}</Notice>}
       {r && (
-        <div className="space-y-3 rounded-lg bg-white p-6 text-sm text-black">
+        <div className="space-y-3 rounded-md bg-[#fffefb] p-7 text-sm leading-relaxed text-foret ring-1 ring-line print:ring-0">
           <div className="flex justify-between"><b>{r.company}</b><span>Quittance n° {r.number}</span></div>
           <p>Reçu de {r.tenant} la somme de <b>{fmtGNF(r.amount_total)}</b> au titre du loyer et des charges du bien {r.property} {r.property_address ? `(${r.property_address})` : ""}, pour la période suivante :</p>
           <ul className="list-disc pl-5">{r.lines.map((l, i) => <li key={i}>{l.name} : {fmtGNF(l.amount)}</li>)}</ul>
@@ -214,7 +214,7 @@ function Unpaid() {
     <Card padded={false}>
       {!data ? <Loading /> : (
         <DataTable rows={data} rowKey={(m) => m.id} empty="Aucun loyer impayé." columns={[
-          { key: "partner", label: "Locataire", render: (m) => m.partner?.name ?? "—" },
+          { key: "partner", label: "Locataire", render: (m) => m.partner?.name ?? "–" },
           { key: "name", label: "Échéance", render: (m) => `${m.name} du ${fmtDate(m.invoice_date)}` },
           { key: "invoice_date_due", label: "Exigible le", render: (m) => fmtDate(m.invoice_date_due) },
           { key: "late_days", label: "Retard", align: "right", render: (m) => <span className={m.late_days > 30 ? "text-danger" : "text-warn"}>{m.late_days} j</span> },

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileUp, Paperclip, RotateCcw, Send, Wallet, XCircle } from "lucide-react";
-import { Badge, Button, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Download, Paperclip, RotateCcw, Send, Wallet, XCircle } from "@/components/icons";
+import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
@@ -32,7 +32,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
     }
   }
 
-  const title = move ? `${move.name ?? "Brouillon"} · ${move.partner?.name ?? ""}` : "Pièce";
+  const title = move ? `${move.name ?? "Brouillon"}, ${move.partner?.name ?? ""}` : "Pièce";
   return (
     <Modal open={moveId !== null} onClose={onClose} title={title} wide>
       {error && <ErrorBox error={error} />}
@@ -49,8 +49,8 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               </Badge>
             )}
             <span className="text-xs text-muted">
-              Pièce du {fmtDate(move.invoice_date ?? move.date)} · échéance {fmtDate(move.invoice_date_due)}
-              {move.ref ? ` · réf. ${move.ref}` : ""}
+              Pièce du {fmtDate(move.invoice_date ?? move.date)}, échéance {fmtDate(move.invoice_date_due)}
+              {move.ref ? `, réf. ${move.ref}` : ""}
             </span>
           </div>
 
@@ -60,17 +60,17 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
             rowKey={(l) => l.id}
             columns={[
               { key: "name", label: "Libellé" },
-              { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "—") },
+              { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
               { key: "quantity", label: "Qté", align: "right", render: (l) => String(l.quantity) },
               { key: "price_unit", label: "PU HT", align: "right", render: (l) => fmtGNF(l.price_unit) },
-              { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => `${t.amount} %`).join(", ") || "—" },
+              { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => `${t.amount} %`).join(", ") || "–" },
               { key: "price_subtotal", label: "Total HT", align: "right", render: (l) => fmtGNF(l.price_subtotal) },
             ]}
           />
 
           <div className="flex flex-wrap justify-between gap-4">
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
                 <Paperclip className="h-3.5 w-3.5" /> Pièces jointes
               </div>
               {move.attachments.length === 0 && <p className="text-xs text-muted">Aucune pièce jointe.</p>}
@@ -83,21 +83,16 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                   </li>
                 ))}
               </ul>
-              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-ink-2 hover:text-accent">
-                <FileUp className="h-4 w-4" /> Joindre un justificatif
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const form = new FormData();
-                    form.append("file", file);
-                    void act("upload", () => apiUpload(`/finance/moves/${move.id}/attachments`, form));
-                  }}
-                />
-              </label>
+              <FileButton
+                small
+                label="Joindre un justificatif"
+                accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
+                onFile={(file) => {
+                  const form = new FormData();
+                  form.append("file", file);
+                  void act("upload", () => apiUpload(`/finance/moves/${move.id}/attachments`, form));
+                }}
+              />
             </div>
             <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
               <dt className="text-muted">Total HT</dt>
@@ -116,7 +111,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
           </div>
 
           {paying && (
-            <div className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-panel-2 p-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 rounded-lg bg-panel-2 p-4 md:grid-cols-4">
               <Field label="Compte de trésorerie">
                 <Select value={journalId} onChange={(e) => setJournalId(e.target.value)} placeholder="Choisir…" options={(journals ?? []).map((j) => ({ value: j.id, label: j.name }))} />
               </Field>

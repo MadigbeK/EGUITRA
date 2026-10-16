@@ -5,7 +5,7 @@ import { cx } from "@/components/ui";
 /** Bascule entre la société de travail et la vue consolidée du groupe. */
 export function ScopeToggle({ value, onChange }: { value: "company" | "group"; onChange: (v: "company" | "group") => void }) {
   return (
-    <div className="inline-flex rounded-lg border border-line bg-panel p-0.5 text-sm">
+    <div role="radiogroup" aria-label="Périmètre" className="inline-flex rounded-lg border border-line-strong/50 bg-panel p-[3px] text-sm">
       {(
         [
           ["company", "Société"],
@@ -15,9 +15,12 @@ export function ScopeToggle({ value, onChange }: { value: "company" | "group"; o
         <button
           key={key}
           type="button"
+          role="radio"
+          aria-checked={value === key}
           onClick={() => onChange(key)}
-          className={cx("rounded-md px-3 py-1.5 transition", value === key ? "bg-accent text-accent-ink" : "text-muted hover:text-ink")}
+          className={cx("inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-colors", value === key ? "bg-accent text-accent-ink" : "text-ink-2 hover:bg-panel-2 hover:text-ink")}
         >
+          {key === "group" && <span aria-hidden className={cx("h-1.5 w-1.5 rotate-45", value === key ? "bg-or" : "bg-or/70")} />}
           {label}
         </button>
       ))}

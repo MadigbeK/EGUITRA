@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Printer } from "lucide-react";
+import { Download, Printer } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
@@ -56,7 +56,7 @@ function StatementTable({ lines, compare }: { lines: StatementLine[]; compare?: 
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="border-b border-line text-[11px] uppercase tracking-wider text-muted">
+        <tr className="border-b border-line text-[12.5px] font-medium text-muted">
           <th className="w-14 px-3 py-2 text-left">Réf.</th>
           <th className="px-3 py-2 text-left">Rubrique</th>
           <th className="px-3 py-2 text-right">Exercice</th>
@@ -189,7 +189,7 @@ interface RunResult {
 }
 
 function cell(value: unknown, type: string) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "–";
   if (type === "money" || type === "int") return fmtInt(value);
   if (type === "date") return fmtDate(String(value));
   return String(value);
@@ -267,7 +267,7 @@ function ReportBuilder({ scope }: { scope: string }) {
       {Boolean(error) && <ErrorBox error={error} />}
       {result && (
         <Card
-          title={`${result.label} · ${result.total_count} ligne(s)`}
+          title={`${result.label}, ${result.total_count} ligne(s)`}
           padded={false}
           actions={
             <div className="no-print flex gap-2">

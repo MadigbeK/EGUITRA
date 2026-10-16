@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
@@ -65,10 +65,10 @@ export default function PartnersPage() {
             columns={[
               { key: "name", label: "Nom" },
               { key: "role", label: "Rôle", render: (p) => <div className="flex gap-1">{p.customer && <Badge tone="ok">Client</Badge>}{p.supplier && <Badge tone="accent">Fournisseur</Badge>}</div> },
-              { key: "city", label: "Ville", render: (p) => p.city ?? "—" },
+              { key: "city", label: "Ville", render: (p) => p.city ?? "–" },
               { key: "receivable", label: "Nous doit", align: "right", render: (p) => fmtGNF(p.receivable) },
               { key: "payable", label: "Nous lui devons", align: "right", render: (p) => fmtGNF(p.payable) },
-              { key: "credit_limit", label: "Limite de crédit", align: "right", render: (p) => (p.credit_limit ? fmtGNF(p.credit_limit) : "—") },
+              { key: "credit_limit", label: "Limite de crédit", align: "right", render: (p) => (p.credit_limit ? fmtGNF(p.credit_limit) : "–") },
             ]}
           />
         )}
@@ -94,10 +94,10 @@ function PartnerModal({ id, onClose, onEdit }: { id: number; onClose: () => void
           </div>
           {p.credit_used_pct !== undefined && <ProgressBar value={p.credit_used_pct} tone={p.credit_used_pct > 100 ? "danger" : p.credit_used_pct > 80 ? "warn" : "ok"} />}
           <div className="grid grid-cols-2 gap-2 text-sm text-ink-2 md:grid-cols-4">
-            <div>NIF : {p.vat ?? "—"}</div>
-            <div>Tél. : {p.phone ?? "—"}</div>
-            <div>Courriel : {p.email ?? "—"}</div>
-            <div>{[p.street, p.city].filter(Boolean).join(", ") || "—"}</div>
+            <div>NIF : {p.vat ?? "–"}</div>
+            <div>Tél. : {p.phone ?? "–"}</div>
+            <div>Courriel : {p.email ?? "–"}</div>
+            <div>{[p.street, p.city].filter(Boolean).join(", ") || "–"}</div>
           </div>
           <Card title="Pièces non soldées" padded={false}>
             <DataTable
@@ -110,7 +110,7 @@ function PartnerModal({ id, onClose, onEdit }: { id: number; onClose: () => void
                 { key: "kind", label: "Nature" },
                 { key: "date", label: "Date", render: (i) => fmtDate(i.date) },
                 { key: "due", label: "Échéance", render: (i) => fmtDate(i.due) },
-                { key: "late_days", label: "Retard", align: "right", render: (i) => (i.late_days ? <span className="text-warn">{i.late_days} j</span> : "—") },
+                { key: "late_days", label: "Retard", align: "right", render: (i) => (i.late_days ? <span className="text-warn">{i.late_days} j</span> : "–") },
                 { key: "residual", label: "Reste", align: "right", render: (i) => fmtGNF(Math.abs(i.residual)) },
               ]}
             />

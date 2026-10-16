@@ -23,17 +23,17 @@ export default function PiecesPage() {
       {p === null && <Card><p className="text-sm text-muted">Aucune grille en vigueur : importez puis mettez en vigueur la grille du cabinet.</p></Card>}
       {p && (
         <div className="space-y-4">
-          {[...p.gates.map((g) => ({ id: g.id as number | null, title: `${g.code} · ${g.name}` })), { id: null, title: "Sans gate particulier" }].map((g) => {
+          {[...p.gates.map((g) => ({ id: g.id as number | null, title: `${g.code}, ${g.name}` })), { id: null, title: "Sans gate particulier" }].map((g) => {
             const rows = p.documents.filter((d) => d.gate_id === g.id);
             if (!rows.length) return null;
             return (
-              <Card key={g.id ?? "none"} title={`${g.title} · ${rows.length} pièces`} padded={false}>
+              <Card key={g.id ?? "none"} title={`${g.title}, ${rows.length} pièces`} padded={false}>
                 <DataTable dense rows={rows} rowKey={(d) => d.id} columns={[
                   { key: "code", label: "Code", render: (d) => <span className="font-mono text-xs">{d.code}</span> },
                   { key: "name", label: "Pièce" },
-                  { key: "category", label: "Rubrique", render: (d) => d.category ?? "—" },
+                  { key: "category", label: "Rubrique", render: (d) => d.category ?? "–" },
                   { key: "required", label: "", render: (d) => (d.required ? <Badge tone="accent">Obligatoire</Badge> : <Badge>Facultative</Badge>) },
-                  { key: "guidance", label: "Consignes au porteur", render: (d) => <span className="text-xs text-muted">{d.guidance ?? "—"}</span> },
+                  { key: "guidance", label: "Consignes au porteur", render: (d) => <span className="text-xs text-muted">{d.guidance ?? "–"}</span> },
                 ]} />
               </Card>
             );

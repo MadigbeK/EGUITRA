@@ -1,94 +1,121 @@
 @import "tailwindcss";
 
 /*
- * Thèmes des quatre surfaces. La charte définitive du groupe et du cabinet remplacera ces
- * valeurs provisoires (prérequis client) : seules les variables ci-dessous changeront.
+ * Identité NIMOVA (note de cadrage du DG, octobre 2026). Les couleurs de base sont relevées dans
+ * le PDF du DG ; les teintes dérivées gardent un contraste AA (4,5:1 au moins) sur le crème.
+ *
+ * Deux idées tiennent l'interface :
+ * - le dos du registre : la colonne de gauche prend la couleur de la société dont on tient les
+ *   livres (vert forêt pour EGUITRA GROUP, bleu nuit pour MB AxisPro Consulting) ;
+ * - le compteur : les chiffres clés s'affichent comme sur un compteur volumétrique de citerne.
+ * Le reste se tait : pas d'ombre hors des éléments qui flottent, pas de dégradé, pas de majuscules
+ * d'étiquette.
  */
 @theme inline {
   --color-bg: var(--bg);
   --color-panel: var(--panel);
   --color-panel-2: var(--panel-2);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-strong: var(--accent-strong);
   --color-accent-2: var(--accent-2);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
-  --font-sans: "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  --color-dos: var(--dos);
+  --color-dos-2: var(--dos-2);
+  --color-dos-ink: var(--dos-ink);
+  --color-dos-accent: var(--dos-accent);
+  --color-foret: var(--n-foret);
+  --color-pin: var(--n-pin);
+  --color-menthe: var(--n-menthe);
+  --color-or: var(--n-or);
+  --color-creme: var(--n-creme);
+  --color-nuit: var(--n-nuit);
+
+  /* Barlow, dessinée d'après la signalétique routière : le vocabulaire du transport. */
+  --font-sans: var(--font-barlow), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  /* Titres et chiffres des tableaux : Barlow Semi Condensed, chiffres tabulaires. « font-mono »
+     désigne ici les montants alignés, pas une chasse fixe. */
+  --font-display: var(--font-barlow-sc), var(--font-barlow), "Segoe UI", sans-serif;
+  --font-mono: var(--font-barlow-sc), var(--font-barlow), "Segoe UI", sans-serif;
+  /* Compteurs : Barlow Condensed. */
+  --font-compteur: var(--font-barlow-c), var(--font-barlow-sc), "Segoe UI", sans-serif;
+
+  /* Petits rayons par défaut ; le grand rayon est réservé au monogramme. */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
 }
 
-:root,
-[data-app="finance"] {
-  --bg: #0a0c24;
-  --panel: #10133a;
-  --panel-2: #161c4b;
-  --line: #262d6b;
-  --ink: #eef3f6;
-  --ink-2: #c4d0e4;
-  --muted: #8fa2c0;
-  --accent: #e0a83c;
-  --accent-ink: #0a0c24;
-  --accent-2: #1a9e9e;
-  --ok: #33a98c;
-  --warn: #e0a83c;
-  --danger: #f2777a;
-  color-scheme: dark;
+:root {
+  /* Palette du DG */
+  --n-foret: #142f29;
+  --n-foret-2: #1f4339;
+  --n-pin: #22634c;
+  --n-menthe: #a5e6c2;
+  --n-or: #d4aa5b;
+  --n-creme: #faf9f5;
+  --n-nuit: #23364b;
+  --n-nuit-2: #2e4560;
+  --n-brume: #eff6f1;
+  --n-filet: #dae5dd;
+  /* Dérivés pour l'écran */
+  --n-encre-2: #2b443d;
+  --n-gris: #5b6b63;
+  --n-or-fonce: #7d5c17;
+  --n-laterite: #a23b28;
+  --n-trait-fort: #7f928a;
+
+  --bg: var(--n-brume);
+  --panel: var(--n-creme);
+  --panel-2: #f0f5f0;
+  --line: var(--n-filet);
+  --line-strong: var(--n-trait-fort);
+  --ink: var(--n-foret);
+  --ink-2: var(--n-encre-2);
+  --muted: var(--n-gris);
+  --accent: var(--n-pin);
+  --accent-ink: var(--n-creme);
+  --accent-strong: #1a4d3b;
+  --accent-2: var(--n-or);
+  --ok: var(--n-pin);
+  --warn: var(--n-or-fonce);
+  --danger: var(--n-laterite);
+
+  /* Dos du registre : société active (EGUITRA GROUP par défaut). */
+  --dos: var(--n-foret);
+  --dos-2: var(--n-foret-2);
+  --dos-ink: var(--n-creme);
+  --dos-accent: var(--n-menthe);
+
+  color-scheme: light;
 }
 
-[data-app="axispro"] {
-  --bg: #0b1613;
-  --panel: #11221d;
-  --panel-2: #172d26;
-  --line: #24453a;
-  --ink: #eef5f1;
-  --ink-2: #c6dbd1;
-  --muted: #8eaa9d;
-  --accent: #2bb58a;
-  --accent-ink: #06130f;
-  --accent-2: #d9a441;
-  --ok: #2bb58a;
-  --warn: #d9a441;
-  --danger: #ef7b6f;
-  color-scheme: dark;
-}
-
+/* AxisPro Suite et le portail des porteurs : outils du cabinet, en bleu nuit. */
+[data-app="axispro"],
 [data-app="portail"] {
-  --bg: #f4f7f5;
-  --panel: #ffffff;
-  --panel-2: #eef3f0;
-  --line: #d9e3de;
-  --ink: #12211c;
-  --ink-2: #304540;
-  --muted: #5e7069;
-  --accent: #1f8a66;
-  --accent-ink: #ffffff;
-  --accent-2: #b7862c;
-  --ok: #1f8a66;
-  --warn: #b7862c;
-  --danger: #c2453b;
-  color-scheme: light;
+  --accent: var(--n-nuit);
+  --accent-strong: #182638;
+  --dos: var(--n-nuit);
+  --dos-2: var(--n-nuit-2);
 }
 
-[data-app="mobile"] {
-  --bg: #f2f4fa;
-  --panel: #ffffff;
-  --panel-2: #e9ecf6;
-  --line: #d4d9ea;
-  --ink: #0a0c24;
-  --ink-2: #252b52;
-  --muted: #5a6386;
-  --accent: #1d2a6b;
-  --accent-ink: #ffffff;
-  --accent-2: #e0a83c;
-  --ok: #1e8b6f;
-  --warn: #b7862c;
-  --danger: #c2453b;
-  color-scheme: light;
+/* Société de travail affichée : la couleur du dos suit les livres ouverts. */
+[data-societe="groupe"] {
+  --dos: var(--n-foret);
+  --dos-2: var(--n-foret-2);
+}
+[data-societe="cabinet"] {
+  --dos: var(--n-nuit);
+  --dos-2: var(--n-nuit-2);
 }
 
 html,
@@ -99,16 +126,162 @@ body {
 
 body {
   font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: "kern" 1;
 }
 
-.tabular {
-  font-variant-numeric: tabular-nums;
+::selection {
+  background: var(--n-menthe);
+  color: var(--n-foret);
+}
+
+.tabular,
+.font-mono {
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Sur le dos (fond sombre), le contour de focus passe au vert d'eau. */
+.sur-dos :focus-visible {
+  outline-color: var(--n-menthe);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b9c8c0 transparent;
+}
+
+/* Liste déroulante : flèche dessinée, la même sur tous les systèmes. */
+.champ-liste {
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b443d' stroke-width='1.6'%3E%3Cpath d='M6.5 9.5 12 15l5.5-5.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem;
+}
+
+/* ─── Dos du registre ───────────────────────────────────────────────────── */
+
+/* Titre du dos, lu de bas en haut comme sur un registre posé à plat. */
+.titre-dos {
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+  white-space: nowrap;
+}
+
+/* ─── Compteur ──────────────────────────────────────────────────────────── */
+
+.compteur {
+  --hauteur: 1.16em;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.18em;
+  font-family: var(--font-compteur);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.compteur-groupe {
+  display: inline-flex;
+  gap: 0.05em;
+}
+
+.compteur-case {
+  position: relative;
+  display: inline-block;
+  width: 0.6em;
+  height: var(--hauteur);
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--compteur-fond, rgb(20 47 41 / 0.06));
+}
+
+/* Ligne médiane des rouleaux. */
+.compteur-case::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--compteur-ligne, rgb(20 47 41 / 0.1));
+}
+
+.compteur-rouleau {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--chiffre) * var(--hauteur) * -1));
+  transition: transform 600ms cubic-bezier(0.2, 0.7, 0.1, 1);
+  animation: compteur-rouler 1100ms cubic-bezier(0.16, 0.84, 0.2, 1) both;
+  animation-delay: calc(var(--rang, 0) * 45ms);
+}
+
+.compteur-rouleau > span {
+  display: block;
+  height: var(--hauteur);
+  line-height: var(--hauteur);
+  text-align: center;
+}
+
+.compteur-signe,
+.compteur-unite {
+  line-height: var(--hauteur);
+}
+
+@keyframes compteur-rouler {
+  from {
+    transform: translateY(0);
+  }
+}
+
+/* ─── Chargement ────────────────────────────────────────────────────────── */
+
+.barre-attente {
+  position: relative;
+  overflow: hidden;
+  height: 2px;
+  background: var(--line);
+}
+
+.barre-attente::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: 30%;
+  background: var(--accent);
+  animation: barre-attente 1.2s ease-in-out infinite;
+}
+
+@keyframes barre-attente {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compteur-rouleau {
+    animation: none;
+    transition: none;
+  }
+  .barre-attente::after {
+    animation-duration: 3s;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
 }
 
 @media print {

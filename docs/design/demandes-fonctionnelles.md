@@ -13,3 +13,12 @@ documents. La disponibilité juridique du nom reste à vérifier, comme le rappe
 Point à trancher avec le gérant : le portail des porteurs garde la marque MB AxisPro Consulting.
 Une adresse en portail.nimovagroup.com montrerait la marque interne aux clients du cabinet ; un
 domaine du cabinet conviendrait peut-être mieux.
+
+## Rotations : renouveler le cache du service worker
+
+Les icônes et le manifeste de Rotations changent (monogramme NIMOVA, couleurs forêt). Le service
+worker `public/mobile-sw.js` les met en cache sous la version `rotations-v1` ; les téléphones déjà
+installés garderont les anciennes icônes tant que cette version ne change pas. À faire à la fusion :
+passer `VERSION` à `rotations-v2` dans `public/mobile-sw.js` et dans `lib/offline-store.ts` (le
+commentaire du fichier indique les deux emplacements). Ce fichier est hors du périmètre de la
+session design, d'où cette demande.

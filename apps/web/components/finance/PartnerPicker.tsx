@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search } from "@/components/icons";
 import { apiGet, apiSend } from "@/lib/api-client";
 import type { Paged, Partner } from "@/lib/finance-types";
 import { cx } from "@/components/ui";
@@ -52,10 +52,10 @@ export function PartnerPicker({
 
   return (
     <div className="relative" ref={box}>
-      <div className="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 focus-within:border-accent">
+      <div className="flex min-h-9 items-center gap-2 rounded-lg border border-line-strong bg-panel px-3 py-1.5 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15">
         <Search className="h-4 w-4 text-muted" />
         <input
-          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted/60"
+          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted/75"
           placeholder={placeholder}
           value={open ? query : value?.name ?? ""}
           onFocus={() => {
@@ -66,7 +66,7 @@ export function PartnerPicker({
         />
       </div>
       {open && (
-        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-panel shadow-xl">
+        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-panel py-1 shadow-[0_18px_50px_-12px_rgb(20_47_41/0.4)]">
           {items.map((p) => (
             <button
               key={p.id}

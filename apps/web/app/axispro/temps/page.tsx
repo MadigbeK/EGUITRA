@@ -50,7 +50,7 @@ export default function TempsPage() {
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       <Card title="Saisir du temps" className="mb-6">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-          <Field label="Dossier" className="md:col-span-2"><Select value={f.dossier_id} onChange={(e) => setF({ ...f, dossier_id: e.target.value })} placeholder="Choisir" options={(dossiers ?? []).map((d) => ({ value: d.id, label: `${d.reference} · ${d.name}` }))} /></Field>
+          <Field label="Dossier" className="md:col-span-2"><Select value={f.dossier_id} onChange={(e) => setF({ ...f, dossier_id: e.target.value })} placeholder="Choisir" options={(dossiers ?? []).map((d) => ({ value: d.id, label: `${d.reference}, ${d.name}` }))} /></Field>
           <Field label="Date"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
           <Field label="Heures"><Input inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} /></Field>
           <Field label="Travaux" className="md:col-span-2"><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>

@@ -18,25 +18,25 @@ function round0(n: number): number {
 /** 1 234 567 GNF */
 export function fmtGNF(value: unknown, currency = "GNF"): string {
   const n = toNumber(value);
-  if (n === null) return "—";
+  if (n === null) return "–";
   return `${intFmt.format(round0(n))} ${currency}`;
 }
 
 /** 1 234 567 (sans devise, pour les tableaux) */
 export function fmtInt(value: unknown): string {
   const n = toNumber(value);
-  return n === null ? "—" : intFmt.format(round0(n));
+  return n === null ? "–" : intFmt.format(round0(n));
 }
 
 export function fmtDec(value: unknown): string {
   const n = toNumber(value);
-  return n === null ? "—" : decFmt.format(n);
+  return n === null ? "–" : decFmt.format(n);
 }
 
 /** 20,6 Mds · 384 M · 12 500 */
 export function fmtShort(value: unknown): string {
   const n = toNumber(value);
-  if (n === null) return "—";
+  if (n === null) return "–";
   const a = Math.abs(n);
   if (a >= 1e9) return `${decFmt.format(Math.round(n / 1e7) / 100)} Mds`;
   if (a >= 1e6) return `${intFmt.format(round0(n / 1e6))} M`;
@@ -45,18 +45,18 @@ export function fmtShort(value: unknown): string {
 
 export function fmtPct(value: unknown, digits = 1): string {
   const n = toNumber(value);
-  if (n === null) return "—";
+  if (n === null) return "–";
   return `${n.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`;
 }
 
 export function fmtDate(value: unknown): string {
-  if (!value || typeof value !== "string") return "—";
+  if (!value || typeof value !== "string") return "–";
   const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("fr-FR");
 }
 
 export function fmtDateTime(value: unknown): string {
-  if (!value || typeof value !== "string") return "—";
+  if (!value || typeof value !== "string") return "–";
   const d = new Date(value);
   return Number.isNaN(d.getTime())
     ? value

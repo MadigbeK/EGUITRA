@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftRight, Check, FileUp, Link2, Plus, Undo2 } from "lucide-react";
+import { ArrowLeftRight, Check, FileUp, Link2, Plus, Undo2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi } from "@/lib/api-client";
@@ -72,7 +72,7 @@ export default function TreasuryPage() {
             {position.accounts.map((a) => (
               <button key={a.journal_id} type="button" onClick={() => setJournalId(a.journal_id)} className="text-left">
                 <div className={cx("rounded-xl border bg-panel p-5 transition", current?.journal_id === a.journal_id ? "border-accent" : "border-line hover:border-accent/50")}>
-                  <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                  <div className="flex items-center justify-between text-[12.5px] font-medium text-muted">
                     <span>{a.type === "cash" ? "Caisse" : "Banque"}</span>
                     {a.unreconciled ? <Badge tone="warn">{a.unreconciled} à rapprocher</Badge> : <Badge tone="ok">À jour</Badge>}
                   </div>
@@ -86,7 +86,7 @@ export default function TreasuryPage() {
             ))}
           </div>
           {current && (
-            <Card title={`Opérations · ${current.name}`} padded={false}>
+            <Card title={`Opérations, ${current.name}`} padded={false}>
               <div className="px-4 pt-3">
                 <Tabs
                   tabs={[
@@ -107,7 +107,7 @@ export default function TreasuryPage() {
                   columns={[
                     { key: "date", label: "Date", render: (l) => fmtDate(l.date) },
                     { key: "label", label: "Libellé" },
-                    { key: "partner", label: "Tiers", render: (l) => l.partner?.name ?? "—" },
+                    { key: "partner", label: "Tiers", render: (l) => l.partner?.name ?? "–" },
                     { key: "amount", label: "Montant", align: "right", render: (l) => <span className={l.amount < 0 ? "text-danger" : "text-ok"}>{fmtGNF(l.amount)}</span> },
                     {
                       key: "reconciled",
@@ -171,7 +171,7 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
     }
   }
   return (
-    <Modal open title={`Opération · ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount}>Enregistrer</Button>}>
+    <Modal open title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount}>Enregistrer</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
         <Tabs tabs={[{ key: "out", label: "Sortie" }, { key: "in", label: "Entrée" }]} value={direction} onChange={setDirection} />
@@ -218,7 +218,7 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
     }
   }
   return (
-    <Modal open title={`Importer un relevé · ${journal.name}`} onClose={onClose} footer={<Button variant="primary" onClick={submit} loading={busy} disabled={!file}>Importer</Button>}>
+    <Modal open title={`Importer un relevé, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" onClick={submit} loading={busy} disabled={!file}>Importer</Button>}>
       <div className="space-y-3 text-sm">
         <p className="text-muted">Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit). Les opérations déjà importées sont ignorées.</p>
         {error && <Notice tone="danger">{error}</Notice>}
@@ -227,7 +227,7 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
             {result.created} opération(s) importée(s), {result.skipped_duplicates} doublon(s) ignoré(s).
           </Notice>
         )}
-        <input type="file" accept=".csv,.xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm" />
+        <input type="file" accept=".csv,.xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
       </div>
     </Modal>
   );
@@ -309,7 +309,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
     <Modal
       open
       wide
-      title={`Rapprocher · ${line.label} · ${fmtGNF(line.amount)}`}
+      title={`Rapprocher, ${line.label}, ${fmtGNF(line.amount)}`}
       onClose={onClose}
       footer={
         <Button variant="primary" loading={busy} disabled={!selected.length && !account} onClick={submit}>
@@ -332,15 +332,15 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
             columns={[
               { key: "sel", label: "", render: (c) => <input type="checkbox" readOnly checked={selected.includes(c.id)} /> },
               { key: "move", label: "Pièce" },
-              { key: "partner", label: "Tiers", render: (c) => c.partner ?? "—" },
+              { key: "partner", label: "Tiers", render: (c) => c.partner ?? "–" },
               { key: "due", label: "Échéance", render: (c) => fmtDate(c.due) },
               { key: "residual", label: "Reste", align: "right", render: (c) => fmtGNF(c.residual) },
-              { key: "score", label: "Pertinence", align: "right", render: (c) => (c.score >= 5 ? <Badge tone="ok">Forte</Badge> : c.score >= 2 ? <Badge tone="accent">Moyenne</Badge> : "—") },
+              { key: "score", label: "Pertinence", align: "right", render: (c) => (c.score >= 5 ? <Badge tone="ok">Forte</Badge> : c.score >= 2 ? <Badge tone="accent">Moyenne</Badge> : "–") },
             ]}
           />
         )}
         <Field label="Ou imputer directement à un compte" hint="Frais bancaires, agios, produit divers…">
-          <Select value={account} onChange={(e) => setAccount(e.target.value)} placeholder="—" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+          <Select value={account} onChange={(e) => setAccount(e.target.value)} placeholder="–" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
         </Field>
       </div>
     </Modal>

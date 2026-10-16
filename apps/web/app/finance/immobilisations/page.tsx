@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calculator, Plus } from "lucide-react";
+import { Calculator, Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
@@ -151,7 +151,7 @@ function DisposeForm({ asset, onCancel, onDone }: { asset: Asset; onCancel: () =
     }
   }
   return (
-    <div className="mb-4 space-y-3 rounded-lg border border-line bg-panel-2 p-4">
+    <div className="mb-4 space-y-3 rounded-lg bg-panel-2 p-4">
       <p className="text-sm">
         Sortie de l&apos;actif : dotation jusqu&apos;à la date de sortie, reprise des amortissements, valeur nette comptable en 81x.
         En cas de vente, la créance sur l&apos;acquéreur (485) et le produit de cession (82x) sont comptabilisés.

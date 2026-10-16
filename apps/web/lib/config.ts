@@ -1,11 +1,15 @@
 /** Applications servies par ce projet. Le code d'application est transmis à l'API à la connexion. */
 export type AppCode = "finance" | "axispro" | "portail" | "mobile";
 
+/**
+ * Noms affichés (décision du gérant, 16 octobre 2026) : NIMOVA, marque interne, suivie du module.
+ * Le portail, ouvert aux clients du cabinet, porte la marque MB AxisPro Consulting.
+ */
 export const APPS: Record<AppCode, { name: string; home: string; tagline: string }> = {
-  finance: { name: "EGUITRA Finance", home: "/finance", tagline: "Pilotage financier du groupe" },
-  axispro: { name: "AxisPro Suite", home: "/axispro", tagline: "Évaluation et suivi des projets" },
-  portail: { name: "Portail AxisPro", home: "/portail", tagline: "Espace des porteurs de projets" },
-  mobile: { name: "EGUITRA Rotations", home: "/mobile", tagline: "Saisie des rotations au parc" },
+  finance: { name: "NIMOVA · Finance", home: "/finance", tagline: "Pilotage financier du groupe" },
+  axispro: { name: "NIMOVA · AxisPro", home: "/axispro", tagline: "Évaluation et suivi des projets" },
+  portail: { name: "Portail des porteurs de projets", home: "/portail", tagline: "MB AxisPro Consulting" },
+  mobile: { name: "NIMOVA · Rotations", home: "/mobile", tagline: "Saisie des rotations au parc" },
 };
 
 export function isAppCode(value: unknown): value is AppCode {

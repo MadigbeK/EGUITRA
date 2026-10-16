@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -73,7 +73,7 @@ function Axes() {
                   <td className="px-3 py-2 text-right font-mono">{fmtGNF(total.income)}</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtGNF(total.expense)}</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtGNF(total.income - total.expense)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{total.income ? fmtPct(((total.income - total.expense) / total.income) * 100) : "—"}</td>
+                  <td className="px-3 py-2 text-right font-mono">{total.income ? fmtPct(((total.income - total.expense) / total.income) * 100) : "–"}</td>
                 </tr>
               ) : undefined
             }
@@ -114,7 +114,7 @@ function Budget() {
         )}
       </div>
       {compare && (
-        <Card title={`Budget et réalisé · seuil d'alerte ${compare.threshold_pct} %`} padded={false}>
+        <Card title={`Budget et réalisé, seuil d'alerte ${compare.threshold_pct} %`} padded={false}>
           <DataTable
             rows={compare.lines}
             rowKey={(l) => l.account_id}

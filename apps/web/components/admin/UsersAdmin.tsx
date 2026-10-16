@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Plus, ShieldOff } from "lucide-react";
+import { KeyRound, Plus, ShieldOff } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Company, Me } from "@/lib/types";

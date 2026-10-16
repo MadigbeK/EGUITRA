@@ -33,7 +33,7 @@ export default function AlertsPage() {
                 <div>
                   <div className="font-medium text-ink">{a.title}</div>
                   <div className="text-sm text-muted">
-                    {a.message} {a.value !== null && `(${fmtGNF(a.value)})`} · {a.company}
+                    {a.message} {a.value !== null && `(${fmtGNF(a.value)})`}, {a.company}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -55,7 +55,7 @@ export default function AlertsPage() {
           rowKey={(t) => t.id}
           columns={[
             { key: "label", label: "Seuil" },
-            { key: "value", label: "Valeur", align: "right", render: (t) => (t.value ? t.value.toLocaleString("fr-FR") : "—") },
+            { key: "value", label: "Valeur", align: "right", render: (t) => (t.value ? t.value.toLocaleString("fr-FR") : "–") },
             { key: "severity", label: "Gravité", render: (t) => <Badge tone={SEVERITY[t.severity as keyof typeof SEVERITY][1]}>{SEVERITY[t.severity as keyof typeof SEVERITY][0]}</Badge> },
             { key: "active", label: "Actif", render: (t) => (t.active ? "Oui" : "Non") },
           ]}

@@ -45,7 +45,7 @@ export function PasswordForm({ app, required = false }: { app: AppCode; required
             <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </Field>
           <Button type="submit" variant="primary" loading={busy}>
-            Enregistrer
+            Enregistrer le nouveau mot de passe
           </Button>
         </form>
       </Card>
