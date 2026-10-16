@@ -1,7 +1,13 @@
 """Temps passés par dossier et facturation des prestations du cabinet."""
 
-from odoo import Command, fields, models
+from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
+
+# Services de MB AxisPro Consulting (activités analytiques du cabinet). Les honoraires des dossiers
+# d'AxisPro Suite relèvent de la gestion de projets ; les autres services se facturent depuis Finance.
+PROJECT_ACTIVITY = "Gestion de projets"
+CABINET_ACTIVITIES = (PROJECT_ACTIVITY, "Formation et coaching", "Conseil", "Audit d'évaluation des transporteurs",
+                      "Certification")
 
 
 class AxisproTimesheet(models.Model):
@@ -18,13 +24,27 @@ class AxisproTimesheet(models.Model):
     billable = fields.Boolean("Facturable", default=True)
     invoice_id = fields.Many2one("account.move", "Facture", readonly=True, copy=False)
 
-    def _activity_account(self, company):
+    def _activity_account(self, company, name=PROJECT_ACTIVITY):
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
         Analytic = self.env["account.analytic.account"].sudo()
-        name = "Conseil et accompagnement de projets"
         account = Analytic.search([("plan_id", "=", plan.id), ("name", "=", name),
                                    ("company_id", "in", [False, company.id])], limit=1)
         return account or Analytic.create({"name": name, "plan_id": plan.id, "company_id": company.id})
+
+    @api.model
+    def _ensure_cabinet_activities(self):
+        """Activités du cabinet (services de MB AxisPro Consulting), proposées à chaque ligne de facture
+        de Finance ; rejoué à chaque mise à jour du module."""
+        plan = self.env.ref("eguitra_base.analytic_plan_activite")
+        Analytic = self.env["account.analytic.account"].sudo()
+        for company in self.env["res.company"].sudo().search([("eguitra_entity", "=", "cabinet")]):
+            former = Analytic.search([("plan_id", "=", plan.id), ("name", "=", "Conseil et accompagnement de projets"),
+                                      ("company_id", "=", company.id)], limit=1)
+            if former and not Analytic.search_count([("plan_id", "=", plan.id), ("name", "=", PROJECT_ACTIVITY),
+                                                     ("company_id", "=", company.id)]):
+                former.name = PROJECT_ACTIVITY
+            for name in CABINET_ACTIVITIES:
+                self._activity_account(company, name)
 
     def action_invoice(self, hourly_rate, extra_lines=None):
         """Facture d'honoraires du cabinet : une ligne par consultant, au taux horaire indiqué."""

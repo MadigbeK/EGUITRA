@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Activités du cabinet, créées ou complétées à chaque installation et mise à jour du module. -->
+    <function model="axispro.timesheet" name="_ensure_cabinet_activities"/>
+</odoo>

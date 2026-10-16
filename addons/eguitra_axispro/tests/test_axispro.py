@@ -251,6 +251,21 @@ class TestAxispro(ApiCase):
             self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
             self.assertEqual(self.call("POST", path, {"body": "Encore"}, token=token)[0], 429, "Messages bornés par jour")
 
+    def test_activites_du_cabinet(self):
+        """Les services du cabinet sont des activités de MB AxisPro, proposées aux lignes de facture."""
+        plan = self.env.ref("eguitra_base.analytic_plan_activite")
+        names = self.env["account.analytic.account"].search([("plan_id", "=", plan.id),
+                                                             ("company_id", "=", self.cabinet.id)]).mapped("name")
+        for name in ("Gestion de projets", "Formation et coaching", "Conseil", "Audit d'évaluation des transporteurs",
+                     "Certification"):
+            self.assertIn(name, names)
+        dossier = self._dossier()
+        self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 2, "description": "Analyse"})
+        invoice = self.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)]).action_invoice(100_000)
+        activities = self.env["account.analytic.account"].browse(
+            [int(i) for line in invoice.invoice_line_ids for key in (line.analytic_distribution or {}) for i in key.split(",")])
+        self.assertIn("Gestion de projets", activities.mapped("name"), "Honoraires des dossiers : gestion de projets")
+
     def test_rapport_xlsx_et_facturation(self):
         dossier = self._dossier()
         token = self.open_session("consultant", app="axispro")["access_token"]

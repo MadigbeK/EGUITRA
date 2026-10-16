@@ -11,6 +11,7 @@
         "security/ir.model.access.csv",
         "security/axispro_rules.xml",
         "data/sequences.xml",
+        "data/activites.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,
