@@ -587,7 +587,7 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
 /** Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire. */
 export function FileButton({ label, accept, onFile, small }: { label: string; accept?: string; onFile: (file: File) => void; small?: boolean }) {
   return (
-    <label className={cx("inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif", small ? "px-2.5 py-1 text-[12.5px]" : "min-h-9 px-3.5 py-1.5 text-sm")}>
+    <label className={cx("relative inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif", small ? "px-2.5 py-1 text-[12.5px]" : "min-h-9 px-3.5 py-1.5 text-sm")}>
       <FileUpIcon className={small ? "h-3.5 w-3.5" : "h-4 w-4"} />
       {label}
       <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
@@ -1244,6 +1244,31 @@ export function RankBars({ items, format, couleur = "var(--accent-vif)" }: { ite
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * Anneau de progression (score sur 100, part des critères évalués) : il se remplit à l'affichage,
+ * la valeur au centre défile. Sur fond sombre, `clair` passe le texte et la piste en blanc.
+ */
+export function Anneau({ value, max = 100, couleur = "var(--accent-vif)", taille = 120, epaisseur = 10, centre, sous, clair }: { value: number | null; max?: number; couleur?: string; taille?: number; epaisseur?: number; centre?: string; sous?: string; clair?: boolean }) {
+  const r = 50 - epaisseur / 2 - 1;
+  const part = value === null ? 0 : Math.max(0, Math.min(100, (value / max) * 100));
+  return (
+    <div className="relative flex-none" style={{ width: taille, height: taille }}>
+      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden focusable="false">
+        <circle cx="50" cy="50" r={r} fill="none" stroke={clair ? "rgb(255 255 255 / 0.18)" : "var(--panel-3)"} strokeWidth={epaisseur} />
+        {value !== null && <circle cx="50" cy="50" r={r} fill="none" stroke={couleur} strokeWidth={epaisseur} strokeLinecap="round" pathLength={100} strokeDasharray={`${Math.max(0.01, part)} ${100 - part}`} className="n-anneau" />}
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-center">
+        <div>
+          <div className={cx("font-display font-bold leading-none tabular", clair ? "text-white" : "text-ink")} style={{ fontSize: taille * 0.24 }}>
+            {centre ?? (value === null ? "–" : <Valeur value={String(Math.round(value))} />)}
+          </div>
+          {sous && <div className={cx("mt-1 text-[11.5px] font-semibold", clair ? "text-white/75" : "text-muted")}>{sous}</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 

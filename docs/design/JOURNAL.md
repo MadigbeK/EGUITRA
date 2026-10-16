@@ -88,6 +88,25 @@ même branche, sans toucher à la logique des écrans :
   Couleur du navigateur de Rotations passée au corail (`app/mobile/layout.tsx`, manifeste).
 - Contrôles : `npx tsc --noEmit` et `npx next build` ; rendu vérifié sur la maquette d'API
   (grand écran et téléphone de 390 px).
+- AxisPro refait à la demande du gérant (« le design d'AxisPro est laid ») : accueil en portefeuille
+  (chiffres clés, entonnoir des dossiers par étape, anneau des recommandations, tableau en
+  colonnes par étape avec cartes de dossier, vue liste au choix mémorisée), fiche dossier
+  (bandeau azur avec anneau de score, domaines avec les seuils GO et sous conditions, écarts
+  numérotés, état des critères choisi par puces colorées, échanges en bulles), comités (dossiers
+  à présenter en cartes à anneau de score), temps (heures par dossier en classement), pièces
+  standard (étapes numérotées).
+- Coque : bascule « Finance | AxisPro » en tête de la colonne de navigation, pour passer d'un
+  espace de gestion à l'autre d'un clic (comptes ouverts aux deux).
+- Vérification complète sur la maquette (16 octobre) : 32 écrans et les 7 onglets de 8 dossiers
+  AxisPro, en grand écran et sur téléphone de 360 px (aucune erreur, aucun débordement, aucune
+  valeur manquante) ; connexion (erreur, code, activation), mot de passe provisoire, portail
+  (message envoyé), Rotations (saisie transmise), recherche Ctrl K, repli du menu, fenêtres,
+  tri, onglets, graphiques au clavier ; appels d'API identiques à l'origine dans chaque fichier.
+  Corrigés : débordements sur téléphone (rapport mensuel, transport, data room, rapport de
+  décision ; le champ de fichier caché sortait de son tableau). Ajoutés : page « introuvable »
+  et page d'erreur aux couleurs de NIMOVA (au lieu de la page anglaise de Next.js).
+- Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
+  partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 

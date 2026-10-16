@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Notice, PageHeader, Select, Tabs, Badge } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Notice, PageHeader, RankBars, Select, Tabs, Badge } from "@/components/ui";
+import { Clock, FolderKanban, Receipt } from "@/components/icons";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { DossierSummary } from "@/lib/axispro-types";
 import { fmtDate, fmtDec } from "@/lib/format";
@@ -47,6 +48,11 @@ export default function TempsPage() {
   return (
     <div>
       <PageHeader title="Temps et facturation" subtitle="Temps passés par dossier ; la facture d'honoraires se crée depuis l'onglet Temps et facturation du dossier." />
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Kpi label="Heures affichées" value={fmtDec(rows.reduce((a, t) => a + t.hours, 0))} icon={Clock} teinte="azur" />
+        <Kpi label="Heures à facturer" value={fmtDec(rows.filter((t) => t.billable && !t.invoice).reduce((a, t) => a + t.hours, 0))} tone="warn" icon={Receipt} teinte="ambre" hint="Temps facturables sans facture d'honoraires" />
+        <Kpi label="Dossiers concernés" value={String(byDossier.length)} icon={FolderKanban} teinte="lagon" />
+      </div>
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       <Card title="Saisir du temps" className="mb-6">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
@@ -60,20 +66,26 @@ export default function TempsPage() {
           <Button variant="primary" disabled={!f.dossier_id || !f.hours || !f.description} onClick={submit}>Enregistrer</Button>
         </div>
       </Card>
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label="Heures affichées" value={fmtDec(rows.reduce((a, t) => a + t.hours, 0))} />
-        <Kpi label="Heures à facturer" value={fmtDec(rows.filter((t) => t.billable && !t.invoice).reduce((a, t) => a + t.hours, 0))} tone="warn" />
-        <Kpi label="Dossiers concernés" value={String(byDossier.length)} />
-      </div>
       <Tabs tabs={[{ key: "unbilled", label: "À facturer" }, { key: "all", label: "Tous les temps" }]} value={filter} onChange={setFilter} />
       {error && <ErrorBox error={error} />}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Card title="Par dossier" padded={false}>
-          <DataTable dense rows={byDossier} rowKey={(d) => d.id} empty="Aucun temps." columns={[
-            { key: "reference", label: "Dossier", render: (d) => <Link className="text-accent hover:underline" href={`/axispro/dossiers/${d.id}`}>{d.reference}</Link> },
-            { key: "hours", label: "Heures", align: "right", render: (d) => fmtDec(d.hours) },
-            { key: "unbilled", label: "À facturer", align: "right", render: (d) => fmtDec(d.unbilled) },
-          ]} />
+        <Card title="Heures par dossier">
+          {byDossier.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">Aucun temps.</p>
+          ) : (
+            <RankBars
+              couleur="var(--g-azur)"
+              format={(v) => `${fmtDec(v)} h`}
+              items={[...byDossier].sort((a, b) => b.hours - a.hours).map((d) => ({ key: d.id, label: d.name, value: d.hours, detail: `${d.reference}, ${fmtDec(d.unbilled)} h à facturer` }))}
+            />
+          )}
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
+            {byDossier.map((d) => (
+              <Link key={d.id} className="rounded-md bg-accent-doux px-2 py-0.5 text-[12px] font-semibold text-accent hover:underline" href={`/axispro/dossiers/${d.id}`}>
+                {d.reference}
+              </Link>
+            ))}
+          </div>
         </Card>
         <Card title="Détail" padded={false} className="xl:col-span-2">
           {!data ? <Loading /> : (

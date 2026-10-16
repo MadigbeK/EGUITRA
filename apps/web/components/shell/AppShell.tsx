@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
 import { AlertTriangle, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronRight, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
 import { APPS, CABINET_APPS, type AppCode } from "@/lib/config";
@@ -317,6 +317,8 @@ function Navigation({
         )}
       </div>
 
+      {!replie && <Bascule app={app} me={me} onNavigate={onNavigate} />}
+
       <div className={cx("pb-3", replie ? "px-3" : "px-4")}>
         <Societe app={app} me={me} replie={replie} onCompany={onCompany} />
       </div>
@@ -372,6 +374,36 @@ function Navigation({
 
       <div className={cx("border-t border-line py-3", replie ? "px-3" : "px-4")}>
         <CompteMenu app={app} me={me} onLogout={onLogout} placement="haut" replie={replie} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Bascule entre les deux espaces de gestion (Finance, AxisPro) : visible d'emblée, chaque espace
+ * à sa couleur. Elle n'apparaît que si le compte est ouvert aux deux.
+ */
+function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: () => void }) {
+  const espaces = (["finance", "axispro"] as const).filter((a) => me.apps.includes(a));
+  if (espaces.length < 2) return null;
+  return (
+    <div className="px-4 pb-3">
+      <div role="group" aria-label="Espace de gestion" className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-panel-2 p-1">
+        {espaces.map((a) => {
+          const actif = a === app;
+          return (
+            <Link
+              key={a}
+              href={APPS[a].home}
+              onClick={onNavigate}
+              aria-current={actif ? "true" : undefined}
+              className={cx("flex items-center justify-center gap-2 rounded-[9px] px-2 py-1.5 text-[13px] font-semibold transition-all duration-200", actif ? "bg-panel text-ink shadow-[0_1px_3px_rgb(16_36_31/0.12),0_0_0_1px_rgb(16_36_31/0.04)]" : "text-muted hover:text-ink")}
+            >
+              <span aria-hidden className={cx("h-2 w-2 rounded-full", actif && "n-pouls")} style={{ background: TEINTE_APP[a], ["--pouls" as string]: `color-mix(in oklab, ${TEINTE_APP[a]} 55%, transparent)` } as CSSProperties} />
+              {moduleOf(a)}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
@@ -714,7 +746,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
                     <I className="h-4 w-4" />
                   </span>
                   <span className="flex-1 font-medium">{c.libelle}</span>
-                  {i === actif && <span className="text-[12px] font-semibold text-accent">Entrée</span>}
+                  {i === actif && <span aria-hidden className="text-[12px] font-semibold text-accent">Entrée</span>}
                 </div>
               </li>
             );

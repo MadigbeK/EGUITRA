@@ -73,27 +73,29 @@ export default function ManagementReportPage() {
           </div>
 
           <Card title="Résultat : le mois et le cumul, comparés à l'an dernier" padded={false}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-[12.5px] font-medium text-muted">
-                  <th className="px-3 py-2 text-left">Solde</th>
-                  <th className="px-3 py-2 text-right">Mois</th>
-                  <th className="px-3 py-2 text-right">Même mois N-1</th>
-                  <th className="px-3 py-2 text-right">Cumul</th>
-                  <th className="px-3 py-2 text-right">Cumul N-1</th>
-                </tr>
-              </thead>
-              <tbody className="tabular">
-                {r.income.map((l) => (
-                  <tr key={l.code} className={cx("border-b border-line/50", (l.code === "XB" || l.code === "XI") && "font-semibold")}>
-                    <td className="px-3 py-1.5">{l.label}</td>
-                    {[l.month, l.month_last_year, l.ytd, l.ytd_last_year].map((v, i) => (
-                      <td key={i} className={cx("px-3 py-1.5 text-right font-mono", v < 0 && "text-danger", i % 2 === 1 && "text-muted")}>{fmtInt(v)}</td>
-                    ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-[12.5px] font-medium text-muted">
+                    <th className="px-3 py-2 text-left">Solde</th>
+                    <th className="px-3 py-2 text-right">Mois</th>
+                    <th className="px-3 py-2 text-right">Même mois N-1</th>
+                    <th className="px-3 py-2 text-right">Cumul</th>
+                    <th className="px-3 py-2 text-right">Cumul N-1</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="tabular">
+                  {r.income.map((l) => (
+                    <tr key={l.code} className={cx("border-b border-line/50", (l.code === "XB" || l.code === "XI") && "font-semibold")}>
+                      <td className="px-3 py-1.5">{l.label}</td>
+                      {[l.month, l.month_last_year, l.ytd, l.ytd_last_year].map((v, i) => (
+                        <td key={i} className={cx("px-3 py-1.5 text-right font-mono", v < 0 && "text-danger", i % 2 === 1 && "text-muted")}>{fmtInt(v)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -107,16 +109,18 @@ export default function ManagementReportPage() {
               ]} />
             </Card>
             <Card title="Flux de trésorerie cumulés" padded={false}>
-              <table className="w-full text-sm">
-                <tbody className="tabular">
-                  {([["ZA", "Trésorerie nette à l'ouverture"], ["ZB", "Flux opérationnels"], ["ZC", "Flux d'investissement"], ["ZF", "Flux de financement"], ["ZG", "Variation de la trésorerie"], ["ZH", "Trésorerie nette fin de mois"]] as const).map(([code, label]) => (
-                    <tr key={code} className={cx("border-b border-line/50", (code === "ZA" || code === "ZH") && "font-semibold")}>
-                      <td className="px-3 py-1.5">{label}</td>
-                      <td className={cx("px-3 py-1.5 text-right font-mono", r.cash_flow[code] < 0 && "text-danger")}>{fmtInt(r.cash_flow[code])}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <tbody className="tabular">
+                    {([["ZA", "Trésorerie nette à l'ouverture"], ["ZB", "Flux opérationnels"], ["ZC", "Flux d'investissement"], ["ZF", "Flux de financement"], ["ZG", "Variation de la trésorerie"], ["ZH", "Trésorerie nette fin de mois"]] as const).map(([code, label]) => (
+                      <tr key={code} className={cx("border-b border-line/50", (code === "ZA" || code === "ZH") && "font-semibold")}>
+                        <td className="px-3 py-1.5">{label}</td>
+                        <td className={cx("px-3 py-1.5 text-right font-mono", r.cash_flow[code] < 0 && "text-danger")}>{fmtInt(r.cash_flow[code])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </div>
 
