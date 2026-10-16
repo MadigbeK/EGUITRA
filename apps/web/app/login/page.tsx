@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Monogramme, SIGNATURE } from "@/components/brand";
 import { APPS, appFromHost, isAppCode, type AppCode } from "@/lib/config";
@@ -32,8 +32,12 @@ async function appOf(params: Params): Promise<AppCode> {
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
   const app = await appOf(await searchParams);
   // Le portail est celui du cabinet : ni le nom ni le monogramme de la marque interne.
-  if (app === "portail") return { title: { absolute: "Connexion · MB AxisPro Consulting" }, icons: { icon: "/icons/portail.svg" } };
+  if (app === "portail") return { title: { absolute: "Connexion · MB AxisPro Consulting" }, description: "Portail des porteurs de projets de MB AxisPro Consulting : dossier, pièces et échanges avec le cabinet.", icons: { icon: "/icons/portail.svg" } };
   return { title: "Connexion" };
+}
+
+export async function generateViewport({ searchParams }: { searchParams: Promise<Params> }): Promise<Viewport> {
+  return { themeColor: (await appOf(await searchParams)) === "portail" ? "#23364b" : "#142f29" };
 }
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Params> }) {

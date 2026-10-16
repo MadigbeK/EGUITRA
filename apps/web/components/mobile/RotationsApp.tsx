@@ -390,7 +390,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
                 <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
                   <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs.costs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
-                  <Button variant="ghost" className="min-h-11 text-danger hover:text-danger" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
+                  <Button variant="danger" className="min-h-11" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
                 </div>
               </div>
             ))}

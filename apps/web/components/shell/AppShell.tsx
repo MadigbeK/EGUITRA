@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { MarqueCabinet, Monogramme, moduleOf } from "@/components/brand";
 import { ChevronDown, KeyRound, LogOut, Menu, X } from "@/components/icons";
 import { APPS, type AppCode } from "@/lib/config";
@@ -37,6 +37,21 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   const home = APPS[app].home;
   const company = me.companies.find((c) => c.id === me.company_id);
   const entity = entityOf(company, app);
+
+  // Tiroir du téléphone : Échap le ferme, le focus va au bouton de fermeture puis revient au menu.
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    closeButton.current?.focus();
+    const trigger = menuButton.current;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      trigger?.focus();
+    };
+  }, [open]);
 
   async function logout() {
     await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
@@ -89,22 +104,22 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
           <span className="block font-display text-[20px] font-semibold tracking-[0.08em] text-foret">NIMOVA</span>
           <span className="mt-1 block text-[13px] font-medium text-muted">{moduleOf(app)}</span>
         </Link>
+        {me.companies.length <= 1 && company && <p className="mt-3 text-[12.5px] leading-snug text-ink-2">{company.name}</p>}
       </div>
 
       {me.companies.length > 1 && (
         <div className="px-3 pb-4">
-          <div id="choix-societe" className="px-2 pb-1.5 text-[12px] font-medium text-muted">
+          <div aria-hidden className="px-2 pb-1.5 text-[12px] font-medium text-muted">
             Société
           </div>
-          <div role="radiogroup" aria-labelledby="choix-societe" className="space-y-0.5">
+          <div role="group" aria-label="Société" className="space-y-0.5">
             {me.companies.map((c) => {
               const active = c.id === me.company_id;
               return (
                 <button
                   key={c.id}
                   type="button"
-                  role="radio"
-                  aria-checked={active}
+                  aria-pressed={active}
                   onClick={() => switchCompany(c.id)}
                   className={cx("flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors", active ? "bg-panel-2 font-semibold text-ink" : "text-ink-2 hover:bg-panel-2")}
                 >
@@ -172,7 +187,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 
       {/* Barre du haut et tiroir (téléphone, tablette) */}
       <header className="no-print sur-dos sticky top-0 z-30 flex items-center justify-between gap-3 bg-dos px-3 py-2.5 text-dos-ink lg:hidden">
-        <button type="button" onClick={() => setOpen(true)} className="grid h-10 w-10 place-items-center rounded-lg" aria-label="Ouvrir le menu">
+        <button ref={menuButton} type="button" onClick={() => setOpen(true)} className="grid h-10 w-10 place-items-center rounded-lg" aria-label="Ouvrir le menu" aria-expanded={open}>
           <Menu className="h-5 w-5" />
         </button>
         <Link href={home} className="flex min-w-0 items-center gap-2.5 rounded-lg">
@@ -188,7 +203,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-foret/50" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 left-0 flex w-[min(86vw,300px)] flex-col bg-panel shadow-[0_0_60px_-10px_rgb(20_47_41/0.5)]">
-            <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-3 grid h-10 w-10 place-items-center rounded-lg text-muted" aria-label="Fermer le menu">
+            <button ref={closeButton} type="button" onClick={() => setOpen(false)} className="absolute right-2 top-3 grid h-10 w-10 place-items-center rounded-lg text-muted" aria-label="Fermer le menu">
               <X className="h-5 w-5" />
             </button>
             {navigation}
@@ -208,6 +223,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 function CompteMenu({ app, me, onLogout, placement }: { app: AppCode; me: Me; onLogout: () => void; placement: "cote" | "bas" }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const panelId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -228,7 +244,7 @@ function CompteMenu({ app, me, onLogout, placement }: { app: AppCode; me: Me; on
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-controls={panelId}
         className={cx("flex items-center gap-1.5 rounded-lg", placement === "bas" ? "px-1.5 py-1" : "p-0")}
         title={me.name}
       >
@@ -238,7 +254,7 @@ function CompteMenu({ app, me, onLogout, placement }: { app: AppCode; me: Me; on
       </button>
       {open && (
         <div
-          role="menu"
+          id={panelId}
           className={cx(
             "absolute z-50 w-64 rounded-xl bg-panel p-1.5 text-ink shadow-[0_18px_50px_-12px_rgb(20_47_41/0.45)]",
             placement === "cote" ? "bottom-0 left-full ml-3" : "right-0 top-full mt-2",
@@ -249,18 +265,18 @@ function CompteMenu({ app, me, onLogout, placement }: { app: AppCode; me: Me; on
             <div className="truncate text-[12px] text-muted">{me.login}</div>
           </div>
           <div className="border-t border-line pt-1.5">
-            <Link role="menuitem" href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
+            <Link href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
               <KeyRound className="h-4 w-4 text-muted" /> Changer le mot de passe
             </Link>
             {others.map((a) => (
-              <Link key={a} role="menuitem" href={APPS[a].home} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
+              <Link key={a} href={APPS[a].home} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
                 <span aria-hidden className="grid h-4 w-4 place-items-center">
                   <span className="h-1.5 w-1.5 rotate-45 bg-or" />
                 </span>
                 Ouvrir {APPS[a].name}
               </Link>
             ))}
-            <button type="button" role="menuitem" onClick={onLogout} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger/[0.07]">
+            <button type="button" onClick={onLogout} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger/[0.07]">
               <LogOut className="h-4 w-4" /> Se déconnecter
             </button>
           </div>

@@ -41,6 +41,12 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
 - Charte (`docs/design/CHARTE.md`), planche de présentation (`docs/design/planche/index.html`,
   régénérée par `node docs/design/planche/construire.mjs`) et captures de référence
   (`docs/design/captures/`, données fictives).
+- Relecture indépendante du diff (logique intacte : chemins d'API, corps de requêtes et valeurs
+  identiques) puis corrections : touche Entrée des boutons placés dans une ligne de tableau
+  cliquable rendue à son bouton, colonnes sans titre non triables, rôles ARIA ramenés à des
+  boutons à état pressé, tiroir du téléphone fermé par Échap avec retour du focus, aucune mention
+  de NIMOVA dans les métadonnées du portail, titres d'onglet « page · NIMOVA Finance », tailles
+  de champ de Rotations à 16 px (pas de zoom à la saisie sur iPhone).
 - Contrôles : `npx tsc --noEmit` et `npx next build` sans erreur.
 - Branche `claude/design-nimova` poussée sur GitHub le 16 octobre 2026 ; rien n'est déployé.
 

@@ -5,7 +5,7 @@ import { ServiceWorker } from "@/components/mobile/ServiceWorker";
 export const metadata: Metadata = {
   title: { absolute: "NIMOVA · Rotations" },
   manifest: "/mobile.webmanifest",
-  icons: { apple: "/icons/rotations-180.png" },
+  icons: { icon: "/icons/nimova.svg", apple: "/icons/rotations-180.png" },
   appleWebApp: { capable: true, title: "Rotations", statusBarStyle: "default" },
 };
 

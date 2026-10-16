@@ -96,6 +96,19 @@ export function Tag({ children }: { children: ReactNode }) {
 
 /* ─── Contrôles ────────────────────────────────────────────────────────── */
 
+/**
+ * Les classes passées par un écran l'emportent sur celles du composant pour la taille du texte, la
+ * hauteur minimale et les marges intérieures ; sans cela, l'ordre du CSS généré déciderait seul.
+ */
+const GROUPES = [/^text-(xs|sm|base|lg|xl|[2-9]xl|\[\d[^\]]*\])$/, /^min-h-/, /^px-/, /^py-/];
+
+function ajuste(base: string, extra?: string): string {
+  if (!extra) return base;
+  const ajout = extra.split(/\s+/).filter(Boolean);
+  const garde = base.split(/\s+/).filter((c) => !GROUPES.some((g) => g.test(c) && ajout.some((a) => g.test(a))));
+  return [...garde, ...ajout].join(" ");
+}
+
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON: Record<ButtonVariant, string> = {
@@ -112,9 +125,8 @@ export function Button({ variant = "secondary", loading, className, children, di
       {...props}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cx(
-        "inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-        BUTTON[variant],
+      className={ajuste(
+        cx("inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45", BUTTON[variant]),
         className,
       )}
     >
@@ -127,16 +139,16 @@ export function Button({ variant = "secondary", loading, className, children, di
 const FIELD = "w-full rounded-lg border border-line-strong bg-panel px-3 py-2 text-sm text-ink placeholder:text-muted/75 outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-muted";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cx(FIELD, "min-h-9", props.className)} />;
+  return <input {...props} className={ajuste(cx(FIELD, "min-h-9"), props.className)} />;
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cx(FIELD, "min-h-[84px] leading-relaxed", props.className)} />;
+  return <textarea {...props} className={ajuste(cx(FIELD, "min-h-[84px] leading-relaxed"), props.className)} />;
 }
 
 export function Select({ options, placeholder, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { options: Array<{ value: string | number; label: string }>; placeholder?: string }) {
   return (
-    <select {...props} className={cx(FIELD, "champ-liste min-h-9", props.className)}>
+    <select {...props} className={ajuste(cx(FIELD, "champ-liste min-h-9"), props.className)}>
       {placeholder !== undefined && <option value="">{placeholder}</option>}
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -255,6 +267,8 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
   const pad = dense ? "px-3 py-1.5" : "px-3 py-2.5";
   const alignOf = (c: Column<T>) => (c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left");
   const onKey = (row: T) => (e: KeyboardEvent<HTMLTableRowElement>) => {
+    // Seule la ligne elle-même réagit : un bouton ou un champ de la ligne garde sa touche Entrée.
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onRowClick?.(row);
@@ -266,6 +280,8 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
         <thead>
           <tr className="border-b border-line">
             {columns.map((c) => {
+              // Colonne sans titre (cases, actions) : rien à trier.
+              if (!c.label) return <th key={c.key} scope="col" className={cx(pad, "first:pl-5 last:pr-5")} />;
               const active = sort?.key === c.key;
               return (
                 <th key={c.key} scope="col" aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : undefined} className={cx(pad, "whitespace-nowrap font-medium first:pl-5 last:pr-5", alignOf(c))}>
@@ -295,7 +311,7 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
             >
               {columns.map((c) => (
                 <td key={c.key} className={cx(pad, "first:pl-5 last:pr-5", alignOf(c), c.align === "right" && "whitespace-nowrap font-mono", c.className)}>
-                  {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "")}
+                  {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "–")}
                 </td>
               ))}
             </tr>
@@ -353,13 +369,12 @@ export function FileButton({ label, accept, onFile, small }: { label: string; ac
 
 export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<{ key: K; label: string; count?: number }>; value: K; onChange: (key: K) => void }) {
   return (
-    <div role="tablist" className="no-print mb-5 flex flex-wrap gap-x-6 border-b border-line">
+    <div className="no-print mb-5 flex flex-wrap gap-x-6 border-b border-line">
       {tabs.map((t) => (
         <button
           key={t.key}
           type="button"
-          role="tab"
-          aria-selected={value === t.key}
+          aria-pressed={value === t.key}
           onClick={() => onChange(t.key)}
           className={cx("-mb-px border-b-2 py-2.5 text-sm font-medium transition-colors", value === t.key ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink")}
         >

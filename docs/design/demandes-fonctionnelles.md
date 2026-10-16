@@ -14,6 +14,14 @@ Point à trancher avec le gérant : le portail des porteurs garde la marque MB A
 Une adresse en portail.nimovagroup.com montrerait la marque interne aux clients du cabinet ; un
 domaine du cabinet conviendrait peut-être mieux.
 
+## Polices : accès sortant pendant la construction de l'image web
+
+Les polices Barlow sont embarquées par `next/font/google` : `next build` les télécharge une fois
+(fonts.googleapis.com et fonts.gstatic.com), puis le site les sert lui-même, ce qui respecte la
+politique de contenu. La construction de l'image web sur le serveur a donc besoin de cet accès
+sortant, comme pour `npm ci`. Si ce n'était pas possible, les fichiers seraient à placer dans le
+dépôt avec `next/font/local`.
+
 ## Rotations : renouveler le cache du service worker
 
 Les icônes et le manifeste de Rotations changent (monogramme NIMOVA, couleurs forêt). Le service
