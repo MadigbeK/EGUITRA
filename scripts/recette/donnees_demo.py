@@ -139,7 +139,7 @@ cenv = env(context=dict(env.context, allowed_company_ids=cabinet.ids))
 Policy = cenv["axispro.policy"]
 if not Policy.search([("company_id", "=", cabinet.id)]):
     grid = "\n".join([
-        "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide",
+        "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide;indicateur;seuil;seuil_partiel",
         "gate;G0;Idée et opportunité;;;;;;;Le projet répond-il à un besoin avéré ?",
         "gate;G1;Étude de faisabilité;;;;;;;Le projet est-il réalisable techniquement et commercialement ?",
         "gate;G2;Structuration financière;;;;;;;Le plan de financement est-il bancable ?",
@@ -153,8 +153,8 @@ if not Policy.search([("company_id", "=", cabinet.id)]):
         "critere;C004;Procédé technique maîtrisé;D02;G1;3;oui;non;oui;Références de l'équipementier ou du procédé.",
         "critere;C005;Site disponible;D02;G1;2;non;non;oui;Titre foncier ou bail du site.",
         "critere;C006;Plan d'affaires sur 5 ans;D03;G1;3;oui;non;oui;Comptes prévisionnels et hypothèses.",
-        "critere;C007;Apport du promoteur au moins 30 %;D03;G2;3;oui;non;oui;Justificatifs de l'apport.",
-        "critere;C008;Ratio de couverture de la dette supérieur à 1,3;D03;G2;3;oui;non;non;Calcul du DSCR sur la durée du prêt.",
+        "critere;C007;Apport du promoteur au moins 30 %;D03;G2;3;oui;non;oui;Justificatifs de l'apport.;equity_share;30;20",
+        "critere;C008;Ratio de couverture de la dette supérieur à 1,3;D03;G2;3;oui;non;non;Calcul du DSCR sur la durée du prêt.;dscr_min;1,3;1,1",
         "critere;C009;Société immatriculée;D04;G0;2;non;oui;oui;Immatriculation au RCCM.",
         "critere;C010;Comptes certifiés ou attestés;D04;G2;1;non;non;oui;États financiers des deux derniers exercices.",
         "piece;P01;Statuts et RCCM;Juridique;G0;;oui;;;Copies certifiées.",
