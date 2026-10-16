@@ -12,6 +12,9 @@ export const APPS: Record<AppCode, { name: string; home: string; tagline: string
   mobile: { name: "NIMOVA · Rotations", home: "/mobile", tagline: "Saisie des rotations au parc" },
 };
 
+/** Applications du cabinet : elles ne travaillent que dans MB AxisPro Consulting (le noyau l'impose). */
+export const CABINET_APPS: readonly AppCode[] = ["axispro", "portail"];
+
 export function isAppCode(value: unknown): value is AppCode {
   return typeof value === "string" && value in APPS;
 }

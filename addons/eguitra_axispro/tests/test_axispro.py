@@ -129,6 +129,20 @@ class TestAxispro(ApiCase):
         self.assertNotIn(r2.id, [r["id"] for r in body])
         self.assertEqual(next(r for r in body if r["id"] == r1.id)["dossier"]["id"], dossier.id)
 
+    def test_axispro_toujours_dans_le_cabinet(self):
+        """Un compte ouvert aux deux sociétés ne peut pas faire travailler AxisPro Suite dans le groupe."""
+        groupe = self.env.ref("base.main_company")
+        self._create_user("dg.deux", "direction", "cabinet", company_id=groupe.id,
+                          company_ids=[(6, 0, (groupe | self.cabinet).ids)])
+        token = self.open_session("dg.deux", app="axispro")["access_token"]
+        headers = {"X-Eguitra-App": "axispro", "X-Eguitra-Company": str(groupe.id)}
+        status, me = self.call("GET", "/auth/me", token=token, headers=headers)
+        self.assertEqual(status, 200, me)
+        self.assertEqual(me["company_id"], self.cabinet.id, "La société demandée est ignorée dans AxisPro")
+        status, me = self.call("GET", "/auth/me", token=token,
+                               headers={"X-Eguitra-App": "finance", "X-Eguitra-Company": str(groupe.id)})
+        self.assertEqual(me["company_id"], groupe.id, "EGUITRA Finance garde le choix de la société")
+
     def test_cloisonnement_entre_societes(self):
         """Un profil direction sans la société du cabinet ne lit rien du cabinet, même par identifiant."""
         dossier = self._dossier()

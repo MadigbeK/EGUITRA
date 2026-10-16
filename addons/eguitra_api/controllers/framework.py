@@ -134,7 +134,11 @@ def _set_companies(user):
     current = user.company_id.id
     if request.httprequest.headers.get(APP_HEADER) in CABINET_APPS:
         cabinet = user.company_ids.filtered(lambda c: c.eguitra_entity == "cabinet")[:1]
-        current = cabinet.id or current
+        if cabinet:
+            # AxisPro Suite et le portail ne relèvent que du cabinet : aucune autre société de travail,
+            # même pour un compte ouvert aux deux sociétés.
+            request.update_context(allowed_company_ids=cabinet.ids)
+            return
     if wanted:
         try:
             wanted = int(wanted)

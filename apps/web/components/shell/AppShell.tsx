@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
 import { AlertTriangle, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronRight, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
-import { APPS, type AppCode } from "@/lib/config";
+import { APPS, CABINET_APPS, type AppCode } from "@/lib/config";
 import { navFor, type NavItem, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
@@ -384,7 +384,8 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
   const panelId = useId();
   const company = me.companies.find((c) => c.id === me.company_id);
   const entite = entityOf(company, app);
-  const plusieurs = me.companies.length > 1;
+  // AxisPro Suite et le portail ne relèvent que du cabinet : pas de choix de société.
+  const plusieurs = me.companies.length > 1 && !CABINET_APPS.includes(app);
 
   useEffect(() => {
     if (!open) return;
