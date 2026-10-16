@@ -103,6 +103,13 @@ domaines publiés, ajouter une surveillance externe de disponibilité (sonde HTT
 
 ## Accès techniques
 
+- Recette ouverte sur Internet en HTTPS avant l'achat du domaine (16 octobre 2026) : nom provisoire
+  `recette.<adresse IP, points remplacés par des tirets>.sslip.io` (service DNS public qui renvoie
+  l'adresse contenue dans le nom), dans `RECETTE_DOMAIN` de `infra/.env` ; certificat Let's Encrypt
+  obtenu par Caddy (`docker compose --profile proxy up -d caddy`). À remplacer par
+  `recette.nimovagroup.com` dès le domaine enregistré. Les domaines non renseignés prennent un nom en
+  `.localhost` (jamais joignable) : la production reste fermée tant qu'ils ne sont pas définis.
+
 - Noyaux et applications n'écoutent que sur 127.0.0.1 ; accès d'administration par tunnel SSH :
   `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 -L 8069:127.0.0.1:8069 -L 8169:127.0.0.1:8169 eguitra-vps`,
   puis http://localhost:3000 (production) et http://localhost:3100 (recette). Navigateur : Chrome,

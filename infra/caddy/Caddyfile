@@ -1,10 +1,12 @@
 # Proxy d'entrée : TLS automatique (Let's Encrypt), en-têtes de sécurité, journal d'accès.
 # Les domaines viennent de infra/.env (FINANCE_DOMAIN, AXISPRO_DOMAIN, PORTAIL_DOMAIN, RECETTE_DOMAIN,
-# CORE_DOMAIN).
+# CORE_DOMAIN). Un domaine non renseigné prend un nom en .localhost, jamais joignable de l'extérieur :
+# on peut ainsi ouvrir la recette avant la production.
 # Seules les applications web sont publiques ; l'API du noyau ne l'est jamais (la passerelle Next
 # l'appelle sur le réseau Docker) et le client web du noyau n'est ouvert qu'aux adresses ADMIN_IPS.
 {
 	email {$ACME_EMAIL}
+	skip_install_trust
 }
 
 (commun) {
@@ -23,7 +25,7 @@
 }
 
 # EGUITRA Finance (et l'application mobile Rotations sous /mobile), AxisPro Suite, portail des porteurs.
-{$FINANCE_DOMAIN}, {$AXISPRO_DOMAIN}, {$PORTAIL_DOMAIN} {
+{$FINANCE_DOMAIN:finance.localhost}, {$AXISPRO_DOMAIN:axispro.localhost}, {$PORTAIL_DOMAIN:portail.localhost} {
 	import commun
 	request_body {
 		max_size 25MB
@@ -36,7 +38,7 @@
 }
 
 # Recette : mêmes applications, environnement d'essai séparé (base, noyau et cookies distincts).
-{$RECETTE_DOMAIN} {
+{$RECETTE_DOMAIN:recette.localhost} {
 	import commun
 	request_body {
 		max_size 25MB
@@ -48,7 +50,7 @@
 }
 
 # Noyau de production : administration technique seulement, depuis les adresses autorisées.
-{$CORE_DOMAIN} {
+{$CORE_DOMAIN:noyau.localhost} {
 	import commun
 	@admin remote_ip {$ADMIN_IPS}
 	handle @admin {

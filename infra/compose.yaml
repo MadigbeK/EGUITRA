@@ -211,11 +211,11 @@ services:
       - web-recette
     environment:
       ACME_EMAIL: ${ACME_EMAIL:-}
-      FINANCE_DOMAIN: ${FINANCE_DOMAIN:-}
-      AXISPRO_DOMAIN: ${AXISPRO_DOMAIN:-}
-      PORTAIL_DOMAIN: ${PORTAIL_DOMAIN:-}
-      RECETTE_DOMAIN: ${RECETTE_DOMAIN:-}
-      CORE_DOMAIN: ${CORE_DOMAIN:-}
+      FINANCE_DOMAIN: ${FINANCE_DOMAIN:-finance.localhost}
+      AXISPRO_DOMAIN: ${AXISPRO_DOMAIN:-axispro.localhost}
+      PORTAIL_DOMAIN: ${PORTAIL_DOMAIN:-portail.localhost}
+      RECETTE_DOMAIN: ${RECETTE_DOMAIN:-recette.localhost}
+      CORE_DOMAIN: ${CORE_DOMAIN:-noyau.localhost}
       ADMIN_IPS: ${ADMIN_IPS:-127.0.0.1/32}
     ports:
       - "80:80"

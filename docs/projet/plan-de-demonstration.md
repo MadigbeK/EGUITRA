@@ -6,19 +6,21 @@ donnée : on ne la montre pas.
 
 ## Préparation, avant la réunion (15 minutes)
 
-1. Ouvrir le tunnel dans PowerShell et laisser la fenêtre ouverte :
-   `ssh -N -L 3100:127.0.0.1:3100 eguitra-vps`
-2. Dans Chrome ou Edge (pas Safari), ouvrir http://localhost:3100/finance et se connecter avec
+1. Ouvrir l'adresse publique de la recette, en HTTPS (transmise par E-VOLUTION XP), suivie de
+   `/finance`. Elle fonctionne aussi sur un téléphone. À défaut, le tunnel
+   `ssh -N -L 3100:127.0.0.1:3100 eguitra-vps` puis http://localhost:3100.
+2. Dans Chrome ou Edge, ouvrir l'adresse de la recette et se connecter avec
    l'identifiant `emkouyate` et le mot de passe provisoire. Activer la double authentification avec
    le téléphone, puis choisir le mot de passe définitif. À faire maintenant, pas devant le DG.
 3. Ouvrir à l'avance un onglet par étape : Tableau de bord, À valider, Transport, Immobilier,
-   Clôtures et contrôles, puis AxisPro (http://localhost:3100/axispro).
+   Clôtures et contrôles, puis AxisPro (`/axispro`).
 4. Facultatif, pour montrer le portail : AxisPro, dossier « Unité de séchage de mangues (démo) »,
    carte « Accès du porteur au portail » : identifiant `porteur.mamou`, nom « Promoteur Mamou »,
    un mot de passe provisoire, « Ouvrir l'accès ». Dans une fenêtre de navigation privée, se
-   connecter sur http://localhost:3100/portail avec ce compte, activer sa double authentification
-   et changer le mot de passe.
-5. Rotations : touche F12, puis l'icône « téléphone » (Ctrl+Maj+M) pour afficher l'écran du parc.
+   connecter sur `/portail` avec ce compte, activer sa double authentification et changer le mot
+   de passe.
+5. Rotations : sur un téléphone, ouvrir l'adresse de la recette suivie de `/mobile` (et l'ajouter à
+   l'écran d'accueil) ; sur l'ordinateur, touche F12 puis l'icône « téléphone » (Ctrl+Maj+M).
 
 Chiffres attendus (EGUITRA GROUP, exercice 2026, fictifs) : chiffre d'affaires environ 3,66 Md GNF,
 résultat environ 0,87 Md, trésorerie environ 0,99 Md, créances environ 1,26 Md dont 158 M échues.
