@@ -63,7 +63,7 @@ html = html
   .replace("<!--MONOGRAMME-->", monogramme(122))
   .replaceAll("<!--MONOGRAMME-NU-->", monogramme(34, false))
   .replace("<!--MONOGRAMME-80-->", monogramme(80))
-  .replace("<!--MONOGRAMME-NU-64-->", monogramme(64, false))
+  .replace("<!--MONOGRAMME-64-->", monogramme(64))
   .replace("<!--MONOGRAMME-32-->", monogramme(32))
   .replace("<!--MONOGRAMME-16-->", monogramme(16))
   .replace("<!--COMPTEUR-->", compteur(4380000000, "GNF"))
