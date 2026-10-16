@@ -37,7 +37,7 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
               <span className="rounded-lg bg-white px-2 py-0.5 text-[12.5px] font-bold text-accent">{RECO[d.recommendation].label}</span>
             </div>
             <h1 className="mt-3 text-[26px] font-bold leading-tight sm:text-[32px]">{d.name}</h1>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-white/80">
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-white/95">
               <span>{d.promoter.name}</span>
               {d.sector && <span>{d.sector}</span>}
               {d.location && (
@@ -52,11 +52,11 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
             <Anneau value={d.scoring.global_score} taille={112} epaisseur={9} couleur="#ffffff" clair sous="score / 100" />
             <div className="space-y-2.5 text-[13px]">
               <div>
-                <div className="text-white/70">Besoin de financement</div>
+                <div className="text-white/90">Besoin de financement</div>
                 <div className="font-display text-[20px] font-bold tabular">{fmtShort(d.financing_need)} GNF</div>
               </div>
               <div>
-                <div className="text-white/70">Critères évalués</div>
+                <div className="text-white/90">Critères évalués</div>
                 <div className="font-semibold tabular">
                   {d.progress.assessed} sur {d.progress.criteria}
                 </div>

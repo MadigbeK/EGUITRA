@@ -108,7 +108,7 @@ export function Valeur({ value }: { value: ReactNode }) {
   const decimales = brut.includes(",") ? (brut.split(",")[1] ?? "").length : 0;
   const cible = trouve ? Number(brut.replace(/[   ]/g, "").replace("−", "-").replace(",", ".")) : 0;
   const courant = useDefilement(cible, vu && trouve !== null);
-  if (!texte || !trouve) return <>{value}</>;
+  if (!texte || !trouve) return <span ref={ref}>{value}</span>;
   const groupe = /[   ]/.test(brut) || Math.abs(cible) >= 10000;
   const format = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales, useGrouping: groupe });
   const avant = texte.slice(0, trouve.index);
@@ -600,10 +600,10 @@ export function FileButton({ label, accept, onFile, small }: { label: string; ac
 /** Onglets soulignés : le trait glisse sous l'onglet choisi. */
 export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<{ key: K; label: string; count?: number }>; value: K; onChange: (key: K) => void }) {
   const boite = useRef<HTMLDivElement>(null);
-  const [trait, setTrait] = useState<{ x: number; w: number } | null>(null);
+  const [trait, setTrait] = useState<{ x: number; y: number; w: number } | null>(null);
   const mesurer = useCallback(() => {
     const el = boite.current?.querySelector<HTMLElement>(`[data-cle="${CSS.escape(value)}"]`);
-    if (el) setTrait({ x: el.offsetLeft, w: el.offsetWidth });
+    if (el) setTrait({ x: el.offsetLeft, y: el.offsetTop + el.offsetHeight - 2, w: el.offsetWidth });
   }, [value]);
   useEffect(() => {
     mesurer();
@@ -611,6 +611,8 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(mesurer);
     ro.observe(el);
+    el.querySelectorAll("button").forEach((b) => ro.observe(b));
+    void document.fonts?.ready.then(mesurer);
     return () => ro.disconnect();
   }, [mesurer]);
   return (
@@ -631,7 +633,7 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
           </button>
         );
       })}
-      {trait && <span aria-hidden className="n-repere absolute -bottom-px left-0 h-[3px] rounded-full bg-accent-vif" style={{ transform: `translateX(${trait.x}px)`, width: trait.w }} />}
+      {trait && <span aria-hidden className="n-repere absolute left-0 top-0 h-[3px] rounded-full bg-accent-vif" style={{ transform: `translate(${trait.x}px, ${trait.y}px)`, width: trait.w }} />}
     </div>
   );
 }
@@ -727,7 +729,7 @@ function graduations(min: number, max: number, nombre = 4): number[] {
   const brut = (hi - lo) / nombre;
   const ordre = 10 ** Math.floor(Math.log10(brut));
   const r = brut / ordre;
-  const pas = (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * ordre;
+  const pas = Math.max(1, (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * ordre);
   lo = Math.floor(lo / pas) * pas;
   hi = Math.ceil(hi / pas) * pas;
   const t: number[] = [];
@@ -900,7 +902,7 @@ export function AreaChart({ labels, series, height = 220, format, formatAxis, la
       <div aria-hidden className="relative ml-14 mt-2 h-4">
         {labels.map((l, i) =>
           i % pasEtiquette === 0 || i === n - 1 ? (
-            <span key={`${l}-${i}`} className={cx("absolute -translate-x-1/2 whitespace-nowrap text-[11px] transition-colors", focus === i ? "font-semibold text-ink" : "text-muted")} style={{ left: `${pct(i)}%` }}>
+            <span key={`${l}-${i}`} className={cx("absolute -translate-x-1/2 whitespace-nowrap text-[11px] transition-colors", focus === i ? "font-semibold text-ink" : "text-muted", n > 6 && i % 2 === 1 && i !== n - 1 && focus !== i && "max-sm:hidden")} style={{ left: `${pct(i)}%` }}>
               {l}
             </span>
           ) : null,
@@ -969,6 +971,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
               <div
                 key={`${d.label}-${i}`}
                 tabIndex={0}
+                role="img"
                 aria-label={`${d.label} : ${show(d.value)}`}
                 onPointerEnter={() => setFocus(i)}
                 onPointerLeave={() => setFocus(null)}
@@ -1048,6 +1051,7 @@ export function Repartition({ parts, format }: { parts: Array<{ key: string; lab
             <div
               key={p.key}
               tabIndex={0}
+              role="img"
               aria-label={`${p.label} : ${show(p.value)}`}
               onPointerEnter={() => setFocus(p.key)}
               onPointerLeave={() => setFocus(null)}

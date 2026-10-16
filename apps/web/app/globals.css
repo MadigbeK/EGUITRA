@@ -586,7 +586,8 @@ input[type="radio"] {
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.02em;
   line-height: 1;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  row-gap: 0.1em;
 }
 
 .compteur-groupe {
@@ -669,5 +670,12 @@ input[type="radio"] {
   * {
     animation: none !important;
     box-shadow: none !important;
+  }
+  .n-degrade {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .n-tracer {
+    stroke-dashoffset: 0;
   }
 }

@@ -66,8 +66,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
     });
   }
 
-  // Ctrl+K (ou Cmd+K) ouvre la recherche d'écran.
+  // Ctrl+K (ou Cmd+K) ouvre la recherche d'écran (absente du portail).
   useEffect(() => {
+    if (app === "portail") return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -76,7 +77,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [app]);
 
   // Tiroir du téléphone : Échap le ferme, le focus va au bouton de fermeture puis revient au menu.
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -352,17 +353,12 @@ function Navigation({
                         className={cx(
                           "relative z-[1] flex items-center gap-3 rounded-xl text-[14px] leading-tight transition-colors duration-200",
                           replie ? "justify-center px-0 py-2.5" : "px-3 py-[9px]",
-                          active ? "font-semibold text-accent-ink" : "font-medium text-ink-2 hover:bg-panel-2 hover:text-ink",
+                          active ? cx("font-semibold text-accent-ink", !repere && "n-degrade") : "font-medium text-ink-2 hover:bg-panel-2 hover:text-ink",
                         )}
                       >
                         <I className={cx("h-[19px] w-[19px] flex-none transition-transform duration-200", !active && "text-muted group-hover/entree:translate-x-0.5 group-hover/entree:text-accent")} />
                         <span className={replie ? "sr-only" : "truncate"}>{item.label}</span>
                       </Link>
-                      {replie && (
-                        <span aria-hidden className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-foret px-2.5 py-1.5 text-[12.5px] font-semibold text-white opacity-0 shadow-[var(--ombre-levee)] transition-opacity duration-150 group-hover/entree:opacity-100">
-                          {item.label}
-                        </span>
-                      )}
                     </li>
                   );
                 })}
@@ -679,10 +675,20 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
   const actif = Math.min(index, Math.max(0, filtres.length - 1));
 
   useEffect(() => {
+    const precedent = document.activeElement as HTMLElement | null;
     champ.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "Tab") {
+        e.preventDefault();
+        champ.current?.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      precedent?.focus?.();
+    };
   }, [onClose]);
 
   useEffect(() => {

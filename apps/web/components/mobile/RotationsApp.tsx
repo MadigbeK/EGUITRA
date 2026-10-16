@@ -289,7 +289,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           </span>
           <div className="min-w-0 flex-1 leading-tight">
             <div className="font-display text-[19px] font-bold">Rotations</div>
-            <div className="truncate text-[12.5px] text-white/75">{me.name}</div>
+            <div className="truncate text-[12.5px] text-white/95">{me.name}</div>
           </div>
           <span
             className={cx(
@@ -311,7 +311,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
               type="button"
               onClick={() => setView(key)}
               aria-current={view === key ? "page" : undefined}
-              className={cx("flex min-h-12 items-center justify-center gap-2 border-b-[3px] font-semibold transition-colors", view === key ? "border-white text-white" : "border-transparent text-white/70")}
+              className={cx("flex min-h-12 items-center justify-center gap-2 border-b-[3px] font-semibold transition-colors", view === key ? "border-white text-white" : "border-transparent text-white/90")}
             >
               {text}
               {count ? <span className="n-surgir grid h-5 min-w-5 place-items-center rounded-full bg-or px-1.5 font-compteur text-[12.5px] font-bold text-foret">{count}</span> : null}

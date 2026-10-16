@@ -86,7 +86,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
             </div>
             <IconTile icon={Landmark} teinte="jade" />
           </div>
-          <Compteur value={d.cash} className={cx("relative mt-5 text-[38px] sm:text-[46px] xl:text-[44px] 2xl:text-[54px]", d.cash < 0 ? "text-danger" : "text-ink")} />
+          <Compteur value={d.cash} className={cx("relative mt-5 text-[30px] sm:text-[44px] xl:text-[34px] 2xl:text-[46px]", d.cash < 0 ? "text-danger" : "text-ink")} />
           {d.cash_by_journal.length === 0 ? (
             <p className="mt-6 text-sm text-muted">Aucun compte de trésorerie.</p>
           ) : (
