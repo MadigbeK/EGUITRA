@@ -121,6 +121,19 @@ même branche, sans toucher à la logique des écrans :
   (`components/accueil/icones-modules.tsx`, 28 icônes), libellés courts ; Finance puis AxisPro,
   Rotations et Réglages en fin ; société et compte en haut à droite ; taper au clavier ouvre la
   recherche. La racine et la connexion y mènent (aiguillage repris par la session fonctionnelle).
+- Accueil en motion design, à la demande du gérant (« plus haut de gamme, animé, interactif ») :
+  - icônes vivantes : chaque icône est découpée en pièces animées selon son sens (barres qui
+    poussent, courbe qui se trace, cloche qui sonne, camion qui roule, aiguille du chrono, roue
+    dentée, pièces qui tombent…) ; elles jouent en vague à l'arrivée, puis à chaque survol ou
+    focus clavier ;
+  - tuiles : entrée en vague avec rebond, inclinaison 3D sous le curseur, reflet qui suit la
+    souris, enfoncement au clic ;
+  - ouverture : la tuile grandit jusqu'à couvrir l'écran pendant le chargement du module ;
+  - recherche : les tuiles retirées ou rendues glissent à leur nouvelle place ; les flèches du
+    clavier passent d'une tuile à sa voisine ;
+  - fond : rubans qui dérivent lentement et lumière qui suit le curseur.
+  Tout s'arrête net avec la préférence « réduire les animations » du système. Classes
+  `.tuile*`, `.ic .a-*` et `.accueil-ruban*` dans `app/globals.css`.
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la

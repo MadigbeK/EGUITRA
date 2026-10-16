@@ -643,6 +643,398 @@ input[type="radio"] {
   animation: n-tiroir 340ms var(--ease-sortie) both;
 }
 
+/* ─── Accueil : tuiles et icônes vivantes ──────────────────────────────── */
+
+/* Entrée des tuiles : une vague, avec un léger rebond. */
+@keyframes tuile-entree {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.72) rotate(-5deg);
+  }
+}
+.tuile-entree {
+  animation: tuile-entree 760ms var(--ease-ressort) backwards;
+  animation-delay: var(--d, 0ms);
+}
+
+/* Boîte de la tuile : inclinaison 3D sous le curseur, retour en ressort. */
+.tuile-boite {
+  transform: perspective(520px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--ty, 0px)) scale(var(--sc, 1));
+  transition:
+    transform 520ms var(--ease-ressort),
+    box-shadow 300ms ease;
+}
+.tuile:hover .tuile-boite,
+.tuile:focus-visible .tuile-boite {
+  --ty: -4px;
+  transition:
+    transform 140ms ease-out,
+    box-shadow 300ms ease;
+}
+.tuile:active .tuile-boite {
+  --sc: 0.94;
+}
+/* Reflet qui suit le curseur sur la tuile. */
+.tuile-reflet {
+  background: radial-gradient(90px circle at var(--mx, 50%) var(--my, 0%), rgb(165 230 194 / 0.55), transparent 65%);
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.tuile:hover .tuile-reflet {
+  opacity: 1;
+}
+
+/* Pièces des icônes : elles jouent à l'arrivée (.joue) puis à chaque survol. */
+.ic :where(*) {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.ic .a-trace {
+  stroke-dasharray: 1;
+}
+.tuile.joue {
+  --d0: var(--d-intro, 0ms);
+}
+.tuile:hover,
+.tuile:focus-visible {
+  --d0: 0ms;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic :is([class^="a-"], [class*=" a-"]) {
+  animation-delay: calc(var(--d0, 0ms) + var(--k, 0) * 75ms);
+  animation-fill-mode: both;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-pop,
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-part {
+  animation-name: ic-pop;
+  animation-duration: 580ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-pousse {
+  transform-origin: center bottom;
+  animation-name: ic-pousse-y;
+  animation-duration: 640ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-pousse-x {
+  transform-origin: left center;
+  animation-name: ic-pousse-x;
+  animation-duration: 560ms;
+  animation-timing-function: var(--ease-sortie);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-trace {
+  animation-name: ic-tracer;
+  animation-duration: 520ms;
+  animation-timing-function: var(--ease-sortie);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-balance {
+  animation-name: ic-balance;
+  animation-duration: 950ms;
+  animation-timing-function: ease-in-out;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-piece {
+  animation-name: ic-piece;
+  animation-duration: 760ms;
+  animation-timing-function: ease-in-out;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-saute {
+  animation-name: ic-saute;
+  animation-duration: 620ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-glisse {
+  animation-name: ic-glisse;
+  animation-duration: 620ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-tombe {
+  animation-name: ic-tombe;
+  animation-duration: 680ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-secoue {
+  animation-name: ic-secoue;
+  animation-duration: 620ms;
+  animation-timing-function: ease-in-out;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-carte {
+  animation-name: ic-carte;
+  animation-duration: 720ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-page {
+  animation-name: ic-page;
+  animation-duration: 820ms;
+  animation-timing-function: ease-in-out;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-pivote {
+  animation-name: ic-pivote;
+  animation-duration: 760ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-anse {
+  animation-name: ic-anse;
+  animation-duration: 900ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-roule {
+  animation-name: ic-roule;
+  animation-duration: 900ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-roue {
+  animation-name: ic-tourne;
+  animation-duration: 900ms;
+  animation-timing-function: var(--ease-sortie);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-allume {
+  animation-name: ic-allume;
+  animation-duration: 900ms;
+  animation-timing-function: ease-in-out;
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-rabat {
+  animation-name: ic-rabat;
+  animation-duration: 700ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-aiguille {
+  animation-name: ic-tourne;
+  animation-duration: 1100ms;
+  animation-timing-function: cubic-bezier(0.6, 0, 0.2, 1);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-fleche {
+  animation-name: ic-fleche;
+  animation-duration: 620ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-eventail {
+  animation-name: ic-eventail;
+  animation-duration: 760ms;
+  animation-timing-function: var(--ease-ressort);
+}
+:is(.tuile:hover, .tuile:focus-visible, .tuile.joue) .ic .a-engrenage {
+  animation-name: ic-engrenage;
+  animation-duration: 1000ms;
+  animation-timing-function: var(--ease-ressort);
+}
+
+@keyframes ic-pop {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes ic-pousse-y {
+  0% {
+    transform: scaleY(0);
+  }
+  70% {
+    transform: scaleY(1.08);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+@keyframes ic-pousse-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes ic-tracer {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ic-balance {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  18% {
+    transform: rotate(16deg);
+  }
+  38% {
+    transform: rotate(-13deg);
+  }
+  58% {
+    transform: rotate(8deg);
+  }
+  78% {
+    transform: rotate(-4deg);
+  }
+}
+@keyframes ic-piece {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  25% {
+    transform: scaleX(0.08);
+  }
+  50% {
+    transform: scaleX(1);
+  }
+  75% {
+    transform: scaleX(0.08);
+  }
+}
+@keyframes ic-saute {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes ic-glisse {
+  from {
+    transform: translateX(-7px);
+    opacity: 0;
+  }
+}
+@keyframes ic-tombe {
+  0% {
+    transform: translateY(-16px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(2px);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes ic-secoue {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-2.5px) rotate(-4deg);
+  }
+  40% {
+    transform: translateX(2.5px) rotate(4deg);
+  }
+  60% {
+    transform: translateX(-1.5px) rotate(-2deg);
+  }
+  80% {
+    transform: translateX(1px);
+  }
+}
+@keyframes ic-carte {
+  from {
+    transform: translateY(8px) rotate(-10deg);
+    opacity: 0.4;
+  }
+}
+@keyframes ic-page {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(0.12);
+  }
+}
+@keyframes ic-pivote {
+  from {
+    transform: rotate(-180deg);
+  }
+}
+@keyframes ic-anse {
+  0%,
+  100% {
+    transform: none;
+  }
+  35%,
+  60% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes ic-roule {
+  0% {
+    transform: translateX(-14px);
+  }
+  65% {
+    transform: translateX(2px);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes ic-tourne {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ic-allume {
+  0%,
+  100% {
+    fill: #ffffff;
+  }
+  45% {
+    fill: #ffd27a;
+  }
+}
+@keyframes ic-rabat {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scaleY(0.78) skewX(-6deg);
+  }
+}
+@keyframes ic-fleche {
+  from {
+    transform: translate(12px, -12px);
+    opacity: 0;
+  }
+}
+@keyframes ic-eventail {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  45% {
+    transform: rotate(-16deg);
+  }
+}
+@keyframes ic-engrenage {
+  from {
+    transform: rotate(-180deg);
+  }
+}
+
+/* Fond de l'accueil : rubans qui dérivent lentement et suivent le curseur. */
+@keyframes ruban-derive {
+  from {
+    transform: translate3d(calc(var(--px, 0) * 18px - 2%), calc(var(--py, 0) * 12px), 0);
+  }
+  to {
+    transform: translate3d(calc(var(--px, 0) * 18px + 2%), calc(var(--py, 0) * 12px), 0);
+  }
+}
+.accueil-ruban {
+  animation: ruban-derive 18s ease-in-out infinite alternate;
+}
+.accueil-ruban-2 {
+  animation: ruban-derive 24s ease-in-out infinite alternate-reverse;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

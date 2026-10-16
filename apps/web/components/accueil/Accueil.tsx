@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact, type PointerEvent as PointeurReact } from "react";
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
-import { cx } from "@/components/ui";
+import { cx, useMouvementReduit } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
 import { navFor } from "@/lib/nav";
 import type { Me } from "@/lib/types";
@@ -31,6 +31,9 @@ const COURT: Record<string, string> = {
   "/axispro/pieces": "Pièces",
 };
 
+/** Durée pendant laquelle les icônes jouent leur entrée (la vague des tuiles comprise). */
+const INTRO_MS = 3200;
+
 function sansAccents(s: string) {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
@@ -44,13 +47,20 @@ function initials(name: string) {
 
 /**
  * Accueil NIMOVA, à la manière de l'accueil d'Odoo : un fond clair, une grille d'applications.
- * Une tuile par module ouvert au profil (Finance puis AxisPro), Rotations et les réglages en fin.
- * Il suffit de taper pour chercher ; Entrée ouvre le premier module trouvé.
+ * Le mouvement porte l'écran : les tuiles arrivent en vague et leurs icônes s'animent, chaque tuile
+ * s'incline sous le curseur, la grille glisse quand on cherche, la tuile choisie s'ouvre en plein
+ * écran. Il suffit de taper pour chercher ; les flèches déplacent le focus d'une tuile à l'autre.
  */
 export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const router = useRouter();
+  const reduit = useMouvementReduit();
   const [q, setQ] = useState("");
+  const [intro, setIntro] = useState(true);
   const champ = useRef<HTMLInputElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  const grille = useRef<HTMLUListElement>(null);
+  const positions = useRef(new Map<string, DOMRect>());
+  const voile = useRef<HTMLDivElement | null>(null);
   const company = me.companies.find((c) => c.id === me.company_id);
 
   const tuiles = useMemo<Tuile[]>(() => {
@@ -73,6 +83,15 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
   const visibles = tuiles.filter((t) => mots.every((m) => sansAccents(`${t.libelle} ${t.motsCles}`).includes(m)));
+  const signature = visibles.map((t) => t.cle).join("|");
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setIntro(false), INTRO_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Le voile d'ouverture disparaît avec l'accueil.
+  useEffect(() => () => voile.current?.remove(), []);
 
   // Comme sur Odoo : taper au clavier n'importe où ouvre la recherche.
   useEffect(() => {
@@ -94,25 +113,114 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Grille fluide : quand la recherche retire ou rend des tuiles, chacune glisse à sa nouvelle place.
+  useLayoutEffect(() => {
+    const ul = grille.current;
+    if (!ul) return;
+    const avant = positions.current;
+    const apres = new Map<string, DOMRect>();
+    ul.querySelectorAll<HTMLElement>("li[data-cle]").forEach((li) => {
+      const cle = li.dataset.cle!;
+      const r = li.getBoundingClientRect();
+      apres.set(cle, r);
+      const p = avant.get(cle);
+      if (reduit || avant.size === 0) return;
+      if (!p) {
+        li.animate([{ opacity: 0, transform: "scale(0.6)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: "cubic-bezier(0.34,1.4,0.64,1)" });
+      } else if (Math.abs(p.left - r.left) > 1 || Math.abs(p.top - r.top) > 1) {
+        li.animate([{ transform: `translate(${p.left - r.left}px, ${p.top - r.top}px)` }, { transform: "none" }], { duration: 480, easing: "cubic-bezier(0.22,1,0.36,1)" });
+      }
+    });
+    positions.current = apres;
+  }, [signature, reduit]);
+
+  // Fond : les rubans et la lumière suivent le curseur.
+  function suivre(e: PointeurReact<HTMLDivElement>) {
+    if (reduit || e.pointerType !== "mouse") return;
+    const el = page.current;
+    if (!el) return;
+    el.style.setProperty("--px", ((e.clientX / window.innerWidth) * 2 - 1).toFixed(3));
+    el.style.setProperty("--py", ((e.clientY / window.innerHeight) * 2 - 1).toFixed(3));
+    el.style.setProperty("--lx", `${e.clientX}px`);
+    el.style.setProperty("--ly", `${e.clientY}px`);
+  }
+
+  // Ouverture : la tuile grandit jusqu'à couvrir l'écran, puis le module s'affiche.
+  function ouvrir(e: SourisReact<HTMLAnchorElement>, href: string) {
+    if (reduit || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    const boite = e.currentTarget.querySelector<HTMLElement>(".tuile-boite");
+    if (!boite) return;
+    e.preventDefault();
+    const r = boite.getBoundingClientRect();
+    const v = document.createElement("div");
+    v.setAttribute("aria-hidden", "true");
+    v.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:15px;background:#fff;z-index:100;display:grid;place-items:center;box-shadow:0 30px 80px -20px rgb(16 36 31 / .35);pointer-events:none`;
+    const icone = boite.querySelector("svg")?.cloneNode(true) as SVGElement | undefined;
+    if (icone) {
+      icone.style.width = "42px";
+      icone.style.height = "42px";
+      v.appendChild(icone);
+    }
+    document.body.appendChild(v);
+    voile.current?.remove();
+    voile.current = v;
+    v.animate(
+      [
+        { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: "15px", background: "#ffffff" },
+        { left: "0px", top: "0px", width: "100vw", height: "100vh", borderRadius: "0px", background: "#eef2ef" },
+      ],
+      { duration: 520, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
+    );
+    icone?.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(2.6)", opacity: 0 }], { duration: 480, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" });
+    window.setTimeout(() => router.push(href), 180);
+    window.setTimeout(() => v.remove(), 6000);
+  }
+
+  // Flèches : le focus passe d'une tuile à sa voisine, en ligne comme en colonne.
+  function naviguer(e: ClavierReact<HTMLUListElement>) {
+    if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+    const liens = [...(grille.current?.querySelectorAll<HTMLAnchorElement>("a.tuile") ?? [])];
+    const i = liens.indexOf(document.activeElement as HTMLAnchorElement);
+    if (i < 0) return;
+    e.preventDefault();
+    let cible = i;
+    if (e.key === "ArrowRight") cible = Math.min(liens.length - 1, i + 1);
+    else if (e.key === "ArrowLeft") cible = Math.max(0, i - 1);
+    else {
+      const r = liens[i]!.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const candidats = liens
+        .map((l, n) => ({ n, b: l.getBoundingClientRect() }))
+        .filter(({ b }) => (e.key === "ArrowDown" ? b.top > r.top + 5 : b.top < r.top - 5));
+      if (candidats.length) {
+        const ligne = e.key === "ArrowDown" ? Math.min(...candidats.map((c) => c.b.top)) : Math.max(...candidats.map((c) => c.b.top));
+        const memeLigne = candidats.filter((c) => Math.abs(c.b.top - ligne) < 5);
+        cible = memeLigne.reduce((m, c) => (Math.abs(c.b.left + c.b.width / 2 - x) < Math.abs(m.b.left + m.b.width / 2 - x) ? c : m)).n;
+      }
+    }
+    liens[cible]?.focus();
+  }
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#eaf4ef_0%,#f3f6f1_45%,#f8f4ea_100%)] text-ink">
-      {/* Rubans de lumière en diagonale, comme le fond de l'accueil d'Odoo. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,transparent_38%,rgb(255_255_255/0.6)_38%,rgb(255_255_255/0.6)_58%,transparent_58%)]" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,transparent_64%,rgb(165_230_194/0.18)_64%,rgb(165_230_194/0.18)_80%,transparent_80%)]" />
+    <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#eaf4ef_0%,#f3f6f1_45%,#f8f4ea_100%)] text-ink">
+      {/* Rubans de lumière en diagonale, comme le fond de l'accueil d'Odoo ; ils dérivent et suivent le curseur. */}
+      <div aria-hidden className="accueil-ruban pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_38%,rgb(255_255_255/0.62)_38%,rgb(255_255_255/0.62)_58%,transparent_58%)]" />
+      <div aria-hidden className="accueil-ruban-2 pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_64%,rgb(165_230_194/0.2)_64%,rgb(165_230_194/0.2)_80%,transparent_80%)]" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(520px_circle_at_var(--lx,50%)_var(--ly,30%),rgb(255_255_255/0.55),transparent_70%)]" />
 
       <header className="relative z-20 flex h-14 items-center justify-between gap-3 px-4 sm:px-6">
-        <span className="inline-flex items-center gap-2.5">
+        <span className="n-entree inline-flex items-center gap-2.5" style={{ "--i": 0 } as CSSProperties}>
           <Monogramme className="h-8 w-8" />
           <span className="font-display text-[15px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="n-entree flex items-center gap-1.5" style={{ "--i": 1 } as CSSProperties}>
           <Societe me={me} app={app} />
           <Compte me={me} app={app} />
         </div>
       </header>
 
       <main className="relative z-10 mx-auto max-w-[800px] px-4 pb-16 pt-[6vh] sm:px-6">
-        <div className={cx("mx-auto mb-8 max-w-md transition-all duration-200", q ? "opacity-100" : "pointer-events-none h-0 opacity-0 sm:h-auto")} aria-hidden={!q}>
+        <div className={cx("mx-auto mb-8 max-w-md transition-all duration-300 ease-[var(--ease-sortie)]", q ? "translate-y-0 opacity-100" : "pointer-events-none h-0 -translate-y-2 opacity-0 sm:h-auto")} aria-hidden={!q}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -126,7 +234,16 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
               ref={champ}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && (setQ(""), champ.current?.blur())}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setQ("");
+                  champ.current?.blur();
+                }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  grille.current?.querySelector<HTMLAnchorElement>("a.tuile")?.focus();
+                }
+              }}
               tabIndex={q ? 0 : -1}
               aria-label="Rechercher un module"
               placeholder="Rechercher un module"
@@ -140,26 +257,63 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
           </form>
         </div>
 
-        <ul className="n-apparaitre grid grid-cols-3 gap-x-2 gap-y-7 sm:grid-cols-4 md:grid-cols-6" style={{ animationDuration: "500ms" }}>
+        <ul ref={grille} onKeyDown={naviguer} className="grid grid-cols-3 gap-x-2 gap-y-7 sm:grid-cols-4 md:grid-cols-6">
           {visibles.map((t, i) => (
-            <li key={t.cle}>
-              <Link href={t.href} className="group flex flex-col items-center rounded-xl px-1 py-1 text-center outline-offset-2">
-                <span
-                  className={cx(
-                    "grid h-[66px] w-[66px] place-items-center rounded-[15px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_4px_10px_-3px_rgb(16_36_31/0.12)] transition-[transform,box-shadow] duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_2px_4px_rgb(16_36_31/0.08),0_10px_20px_-6px_rgb(16_36_31/0.22)] group-active:scale-95",
-                    q && i === 0 && "ring-2 ring-accent-vif ring-offset-2 ring-offset-transparent",
-                  )}
-                >
-                  <IconeModule cle={t.cle} className="h-[42px] w-[42px]" />
-                </span>
-                <span className="mt-2 line-clamp-2 text-[13px] leading-tight text-[#3a4842] group-hover:text-ink">{t.libelle}</span>
-              </Link>
+            <li key={t.cle} data-cle={t.cle} className="tuile-entree" style={{ "--d": `${120 + i * 45}ms` } as CSSProperties}>
+              <TuileModule t={t} premiere={Boolean(q) && i === 0} joue={intro && !q} delaiIntro={`${420 + i * 45}ms`} reduit={reduit} onOuvrir={ouvrir} />
             </li>
           ))}
         </ul>
-        {visibles.length === 0 && <p className="py-10 text-center text-[14px] text-muted">Aucun module ne correspond à « {q} ».</p>}
+        {visibles.length === 0 && <p className="n-apparaitre py-10 text-center text-[14px] text-muted">Aucun module ne correspond à « {q} ».</p>}
       </main>
     </div>
+  );
+}
+
+/** Tuile : boîte blanche qui s'incline sous le curseur, reflet, icône vivante, libellé. */
+function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: Tuile; premiere: boolean; joue: boolean; delaiIntro: string; reduit: boolean; onOuvrir: (e: SourisReact<HTMLAnchorElement>, href: string) => void }) {
+  const boite = useRef<HTMLSpanElement>(null);
+
+  function incliner(e: PointeurReact<HTMLAnchorElement>) {
+    const el = boite.current;
+    if (!el || reduit || e.pointerType !== "mouse") return;
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    el.style.setProperty("--ry", `${((x - 0.5) * 18).toFixed(2)}deg`);
+    el.style.setProperty("--rx", `${((0.5 - y) * 18).toFixed(2)}deg`);
+    el.style.setProperty("--mx", `${(x * 100).toFixed(1)}%`);
+    el.style.setProperty("--my", `${(y * 100).toFixed(1)}%`);
+  }
+
+  function relacher() {
+    const el = boite.current;
+    if (!el) return;
+    el.style.setProperty("--rx", "0deg");
+    el.style.setProperty("--ry", "0deg");
+  }
+
+  return (
+    <Link
+      href={t.href}
+      onClick={(e) => onOuvrir(e, t.href)}
+      onPointerMove={incliner}
+      onPointerLeave={relacher}
+      className={cx("tuile group flex flex-col items-center rounded-xl px-1 py-1 text-center outline-none", joue && "joue")}
+      style={{ "--d-intro": delaiIntro } as CSSProperties}
+    >
+      <span
+        ref={boite}
+        className={cx(
+          "tuile-boite relative grid h-[66px] w-[66px] place-items-center rounded-[15px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_4px_10px_-3px_rgb(16_36_31/0.12)] group-hover:shadow-[0_2px_4px_rgb(16_36_31/0.08),0_14px_24px_-8px_rgb(16_36_31/0.26)] group-focus-visible:ring-2 group-focus-visible:ring-accent-vif group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#f3f6f1]",
+          premiere && "ring-2 ring-accent-vif ring-offset-2 ring-offset-[#f3f6f1]",
+        )}
+      >
+        <span aria-hidden className="tuile-reflet pointer-events-none absolute inset-0 rounded-[15px]" />
+        <IconeModule cle={t.cle} className="relative h-[42px] w-[42px]" />
+      </span>
+      <span className="mt-2 line-clamp-2 text-[13px] leading-tight text-[#3a4842] transition-colors group-hover:text-ink">{t.libelle}</span>
+    </Link>
   );
 }
 
