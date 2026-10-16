@@ -23,7 +23,7 @@ function footer(slide, label) {
 
 function stepBadge(slide, n) {
   slide.addShape(pres.shapes.OVAL, { x: 0.5, y: 0.32, w: 0.62, h: 0.62, fill: { color: C.forest } });
-  slide.addText(String(n), { x: 0.5, y: 0.32, w: 0.62, h: 0.62, fontFace: H, fontSize: 20, bold: true,
+  slide.addText(String(n), { x: 0.5, y: 0.32, w: 0.62, h: 0.62, fontFace: B, fontSize: 20, bold: true,
     color: C.gold, align: "center", valign: "middle", margin: 0 });
 }
 
@@ -34,20 +34,36 @@ function title(slide, text, sub, x = 1.3) {
 
 // Liste numérotée de clics : [libellé en gras, suite]. Numéros dans des pastilles dorées ; la
 // taille du texte se réduit si la liste ne tient pas dans la hauteur disponible.
+// Espaces insécables de la typographie française : « ; », « : », « ! », « ? » et les guillemets
+// ne passent jamais seuls en début ou en fin de ligne.
+const nb = (t) => (t || "").replace(/ ([;:!?»])/g, " $1").replace(/« /g, "« ");
+
+// Largeur approchée d'un texte en Calibri, en cadratins (chasse moyenne des caractères ; le gras
+// est un peu plus large) : la hauteur réservée à chaque étape suit le nombre réel de lignes.
+function textWidth(text, factor) {
+  let em = 0;
+  for (const c of text || "") {
+    if ("  ijlI.,;:'!|".includes(c)) em += 0.24;
+    else if ("ftr()«»‑-".includes(c)) em += 0.33;
+    else if ("mwMW".includes(c)) em += 0.78;
+    else if (c >= "A" && c <= "Z") em += 0.6;
+    else em += 0.49;
+  }
+  return em * factor;
+}
+
 function clicks(slide, items, opts = {}) {
+  items = items.map(([a, b]) => [nb(a), nb(b)]);
   const x = opts.x ?? 0.5, y0 = opts.y ?? 1.25, w = opts.w ?? 5.6;
   const bottom = opts.caution ? 4.5 : 5.05;
   slide.addText("À l'écran", { x, y: y0, w, h: 0.3, fontFace: B, fontSize: 11, bold: true, color: C.green,
     charSpacing: 2, margin: 0 });
   const textW = w - 0.45;
-  const layout = (size) => {
-    const perLine = Math.floor(textW * 72 / (size * 0.5));
-    return items.map((it) => {
-      const text = it[0] + (it[1] ? " " + it[1] : "");
-      const lines = Math.max(1, Math.ceil(text.length / perLine));
-      return lines * size * 1.22 / 72 + 0.05;
-    });
-  };
+  const layout = (size) => items.map((it) => {
+    const width = (textWidth(it[0], 1.06) + textWidth(it[1] ? " " + it[1] : "", 1)) * size / 72;
+    const lines = Math.max(1, Math.ceil(width / (textW * 0.93)));
+    return lines * size * 1.22 / 72 + 0.05;
+  });
   let size = opts.size ?? 13;
   let heights = layout(size);
   const gap = 0.13;
@@ -58,7 +74,7 @@ function clicks(slide, items, opts = {}) {
   let y = y0 + 0.4;
   items.forEach((it, i) => {
     slide.addShape(pres.shapes.OVAL, { x, y: y + 0.01, w: 0.3, h: 0.3, fill: { color: C.gold } });
-    slide.addText(String(i + 1), { x, y: y + 0.01, w: 0.3, h: 0.3, fontFace: H, fontSize: 11, bold: true,
+    slide.addText(String(i + 1), { x, y: y + 0.01, w: 0.3, h: 0.3, fontFace: B, fontSize: 11, bold: true,
       color: C.forest, align: "center", valign: "middle", margin: 0 });
     slide.addText([{ text: it[0], options: { bold: true } }, { text: it[1] ? " " + it[1] : "" }],
       { x: x + 0.45, y, w: textW, h: heights[i], fontFace: B, fontSize: size, color: C.ink, valign: "top", margin: 0 });
@@ -72,7 +88,7 @@ function sayBox(slide, lines, opts = {}) {
   slide.addShape(pres.shapes.RECTANGLE, { x, y, w, h, fill: { color: C.forest } });
   slide.addText("À dire", { x: x + 0.22, y: y + 0.18, w: w - 0.44, h: 0.3, fontFace: B, fontSize: 11, bold: true,
     color: C.gold, charSpacing: 2, margin: 0 });
-  slide.addText(lines.map((t, i) => ({ text: t, options: { bullet: true, breakLine: i < lines.length - 1 } })),
+  slide.addText(lines.map((t, i) => ({ text: nb(t), options: { bullet: true, breakLine: i < lines.length - 1 } })),
     { x: x + 0.22, y: y + 0.55, w: w - 0.44, h: h - 0.75, fontFace: B, fontSize: 12, color: C.white,
       valign: "top", paraSpaceAfter: 6, margin: 0 });
 }
@@ -124,7 +140,7 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
   s.background = { color: C.cream };
   title(s, "Comment lire ce guide", "Une diapositive par étape de la démonstration", 0.5);
   const cards = [
-    ["À l'écran", "Les clics, dans l'ordre. Les mots entre « » sont écrits tels quels sur l'écran : menu, onglet ou bouton.", C.white, C.ink],
+    ["À l'écran", "Les clics, dans l'ordre. Les mots entre guillemets, comme « Se connecter », sont écrits tels quels à l'écran : menu, onglet ou bouton.", C.white, C.ink],
     ["À dire", "Deux à quatre phrases simples pour le DG pendant que l'écran s'affiche.", C.forest, C.white],
     ["Attention", "Ce qu'il ne faut pas cliquer pendant la démonstration.", C.white, C.ink],
   ];
@@ -161,13 +177,13 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
   s.addShape(pres.shapes.RECTANGLE, { x: 6.35, y: 1.25, w: 3.15, h: 3.75, fill: { color: C.forest } });
   s.addText("Votre adresse", { x: 6.57, y: 1.43, w: 2.7, h: 0.3, fontFace: B, fontSize: 11, bold: true, color: C.gold,
     charSpacing: 2, margin: 0 });
-  s.addText(URL + "/finance", { x: 6.57, y: 1.8, w: 2.75, h: 0.75, fontFace: B, fontSize: 11.5, bold: true,
+  s.addText(URL.replace(/^https?:\/\//, "").replace(/-/g, "‑") + "/finance", { x: 6.57, y: 1.8, w: 2.75, h: 0.4, fontFace: B, fontSize: 10, bold: true,
     color: C.white, valign: "top", margin: 0 });
   s.addText([
     { text: "Identifiant : emkouyate", options: { breakLine: true } },
     { text: "Autres écrans : même adresse suivie de /axispro, /mobile ou /portail.", options: { breakLine: true } },
     { text: "Code refusé ? Attendre le code suivant (il change toutes les 30 secondes)." },
-  ], { x: 6.57, y: 2.65, w: 2.75, h: 2.2, fontFace: B, fontSize: 11.5, color: C.white, valign: "top",
+  ], { x: 6.57, y: 2.3, w: 2.75, h: 2.5, fontFace: B, fontSize: 11.5, color: C.white, valign: "top",
     paraSpaceAfter: 6, margin: 0 });
   footer(s, "Préparation");
 }
@@ -211,14 +227,14 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
   legends.forEach(([n, t, d], i) => {
     const y = 1.2 + i * 0.77;
     s.addShape(pres.shapes.OVAL, { x: 6.7, y, w: 0.36, h: 0.36, fill: { color: C.gold } });
-    s.addText(n, { x: 6.7, y, w: 0.36, h: 0.36, fontFace: H, fontSize: 12, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
+    s.addText(n, { x: 6.7, y, w: 0.36, h: 0.36, fontFace: B, fontSize: 12, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
     s.addText([{ text: t, options: { bold: true, breakLine: true } }, { text: d }],
       { x: 7.15, y: y - 0.04, w: 2.4, h: 0.74, fontFace: B, fontSize: 10, color: C.ink, valign: "top", margin: 0 });
   });
   // repères sur le schéma
-  [[2.14, 1.59, "1"], [2.14, 1.97, "2"], [2.14, 2.37, "3"], [2.14, 4.62, "4"], [3.42, 1.3, "5"]].forEach(([x, y, n]) => {
+  [[2.32, 1.59, "1"], [2.32, 1.97, "2"], [2.32, 2.37, "3"], [2.32, 4.62, "4"], [3.42, 1.3, "5"]].forEach(([x, y, n]) => {
     s.addShape(pres.shapes.OVAL, { x, y, w: 0.26, h: 0.26, fill: { color: C.gold } });
-    s.addText(n, { x, y, w: 0.26, h: 0.26, fontFace: H, fontSize: 9, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
+    s.addText(n, { x, y, w: 0.26, h: 0.26, fontFace: B, fontSize: 9, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
   });
   footer(s, "Repères");
 }
