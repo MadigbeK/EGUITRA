@@ -60,7 +60,7 @@ export const cache = {
 };
 
 /** Nom du cache du service worker (public/mobile-sw.js, constante VERSION). */
-const SHELL_CACHE = "rotations-v1";
+const SHELL_CACHE = "rotations-v2";
 
 /**
  * Les listes gardées sur le téléphone n'appartiennent qu'à un utilisateur : à l'ouverture par un autre
