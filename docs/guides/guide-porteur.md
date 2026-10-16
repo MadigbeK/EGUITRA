@@ -11,7 +11,9 @@ téléphone, puis choisissez votre propre mot de passe (10 caractères au moins)
 ## Votre dossier
 
 - Avancement : les étapes de l'évaluation et celle où se trouve votre dossier.
-- Ce que le cabinet attend de vous : les actions prioritaires pour progresser.
+- Ce que le cabinet attend de vous : les actions à mener, avec leur échéance. Une fois une action
+  réalisée, « J'ai réalisé cette action », décrivez ce que vous avez fait (et déposez les pièces
+  correspondantes), puis « Transmettre au cabinet » : votre consultant la valide.
 - Pièces demandées : la liste des documents attendus à ce stade, leur état (manquante, reçue,
   validée, à reprendre).
 - Déposer une pièce : « Déposer » en face du document (PDF, photo JPEG ou PNG, Word .docx ou
