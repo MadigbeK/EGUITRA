@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed, Barlow_Semi_Condensed } from "next/font/google";
+import { Funnel_Display, Funnel_Sans } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 
 // Polices embarquées à la construction : servies par le site lui-même (politique de contenu).
-const barlow = Barlow({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-barlow", display: "swap" });
-const barlowSemiCondensed = Barlow_Semi_Condensed({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-barlow-sc", display: "swap" });
-const barlowCondensed = Barlow_Condensed({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-barlow-c", display: "swap" });
+// Choix du gérant (16 octobre 2026) : Funnel Sans pour le texte courant et les montants, Funnel
+// Display pour les titres et les grands chiffres.
+const funnelSans = Funnel_Sans({ subsets: ["latin"], variable: "--font-funnel-sans", display: "swap" });
+const funnelDisplay = Funnel_Display({ subsets: ["latin"], variable: "--font-funnel-display", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "NIMOVA", template: "%s · NIMOVA" },
@@ -25,7 +26,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fr" className={`${barlow.variable} ${barlowSemiCondensed.variable} ${barlowCondensed.variable}`}>
+    <html lang="fr" className={`${funnelSans.variable} ${funnelDisplay.variable}`}>
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
