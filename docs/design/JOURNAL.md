@@ -50,6 +50,41 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
 - Contrôles : `npx tsc --noEmit` et `npx next build` sans erreur.
 - Branche `claude/design-nimova` poussée sur GitHub le 16 octobre 2026 ; rien n'est déployé.
 
+## Seconde version (16 octobre 2026, après-midi)
+
+Le gérant a jugé la première version « fade » : il veut le langage visuel de ses captures (Vantus,
+Sypher, ERP Software, « Production output ») : coloré, animé, interactif. Refonte faite dans la
+même branche, sans toucher à la logique des écrans :
+
+- Logos des deux sociétés repris de leurs sites (eguitragroup.com, mbaxisproconsulting.com),
+  recadrés en versions couleur et blanche, complètes et emblèmes : `apps/web/public/brand/`,
+  composant `LogoSociete` (`components/brand.tsx`). Le portail porte désormais le logo officiel
+  de MB AxisPro Consulting.
+- Polices : Funnel Display (titres, grands chiffres) et Funnel Sans (texte, montants), choix du
+  gérant, embarquées par `next/font`.
+- Thème (`app/globals.css`) : fond gris vert, panneaux blancs, une couleur par application (jade
+  pour Finance, azur pour AxisPro et le portail, corail pour Rotations), gamme de six couleurs
+  pour les graphiques contrôlée pour les daltoniens (outil de validation de palette), contrastes
+  AA mesurés. Bibliothèque de mouvements : entrée orchestrée de chaque écran, cartes qui
+  surgissent, barres qui poussent, courbes qui se tracent, repères qui glissent ; tout s'arrête
+  quand le système demande de réduire les animations.
+- Composants (`components/ui.tsx`) : chiffres clés en cartes avec pastille d'icône et valeur qui
+  défile, puces d'état colorées, onglets et bascules à repère glissant, squelettes de chargement,
+  courbes à réticule et info-bulle (souris et clavier, légende qui masque une série), colonnes en
+  dégradé, anneau, jauge à aiguille, classement à barres texturées, tableaux à en-tête teinté.
+- Coque (`components/shell/AppShell.tsx`) : colonne blanche à icônes, repliable, repère de page
+  qui glisse, choix de la société avec les logos, fil d'Ariane, recherche d'écran (Ctrl K),
+  passage d'une application à l'autre, menu du compte.
+- Connexion : scène animée (le N du monogramme qui se trace, fragments des écrans qui flottent,
+  camion qui roule sur sa route, logos des deux sociétés) ; portail : scène du cabinet (escalier
+  de son emblème qui monte).
+- Tableau de bord du dirigeant recomposé : trésorerie au compteur avec barres par compte, quatre
+  chiffres clés, courbes du chiffre d'affaires et du résultat, alertes à pastilles, anneau de
+  l'ancienneté des créances, jauge de couverture de la dette, indicateurs, classement des marges.
+- Contrôles : `npx tsc --noEmit` et `npx next build` ; rendu vérifié sur la maquette d'API.
+- `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
+  seconde si le gérant la valide.
+
 ## Décisions du gérant (16 octobre 2026)
 
 - Modèle : une synthèse originale des captures fournies, avec le fondamental NIMOVA.
@@ -65,19 +100,20 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
 
 - Icônes : un jeu dessiné pour NIMOVA, sans dépendance ; `lucide-react` retiré. C'est le seul écart
   avec le brief, qui citait lucide-react.
-- Caractères : Barlow, Barlow Semi Condensed et Barlow Condensed (licence OFL), choisies pour leur
-  origine (signalétique routière, plaques d'immatriculation) et leurs chiffres tabulaires.
+- Caractères : Funnel Display et Funnel Sans (licence OFL), choix du gérant pour la seconde
+  version (la première utilisait Barlow).
 - Logo : le N du DG redessiné, carré et verts conservés, diagonale dorée.
-- Couleur de la coque : celle de la société dont on tient les livres (forêt pour EGUITRA GROUP,
-  nuit pour MB AxisPro Consulting).
+- Couleurs : une par application (jade Finance, azur AxisPro et portail, corail Rotations) ; la
+  société de travail se reconnaît à son logo dans la colonne de navigation.
 - Les valeurs absentes s'affichent « – » (tiret demi-cadratin) au lieu du tiret cadratin.
 
 ## Reste à faire
 
 - Validation de l'ensemble par le gérant, sur la recette (http://localhost:3200 avec le tunnel)
   ou sur la planche ; ajustements éventuels dans cette branche.
-- Logo officiel de MB AxisPro Consulting à recevoir (prérequis client) : il remplacera la
-  composition typographique du portail (`components/brand.tsx`, `public/icons/portail.svg`).
+- Logos repris des sites des deux sociétés : à faire confirmer par le client (fichiers vectoriels
+  officiels si disponibles) ; l'icône d'onglet du portail (`public/icons/portail.svg`) reste
+  typographique.
 
 ## Pour la session fonctionnelle
 
