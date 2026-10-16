@@ -84,6 +84,11 @@ class EguitraAuthController(http.Controller):
             secret = base64.b32encode(os.urandom(20)).decode()
             raw, _rec = Token._issue(user, "mfa_setup", app, payload=secret, ip=client_ip())
             issuer = "EGUITRA" if app != "axispro" else "AxisPro"
+            # Hors production (recette), le nom affiché par l'application d'authentification le dit :
+            # le téléphone ne confond pas les codes de la recette avec ceux de la production.
+            label = env["ir.config_parameter"].sudo().get_param("eguitra_api.environment_label")
+            if label:
+                issuer = f"{issuer} {label}"
             uri = (
                 f"otpauth://totp/{quote(issuer)}:{quote(user.login)}"
                 f"?secret={secret}&issuer={quote(issuer)}&algorithm=SHA1&digits=6&period=30"

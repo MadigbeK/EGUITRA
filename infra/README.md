@@ -103,6 +103,8 @@ domaines publiés, ajouter une surveillance externe de disponibilité (sonde HTT
 
 ## Accès techniques
 
+- Recette : paramètre système `eguitra_api.environment_label` = `recette` ; l'application
+  d'authentification du téléphone affiche alors « EGUITRA recette », distinct de la production.
 - Recette ouverte sur Internet en HTTPS avant l'achat du domaine (16 octobre 2026) : nom provisoire
   `recette.<adresse IP, points remplacés par des tirets>.sslip.io` (service DNS public qui renvoie
   l'adresse contenue dans le nom), dans `RECETTE_DOMAIN` de `infra/.env` ; certificat Let's Encrypt
