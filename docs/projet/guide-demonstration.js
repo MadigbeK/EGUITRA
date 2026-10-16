@@ -137,10 +137,10 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
     s.addText(d, { x: x + 0.22, y: 2.0, w: 2.4, h: 1.4, fontFace: B, fontSize: 12.5, color: fg, valign: "top", margin: 0 });
   });
   s.addText([
-    { text: "Le menu de gauche ", options: { bold: true } },
-    { text: "regroupe les écrans en quatre familles : Pilotage, Comptabilité, Métiers, Administration. " },
-    { text: "En haut ", options: { bold: true } },
-    { text: "se trouvent le choix de la société et votre nom (menu du compte)." },
+    { text: "La colonne de gauche ", options: { bold: true } },
+    { text: "porte la bascule Finance | AxisPro, la société de travail, les écrans par famille et, en bas, votre nom. " },
+    { text: "En haut, ", options: { bold: true } },
+    { text: "« Rechercher un écran » (Ctrl K) ouvre n'importe quel écran en tapant quelques lettres." },
   ], { x: 0.5, y: 3.85, w: 9, h: 0.8, fontFace: B, fontSize: 13, color: C.ink, margin: 0 });
   footer(s, "Mode d'emploi");
 }
@@ -156,7 +156,7 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
     ["Se connecter :", "identifiant emkouyate, mot de passe provisoire, « Se connecter »."],
     ["Double authentification :", "sur le téléphone, ouvrir Google Authenticator ou Microsoft Authenticator, « + », scanner le code affiché, puis taper le code à 6 chiffres."],
     ["Mot de passe :", "choisir le mot de passe définitif (10 caractères au moins), puis se reconnecter."],
-    ["Ouvrir un onglet par étape", "(Ctrl+T) : Tableau de bord, À valider, Transport, Immobilier, Clôtures, et l'adresse suivie de /axispro."],
+    ["Ouvrir un onglet par étape", "(Ctrl+T) : Tableau de bord, À valider, Transport, Immobilier, Clôtures, et AxisPro (bascule en haut du menu)."],
   ], { size: 12.5 });
   s.addShape(pres.shapes.RECTANGLE, { x: 6.35, y: 1.25, w: 3.15, h: 3.75, fill: { color: C.forest } });
   s.addText("Votre adresse", { x: 6.57, y: 1.43, w: 2.7, h: 0.3, fontFace: B, fontSize: 11, bold: true, color: C.gold,
@@ -179,34 +179,46 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
   title(s, "Repères : où se trouve quoi", "Schéma de l'écran d'EGUITRA Finance", 0.5);
   // cadre écran
   s.addShape(pres.shapes.RECTANGLE, { x: 0.5, y: 1.2, w: 5.9, h: 3.85, fill: { color: C.white }, line: { color: C.line, width: 1 } });
-  s.addShape(pres.shapes.RECTANGLE, { x: 0.5, y: 1.2, w: 1.55, h: 3.85, fill: { color: C.soft } });
-  const menu = ["PILOTAGE", "Tableau de bord", "À valider", "COMPTABILITÉ", "Ventes, Trésorerie…", "MÉTIERS", "Transport", "Chantiers", "Immobilier", "ADMINISTRATION"];
+  s.addShape(pres.shapes.RECTANGLE, { x: 0.5, y: 1.2, w: 1.75, h: 3.85, fill: { color: C.soft } });
+  s.addText("NIMOVA", { x: 0.62, y: 1.27, w: 1.5, h: 0.25, fontFace: H, fontSize: 10, bold: true, color: C.ink, margin: 0 });
+  // 1. bascule Finance | AxisPro
+  s.addShape(pres.shapes.RECTANGLE, { x: 0.62, y: 1.58, w: 1.5, h: 0.28, fill: { color: C.white }, line: { color: C.line, width: 1 } });
+  s.addText("Finance | AxisPro", { x: 0.62, y: 1.58, w: 1.5, h: 0.28, fontFace: B, fontSize: 8.5, bold: true, color: C.ink, align: "center", valign: "middle", margin: 0 });
+  // 2. société de travail
+  s.addShape(pres.shapes.RECTANGLE, { x: 0.62, y: 1.95, w: 1.5, h: 0.3, fill: { color: C.white }, line: { color: C.green, width: 1 } });
+  s.addText("Société ▾", { x: 0.62, y: 1.95, w: 1.5, h: 0.3, fontFace: B, fontSize: 9, color: C.ink, align: "center", valign: "middle", margin: 0 });
+  // 3. écrans par famille
+  const menu = ["PILOTAGE", "Tableau de bord", "À valider", "COMPTABILITÉ", "Ventes, Trésorerie…", "MÉTIERS", "Transport, Chantiers…", "ADMINISTRATION"];
   s.addText(menu.map((m, i) => ({ text: m, options: { bold: m === m.toUpperCase(), color: m === m.toUpperCase() ? C.green : C.ink, breakLine: i < menu.length - 1 } })),
-    { x: 0.6, y: 1.3, w: 1.4, h: 3.6, fontFace: B, fontSize: 9.5, valign: "top", margin: 0, paraSpaceAfter: 3 });
-  s.addShape(pres.shapes.RECTANGLE, { x: 2.05, y: 1.2, w: 4.35, h: 0.45, fill: { color: C.white }, line: { color: C.line, width: 1 } });
-  s.addShape(pres.shapes.RECTANGLE, { x: 3.0, y: 1.28, w: 1.9, h: 0.3, fill: { color: C.soft }, line: { color: C.green, width: 1 } });
-  s.addText("Société ▾", { x: 3.0, y: 1.28, w: 1.9, h: 0.3, fontFace: B, fontSize: 9.5, color: C.ink, align: "center", valign: "middle", margin: 0 });
-  s.addShape(pres.shapes.OVAL, { x: 5.55, y: 1.27, w: 0.32, h: 0.32, fill: { color: C.white }, line: { color: C.green, width: 1 } });
-  s.addText("MK", { x: 5.55, y: 1.27, w: 0.32, h: 0.32, fontFace: B, fontSize: 7.5, bold: true, color: C.green, align: "center", valign: "middle", margin: 0 });
-  s.addText("Contenu de l'écran choisi", { x: 2.2, y: 2.6, w: 4.0, h: 0.5, fontFace: B, fontSize: 12, color: C.muted, align: "center", margin: 0 });
+    { x: 0.62, y: 2.37, w: 1.55, h: 2.05, fontFace: B, fontSize: 8.5, valign: "top", margin: 0, paraSpaceAfter: 2 });
+  // 4. compte, en bas de la colonne
+  s.addShape(pres.shapes.OVAL, { x: 0.62, y: 4.6, w: 0.3, h: 0.3, fill: { color: C.white }, line: { color: C.green, width: 1 } });
+  s.addText("MK", { x: 0.62, y: 4.6, w: 0.3, h: 0.3, fontFace: B, fontSize: 7, bold: true, color: C.green, align: "center", valign: "middle", margin: 0 });
+  s.addText("Votre nom", { x: 0.98, y: 4.6, w: 1.2, h: 0.3, fontFace: B, fontSize: 8.5, color: C.ink, valign: "middle", margin: 0 });
+  // 5. barre du haut : recherche
+  s.addShape(pres.shapes.RECTANGLE, { x: 2.25, y: 1.2, w: 4.15, h: 0.45, fill: { color: C.white }, line: { color: C.line, width: 1 } });
+  s.addShape(pres.shapes.RECTANGLE, { x: 3.75, y: 1.28, w: 2.05, h: 0.3, fill: { color: C.soft }, line: { color: C.line, width: 1 } });
+  s.addText("Rechercher un écran   Ctrl K", { x: 3.75, y: 1.28, w: 2.05, h: 0.3, fontFace: B, fontSize: 8.5, color: C.muted, align: "center", valign: "middle", margin: 0 });
+  s.addText("Contenu de l'écran choisi", { x: 2.4, y: 2.8, w: 3.85, h: 0.5, fontFace: B, fontSize: 12, color: C.muted, align: "center", margin: 0 });
   // légendes
   const legends = [
-    ["1", "Menu de gauche", "les écrans, par famille ; un clic ouvre l'écran."],
-    ["2", "« Société »", "liste en haut : EGUITRA GROUP SARLU ou MB AxisPro Consulting ; l'écran se recharge."],
-    ["3", "Vos initiales", "en haut à droite : « Changer le mot de passe », aller sur AxisPro Suite, « Se déconnecter »."],
-    ["4", "« Groupe consolidé »", "sur le tableau de bord : les deux sociétés réunies."],
+    ["1", "« Finance | AxisPro »", "passer d'une application à l'autre d'un clic (comptes ouverts aux deux)."],
+    ["2", "« Société »", "EGUITRA GROUP SARLU ou MB AxisPro Consulting ; l'écran se recharge."],
+    ["3", "Menu", "les écrans, par famille ; un clic ouvre l'écran."],
+    ["4", "Votre nom", "en bas à gauche : « Changer le mot de passe », « Se déconnecter »."],
+    ["5", "« Rechercher un écran »", "en haut : taper quelques lettres, puis Entrée."],
   ];
   legends.forEach(([n, t, d], i) => {
-    const y = 1.25 + i * 0.95;
-    s.addShape(pres.shapes.OVAL, { x: 6.7, y, w: 0.4, h: 0.4, fill: { color: C.gold } });
-    s.addText(n, { x: 6.7, y, w: 0.4, h: 0.4, fontFace: H, fontSize: 13, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
+    const y = 1.2 + i * 0.77;
+    s.addShape(pres.shapes.OVAL, { x: 6.7, y, w: 0.36, h: 0.36, fill: { color: C.gold } });
+    s.addText(n, { x: 6.7, y, w: 0.36, h: 0.36, fontFace: H, fontSize: 12, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
     s.addText([{ text: t, options: { bold: true, breakLine: true } }, { text: d }],
-      { x: 7.2, y: y - 0.04, w: 2.3, h: 0.9, fontFace: B, fontSize: 10.5, color: C.ink, valign: "top", margin: 0 });
+      { x: 7.15, y: y - 0.04, w: 2.4, h: 0.74, fontFace: B, fontSize: 10, color: C.ink, valign: "top", margin: 0 });
   });
   // repères sur le schéma
-  [[1.72, 1.3, "1"], [3.05, 1.68, "2"], [5.9, 1.62, "3"]].forEach(([x, y, n]) => {
-    s.addShape(pres.shapes.OVAL, { x, y, w: 0.3, h: 0.3, fill: { color: C.gold } });
-    s.addText(n, { x, y, w: 0.3, h: 0.3, fontFace: H, fontSize: 10, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
+  [[2.14, 1.59, "1"], [2.14, 1.97, "2"], [2.14, 2.37, "3"], [2.14, 4.62, "4"], [3.42, 1.3, "5"]].forEach(([x, y, n]) => {
+    s.addShape(pres.shapes.OVAL, { x, y, w: 0.26, h: 0.26, fill: { color: C.gold } });
+    s.addText(n, { x, y, w: 0.26, h: 0.26, fontFace: H, fontSize: 9, bold: true, color: C.forest, align: "center", valign: "middle", margin: 0 });
   });
   footer(s, "Repères");
 }
@@ -234,7 +246,7 @@ stepSlide(2, "Connexion et sécurité", "3 minutes · montrer l'écran de connex
 ], { duration: "3 min" });
 
 stepSlide(3, "Deux sociétés, un seul compte", "3 minutes · la promesse faite au client", [
-  ["En haut, liste « Société » :", "choisir « MB AxisPro Consulting ». L'écran se recharge : autres chiffres, autre comptabilité."],
+  ["Colonne de gauche, carte « Société » :", "choisir « MB AxisPro Consulting ». L'écran se recharge : autres chiffres, autre comptabilité."],
   ["Revenir à « EGUITRA GROUP SARLU ».", ""],
   ["Sur le tableau de bord, cliquer « Groupe consolidé » :", "les deux sociétés réunies."],
   ["Recliquer sur la société", "pour revenir à une seule."],
@@ -347,8 +359,8 @@ stepSlide(11, "Chantiers et immobilier", "4 minutes · menu Métiers", [
   "La quittance n'est délivrée que pour un loyer réglé.",
 ], { duration: "4 min" });
 
-stepSlide(12, "AxisPro, le cabinet", "6 minutes · onglet de l'adresse suivie de /axispro", [
-  ["Menu « Dossiers » :", "cliquer « Usine de briques compressées (démo) »."],
+stepSlide(12, "AxisPro, le cabinet", "6 minutes · bascule « AxisPro » en haut du menu", [
+  ["Accueil « Dossiers de projets » :", "entonnoir par étape, recommandations ; cliquer la carte « Usine de briques compressées (démo) »."],
   ["« Synthèse » :", "score, recommandation, critères éliminatoires, étapes (« Stage gates »)."],
   ["« Data room » :", "les pièces attendues et déposées ; « Déposer » pour en ajouter."],
   ["« Comités » :", "décisions verrouillées ; « Rapport » : « Imprimer le rapport de décision »."],
@@ -359,11 +371,12 @@ stepSlide(12, "AxisPro, le cabinet", "6 minutes · onglet de l'adresse suivie de
   "Chaque dossier garde la version de la grille en vigueur à son ouverture.",
 ], { duration: "6 min", size: 12.5 });
 
-stepSlide(13, "Le portail du porteur (facultatif)", "3 minutes · à préparer avant la réunion", [
-  ["Avant la réunion, dans AxisPro :", "dossier « Unité de séchage de mangues (démo) », carte « Accès du porteur au portail »."],
-  ["Remplir :", "identifiant porteur.mamou, nom, mot de passe provisoire (10 caractères), « Ouvrir l'accès »."],
-  ["Dans une fenêtre privée :", "adresse suivie de /portail, connexion du porteur, double authentification."],
-  ["Pendant la réunion :", "montrer ses pièces à fournir, son avancement, ses échanges."],
+stepSlide(13, "Le portail du porteur (facultatif)", "3 minutes · compte de démonstration prêt", [
+  ["Compte prêt :", "identifiant porteur.demo, dossier « Usine de briques compressées (démo) » ; mot de passe remis à part."],
+  ["Dans une fenêtre privée (Ctrl+Maj+N) :", "adresse suivie de /portail, identifiant, mot de passe, « Se connecter »."],
+  ["Première connexion :", "scanner le code QR avec l'application d'authentification, puis taper le code à 6 chiffres."],
+  ["Montrer :", "son avancement par étape, ses pièces à fournir, ses échanges avec le cabinet."],
+  ["Pour un vrai porteur :", "dans le dossier, carte « Accès du porteur au portail », puis « Ouvrir l'accès »."],
 ], [
   "Le porteur ne voit que son dossier.",
   "Il dépose ses pièces et échange avec son consultant.",
@@ -413,9 +426,9 @@ stepSlide(14, "Administration et sûreté", "3 minutes · menu Administration", 
   const items = [
     ["Retour à l'écran de connexion", "La session a expiré : se reconnecter (identifiant, mot de passe, code)."],
     ["Code à 6 chiffres refusé", "Attendre le code suivant sur le téléphone (30 secondes)."],
-    ["« Accès non autorisé »", "Vérifier la société choisie en haut ; certaines pages sont réservées à un profil."],
+    ["« Accès non autorisé »", "Vérifier la société choisie à gauche ; certaines pages sont réservées à un profil."],
     ["Écran vide ou figé", "Recharger la page : touche F5."],
-    ["Mauvaise société affichée", "Liste « Société » en haut de l'écran."],
+    ["Mauvaise société affichée", "Carte « Société » dans la colonne de gauche (EGUITRA Finance)."],
     ["Adresse injoignable", "Dernier recours : le tunnel SSH et http://localhost:3100."],
   ];
   items.forEach(([t, d], i) => {
