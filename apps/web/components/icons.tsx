@@ -259,8 +259,8 @@ export const Truck = dessin("Truck", (
 ));
 export const HardHat = dessin("HardHat", (
   <>
-    <path d="M3 17.5h18M5 17.5v-2.75a7 7 0 0 1 14 0v2.75" />
-    <path d="M10 8.25V6h4v2.25" />
+    <path d="M2.5 18h19M5 18v-3.5a7 7 0 0 1 14 0V18" />
+    <path d="M9.5 8.2V13M14.5 8.2V13" />
   </>
 ));
 export const Calculator = dessin("Calculator", (

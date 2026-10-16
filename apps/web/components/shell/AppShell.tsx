@@ -151,9 +151,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   );
 
   return (
-    <div data-app={app} data-societe={entity} className="min-h-screen bg-bg text-ink md:flex">
+    <div data-app={app} data-societe={entity} className="min-h-screen bg-bg text-ink lg:flex">
       {/* Dos du registre (écran large) */}
-      <aside className="no-print sur-dos sticky top-0 hidden h-screen w-16 flex-none flex-col items-center bg-dos py-4 text-dos-ink md:flex">
+      <aside className="no-print sur-dos sticky top-0 hidden h-screen w-16 flex-none flex-col items-center bg-dos py-4 text-dos-ink lg:flex">
         <Link href={home} className="rounded-lg" title={APPS[app].name}>
           <Monogramme tuile={false} className="h-10 w-10" title={APPS[app].name} />
         </Link>
@@ -168,10 +168,10 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
       </aside>
 
       {/* Colonne de navigation (écran large) */}
-      <aside className="no-print sticky top-0 hidden h-screen w-[232px] flex-none border-r border-line bg-panel md:block">{navigation}</aside>
+      <aside className="no-print sticky top-0 hidden h-screen w-[232px] flex-none border-r border-line bg-panel lg:block">{navigation}</aside>
 
       {/* Barre du haut et tiroir (téléphone, tablette) */}
-      <header className="no-print sur-dos sticky top-0 z-30 flex items-center justify-between gap-3 bg-dos px-3 py-2.5 text-dos-ink md:hidden">
+      <header className="no-print sur-dos sticky top-0 z-30 flex items-center justify-between gap-3 bg-dos px-3 py-2.5 text-dos-ink lg:hidden">
         <button type="button" onClick={() => setOpen(true)} className="grid h-10 w-10 place-items-center rounded-lg" aria-label="Ouvrir le menu">
           <Menu className="h-5 w-5" />
         </button>
@@ -185,7 +185,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
         <CompteMenu app={app} me={me} onLogout={logout} placement="bas" />
       </header>
       {open && (
-        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-foret/50" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 left-0 flex w-[min(86vw,300px)] flex-col bg-panel shadow-[0_0_60px_-10px_rgb(20_47_41/0.5)]">
             <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-3 grid h-10 w-10 place-items-center rounded-lg text-muted" aria-label="Fermer le menu">
@@ -198,7 +198,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 
       <div className="flex min-w-0 flex-1 flex-col">
         {passwordBanner}
-        <main className="min-w-0 flex-1 px-5 py-7 md:px-10 md:py-9">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8 xl:px-10 xl:py-9">{children}</main>
       </div>
     </div>
   );

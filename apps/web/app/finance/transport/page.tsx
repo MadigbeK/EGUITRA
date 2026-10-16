@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
@@ -48,12 +48,21 @@ export default function TransportPage() {
     <div>
       <PageHeader title="Transport pétrolier" subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge." />
       {summary && (
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Kpi label="Rotations du mois" value={String(summary.rotations)} hint={`${fmtDec(summary.volume)} m³ livrés`} />
-          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} tone="ok" />
-          <Kpi label="Marge du mois" value={fmtShort(summary.margin)} hint={fmtPct(summary.margin_rate)} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} />
-          <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} hint={`${summary.to_invoice.count} rotation(s) validée(s)`} tone="accent" />
-          <Kpi label="Flotte" value={`${summary.fleet.service ?? 0} en service`} hint={`${summary.fleet.maintenance ?? 0} en maintenance, ${summary.drafts} saisie(s) à valider`} />
+        <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
+          {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne. */}
+          <section className="min-w-0 rounded-xl bg-panel p-6 xl:col-span-5">
+            <h2 className="font-display text-[17px] font-semibold text-ink">Volume livré ce mois</h2>
+            <Compteur value={summary.volume} unit="m³" className="mt-5 text-[40px] text-ink sm:text-[48px]" />
+            <p className="mt-4 text-[13px] text-muted">
+              {summary.rotations} rotation{summary.rotations > 1 ? "s" : ""}, {fmtDec(summary.volume)} m³ au total
+            </p>
+          </section>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:col-span-7">
+            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} tone="ok" />
+            <Kpi label="Marge du mois" value={fmtShort(summary.margin)} hint={fmtPct(summary.margin_rate)} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} hint={`${summary.to_invoice.count} rotation(s) validée(s)`} tone="accent" />
+            <Kpi label="Flotte" value={`${summary.fleet.service ?? 0} en service`} hint={`${summary.fleet.maintenance ?? 0} en maintenance, ${summary.drafts} saisie(s) à valider`} />
+          </div>
         </div>
       )}
       <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }]} value={tab} onChange={setTab} />
@@ -129,7 +138,7 @@ function Rotations() {
               { key: "route", label: "Route", render: (r) => r.route.name },
               { key: "volume", label: "Livré (m³)", align: "right", render: (r) => fmtDec(r.volume_delivered || r.volume_loaded) },
               { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
-              { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)}, {fmtPct(r.margin_rate, 0)}</span> },
+              { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span> },
               { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]}>{STATE[r.state][0]}</Badge> },
             ]}
             footer={

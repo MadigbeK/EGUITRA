@@ -157,6 +157,14 @@ body {
   scrollbar-color: #b9c8c0 transparent;
 }
 
+/* Cases à cocher et boutons radio natifs aux couleurs de l'application. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
 /* Liste déroulante : flèche dessinée, la même sur tous les systèmes. */
 .champ-liste {
   appearance: none;

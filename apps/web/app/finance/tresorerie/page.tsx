@@ -70,18 +70,22 @@ export default function TreasuryPage() {
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} tone="accent" />
             {position.accounts.map((a) => (
-              <button key={a.journal_id} type="button" onClick={() => setJournalId(a.journal_id)} className="text-left">
-                <div className={cx("rounded-xl border bg-panel p-5 transition", current?.journal_id === a.journal_id ? "border-accent" : "border-line hover:border-accent/50")}>
-                  <div className="flex items-center justify-between text-[12.5px] font-medium text-muted">
-                    <span>{a.type === "cash" ? "Caisse" : "Banque"}</span>
-                    {a.unreconciled ? <Badge tone="warn">{a.unreconciled} à rapprocher</Badge> : <Badge tone="ok">À jour</Badge>}
-                  </div>
-                  <div className="mt-1 truncate text-sm text-ink-2">{a.name}</div>
-                  <div className="tabular mt-1 font-mono text-xl font-bold">
-                    {a.currency !== "GNF" ? `${fmtDec(a.balance_currency)} ${a.currency}` : fmtGNF(a.balance)}
-                  </div>
-                  {a.currency !== "GNF" && <div className="text-xs text-muted">Contre-valeur {fmtGNF(a.balance)}</div>}
+              <button
+                key={a.journal_id}
+                type="button"
+                onClick={() => setJournalId(a.journal_id)}
+                aria-pressed={current?.journal_id === a.journal_id}
+                className={cx("min-w-0 rounded-xl bg-panel p-5 text-left transition-shadow", current?.journal_id === a.journal_id ? "ring-2 ring-inset ring-accent" : "hover:ring-1 hover:ring-inset hover:ring-line-strong/60")}
+              >
+                <div className="flex items-center justify-between gap-2 text-[12.5px] font-medium text-muted">
+                  <span>{a.type === "cash" ? "Caisse" : "Banque"}</span>
+                  {a.unreconciled ? <Badge tone="warn">{a.unreconciled} à rapprocher</Badge> : <Badge tone="ok">À jour</Badge>}
                 </div>
+                <div className="mt-1.5 truncate text-sm text-ink-2">{a.name}</div>
+                <div className="mt-1.5 font-display text-[21px] font-semibold text-ink">
+                  {a.currency !== "GNF" ? `${fmtDec(a.balance_currency)} ${a.currency}` : fmtGNF(a.balance)}
+                </div>
+                {a.currency !== "GNF" && <div className="mt-0.5 text-[12px] text-muted">Contre-valeur {fmtGNF(a.balance)}</div>}
               </button>
             ))}
           </div>

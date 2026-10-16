@@ -82,7 +82,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
               {d.cash_by_journal.length} compte{d.cash_by_journal.length > 1 ? "s" : ""} de banque et caisse, au {fmtDate(d.as_of)}
             </span>
           </div>
-          <Compteur value={d.cash} className={cx("mt-6 text-[34px] sm:text-[46px] 2xl:text-[56px]", d.cash < 0 ? "text-danger" : "text-ink")} />
+          <Compteur value={d.cash} className={cx("mt-6 text-[34px] sm:text-[46px] xl:text-[54px] 2xl:text-[60px]", d.cash < 0 ? "text-danger" : "text-ink")} />
           {d.cash_by_journal.length === 0 ? (
             <p className="mt-6 text-sm text-muted">Aucun compte de trésorerie.</p>
           ) : (

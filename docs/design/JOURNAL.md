@@ -15,6 +15,27 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
 - Lu : brief, état du projet, note de cadrage du DG (12 pages), 16 captures d'écran retenues par le
   gérant (Sypher, Vantus, ERP Software, « Production output », etc.), guide « 30 signes que ton site
   est vibe-codé » transmis par le gérant.
+- Identité appliquée à toute l'application web (charte : `docs/design/CHARTE.md`) :
+  - thème (`app/globals.css`) : palette relevée dans le PDF du DG, teintes dérivées à contraste AA
+    mesuré, polices Barlow embarquées par `next/font`, petits rayons, aucune ombre hors éléments
+    flottants ;
+  - marque (`components/brand.tsx`) : monogramme N redessiné, noms « NIMOVA · module »
+    (`lib/config.ts`), icônes du site et de Rotations (`public/icons/`, manifeste) ;
+  - jeu d'icônes dessiné pour le projet (`components/icons.tsx`), `lucide-react` retiré ;
+  - coque (`components/shell/AppShell.tsx`) : dos du registre à la couleur de la société active,
+    navigation en texte seul, choix de la société, menu du compte ; variante du portail sous la
+    marque MB AxisPro Consulting ;
+  - connexion : couverture reprise de la note du DG, code de vérification en cases de compteur ;
+    titre et icône d'onglet du cabinet pour le portail ;
+  - composants (`components/ui.tsx`) : chiffres clés en bande, compteur, répartition segmentée,
+    colonnes avec info-bulles, étapes, boutons d'envoi de fichiers accessibles au clavier ;
+  - écrans : tableau de bord du dirigeant recomposé (trésorerie au compteur, registre
+    d'indicateurs), Transport (volume livré au compteur), Rotations repensée pour le téléphone,
+    portail du porteur, gates d'AxisPro en étapes ; textes sans tirets cadratins ni points
+    médians de gabarit, libellés en casse normale.
+- Maquette d'API locale pour contrôler les écrans connectés sans mot de passe réel :
+  `docs/design/maquette-api/` (données fictives, outil de conception uniquement).
+- Contrôles : `npx tsc --noEmit` et `npx next build` sans erreur.
 
 ## Décisions du gérant (16 octobre 2026)
 
@@ -23,20 +44,25 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
   avoir tout achevé »). Pas de validation intermédiaire de planche : le design est appliqué à tous
   les écrans du périmètre, puis présenté.
 - Noms affichés : NIMOVA · Finance, NIMOVA · AxisPro, NIMOVA · Rotations. La société active
-  s'affiche dans le sélecteur de l'en-tête.
+  s'affiche dans le sélecteur de la coque.
 - Portail des porteurs de projets : marque MB AxisPro Consulting, NIMOVA restant une marque interne.
 - Nom de domaine : nimovagroup.com (voir `demandes-fonctionnelles.md`).
 
-## Partis pris annoncés au gérant, sans objection
+## Partis pris de la session design
 
-- Icônes : un jeu dessiné pour NIMOVA (SVG, un seul trait, une seule taille), sans dépendance ;
-  `lucide-react` sera retiré. C'est le seul écart avec le brief, qui citait lucide-react.
-- Caractères : Aptos n'étant pas libre, deux couples de polices libres sont proposés sur la planche
-  et le gérant choisit. Ni Inter, ni Geist, ni Space Grotesk.
-- Logo : le N du DG redessiné, en gardant le carré et les verts.
-- Fond crème #F9F8F5, jamais de blanc pur. Pas d'ombre hors des éléments qui flottent (menus,
-  fenêtres), pas de dégradé décoratif, pas d'emoji ni de tiret cadratin dans les textes.
+- Icônes : un jeu dessiné pour NIMOVA, sans dépendance ; `lucide-react` retiré. C'est le seul écart
+  avec le brief, qui citait lucide-react.
+- Caractères : Barlow, Barlow Semi Condensed et Barlow Condensed (licence OFL), choisies pour leur
+  origine (signalétique routière, plaques d'immatriculation) et leurs chiffres tabulaires.
+- Logo : le N du DG redessiné, carré et verts conservés, diagonale dorée.
+- Couleur de la coque : celle de la société dont on tient les livres (forêt pour EGUITRA GROUP,
+  nuit pour MB AxisPro Consulting).
+- Les valeurs absentes s'affichent « – » (tiret demi-cadratin) au lieu du tiret cadratin.
 
 ## En cours
 
-- Planche de proposition n° 1 : `docs/design/planche/`.
+- Contrôle visuel de chaque écran sur la maquette d'API, puis corrections.
+
+## Pour la session fonctionnelle
+
+- Voir `demandes-fonctionnelles.md` : domaine nimovagroup.com, version du cache de Rotations.

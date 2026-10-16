@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, FileCheck2, Plus, Printer, RefreshCw } from "@/components/icons";
+import { FileCheck2, Plus, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -60,8 +60,8 @@ function Properties({ onChanged }: { onChanged: () => void }) {
         {!data ? <Loading /> : (
           <DataTable rows={data.items} rowKey={(p) => p.id} empty="Aucun bien." columns={[
             { key: "name", label: "Bien", render: (p) => (
-              <button type="button" className="flex items-center gap-2 text-left hover:text-accent" title="Modifier le bien" onClick={() => setEditing(p)}>
-                <Building2 className="h-4 w-4 text-accent" />{p.name}
+              <button type="button" className="text-left font-medium text-ink underline-offset-2 hover:underline" title="Modifier le bien" onClick={() => setEditing(p)}>
+                {p.name}
               </button>
             ) },
             { key: "kind", label: "Nature", render: (p) => data.kinds.find((k) => k.code === p.kind)?.label ?? p.kind },

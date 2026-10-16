@@ -89,6 +89,11 @@ export function Badge({ tone = "neutral", children }: { tone?: Tone; children: R
   );
 }
 
+/** Étiquette neutre (profil, catégorie) : un aplat discret, sans couleur d'état. */
+export function Tag({ children }: { children: ReactNode }) {
+  return <span className="inline-flex items-center whitespace-nowrap rounded-md bg-panel-2 px-2 py-0.5 text-[12.5px] font-medium text-ink-2">{children}</span>;
+}
+
 /* ─── Contrôles ────────────────────────────────────────────────────────── */
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -108,7 +113,7 @@ export function Button({ variant = "secondary", loading, className, children, di
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cx(
-        "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        "inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
         BUTTON[variant],
         className,
       )}
@@ -263,7 +268,7 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
             {columns.map((c) => {
               const active = sort?.key === c.key;
               return (
-                <th key={c.key} scope="col" aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : undefined} className={cx(pad, "whitespace-nowrap font-medium", alignOf(c))}>
+                <th key={c.key} scope="col" aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : undefined} className={cx(pad, "whitespace-nowrap font-medium first:pl-5 last:pr-5", alignOf(c))}>
                   <button
                     type="button"
                     onClick={() => setSort(active ? { key: c.key, dir: sort.dir === 1 ? -1 : 1 } : { key: c.key, dir: 1 })}
@@ -289,14 +294,14 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
               className={cx("border-b border-line/80 last:border-0", onRowClick && "cursor-pointer outline-offset-[-2px] hover:bg-panel-2")}
             >
               {columns.map((c) => (
-                <td key={c.key} className={cx(pad, alignOf(c), c.align === "right" && "font-mono", c.className)}>
+                <td key={c.key} className={cx(pad, "first:pl-5 last:pr-5", alignOf(c), c.align === "right" && "whitespace-nowrap font-mono", c.className)}>
                   {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "")}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
-        {footer && <tfoot className="tabular border-t border-ink/25 font-semibold">{footer}</tfoot>}
+        {footer && <tfoot className="tabular border-t border-ink/25 font-semibold [&_td:first-child]:pl-5 [&_td:last-child]:pr-5">{footer}</tfoot>}
       </table>
     </div>
   );

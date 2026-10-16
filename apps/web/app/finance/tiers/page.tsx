@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Tabs } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Tabs, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtPct } from "@/lib/format";
@@ -64,7 +64,7 @@ export default function PartnersPage() {
             empty="Aucun tiers."
             columns={[
               { key: "name", label: "Nom" },
-              { key: "role", label: "Rôle", render: (p) => <div className="flex gap-1">{p.customer && <Badge tone="ok">Client</Badge>}{p.supplier && <Badge tone="accent">Fournisseur</Badge>}</div> },
+              { key: "role", label: "Rôle", render: (p) => <div className="flex gap-1">{p.customer && <Tag>Client</Tag>}{p.supplier && <Tag>Fournisseur</Tag>}</div> },
               { key: "city", label: "Ville", render: (p) => p.city ?? "–" },
               { key: "receivable", label: "Nous doit", align: "right", render: (p) => fmtGNF(p.receivable) },
               { key: "payable", label: "Nous lui devons", align: "right", render: (p) => fmtGNF(p.payable) },

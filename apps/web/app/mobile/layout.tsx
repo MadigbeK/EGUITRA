@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ServiceWorker } from "@/components/mobile/ServiceWorker";
 
 export const metadata: Metadata = {
-  title: "Rotations",
+  title: { absolute: "NIMOVA · Rotations" },
   manifest: "/mobile.webmanifest",
   icons: { apple: "/icons/rotations-180.png" },
   appleWebApp: { capable: true, title: "Rotations", statusBarStyle: "default" },

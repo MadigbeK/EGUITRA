@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import { Download, Lock, Printer, Send } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etapes, FileButton, Field, Input, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etapes, FileButton, Field, Input, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, RECO, STATUS_LABELS, type CriterionEval, type DocFile, type DossierDetail, type Message, type Recommendation, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort } from "@/lib/format";
@@ -159,7 +159,7 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
                 <span className="font-medium text-ink">{c.name}</span>
                 {c.knockout && <Badge tone="danger">Éliminatoire</Badge>}
                 {c.critical && <Badge tone="warn">Critique</Badge>}
-                {c.evidence_required && <Badge>Preuve requise</Badge>}
+                {c.evidence_required && <Tag>Preuve requise</Tag>}
               </div>
               <div className="mt-1 text-xs text-muted">{c.domain}, poids {c.weight}{c.guidance ? `, ${c.guidance}` : ""}</div>
             </div>

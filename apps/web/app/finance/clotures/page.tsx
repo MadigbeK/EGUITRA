@@ -54,7 +54,7 @@ export default function ClosingPage() {
           </Notice>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
             {data.months.map((m, i) => (
-              <button key={m.period} type="button" onClick={() => setMonth(m)} className={cx("rounded-xl border bg-panel p-4 text-left transition hover:border-accent", m.state === "closed" ? "border-ok/40" : "border-line")}>
+              <button key={m.period} type="button" onClick={() => setMonth(m)} className={cx("rounded-xl p-4 text-left transition-shadow hover:ring-1 hover:ring-inset hover:ring-line-strong/60", m.state === "closed" ? "bg-ok/[0.08]" : "bg-panel")}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold capitalize">{MONTHS_FR[i]}</span>
                   {m.state === "closed" ? <Lock className="h-4 w-4 text-ok" /> : <LockOpen className="h-4 w-4 text-muted" />}

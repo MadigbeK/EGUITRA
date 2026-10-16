@@ -66,7 +66,7 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
       <Card padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
           <Tabs tabs={VIEWS} value={view} onChange={setView} />
-          <Input className="max-w-xs" placeholder="Numéro, référence ou tiers…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input aria-label="Rechercher une pièce" className="max-w-xs" placeholder="Numéro, référence ou tiers…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         {error && (
           <div className="p-4">

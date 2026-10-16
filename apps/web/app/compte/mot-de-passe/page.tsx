@@ -6,7 +6,12 @@ import { requireUser } from "@/lib/server-api";
 import { COOKIES } from "@/lib/session";
 import { PasswordForm } from "./PasswordForm";
 
-export const metadata: Metadata = { title: "Mot de passe" };
+export async function generateMetadata(): Promise<Metadata> {
+  // Un porteur de projet reste chez MB AxisPro Consulting : pas de marque interne dans l'onglet.
+  const fromCookie = (await cookies()).get(COOKIES.app)?.value;
+  if (fromCookie === "portail") return { title: { absolute: "Mot de passe · MB AxisPro Consulting" }, icons: { icon: "/icons/portail.svg" } };
+  return { title: "Mot de passe" };
+}
 
 export default async function PasswordPage() {
   const fromCookie = (await cookies()).get(COOKIES.app)?.value;
