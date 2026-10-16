@@ -44,7 +44,8 @@ résultat environ 0,87 Md, trésorerie environ 0,99 Md, créances environ 1,26 M
 
 ### 4. Tableau de bord du dirigeant (5 min)
 - Chiffre d'affaires, résultat, trésorerie par compte, créances et leur ancienneté.
-- Alertes : la route Conakry - Labé passe sous le seuil de marge de 15 %.
+- Alertes : « Clôture en retard », septembre n'est pas encore clôturé (seuil de 10 jours). Les seuils
+  se règlent dans Administration > Seuils et taux.
 - Rapport mensuel de gestion : la synthèse à remettre à la direction chaque mois.
 
 ### 5. Approbation en direct (5 min)
@@ -66,7 +67,8 @@ résultat environ 0,87 Md, trésorerie environ 0,99 Md, créances environ 1,26 M
 
 ### 7. Transport (6 min)
 - Rotations : 30 rotations sur quatre mois, validées au bureau, facturées par client.
-- Rentabilité par ensemble routier, par route et par mois ; la route Labé apparaît en alerte.
+- Rentabilité par ensemble routier, par route et par mois : la route Conakry - Labé ne dégage
+  qu'environ 10 % de marge, contre plus de 60 % pour les autres.
 - Écran du parc (Rotations, en mode téléphone) : saisir une rotation, couper le réseau (F12,
   onglet Réseau, « Hors connexion »), en saisir une autre, rétablir : elle part seule, sans doublon.
 
