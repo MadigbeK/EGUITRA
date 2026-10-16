@@ -115,6 +115,14 @@ même branche, sans toucher à la logique des écrans :
 - Reste pour la session fonctionnelle : passer la version du cache de Rotations
   (`public/mobile-sw.js`, `VERSION`) pour que les téléphones déjà équipés reçoivent le nouveau
   manifeste et les nouvelles icônes.
+- Accueil NIMOVA (`/accueil`, demande du gérant : « une interface similaire à l'accueil d'Odoo ») :
+  fond vert profond où se trace le N du monogramme, salutation et signature, recherche de module
+  (Ctrl K, Entrée ouvre la première tuile), une tuile colorée par module, regroupées par espace
+  (NIMOVA · Finance, NIMOVA · AxisPro) et filtrées par profil et par société ; l'administration
+  en petites étiquettes ; Rotations en encart ; société et compte en haut, logos des deux
+  sociétés en pied. La racine `/` y mène (le domaine du portail garde son portail), la connexion
+  à Finance ou AxisPro y arrive, et le bouton à neuf points de la coque y revient
+  (`proxy.ts`, `app/login/page.tsx`, `components/shell/AppShell.tsx`).
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la

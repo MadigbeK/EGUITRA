@@ -45,7 +45,8 @@ export async function generateViewport({ searchParams }: { searchParams: Promise
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const app = await appOf(params);
-  const next = safeNext(params.next) ?? APPS[app].home;
+  // Finance et AxisPro s'ouvrent sur l'accueil NIMOVA, comme l'accueil d'Odoo.
+  const next = safeNext(params.next) ?? (app === "finance" || app === "axispro" ? "/accueil" : APPS[app].home);
   const message = (params.error && MESSAGES[params.error]) || (params.message && MESSAGES[params.message]) || null;
   const portail = app === "portail";
 

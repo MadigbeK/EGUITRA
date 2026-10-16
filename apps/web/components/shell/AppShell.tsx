@@ -207,7 +207,16 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
                 <span className="hidden flex-1 text-left sm:inline">Rechercher un écran</span>
                 <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted sm:inline">Ctrl K</kbd>
               </button>
-              <Applications app={app} me={me} />
+              {(me.apps.includes("finance") || me.apps.includes("axispro")) && (
+                <Link
+                  href="/accueil"
+                  className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-panel text-ink-2 shadow-[0_1px_2px_rgb(16_36_31/0.04)] transition-colors hover:border-line-strong hover:text-ink"
+                  aria-label="Accueil NIMOVA"
+                  title="Accueil NIMOVA"
+                >
+                  <Grid className="h-4 w-4" />
+                </Link>
+              )}
               <span className="hidden items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[13px] font-medium capitalize text-ink-2 xl:flex">
                 <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-accent-vif" />
                 <Aujourdhui />
@@ -491,68 +500,6 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
               </button>
             );
           })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Applications du compte : passer de Finance à AxisPro (ou à Rotations) d'un clic. */
-function Applications({ app, me }: { app: AppCode; me: Me }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  const panelId = useId();
-  const autres = me.apps.filter((a) => a !== "portail");
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onClick);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onClick);
-    };
-  }, [open]);
-
-  if (autres.length < 2) return null;
-  return (
-    <div ref={box} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-panel text-ink-2 shadow-[0_1px_2px_rgb(16_36_31/0.04)] transition-colors hover:border-line-strong hover:text-ink"
-        aria-label="Applications NIMOVA"
-        title="Applications NIMOVA"
-      >
-        <Grid className="h-4 w-4" />
-      </button>
-      {open && (
-        <div id={panelId} className="n-surgir absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-line bg-panel p-2 shadow-[var(--ombre-flottante)]">
-          <div className="px-2.5 pb-2 pt-1.5 text-[12px] font-semibold text-muted">Applications NIMOVA</div>
-          <div className="grid gap-1">
-            {autres.map((a) => (
-              <Link
-                key={a}
-                href={APPS[a].home}
-                onClick={() => setOpen(false)}
-                aria-current={a === app ? "true" : undefined}
-                className={cx("flex items-center gap-3 rounded-xl px-2.5 py-2 transition-colors", a === app ? "bg-panel-2" : "hover:bg-panel-2")}
-              >
-                <span aria-hidden className="grid h-9 w-9 place-items-center rounded-xl text-white shadow-[0_6px_14px_-8px_rgb(16_36_31/0.5)]" style={{ background: `linear-gradient(135deg, ${TEINTE_APP[a]}, color-mix(in oklab, ${TEINTE_APP[a]} 70%, #10241f))` }}>
-                  <Monogramme tuile={false} className="h-6 w-6" />
-                </span>
-                <span className="min-w-0 flex-1 leading-tight">
-                  <span className="block text-[13.5px] font-semibold text-ink">{APPS[a].name}</span>
-                  <span className="block truncate text-[12px] text-muted">{APPS[a].tagline}</span>
-                </span>
-                {a === app && <Check className="h-4 w-4 flex-none text-accent" strokeWidth={2.2} />}
-              </Link>
-            ))}
-          </div>
         </div>
       )}
     </div>
