@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monogramme } from "@/components/brand";
-import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Wifi } from "@/components/icons";
+import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
 import { Badge, Button, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
@@ -282,22 +282,25 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col">
-      <header className="sur-dos sticky top-0 z-10 bg-foret text-creme">
+      <header className="sur-dos sticky top-0 z-10 bg-[linear-gradient(135deg,#c4471d_0%,#983210_60%,#142f29_140%)] text-white shadow-[0_10px_30px_-18px_rgb(152_50_16/0.8)]">
         <div className="flex items-center gap-3 px-4 pb-3 pt-3.5">
-          <Monogramme tuile={false} className="h-9 w-9 flex-none" />
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white/15">
+            <Monogramme tuile={false} className="h-7 w-7" />
+          </span>
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="font-display text-[19px] font-semibold">Rotations</div>
-            <div className="truncate text-[12.5px] text-creme/70">{me.name}</div>
+            <div className="font-display text-[19px] font-bold">Rotations</div>
+            <div className="truncate text-[12.5px] text-white/75">{me.name}</div>
           </div>
           <span
             className={cx(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-semibold",
-              online ? "bg-creme/10 text-menthe" : "bg-or text-foret",
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold",
+              online ? "bg-white/15 text-white" : "bg-or text-foret",
             )}
           >
-            {online ? <Wifi className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />} {online ? "En ligne" : "Hors réseau"}
+            {online ? <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-menthe" style={{ ["--pouls" as string]: "rgb(165 230 194 / 0.7)" } as import("react").CSSProperties} /> : <CloudOff className="h-3.5 w-3.5" />}
+            {online && <Wifi className="h-3.5 w-3.5" />} {online ? "En ligne" : "Hors réseau"}
           </span>
-          <button type="button" onClick={logout} aria-label="Se déconnecter" className="-mr-1.5 grid h-11 w-11 place-items-center rounded-lg text-creme/80 hover:text-creme">
+          <button type="button" onClick={logout} aria-label="Se déconnecter" className="-mr-1.5 grid h-11 w-11 place-items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white">
             <LogOut className="h-5 w-5" />
           </button>
         </div>
@@ -308,10 +311,10 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
               type="button"
               onClick={() => setView(key)}
               aria-current={view === key ? "page" : undefined}
-              className={cx("flex min-h-12 items-center justify-center gap-2 border-b-[3px] font-medium transition-colors", view === key ? "border-or text-creme" : "border-transparent text-creme/65")}
+              className={cx("flex min-h-12 items-center justify-center gap-2 border-b-[3px] font-semibold transition-colors", view === key ? "border-white text-white" : "border-transparent text-white/70")}
             >
               {text}
-              {count ? <span className="grid h-5 min-w-5 place-items-center rounded-[4px] bg-or px-1 font-compteur text-[13px] font-semibold text-foret">{count}</span> : null}
+              {count ? <span className="n-surgir grid h-5 min-w-5 place-items-center rounded-full bg-or px-1.5 font-compteur text-[12.5px] font-bold text-foret">{count}</span> : null}
             </button>
           ))}
         </nav>
@@ -325,7 +328,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           refs === null ? <Notice tone="warn">Les listes (camions, clients, routes) ne sont pas encore sur ce téléphone. Ouvrez l&apos;application une première fois avec du réseau.</Notice> : (
             <div className="space-y-4">
               {form.uuid && <Notice tone="accent">Correction d&apos;une saisie en attente.</Notice>}
-              <section className="space-y-4 rounded-xl bg-panel p-4">
+              <section className="space-y-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
                 <Field label="Date de chargement"><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
                 <Field label="Ensemble routier">
                   <Select className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
@@ -342,12 +345,12 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 </div>
               </section>
 
-              <section className="grid grid-cols-2 gap-3 rounded-xl bg-panel p-4">
+              <section className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
                 <Field label="Volume chargé (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide" inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
                 <Field label="Volume livré (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide placeholder:font-sans placeholder:text-sm placeholder:font-normal" inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
               </section>
 
-              <section className="rounded-xl bg-panel p-4">
+              <section className="rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
                 <button type="button" aria-expanded={showCosts} className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px] font-medium text-ink" onClick={() => setShowCosts(!showCosts)}>
                   Frais de route
                   <span className="text-right text-[13px] font-normal text-muted">{showCosts ? "Masquer" : "Carburant, péages, frais de route…"}</span>
@@ -378,15 +381,18 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
             </div>
             {mine.length === 0 && <p className="py-8 text-center text-sm text-muted">Toutes vos saisies ont été transmises.</p>}
             {mine.map((item) => (
-              <div key={item.client_uuid} className={cx("rounded-xl bg-panel p-4 text-sm", item.status === "error" && "ring-1 ring-danger/50")}>
+              <div key={item.client_uuid} className={cx("n-surgir rounded-2xl border bg-panel p-4 text-sm shadow-[var(--ombre-carte)]", item.status === "error" ? "border-danger/40" : "border-line")}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
+                    <Truck className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
                     <div className="font-semibold text-ink">{label("vehicles", item.payload.vehicle_id)}, {fmtDate(item.payload.date_loading)}</div>
                     <div className="mt-0.5 text-[13px] text-muted">{label("clients", item.payload.partner_id)}, {label("routes", item.payload.route_id)}</div>
                   </div>
-                  <Badge tone={item.status === "error" ? "danger" : "warn"}>{item.status === "error" ? "Refusée" : "En attente"}</Badge>
+                  <Badge tone={item.status === "error" ? "danger" : "warn"} vivant={item.status !== "error"}>{item.status === "error" ? "Refusée" : "En attente"}</Badge>
                 </div>
-                <div className="mt-2 font-compteur text-[22px] font-semibold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} m³</div>
+                <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} <span className="text-[15px] font-semibold text-muted">m³</span></div>
                 {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
                 <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
                   <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs.costs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
@@ -402,7 +408,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           <div className="space-y-2">
             {!online && <Notice tone="warn">Hors réseau : dernière liste connue.</Notice>}
             {sent === null ? <p role="status" className="py-8 text-center text-sm text-muted">Chargement des rotations…</p> : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : (
-              <ul className="divide-y divide-line rounded-xl bg-panel px-4">
+              <ul className="divide-y divide-line rounded-2xl border border-line bg-panel px-4 shadow-[var(--ombre-carte)]">
                 {sent.map((r) => (
                   <li key={r.id} className="flex items-start justify-between gap-3 py-3.5 text-sm">
                     <div className="min-w-0">

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#142f29",
+  themeColor: "#b83e16",
 };
 
 /** Application Rotations : sans menu latéral, pensée pour le téléphone et le travail hors réseau. */
