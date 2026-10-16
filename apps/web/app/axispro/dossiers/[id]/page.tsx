@@ -1,8 +1,10 @@
 "use client";
 
 import { use, useState } from "react";
-import { Download, Lock, Printer, Send } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etapes, FileButton, Field, Input, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, Textarea, cx } from "@/components/ui";
+import { ChevronLeft, Coins, Download, FileText, Lock, MapPin, Printer, Send, ShieldAlert, Target } from "@/components/icons";
+import Link from "next/link";
+import type { CSSProperties } from "react";
+import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Etapes, FileButton, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Tabs, Tag, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, RECO, STATUS_LABELS, type CriterionEval, type DocFile, type DossierDetail, type Message, type Recommendation, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort } from "@/lib/format";
@@ -17,11 +19,52 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
   if (!d) return <Loading />;
   return (
     <div>
-      <PageHeader
-        title={`${d.reference}, ${d.name}`}
-        subtitle={`${d.promoter.name}${d.sector ? `, ${d.sector}` : ""}${d.location ? `, ${d.location}` : ""}, politique v${d.policy_version}`}
-        actions={<Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge>}
-      />
+      <Link href="/axispro" className="mb-3 inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-muted hover:text-accent">
+        <ChevronLeft className="h-4 w-4" /> Tous les dossiers
+      </Link>
+      <section className="n-degrade relative mb-6 overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_50px_-28px_var(--accent-lueur)] sm:p-7">
+        <svg aria-hidden viewBox="0 0 200 200" className="pointer-events-none absolute -right-10 -top-16 h-64 w-64 opacity-[0.14]" focusable="false">
+          {[0, 1, 2, 3].map((k) => (
+            <rect key={k} x={20 + k * 34} y={150 - k * 34} width="90" height="12" rx="4" fill="#fff" />
+          ))}
+          <circle cx="160" cy="34" r="12" fill="#fff" />
+        </svg>
+        <div className="relative flex flex-wrap items-center gap-6">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-lg bg-white/15 px-2 py-0.5 text-[12.5px] font-semibold tabular">{d.reference}</span>
+              {d.current_gate && <span className="rounded-lg bg-white/15 px-2 py-0.5 text-[12.5px] font-semibold">{d.current_gate.code} {d.current_gate.name}</span>}
+              <span className="rounded-lg bg-white px-2 py-0.5 text-[12.5px] font-bold text-accent">{RECO[d.recommendation].label}</span>
+            </div>
+            <h1 className="mt-3 text-[26px] font-bold leading-tight sm:text-[32px]">{d.name}</h1>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-white/80">
+              <span>{d.promoter.name}</span>
+              {d.sector && <span>{d.sector}</span>}
+              {d.location && (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" /> {d.location}
+                </span>
+              )}
+              <span>Grille version {d.policy_version}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-5">
+            <Anneau value={d.scoring.global_score} taille={112} epaisseur={9} couleur="#ffffff" clair sous="score / 100" />
+            <div className="space-y-2.5 text-[13px]">
+              <div>
+                <div className="text-white/70">Besoin de financement</div>
+                <div className="font-display text-[20px] font-bold tabular">{fmtShort(d.financing_need)} GNF</div>
+              </div>
+              <div>
+                <div className="text-white/70">Critères évalués</div>
+                <div className="font-semibold tabular">
+                  {d.progress.assessed} sur {d.progress.criteria}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
       <Tabs
         tabs={[
           { key: "synthese", label: "Synthèse" },
@@ -65,10 +108,10 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Score global" value={s.global_score === null ? "–" : `${Math.round(s.global_score)} / 100`} hint={`GO ≥ ${s.thresholds.go}, conditionnel ≥ ${s.thresholds.conditional}`} tone={RECO[s.recommendation].tone === "ok" ? "ok" : RECO[s.recommendation].tone === "danger" ? "danger" : "warn"} />
-        <Kpi label="Critères évalués" value={`${s.assessed} / ${s.criteria}`} />
-        <Kpi label="Éliminatoires actifs" value={String(s.knockouts.length)} hint={s.knockouts.map((k) => k.code).join(", ") || "Aucun"} tone={s.knockouts.length ? "danger" : "ok"} />
-        <Kpi label="Besoin de financement" value={fmtShort(d.financing_need)} hint={`Investissement ${fmtShort(d.investment)}`} />
+        <Kpi label="Score global" value={s.global_score === null ? "–" : `${Math.round(s.global_score)} / 100`} icon={Target} teinte="azur" hint={`GO à partir de ${s.thresholds.go}, sous conditions à partir de ${s.thresholds.conditional}`} tone={RECO[s.recommendation].tone === "ok" ? "ok" : RECO[s.recommendation].tone === "danger" ? "danger" : "warn"} />
+        <Kpi label="Critères évalués" value={`${s.assessed} sur ${s.criteria}`} icon={FileText} teinte="lagon" hint={`${Math.round((s.assessed / Math.max(1, s.criteria)) * 100)} % de la grille`} />
+        <Kpi label="Éliminatoires actifs" value={String(s.knockouts.length)} icon={ShieldAlert} teinte={s.knockouts.length ? "danger" : "jade"} hint={s.knockouts.map((k) => k.code).join(", ") || "Aucun"} tone={s.knockouts.length ? "danger" : "ok"} />
+        <Kpi label="Besoin de financement" value={fmtShort(d.financing_need)} icon={Coins} teinte="or" tone="accent" hint={`Investissement ${fmtShort(d.investment)}`} />
       </div>
       <Card
         title="Stage gates"
@@ -88,27 +131,43 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
       </Card>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card title="Score par domaine">
-          <ul className="space-y-3">
-            {s.domains.map((dom) => (
-              <li key={dom.domain_id}>
-                <div className="mb-1 flex justify-between text-xs"><span className="text-ink-2">{dom.code}, {dom.name} <span className="text-muted">(poids {dom.weight})</span></span><span className="font-mono">{dom.score === null ? "–" : Math.round(dom.score)}</span></div>
-                <ProgressBar value={dom.score ?? 0} tone={dom.score === null ? "accent" : dom.score >= s.thresholds.go ? "ok" : dom.score >= s.thresholds.conditional ? "warn" : "danger"} />
-              </li>
-            ))}
+          <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
+            <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-3 w-0.5 rounded bg-warn-vif" /> Seuil sous conditions ({s.thresholds.conditional})</span>
+            <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-3 w-0.5 rounded bg-jade" /> Seuil GO ({s.thresholds.go})</span>
+          </div>
+          <ul className="space-y-3.5">
+            {s.domains.map((dom, i) => {
+              const c = dom.score === null ? "var(--line-strong)" : dom.score >= s.thresholds.go ? "var(--g-jade)" : dom.score >= s.thresholds.conditional ? "var(--warn-vif)" : "var(--danger-vif)";
+              return (
+                <li key={dom.domain_id}>
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[13px]">
+                    <span className="min-w-0 truncate text-ink-2">
+                      <span className="font-semibold text-ink">{dom.code}</span> {dom.name} <span className="text-[12px] text-muted">poids {dom.weight}, {dom.assessed}/{dom.criteria} évalués</span>
+                    </span>
+                    <span className="font-display text-[16px] font-bold tabular text-ink">{dom.score === null ? "–" : Math.round(dom.score)}</span>
+                  </div>
+                  <div className="relative h-2.5 rounded-full bg-panel-3">
+                    <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(dom.score ?? 0, 1)}%`, background: c, "--i": i } as CSSProperties} />
+                    <span aria-hidden className="absolute -top-1 h-[18px] w-0.5 rounded bg-warn-vif" style={{ left: `${s.thresholds.conditional}%` }} />
+                    <span aria-hidden className="absolute -top-1 h-[18px] w-0.5 rounded bg-jade" style={{ left: `${s.thresholds.go}%` }} />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </Card>
         <Card title="Écarts prioritaires : actions du promoteur">
           {d.gaps.length === 0 ? <p className="text-sm text-muted">Aucun écart.</p> : (
             <ol className="space-y-2">
               {d.gaps.map((g, i) => (
-                <li key={g.criterion_id} className="rounded-lg bg-panel-2 px-3 py-2.5 text-sm">
+                <li key={g.criterion_id} className={cx("rounded-xl border bg-panel px-3.5 py-3 text-sm", g.knockout ? "border-danger/30 bg-danger-doux/40" : "border-line")}>
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <span className="grid h-5 min-w-5 place-items-center rounded-[4px] bg-accent px-1 font-mono text-[12px] font-semibold text-accent-ink">{i + 1}</span>
+                    <span className="n-degrade grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
                     <span className="font-medium">{g.code} {g.name}</span>
                     {g.knockout && <Badge tone="danger">Éliminatoire</Badge>}
                     {g.critical && <Badge tone="warn">Critique</Badge>}
                   </div>
-                  <div className="mt-1 text-xs text-muted">{g.action}</div>
+                  <div className="mt-1.5 pl-[34px] text-[12.5px] leading-snug text-muted">{g.action}</div>
                 </li>
               ))}
             </ol>
@@ -127,6 +186,15 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
     </div>
   );
 }
+
+/** Couleur de la puce d'état choisie. */
+const ETAT: Record<string, string> = {
+  met: "border-transparent bg-jade text-white shadow-[0_6px_14px_-8px_rgb(18_149_106/0.8)]",
+  partial: "border-transparent bg-ambre text-white shadow-[0_6px_14px_-8px_rgb(223_143_23/0.8)]",
+  not_met: "border-transparent bg-danger-vif text-white shadow-[0_6px_14px_-8px_rgb(236_79_73/0.8)]",
+  na: "border-transparent bg-ink-2 text-white",
+  not_assessed: "border-line-strong bg-panel-3 text-ink-2",
+};
 
 function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const [gate, setGate] = useState(String(d.current_gate?.id ?? ""));
@@ -163,7 +231,22 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
               </div>
               <div className="mt-1 text-xs text-muted">{c.domain}, poids {c.weight}{c.guidance ? `, ${c.guidance}` : ""}</div>
             </div>
-            <Select className="w-48" value={c.status} onChange={(e) => save(c, { status: e.target.value })} options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
+            <div role="group" aria-label={`État du critère ${c.code}`} className="flex flex-wrap gap-1.5">
+              {Object.entries(STATUS_LABELS).map(([value, label]) => {
+                const actif = c.status === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={actif}
+                    onClick={() => !actif && save(c, { status: value })}
+                    className={cx("rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-all duration-200", actif ? ETAT[value] ?? "border-transparent bg-panel-3 text-ink" : "border-line bg-panel text-muted hover:border-line-strong hover:text-ink")}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <Textarea className="mt-2 min-h-[48px]" defaultValue={c.comment ?? ""} placeholder="Commentaire d'évaluation" onBlur={(e) => e.target.value !== (c.comment ?? "") && save(c, { comment: e.target.value })} />
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -300,9 +383,9 @@ function Messages({ d }: { d: DossierDetail }) {
     <Card>
       <div className="max-h-[480px] space-y-2 overflow-y-auto">
         {(data ?? []).map((m) => (
-          <div key={m.id} className={cx("max-w-[80%] rounded-lg px-3 py-2 text-sm", m.from_promoter ? "bg-panel-2" : "ml-auto bg-accent/15", m.internal && "border border-dashed border-warn")}>
-            <div className="text-[11px] text-muted">{m.author}, {fmtDateTime(m.date)}{m.internal ? ", note interne" : ""}</div>
-            <div className="whitespace-pre-wrap">{m.body}</div>
+          <div key={m.id} className={cx("n-surgir max-w-[80%] rounded-2xl px-4 py-2.5 text-sm", m.from_promoter ? "rounded-bl-[6px] bg-panel-2" : m.internal ? "ml-auto rounded-br-[6px] border border-dashed border-warn bg-warn-doux" : "n-degrade ml-auto rounded-br-[6px] text-white")}>
+            <div className={cx("text-[11.5px]", !m.from_promoter && !m.internal ? "text-white/80" : "text-muted")}>{m.author}, {fmtDateTime(m.date)}{m.internal ? ", note interne" : ""}</div>
+            <div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{m.body}</div>
           </div>
         ))}
         {data && data.length === 0 && <p className="text-sm text-muted">Aucun échange.</p>}
