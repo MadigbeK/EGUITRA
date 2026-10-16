@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Send } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, FileButton, Loading, Notice, PageHeader, ProgressBar, Select, Textarea, cx } from "@/components/ui";
+import { Download, FileText, Flag, Send, Users } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, FileButton, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, RECO, type DocFile, type Message, type Recommendation, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDateTime } from "@/lib/format";
@@ -77,6 +77,11 @@ function Dossier({ d }: { d: PortalDossier }) {
     <div className="space-y-5">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       {d.decision && <Notice tone={RECO[d.decision].tone}>Décision du comité : <b>{RECO[d.decision].label}</b>. Votre consultant vous en détaille les conditions.</Notice>}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Kpi label="Étape en cours" value={d.current_gate?.name ?? "–"} icon={Flag} teinte="azur" hint={d.state === "closed" ? "Dossier clos" : d.state === "on_hold" ? "Dossier suspendu" : "Dossier en cours d'évaluation"} />
+        <Kpi label="Pièces transmises" value={`${d.documents_progress.received} sur ${d.documents_progress.due}`} icon={FileText} teinte="lagon" tone={pct >= 100 ? "ok" : "neutral"} hint={`${Math.round(pct)} % des pièces attendues à ce stade`} />
+        <Kpi label="Votre consultant" value={d.consultant ?? "À désigner"} icon={Users} teinte="or" tone="accent" hint="MB AxisPro Consulting" />
+      </div>
       <Card title="Avancement du dossier">
         <Etapes steps={d.gates.map((g) => ({ key: g.code, label: g.name, state: g.code === d.current_gate?.code ? "current" : g.reached ? "done" : "todo" }))} />
       </Card>
@@ -85,8 +90,8 @@ function Dossier({ d }: { d: PortalDossier }) {
           {d.actions.length === 0 ? <p className="text-sm text-muted">Rien pour le moment.</p> : (
             <ol className="space-y-3">
               {d.actions.map((a, i) => (
-                <li key={i} className="flex gap-3 text-sm">
-                  <span className="font-mono font-semibold text-muted">{i + 1}</span>
+                <li key={i} className="flex gap-3 rounded-xl bg-panel-2 p-3 text-sm">
+                  <span className="n-degrade grid h-7 w-7 flex-none place-items-center rounded-full text-[12.5px] font-bold text-white">{i + 1}</span>
                   <div>
                     <div className="font-semibold text-ink">{a.name}</div>
                     <div className="mt-0.5 leading-snug text-muted">{a.action}</div>
@@ -98,13 +103,13 @@ function Dossier({ d }: { d: PortalDossier }) {
         </Card>
         <Card title="Pièces demandées" className="lg:col-span-5">
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-[34px] font-semibold leading-none text-ink">{d.documents_progress.received}</span>
+            <span className="font-display text-[40px] font-bold leading-none text-ink">{d.documents_progress.received}</span>
             <span className="text-sm text-muted">
               transmise{d.documents_progress.received > 1 ? "s" : ""} sur {d.documents_progress.due} attendue{d.documents_progress.due > 1 ? "s" : ""} à ce stade
             </span>
           </div>
           <div className="mt-4">
-            <ProgressBar value={pct} tone={pct >= 100 ? "ok" : "accent"} />
+            <ProgressBar value={pct} tone={pct >= 100 ? "ok" : "accent"} rayures epaisseur={12} />
           </div>
         </Card>
       </div>
@@ -157,11 +162,11 @@ function Messages({ dossierId, closed }: { dossierId: number; closed: boolean })
     <Card title="Échanges avec le cabinet">
       <div className="max-h-[440px] space-y-3 overflow-y-auto">
         {(data ?? []).map((m) => (
-          <div key={m.id} className={cx("max-w-[78%] rounded-xl px-4 py-2.5 text-sm", m.from_promoter ? "ml-auto rounded-br-[4px] bg-accent/[0.08]" : "rounded-bl-[4px] bg-panel-2")}>
-            <div className="text-[12px] text-muted">
-              <span className="font-semibold text-ink-2">{m.author}</span>, {fmtDateTime(m.date)}
+          <div key={m.id} className={cx("n-surgir max-w-[78%] rounded-2xl px-4 py-2.5 text-sm", m.from_promoter ? "n-degrade ml-auto rounded-br-[6px] text-white" : "rounded-bl-[6px] bg-panel-2")}>
+            <div className={cx("text-[12px]", m.from_promoter ? "text-white/80" : "text-muted")}>
+              <span className={cx("font-semibold", m.from_promoter ? "text-white" : "text-ink-2")}>{m.author}</span>, {fmtDateTime(m.date)}
             </div>
-            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-ink">{m.body}</div>
+            <div className={cx("mt-1 whitespace-pre-wrap leading-relaxed", m.from_promoter ? "text-white" : "text-ink")}>{m.body}</div>
           </div>
         ))}
         {data && data.length === 0 && <p className="text-sm text-muted">Aucun échange pour le moment.</p>}
