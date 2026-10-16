@@ -9,6 +9,8 @@
         <field name="user_id" ref="base.user_root"/>
         <field name="interval_number">1</field>
         <field name="interval_type">days</field>
+        <!-- Chaque nuit à 01 h 20 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:20:00')"/>
         <field name="active" eval="True"/>
     </record>
     <!-- Relances des clients : créées chaque nuit, envoyées seules si un serveur de courriel existe. -->
@@ -20,6 +22,8 @@
         <field name="user_id" ref="base.user_root"/>
         <field name="interval_number">1</field>
         <field name="interval_type">days</field>
+        <!-- Chaque nuit à 01 h 40 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:40:00')"/>
         <field name="active" eval="True"/>
     </record>
 </odoo>

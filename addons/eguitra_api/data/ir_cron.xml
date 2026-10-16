@@ -7,6 +7,8 @@
         <field name="code">model._cron_purge()</field>
         <field name="interval_number">1</field>
         <field name="interval_type">days</field>
+        <!-- Chaque nuit à 02 h 30 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 02:30:00')"/>
     </record>
     <record id="cron_purge_access_log" model="ir.cron">
         <field name="name">EGUITRA : purge des journaux d'accès de plus de 12 mois</field>
@@ -15,6 +17,8 @@
         <field name="code">model._cron_purge()</field>
         <field name="interval_number">1</field>
         <field name="interval_type">days</field>
+        <!-- Chaque nuit à 02 h 40 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 02:40:00')"/>
     </record>
     <record id="cron_purge_login_attempts" model="ir.cron">
         <field name="name">EGUITRA : purge des tentatives de connexion</field>
@@ -23,5 +27,7 @@
         <field name="code">model._cron_purge()</field>
         <field name="interval_number">1</field>
         <field name="interval_type">days</field>
+        <!-- Chaque nuit à 02 h 50 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 02:50:00')"/>
     </record>
 </odoo>

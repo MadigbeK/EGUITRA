@@ -56,6 +56,7 @@ class TestImmobilier(FinanceDataMixin, TransactionCase):
         self.env["eguitra.lease"]._cron_generate_rents()
         self.assertEqual(self.env["account.move"].search_count([("partner_id", "=", self.tenant.id)]), 2)
         self.assertTrue(self.env.ref("eguitra_immobilier.cron_rents").active)
+        self.assertEqual(self.env.ref("eguitra_immobilier.cron_rents").nextcall.hour, 1, "Quittancement la nuit, à 1 h")
         cron = self.env.ref("contract.contract_cron_for_invoice")
         self.assertFalse(cron.active, "Génération du module contract remplacée")
         cron.active = True  # base existante : la fiche du module contract n'est pas rechargée à la mise à jour
