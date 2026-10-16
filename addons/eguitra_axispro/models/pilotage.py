@@ -157,7 +157,7 @@ class AxisproAction(models.Model):
             if gap["criterion_id"] in open_criteria.ids:
                 continue
             values.append({
-                "dossier_id": dossier.id, "name": gap["action"], "description": f"{gap['code']} {gap['name']}",
+                "dossier_id": dossier.id, "name": gap["name"], "description": gap["action"],
                 "source": "gap", "criterion_id": gap["criterion_id"], "assignee": "porteur", "due_date": due,
             })
         return self.create(values)
