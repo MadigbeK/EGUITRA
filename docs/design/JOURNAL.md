@@ -35,7 +35,14 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
     médians de gabarit, libellés en casse normale.
 - Maquette d'API locale pour contrôler les écrans connectés sans mot de passe réel :
   `docs/design/maquette-api/` (données fictives, outil de conception uniquement).
+- Relecture visuelle de chaque écran sur la maquette, en grand écran et sur un téléphone de
+  360 px, puis corrections (titres d'onglet, chiffres sur une ligne, étiquettes neutres, aplats,
+  marque du cabinet seule côté porteur).
+- Charte (`docs/design/CHARTE.md`), planche de présentation (`docs/design/planche/index.html`,
+  régénérée par `node docs/design/planche/construire.mjs`) et captures de référence
+  (`docs/design/captures/`, données fictives).
 - Contrôles : `npx tsc --noEmit` et `npx next build` sans erreur.
+- Branche `claude/design-nimova` poussée sur GitHub le 16 octobre 2026 ; rien n'est déployé.
 
 ## Décisions du gérant (16 octobre 2026)
 
@@ -59,10 +66,16 @@ reporte dans `docs/projet/ETAT.md` au moment de la fusion.
   nuit pour MB AxisPro Consulting).
 - Les valeurs absentes s'affichent « – » (tiret demi-cadratin) au lieu du tiret cadratin.
 
-## En cours
+## Reste à faire
 
-- Contrôle visuel de chaque écran sur la maquette d'API, puis corrections.
+- Validation de l'ensemble par le gérant, sur la recette (http://localhost:3200 avec le tunnel)
+  ou sur la planche ; ajustements éventuels dans cette branche.
+- Logo officiel de MB AxisPro Consulting à recevoir (prérequis client) : il remplacera la
+  composition typographique du portail (`components/brand.tsx`, `public/icons/portail.svg`).
 
 ## Pour la session fonctionnelle
 
 - Voir `demandes-fonctionnelles.md` : domaine nimovagroup.com, version du cache de Rotations.
+- À la fusion : les écrans ont été retouchés pour leur seule présentation (imports d'icônes,
+  libellés, classes) ; en cas de conflit avec une évolution fonctionnelle, garder la logique de
+  la session fonctionnelle et réappliquer la présentation.
