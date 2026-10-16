@@ -165,6 +165,21 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**Décisions du gérant, 16 octobre (suite de la vérification de l'organisation)** :
+- Autres services de MB AxisPro (formation et coaching, conseil, audit d'évaluation des transporteurs,
+  certification) : facturés depuis Finance ; modules dédiés plus tard. Fait : activités analytiques du
+  cabinet créées à chaque mise à jour d'`eguitra_axispro` (Gestion de projets, Formation et coaching,
+  Conseil, Audit d'évaluation des transporteurs, Certification), proposées à chaque ligne de facture ;
+  les honoraires des dossiers AxisPro relèvent de « Gestion de projets ».
+- Transport : créer un module de gestion du transport couvrant tout le pôle Transport & Logistique
+  d'EGUITRA (miniers, pétroliers, conteneurs, personnel, location de véhicules, taxi). Hors offre
+  (nouveau module). Cadrage et questions au client : `docs/projet/cadrage-transport.md`.
+- Comptabilité (frais communs aux deux sociétés, refacturation) : le client reviendra vers nous.
+- Adresse du portail des porteurs : question reformulée au gérant (domaine du cabinet ou
+  nimovagroup.com).
+- Accueil NIMOVA (session design, tuiles des modules) fusionné et déployé en recette, avec un
+  correctif : sur axispro.*, sans cookie, l'accueil et la racine ouvrent AxisPro et non Finance.
+
 **Fait le 16 octobre** : retouches du design NIMOVA fusionnées (accueil d'AxisPro en portefeuille, fiche dossier, comités, temps, pièces standard, bascule « Finance | AxisPro » en tête du menu, pages introuvable et d'erreur ; `docs/design/JOURNAL.md`) et déployées en recette avec le module AxisPro 19.0.1.1.0 ; guide de démonstration PowerPoint mis à jour (repères de l'écran NIMOVA, société dans la colonne de gauche, accueil d'AxisPro, portail avec le compte `porteur.demo`).
 
 **Fait le 16 octobre, demandé par le gérant : AxisPro Suite en mode expert** (au-delà du chapitre 3.7 de l'offre), en recette.
