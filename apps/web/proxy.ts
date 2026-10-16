@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { appFromHost, appFromPath, isAppCode } from "@/lib/config";
+import { accueilApp, appFromHost, appFromPath, isAppCode } from "@/lib/config";
 import {
   COOKIES,
   accessExpiring,
@@ -18,8 +18,9 @@ export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   // La racine ouvre l'accueil NIMOVA ; le domaine du portail garde son portail.
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   if (pathname === "/") {
-    const app = appFromHost(req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
+    const app = appFromHost(host);
     return NextResponse.redirect(new URL(app === "portail" ? "/portail" : "/accueil", req.url));
   }
 
@@ -27,7 +28,7 @@ export async function proxy(req: NextRequest) {
   const app =
     appFromPath(pathname) ??
     (pathname.startsWith("/compte") ? (isAppCode(fromCookie) ? fromCookie : "finance") : null) ??
-    (pathname === "/accueil" ? (fromCookie === "axispro" ? "axispro" : "finance") : null);
+    (pathname === "/accueil" ? accueilApp(fromCookie, host) : null);
   if (!app) return NextResponse.next();
 
   const refresh = req.cookies.get(COOKIES.refresh)?.value;

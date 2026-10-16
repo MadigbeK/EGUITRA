@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Accueil } from "@/components/accueil/Accueil";
+import { accueilApp } from "@/lib/config";
 import { requireUser } from "@/lib/server-api";
 import { COOKIES } from "@/lib/session";
 
@@ -11,7 +12,8 @@ export const metadata: Metadata = { title: { absolute: "Accueil · NIMOVA" } };
 export default async function Page() {
   const memo = (await cookies()).get(COOKIES.app)?.value;
   if (memo === "portail") redirect("/portail");
-  const app = memo === "axispro" ? "axispro" : "finance";
+  const h = await headers();
+  const app = accueilApp(memo, h.get("x-forwarded-host") ?? h.get("host"));
   const me = await requireUser(app);
   return <Accueil me={me} app={app} />;
 }

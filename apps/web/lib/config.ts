@@ -30,6 +30,16 @@ export function appFromHost(host: string | null): AppCode {
   return "finance";
 }
 
+/**
+ * Espace ouvert par l'accueil NIMOVA : celui mémorisé à la connexion, à défaut celui de l'adresse
+ * (axispro.* : AxisPro). Sans cela, un consultant du cabinet arrivant sur axispro.* sans cookie
+ * serait envoyé vers la connexion à Finance, qui ne lui est pas ouverte.
+ */
+export function accueilApp(memo: string | undefined, host: string | null): "finance" | "axispro" {
+  if (memo === "finance" || memo === "axispro") return memo;
+  return appFromHost(host) === "axispro" ? "axispro" : "finance";
+}
+
 /** Application déduite du chemin demandé. */
 export function appFromPath(pathname: string): AppCode | null {
   const first = pathname.split("/")[1] ?? "";
