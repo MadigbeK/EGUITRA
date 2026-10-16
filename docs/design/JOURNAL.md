@@ -81,7 +81,13 @@ même branche, sans toucher à la logique des écrans :
 - Tableau de bord du dirigeant recomposé : trésorerie au compteur avec barres par compte, quatre
   chiffres clés, courbes du chiffre d'affaires et du résultat, alertes à pastilles, anneau de
   l'ancienneté des créances, jauge de couverture de la dette, indicateurs, classement des marges.
-- Contrôles : `npx tsc --noEmit` et `npx next build` ; rendu vérifié sur la maquette d'API.
+- Écrans enrichis ensuite, carte blanche du gérant : transport (volume au compteur, état de la
+  flotte en segments, chiffres clés à pastilles), trésorerie (comptes en cartes, compte choisi
+  en dégradé), AxisPro (chiffres clés, score en pastille), portail (étape, pièces, consultant,
+  messages en bulles), Rotations (en-tête corail, état du réseau qui bat, cartes de saisie).
+  Couleur du navigateur de Rotations passée au corail (`app/mobile/layout.tsx`, manifeste).
+- Contrôles : `npx tsc --noEmit` et `npx next build` ; rendu vérifié sur la maquette d'API
+  (grand écran et téléphone de 390 px).
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
