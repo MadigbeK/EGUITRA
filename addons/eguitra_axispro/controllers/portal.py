@@ -37,8 +37,22 @@ def _portal_view(dossier):
         "documents": docs,
         "documents_progress": {"due": len(due), "received": len([d for d in due if d["state"] in ("received", "validated")])},
         "actions": [{"name": g["name"], "action": g["action"]} for g in dossier.gaps(5)],
+        "tasks": [_task_row(a) for a in _tasks(dossier)],
         "decision": dossier.decision or None,
     }
+
+
+def _tasks(dossier):
+    """Actions confiées au porteur et rendues visibles par le cabinet."""
+    return dossier.action_ids.filtered(
+        lambda a: a.portal_visible and a.assignee == "porteur" and a.state != "cancelled"
+    ).sorted(lambda a: (a.state == "done", a.due_date or fields.Date.today(), a.id))
+
+
+def _task_row(action):
+    return {"id": action.id, "name": action.name, "description": action.description or None,
+            "due_date": action.due_date, "state": action.state, "porteur_comment": action.porteur_comment or None,
+            "overdue": action.is_overdue()}
 
 
 class EguitraPortal(http.Controller):
@@ -72,6 +86,19 @@ class EguitraPortal(http.Controller):
             raise ApiError(404, "not_found", "Pièce introuvable.")
         _own(doc.dossier_id.id)
         return download(doc)
+
+    @api_route("/portail/actions/<int:action_id>/report", methods=("POST",), profiles=PORTEUR)
+    def report_action(self, action_id, **_kw):
+        """Le porteur déclare une action réalisée ; le cabinet la valide ensuite."""
+        action = request.env["axispro.action"].sudo().browse(action_id).exists()
+        if not action or not action.portal_visible or action.assignee != "porteur":
+            raise ApiError(404, "not_found", "Action introuvable.")
+        dossier = _own(action.dossier_id.id)
+        if dossier.state == "closed" or action.state not in ("todo", "in_progress", "submitted"):
+            raise ApiError(422, "business_rule", "Cette action n'attend plus de compte rendu.")
+        (comment,) = require(read_json(), "comment")
+        action.write({"state": "submitted", "porteur_comment": str(comment)[:5000]})
+        return _task_row(action)
 
     @api_route("/portail/dossiers/<int:dossier_id>/messages", profiles=PORTEUR)
     def messages(self, dossier_id, **_kw):

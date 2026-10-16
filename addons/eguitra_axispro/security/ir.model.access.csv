@@ -24,3 +24,13 @@ access_review_cabinet,comités cabinet,model_axispro_review,eguitra_base.group_p
 access_review_direction,comités direction,model_axispro_review,eguitra_base.group_profile_direction,1,0,0,0
 access_timesheet_cabinet,temps cabinet,model_axispro_timesheet,eguitra_base.group_profile_cabinet,1,1,1,1
 access_timesheet_direction,temps direction,model_axispro_timesheet,eguitra_base.group_profile_direction,1,0,0,0
+access_plan_cabinet,modèle financier cabinet,model_axispro_plan,eguitra_base.group_profile_cabinet,1,1,1,1
+access_plan_direction,modèle financier direction,model_axispro_plan,eguitra_base.group_profile_direction,1,0,0,0
+access_plan_line_cabinet,hypothèses financières cabinet,model_axispro_plan_line,eguitra_base.group_profile_cabinet,1,1,1,1
+access_plan_line_direction,hypothèses financières direction,model_axispro_plan_line,eguitra_base.group_profile_direction,1,0,0,0
+access_risk_cabinet,risques cabinet,model_axispro_risk,eguitra_base.group_profile_cabinet,1,1,1,1
+access_risk_direction,risques direction,model_axispro_risk,eguitra_base.group_profile_direction,1,0,0,0
+access_action_cabinet,plan d'actions cabinet,model_axispro_action,eguitra_base.group_profile_cabinet,1,1,1,1
+access_action_direction,plan d'actions direction,model_axispro_action,eguitra_base.group_profile_direction,1,0,0,0
+access_funding_cabinet,financements cabinet,model_axispro_funding,eguitra_base.group_profile_cabinet,1,1,1,1
+access_funding_direction,financements direction,model_axispro_funding,eguitra_base.group_profile_direction,1,0,0,0

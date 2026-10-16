@@ -13,8 +13,13 @@ from odoo.exceptions import UserError
 
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, xlsx_row
 
+from ..engine import INDICATORS, suggest
+
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
+# Colonnes facultatives : critère adossé à un indicateur du modèle financier (code ou libellé de
+# l'indicateur, seuil de satisfaction, seuil de satisfaction partielle).
+OPTIONAL_COLUMNS = ("indicateur", "seuil", "seuil_partiel")
 
 
 class AxisproPolicy(models.Model):
@@ -86,13 +91,22 @@ class AxisproPolicy(models.Model):
                     if row["domaine"] not in domains or row["gate"] not in gates:
                         errors.append(f"Ligne {line_no} ({code}) : domaine ou gate inconnu.")
                         continue
-                    self.env["axispro.criterion"].create({
+                    values = {
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
                         "domain_id": domains[row["domaine"]].id, "gate_id": gates[row["gate"]].id,
                         "weight": _num(row["poids"], 1), "critical": _bool(row["critique"]),
                         "knockout": _bool(row["eliminatoire"]), "evidence_required": _bool(row["preuve"]),
                         "guidance": row["aide"] or False,
-                    })
+                    }
+                    if row["indicateur"]:
+                        indicator = _indicator(row["indicateur"])
+                        if not indicator or row["seuil"] == "":
+                            errors.append(f"Ligne {line_no} ({code}) : indicateur inconnu ou seuil manquant.")
+                            continue
+                        values.update({"indicator": indicator, "indicator_threshold": _num(row["seuil"]),
+                                       "indicator_has_partial": row["seuil_partiel"] != "",
+                                       "indicator_partial": _num(row["seuil_partiel"])})
+                    self.env["axispro.criterion"].create(values)
                 else:
                     self.env["axispro.document.type"].create({
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
@@ -128,6 +142,15 @@ def _num(value, default=0.0):
         return default
 
 
+def _indicator(value):
+    """Code d'un indicateur à partir de son code ou de son libellé."""
+    text = str(value or "").strip().lower()
+    for key, (label, _higher, _unit) in INDICATORS.items():
+        if text in (key, label.lower()):
+            return key
+    return None
+
+
 def _bool(value):
     return str(value or "").strip().lower() in ("1", "oui", "o", "x", "yes", "vrai", "true")
 
@@ -150,12 +173,14 @@ def _read_rows(filename, content):
     missing = [c for c in GRID_COLUMNS if c not in header]
     if missing:
         raise UserError("Colonnes manquantes : " + ", ".join(missing))
-    index = {c: header.index(c) for c in GRID_COLUMNS}
+    index = {c: header.index(c) for c in GRID_COLUMNS + OPTIONAL_COLUMNS if c in header}
     rows = []
     for n, values in enumerate(raw[1:], start=2):
         if not any(v not in (None, "") for v in values):
             continue
-        row = {c: (str(values[i]).strip() if i < len(values) and values[i] is not None else "") for c, i in index.items()}
+        row = dict.fromkeys(OPTIONAL_COLUMNS, "")
+        row.update({c: (str(values[i]).strip() if i < len(values) and values[i] is not None else "")
+                    for c, i in index.items()})
         row["type"] = row["type"].lower().replace("è", "e").replace("é", "e")
         rows.append((n, row))
     return rows
@@ -169,11 +194,13 @@ def grid_template():
     book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
     sheet = book.add_worksheet("Grille")
     bold = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
-    xlsx_row(sheet, 0, GRID_COLUMNS, bold)
+    xlsx_row(sheet, 0, GRID_COLUMNS + OPTIONAL_COLUMNS, bold)
     examples = [
         ("gate", "G0", "Idée et opportunité", "", "", "", "", "", "", "Le projet répond-il à un besoin avéré ?"),
         ("domaine", "D01", "Marché et demande", "", "", "10", "", "", "", ""),
         ("critere", "C001", "Étude de marché documentée", "D01", "G0", "3", "oui", "non", "oui", "Joindre l'étude."),
+        ("critere", "C002", "Couverture du service de la dette", "D01", "G0", "2", "oui", "non", "non",
+         "DSCR minimal du modèle financier.", "dscr_min", "1,3", "1,1"),
         ("piece", "P01", "Statuts de la société", "Juridique", "G0", "", "oui", "", "", "Copie certifiée."),
     ]
     for r, row in enumerate(examples, start=1):
@@ -181,6 +208,14 @@ def grid_template():
     sheet.set_column(0, 1, 10)
     sheet.set_column(2, 2, 45)
     sheet.set_column(9, 9, 50)
+    sheet.set_column(10, 12, 14)
+    indicators = book.add_worksheet("Indicateurs")
+    xlsx_row(indicators, 0, ("Code", "Indicateur", "Sens", "Unité"), bold)
+    for r, (key, (label, higher, unit)) in enumerate(INDICATORS.items(), start=1):
+        xlsx_row(indicators, r, (key, label, "au moins le seuil" if higher else "au plus le seuil", unit))
+    indicators.set_column(0, 0, 18)
+    indicators.set_column(1, 1, 40)
+    indicators.set_column(2, 3, 18)
     book.close()
     return out.getvalue()
 
@@ -225,6 +260,23 @@ class AxisproCriterion(models.Model):
     critical = fields.Boolean("Critique")
     knockout = fields.Boolean("Éliminatoire", help="Non satisfait : NO-GO quel que soit le score.")
     evidence_required = fields.Boolean("Preuve requise")
+    # Critère adossé à un indicateur du modèle financier : statut suggéré à l'évaluateur.
+    indicator = fields.Selection([(k, v[0]) for k, v in INDICATORS.items()], "Indicateur du modèle financier")
+    indicator_threshold = fields.Float("Seuil de satisfaction")
+    indicator_has_partial = fields.Boolean("Seuil partiel défini")
+    indicator_partial = fields.Float("Seuil de satisfaction partielle")
+
+    def suggestion(self, indicators):
+        """Statut suggéré par le modèle financier (None sans indicateur ou sans modèle)."""
+        self.ensure_one()
+        if not self.indicator or indicators is None:
+            return None
+        result = suggest(self.indicator, self.indicator_threshold,
+                         self.indicator_partial if self.indicator_has_partial else None, indicators)
+        label, higher, unit = INDICATORS[self.indicator]
+        return dict(result, indicator=self.indicator, label=label, unit=unit, higher=higher,
+                    threshold=self.indicator_threshold,
+                    partial=self.indicator_partial if self.indicator_has_partial else None)
 
 
 class AxisproDocumentType(models.Model):

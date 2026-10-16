@@ -31,7 +31,18 @@ def dossier_summary(d):
         "progress": {"assessed": score["assessed"], "criteria": score["criteria"]},
         "documents": {"due": len(due), "received": len([x for x in due if x["state"] in ("received", "validated")])},
         "policy_version": d.policy_id.version,
+        "financial": _financial_brief(d),
+        "risks": d.risk_summary(),
+        "actions": d.action_summary(),
     }
+
+
+def _financial_brief(d):
+    indicators = d.financial_indicators()
+    if not indicators:
+        return None
+    return {k: indicators[k] for k in ("npv", "irr_project", "irr_equity", "dscr_min", "payback", "equity_share",
+                                       "cash_min")}
 
 
 def dossier_detail(d):

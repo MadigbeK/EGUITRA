@@ -9,7 +9,9 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
+from ..engine import INDICATORS
 from ..models.dossier import RECOMMENDATIONS, STATUSES
+from ..models.pilotage import ACTION_OPEN, ACTION_STATES, RISK_CATEGORIES, risk_level
 from ..models.policy import grid_template
 from .common import (
     document_row,
@@ -23,6 +25,9 @@ from .common import (
 
 READ = ("admin", "direction", "cabinet")
 WRITE = ("cabinet",)
+# Indicateurs financiers figés dans l'instantané d'une revue de comité.
+SNAPSHOT_INDICATORS = ("npv", "irr_project", "irr_equity", "dscr_min", "llcr", "payback", "equity_share",
+                       "ebitda_margin", "cash_min")
 
 
 def _dossier(dossier_id):
@@ -30,6 +35,15 @@ def _dossier(dossier_id):
     if not dossier:
         raise ApiError(404, "not_found", "Dossier introuvable.")
     return dossier
+
+
+def _report_financial(dossier):
+    plan = dossier.plan_ids[:1]
+    if not plan or not plan.line_ids:
+        return None
+    analysis = plan.analysis()
+    return {"indicators": analysis["indicators"], "financing_plan": analysis["financing_plan"],
+            "alerts": analysis["alerts"], "params": analysis["params"]}
 
 
 def _policy_payload(policy):
@@ -42,9 +56,12 @@ def _policy_payload(policy):
         "criteria": [
             {"id": c.id, "code": c.code, "name": c.name, "domain_id": c.domain_id.id, "gate_id": c.gate_id.id,
              "weight": c.weight, "critical": c.critical, "knockout": c.knockout,
-             "evidence_required": c.evidence_required, "guidance": c.guidance or None}
+             "evidence_required": c.evidence_required, "guidance": c.guidance or None,
+             "indicator": c.indicator or None, "indicator_threshold": c.indicator_threshold if c.indicator else None,
+             "indicator_partial": c.indicator_partial if c.indicator and c.indicator_has_partial else None}
             for c in policy.criterion_ids
         ],
+        "indicators": {k: {"label": v[0], "higher": v[1], "unit": v[2]} for k, v in INDICATORS.items()},
         "documents": [
             {"id": t.id, "code": t.code, "name": t.name, "category": t.category or None, "gate_id": t.gate_id.id or None,
              "required": t.required, "guidance": t.guidance or None}
@@ -127,6 +144,16 @@ class EguitraAxispro(http.Controller):
                 values[key] = bool(data[key])
         if "weight" in data:
             values["weight"] = as_float(data["weight"], "weight")
+        if "indicator" in data:
+            if data["indicator"] and data["indicator"] not in INDICATORS:
+                raise ApiError(400, "invalid_parameter", "Indicateur inconnu.")
+            values["indicator"] = data["indicator"] or False
+        if "indicator_threshold" in data:
+            values["indicator_threshold"] = as_float(data["indicator_threshold"] or 0, "indicator_threshold")
+        if "indicator_partial" in data:
+            partial = data["indicator_partial"]
+            values["indicator_has_partial"] = partial not in (None, "")
+            values["indicator_partial"] = as_float(partial, "indicator_partial") if partial not in (None, "") else 0.0
         criterion.write(values)
         return {"status": "ok"}
 
@@ -197,13 +224,16 @@ class EguitraAxispro(http.Controller):
         evaluations = dossier.evaluation_ids
         if kw.get("gate_id"):
             evaluations = evaluations.filtered(lambda e: e.criterion_id.gate_id.id == int_arg(kw, "gate_id"))
+        indicators = dossier.financial_indicators() if evaluations.criterion_id.filtered("indicator") else None
         return [
             {"id": e.id, "criterion_id": e.criterion_id.id, "code": e.criterion_id.code, "name": e.criterion_id.name,
              "domain": e.criterion_id.domain_id.name, "gate_id": e.criterion_id.gate_id.id, "weight": e.criterion_id.weight,
              "critical": e.criterion_id.critical, "knockout": e.criterion_id.knockout,
              "evidence_required": e.criterion_id.evidence_required, "guidance": e.criterion_id.guidance or None,
              "status": e.status, "comment": e.comment or None, "documents": e.document_ids.ids,
-             "assessed_by": e.assessed_by.name or None, "assessed_at": e.assessed_at}
+             "assessed_by": e.assessed_by.name or None, "assessed_at": e.assessed_at,
+             "suggestion": e.criterion_id.suggestion(indicators) if e.criterion_id.indicator else None,
+             "indicator": e.criterion_id.indicator or None}
             for e in evaluations
         ]
 
@@ -283,6 +313,9 @@ class EguitraAxispro(http.Controller):
         if decision not in dict(RECOMMENDATIONS + [("postponed", "")]):
             raise ApiError(400, "invalid_parameter", "Décision inconnue.")
         scoring = dossier.scoring()
+        financial = dossier.financial_indicators()
+        if financial:
+            scoring["financial"] = {k: financial[k] for k in SNAPSHOT_INDICATORS}
         review = request.env["axispro.review"].create({
             "dossier_id": dossier.id, "date": parse_date(data, "date", today()), "gate_id": dossier.current_gate_id.id,
             "members": data.get("members") or False, "decision": decision, "conditions": data.get("conditions") or False,
@@ -336,6 +369,14 @@ class EguitraAxispro(http.Controller):
                        "notes": policy.notes or None, "go_threshold": policy.go_threshold,
                        "conditional_threshold": policy.conditional_threshold},
             "documents": dossier.documents_status(),
+            "financial": _report_financial(dossier),
+            "risks": [{"name": r.name, "category": r.category, "score": r.score, "level": risk_level(r.score),
+                       "mitigation": r.mitigation or None, "state": r.state}
+                      for r in dossier.risk_ids.filtered(lambda r: r.state != "closed")[:10]],
+            "actions": [{"name": a.name, "assignee": a.assignee, "due_date": a.due_date, "state": a.state}
+                        for a in dossier.action_ids.filtered(lambda a: a.state in ACTION_OPEN)],
+            "fundings": [{"funder": f.funder_id.name, "instrument": f.instrument, "amount_requested": f.amount_requested,
+                          "amount_granted": f.amount_granted, "state": f.state} for f in dossier.funding_ids],
             "generated_at": fields.Datetime.now(),
         }
 
@@ -379,6 +420,34 @@ class EguitraAxispro(http.Controller):
         xlsx_row(gaps, 0, ["Rang", "Critère", "Domaine", "Action attendue du promoteur"], head)
         for r, g in enumerate(dossier.gaps(5), start=1):
             xlsx_row(gaps, r, [r, f"{g['code']} {g['name']}", g["domain"], g["action"]])
+        financial = dossier.financial_indicators()
+        if financial:
+            fin = book.add_worksheet("Modèle financier")
+            xlsx_row(fin, 0, ["Indicateur", "Valeur"], head)
+            for r, (key, (label, _higher, unit)) in enumerate(INDICATORS.items(), start=1):
+                value = financial.get(key)
+                xlsx_row(fin, r, [f"{label} ({unit})", round(value, 2) if value is not None else "n.d."])
+            fin.set_column(0, 0, 45)
+            fin.set_column(1, 1, 22)
+        if dossier.risk_ids:
+            sheet_risks = book.add_worksheet("Risques")
+            xlsx_row(sheet_risks, 0, ["Risque", "Catégorie", "Probabilité", "Impact", "Criticité", "Atténuation", "État"],
+                     head)
+            categories = dict(RISK_CATEGORIES)
+            for r, risk in enumerate(dossier.risk_ids, start=1):
+                xlsx_row(sheet_risks, r, [risk.name, categories.get(risk.category, ""), risk.probability, risk.impact,
+                                          risk.score, risk.mitigation or "", risk.state])
+            sheet_risks.set_column(0, 0, 40)
+            sheet_risks.set_column(5, 5, 60)
+        if dossier.action_ids:
+            sheet_actions = book.add_worksheet("Plan d'actions")
+            xlsx_row(sheet_actions, 0, ["Action", "Confiée à", "Échéance", "État"], head)
+            states = dict(ACTION_STATES)
+            for r, action in enumerate(dossier.action_ids, start=1):
+                xlsx_row(sheet_actions, r, [action.name, "Porteur" if action.assignee == "porteur" else "Cabinet",
+                                            action.due_date.isoformat() if action.due_date else "", states[action.state]])
+            sheet_actions.set_column(0, 0, 60)
+            sheet_actions.set_column(1, 3, 16)
         book.close()
         return request.make_response(out.getvalue(), headers=[
             ("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
