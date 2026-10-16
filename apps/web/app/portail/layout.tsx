@@ -1,6 +1,16 @@
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { requireUser } from "@/lib/server-api";
+
+// Le portail est celui du cabinet : ni le nom ni le monogramme de la marque interne NIMOVA.
+export const metadata: Metadata = {
+  title: { absolute: "Portail des porteurs de projets · MB AxisPro Consulting", template: "%s · MB AxisPro Consulting" },
+  description: "Portail des porteurs de projets de MB AxisPro Consulting : dossier, pièces et échanges avec le cabinet.",
+  icons: { icon: "/icons/portail.svg" },
+};
+
+export const viewport: Viewport = { themeColor: "#23364b" };
 
 export default async function Layout({ children }: { children: ReactNode }) {
   const me = await requireUser("portail");

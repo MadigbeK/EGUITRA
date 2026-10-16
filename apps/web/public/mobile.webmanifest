@@ -1,5 +1,5 @@
 {
-  "name": "EGUITRA Rotations",
+  "name": "NIMOVA · Rotations",
   "short_name": "Rotations",
   "description": "Saisie des rotations de transport au parc, même sans réseau.",
   "lang": "fr",
@@ -7,11 +7,11 @@
   "scope": "/mobile",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f2f4fa",
-  "theme_color": "#1d2a6b",
+  "background_color": "#eff6f1",
+  "theme_color": "#b83e16",
   "icons": [
     { "src": "/icons/rotations-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/rotations-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/rotations-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/rotations-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

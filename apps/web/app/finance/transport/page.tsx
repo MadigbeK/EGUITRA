@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCheck, FileText, Plus, Smartphone } from "lucide-react";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { CheckCheck, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
+import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
@@ -48,12 +48,40 @@ export default function TransportPage() {
     <div>
       <PageHeader title="Transport pétrolier" subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge." />
       {summary && (
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Kpi label="Rotations du mois" value={String(summary.rotations)} hint={`${fmtDec(summary.volume)} m³ livrés`} />
-          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} tone="ok" />
-          <Kpi label="Marge du mois" value={fmtShort(summary.margin)} hint={fmtPct(summary.margin_rate)} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} />
-          <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} hint={`${summary.to_invoice.count} rotation(s) validée(s)`} tone="accent" />
-          <Kpi label="Flotte" value={`${summary.fleet.service ?? 0} en service`} hint={`${summary.fleet.maintenance ?? 0} en maintenance · ${summary.drafts} saisie(s) à valider`} />
+        <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
+          {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne ; l'état de la flotte dessous. */}
+          <section className="min-w-0 rounded-2xl border border-line bg-panel p-6 shadow-[var(--ombre-carte)] xl:col-span-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-[16.5px] font-semibold text-ink">Volume livré ce mois</h2>
+                <p className="mt-0.5 text-[12.5px] text-muted">
+                  {summary.rotations} rotation{summary.rotations > 1 ? "s" : ""}, {fmtDec(summary.volume)} m³ au total
+                </p>
+              </div>
+              <IconTile icon={Droplet} teinte="corail" />
+            </div>
+            <Compteur value={summary.volume} unit="m³" className="mt-5 text-[42px] text-ink sm:text-[50px]" />
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between text-[13px]">
+                <span className="font-semibold text-ink-2">Flotte</span>
+                <span className="text-muted">{(summary.fleet.service ?? 0) + (summary.fleet.maintenance ?? 0) + (summary.fleet.off ?? 0)} ensembles</span>
+              </div>
+              <Repartition
+                parts={[
+                  { key: "service", label: "En service", value: summary.fleet.service ?? 0, color: "#12956a" },
+                  { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: "#df8f17" },
+                  { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: "#ec4f49" },
+                ]}
+                format={(v) => `${v}`}
+              />
+            </div>
+          </section>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
+            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} icon={TrendingUp} teinte="jade" hint="Rotations validées et facturées" />
+            <Kpi label="Marge du mois" value={fmtShort(summary.margin)} icon={Percent} teinte={(summary.margin_rate ?? 0) < 15 ? "ambre" : "jade"} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} hint={`Taux de marge ${fmtPct(summary.margin_rate)}`} />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={`${summary.to_invoice.count} rotation(s) validée(s)`} />
+            <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
+          </div>
         </div>
       )}
       <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }]} value={tab} onChange={setTab} />
@@ -122,15 +150,15 @@ function Rotations() {
             empty="Aucune rotation pour ce filtre."
             columns={[
               { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={selected.includes(r.id)} /> },
-              { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name ?? "—"}{r.source === "mobile" && <Smartphone className="ml-1 inline h-3 w-3 text-accent" />}</span> },
+              { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name ?? "–"}{r.source === "mobile" && <Smartphone className="ml-1 inline h-3 w-3 text-accent" />}</span> },
               { key: "date_loading", label: "Chargement", render: (r) => fmtDate(r.date_loading) },
               { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name, sortValue: (r) => r.vehicle.name },
               { key: "client", label: "Client", render: (r) => r.client.name, sortValue: (r) => r.client.name },
               { key: "route", label: "Route", render: (r) => r.route.name },
               { key: "volume", label: "Livré (m³)", align: "right", render: (r) => fmtDec(r.volume_delivered || r.volume_loaded) },
               { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
-              { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} · {fmtPct(r.margin_rate, 0)}</span> },
-              { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]}>{STATE[r.state][0]}</Badge> },
+              { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span> },
+              { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]} vivant={r.state === "draft"}>{STATE[r.state][0]}</Badge> },
             ]}
             footer={
               data.items.length > 0 ? (
@@ -182,7 +210,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Field label="Chargement"><Input type="date" value={f.date_loading} onChange={set("date_loading")} /></Field>
             <Field label="Ensemble routier"><Select value={f.vehicle_id ?? ""} onChange={set("vehicle_id")} placeholder="Choisir…" options={ref.vehicles.map((v) => ({ value: v.id, label: `${v.name} ${v.tractor_plate ?? ""}` }))} /></Field>
-            <Field label="Chauffeur" hint="Vide : chauffeur habituel"><Select value={f.driver_id ?? ""} onChange={set("driver_id")} placeholder="—" options={ref.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
+            <Field label="Chauffeur" hint="Vide : chauffeur habituel"><Select value={f.driver_id ?? ""} onChange={set("driver_id")} placeholder="–" options={ref.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
             <Field label="Produit"><Select value={f.product} onChange={set("product")} options={ref.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
             <Field label="Client" className="md:col-span-2"><Select value={f.partner_id ?? ""} onChange={set("partner_id")} placeholder="Choisir…" options={ref.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
             <Field label="Route" className="md:col-span-2"><Select value={f.route_id ?? ""} onChange={set("route_id")} placeholder="Choisir…" options={ref.routes.map((r) => ({ value: r.id, label: r.name }))} /></Field>
@@ -244,9 +272,9 @@ function Fleet() {
         {message && <div className="p-3"><Notice>{message}</Notice></div>}
         <DataTable rows={vehicles ?? []} rowKey={(x) => x.id} columns={[
           { key: "name", label: "Code" },
-          { key: "tractor_plate", label: "Tracteur", render: (x) => x.tractor_plate ?? "—" },
+          { key: "tractor_plate", label: "Tracteur", render: (x) => x.tractor_plate ?? "–" },
           { key: "capacity_liters", label: "Capacité (L)", align: "right", render: (x) => x.capacity_liters.toLocaleString("fr-FR") },
-          { key: "driver", label: "Chauffeur", render: (x) => x.driver?.name ?? "—" },
+          { key: "driver", label: "Chauffeur", render: (x) => x.driver?.name ?? "–" },
           { key: "state", label: "État", render: (x) => <Select value={x.state} onChange={(e) => apiSend("PATCH", `/transport/vehicles/${x.id}`, { state: e.target.value }).then(() => mutate())} options={[{ value: "service", label: "En service" }, { value: "maintenance", label: "Maintenance" }, { value: "off", label: "Hors service" }]} /> },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-5">
@@ -260,8 +288,8 @@ function Fleet() {
       <Card title="Chauffeurs" padded={false}>
         <DataTable rows={drivers ?? []} rowKey={(x) => x.id} columns={[
           { key: "name", label: "Nom" },
-          { key: "phone", label: "Téléphone", render: (x) => x.phone ?? "—" },
-          { key: "license_number", label: "Permis", render: (x) => x.license_number ?? "—" },
+          { key: "phone", label: "Téléphone", render: (x) => x.phone ?? "–" },
+          { key: "license_number", label: "Permis", render: (x) => x.license_number ?? "–" },
           { key: "license_expiry", label: "Validité", render: (x) => (x.license_expiry && x.license_expiry < new Date().toISOString().slice(0, 10) ? <Badge tone="danger">Expiré {fmtDate(x.license_expiry)}</Badge> : fmtDate(x.license_expiry)) },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-5">
@@ -288,7 +316,7 @@ function Routes() {
           { key: "name", label: "Route" },
           { key: "distance_km", label: "Distance (km)", align: "right", render: (x) => String(x.distance_km) },
           { key: "default_rate", label: "Tarif par m³", align: "right", render: (x) => fmtGNF(x.default_rate) },
-          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${t.product})` : ""} : ${fmtShort(t.rate)}`).join(" · ") || "—" },
+          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${t.product})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-4">
           <Input placeholder="Conakry - Siguiri" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} />

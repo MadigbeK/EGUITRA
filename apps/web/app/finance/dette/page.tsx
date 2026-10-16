@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -91,7 +91,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
     }
   }
   return (
-    <Modal open wide title={loan ? `${loan.name} · ${loan.lender.name}` : "Financement"} onClose={onClose} footer={loan?.state === "draft" && <Button variant="primary" onClick={() => act(() => apiSend("POST", `/finance/loans/${id}/activate`))}>Mettre en service</Button>}>
+    <Modal open wide title={loan ? `${loan.name}, ${loan.lender.name}` : "Financement"} onClose={onClose} footer={loan?.state === "draft" && <Button variant="primary" onClick={() => act(() => apiSend("POST", `/finance/loans/${id}/activate`))}>Mettre en service</Button>}>
       {!loan ? (
         <Loading />
       ) : (

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Plus, ShieldOff } from "lucide-react";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { KeyRound, Plus, ShieldOff } from "@/components/icons";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Company, Me } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -42,7 +42,7 @@ export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]
             columns={[
               { key: "name", label: "Nom" },
               { key: "login", label: "Identifiant" },
-              { key: "profiles", label: "Profils", render: (u) => <div className="flex flex-wrap gap-1">{u.profiles.map((p) => <Badge key={p} tone="accent">{label(p)}</Badge>)}</div> },
+              { key: "profiles", label: "Profils", render: (u) => <div className="flex flex-wrap gap-1">{u.profiles.map((p) => <Tag key={p}>{label(p)}</Tag>)}</div> },
               { key: "companies", label: "Sociétés", render: (u) => <div className="flex flex-wrap gap-1">{u.companies.map((c) => <Badge key={c.id} tone={c.id === u.company_id ? "ok" : "neutral"}>{c.name}</Badge>)}</div> },
               { key: "mfa_enabled", label: "Double auth.", render: (u) => (u.mfa_enabled ? <Badge tone="ok">Activée</Badge> : <Badge tone="warn">À activer</Badge>) },
               { key: "last_login", label: "Dernière connexion", render: (u) => fmtDateTime(u.last_login) },

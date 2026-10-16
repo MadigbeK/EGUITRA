@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
 import { apiSend, useApi, ApiError } from "@/lib/api-client";
@@ -141,7 +141,7 @@ export function MoveForm({
 
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
-            <thead className="bg-panel-2 text-[11px] uppercase tracking-wider text-muted">
+            <thead className="bg-panel-2 text-[12.5px] font-medium text-muted">
               <tr>
                 <th className="px-2 py-2 text-left">Libellé</th>
                 <th className="w-20 px-2 py-2 text-right">Qté</th>
@@ -171,7 +171,7 @@ export function MoveForm({
                     <Select value={l.tax_id || String(defaultTax?.id ?? "")} onChange={(e) => update(i, { tax_id: e.target.value })} options={(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))} />
                   </td>
                   <td className="px-2 py-1.5">
-                    <Select value={l.activity_id} onChange={(e) => update(i, { activity_id: e.target.value })} placeholder="—" options={(activities ?? []).map((a) => ({ value: a.id, label: a.name }))} />
+                    <Select value={l.activity_id} onChange={(e) => update(i, { activity_id: e.target.value })} placeholder="–" options={(activities ?? []).map((a) => ({ value: a.id, label: a.name }))} />
                   </td>
                   <td className="px-1">
                     {lines.length > 1 && (

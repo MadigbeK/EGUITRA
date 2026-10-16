@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Printer, RefreshCw } from "lucide-react";
+import { Mail, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Kpi, Loading, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort } from "@/lib/format";
@@ -78,7 +78,7 @@ export default function RemindersPage() {
             { key: "days_overdue", label: "Retard", align: "right", render: (r) => `${r.days_overdue} j` },
             { key: "invoices", label: "Factures", align: "right" },
             { key: "amount_due", label: "Montant échu", align: "right", render: (r) => fmtGNF(r.amount_due) },
-            { key: "sent", label: state === "sent" ? "Envoi" : "Courriel", render: (r) => state === "sent" ? `${r.channel === "email" ? "Courriel" : "Courrier"}, ${fmtDateTime(r.sent_at)}` : r.email ?? "—" },
+            { key: "sent", label: state === "sent" ? "Envoi" : "Courriel", render: (r) => state === "sent" ? `${r.channel === "email" ? "Courriel" : "Courrier"}, ${fmtDateTime(r.sent_at)}` : r.email ?? "–" },
           ]} />
         )}
       </Card>

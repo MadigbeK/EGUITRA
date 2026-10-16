@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, Field, Input, Loading, Notice, PageHeader, Select } from "@/components/ui";
+import { Button, Card, DataTable, Field, Input, Loading, Notice, PageHeader, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec } from "@/lib/format";
 
@@ -118,7 +118,7 @@ function Rates({ currencies, onSaved }: { currencies: Currency[]; onSaved: () =>
           { key: "name", label: "Devise" },
           { key: "inverse_rate", label: "1 unité = … GNF", align: "right", render: (c) => fmtDec(c.inverse_rate) },
           { key: "date", label: "Date du taux", render: (c) => fmtDate(c.date) },
-          { key: "x", label: "", render: () => <Badge>BCRG ou saisie</Badge> },
+          { key: "x", label: "", render: () => <Tag>BCRG ou saisie</Tag> },
         ]}
       />
       <div className="flex flex-wrap items-end gap-3 border-t border-line p-4">

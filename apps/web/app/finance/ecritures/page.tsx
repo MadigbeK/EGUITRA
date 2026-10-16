@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Field, Input, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -48,8 +48,8 @@ export default function EntriesPage() {
             columns={[
               { key: "name", label: "Pièce", render: (m) => <span className="font-mono text-xs">{m.name ?? "Brouillon"}</span> },
               { key: "date", label: "Date", render: (m) => fmtDate(m.date) },
-              { key: "journal", label: "Journal", render: (m) => m.journal?.name ?? "—" },
-              { key: "ref", label: "Libellé", render: (m) => m.ref ?? "—" },
+              { key: "journal", label: "Journal", render: (m) => m.journal?.name ?? "–" },
+              { key: "ref", label: "Libellé", render: (m) => m.ref ?? "–" },
               { key: "amount_total", label: "Montant", align: "right", render: (m) => fmtGNF(m.amount_total) },
               { key: "state", label: "Statut", render: (m) => <Badge tone={MOVE_STATES[m.state]?.tone}>{MOVE_STATES[m.state]?.label}</Badge> },
             ]}
@@ -145,7 +145,7 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           </Field>
         </div>
         <table className="w-full text-sm">
-          <thead className="text-[11px] uppercase tracking-wider text-muted">
+          <thead className="text-[12.5px] font-medium text-muted">
             <tr>
               <th className="px-2 py-1 text-left">Compte</th>
               <th className="px-2 py-1 text-left">Libellé</th>

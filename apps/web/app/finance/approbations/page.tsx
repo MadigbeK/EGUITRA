@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
@@ -61,7 +61,7 @@ export default function ApprovalsPage() {
             onRowClick={(r) => setSelected(r.id)}
             columns={[
               { key: "name", label: "Demande" },
-              { key: "partner", label: "Tiers", render: (r) => r.partner ?? "—" },
+              { key: "partner", label: "Tiers", render: (r) => r.partner ?? "–" },
               { key: "amount", label: "Montant", align: "right", render: (r) => fmtGNF(r.amount) },
               { key: "requested_by", label: "Demandée par" },
               { key: "requested_at", label: "Le", render: (r) => fmtDate(r.requested_at) },
@@ -124,7 +124,7 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
             </div>
             <div>
               <div className="text-xs text-muted">Tiers</div>
-              <div>{r.partner ?? "—"}</div>
+              <div>{r.partner ?? "–"}</div>
             </div>
             <div>
               <div className="text-xs text-muted">Demandée par</div>
@@ -142,7 +142,7 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
             <ol className="space-y-2">
               {r.steps?.map((s) => (
                 <li key={s.sequence} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="grid h-6 w-6 place-items-center rounded-full bg-panel-2 text-xs">{s.sequence}</span>
+                  <span className="grid h-6 w-6 place-items-center rounded-md border border-line-strong/70 font-mono text-[13px] font-semibold text-ink-2">{s.sequence}</span>
                   <span className="flex-1">{s.label}</span>
                   <Badge tone={s.state === "approved" ? "ok" : s.state === "rejected" ? "danger" : s.state === "pending" ? "warn" : "neutral"}>
                     {s.state === "approved" ? `Approuvée par ${s.decided_by}` : s.state === "rejected" ? `Refusée par ${s.decided_by}` : s.state === "pending" ? s.profile : "Sans objet"}
@@ -191,7 +191,7 @@ function Rules() {
               { key: "sequence", label: "Niveau", align: "right", render: (r) => String(r.sequence) },
               { key: "name", label: "Règle" },
               { key: "min_amount", label: "À partir de", align: "right", render: (r) => fmtGNF(r.min_amount) },
-              { key: "max_amount", label: "Jusqu'à", align: "right", render: (r) => (r.max_amount ? fmtGNF(r.max_amount) : "—") },
+              { key: "max_amount", label: "Jusqu'à", align: "right", render: (r) => (r.max_amount ? fmtGNF(r.max_amount) : "–") },
               { key: "account_prefix", label: "Comptes", render: (r) => r.account_prefix ?? "Tous" },
               { key: "approver_label", label: "Approbateur" },
               { key: "active", label: "", render: (r) => <input type="checkbox" checked={r.active} onChange={(e) => apiSend("PATCH", `/approvals/rules/${r.id}`, { active: e.target.checked }).then(() => mutate()).catch(() => setMessage({ tone: "danger", text: "Réservé à l'administration." }))} /> },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Lock, LockOpen, ShieldAlert, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { MONTHS_FR, fmtDate, fmtDateTime } from "@/lib/format";
@@ -50,11 +50,11 @@ export default function ClosingPage() {
       {data && (
         <>
           <Notice tone="accent">
-            {data.company} · écritures verrouillées jusqu&apos;au {data.lock_date ? fmtDate(data.lock_date) : "— (aucune clôture)"}.
+            {data.company} : {data.lock_date ? `écritures verrouillées jusqu'au ${fmtDate(data.lock_date)}` : "aucune période clôturée pour l'instant"}.
           </Notice>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
             {data.months.map((m, i) => (
-              <button key={m.period} type="button" onClick={() => setMonth(m)} className={cx("rounded-xl border bg-panel p-4 text-left transition hover:border-accent", m.state === "closed" ? "border-ok/40" : "border-line")}>
+              <button key={m.period} type="button" onClick={() => setMonth(m)} className={cx("rounded-xl p-4 text-left transition-shadow hover:ring-1 hover:ring-inset hover:ring-line-strong/60", m.state === "closed" ? "bg-ok/[0.08]" : "bg-panel")}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold capitalize">{MONTHS_FR[i]}</span>
                   {m.state === "closed" ? <Lock className="h-4 w-4 text-ok" /> : <LockOpen className="h-4 w-4 text-muted" />}
@@ -98,8 +98,8 @@ function Integrity() {
               <DataTable dense rows={data.hash_chains} rowKey={(c) => c.journal} columns={[
                 { key: "journal", label: "Journal", render: (c) => c.journal },
                 { key: "status", label: "Écritures", render: (c) => <Badge tone={CHAIN[c.status]?.tone ?? "neutral"}>{CHAIN[c.status]?.label ?? c.status}</Badge> },
-                { key: "first", label: "Première pièce", render: (c) => c.first ?? "—" },
-                { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` (${c.last_date})` : ""}` : "—") },
+                { key: "first", label: "Première pièce", render: (c) => c.first ?? "–" },
+                { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` (${c.last_date})` : ""}` : "–") },
                 { key: "message", label: "", render: (c) => (c.status === "corrupted" ? <span className="text-danger">{c.message}</span> : null) },
               ]} />
             )}
@@ -117,7 +117,7 @@ function CheckList({ checks }: { checks: Check[] }) {
         const s = STATUS[c.status];
         const Icon = s.icon;
         return (
-          <li key={c.code} className="flex items-start gap-3 rounded-lg border border-line bg-panel-2 px-3 py-2">
+          <li key={c.code} className="flex items-start gap-3 rounded-lg bg-panel-2 px-3 py-2">
             <Icon className={cx("mt-0.5 h-4 w-4 flex-none", s.tone)} />
             <div className="flex-1">
               <div className="text-sm text-ink">{c.label}</div>
@@ -210,7 +210,7 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
             <ul className="space-y-1 text-xs text-ink-2">
               {month.events.map((e, i) => (
                 <li key={i}>
-                  {fmtDateTime(e.date)} · {e.action === "close" ? "Clôture" : "Réouverture"} par {e.user}
+                  {fmtDateTime(e.date)}, {e.action === "close" ? "Clôture" : "Réouverture"} par {e.user}
                   {e.reason ? ` : ${e.reason}` : ""}
                 </li>
               ))}

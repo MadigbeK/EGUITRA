@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "lucide-react";
+import { Monogramme } from "@/components/brand";
+import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
 import { Badge, Button, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
@@ -269,67 +270,104 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
   const label = (kind: "vehicles" | "clients" | "routes", id: unknown) => {
     const list: Array<{ id: number; name: string }> = refs?.[kind] ?? [];
-    return list.find((x) => x.id === Number(id))?.name ?? "—";
+    return list.find((x) => x.id === Number(id))?.name ?? "–";
   };
+
+  const champ = "min-h-12 text-base";
+  const views: Array<[View, string, number | null]> = [
+    ["saisie", "Nouvelle", null],
+    ["attente", "À envoyer", mine.length],
+    ["envoyees", "Envoyées", null],
+  ];
 
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col">
-      <header className="sticky top-0 z-10 flex items-center gap-3 bg-accent px-4 py-3 text-accent-ink shadow">
-        <Truck className="h-5 w-5" />
-        <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold leading-tight">Rotations</div>
-          <div className="truncate text-[11px] opacity-80">{me.name}</div>
+      <header className="sur-dos sticky top-0 z-10 bg-[linear-gradient(135deg,#c4471d_0%,#983210_60%,#142f29_140%)] text-white shadow-[0_10px_30px_-18px_rgb(152_50_16/0.8)]">
+        <div className="flex items-center gap-3 px-4 pb-3 pt-3.5">
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white/15">
+            <Monogramme tuile={false} className="h-7 w-7" />
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="font-display text-[19px] font-bold">Rotations</div>
+            <div className="truncate text-[12.5px] text-white/75">{me.name}</div>
+          </div>
+          <span
+            className={cx(
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold",
+              online ? "bg-white/15 text-white" : "bg-or text-foret",
+            )}
+          >
+            {online ? <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-menthe" style={{ ["--pouls" as string]: "rgb(165 230 194 / 0.7)" } as import("react").CSSProperties} /> : <CloudOff className="h-3.5 w-3.5" />}
+            {online && <Wifi className="h-3.5 w-3.5" />} {online ? "En ligne" : "Hors réseau"}
+          </span>
+          <button type="button" onClick={logout} aria-label="Se déconnecter" className="-mr-1.5 grid h-11 w-11 place-items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white">
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
-        <span className={cx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]", online ? "bg-white/15" : "bg-danger text-white")}>
-          {online ? <Wifi className="h-3 w-3" /> : <CloudOff className="h-3 w-3" />} {online ? "En ligne" : "Hors réseau"}
-        </span>
-        <button type="button" onClick={logout} aria-label="Se déconnecter" className="rounded p-1 opacity-80 hover:opacity-100"><LogOut className="h-4 w-4" /></button>
+        <nav className="grid grid-cols-3 px-2 text-[15px]">
+          {views.map(([key, text, count]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              aria-current={view === key ? "page" : undefined}
+              className={cx("flex min-h-12 items-center justify-center gap-2 border-b-[3px] font-semibold transition-colors", view === key ? "border-white text-white" : "border-transparent text-white/70")}
+            >
+              {text}
+              {count ? <span className="n-surgir grid h-5 min-w-5 place-items-center rounded-full bg-or px-1.5 font-compteur text-[12.5px] font-bold text-foret">{count}</span> : null}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      <nav className="grid grid-cols-3 border-b border-line bg-panel text-sm">
-        {([["saisie", "Nouvelle"], ["attente", `À envoyer${mine.length ? ` (${mine.length})` : ""}`], ["envoyees", "Envoyées"]] as Array<[View, string]>).map(([key, text]) => (
-          <button key={key} type="button" onClick={() => setView(key)} className={cx("border-b-2 py-3 font-medium", view === key ? "border-accent text-accent" : "border-transparent text-muted")}>{text}</button>
-        ))}
-      </nav>
-
-      <main className="flex-1 space-y-4 p-4">
+      <main className="flex-1 space-y-4 px-4 pb-10 pt-5">
         {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
         {view === "saisie" && (
-          refs === undefined ? <p className="py-10 text-center text-sm text-muted">Chargement…</p> :
+          refs === undefined ? <p role="status" className="py-10 text-center text-sm text-muted">Chargement des listes…</p> :
           refs === null ? <Notice tone="warn">Les listes (camions, clients, routes) ne sont pas encore sur ce téléphone. Ouvrez l&apos;application une première fois avec du réseau.</Notice> : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {form.uuid && <Notice tone="accent">Correction d&apos;une saisie en attente.</Notice>}
-              <Field label="Date de chargement"><Input type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
-              <Field label="Ensemble routier">
-                <Select value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
-                  const v = refs.vehicles.find((x) => String(x.id) === e.target.value);
-                  setForm({ ...form, vehicle_id: e.target.value, driver_id: v?.driver_id ? String(v.driver_id) : form.driver_id });
-                }} options={refs.vehicles.map((v) => ({ value: v.id, label: v.tractor_plate ? `${v.name} · ${v.tractor_plate}` : v.name }))} />
-              </Field>
-              <Field label="Chauffeur"><Select value={form.driver_id} placeholder="Chauffeur habituel" onChange={(e) => setForm({ ...form, driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
-              <Field label="Client"><Select value={form.partner_id} placeholder="Choisir le client" onChange={(e) => setForm({ ...form, partner_id: e.target.value })} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-              <Field label="Route"><Select value={form.route_id} placeholder="Choisir la route" onChange={(e) => setForm({ ...form, route_id: e.target.value })} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Produit"><Select value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
-                <Field label="Bon de livraison"><Input value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
-                <Field label="Volume chargé (m³)"><Input inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
-                <Field label="Volume livré (m³)"><Input inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
-              </div>
-              <button type="button" className="text-sm text-accent underline-offset-2 hover:underline" onClick={() => setShowCosts(!showCosts)}>
-                {showCosts ? "Masquer les frais" : "Ajouter des frais (carburant, péages, frais de route…)"}
-              </button>
-              {showCosts && (
-                <div className="grid grid-cols-2 gap-3 rounded-lg border border-line bg-panel p-3">
-                  {refs.costs.map((c) => (
-                    <Field key={c.code} label={`${c.label} (GNF)`}><Input inputMode="numeric" value={form.costs[c.code] ?? ""} onChange={(e) => setForm({ ...form, costs: { ...form.costs, [c.code]: e.target.value } })} /></Field>
-                  ))}
+              <section className="space-y-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+                <Field label="Date de chargement"><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
+                <Field label="Ensemble routier">
+                  <Select className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
+                    const v = refs.vehicles.find((x) => String(x.id) === e.target.value);
+                    setForm({ ...form, vehicle_id: e.target.value, driver_id: v?.driver_id ? String(v.driver_id) : form.driver_id });
+                  }} options={refs.vehicles.map((v) => ({ value: v.id, label: v.tractor_plate ? `${v.name}, ${v.tractor_plate}` : v.name }))} />
+                </Field>
+                <Field label="Chauffeur"><Select className={champ} value={form.driver_id} placeholder="Chauffeur habituel" onChange={(e) => setForm({ ...form, driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
+                <Field label="Client"><Select className={champ} value={form.partner_id} placeholder="Choisir le client" onChange={(e) => setForm({ ...form, partner_id: e.target.value })} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
+                <Field label="Route"><Select className={champ} value={form.route_id} placeholder="Choisir la route" onChange={(e) => setForm({ ...form, route_id: e.target.value })} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Produit"><Select className={champ} value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
+                  <Field label="Bon de livraison"><Input className={champ} value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
                 </div>
-              )}
-              <Field label="Observations"><Textarea className="min-h-[60px]" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-              <div className="flex gap-2">
-                {form.uuid && <Button className="flex-1 py-3" onClick={() => setForm(blank())}>Annuler</Button>}
-                <Button variant="primary" className="flex-1 py-3 text-base" onClick={save}>Enregistrer la rotation</Button>
+              </section>
+
+              <section className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+                <Field label="Volume chargé (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide" inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
+                <Field label="Volume livré (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide placeholder:font-sans placeholder:text-sm placeholder:font-normal" inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
+              </section>
+
+              <section className="rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+                <button type="button" aria-expanded={showCosts} className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px] font-medium text-ink" onClick={() => setShowCosts(!showCosts)}>
+                  Frais de route
+                  <span className="text-right text-[13px] font-normal text-muted">{showCosts ? "Masquer" : "Carburant, péages, frais de route…"}</span>
+                </button>
+                {showCosts && (
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-4">
+                    {refs.costs.map((c) => (
+                      <Field key={c.code} label={`${c.label} (GNF)`}><Input className={champ} inputMode="numeric" value={form.costs[c.code] ?? ""} onChange={(e) => setForm({ ...form, costs: { ...form.costs, [c.code]: e.target.value } })} /></Field>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <Field label="Observations"><Textarea className="min-h-[72px] text-base" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+              <div className="flex gap-2 pt-1">
+                {form.uuid && <Button className="min-h-14 flex-1 text-base" onClick={() => setForm(blank())}>Annuler</Button>}
+                <Button variant="primary" className="min-h-14 flex-1 text-base" onClick={save}>Enregistrer la rotation</Button>
               </div>
             </div>
           )
@@ -337,43 +375,54 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
         {view === "attente" && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-muted">
+            <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
               <span>{lastSync ? `Dernier envoi à ${lastSync}` : "Les saisies partent seules dès que le réseau revient."}</span>
-              <Button className="px-3 py-1.5 text-xs" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-3.5 w-3.5" /> Envoyer</Button>
+              <Button className="min-h-11 px-4" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
             </div>
             {mine.length === 0 && <p className="py-8 text-center text-sm text-muted">Toutes vos saisies ont été transmises.</p>}
             {mine.map((item) => (
-              <div key={item.client_uuid} className={cx("rounded-lg border bg-panel p-3 text-sm", item.status === "error" ? "border-danger/50" : "border-line")}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{label("vehicles", item.payload.vehicle_id)} · {fmtDate(item.payload.date_loading)}</div>
-                    <div className="text-xs text-muted">{label("clients", item.payload.partner_id)} · {label("routes", item.payload.route_id)} · {fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} m³</div>
+              <div key={item.client_uuid} className={cx("n-surgir rounded-2xl border bg-panel p-4 text-sm shadow-[var(--ombre-carte)]", item.status === "error" ? "border-danger/40" : "border-line")}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
+                    <Truck className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-ink">{label("vehicles", item.payload.vehicle_id)}, {fmtDate(item.payload.date_loading)}</div>
+                    <div className="mt-0.5 text-[13px] text-muted">{label("clients", item.payload.partner_id)}, {label("routes", item.payload.route_id)}</div>
                   </div>
-                  <Badge tone={item.status === "error" ? "danger" : "warn"}>{item.status === "error" ? "Refusée" : "En attente"}</Badge>
+                  <Badge tone={item.status === "error" ? "danger" : "warn"} vivant={item.status !== "error"}>{item.status === "error" ? "Refusée" : "En attente"}</Badge>
                 </div>
-                {item.message && <div className="mt-2 text-xs text-danger">{item.message}</div>}
-                <div className="mt-2 flex justify-end gap-3 text-xs">
-                  <button type="button" className="inline-flex items-center gap-1 text-accent" onClick={() => { if (refs) { setForm(fromPayload(item, refs.costs)); setView("saisie"); } }}><Pencil className="h-3.5 w-3.5" /> Corriger</button>
-                  <button type="button" className="inline-flex items-center gap-1 text-danger" onClick={() => void remove(item)}><Trash2 className="h-3.5 w-3.5" /> Supprimer</button>
+                <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} <span className="text-[15px] font-semibold text-muted">m³</span></div>
+                {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
+                <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
+                  <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs.costs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
+                  <Button variant="danger" className="min-h-11" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
                 </div>
               </div>
             ))}
-            {others > 0 && <p className="text-xs text-muted">{others} saisie(s) d&apos;un autre utilisateur restent sur ce téléphone : elles partiront à sa prochaine connexion.</p>}
+            {others > 0 && <p className="text-[13px] text-muted">{others} saisie(s) d&apos;un autre utilisateur restent sur ce téléphone : elles partiront à sa prochaine connexion.</p>}
           </div>
         )}
 
         {view === "envoyees" && (
           <div className="space-y-2">
             {!online && <Notice tone="warn">Hors réseau : dernière liste connue.</Notice>}
-            {sent === null ? <p className="py-8 text-center text-sm text-muted">Chargement…</p> : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : sent.map((r) => (
-              <div key={r.id} className="flex items-start justify-between gap-2 rounded-lg border border-line bg-panel p-3 text-sm">
-                <div>
-                  <div className="font-medium">{r.vehicle?.name ?? "—"} · {fmtDate(r.date_loading)}</div>
-                  <div className="text-xs text-muted">{r.client?.name ?? "—"} · {r.route?.name ?? "—"} · {fmtDec(r.volume_delivered || r.volume_loaded)} m³{r.name ? ` · ${r.name}` : ""}</div>
-                </div>
-                <Badge tone={STATE_LABEL[r.state][1]}>{STATE_LABEL[r.state][0]}</Badge>
-              </div>
-            ))}
+            {sent === null ? <p role="status" className="py-8 text-center text-sm text-muted">Chargement des rotations…</p> : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : (
+              <ul className="divide-y divide-line rounded-2xl border border-line bg-panel px-4 shadow-[var(--ombre-carte)]">
+                {sent.map((r) => (
+                  <li key={r.id} className="flex items-start justify-between gap-3 py-3.5 text-sm">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-ink">{r.vehicle?.name ?? "–"}, {fmtDate(r.date_loading)}</div>
+                      <div className="mt-0.5 text-[13px] text-muted">{r.client?.name ?? "–"}, {r.route?.name ?? "–"}{r.name ? `, ${r.name}` : ""}</div>
+                    </div>
+                    <div className="flex flex-none flex-col items-end gap-1">
+                      <span className="font-compteur text-[19px] font-semibold text-ink">{fmtDec(r.volume_delivered || r.volume_loaded)} m³</span>
+                      <Badge tone={STATE_LABEL[r.state][1]}>{STATE_LABEL[r.state][0]}</Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </main>

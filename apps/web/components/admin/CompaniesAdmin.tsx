@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import { Building2, ImageUp, Trash2 } from "lucide-react";
-import { Button, Card, ErrorBox, Field, Input, Loading, Notice, PageHeader } from "@/components/ui";
+import { Building2, Trash2 } from "@/components/icons";
+import { Button, Card, ErrorBox, Field, FileButton, Input, Loading, Notice, PageHeader } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 
 interface CompanyRow {
@@ -88,16 +88,13 @@ function CompanyForm({ company, onSaved }: { company: CompanyRow; onSaved: () =>
           <div className="grid h-16 w-40 place-items-center overflow-hidden rounded-lg border border-line bg-white">
             {shown ? <img src={shown} alt={`Logo de ${company.name}`} className="max-h-14 max-w-36 object-contain" /> : <Building2 className="h-6 w-6 text-muted" />}
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-accent">
-            <ImageUp className="h-4 w-4" /> {shown ? "Changer le logo" : "Ajouter le logo"}
-            <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => pickLogo(e.target.files?.[0])} />
-          </label>
+          <FileButton label={shown ? "Changer le logo" : "Ajouter le logo"} accept="image/png,image/jpeg" onFile={(f) => pickLogo(f)} />
           {shown && (
             <button type="button" className="inline-flex items-center gap-1 text-sm text-muted hover:text-danger" onClick={() => setLogo(null)}>
               <Trash2 className="h-4 w-4" /> Retirer
             </button>
           )}
-          <span className="text-xs text-muted">Devise {company.currency}{company.country ? ` · ${company.country}` : ""}</span>
+          <span className="text-xs text-muted">Devise {company.currency}{company.country ? `, ${company.country}` : ""}</span>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Raison sociale" className="md:col-span-2"><Input value={f.name} onChange={set("name")} /></Field>

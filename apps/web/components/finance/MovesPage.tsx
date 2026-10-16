@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Input, Kpi, Loading, PageHeader, Tabs } from "@/components/ui";
 import { MoveDetailModal } from "./MoveDetailModal";
 import { MoveForm } from "./MoveForm";
@@ -61,12 +61,12 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Kpi label={sale ? "Reste à encaisser" : "Reste à payer"} value={fmtShort(openData?.totals?.amount_residual)} hint={`${openData?.total_count ?? 0} pièce(s)`} tone="accent" />
         <Kpi label="Dont échu" value={fmtShort(overdueData?.totals?.amount_residual)} hint={`${overdueData?.total_count ?? 0} pièce(s) en retard`} tone={overdueData?.total_count ? "warn" : "neutral"} />
-        <Kpi label="Pièces affichées" value={String(data?.total_count ?? "—")} hint={`Total TTC ${fmtGNF(data?.totals?.amount_total)}`} />
+        <Kpi label="Pièces affichées" value={String(data?.total_count ?? "–")} hint={`Total TTC ${fmtGNF(data?.totals?.amount_total)}`} />
       </div>
       <Card padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
           <Tabs tabs={VIEWS} value={view} onChange={setView} />
-          <Input className="max-w-xs" placeholder="Numéro, référence ou tiers…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input aria-label="Rechercher une pièce" className="max-w-xs" placeholder="Numéro, référence ou tiers…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         {error && (
           <div className="p-4">
@@ -84,11 +84,11 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
             columns={[
               { key: "name", label: "Numéro", render: (m) => <span className="font-mono text-xs">{m.name ?? "Brouillon"}</span> },
               { key: "invoice_date", label: "Date", render: (m) => fmtDate(m.invoice_date ?? m.date) },
-              { key: "partner", label: sale ? "Client" : "Fournisseur", render: (m) => m.partner?.name ?? "—", sortValue: (m) => m.partner?.name ?? "" },
+              { key: "partner", label: sale ? "Client" : "Fournisseur", render: (m) => m.partner?.name ?? "–", sortValue: (m) => m.partner?.name ?? "" },
               { key: "invoice_date_due", label: "Échéance", render: (m) => fmtDate(m.invoice_date_due) },
               { key: "amount_untaxed", label: "HT", align: "right", render: (m) => fmtGNF(m.amount_untaxed) },
               { key: "amount_total", label: "TTC", align: "right", render: (m) => fmtGNF(m.amount_total) },
-              { key: "amount_residual", label: "Reste dû", align: "right", render: (m) => (m.state === "posted" ? fmtGNF(m.amount_residual) : "—") },
+              { key: "amount_residual", label: "Reste dû", align: "right", render: (m) => (m.state === "posted" ? fmtGNF(m.amount_residual) : "–") },
               {
                 key: "state",
                 label: "Statut",

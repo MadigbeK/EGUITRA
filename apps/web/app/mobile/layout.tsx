@@ -3,16 +3,16 @@ import type { ReactNode } from "react";
 import { ServiceWorker } from "@/components/mobile/ServiceWorker";
 
 export const metadata: Metadata = {
-  title: "Rotations",
+  title: { absolute: "NIMOVA · Rotations" },
   manifest: "/mobile.webmanifest",
-  icons: { apple: "/icons/rotations-180.png" },
+  icons: { icon: "/icons/nimova.svg", apple: "/icons/rotations-180.png" },
   appleWebApp: { capable: true, title: "Rotations", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#1d2a6b",
+  themeColor: "#b83e16",
 };
 
 /** Application Rotations : sans menu latéral, pensée pour le téléphone et le travail hors réseau. */

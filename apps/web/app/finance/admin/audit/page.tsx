@@ -54,7 +54,7 @@ export default function AuditPage() {
                     <span className="font-medium">{a.model}</span>
                     <span className="text-muted">{a.record ?? `n° ${a.res_id}`}</span>
                     <span className="ml-auto text-xs text-muted">
-                      {a.user ?? "système"} · {fmtDateTime(a.date)}
+                      {a.user ?? "système"}, {fmtDateTime(a.date)}
                     </span>
                   </div>
                   {a.lines.length > 0 && (
@@ -63,8 +63,8 @@ export default function AuditPage() {
                         {a.lines.slice(0, 12).map((l, i) => (
                           <tr key={i} className="border-t border-line/50">
                             <td className="w-1/4 py-1 pr-2 text-muted">{l.field}</td>
-                            <td className="w-3/8 py-1 pr-2 text-danger/90 line-through decoration-danger/40">{l.old || "—"}</td>
-                            <td className="w-3/8 py-1 text-ok">{l.new || "—"}</td>
+                            <td className="w-3/8 py-1 pr-2 text-danger/90 line-through decoration-danger/40">{l.old || "–"}</td>
+                            <td className="w-3/8 py-1 text-ok">{l.new || "–"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -87,7 +87,7 @@ export default function AuditPage() {
               rowKey={(_r, i) => i}
               columns={[
                 { key: "date", label: "Date", render: (r) => fmtDateTime(r.date) },
-                { key: "user", label: "Utilisateur", render: (r) => r.user ?? "—" },
+                { key: "user", label: "Utilisateur", render: (r) => r.user ?? "–" },
                 { key: "method", label: "Action" },
                 { key: "path", label: "Adresse" },
                 { key: "status", label: "Statut", render: (r) => <Badge tone={r.status < 300 ? "ok" : r.status < 500 ? "warn" : "danger"}>{r.status}</Badge> },

@@ -1,8 +1,8 @@
 "use client";
 
 import { use, useState } from "react";
-import { ArrowRight, Download, FileUp, Lock, Printer, Send, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { Download, Lock, Printer, Send } from "@/components/icons";
+import { Badge, Button, Card, DataTable, ErrorBox, Etapes, FileButton, Field, Input, Kpi, Loading, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, RECO, STATUS_LABELS, type CriterionEval, type DocFile, type DossierDetail, type Message, type Recommendation, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort } from "@/lib/format";
@@ -18,8 +18,8 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
   return (
     <div>
       <PageHeader
-        title={`${d.reference} · ${d.name}`}
-        subtitle={`${d.promoter.name}${d.sector ? ` · ${d.sector}` : ""}${d.location ? ` · ${d.location}` : ""} · politique v${d.policy_version}`}
+        title={`${d.reference}, ${d.name}`}
+        subtitle={`${d.promoter.name}${d.sector ? `, ${d.sector}` : ""}${d.location ? `, ${d.location}` : ""}, politique v${d.policy_version}`}
         actions={<Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge>}
       />
       <Tabs
@@ -65,29 +65,33 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Score global" value={s.global_score === null ? "—" : `${Math.round(s.global_score)} / 100`} hint={`GO ≥ ${s.thresholds.go}, conditionnel ≥ ${s.thresholds.conditional}`} tone={RECO[s.recommendation].tone === "ok" ? "ok" : RECO[s.recommendation].tone === "danger" ? "danger" : "warn"} />
+        <Kpi label="Score global" value={s.global_score === null ? "–" : `${Math.round(s.global_score)} / 100`} hint={`GO ≥ ${s.thresholds.go}, conditionnel ≥ ${s.thresholds.conditional}`} tone={RECO[s.recommendation].tone === "ok" ? "ok" : RECO[s.recommendation].tone === "danger" ? "danger" : "warn"} />
         <Kpi label="Critères évalués" value={`${s.assessed} / ${s.criteria}`} />
         <Kpi label="Éliminatoires actifs" value={String(s.knockouts.length)} hint={s.knockouts.map((k) => k.code).join(", ") || "Aucun"} tone={s.knockouts.length ? "danger" : "ok"} />
         <Kpi label="Besoin de financement" value={fmtShort(d.financing_need)} hint={`Investissement ${fmtShort(d.investment)}`} />
       </div>
-      <Card title="Stage gates">
-        <div className="flex flex-wrap items-center gap-2">
-          {d.gates.map((g) => (
-            <span key={g.id} className={cx("rounded-full border px-3 py-1 text-xs", (g.sequence ?? 0) < currentSeq ? "border-ok/50 bg-ok/10 text-ok" : g.id === d.current_gate?.id ? "border-accent bg-accent text-accent-ink" : "border-line text-muted")}>
-              {g.code} · {g.name}
-            </span>
-          ))}
-          <Button className="ml-auto" onClick={() => act(() => apiSend("POST", `/axispro/dossiers/${d.id}/advance-gate`), "Le dossier passe au gate suivant.")}>
-            Passer au gate suivant <ArrowRight className="h-4 w-4" />
+      <Card
+        title="Stage gates"
+        actions={
+          <Button onClick={() => act(() => apiSend("POST", `/axispro/dossiers/${d.id}/advance-gate`), "Le dossier passe au gate suivant.")}>
+            Passer au gate suivant
           </Button>
-        </div>
+        }
+      >
+        <Etapes
+          steps={d.gates.map((g) => ({
+            key: String(g.id),
+            label: `${g.code} ${g.name}`,
+            state: (g.sequence ?? 0) < currentSeq ? "done" : g.id === d.current_gate?.id ? "current" : "todo",
+          }))}
+        />
       </Card>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card title="Score par domaine">
           <ul className="space-y-3">
             {s.domains.map((dom) => (
               <li key={dom.domain_id}>
-                <div className="mb-1 flex justify-between text-xs"><span className="text-ink-2">{dom.code} · {dom.name} <span className="text-muted">(poids {dom.weight})</span></span><span className="font-mono">{dom.score === null ? "—" : Math.round(dom.score)}</span></div>
+                <div className="mb-1 flex justify-between text-xs"><span className="text-ink-2">{dom.code}, {dom.name} <span className="text-muted">(poids {dom.weight})</span></span><span className="font-mono">{dom.score === null ? "–" : Math.round(dom.score)}</span></div>
                 <ProgressBar value={dom.score ?? 0} tone={dom.score === null ? "accent" : dom.score >= s.thresholds.go ? "ok" : dom.score >= s.thresholds.conditional ? "warn" : "danger"} />
               </li>
             ))}
@@ -97,11 +101,11 @@ function Synthesis({ d, onChanged }: { d: DossierDetail; onChanged: () => void }
           {d.gaps.length === 0 ? <p className="text-sm text-muted">Aucun écart.</p> : (
             <ol className="space-y-2">
               {d.gaps.map((g, i) => (
-                <li key={g.criterion_id} className="rounded-lg border border-line bg-panel-2 px-3 py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-5 w-5 place-items-center rounded-full bg-accent text-[11px] font-bold text-accent-ink">{i + 1}</span>
+                <li key={g.criterion_id} className="rounded-lg bg-panel-2 px-3 py-2.5 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <span className="grid h-5 min-w-5 place-items-center rounded-[4px] bg-accent px-1 font-mono text-[12px] font-semibold text-accent-ink">{i + 1}</span>
                     <span className="font-medium">{g.code} {g.name}</span>
-                    {g.knockout && <Badge tone="danger"><ShieldAlert className="mr-1 h-3 w-3" />Éliminatoire</Badge>}
+                    {g.knockout && <Badge tone="danger">Éliminatoire</Badge>}
                     {g.critical && <Badge tone="warn">Critique</Badge>}
                   </div>
                   <div className="mt-1 text-xs text-muted">{g.action}</div>
@@ -143,7 +147,7 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
   return (
     <div className="space-y-3">
       <Field label="Gate" className="max-w-xs">
-        <Select value={gate} onChange={(e) => setGate(e.target.value)} options={[{ value: "", label: "Tous les gates" }, ...d.gates.map((g) => ({ value: g.id, label: `${g.code} · ${g.name}` }))]} />
+        <Select value={gate} onChange={(e) => setGate(e.target.value)} options={[{ value: "", label: "Tous les gates" }, ...d.gates.map((g) => ({ value: g.id, label: `${g.code}, ${g.name}` }))]} />
       </Field>
       {error && <Notice tone="danger">{error}</Notice>}
       {!criteria ? <Loading /> : criteria.map((c) => (
@@ -155,9 +159,9 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
                 <span className="font-medium text-ink">{c.name}</span>
                 {c.knockout && <Badge tone="danger">Éliminatoire</Badge>}
                 {c.critical && <Badge tone="warn">Critique</Badge>}
-                {c.evidence_required && <Badge>Preuve requise</Badge>}
+                {c.evidence_required && <Tag>Preuve requise</Tag>}
               </div>
-              <div className="mt-1 text-xs text-muted">{c.domain} · poids {c.weight}{c.guidance ? ` · ${c.guidance}` : ""}</div>
+              <div className="mt-1 text-xs text-muted">{c.domain}, poids {c.weight}{c.guidance ? `, ${c.guidance}` : ""}</div>
             </div>
             <Select className="w-48" value={c.status} onChange={(e) => save(c, { status: e.target.value })} options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
           </div>
@@ -167,7 +171,7 @@ function Evaluation({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
             {c.documents.map((docId) => {
               const f = files.find((x) => x.id === docId);
               return (
-                <span key={docId} className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5">
+                <span key={docId} className="inline-flex items-center gap-1.5 rounded-md bg-panel-2 py-0.5 pl-2 pr-1">
                   {f ? `${f.name} v${f.version}` : `Pièce ${docId}`}
                   <button type="button" aria-label="Retirer la preuve" className="text-muted hover:text-danger" onClick={() => save(c, { document_ids: c.documents.filter((x) => x !== docId) })}>×</button>
                 </span>
@@ -207,15 +211,15 @@ function DataRoom({ d }: { d: DossierDetail }) {
         <DataTable rows={data.standard} rowKey={(s) => s.document_type_id} columns={[
           { key: "code", label: "Code" },
           { key: "name", label: "Pièce" },
-          { key: "gate", label: "Gate", render: (s) => s.gate ?? "—" },
+          { key: "gate", label: "Gate", render: (s) => s.gate ?? "–" },
           { key: "state", label: "État", render: (s) => <Badge tone={s.due || s.state !== "missing" ? DOC_STATE[s.state]?.tone : "neutral"}>{s.due || s.state !== "missing" ? DOC_STATE[s.state]?.label : "Pas encore due"}</Badge> },
-          { key: "version", label: "Version", align: "right", render: (s) => (s.version ? `v${s.version}` : "—") },
+          { key: "version", label: "Version", align: "right", render: (s) => (s.version ? `v${s.version}` : "–") },
           { key: "actions", label: "", render: (s) => (
             <div className="flex items-center justify-end gap-2">
-              {s.document_id && <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/axispro/documents/${s.document_id}/download`, s.name)}><Download className="h-3.5 w-3.5" /></Button>}
+              {s.document_id && <Button aria-label="Télécharger" title="Télécharger" className="px-2 py-1 text-xs" onClick={() => apiDownload(`/axispro/documents/${s.document_id}/download`, s.name)}><Download className="h-3.5 w-3.5" /></Button>}
               {s.document_id && s.state === "received" && <Button className="px-2 py-1 text-xs" onClick={() => apiSend("PATCH", `/axispro/documents/${s.document_id}`, { state: "validated" }).then(() => mutate())}>Valider</Button>}
               {s.document_id && s.state === "received" && <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => { const comment = window.prompt("Motif de la reprise demandée au porteur :"); if (comment) void apiSend("PATCH", `/axispro/documents/${s.document_id}`, { state: "rejected", comment }).then(() => mutate()); }}>À reprendre</Button>}
-              <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-accent"><FileUp className="h-3.5 w-3.5" />Déposer<input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], s.document_type_id)} /></label>
+              <FileButton small label="Déposer" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(f) => upload(f, s.document_type_id)} />
             </div>
           ) },
         ]} />
@@ -255,7 +259,7 @@ function Committees({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
     <div className="space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card title="Nouvelle revue de comité">
-        <p className="mb-3 text-xs text-muted">Recommandation calculée : {RECO[d.scoring.recommendation].label}, score {d.scoring.global_score === null ? "—" : Math.round(d.scoring.global_score)}. L&apos;instantané de l&apos;évaluation est conservé avec la décision.</p>
+        <p className="mb-3 text-xs text-muted">Recommandation calculée : {RECO[d.scoring.recommendation].label}, score {d.scoring.global_score === null ? "–" : Math.round(d.scoring.global_score)}. L&apos;instantané de l&apos;évaluation est conservé avec la décision.</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Field label="Décision"><Select value={f.decision} onChange={(e) => setF({ ...f, decision: e.target.value as Recommendation })} options={[{ value: "go", label: "GO" }, { value: "conditional", label: "GO sous conditions" }, { value: "no_go", label: "NO-GO" }, { value: "postponed", label: "Ajourné" }]} /></Field>
           <Field label="Membres du comité" className="md:col-span-2"><Input value={f.members} onChange={(e) => setF({ ...f, members: e.target.value })} /></Field>
@@ -268,19 +272,19 @@ function Committees({ d, onChanged }: { d: DossierDetail; onChanged: () => void 
         <DataTable rows={d.reviews} rowKey={(r) => r.id} empty="Aucune revue." onRowClick={(r) => setCompare((c) => (c.includes(r.id) ? c.filter((x) => x !== r.id) : [...c, r.id].slice(-2)))} columns={[
           { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={compare.includes(r.id)} /> },
           { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
-          { key: "gate", label: "Gate", render: (r) => r.gate ?? "—" },
-          { key: "score", label: "Score", align: "right", render: (r) => (r.score === null ? "—" : Math.round(r.score)) },
+          { key: "gate", label: "Gate", render: (r) => r.gate ?? "–" },
+          { key: "score", label: "Score", align: "right", render: (r) => (r.score === null ? "–" : Math.round(r.score)) },
           { key: "decision", label: "Décision", render: (r) => <Badge tone={RECO[r.decision]?.tone ?? "neutral"}>{RECO[r.decision]?.label ?? r.decision}</Badge> },
           { key: "state", label: "", render: (r) => (r.state === "locked" ? <Badge tone="ok"><Lock className="mr-1 h-3 w-3" />Verrouillée</Badge> : <Button className="px-2 py-1 text-xs" onClick={() => apiSend("POST", `/axispro/reviews/${r.id}/lock`).then(onChanged)}>Verrouiller</Button>) },
         ]} />
       </Card>
       {diff && (
-        <Card title={`Comparaison : ${fmtDate(diff.from.date)} → ${fmtDate(diff.to.date)}`} padded={false}>
+        <Card title={`Comparaison du ${fmtDate(diff.from.date)} au ${fmtDate(diff.to.date)}`} padded={false}>
           <DataTable dense rows={diff.domains} rowKey={(x) => x.code} columns={[
             { key: "name", label: "Domaine" },
-            { key: "before", label: "Avant", align: "right", render: (x) => (x.before === null ? "—" : Math.round(x.before)) },
-            { key: "after", label: "Après", align: "right", render: (x) => (x.after === null ? "—" : Math.round(x.after)) },
-            { key: "delta", label: "Évolution", align: "right", render: (x) => (x.delta === null ? "—" : <span className={x.delta >= 0 ? "text-ok" : "text-danger"}>{x.delta >= 0 ? "+" : ""}{Math.round(x.delta)}</span>) },
+            { key: "before", label: "Avant", align: "right", render: (x) => (x.before === null ? "–" : Math.round(x.before)) },
+            { key: "after", label: "Après", align: "right", render: (x) => (x.after === null ? "–" : Math.round(x.after)) },
+            { key: "delta", label: "Évolution", align: "right", render: (x) => (x.delta === null ? "–" : <span className={x.delta >= 0 ? "text-ok" : "text-danger"}>{x.delta >= 0 ? "+" : ""}{Math.round(x.delta)}</span>) },
           ]} />
         </Card>
       )}
@@ -297,7 +301,7 @@ function Messages({ d }: { d: DossierDetail }) {
       <div className="max-h-[480px] space-y-2 overflow-y-auto">
         {(data ?? []).map((m) => (
           <div key={m.id} className={cx("max-w-[80%] rounded-lg px-3 py-2 text-sm", m.from_promoter ? "bg-panel-2" : "ml-auto bg-accent/15", m.internal && "border border-dashed border-warn")}>
-            <div className="text-[11px] text-muted">{m.author} · {fmtDateTime(m.date)}{m.internal ? " · note interne" : ""}</div>
+            <div className="text-[11px] text-muted">{m.author}, {fmtDateTime(m.date)}{m.internal ? ", note interne" : ""}</div>
             <div className="whitespace-pre-wrap">{m.body}</div>
           </div>
         ))}
@@ -330,11 +334,11 @@ function Report({ d }: { d: DossierDetail }) {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div><div className="text-xs text-muted">Projet</div>{d.name}</div>
             <div><div className="text-xs text-muted">Promoteur</div>{d.promoter.name}</div>
-            <div><div className="text-xs text-muted">Gate</div>{d.current_gate?.name ?? "—"}</div>
+            <div><div className="text-xs text-muted">Gate</div>{d.current_gate?.name ?? "–"}</div>
             <div><div className="text-xs text-muted">Besoin de financement</div>{fmtGNF(d.financing_need)}</div>
           </div>
-          <div className="rounded-lg border border-line bg-panel-2 p-3">
-            <b>Recommandation : {RECO[s.recommendation].label}</b> · score {s.global_score === null ? "—" : `${Math.round(s.global_score)} / 100`} · éliminatoires actifs : {s.knockouts.map((k) => `${k.code} ${k.name}`).join(", ") || "aucun"} · critères critiques ouverts : {s.critical_open.length}.
+          <div className="rounded-lg bg-panel-2 p-3">
+            <b>Recommandation : {RECO[s.recommendation].label}</b>, score {s.global_score === null ? "–" : `${Math.round(s.global_score)} / 100`}, éliminatoires actifs : {s.knockouts.map((k) => `${k.code} ${k.name}`).join(", ") || "aucun"}, critères critiques ouverts : {s.critical_open.length}.
           </div>
           {d.hypotheses && <p><b>Hypothèses de décision.</b> {d.hypotheses}</p>}
           <div>

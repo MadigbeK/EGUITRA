@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Copy, Download, FileUp } from "lucide-react";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Textarea } from "@/components/ui";
+import { CheckCircle2, Copy, Download, FileUp } from "@/components/icons";
+import { Badge, Button, Card, DataTable, ErrorBox, Etapes, Field, Input, Loading, Modal, Notice, PageHeader, Textarea } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 
@@ -76,7 +76,7 @@ export default function GrillePage() {
                 { key: "version", label: "Version", render: (p) => <span className={p.id === current ? "font-semibold text-accent" : undefined}>v{p.version}</span> },
                 { key: "name", label: "Intitulé" },
                 { key: "state", label: "État", render: (p) => <Badge tone={STATE[p.state][1]}>{STATE[p.state][0]}</Badge> },
-                { key: "date_active", label: "En vigueur depuis", render: (p) => (p.date_active ? fmtDate(p.date_active) : "—") },
+                { key: "date_active", label: "En vigueur depuis", render: (p) => (p.date_active ? fmtDate(p.date_active) : "–") },
                 { key: "gates", label: "Gates", align: "right" },
                 { key: "domains", label: "Domaines", align: "right" },
                 { key: "criteria", label: "Critères", align: "right" },
@@ -116,7 +116,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
     <div className="space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card
-        title={`${p.name} · version ${p.version}`}
+        title={`${p.name}, version ${p.version}`}
         actions={
           <div className="flex gap-2">
             {editable && (
@@ -136,19 +136,19 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
           <div><div className="text-xs text-muted">État</div><Badge tone={STATE[p.state][1]}>{STATE[p.state][0]}</Badge>{p.date_active ? ` depuis le ${fmtDate(p.date_active)}` : ""}</div>
           {p.notes && <div className="md:col-span-3"><div className="text-xs text-muted">Principes rappelés dans chaque rapport</div><p className="whitespace-pre-wrap">{p.notes}</p></div>}
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {p.gates.map((g) => <span key={g.id} title={g.description ?? undefined} className="rounded-full border border-line px-3 py-1 text-xs text-ink-2">{g.code} · {g.name}</span>)}
+        <div className="mt-5 border-t border-line pt-4">
+          <Etapes steps={p.gates.map((g) => ({ key: String(g.id), label: `${g.code} ${g.name}`, state: "todo" as const, title: g.description ?? undefined }))} />
         </div>
         {!editable && <p className="mt-4 text-xs text-muted">Cette version n&apos;est plus modifiable. Pour ajuster une pondération ou un critère, créez une nouvelle version.</p>}
       </Card>
       {p.domains.map((d) => {
         const rows = p.criteria.filter((c) => c.domain_id === d.id);
         return (
-          <Card key={d.id} title={`${d.code} · ${d.name} · poids ${d.weight} · ${rows.length} critères`} padded={false}>
+          <Card key={d.id} title={`${d.code}, ${d.name}, poids ${d.weight}, ${rows.length} critères`} padded={false}>
             <DataTable dense rows={rows} rowKey={(c) => c.id} columns={[
               { key: "code", label: "Code", render: (c) => <span className="font-mono text-xs">{c.code}</span> },
               { key: "name", label: "Critère", render: (c) => <div><div>{c.name}</div>{c.guidance && <div className="text-[11px] text-muted">{c.guidance}</div>}</div> },
-              { key: "gate", label: "Gate", render: (c) => gateCode[c.gate_id] ?? "—" },
+              { key: "gate", label: "Gate", render: (c) => gateCode[c.gate_id] ?? "–" },
               { key: "weight", label: "Poids", align: "right", render: (c) => editable ? <Input className="w-20 py-1 text-right" defaultValue={String(c.weight)} onBlur={(e) => Number(e.target.value.replace(",", ".")) !== c.weight && patch(c, { weight: Number(e.target.value.replace(",", ".")) })} /> : String(c.weight) },
               { key: "critical", label: "Critique", align: "center", render: (c) => <Flag on={c.critical} editable={editable} onToggle={() => patch(c, { critical: !c.critical })} /> },
               { key: "knockout", label: "Éliminatoire", align: "center", render: (c) => <Flag on={c.knockout} editable={editable} danger onToggle={() => patch(c, { knockout: !c.knockout })} /> },
@@ -163,7 +163,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
 
 function Flag({ on, editable, danger, onToggle }: { on: boolean; editable: boolean; danger?: boolean; onToggle: () => void }) {
   if (editable) return <input type="checkbox" checked={on} onChange={onToggle} />;
-  return on ? <Badge tone={danger ? "danger" : "accent"}>oui</Badge> : <span className="text-muted">—</span>;
+  return on ? <Badge tone={danger ? "danger" : "accent"}>oui</Badge> : <span className="text-muted">–</span>;
 }
 
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
@@ -192,7 +192,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (id: nu
       <div className="space-y-3">
         {error && <Notice tone="danger"><span className="whitespace-pre-wrap">{error}</span></Notice>}
         <p className="text-xs text-muted">Classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide. Lignes de type gate, domaine, critere et piece. La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.</p>
-        <Field label="Classeur"><input type="file" accept=".xlsx,.xlsm,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm" /></Field>
+        <Field label="Classeur"><input type="file" accept=".xlsx,.xlsm,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" /></Field>
         <Field label="Intitulé"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Seuil GO (sur 100)"><Input inputMode="decimal" value={f.go_threshold} onChange={(e) => setF({ ...f, go_threshold: e.target.value })} /></Field>

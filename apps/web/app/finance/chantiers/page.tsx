@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { HardHat, Plus, Unlock } from "lucide-react";
+import { HardHat, Plus, Unlock } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -104,7 +104,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
     }
   }
   return (
-    <Modal open wide title={c ? `${c.name} · ${c.client.name}` : "Chantier"} onClose={onClose}>
+    <Modal open wide title={c ? `${c.name}, ${c.client.name}` : "Chantier"} onClose={onClose}>
       {!c ? <Loading /> : (
         <div className="space-y-5">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
@@ -117,7 +117,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
           <DataTable dense rows={c.situations ?? []} rowKey={(s) => s.id} empty="Aucune situation." columns={[
             { key: "number", label: "N°", align: "right", render: (s) => String(s.number) },
             { key: "date", label: "Date", render: (s) => fmtDate(s.date) },
-            { key: "period_label", label: "Période", render: (s) => s.period_label ?? "—" },
+            { key: "period_label", label: "Période", render: (s) => s.period_label ?? "–" },
             { key: "cumulative_amount", label: "Cumul HT", align: "right", render: (s) => fmtGNF(s.cumulative_amount) },
             { key: "amount_period", label: "Période HT", align: "right", render: (s) => fmtGNF(s.amount_period) },
             { key: "retention_amount", label: `Retenue ${c.retention_rate} %`, align: "right", render: (s) => fmtGNF(s.retention_amount) },
@@ -131,7 +131,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
               <div className="flex items-end"><Button variant="primary" disabled={!value} onClick={() => act(() => apiSend("POST", `/chantiers/${c.id}/situations`, mode === "pct" ? { progress_pct: Number(value.replace(",", ".")), period_label: label } : { cumulative_amount: Number(value.replace(/\s/g, "")), period_label: label }), "Situation enregistrée en brouillon.").then(() => { setValue(""); setLabel(""); })}>Enregistrer</Button></div>
             </div>
           </Card>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-panel-2 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-panel-2 px-4 py-3 text-sm">
             <span>Retenues constituées {fmtGNF(c.retention_total)}, libérées {fmtGNF(c.retention_released)}, à recouvrer <b>{fmtGNF(c.retention_outstanding)}</b>.</span>
             <Button disabled={c.retention_outstanding <= 0} onClick={() => act(() => apiSend("POST", `/chantiers/${c.id}/release-retention`), "Retenues libérées : elles redeviennent exigibles du client.")}><Unlock className="h-4 w-4" /> Libérer les retenues</Button>
           </div>

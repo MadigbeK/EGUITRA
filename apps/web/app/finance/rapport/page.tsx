@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer } from "lucide-react";
+import { Printer } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, PageHeader, cx } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
@@ -48,7 +48,7 @@ export default function ManagementReportPage() {
     <div>
       <PageHeader
         title={`Rapport mensuel de gestion${r ? ` : ${fmtMonth(r.month)}` : ""}`}
-        subtitle={r ? `${r.companies.map((c) => c.name).join(", ")} · exercice ouvert le ${fmtDate(r.period.fiscal_year_start)} · montants en GNF` : "Synthèse mensuelle pour la direction générale."}
+        subtitle={r ? `${r.companies.map((c) => c.name).join(", ")}, exercice ouvert le ${fmtDate(r.period.fiscal_year_start)}, montants en GNF` : "Synthèse mensuelle pour la direction générale."}
         actions={
           <>
             <Field label="Mois"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value || thisMonth())} /></Field>
@@ -69,13 +69,13 @@ export default function ManagementReportPage() {
             <Kpi label="Encours clients" value={fmtShort(r.kpis.receivables)} hint={`dont échu ${fmtShort(r.kpis.receivables_overdue)}`} tone={r.kpis.receivables_overdue ? "warn" : "neutral"} />
             <Kpi label="Dettes fournisseurs" value={fmtShort(r.kpis.payables)} />
             <Kpi label="Capital restant dû" value={fmtShort(r.debt.outstanding)} hint={r.debt.next_due_date ? `Prochaine échéance ${fmtDate(r.debt.next_due_date)}` : undefined} />
-            <Kpi label="DSCR" value={r.kpis.dscr === null ? "—" : fmtDec(r.kpis.dscr)} hint="EBE 12 mois / service de la dette" tone={r.kpis.dscr !== null && r.kpis.dscr < 1.2 ? "danger" : "ok"} />
+            <Kpi label="DSCR" value={r.kpis.dscr === null ? "–" : fmtDec(r.kpis.dscr)} hint="EBE 12 mois / service de la dette" tone={r.kpis.dscr !== null && r.kpis.dscr < 1.2 ? "danger" : "ok"} />
           </div>
 
           <Card title="Résultat : le mois et le cumul, comparés à l'an dernier" padded={false}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-[11px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-line text-[12.5px] font-medium text-muted">
                   <th className="px-3 py-2 text-left">Solde</th>
                   <th className="px-3 py-2 text-right">Mois</th>
                   <th className="px-3 py-2 text-right">Même mois N-1</th>
@@ -103,7 +103,7 @@ export default function ManagementReportPage() {
                 { key: "income", label: "Produits", align: "right", render: (a) => fmtInt(a.income) },
                 { key: "expense", label: "Charges", align: "right", render: (a) => fmtInt(a.expense) },
                 { key: "margin", label: "Marge", align: "right", render: (a) => <span className={a.margin < 0 ? "text-danger" : undefined}>{fmtInt(a.margin)}</span> },
-                { key: "margin_rate", label: "Taux", align: "right", render: (a) => (a.margin_rate === null ? "—" : fmtPct(a.margin_rate)) },
+                { key: "margin_rate", label: "Taux", align: "right", render: (a) => (a.margin_rate === null ? "–" : fmtPct(a.margin_rate)) },
               ]} />
             </Card>
             <Card title="Flux de trésorerie cumulés" padded={false}>
