@@ -58,6 +58,26 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 200)
         self.assertFalse(desactive["active"])
 
+    def test_profils_coherents_avec_les_societes(self):
+        """Un profil propre à une société exige que le compte y soit ouvert."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        groupe = self.env.ref("base.main_company")
+        self._create_user("admin.deux", "admin", company_ids=[(6, 0, (groupe | cabinet).ids)])
+        token = self.open_session("admin.deux")["access_token"]
+        compte = {"name": "Consultant", "login": "consultant.x", "password": "Provisoire-2026", "profiles": ["cabinet"]}
+        status, body = self.call("POST", "/admin/users", dict(compte, company_ids=[groupe.id]), token=token)
+        self.assertEqual(status, 422, body)
+        self.assertIn("MB AxisPro Consulting", body["message"])
+        status, user = self.call("POST", "/admin/users", dict(compte, company_ids=[cabinet.id]), token=token)
+        self.assertEqual((status, user["apps"]), (200, ["axispro"]), user)
+        status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "chantiers"]}, token=token)
+        self.assertEqual(status, 422, "Le profil chantiers exige EGUITRA GROUP")
+        status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "finance"]}, token=token)
+        self.assertEqual((status, sorted(body["apps"])), (200, ["axispro", "finance"]),
+                         "Un comptable du cabinet ouvre Finance et AxisPro Suite, dans le seul cabinet")
+        status, profils = self.call("GET", "/admin/profiles", token=token)
+        self.assertEqual({p["code"]: p["entity"] for p in profils}["cabinet"], "cabinet")
+
     def test_admin_ne_se_retire_pas_ses_droits(self):
         session = self.open_session("aissatou")
         me = session["user"]

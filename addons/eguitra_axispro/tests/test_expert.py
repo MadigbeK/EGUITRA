@@ -193,7 +193,8 @@ class TestAxisproExpert(ApiCase):
         self.assertEqual((status, action["source"], action["assignee"]), (200, "risk", "porteur"), action)
         self.assertEqual(self.env["axispro.risk"].browse(risk["id"]).state, "mitigating")
 
-        porteur = self._create_user("porteur.briques", "porteur")
+        porteur = self._create_user("porteur.briques", "porteur", company_id=self.cabinet.id,
+                                    company_ids=[(6, 0, self.cabinet.ids)])
         self.dossier.portal_user_ids = [(4, porteur.id)]
         other = self.env["axispro.dossier"].create({"name": "Autre", "promoter_id": self.promoter.id,
                                                      "company_id": self.cabinet.id})
@@ -248,11 +249,12 @@ class TestAxisproExpert(ApiCase):
         self.assertEqual(self.call("POST", path + "/risks", {"name": "X"}, token=dg)[0], 403)
         groupe = self.env.ref("base.main_company")
         self._create_user("dg.groupe.seul", "direction", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
-        other = self.open_session("dg.groupe.seul", app="axispro")["access_token"]
+        other = self.open_session("dg.groupe.seul", app="finance")["access_token"]
         risk = self.env["axispro.risk"].create({"dossier_id": self.dossier.id, "name": "Change"})
-        self.assertEqual(self.call("GET", path + "/plan", token=other)[0], 403, "Modèle financier du cabinet")
-        self.assertEqual(self.call("GET", f"/axispro/actions?dossier_id={self.dossier.id}", token=other)[1], [],
-                         "Actions du cabinet invisibles hors de sa société")
-        status, board = self.call("GET", "/axispro/portfolio", token=other)
-        self.assertEqual((status, board["projects"]), (200, []))
+        for route in (path + "/plan", f"/axispro/actions?dossier_id={self.dossier.id}", "/axispro/portfolio"):
+            self.assertEqual(self.call("GET", route, token=other)[0], 422, f"{route} : module du cabinet")
+        dg = self.env["res.users"].search([("login", "=", "dg.groupe.seul")])
+        for model in ("axispro.plan", "axispro.risk", "axispro.action", "axispro.funding"):
+            self.assertFalse(self.env[model].with_user(dg).with_context(allowed_company_ids=groupe.ids).search([]),
+                             f"{model} du cabinet invisible depuis le groupe")
         self.assertTrue(risk.exists())

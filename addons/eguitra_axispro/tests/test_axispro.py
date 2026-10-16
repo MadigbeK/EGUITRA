@@ -153,16 +153,18 @@ class TestAxispro(ApiCase):
             {"dossier_id": dossier.id, "decision": "go", "snapshot": dossier.scoring()} for _ in range(2)
         ])
         groupe = self.env.ref("base.main_company")
-        self._create_user("dg.groupe", "direction", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
-        token = self.open_session("dg.groupe", app="axispro")["access_token"]
-        status, _b = self.call("GET", f"/axispro/documents/{doc.id}/download", token=token)
-        self.assertEqual(status, 403, "Pièce de la data room du cabinet")
-        status, _b = self.call("GET", f"/axispro/reviews/compare?a={r1.id}&b={r2.id}", token=token)
-        self.assertEqual(status, 403, "Revues de comité du cabinet")
-        status, policies = self.call("GET", "/axispro/policies", token=token)
-        self.assertEqual((status, policies), (200, []), "Grilles du cabinet")
-        status, _b = self.call("GET", f"/axispro/policies/{self.policy.id}", token=token)
-        self.assertEqual(status, 403)
+        dg = self._create_user("dg.groupe", "direction", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
+        status, body = self.call("POST", "/auth/login", {"login": "dg.groupe", "password": PASSWORD, "app": "axispro"})
+        self.assertEqual(status, 403, "AxisPro Suite fermé à un compte sans la société du cabinet")
+        token = self.open_session("dg.groupe", app="finance")["access_token"]
+        for path in (f"/axispro/documents/{doc.id}/download", f"/axispro/reviews/compare?a={r1.id}&b={r2.id}",
+                     "/axispro/policies", f"/axispro/policies/{self.policy.id}"):
+            status, body = self.call("GET", path, token=token)
+            self.assertEqual(status, 422, f"{path} : module du cabinet refusé hors de sa société")
+        # Règles d'accès du noyau, en dernier rempart : rien du cabinet n'est lisible depuis le groupe.
+        for model in ("axispro.document", "axispro.review", "axispro.policy", "axispro.dossier"):
+            self.assertFalse(self.env[model].with_user(dg).with_context(allowed_company_ids=groupe.ids).search([]),
+                             f"{model} du cabinet invisible")
         status, consultant = self.call("GET", "/axispro/policies",
                                        token=self.open_session("consultant", app="axispro")["access_token"])
         self.assertIn(self.policy.id, [p["id"] for p in consultant], "Le cabinet garde l'accès à sa grille")
@@ -219,7 +221,8 @@ class TestAxispro(ApiCase):
 
     def test_depots_du_porteur_controles(self):
         dossier = self._dossier()
-        porteur = self._create_user("porteur.depots", "porteur")
+        porteur = self._create_user("porteur.depots", "porteur", company_id=self.cabinet.id,
+                                    company_ids=[(6, 0, self.cabinet.ids)])
         dossier.portal_user_ids = [(4, porteur.id)]
         token = self.open_session("porteur.depots", app="portail")["access_token"]
 

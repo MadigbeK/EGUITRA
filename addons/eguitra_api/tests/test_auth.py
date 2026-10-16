@@ -113,11 +113,28 @@ class TestAuth(ApiCase):
         self.assertEqual(body["error"], "app_forbidden")
 
     def test_porteur_limite_au_portail(self):
-        self._create_user("promoteur", "porteur")
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        self._create_user("promoteur", "porteur", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
         status, body = self.call("POST", "/auth/login", {"login": "promoteur", "password": PASSWORD, "app": "finance"})
         self.assertEqual(status, 403)
         session = self.open_session("promoteur", app="portail")
         self.assertEqual(session["user"]["profiles"], ["porteur"])
+
+    def test_application_reservee_a_sa_societe(self):
+        """AxisPro Suite et le portail ne servent que MB AxisPro Consulting ; Rotations, qu'EGUITRA GROUP."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        groupe = self.env.ref("base.main_company")
+        self._create_user("consultante.groupe", "cabinet", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
+        status, body = self.call("POST", "/auth/login", {"login": "consultante.groupe", "password": PASSWORD, "app": "axispro"})
+        self.assertEqual((status, body["error"]), (403, "app_forbidden"), "Sans la société du cabinet, pas d'AxisPro Suite")
+        self._create_user("promoteur.groupe", "porteur")
+        status, body = self.call("POST", "/auth/login", {"login": "promoteur.groupe", "password": PASSWORD, "app": "portail"})
+        self.assertEqual(status, 403, "Un porteur relève du cabinet")
+        self._create_user("parc.deux", "exploitation", company_id=cabinet.id, company_ids=[(6, 0, (groupe | cabinet).ids)])
+        session = self.open_session("parc.deux", app="mobile")
+        status, me = self.call("GET", "/auth/me", token=session["access_token"],
+                               headers={"X-Eguitra-App": "mobile", "X-Eguitra-Company": str(cabinet.id)})
+        self.assertEqual((status, me["company_id"]), (200, groupe.id), "Rotations travaille toujours dans EGUITRA GROUP")
 
     def test_changement_de_mot_de_passe(self):
         session = self.open_session("fatou")

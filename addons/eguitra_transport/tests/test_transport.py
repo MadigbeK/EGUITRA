@@ -30,6 +30,18 @@ class TestTransport(FinanceDataMixin, ApiCase):
         base.update(values)
         return self.env["eguitra.transport.rotation"].create(base)
 
+    def test_transport_reserve_a_eguitra(self):
+        """Les modules métier d'EGUITRA GROUP refusent de travailler dans MB AxisPro Consulting."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        self._create_user("finance.deux", "finance", company_ids=[(6, 0, (self.company | cabinet).ids)])
+        token = self.open_session("finance.deux")["access_token"]
+        status, body = self.call("GET", "/transport/vehicles", token=token,
+                                 headers={"X-Eguitra-App": "finance", "X-Eguitra-Company": str(cabinet.id)})
+        self.assertEqual((status, body["error"]), (422, "wrong_company"), body)
+        status, _b = self.call("GET", "/transport/vehicles", token=token,
+                               headers={"X-Eguitra-App": "finance", "X-Eguitra-Company": str(self.company.id)})
+        self.assertEqual(status, 200)
+
     def test_axes_analytiques_crees(self):
         self.assertEqual(self.truck.analytic_account_id.plan_id, self.env.ref("eguitra_base.analytic_plan_vehicule"))
         self.assertEqual(self.route.analytic_account_id.plan_id, self.env.ref("eguitra_base.analytic_plan_route"))

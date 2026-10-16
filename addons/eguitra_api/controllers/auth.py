@@ -9,10 +9,11 @@ from odoo.exceptions import AccessDenied
 from odoo.http import request
 
 from ..models.api_token import REUSE_GRACE_SECONDS
+from ..organisation import APPS as APP_REGISTRY
 from .framework import ApiError, api_route, client_ip, json_response, read_json, require, sudo_env
 
 MAX_MFA_ATTEMPTS = 5
-APPS = ("finance", "axispro", "portail", "mobile")
+APPS = tuple(APP_REGISTRY)
 
 
 def _mfa_required(env):

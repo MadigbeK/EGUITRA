@@ -5,6 +5,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_base.models.res_users import PROFILE_GROUPS
 
+from ..organisation import PROFILE_ENTITY
 from .framework import ApiError, api_route, int_arg, read_json, require, sudo_env
 
 ADMIN = ("admin",)
@@ -133,12 +134,17 @@ class EguitraAdminController(http.Controller):
                 user._eguitra_set_profiles(list(data["profiles"]))
             except ValueError as e:
                 raise ApiError(422, "business_rule", str(e)) from e
+        try:
+            user._eguitra_check_companies()
+        except ValueError as e:
+            raise ApiError(422, "business_rule", str(e)) from e
 
     @api_route("/admin/profiles", methods=("GET",), profiles=ADMIN)
     def profiles(self, **_kw):
         env = sudo_env()
         return [
-            {"code": code, "name": env.ref(xmlid).name, "description": env.ref(xmlid).comment}
+            {"code": code, "name": env.ref(xmlid).name, "description": env.ref(xmlid).comment,
+             "entity": PROFILE_ENTITY.get(code)}
             for code, xmlid in PROFILE_GROUPS.items()
         ]
 

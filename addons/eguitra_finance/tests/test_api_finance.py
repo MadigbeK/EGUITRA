@@ -31,7 +31,10 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         sans les soldes réservés à la finance."""
         for login, profile, app in (("chef.chantier", "chantiers", "finance"), ("gestion.immo", "immobilier", "finance"),
                                     ("ibrahima", "exploitation", "finance"), ("consultant", "cabinet", "axispro")):
-            if login != "ibrahima":
+            if login == "consultant":  # un profil du cabinet exige la société MB AxisPro Consulting
+                cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+                self._create_user(login, profile, company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
+            elif login != "ibrahima":
                 self._create_user(login, profile)
             token = self.open_session(login, app=app)["access_token"]
             status, body = self.call("GET", "/finance/partners?limit=5", token=token)

@@ -7,5 +7,6 @@ class ResCompany(models.Model):
     eguitra_entity = fields.Selection(
         [("groupe", "EGUITRA GROUP"), ("cabinet", "MB AxisPro Consulting")],
         string="Entité de la plateforme",
-        help="Application qui sert cette société : EGUITRA Finance (groupe) ou AxisPro Suite (cabinet).",
+        help="EGUITRA GROUP : EGUITRA Finance, Rotations et modules métier (transport, chantiers, immobilier). "
+        "MB AxisPro Consulting : EGUITRA Finance, AxisPro Suite et portail des porteurs de projets.",
     )

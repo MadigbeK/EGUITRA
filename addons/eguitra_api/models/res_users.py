@@ -2,13 +2,7 @@ from odoo import fields, models
 
 from odoo.addons.eguitra_base.models.res_users import PROFILE_GROUPS
 
-# Applications ouvertes à chaque profil.
-APP_PROFILES = {
-    "finance": {"admin", "direction", "finance", "exploitation", "chantiers", "immobilier"},
-    "axispro": {"admin", "direction", "cabinet"},
-    "portail": {"porteur"},
-    "mobile": {"admin", "exploitation"},
-}
+from ..organisation import APPS, ENTITY_NAMES, PROFILE_ENTITY
 
 
 class ResUsers(models.Model):
@@ -20,9 +14,23 @@ class ResUsers(models.Model):
     )
 
     def _eguitra_apps(self):
+        """Applications du compte : un de ses profils l'ouvre, et le compte est ouvert à la société
+        qu'elle sert (AxisPro Suite sans MB AxisPro Consulting n'aurait rien à montrer)."""
         self.ensure_one()
         profiles = set(self._eguitra_profiles())
-        return [app for app, allowed in APP_PROFILES.items() if profiles & allowed]
+        entities = set(self.sudo().company_ids.mapped("eguitra_entity"))
+        return [app for app, spec in APPS.items()
+                if profiles & spec["profiles"] and (not spec["entity"] or spec["entity"] in entities)]
+
+    def _eguitra_check_companies(self):
+        """Un profil propre à une société exige que le compte soit ouvert à cette société."""
+        self.ensure_one()
+        entities = set(self.sudo().company_ids.mapped("eguitra_entity"))
+        for profile in self._eguitra_profiles():
+            entity = PROFILE_ENTITY.get(profile)
+            if entity and entity not in entities:
+                name = self.env.ref(PROFILE_GROUPS[profile]).sudo().name
+                raise ValueError(f"Le profil « {name} » exige la société {ENTITY_NAMES[entity]}.")
 
     def _eguitra_public(self):
         """Représentation de l'utilisateur renvoyée aux applications."""

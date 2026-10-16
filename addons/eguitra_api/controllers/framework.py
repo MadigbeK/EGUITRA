@@ -17,13 +17,13 @@ from odoo import SUPERUSER_ID, api, http
 from odoo.exceptions import AccessDenied, AccessError, MissingError, UserError, ValidationError
 from odoo.http import request
 
+from ..organisation import APPS, module_entity, wrong_company_message
+
 _logger = logging.getLogger(__name__)
 
 API_PREFIX = "/api/v1"
 COMPANY_HEADER = "X-Eguitra-Company"
 APP_HEADER = "X-Eguitra-App"
-# Applications du cabinet : elles travaillent par défaut dans la société MB AxisPro Consulting.
-CABINET_APPS = ("axispro", "portail")
 # Seules routes ouvertes tant que le mot de passe provisoire (remis par l'administrateur) n'est pas changé.
 TEMPORARY_PASSWORD_ROUTES = ("/auth/me", "/auth/password", "/auth/logout")
 
@@ -127,18 +127,22 @@ def _authenticate():
 
 
 def _set_companies(user):
-    """Société courante : en-tête X-Eguitra-Company si autorisée, sinon la société par défaut de
-    l'application (le cabinet pour AxisPro Suite et le portail), sinon celle de l'utilisateur."""
+    """Société courante. Une application qui ne sert qu'une société (AxisPro Suite et le portail :
+    MB AxisPro Consulting ; Rotations : EGUITRA GROUP) y travaille toujours, même pour un compte
+    ouvert aux deux sociétés. Sinon : en-tête X-Eguitra-Company si autorisée, à défaut la société
+    de l'utilisateur."""
     allowed = user.company_ids.ids
     wanted = request.httprequest.headers.get(COMPANY_HEADER)
     current = user.company_id.id
-    if request.httprequest.headers.get(APP_HEADER) in CABINET_APPS:
-        cabinet = user.company_ids.filtered(lambda c: c.eguitra_entity == "cabinet")[:1]
-        if cabinet:
-            # AxisPro Suite et le portail ne relèvent que du cabinet : aucune autre société de travail,
-            # même pour un compte ouvert aux deux sociétés.
-            request.update_context(allowed_company_ids=cabinet.ids)
-            return
+    entity = APPS.get(request.httprequest.headers.get(APP_HEADER), {}).get("entity")
+    if entity:
+        scoped = user.company_ids.filtered(lambda c: c.eguitra_entity == entity)
+        if not scoped:
+            raise ApiError(403, "app_forbidden", "Votre compte n'est pas ouvert à la société de cette application.")
+        if wanted and wanted.isdigit() and int(wanted) in scoped.ids:
+            scoped = scoped.browse(int(wanted)) | scoped
+        request.update_context(allowed_company_ids=scoped.ids)
+        return
     if wanted:
         try:
             wanted = int(wanted)
@@ -183,9 +187,12 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
 
     :param profiles: profils autorisés (codes de PROFILE_GROUPS) ; None = tout utilisateur connecté.
     :param auth: False pour les routes publiques (connexion, santé).
+    Un module réservé à une société (organisation.MODULE_ENTITY) refuse de travailler dans l'autre.
     La fonction décorée reçoit les paramètres d'URL et renvoie un objet sérialisable en JSON,
     ou une réponse HTTP déjà construite (fichier).
     """
+
+    entity = module_entity(route)
 
     def decorator(func):
         @functools.wraps(func)
@@ -203,6 +210,8 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
                                        "Remplacez d'abord votre mot de passe provisoire.")
                     if profiles and not set(profiles) & set(user._eguitra_profiles()):
                         raise ApiError(403, "forbidden", "Accès non autorisé pour votre profil.")
+                    if entity and request.env.company.eguitra_entity != entity:
+                        raise ApiError(422, "wrong_company", wrong_company_message(entity))
                 result = func(self, **kwargs)
                 response = result if isinstance(result, http.Response) else json_response(result)
                 status = response.status_code
