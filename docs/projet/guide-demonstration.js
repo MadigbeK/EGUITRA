@@ -1,6 +1,7 @@
 // Guide pas à pas de la démonstration et questions-réponses (PowerPoint, généré avec pptxgenjs).
 //   npm install pptxgenjs (dossier temporaire), puis : node guide-demonstration.js <adresse de la recette> <fichier.pptx>
 // L'adresse de la recette n'est jamais écrite dans le dépôt : elle est passée en argument.
+const pptxgen = require("pptxgenjs");
 const URL = process.argv[2] || "https://recette.<adresse>.sslip.io";
 const OUT = process.argv[3] || "Guide_demonstration.pptx";
 
