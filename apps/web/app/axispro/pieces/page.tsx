@@ -23,14 +23,26 @@ export default function PiecesPage() {
       {p === null && <Card><p className="text-sm text-muted">Aucune grille en vigueur : importez puis mettez en vigueur la grille du cabinet.</p></Card>}
       {p && (
         <div className="space-y-4">
-          {[...p.gates.map((g) => ({ id: g.id as number | null, title: `${g.code}, ${g.name}` })), { id: null, title: "Sans gate particulier" }].map((g) => {
+          {[...p.gates.map((g, i) => ({ id: g.id as number | null, rang: String(i + 1), title: `${g.code}, ${g.name}` })), { id: null, rang: "+", title: "Sans gate particulier" }].map((g) => {
             const rows = p.documents.filter((d) => d.gate_id === g.id);
             if (!rows.length) return null;
             return (
-              <Card key={g.id ?? "none"} title={`${g.title}, ${rows.length} pièces`} padded={false}>
+              <Card
+                key={g.id ?? "none"}
+                title={
+                  <span className="flex items-center gap-3">
+                    <span className="n-degrade grid h-8 w-8 flex-none place-items-center rounded-full text-[13px] font-bold text-white">{g.rang}</span>
+                    {g.title}
+                    <span className="rounded-full bg-accent-doux px-2 py-0.5 text-[12px] font-semibold text-accent">
+                      {rows.length} pièce{rows.length > 1 ? "s" : ""}
+                    </span>
+                  </span>
+                }
+                padded={false}
+              >
                 <DataTable dense rows={rows} rowKey={(d) => d.id} columns={[
-                  { key: "code", label: "Code", render: (d) => <span className="font-mono text-xs">{d.code}</span> },
-                  { key: "name", label: "Pièce" },
+                  { key: "code", label: "Code", render: (d) => <span className="rounded-md bg-panel-3 px-1.5 py-0.5 text-[12px] font-semibold text-ink-2">{d.code}</span> },
+                  { key: "name", label: "Pièce", render: (d) => <span className="font-medium text-ink">{d.name}</span> },
                   { key: "category", label: "Rubrique", render: (d) => d.category ?? "–" },
                   { key: "required", label: "", render: (d) => (d.required ? <Badge tone="accent">Obligatoire</Badge> : <Badge>Facultative</Badge>) },
                   { key: "guidance", label: "Consignes au porteur", render: (d) => <span className="text-xs text-muted">{d.guidance ?? "–"}</span> },

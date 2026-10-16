@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Lock } from "@/components/icons";
-import { Badge, Card, DataTable, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Gavel, Lock } from "@/components/icons";
+import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, Loading, PageHeader, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { RECO, type DossierSummary, type Review } from "@/lib/axispro-types";
 import { fmtDate, fmtShort } from "@/lib/format";
@@ -15,33 +15,47 @@ export default function ComitesPage() {
   const agenda = (dossiers ?? []).filter((d) => d.progress.assessed > 0 && !d.decision);
   return (
     <div>
-      <PageHeader title="Comités" subtitle="Dossiers à présenter, décisions rendues et leur historique. Une décision verrouillée ne se modifie plus." />
+      <PageHeader title="Comités" subtitle="Dossiers à présenter, décisions rendues et leur historique. Une décision verrouillée ne se modifie plus." actions={<span className="inline-flex items-center gap-2 rounded-xl bg-accent-doux px-3 py-2 text-[13px] font-semibold text-accent"><Gavel className="h-4 w-4" /> {(reviews ?? []).filter((r) => r.state === "locked").length} décision(s) verrouillée(s)</span>} />
       {(error || reviewsError) && <ErrorBox error={error ?? reviewsError} />}
       <div className="space-y-6">
-        <Card title="À présenter en comité" padded={false}>
-          {!dossiers ? <Loading /> : (
-            <DataTable rows={agenda} rowKey={(d) => d.id} empty="Aucun dossier en attente de décision." columns={[
-              { key: "reference", label: "Réf.", render: (d) => <Link className="font-mono text-xs text-accent hover:underline" href={`/axispro/dossiers/${d.id}`}>{d.reference}</Link> },
-              { key: "name", label: "Projet" },
-              { key: "promoter", label: "Promoteur", render: (d) => d.promoter.name },
-              { key: "gate", label: "Gate", render: (d) => d.current_gate?.code ?? "–" },
-              { key: "score", label: "Score", align: "right", render: (d) => (d.score === null ? "–" : Math.round(d.score)) },
-              { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
-              { key: "financing_need", label: "Besoin", align: "right", render: (d) => fmtShort(d.financing_need) },
-            ]} />
+        <Card title={`À présenter en comité (${agenda.length})`}>
+          {!dossiers ? (
+            <Loading />
+          ) : agenda.length === 0 ? (
+            <Empty title="Aucun dossier en attente de décision." hint="Un dossier entre ici dès qu'un premier critère est évalué, et en sort à la décision du comité." />
+          ) : (
+            <div className="n-cascade grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+              {agenda.map((d) => (
+                <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className="n-levable flex items-center gap-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+                  <Anneau value={d.score} taille={72} epaisseur={10} couleur={d.score === null ? undefined : d.score >= 70 ? "var(--g-jade)" : d.score >= 50 ? "var(--warn-vif)" : "var(--danger-vif)"} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
+                      {d.current_gate && <span className="rounded-md bg-panel-3 px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-2">{d.current_gate.code}</span>}
+                    </div>
+                    <div className="mt-1.5 line-clamp-2 text-[14px] font-semibold leading-snug text-ink">{d.name}</div>
+                    <div className="truncate text-[12.5px] text-muted">{d.promoter.name}</div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge>
+                      <span className="whitespace-nowrap text-[12.5px] font-semibold tabular text-ink-2">{fmtShort(d.financing_need)}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
           )}
         </Card>
         <Card title="Décisions et revues" padded={false}>
           {!reviews ? <Loading /> : (
             <DataTable rows={reviews} rowKey={(r) => r.id} empty="Aucune revue de comité." columns={[
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
-              { key: "dossier", label: "Dossier", render: (r) => <Link className="hover:underline" href={`/axispro/dossiers/${r.dossier.id}`}><span className="font-mono text-xs text-accent">{r.dossier.reference}</span> {r.dossier.name}</Link> },
+              { key: "dossier", label: "Dossier", render: (r) => <Link className="block min-w-[200px] hover:text-accent" href={`/axispro/dossiers/${r.dossier.id}`}><span className="font-semibold text-ink">{r.dossier.name}</span><span className="block text-[12px] font-semibold text-accent">{r.dossier.reference}</span></Link> },
               { key: "promoter", label: "Promoteur", render: (r) => r.dossier.promoter },
               { key: "gate", label: "Gate", render: (r) => r.gate ?? "–" },
-              { key: "score", label: "Score", align: "right", render: (r) => (r.score === null ? "–" : Math.round(r.score)) },
+              { key: "score", label: "Score", align: "right", render: (r) => (r.score === null ? "–" : <span className={cx("inline-block min-w-10 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", r.score >= 70 ? "bg-ok-doux text-ok-texte" : r.score >= 50 ? "bg-warn-doux text-warn" : "bg-danger-doux text-danger")}>{Math.round(r.score)}</span>) },
               { key: "recommendation", label: "Calculée", render: (r) => <Badge tone={RECO[r.recommendation]?.tone ?? "neutral"}>{RECO[r.recommendation]?.label ?? "–"}</Badge> },
               { key: "decision", label: "Décision", render: (r) => <Badge tone={RECO[r.decision]?.tone ?? "neutral"}>{RECO[r.decision]?.label ?? r.decision}</Badge> },
-              { key: "state", label: "", render: (r) => (r.state === "locked" ? <span className="inline-flex items-center gap-1 text-xs text-ok"><Lock className="h-3 w-3" /> {r.locked_by}</span> : <Badge tone="warn">Brouillon</Badge>) },
+              { key: "state", label: "", render: (r) => (r.state === "locked" ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ok-doux px-2 py-0.5 text-[12px] font-semibold text-ok-texte"><Lock className="h-3 w-3" /> {r.locked_by}</span> : <Badge tone="warn" vivant>Brouillon</Badge>) },
             ]} />
           )}
         </Card>
