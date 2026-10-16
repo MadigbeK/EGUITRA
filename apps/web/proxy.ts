@@ -17,15 +17,17 @@ import {
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
+  // La racine ouvre l'accueil NIMOVA ; le domaine du portail garde son portail.
   if (pathname === "/") {
     const app = appFromHost(req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
-    return NextResponse.redirect(new URL(`/${app}`, req.url));
+    return NextResponse.redirect(new URL(app === "portail" ? "/portail" : "/accueil", req.url));
   }
 
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
   const app =
     appFromPath(pathname) ??
-    (pathname.startsWith("/compte") ? (isAppCode(fromCookie) ? fromCookie : "finance") : null);
+    (pathname.startsWith("/compte") ? (isAppCode(fromCookie) ? fromCookie : "finance") : null) ??
+    (pathname === "/accueil" ? (fromCookie === "axispro" ? "axispro" : "finance") : null);
   if (!app) return NextResponse.next();
 
   const refresh = req.cookies.get(COOKIES.refresh)?.value;
@@ -53,5 +55,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/compte/:path*"],
+  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/compte/:path*"],
 };
