@@ -97,6 +97,14 @@ même branche, sans toucher à la logique des écrans :
   standard (étapes numérotées).
 - Coque : bascule « Finance | AxisPro » en tête de la colonne de navigation, pour passer d'un
   espace de gestion à l'autre d'un clic (comptes ouverts aux deux).
+- Vérification complète sur la maquette (16 octobre) : 32 écrans et les 7 onglets de 8 dossiers
+  AxisPro, en grand écran et sur téléphone de 360 px (aucune erreur, aucun débordement, aucune
+  valeur manquante) ; connexion (erreur, code, activation), mot de passe provisoire, portail
+  (message envoyé), Rotations (saisie transmise), recherche Ctrl K, repli du menu, fenêtres,
+  tri, onglets, graphiques au clavier ; appels d'API identiques à l'origine dans chaque fichier.
+  Corrigés : débordements sur téléphone (rapport mensuel, transport, data room, rapport de
+  décision ; le champ de fichier caché sortait de son tableau). Ajoutés : page « introuvable »
+  et page d'erreur aux couleurs de NIMOVA (au lieu de la page anglaise de Next.js).
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
