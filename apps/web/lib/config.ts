@@ -1,19 +1,22 @@
 /** Applications servies par ce projet. Le code d'application est transmis à l'API à la connexion. */
 export type AppCode = "finance" | "axispro" | "portail" | "mobile";
 
+/** Les deux sociétés : EGUITRA GROUP SARLU (« groupe ») et MB AxisPro Consulting (« cabinet »). */
+export type EntiteSociete = "groupe" | "cabinet";
+
 /**
+ * Registre des applications (le pendant du noyau : addons/eguitra_api/organisation.py).
  * Noms affichés (décision du gérant, 16 octobre 2026) : NIMOVA, marque interne, suivie du module.
  * Le portail, ouvert aux clients du cabinet, porte la marque MB AxisPro Consulting.
+ * entity : société servie, null pour les deux. Finance sert les deux sociétés ; AxisPro Suite et le
+ * portail, le seul cabinet ; Rotations, le seul groupe (le noyau l'impose).
  */
-export const APPS: Record<AppCode, { name: string; home: string; tagline: string }> = {
-  finance: { name: "NIMOVA · Finance", home: "/finance", tagline: "Pilotage financier du groupe" },
-  axispro: { name: "NIMOVA · AxisPro", home: "/axispro", tagline: "Évaluation et suivi des projets" },
-  portail: { name: "Portail des porteurs de projets", home: "/portail", tagline: "MB AxisPro Consulting" },
-  mobile: { name: "NIMOVA · Rotations", home: "/mobile", tagline: "Saisie des rotations au parc" },
+export const APPS: Record<AppCode, { name: string; home: string; tagline: string; entity: EntiteSociete | null }> = {
+  finance: { name: "NIMOVA · Finance", home: "/finance", tagline: "Pilotage financier du groupe", entity: null },
+  axispro: { name: "NIMOVA · AxisPro", home: "/axispro", tagline: "Évaluation et suivi des projets", entity: "cabinet" },
+  portail: { name: "Portail des porteurs de projets", home: "/portail", tagline: "MB AxisPro Consulting", entity: "cabinet" },
+  mobile: { name: "NIMOVA · Rotations", home: "/mobile", tagline: "Saisie des rotations au parc", entity: "groupe" },
 };
-
-/** Applications du cabinet : elles ne travaillent que dans MB AxisPro Consulting (le noyau l'impose). */
-export const CABINET_APPS: readonly AppCode[] = ["axispro", "portail"];
 
 export function isAppCode(value: unknown): value is AppCode {
   return typeof value === "string" && value in APPS;

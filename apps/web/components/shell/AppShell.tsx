@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
 import { AlertTriangle, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronRight, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
-import { APPS, CABINET_APPS, type AppCode } from "@/lib/config";
+import { APPS, type AppCode } from "@/lib/config";
 import { navFor, type NavItem, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
@@ -42,9 +42,10 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   const [open, setOpen] = useState(false);
   const [replie, setReplie] = useState(false);
   const [recherche, setRecherche] = useState(false);
-  const sections = useMemo(() => navFor(app, me.profiles), [app, me.profiles]);
-  const home = APPS[app].home;
   const company = me.companies.find((c) => c.id === me.company_id);
+  // Les modules d'une société (transport, chantiers, immobilier) n'apparaissent que dans ses livres.
+  const sections = useMemo(() => navFor(app, me.profiles, company?.entity), [app, me.profiles, company?.entity]);
+  const home = APPS[app].home;
   const entity = entityOf(company, app);
 
   useEffect(() => {
@@ -413,7 +414,10 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
   const company = me.companies.find((c) => c.id === me.company_id);
   const entite = entityOf(company, app);
   // AxisPro Suite et le portail ne relèvent que du cabinet : pas de choix de société.
-  const plusieurs = me.companies.length > 1 && !CABINET_APPS.includes(app);
+  // Une application qui ne sert qu'une société n'en propose pas d'autre (AxisPro, portail, Rotations).
+  const servie = APPS[app].entity;
+  const ouvertes = servie ? me.companies.filter((c) => c.entity === servie) : me.companies;
+  const plusieurs = ouvertes.length > 1;
 
   useEffect(() => {
     if (!open) return;
@@ -466,7 +470,7 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
       {open && (
         <div id={panelId} role="group" aria-label="Société" className={cx("n-surgir absolute z-50 mt-2 w-[264px] rounded-2xl border border-line bg-panel p-1.5 shadow-[var(--ombre-flottante)]", replie ? "left-full top-0 ml-3 mt-0" : "left-0 top-full")}>
           <div className="px-3 pb-1.5 pt-2 text-[12px] font-semibold text-muted">Livres ouverts</div>
-          {me.companies.map((c) => {
+          {ouvertes.map((c) => {
             const actif = c.id === me.company_id;
             return (
               <button

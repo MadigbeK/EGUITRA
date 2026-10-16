@@ -8,13 +8,15 @@ import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Account } from "@/lib/finance-types";
 import { MONTHS_FR, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
-const PLANS = [
+// Axes analytiques ; ceux d'un métier ne se proposent que dans la société qui l'exerce.
+const PLANS: Array<{ value: string; label: string; entity?: "groupe" | "cabinet" }> = [
   { value: "activite", label: "Activité" },
   { value: "centre_cout", label: "Centre de coût" },
-  { value: "chantier", label: "Chantier" },
-  { value: "vehicule", label: "Ensemble routier" },
-  { value: "route", label: "Route" },
-  { value: "bien", label: "Bien immobilier" },
+  { value: "chantier", label: "Chantier", entity: "groupe" },
+  { value: "vehicule", label: "Ensemble routier", entity: "groupe" },
+  { value: "route", label: "Route", entity: "groupe" },
+  { value: "bien", label: "Bien immobilier", entity: "groupe" },
+  { value: "dossier", label: "Dossier AxisPro", entity: "cabinet" },
 ];
 
 export default function PilotagePage() {
@@ -37,11 +39,14 @@ function Axes() {
     `/finance/analytics?plan=${plan}&date_from=${from}&date_to=${to}&scope=${scope}`,
   );
   const total = (data?.rows ?? []).reduce((a, r) => ({ income: a.income + r.income, expense: a.expense + r.expense }), { income: 0, expense: 0 });
+  const { data: me } = useApi<{ company_id: number; companies: Array<{ id: number; entity: "groupe" | "cabinet" | null }> }>("/auth/me");
+  const entite = me?.companies.find((c) => c.id === me.company_id)?.entity;
+  const axes = PLANS.filter((p) => !p.entity || scope === "group" || !entite || p.entity === entite);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Axe">
-          <Select value={plan} onChange={(e) => setPlan(e.target.value)} options={PLANS} />
+          <Select value={plan} onChange={(e) => setPlan(e.target.value)} options={axes} />
         </Field>
         <Field label="Du">
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />

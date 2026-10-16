@@ -1,4 +1,4 @@
-import type { AppCode } from "./config";
+import type { AppCode, EntiteSociete } from "./config";
 import type { Profile } from "./types";
 
 export interface NavItem {
@@ -6,6 +6,8 @@ export interface NavItem {
   label: string;
   icon: string;
   profiles?: Profile[];
+  /** Module réservé à une société : masqué quand la société de travail est l'autre. */
+  entity?: EntiteSociete;
 }
 
 export interface NavSection {
@@ -47,9 +49,9 @@ export const NAV: Record<AppCode, NavSection[]> = {
     {
       label: "Métiers",
       items: [
-        { href: "/finance/transport", label: "Transport", icon: "Truck", profiles: ["admin", "direction", "finance", "exploitation"] },
-        { href: "/finance/chantiers", label: "Chantiers", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"] },
-        { href: "/finance/immobilier", label: "Immobilier", icon: "Building2", profiles: ["admin", "direction", "finance", "immobilier"] },
+        { href: "/finance/transport", label: "Transport", icon: "Truck", profiles: ["admin", "direction", "finance", "exploitation"], entity: "groupe" },
+        { href: "/finance/chantiers", label: "Chantiers", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"], entity: "groupe" },
+        { href: "/finance/immobilier", label: "Immobilier", icon: "Building2", profiles: ["admin", "direction", "finance", "immobilier"], entity: "groupe" },
       ],
     },
     {
@@ -92,11 +94,13 @@ export const NAV: Record<AppCode, NavSection[]> = {
   mobile: [{ label: "Rotations", items: [{ href: "/mobile", label: "Rotations", icon: "Truck" }] }],
 };
 
-export function navFor(app: AppCode, profiles: Profile[]): NavSection[] {
+export function navFor(app: AppCode, profiles: Profile[], entity?: EntiteSociete | null): NavSection[] {
   return NAV[app]
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !item.profiles || item.profiles.some((p) => profiles.includes(p))),
+      items: section.items.filter(
+        (item) => (!item.profiles || item.profiles.some((p) => profiles.includes(p))) && (!item.entity || !entity || item.entity === entity),
+      ),
     }))
     .filter((section) => section.items.length > 0);
 }

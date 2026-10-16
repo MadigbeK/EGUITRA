@@ -11,7 +11,8 @@ interface UserRow extends Me {
   active: boolean;
   last_login: string | null;
 }
-interface ProfileDef { code: string; name: string; description: string | null }
+/** entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro). */
+interface ProfileDef { code: string; name: string; description: string | null; entity: "groupe" | "cabinet" | null }
 
 /** Utilisateurs : profils, sociétés, mot de passe provisoire, double authentification. */
 export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]; defaultCompany: number }) {
@@ -67,9 +68,21 @@ function UserForm({ user, profiles, companies, defaultCompany, onClose, onSaved 
   const [busy, setBusy] = useState(false);
 
   function toggle(code: string) {
-    if (code === "porteur") return setSelected(selected.includes("porteur") ? [] : ["porteur"]);
-    setSelected((s) => (s.includes(code) ? s.filter((x) => x !== code) : [...s.filter((x) => x !== "porteur"), code]));
+    const ajout = !selected.includes(code);
+    if (code === "porteur") setSelected(ajout ? ["porteur"] : []);
+    else setSelected((s) => (s.includes(code) ? s.filter((x) => x !== code) : [...s.filter((x) => x !== "porteur"), code]));
+    // Un profil propre à une société ouvre cette société au compte.
+    const entite = profiles.find((p) => p.code === code)?.entity;
+    const societe = entite ? companies.find((c) => c.entity === entite) : undefined;
+    if (ajout && societe && !companyIds.includes(societe.id)) {
+      setCompanyIds(code === "porteur" ? [societe.id] : [...companyIds, societe.id]);
+      if (code === "porteur") setMainCompany(societe.id);
+    }
   }
+  const societeExigee = (p: ProfileDef) => (p.entity ? companies.find((c) => c.entity === p.entity)?.name : undefined);
+  const manquantes = selected
+    .map((code) => profiles.find((p) => p.code === code))
+    .filter((p): p is ProfileDef => Boolean(p?.entity) && !companies.some((c) => c.entity === p!.entity && companyIds.includes(c.id)));
   async function run(fn: () => Promise<unknown>, ok: string, close = false) {
     setBusy(true);
     setMessage(null);
@@ -144,11 +157,17 @@ function UserForm({ user, profiles, companies, defaultCompany, onClose, onSaved 
                 <span>
                   <span className="block text-sm text-ink">{p.name}</span>
                   <span className="block text-xs text-muted">{p.description}</span>
+                  {societeExigee(p) && <span className="mt-0.5 block text-[11px] font-semibold text-accent">Société : {societeExigee(p)}</span>}
                 </span>
               </label>
             ))}
           </div>
         </div>
+        {manquantes.length > 0 && (
+          <Notice tone="warn">
+            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro Consulting" : "EGUITRA GROUP SARLU")}.`).join(" ")}
+          </Notice>
+        )}
         {user && (
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
             <PasswordReset userId={user.id} />

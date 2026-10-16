@@ -132,7 +132,7 @@ export default function ManagementReportPage() {
                 { key: "balance", label: "Solde", align: "right", render: (c) => fmtGNF(c.balance) },
               ]} />
             </Card>
-            <Card title="Transport : le mois par ensemble routier" padded={false}>
+            {r.transport.length > 0 && <Card title="Transport : le mois par ensemble routier" padded={false}>
               <DataTable dense rows={r.transport} rowKey={(t) => t.key ?? t.label} empty="Aucune rotation validée ce mois." columns={[
                 { key: "label", label: "Ensemble" },
                 { key: "rotations", label: "Rotations", align: "right" },
@@ -140,7 +140,7 @@ export default function ManagementReportPage() {
                 { key: "revenue", label: "Chiffre d'affaires", align: "right", render: (t) => fmtInt(t.revenue) },
                 { key: "margin", label: "Marge", align: "right", render: (t) => <span className={t.margin < 0 ? "text-danger" : undefined}>{fmtInt(t.margin)}</span> },
               ]} />
-            </Card>
+            </Card>}
           </div>
 
           <Card title="Alertes actives à la fin du mois">
