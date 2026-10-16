@@ -105,6 +105,16 @@ même branche, sans toucher à la logique des écrans :
   Corrigés : débordements sur téléphone (rapport mensuel, transport, data room, rapport de
   décision ; le champ de fichier caché sortait de son tableau). Ajoutés : page « introuvable »
   et page d'erreur aux couleurs de NIMOVA (au lieu de la page anglaise de Next.js).
+- Relecture indépendante du diff (essais réels à 360 et 1280 px) puis corrections : chiffres clés
+  de Ventes et Achats bloqués à 0 (le compteur ne démarrait pas si la valeur arrivait après le
+  premier affichage), tuile du monogramme invisible sous 1024 px, entrée active invisible avant
+  le chargement du script, trait des onglets sur plusieurs lignes, compteur de trésorerie rogné,
+  double navigation dans la liste AxisPro, impression des bandeaux et des courbes, étiquettes de
+  mois serrées sur téléphone, graduations d'une série nulle, focus rendu par la recherche Ctrl K
+  et raccourci laissé au navigateur sur le portail, contrastes du texte blanc sur les dégradés.
+- Reste pour la session fonctionnelle : passer la version du cache de Rotations
+  (`public/mobile-sw.js`, `VERSION`) pour que les téléphones déjà équipés reçoivent le nouveau
+  manifeste et les nouvelles icônes.
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la

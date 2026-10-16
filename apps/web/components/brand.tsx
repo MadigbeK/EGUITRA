@@ -16,17 +16,7 @@ export function Monogramme({ className, tuile = true, title }: { className?: str
   return (
     <svg viewBox="0 0 100 100" className={className ?? "h-9 w-9"} role={title ? "img" : undefined} aria-hidden={title ? undefined : true} focusable="false">
       {title && <title>{title}</title>}
-      {tuile && (
-        <>
-          <defs>
-            <linearGradient id="nimova-tuile" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#22634c" />
-              <stop offset="100%" stopColor="#142f29" />
-            </linearGradient>
-          </defs>
-          <rect width="100" height="100" rx="24" fill="url(#nimova-tuile)" />
-        </>
-      )}
+      {tuile && <rect width="100" height="100" rx="24" fill="#183d33" />}
       <path d="M25 23h13l37 54H62Z" fill="#d3aa5b" />
       <path d="M25 23h13v54H25ZM62 23h13v54H62Z" fill="#a5e6c2" />
     </svg>

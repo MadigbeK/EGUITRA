@@ -244,9 +244,6 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
       rows={rows}
       rowKey={(d) => d.id}
       empty="Aucun dossier."
-      onRowClick={(d) => {
-        window.location.href = `/axispro/dossiers/${d.id}`;
-      }}
       columns={[
         {
           key: "name",
