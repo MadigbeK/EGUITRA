@@ -1,18 +1,73 @@
-"""Fiscalité guinéenne (TVA), exports d'audit et passerelle IFRS."""
+"""Fiscalité guinéenne : TVA, retenues à la source, déclarations et leur historique, exports
+d'audit et passerelle IFRS."""
 
+import base64
 import csv
 import io
+import json
 
 from dateutil.relativedelta import relativedelta
 
 from odoo import http
-from odoo.http import request
+from odoo.http import content_disposition, request
 
-from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text
+from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
+from odoo.addons.eguitra_api.files import ACCEPTED, XLSX_OPTIONS, checked_name, csv_text, detect_type
 
 from ..models.report_registry import ACC_CODE, ACC_NAME, JRN_NAME
-from .common import FIN_READ, companies, parse_date, today
+from .common import FIN_READ, FIN_WRITE, as_float, companies, parse_date, ref, today
+from .exporting import export_meta, table_response
+
+MAX_ATTACHMENT = 15 * 1024 * 1024
+USES = {"purchase": "Retenue opérée (achats)", "sale": "Retenue subie (ventes)"}
+MOVE_TYPES = {"out_invoice": "Facture", "out_refund": "Avoir client", "in_invoice": "Pièce d'achat",
+              "in_refund": "Avoir fournisseur", "entry": "Opération diverse", "out_receipt": "Reçu",
+              "in_receipt": "Reçu fournisseur"}
+
+
+def _month(kw):
+    year = int_arg(kw, "year", today().year)
+    month = int_arg(kw, "month", today().month, 1, 12)
+    start = today().replace(year=year, month=month, day=1)
+    return start, start + relativedelta(months=1, days=-1)
+
+
+def _withholding_row(tax):
+    account = tax.invoice_repartition_line_ids.filtered(lambda r: r.repartition_type == "tax").account_id[:1]
+    return {
+        "id": tax.id, "name": tax.name, "rate": abs(tax.amount), "use": tax.type_tax_use,
+        "use_label": USES.get(tax.type_tax_use, tax.type_tax_use), "nature": tax.eguitra_withholding_nature or None,
+        "account": {"id": account.id, "code": account.code, "name": account.name} if account else None,
+        "active": tax.active,
+    }
+
+
+def _return_row(record):
+    return {
+        "id": record.id, "period": record.period, "kind": record.kind, "state": record.state,
+        "amount_base": record.amount_base, "amount_collected": record.amount_collected,
+        "amount_deductible": record.amount_deductible, "amount_due": record.amount_due,
+        "amount_credit": record.amount_credit, "prepared_by": record.prepared_by.name or None,
+        "prepared_at": record.prepared_at, "filed_date": record.filed_date, "filed_reference": record.filed_reference or None,
+        "paid_date": record.paid_date, "paid_reference": record.paid_reference or None,
+        "settlement_move": ref(record.settlement_move_id), "payment_move": ref(record.payment_move_id),
+        "attachment": {"id": record.attachment_id.id, "name": record.attachment_id.name} if record.attachment_id else None,
+        "note": record.note or None,
+    }
+
+
+def _jsonable(data):
+    """Calcul figé dans la déclaration : dates en texte ISO."""
+    return json.loads(json.dumps(data, default=lambda v: v.isoformat() if hasattr(v, "isoformat") else str(v)))
+
+
+def _tax_return(return_id):
+    # Recherche soumise aux règles d'accès : la déclaration d'une autre société est introuvable.
+    record = request.env["eguitra.tax.return"].search([("id", "=", return_id)])
+    if not record:
+        raise ApiError(404, "not_found", "Déclaration introuvable.")
+    return record
+
 
 # Correspondance indicative SYSCOHADA -> IFRS, à valider avec l'expert-comptable.
 IFRS_MAP = [
@@ -43,55 +98,261 @@ IFRS_MAP = [
 
 
 class EguitraFinanceFiscal(http.Controller):
+    # ─── Déclarations ─────────────────────────────────────────────────────
+
     @api_route("/finance/fiscal/vat", profiles=FIN_READ)
     def vat(self, **kw):
-        """Déclaration mensuelle de TVA préparée à partir des écritures : collectée, déductible, solde."""
-        year = int_arg(kw, "year", today().year)
-        month = int_arg(kw, "month", today().month, 1, 12)
-        start = today().replace(year=year, month=month, day=1)
-        end = start + relativedelta(months=1, days=-1)
-        request.env.flush_all()
-        cr = request.env.cr
-        cr.execute(
-            """SELECT tax.id, COALESCE(tax.name->>'fr_FR', tax.name->>'en_US'), tax.type_tax_use, tax.amount,
-                      COALESCE(SUM(aml.balance), 0)
-                 FROM account_move_line aml
-                 JOIN account_tax tax ON tax.id = aml.tax_line_id
-                WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%s) AND aml.date BETWEEN %s AND %s
-             GROUP BY 1, 2, 3, 4 ORDER BY 3 DESC, 2""",
-            (list(companies(kw).ids), start, end),
-        )
-        taxes = []
-        collected = deductible = 0.0
-        for tax_id, name, use, rate, balance in cr.fetchall():
-            amount = -float(balance) if use == "sale" else float(balance)
-            taxes.append({"tax_id": tax_id, "name": name, "use": use, "rate": float(rate), "amount": amount})
-            if use == "sale":
-                collected += amount
-            else:
-                deductible += amount
-        cr.execute(
-            """SELECT tax.type_tax_use, COALESCE(SUM(aml.balance), 0)
-                 FROM account_move_line aml
-                 JOIN account_move_line_account_tax_rel rel ON rel.account_move_line_id = aml.id
-                 JOIN account_tax tax ON tax.id = rel.account_tax_id
-                WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%s) AND aml.date BETWEEN %s AND %s
-             GROUP BY 1""",
-            (list(companies(kw).ids), start, end),
-        )
-        bases = {use: float(b) for use, b in cr.fetchall()}
-        balance = collected - deductible
-        return {
-            "period": {"from": start, "to": end},
-            "taxes": taxes,
-            "base_sales": -bases.get("sale", 0.0),
-            "base_purchases": bases.get("purchase", 0.0),
-            "vat_collected": collected,
-            "vat_deductible": deductible,
-            "vat_due": max(balance, 0.0),
-            "vat_credit": max(-balance, 0.0),
-            "note": "Montants préparés à partir des écritures ; le modèle de déclaration est validé avec l'expert-comptable.",
+        """Déclaration mensuelle de TVA préparée à partir des écritures : collectée, déductible, solde.
+        Seuls les groupes de taxes de TVA y entrent : une retenue à la source n'est jamais déductible."""
+        start, end = _month(kw)
+        return request.env["eguitra.fiscal"].sudo().vat_declaration(companies(kw), start, end)
+
+    @api_route("/finance/fiscal/withholding", profiles=FIN_READ)
+    def withholding(self, **kw):
+        """Retenues à la source du mois, par nature et par tiers : base, montant, NIF."""
+        start, end = _month(kw)
+        return request.env["eguitra.fiscal"].sudo().withholding_declaration(companies(kw), start, end)
+
+    @api_route("/finance/fiscal/vat/export", profiles=FIN_READ)
+    def vat_export(self, **kw):
+        """Déclaration de TVA et son annexe (pièces, tiers, NIF, base, taxe) : XLSX, ou CSV de la
+        déclaration (part=declaration) ou de l'annexe (par défaut)."""
+        start, end = _month(kw)
+        scope = companies(kw)
+        fiscal = request.env["eguitra.fiscal"].sudo()
+        data = fiscal.vat_declaration(scope, start, end)
+        annex = fiscal.vat_annex(scope, start, end)
+        meta = export_meta(scope, [("Période", f"{start:%d/%m/%Y} au {end:%d/%m/%Y}")])
+        declaration = {
+            "title": "Déclaration de TVA", "meta": meta,
+            "columns": [("Rubrique", "text"), ("Nature", "text"), ("Taux (%)", "percent"), ("Montant", "money")],
+            "rows": [[t["name"], "Collectée" if t["use"] == "sale" else "Déductible", t["rate"], t["amount"]]
+                     for t in data["taxes"]] + [
+                ["Base des ventes (hors taxes)", "", None, data["base_sales"]],
+                ["Base des achats (hors taxes)", "", None, data["base_purchases"]],
+                ["TVA collectée", "", None, data["vat_collected"]],
+                ["TVA déductible", "", None, data["vat_deductible"]],
+                ["TVA à payer", "", None, data["vat_due"]],
+                ["Crédit de TVA", "", None, data["vat_credit"]],
+            ],
+            "styles": [None] * len(data["taxes"]) + [None, None, "total", "total", "total", "total"],
+            "totals": None,
         }
+        annex_sheet = {
+            "title": "Annexe TVA", "meta": meta,
+            "columns": [("Date", "date"), ("Pièce", "text"), ("Type", "text"), ("Tiers", "text"), ("NIF", "text"),
+                        ("Nature", "text"), ("Taux (%)", "text"), ("Base HT", "money"), ("TVA", "money")],
+            "rows": [[r["date"], r["move"] or "", MOVE_TYPES.get(r["move_type"], r["move_type"]), r["partner"],
+                      r["vat_number"] or "", "Collectée" if r["use"] == "sale" else "Déductible",
+                      ", ".join(f"{rate:g}" for rate in r["rates"]), r["base"], r["tax"]] for r in annex],
+            "totals": None,
+        }
+        name = f"tva_{start:%Y_%m}"
+        sheets = [declaration, annex_sheet]
+        return table_response(name, sheets, kw.get("format", "xlsx"), 0 if kw.get("part") == "declaration" else 1)
+
+    @api_route("/finance/fiscal/withholding/export", profiles=FIN_READ)
+    def withholding_export(self, **kw):
+        """Déclaration des retenues (par nature, par tiers) et annexe pièce par pièce."""
+        start, end = _month(kw)
+        scope = companies(kw)
+        fiscal = request.env["eguitra.fiscal"].sudo()
+        data = fiscal.withholding_declaration(scope, start, end)
+        annex = fiscal.withholding_annex(scope, start, end)
+        meta = export_meta(scope, [("Période", f"{start:%d/%m/%Y} au {end:%d/%m/%Y}")])
+        nature = {
+            "title": "Retenues par nature", "meta": meta,
+            "columns": [("Sens", "text"), ("Nature", "text"), ("Taux (%)", "percent"), ("Tiers", "int"),
+                        ("Base", "money"), ("Retenue", "money")],
+            "rows": [[USES.get(n["use"], n["use"]), n["nature"], n["rate"], n["partners"], n["base"], n["amount"]]
+                     for n in data["by_nature"]],
+            "totals": ["Total des retenues opérées", "", None, None, data["base_total"], data["total_operated"]],
+        }
+        partners = {
+            "title": "Retenues par tiers", "meta": meta,
+            "columns": [("Tiers", "text"), ("NIF", "text"), ("Sens", "text"), ("Nature", "text"), ("Taux (%)", "percent"),
+                        ("Base", "money"), ("Retenue", "money")],
+            "rows": [[r["partner"], r["vat_number"] or "", USES.get(r["use"], r["use"]), r["nature"], r["rate"], r["base"],
+                      r["amount"]] for r in data["by_partner"]],
+            "totals": None,
+        }
+        annex_sheet = {
+            "title": "Annexe retenues", "meta": meta,
+            "columns": [("Date", "date"), ("Pièce", "text"), ("Type", "text"), ("Tiers", "text"), ("NIF", "text"),
+                        ("Nature", "text"), ("Taux (%)", "percent"), ("Base", "money"), ("Retenue", "money")],
+            "rows": [[r["date"], r["move"] or "", MOVE_TYPES.get(r["move_type"], r["move_type"]), r["partner"],
+                      r["vat_number"] or "", r["nature"], r["rate"], r["base"], r["amount"]] for r in annex],
+            "totals": None,
+        }
+        part = {"declaration": 0, "tiers": 1}.get(kw.get("part"), 2)
+        return table_response(f"retenues_{start:%Y_%m}", [nature, partners, annex_sheet], kw.get("format", "xlsx"), part)
+
+    # ─── Historique des déclarations ──────────────────────────────────────
+
+    @api_route("/finance/fiscal/returns", profiles=FIN_READ)
+    def returns(self, **kw):
+        domain = [("company_id", "=", request.env.company.id)]
+        if kw.get("year"):
+            year = int_arg(kw, "year")
+            domain += [("period", ">=", f"{year}-01-01"), ("period", "<=", f"{year}-12-01")]
+        if kw.get("kind") in ("vat", "withholding"):
+            domain.append(("kind", "=", kw["kind"]))
+        return [_return_row(r) for r in request.env["eguitra.tax.return"].search(domain)]
+
+    @api_route("/finance/fiscal/returns", methods=("POST",), profiles=FIN_WRITE)
+    def prepare_return(self, **_kw):
+        """Prépare (ou recalcule, tant qu'elle n'est pas déposée) la déclaration d'un mois."""
+        data = read_json()
+        kind, period = require(data, "kind", "period")
+        if kind not in ("vat", "withholding"):
+            raise ApiError(400, "invalid_parameter", "Nature de déclaration inconnue (vat ou withholding).")
+        start = parse_date(data, "period").replace(day=1)
+        end = start + relativedelta(months=1, days=-1)
+        company = request.env.company
+        fiscal = request.env["eguitra.fiscal"].sudo()
+        computation = (fiscal.vat_declaration(company, start, end) if kind == "vat"
+                       else fiscal.withholding_declaration(company, start, end))
+        record = request.env["eguitra.tax.return"]._get(company, start, kind)
+        record.eguitra_prepare(_jsonable(computation))
+        return _return_row(record)
+
+    @api_route("/finance/fiscal/returns/<int:return_id>", profiles=FIN_READ)
+    def get_return(self, return_id, **_kw):
+        record = _tax_return(return_id)
+        return dict(_return_row(record), details=record.details or None)
+
+    @api_route("/finance/fiscal/returns/<int:return_id>/file", methods=("POST",), profiles=FIN_WRITE)
+    def file_return(self, return_id, **_kw):
+        data = read_json()
+        record = _tax_return(return_id)
+        record.eguitra_file(parse_date(data, "date", today()), data.get("reference"))
+        return _return_row(record)
+
+    @api_route("/finance/fiscal/returns/<int:return_id>/pay", methods=("POST",), profiles=FIN_WRITE)
+    def pay_return(self, return_id, **_kw):
+        data = read_json()
+        record = _tax_return(return_id)
+        move = None
+        if data.get("move_id"):
+            move = request.env["account.move"].browse(int(data["move_id"])).exists()
+            if not move:
+                raise ApiError(422, "business_rule", "Écriture de règlement introuvable.")
+        record.eguitra_pay(parse_date(data, "date", today()), data.get("reference"), move)
+        return _return_row(record)
+
+    @api_route("/finance/fiscal/returns/<int:return_id>/attachment", methods=("POST",), profiles=FIN_WRITE)
+    def attach_return(self, return_id, **_kw):
+        """Accusé de dépôt ou quittance (PDF, image, Word ou Excel reconnus à leur contenu)."""
+        record = _tax_return(return_id)
+        upload = request.httprequest.files.get("file")
+        if not upload:
+            raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
+        content = upload.read(MAX_ATTACHMENT + 1)
+        if len(content) > MAX_ATTACHMENT:
+            raise ApiError(413, "too_large", "Fichier trop volumineux (15 Mo maximum).")
+        mimetype = detect_type(content)
+        if not mimetype:
+            raise ApiError(415, "unsupported_type", f"Justificatif au format {ACCEPTED}.")
+        attachment = request.env["ir.attachment"].create({
+            "name": checked_name(upload.filename, mimetype, "accuse-de-depot"),
+            "datas": base64.b64encode(content),
+            "res_model": "eguitra.tax.return",
+            "res_id": record.id,
+            "mimetype": mimetype,
+        })
+        record.sudo().attachment_id = attachment
+        return _return_row(record)
+
+    @api_route("/finance/fiscal/returns/<int:return_id>/attachment", profiles=FIN_READ)
+    def download_return_attachment(self, return_id, **_kw):
+        record = _tax_return(return_id)
+        attachment = record.attachment_id
+        if not attachment:
+            raise ApiError(404, "not_found", "Aucune pièce jointe.")
+        return request.make_response(attachment.sudo().raw or b"", headers=[
+            ("Content-Type", attachment.mimetype or "application/octet-stream"),
+            ("Content-Disposition", content_disposition(attachment.name or "accuse")),
+            ("X-Content-Type-Options", "nosniff"),
+        ])
+
+    # ─── Paramétrage des retenues à la source ─────────────────────────────
+
+    @api_route("/finance/fiscal/withholding-taxes", profiles=FIN_READ)
+    def withholding_taxes(self, **_kw):
+        Tax = request.env["account.tax"].with_context(active_test=False)
+        taxes = Tax.search([("company_id", "=", request.env.company.id), ("tax_group_id.eguitra_kind", "=", "withholding")],
+                           order="type_tax_use, name")
+        return [_withholding_row(t) for t in taxes]
+
+    @api_route("/finance/fiscal/withholding-taxes", methods=("POST",), profiles=("admin", "finance"))
+    def create_withholding_tax(self, **_kw):
+        """Nouvelle retenue : libellé, taux, compte de l'État (447x), nature ; la taxe du noyau est
+        créée avec un taux négatif dans le groupe « Retenues à la source »."""
+        data = read_json()
+        name, rate, account_id = require(data, "name", "rate", "account_id")
+        company = request.env.company
+        account = request.env["account.account"].browse(int(account_id)).exists()
+        if not account:
+            raise ApiError(422, "business_rule", "Compte inconnu.")
+        tax = request.env["account.tax"].eguitra_create_withholding(
+            company, str(name).strip()[:100], as_float(rate, "rate"), account, (data.get("nature") or "").strip()[:100],
+            data.get("use") or "purchase",
+        )
+        return _withholding_row(tax)
+
+    @api_route("/finance/fiscal/withholding-taxes/<int:tax_id>", methods=("PATCH",), profiles=("admin", "finance"))
+    def update_withholding_tax(self, tax_id, **_kw):
+        """Libellé, nature, archivage. Le taux et le compte d'une retenue déjà employée ne changent pas :
+        créer une nouvelle retenue et archiver l'ancienne."""
+        tax = request.env["account.tax"].with_context(active_test=False).browse(tax_id).exists()
+        if not tax or tax.company_id != request.env.company or tax.tax_group_id.eguitra_kind != "withholding":
+            raise ApiError(404, "not_found", "Retenue introuvable.")
+        data = read_json()
+        values = {}
+        if data.get("name"):
+            values["name"] = str(data["name"]).strip()[:100]
+        if "nature" in data:
+            values["eguitra_withholding_nature"] = (data.get("nature") or "").strip()[:100] or False
+        if "active" in data:
+            values["active"] = bool(data["active"])
+        if "rate" in data and abs(as_float(data["rate"], "rate")) != abs(tax.amount):
+            used = request.env["account.move.line"].sudo().search_count(
+                ["|", ("tax_line_id", "=", tax.id), ("tax_ids", "in", tax.ids)], limit=1)
+            if used:
+                raise ApiError(422, "business_rule", "Retenue déjà employée : créez une nouvelle retenue et archivez celle-ci.")
+            values["amount"] = -abs(as_float(data["rate"], "rate"))
+        tax.write(values)
+        return _withholding_row(tax)
+
+    @api_route("/finance/fiscal/withholding-partners", profiles=FIN_READ)
+    def withholding_partners(self, **_kw):
+        """Tiers soumis à des retenues par défaut dans la société de travail."""
+        company = request.env.company
+        partners = request.env["res.partner"].search(
+            [("eguitra_withholding_tax_ids.company_id", "=", company.id)], order="name")
+        return [{
+            "id": p.id, "name": p.name, "vat": p.vat or None,
+            "taxes": [_withholding_row(t) for t in p.eguitra_withholding_tax_ids if t.company_id == company],
+        } for p in partners]
+
+    @api_route("/finance/fiscal/withholding-partners/<int:partner_id>", methods=("PUT",), profiles=("admin", "finance"))
+    def set_withholding_partner(self, partner_id, **_kw):
+        """Retenues par défaut d'un tiers pour la société de travail (celles de l'autre société restent)."""
+        partner = request.env["res.partner"].browse(partner_id).exists()
+        if not partner:
+            raise ApiError(404, "not_found", "Tiers introuvable.")
+        company = request.env.company
+        try:
+            ids = {int(t) for t in read_json().get("tax_ids") or []}
+        except (TypeError, ValueError) as e:
+            raise ApiError(400, "invalid_parameter", "Retenue invalide.") from e
+        taxes = request.env["account.tax"].browse(list(ids)).exists()
+        if len(taxes) != len(ids) or any(t.company_id != company or t.tax_group_id.eguitra_kind != "withholding" for t in taxes):
+            raise ApiError(422, "business_rule", "Retenue inconnue ou d'une autre société.")
+        others = partner.sudo().eguitra_withholding_tax_ids.filtered(lambda t: t.company_id != company)
+        partner.write({"eguitra_withholding_tax_ids": [(6, 0, (others | taxes).ids)]})
+        return {"id": partner.id, "name": partner.name, "vat": partner.vat or None,
+                "taxes": [_withholding_row(t) for t in taxes]}
 
     @api_route("/finance/exports/entries", profiles=FIN_READ)
     def export_entries(self, **kw):

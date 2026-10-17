@@ -26,4 +26,9 @@
         <field name="model_id" ref="model_eguitra_period_close"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_tax_return_company" model="ir.rule">
+        <field name="name">Déclarations fiscales : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_tax_return"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>

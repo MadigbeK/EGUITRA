@@ -7,3 +7,6 @@ from . import report_registry
 from . import account_move
 from . import account_asset
 from . import reminder
+from . import tax_withholding
+from . import tax_return
+from . import fiscal_declarations
