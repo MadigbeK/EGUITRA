@@ -106,7 +106,8 @@ class TestAssetsApi(FinanceDataMixin, ApiCase):
 
         # Seules les dotations de l'exercice ouvert sont comptabilisées.
         self.env["account.asset"]._eguitra_cron_depreciate()
-        self.assertFalse(self.env["account.move.line"].search([("asset_id", "=", record.id), ("date", "<", self.opening)]))
+        self.assertFalse(record.depreciation_line_ids.filtered(lambda line: line.move_id and line.line_date < self.opening),
+                         "Aucune écriture de dotation antérieure à l'ouverture")
 
         # Contrôle : cumul du registre face au solde d'ouverture du compte d'amortissement.
         path = f"/finance/assets/takeover-control?opening_date={self.opening.isoformat()}"
@@ -158,7 +159,8 @@ class TestAssetsApi(FinanceDataMixin, ApiCase):
         self.assertTrue(asset["non_depreciable"])
         self.assertFalse([line for line in asset["board"] if line["type"] == "depreciate"], "Aucun plan")
         self.env["account.asset"]._eguitra_cron_depreciate()
-        self.assertFalse(self.env["account.move.line"].search([("asset_id", "=", asset["id"])]))
+        self.assertFalse(self.env["account.asset"].browse(asset["id"]).depreciation_line_ids.move_id,
+                         "Aucune dotation pour un terrain")
         if activity:
             self.assertEqual(asset["activity"]["id"], activity.id)
 

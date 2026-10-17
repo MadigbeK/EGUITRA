@@ -519,11 +519,10 @@ class EguitraPeriodClose(models.Model):
                  "amount": sum(move.line_ids.mapped("debit"))}
                 for move in generated.sorted("id")
             ],
-            "depreciations": sum(self.env["account.move.line"].sudo().search([
-                ("company_id", "=", company.id), ("parent_state", "=", "posted"), ("date", ">=", start),
-                ("date", "<=", end), ("asset_id", "!=", False), ("move_id.journal_id.type", "=", "general"),
-                ("debit", ">", 0), ("account_id.code", "=like", "68%"),
-            ]).mapped("debit")),
+            "depreciations": sum(self.env["account.asset.line"].sudo().search([
+                ("asset_id.company_id", "=", company.id), ("type", "=", "depreciate"), ("move_check", "=", True),
+                ("line_date", ">=", start), ("line_date", "<=", end),
+            ]).mapped("amount")),
         }
 
     def _closing_seal(self, generated):
