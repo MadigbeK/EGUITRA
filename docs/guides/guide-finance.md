@@ -20,8 +20,9 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 | Un virement entre deux comptes | Comptabilité > Trésorerie, « Virement interne » | Il passe par le compte de passage 585, qui doit être soldé. |
 | Une rotation de camion | Métiers > Transport (ou Rotations au parc) | Une rotation par voyage : source unique de la facturation et de la rentabilité par camion et par route. |
 | Un bien amortissable | Comptabilité > Immobilisations | Les dotations échues sont comptabilisées chaque nuit. |
-| Un nouvel emprunt ou crédit-bail | Comptabilité > Dette et financement | Renseigner l'objet, le compte de dette, le compte d'intérêts et le journal ; comptabiliser le déblocage. |
-| Une écriture diverse | Comptabilité > Journaux et OD | À-nouveaux et régularisations seulement. |
+| Un nouvel emprunt ou crédit-bail | Comptabilité > Dette et financement | Renseigner l'objet, le compte de dette, le compte d'intérêts et le journal, puis « Mettre en service ». |
+| Le déblocage d'un emprunt | Comptabilité > Trésorerie, type « Déblocage d'emprunt » | Désigner le financement : l'entrée de banque crédite son compte de dette. |
+| Une écriture diverse | Comptabilité > Journaux et OD | À-nouveaux et régularisations seulement ; droit « Saisie libre des comptes ». |
 | Un budget | Pilotage > Activités et budget | Un montant par compte et par mois ; le réalisé se compare au budget cumulé. |
 
 ## Trois règles à ne jamais enfreindre
@@ -52,7 +53,11 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
   dirigeant et ce qui demande une décision. Le bouton « Imprimer » produit un document diffusable.
 - Alertes de gestion : chaque règle compare une valeur à un seuil, avec sa gravité (bloquante,
   critique, élevée, moyenne), son domaine et l'action recommandée. « Toutes les règles » montre aussi
-  les règles conformes. Un seuil laissé à 0 éteint sa règle : la plateforme le signale.
+  les règles conformes. Un seuil laissé à 0 éteint sa règle : la plateforme le signale, et les
+  questions du dirigeant, le tableau de bord, le rapport mensuel, l'écran Dette et le transport
+  affichent alors la valeur sans la juger (« Seuil non fixé »), au lieu de la comparer à une valeur
+  par défaut. Seule une trésorerie négative reste signalée en rouge. La « Marge du mois » du
+  transport se juge contre la marge minimale fixée (30 % par défaut).
 - Rapport mensuel de gestion : synthèse, lecture de la période rédigée (comparée au mois précédent
   et à l'an dernier), trésorerie et financement, clients et fournisseurs, transport, flux mensuels,
   alertes avec leurs actions.
@@ -64,8 +69,9 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 - « Nouvelle facture » : client, date, contrat ou bon de commande, devise, lignes (désignation,
   quantité, prix, TVA) et, sous chaque ligne, un compte par axe analytique (activité, centre de coût,
   chantier, ensemble routier, route, bien ; dossier pour MB AxisPro). Sans compte saisi, la ligne
-  prend le compte de produit de l'activité. Les axes laissés vides suivent les imputations
-  automatiques. « Avoir » pour annuler tout ou partie d'une facture.
+  prend le compte de produit de l'activité ; choisir un autre compte demande le droit « Saisie libre
+  des comptes ». Les axes laissés vides suivent les imputations automatiques. « Avoir » pour annuler
+  tout ou partie d'une facture.
 - Client non assujetti à la TVA (case de sa fiche) : ses factures sont émises en exonération.
 - Litige : « Déclarer un litige » (motif obligatoire) sur la fiche de la facture ; elle passe en
   statut « Litige » (vue Litiges) et sort des relances jusqu'à « Lever le litige ».
@@ -89,6 +95,9 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 - Rentabilité : imputer les achats de la flotte (carburant, pneumatiques, entretien) sur
   l'activité Transport pétrolier et sur l'ensemble routier, pour que les coûts comptabilisés
   répondent aux coûts déclarés sur les rotations ; rattacher chaque ensemble à son immobilisation.
+- Export des rotations (XLSX ou CSV) : une colonne par frais (pneumatiques compris), puis
+  kilométrage et ratios (distance, carburant, durée, chiffre d'affaires et coût au kilomètre, coût
+  au litre, consommation aux 100 km).
 
 ## Relances clients (Comptabilité > Relances clients)
 
@@ -111,16 +120,28 @@ rapports. Solder un engagement libère son reste.
 
 Saisir la pièce du fournisseur avec sa pièce jointe numérisée, puis « Soumettre » : elle part au
 circuit d'approbation et se comptabilise une fois approuvée. Chaque ligne se saisit par catégorie de
-dépense : la catégorie fixe le compte et la TVA. Une catégorie dont le compte de tiers n'est pas un
-compte fournisseur (salaires 422, cotisations 431, impôts 447) enregistre la dépense en opération
-diverse ; une catégorie d'investissement crée l'immobilisation à la validation.
+dépense : la catégorie fixe le compte et la TVA (choisir un autre compte demande le droit « Saisie
+libre des comptes » ; sans lui, la catégorie est obligatoire). Une catégorie dont le compte de tiers
+n'est pas un compte fournisseur (salaires 422, cotisations 431, impôts 447) enregistre la dépense en
+opération diverse ; une catégorie d'investissement crée l'immobilisation à la validation.
 
 ## Trésorerie (Comptabilité > Trésorerie)
 
 - Position par compte et par devise.
 - Nouvelle opération : type d'opération (il fixe le sens et la contrepartie ; un type client ou
   fournisseur laisse l'opération à rapprocher de la facture), mode de paiement, référence,
-  justificatif et, avec un compte d'imputation, les axes analytiques.
+  justificatif et, avec un compte d'imputation, les axes analytiques. Choisir soi-même le compte
+  d'imputation demande le droit « Saisie libre des comptes » ; sans lui, l'opération prend le compte
+  de son type, ou reste à rapprocher.
+- Financements : un type à part d'emprunt demande le financement concerné (Dette et financement,
+  financement en service) et prend son compte. « Déblocage d'emprunt » : l'entrée de banque crédite
+  le compte de dette ; c'est ainsi que le déblocage se comptabilise (plusieurs tranches possibles,
+  dans la limite du montant emprunté). « Remboursement anticipé d'emprunt (capital) » et « Intérêts
+  d'emprunt hors échéancier » : la sortie débite le compte de dette ou le compte de charges
+  financières. Ces deux types ne règlent jamais une échéance de l'échéancier, qui se règle depuis la
+  ligne du relevé (« Rapprocher ») ou par « Régler » : un montant égal à une échéance non réglée est
+  refusé, l'échéance ne peut pas être comptée deux fois. Après un remboursement anticipé, l'écart
+  avec l'échéancier est signalé à la clôture jusqu'à sa révision par la banque.
 - Import du relevé bancaire : CSV ou XLSX avec date, libellé et montant (ou débit et crédit), ou
   relevé normalisé ISO 20022 camt.053 (XML) fourni par la banque. Les soldes initial et final sont lus
   dans le fichier (lignes « Solde initial », « Nouveau solde », colonne de solde, soldes d'ouverture
@@ -130,7 +151,9 @@ diverse ; une catégorie d'investissement crée l'immobilisation à la validatio
   de 100 M GNF, l'opération reste en brouillon et part au circuit d'approbation (« À valider ») ;
   elle se comptabilise à la dernière approbation.
 - Rapprochement : pour chaque ligne du relevé, la plateforme propose les factures et règlements en
-  attente, et pour une sortie de banque les échéances d'emprunt ; valider la proposition ou imputer
+  attente, et pour une sortie de banque les échéances d'emprunt ; valider la proposition, imputer
+  selon un type d'opération (frais bancaires, déblocage d'emprunt reçu en banque…, avec le
+  financement pour un type d'emprunt) ou, avec le droit « Saisie libre des comptes », imputer
   directement à un compte, avec ses axes. Une échéance déjà réglée directement en banque et retrouvée
   sur le relevé voit ce règlement direct extourné : la sortie n'est jamais comptée deux fois.
 - État de rapprochement (bouton du même nom) : solde du relevé, opérations comptabilisées absentes
@@ -149,7 +172,9 @@ chaque tiers avec son retard maximal et son statut : à jour, retard, contentieu
 ## Journaux et OD (Comptabilité > Journaux et OD)
 
 Écritures d'opérations diverses guidées et équilibrées, imputées sur les axes analytiques (comptes
-des classes 2, 6, 7 et 8) ; consultation des journaux.
+des classes 2, 6, 7 et 8) ; consultation des journaux. Chaque ligne d'une OD porte un compte choisi :
+la saisie des OD est réservée au droit « Saisie libre des comptes » (sans lui, le bouton « Nouvelle
+OD » est inactif et la plateforme refuse l'opération).
 
 ## Plan comptable (Comptabilité > Plan comptable)
 
@@ -163,8 +188,23 @@ obligatoire » exige l'axe Activité sur ses écritures.
   activité) ; les axes des métiers naissent avec leur fiche. À la clôture, une ligne qui porte un
   centre de coût avec une autre activité que la sienne est signalée.
 - Imputations automatiques : règles par préfixe de compte et par tiers (axes laissés vides à la
-  saisie), axes obligatoires par préfixe, catégories de dépense, types d'opération de trésorerie,
-  modes de paiement. Un essai montre l'imputation qu'appliqueraient les règles.
+  saisie), axes obligatoires par préfixe, catégories de dépense, types d'opération de trésorerie
+  (sens, compte de contrepartie ou part d'emprunt : déblocage, capital, intérêts), modes de paiement.
+  Un essai montre l'imputation qu'appliqueraient les règles. « Proposer les types usuels » ajoute les
+  types courants, dont les trois types des financements.
+- Les comptes des catégories de dépense, des types d'opération et des financements deviennent ceux
+  des pièces des autres utilisateurs : les fixer ou les changer demande le droit « Saisie libre des
+  comptes ».
+
+## Saisie libre des comptes (Administration > Utilisateurs)
+
+Droit complémentaire aux profils, accordé d'office aux comptes finance, direction et administration
+(rien ne change pour eux) et retirable compte par compte (case « Saisie libre des comptes » de la
+fiche de l'utilisateur). Sans ce droit, l'utilisateur ne choisit plus de compte : la ligne prend le
+compte de sa catégorie de dépense, du type d'opération, de l'activité (compte de produit) ou du
+produit ; les opérations diverses, l'imputation directe à un compte au rapprochement et le
+paramétrage des comptes lui sont refusés, avec un message qui l'explique. Les écrans masquent alors
+le choix du compte.
 
 ## Budget (Pilotage > Activités et budget)
 
@@ -178,16 +218,20 @@ s'importe et s'exporte en Excel.
 
 Registre, plans d'amortissement. Les dotations échues sont comptabilisées chaque nuit.
 « Sortir de l'actif » : cession (prix et acquéreur, créance 485 et produit 82x) ou mise au rebut
-(prix nul) ; la valeur nette comptable est portée en 81x.
+(prix nul) ; la valeur nette comptable est portée en 81x. Le registre s'exporte en CSV ou XLSX, avec
+l'en-tête des états : société, exercice, date d'arrêté (dotations comptabilisées à ce jour) et date
+d'export.
 
 ## Dette et financement (Comptabilité > Dette et financement)
 
 Emprunts et crédits-bails, objet du financement, échéanciers, service de la dette. L'écran compare
 l'encours comptable (comptes 16 et 17) au capital restant dû des échéanciers : un écart signale un
 déblocage ou une échéance non comptabilisé. Il donne aussi la dette nette, le gearing (dette sur
-capitaux propres), la dette rapportée à l'EBE des douze derniers mois et le DSCR. « Régler » est
-réservé à la caisse et aux comptes sans relevé : une échéance prélevée en banque se règle depuis la
-ligne du relevé.
+capitaux propres), la dette rapportée à l'EBE des douze derniers mois et le DSCR, jugé contre le
+minimum fixé dans les seuils (sans minimum : « seuil non fixé »). Le déblocage se comptabilise depuis
+la Trésorerie (type « Déblocage d'emprunt », voir plus haut), comme les remboursements anticipés et
+les intérêts hors échéancier. « Régler » est réservé à la caisse et aux comptes sans relevé : une
+échéance prélevée en banque se règle depuis la ligne du relevé.
 
 ## Clôtures et contrôles (Comptabilité > Clôtures et contrôles)
 
@@ -212,7 +256,9 @@ CA et achats TTC, transport, bilan, capitaux propres) et donne l'écart de chacu
 ## Balance et états (Comptabilité > Balance et états)
 
 Bilan, compte de résultat et tableau des flux de trésorerie SYSCOHADA ; balance, grand livre,
-rapports paramétrables, passerelle IFRS et export d'audit (SAF-T), en CSV ou XLSX. L'onglet
+rapports paramétrables, passerelle IFRS et export d'audit (SAF-T), en CSV ou XLSX. Les flux mensuels
+exportés sont ceux du tableau de bord (un seul calcul), arrêtés à la date d'arrêté, avec la colonne
+« Contrôle » de chaque mois (à venir, sous le seuil de sécurité, cash net négatif, conforme). L'onglet
 « Consolidé du groupe » donne le compte de résultat et le bilan de chaque société, les éliminations
 des opérations entre sociétés du groupe (ventes et achats réciproques, créances et dettes, comptes
 courants) et le total du groupe ; il demande un compte ouvert aux deux sociétés.
