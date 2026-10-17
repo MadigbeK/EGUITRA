@@ -41,6 +41,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/immobilisations", label: "Immobilisations", icon: "Boxes", profiles: FIN },
         { href: "/finance/dette", label: "Dette et financement", icon: "HandCoins", profiles: FIN },
         { href: "/finance/ecritures", label: "Journaux et OD", icon: "BookOpen", profiles: FIN },
+        { href: "/finance/plan-comptable", label: "Plan comptable", icon: "ListChecks", profiles: ["admin", "finance"] },
         { href: "/finance/etats", label: "Balance et états", icon: "FileSpreadsheet", profiles: FIN },
         { href: "/finance/fiscalite", label: "Fiscalité", icon: "Scale", profiles: FIN },
         { href: "/finance/clotures", label: "Clôtures et contrôles", icon: "Lock", profiles: FIN },

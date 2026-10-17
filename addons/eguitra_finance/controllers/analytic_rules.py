@@ -34,6 +34,21 @@ def _prefixes(value):
     return ", ".join(p.strip() for p in re.split(r"[,;]", text))
 
 
+def set_requirement(plan, prefix, company, required=True):
+    """Rend l'axe obligatoire (ou facultatif) sur un préfixe de compte, pour les factures, les pièces
+    d'achat et les opérations diverses de la société."""
+    Applicability = request.env["account.analytic.applicability"]
+    existing = Applicability.search([("analytic_plan_id", "=", plan.id), ("account_prefix", "=", prefix),
+                                     ("company_id", "=", company.id), ("applicability", "=", "mandatory")])
+    if not required:
+        existing.unlink()
+        return
+    for domain in DOMAINS:
+        if not existing.filtered(lambda r, d=domain: r.business_domain == d):
+            Applicability.create({"analytic_plan_id": plan.id, "account_prefix": prefix, "business_domain": domain,
+                                  "applicability": "mandatory", "company_id": company.id})
+
+
 def _rule(rule_id):
     rule = request.env["account.analytic.distribution.model"].browse(rule_id).exists()
     company = request.env.company
@@ -157,14 +172,8 @@ class EguitraFinanceAnalyticRules(http.Controller):
         prefix = _prefixes(data.get("prefix"))
         if not prefix:
             raise ApiError(400, "missing_fields", "Préfixe de compte requis.", fields=["prefix"])
-        company = request.env.company
         plan = request.env.ref(PLANS[axis])
-        Applicability = request.env["account.analytic.applicability"]
-        for domain in DOMAINS:
-            if not Applicability.search_count([("analytic_plan_id", "=", plan.id), ("account_prefix", "=", prefix),
-                                               ("business_domain", "=", domain), ("company_id", "=", company.id)]):
-                Applicability.create({"analytic_plan_id": plan.id, "account_prefix": prefix, "business_domain": domain,
-                                      "applicability": "mandatory", "company_id": company.id})
+        set_requirement(plan, prefix, request.env.company)
         return {"status": "ok", "plan": plan.name, "prefix": prefix}
 
     @api_route("/finance/analytic-requirements/<int:record_id>", methods=("DELETE",), profiles=FIN_WRITE)

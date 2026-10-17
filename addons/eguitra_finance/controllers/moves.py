@@ -12,6 +12,7 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
+from ..models.analytic import ACTIVITY_PLAN
 from .common import (
     FIN_READ,
     FIN_WRITE,
@@ -58,6 +59,18 @@ def account_of_company(value, company, label="Compte"):
     if not account or company not in account.company_ids:
         raise ApiError(422, "business_rule", f"{label} absent du plan de comptes de la société.")
     return account
+
+
+def mandatory_prefixes(company):
+    """Préfixes de comptes sur lesquels l'axe Activité est obligatoire dans la société."""
+    plan = request.env.ref(ACTIVITY_PLAN, raise_if_not_found=False)
+    if not plan:
+        return ()
+    records = request.env["account.analytic.applicability"].search([
+        ("analytic_plan_id", "=", plan.id), ("applicability", "=", "mandatory"),
+        ("company_id", "in", [False, company.id]), ("account_prefix", "!=", False),
+    ])
+    return tuple({p.strip() for r in records for p in r.account_prefix.replace(";", ",").split(",") if p.strip()})
 
 
 def store_attachment(move, upload):
@@ -521,6 +534,7 @@ class EguitraFinanceMoves(http.Controller):
 
     @api_route("/finance/accounts", profiles=FIN_READ)
     def accounts(self, **kw):
+        """Plan de comptes de la société de travail ; all=1 ajoute les comptes désactivés."""
         domain = [("company_ids", "in", request.env.company.ids)]
         if kw.get("prefix"):
             domain.append(("code", "=like", kw["prefix"] + "%"))
@@ -528,8 +542,11 @@ class EguitraFinanceMoves(http.Controller):
             domain.append(("account_type", "in", kw["type"].split(",")))
         if kw.get("search"):
             domain += ["|", ("code", "=like", kw["search"] + "%"), ("name", "ilike", kw["search"])]
-        accounts = request.env["account.account"].search(domain, limit=int_arg(kw, "limit", 100, 1, 2000), order="code")
-        return [{"id": a.id, "code": a.code, "name": a.name, "type": a.account_type, "reconcile": a.reconcile}
+        Account = request.env["account.account"].with_context(active_test=kw.get("all") != "1")
+        accounts = Account.search(domain, limit=int_arg(kw, "limit", 100, 1, 3000), order="code")
+        mandatory = mandatory_prefixes(request.env.company)
+        return [{"id": a.id, "code": a.code, "name": a.name, "type": a.account_type, "reconcile": a.reconcile,
+                 "active": a.active, "analytic_required": bool(a.code) and a.code.startswith(mandatory)}
                 for a in accounts]
 
     @api_route("/finance/journals", profiles=FIN_READ)
