@@ -68,6 +68,9 @@ class TestCommitment(FinanceDataMixin, ApiCase):
         within = self._bill(44_000_000, commitment)
         within.with_user(self.comptable)._eguitra_post_or_submit()
         self.assertEqual(within.state, "posted", "Tolérance de 5 % sur l'engagement")
+        state = self.env["eguitra.report.engine"].run("engagements_non_soldes", self.company)
+        row = next(r for r in state["rows"] if r["numero"] == commitment.name)
+        self.assertAlmostEqual(row["reste"], 100_000_000 - 104_000_000, msg="État des engagements non soldés")
         commitment.action_close()
         self.assertEqual(commitment.state, "done")
 

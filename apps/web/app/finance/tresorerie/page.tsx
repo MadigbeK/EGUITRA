@@ -17,6 +17,9 @@ interface StLine {
   partner: { id: number; name: string } | null;
   amount: number;
   reconciled: boolean;
+  /** Faux : décaissement en attente du circuit d'approbation (comptabilisé à la dernière approbation). */
+  posted?: boolean;
+  approval?: { request_id: number; state: string; pending_with: string | null } | null;
   statement: string | null;
   reference: string | null;
   payment_mode: Ref | null;
@@ -216,7 +219,11 @@ export default function TreasuryPage() {
                       label: "",
                       align: "right",
                       render: (l) =>
-                        l.reconciled ? (
+                        l.posted === false ? (
+                          <Badge tone={l.approval?.state === "rejected" ? "danger" : "warn"}>
+                            {l.approval?.state === "rejected" ? "Décaissement refusé" : `En approbation${l.approval?.pending_with ? ` : ${l.approval.pending_with}` : ""}`}
+                          </Badge>
+                        ) : l.reconciled ? (
                           <button type="button" className="inline-flex items-center gap-1 text-xs text-muted hover:text-warn" onClick={() => apiSend("POST", `/finance/treasury/lines/${l.id}/unreconcile`).then(refresh)}>
                             <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée <Undo2 className="h-3.5 w-3.5" />
                           </button>
