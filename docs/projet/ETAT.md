@@ -239,7 +239,18 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
 - Versions : `eguitra_finance` 19.0.1.4.0, `eguitra_approval` 19.0.1.2.0, `eguitra_transport`
   19.0.1.1.0, `eguitra_immobilier` 19.0.1.1.0, `eguitra_axispro` 19.0.1.2.1 ; mise à jour avec
   `-u` de ces modules puis redémarrage du noyau (module d'audit).
-- Reste : reprise du classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt) ;
+- Fait, vue consolidée (attente 2) : compte de résultat et bilan par société, éliminations des
+  opérations entre sociétés du groupe, groupe (États > Consolidé du groupe). Les frais communs
+  s'éliminent dès qu'ils sont refacturés ; leur clé de répartition attend la décision du client.
+- Fait, validation de la reprise (offre 6.3) : valeurs du classeur de référence chargées depuis un
+  fichier (jamais dans le dépôt), recalculées avec les définitions du classeur, « n/26 » et annexe du
+  PV de bascule (Clôtures et contrôles).
+- Tests : `infra/test.sh` installe puis teste dans un second processus (le module d'audit court-
+  circuitait sinon les surcharges de create et write chargées après la pose de ses règles, comme le
+  fait la production avant redémarrage) ; `module:Classe` lance une seule classe. 243 tests au vert
+  sur les huit modules le 17 octobre ; recette mise à jour (sauvegarde de la recette prise avant).
+- Reste : reprise du classeur du prototype et contrôle des 26 valeurs de référence (convertisseur du
+  dossier JSON en cours, sorties hors dépôt) ;
   décisions de droits signalées par l'agent transport (le parc modifie la fiche tiers d'un
   chauffeur et les coefficients à 15 °C ; la finance d'une société modifie un produit commun) ;
   choix comptables à valider avec l'expert-comptable (règlement d'échéance par le 401 du prêteur,
