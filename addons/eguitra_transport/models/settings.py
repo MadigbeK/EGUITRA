@@ -49,6 +49,11 @@ class ResCompany(models.Model):
         "account.account", "Compte des créances sur les chauffeurs",
         help="Vide : premier compte 4211, sinon 421 (personnel, avances et acomptes).",
     )
+    transport_activity_id = fields.Many2one(
+        "account.analytic.account", "Activité du transport",
+        help="Activité analytique des factures de rotations et de la rentabilité du transport (reprise : "
+             "l'activité de l'ancien classeur). Vide : activité « Transport pétrolier », créée au besoin.",
+    )
 
     def _transport_account(self, field, prefixes, label):
         """Compte paramétré, sinon premier compte du plan sous les préfixes donnés."""

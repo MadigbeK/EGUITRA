@@ -49,6 +49,28 @@ class TestTransport(TransportCase):
         with self.assertRaises(UserError):
             rots[0].write({"volume_delivered": 10})
 
+    def test_activite_du_transport_parametree(self):
+        """L'activité des factures de rotations se paramètre (reprise : celle de l'ancien classeur)."""
+        plan = self.env.ref("eguitra_base.analytic_plan_activite")
+        activity = self.env["account.analytic.account"].create(
+            {"name": "Transport d'hydrocarbures", "code": "ACT-01", "plan_id": plan.id, "company_id": self.company.id})
+        self._create_user("finance.param", "finance", company_ids=[(6, 0, self.company.ids)])
+        token = self.open_session("finance.param")["access_token"]
+        headers = {"X-Eguitra-App": "finance", "X-Eguitra-Company": str(self.company.id)}
+        status, body = self.call("PATCH", "/transport/settings", {"activity_id": activity.id}, token=token,
+                                 headers=headers)
+        self.assertEqual((status, body["activity"]["code"]), (200, "ACT-01"), body)
+        self.assertIn("ACT-01", [a["code"] for a in body["activities"]])
+        rots = self._rotation()
+        rots.action_validate()
+        line = rots.action_invoice().invoice_line_ids
+        accounts = {int(k) for key in line.analytic_distribution for k in key.split(",")}
+        self.assertIn(activity.id, accounts)
+        status, body = self.call("PATCH", "/transport/settings", {"activity_id": None}, token=token, headers=headers)
+        self.assertEqual((status, body["activity"]), (200, None), body)
+        self.assertEqual(self.env["eguitra.transport.rotation"]._activity_account(self.company).name,
+                         "Transport pétrolier")
+
     def test_rentabilite_par_vehicule(self):
         rot = self._rotation()
         rot.action_validate()

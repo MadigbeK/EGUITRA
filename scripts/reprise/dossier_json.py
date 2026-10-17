@@ -427,6 +427,27 @@ class Dossier:
             amount(foreign, 2) if foreign else "",
         ])
 
+    def transport_activity(self):
+        """Activité des ventes du transport : la plus fréquente des ventes portant un ensemble ou une route."""
+        counts = {}
+        for s in self.sales:
+            if s.get("camion") or s.get("route"):
+                counts[s["activite"]] = counts.get(s["activite"], 0) + 1
+        return max(counts, key=counts.get) if counts else None
+
+    def thresholds(self):
+        """Seuils d'alerte de la direction (paramètres du prototype), aux unités de la plateforme."""
+        p = self.d["parametres"]
+
+        def pct(value):
+            value = float(value)
+            return round(value * 100, 4) if abs(value) <= 1 else value
+
+        mapping = {"cash_min": ("seuilTresorerie", float), "transport_margin_min": ("seuilMargeTransport", pct),
+                   "budget_overrun_pct": ("seuilBudget", pct), "dso_target_days": ("delaiRecouvrementCible", float),
+                   "dscr_min": ("dscrMinimum", float)}
+        return {code: convert(p[key]) for code, (key, convert) in mapping.items() if p.get(key) not in (None, "")}
+
     def sales_entries(self):
         count = 0
         for s in self.sales:
@@ -681,6 +702,7 @@ class Dossier:
         (folder / "parametres.json").write_text(json.dumps({
             "schema": 1, "exercice": p.get("exercice"), "date_debut": p["dateDebut"], "date_arrete": p["dateArrete"],
             "taux_tva": self.vat_rate, "devise": p.get("devise", "GNF"), "journaux": JOURNALS,
+            "activite_transport": self.transport_activity(), "seuils": self.thresholds(),
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         text = ["Conversion du dossier du prototype : compte rendu", ""] + [f"- {line}" for line in self.report]
         text += ["", f"Points à vérifier ({len(self.warnings)}) :"] + [f"- {w}" for w in self.warnings or ["aucun."]]

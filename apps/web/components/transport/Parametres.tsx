@@ -179,6 +179,11 @@ function Manquants({ settings, onSaved }: { settings: TransportSettings; onSaved
             onChange={(e) => void send("PATCH", "/transport/settings", { shortage_account_id: e.target.value ? Number(e.target.value) : null }, "Compte enregistré.")}
             options={settings.shortage_account && !charges ? [{ value: settings.shortage_account.id, label: `${settings.shortage_account.code} ${settings.shortage_account.name}` }] : accountOptions(charges)} />
         </Field>
+        <Field label="Activité du transport" hint="Factures des rotations et rentabilité. Vide : Transport pétrolier.">
+          <Select disabled={ro} value={settings.activity?.id ?? ""} placeholder="Transport pétrolier"
+            onChange={(e) => void send("PATCH", "/transport/settings", { activity_id: e.target.value ? Number(e.target.value) : null }, "Activité enregistrée.")}
+            options={(settings.activities.length ? settings.activities : settings.activity ? [settings.activity] : []).map((a) => ({ value: a.id, label: a.code ? `${a.code} ${a.name}` : a.name }))} />
+        </Field>
         <Field label="Compte des créances sur les chauffeurs" hint="Vide : 4211, sinon 421.">
           <Select disabled={ro} value={settings.claim_account?.id ?? ""} placeholder="Compte par défaut"
             onChange={(e) => void send("PATCH", "/transport/settings", { claim_account_id: e.target.value ? Number(e.target.value) : null }, "Compte enregistré.")}

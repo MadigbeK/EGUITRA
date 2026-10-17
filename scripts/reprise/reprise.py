@@ -25,6 +25,7 @@ Sans REPRISE_APPLIQUER=1, rien n'est enregistré : le script contrôle tout et a
 import csv
 import hashlib
 import io
+import json
 import os
 import re
 from collections import defaultdict
@@ -964,6 +965,33 @@ if assets_loaded:
     if doubles:
         errors.append(f"Immobilisations : {doubles} ligne(s) d'amortissement de l'exercice passée(s) hors du registre "
                       "(ecritures.csv) ; retirer ces écritures : dotations et sorties d'actif passent par le registre.")
+
+# ─── Paramètres de la direction (parametres.json du convertisseur) ────────
+settings_path = FOLDER / "parametres.json"
+if settings_path.exists():
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    code = settings.get("activite_transport")
+    if code and "transport_activity_id" in company._fields:
+        plan = env.ref("eguitra_base.analytic_plan_activite")
+        activity = env["account.analytic.account"].search(
+            [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id]), ("code", "=ilike", code)], limit=1)
+        if activity:
+            company.transport_activity_id = activity
+            notes.append(f"Activité du transport : {activity.name} ({code}).")
+        else:
+            errors.append(f"parametres.json : activité du transport « {code} » absente (axes.csv).")
+    seuils = settings.get("seuils") or {}
+    if seuils:
+        Threshold = env["eguitra.alert.threshold"]
+        Threshold.ensure_defaults(company)
+        known = dict(Threshold._fields["code"].selection)
+        for code, value in seuils.items():
+            if code not in known:
+                errors.append(f"parametres.json : seuil « {code} » inconnu.")
+                continue
+            Threshold.search([("company_id", "=", company.id), ("code", "=", code)]).write({"value": float(value)})
+        notes.append("Seuils d'alerte de la direction : " + ", ".join(
+            f"{known[c]} {gnf(v) if abs(v) >= 1000 else v}" for c, v in seuils.items() if c in known) + ".")
 
 # ─── Bilan ────────────────────────────────────────────────────────────────
 print("\n".join(notes) or "Aucun fichier de reprise trouvé dans le dossier.")

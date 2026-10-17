@@ -40,6 +40,8 @@ export interface TransportSettings {
   volume_correction: boolean;
   shortage_account: AccountRef | null;
   claim_account: AccountRef | null;
+  activity: { id: number; code: string | null; name: string } | null;
+  activities: Array<{ id: number; code: string | null; name: string }>;
   can_edit: boolean;
 }
 

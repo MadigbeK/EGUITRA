@@ -2,7 +2,7 @@
     "name": "EGUITRA - Transport pétrolier",
     "summary": "Flotte, chauffeurs, routes et tarifs, produits, rotations, manquants et volumes à 15 °C, taxes "
                "spécifiques, facturation, rentabilité (coûts comptabilisés, structure), saisie mobile",
-    "version": "19.0.1.1.0",
+    "version": "19.0.1.2.0",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

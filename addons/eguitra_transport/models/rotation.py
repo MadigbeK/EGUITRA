@@ -428,6 +428,9 @@ class EguitraTransportRotation(models.Model):
 
     @api.model
     def _activity_account(self, company):
+        """Activité du transport paramétrée pour la société, sinon « Transport pétrolier »."""
+        if company.transport_activity_id:
+            return company.transport_activity_id
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
         Analytic = self.env["account.analytic.account"].sudo()
         account = Analytic.search([("plan_id", "=", plan.id), ("name", "=", "Transport pétrolier"),

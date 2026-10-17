@@ -202,9 +202,21 @@ def _settings_payload():
         "volume_correction": company.transport_volume_correction,
         "shortage_account": _account_ref(accounts.transport_shortage_account_id) if accounts else None,
         "claim_account": _account_ref(accounts.transport_claim_account_id) if accounts else None,
+        "activity": _activity_ref(company.sudo().transport_activity_id),
+        "activities": [_activity_ref(a) for a in _activities(company)] if finance else [],
         "rules": [{"code": k, "label": v} for k, v in SHORTAGE_RULES],
         "can_edit": finance,
     }
+
+
+def _activities(company):
+    plan = request.env.ref("eguitra_base.analytic_plan_activite")
+    return request.env["account.analytic.account"].sudo().search(
+        [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])], order="code, name")
+
+
+def _activity_ref(account):
+    return {"id": account.id, "code": account.code or None, "name": account.name} if account else None
 
 
 def _account_ref(account):
@@ -491,6 +503,16 @@ class EguitraTransport(http.Controller):
                     if not account or company not in account.company_ids:
                         raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
                 values[field] = account.id or False
+        if "activity_id" in data:
+            activity = request.env["account.analytic.account"]
+            if data["activity_id"]:
+                try:
+                    activity = activity.sudo().browse(int(data["activity_id"])).exists()
+                except (TypeError, ValueError) as e:
+                    raise ApiError(400, "invalid_parameter", "Activité inconnue.") from e
+                if activity not in _activities(company):
+                    raise ApiError(422, "business_rule", "Activité inconnue dans la société de travail.")
+            values["transport_activity_id"] = activity.id or False
         # La fiche société n'est modifiable que par l'administration du noyau : écriture limitée
         # à ces paramètres, pour la société de travail.
         company.sudo().write(values)
