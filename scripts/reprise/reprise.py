@@ -474,6 +474,12 @@ if data is not None:
         if not r.get("libelle") or not r.get("profil"):
             errors.append(f"{where} : libellé et catégorie (profil) obligatoires.")
             continue
+        if r.get("methode"):
+            # Variante de mesure (dossier_json.py --convention=prototype) : plan en mois entiers, que la
+            # reprise n'applique pas tant que la convention n'est pas décidée.
+            errors.append(f"{where} : méthode « {r['methode']} » non appliquée par la reprise ; convertir sans "
+                          "--convention=prototype.")
+            continue
         profile = profiles.get(r["profil"].lower())
         if not profile and r.get("compte_immobilisation") and r.get("compte_amortissement"):
             profile = create_profile(r, where)

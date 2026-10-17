@@ -2,6 +2,11 @@
 schéma 1) en fichiers de reprise, au format lu par reprise.py (modèles dans modeles/).
 
     python -I scripts/reprise/dossier_json.py chemin/dossier.json dossier_de_sortie [--taux-implicites]
+        [--convention=plateforme|prototype]
+
+--convention=prototype (mesure seulement, reprise.py la refuse) : plan des immobilisations selon la
+convention du prototype, en mois entiers (méthode « mois », 12 × durée dotations égales du module)
+à compter du 1er du mois qui suit l'acquisition ; la date d'acquisition reste dans sa colonne.
 
 Le dossier est une donnée du client, lue sans rien exécuter ; les fichiers produits ne se versionnent
 pas. Les écritures suivent l'imputation du moteur du prototype (fonction Moteur) :
@@ -56,7 +61,8 @@ HEADERS = {
              "secteur contact",
     "soldes_ouverture": "compte libelle tiers debit credit echeance reference",
     "immobilisations": "code libelle profil date_mise_en_service valeur_brute cumul duree activite localisation "
-                       "responsable compte_immobilisation compte_amortissement compte_dotation non_amortissable",
+                       "responsable compte_immobilisation compte_amortissement compte_dotation non_amortissable "
+                       "date_acquisition methode",
     "routes": "nom origine destination distance_km distance_ar_km duree_jours tarif_m3",
     "chauffeurs": "nom telephone permis",
     "ensembles": "code immatriculation marque capacite_litres chauffeur annee mise_en_service etat immobilisation",
@@ -134,7 +140,8 @@ def accumulated(asset, day):
 
 
 class Dossier:
-    def __init__(self, data):
+    def __init__(self, data, convention="plateforme"):
+        self.convention = convention
         if data.get("schema") != 1:
             sys.exit(f"Schéma du dossier non pris en charge : {data.get('schema')!r} (attendu : 1).")
         self.d = data
@@ -386,16 +393,25 @@ class Dossier:
             if R(value) != R(self.opening_balances.get(account, 0)):
                 self.warnings.append(f"Immobilisations, compte {account} : valeur brute du registre différente de l'à-nouveau "
                                      f"de {R(self.opening_balances.get(account, 0)) - R(value):+d} GNF.")
+        months = self.convention == "prototype"
         for r in rows:
             im = r["im"]
+            # Convention du prototype (permanence des méthodes) : plan en mois entiers, à compter du 1er du
+            # mois qui suit l'acquisition ; la date d'acquisition réelle reste sur la fiche.
+            plan_start = add_months(r["start"].replace(day=1), 1) if months and r["years"] > 0 else r["start"]
+            if r["start"] < self.start <= plan_start:
+                self.warnings.append(f"Immobilisation {im['code']} : acquise avant l'ouverture, plan à compter de "
+                                     f"l'ouverture ; le contrôle des 2x de reprise.py la comptera hors registre.")
             self.rows["immobilisations"].append([
-                im["code"], im.get("designation") or im["code"], r["profile"], fr(r["start"]), amount(im["valeur"]),
+                im["code"], im.get("designation") or im["code"], r["profile"], fr(plan_start), amount(im["valeur"]),
                 amount(r["cumul"]), int(r["years"]) if r["years"] > 0 else "", im.get("activite") or "",
                 im.get("localisation") or "", im.get("responsable") or "", im["compteImmo"], im["compteAmort"], expense,
-                "" if r["years"] > 0 else "oui",
+                "" if r["years"] > 0 else "oui", fr(r["start"]), "mois" if months and r["years"] > 0 else "",
             ])
         self.report.append(f"Immobilisations : {len(rows)} biens, cumul au {fr(eve)} calculé comme le prototype "
-                           "(mois entiers à compter du mois suivant l'acquisition).")
+                           "(mois entiers à compter du mois suivant l'acquisition)"
+                           + ("; plan de la plateforme selon la même convention (méthode « mois », mise en service au "
+                              "1er du mois suivant l'acquisition)." if months else "."))
 
     # ─── Écritures de l'exercice ──────────────────────────────────────────
 
@@ -674,11 +690,13 @@ class Dossier:
 
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
-    if len(args) != 2:
-        sys.exit("Usage : python -I scripts/reprise/dossier_json.py dossier.json dossier_de_sortie [--taux-implicites]")
+    options = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "1") for a in argv if a.startswith("--"))
+    if len(args) != 2 or options.get("convention", "plateforme") not in ("plateforme", "prototype"):
+        sys.exit("Usage : python -I scripts/reprise/dossier_json.py dossier.json dossier_de_sortie [--taux-implicites] "
+                 "[--convention=plateforme|prototype]")
     source, target = Path(args[0]), Path(args[1])
-    dossier = Dossier(json.loads(source.read_text(encoding="utf-8")))
-    dossier.convert(implied_rates="--taux-implicites" in argv)
+    dossier = Dossier(json.loads(source.read_text(encoding="utf-8")), options.get("convention", "plateforme"))
+    dossier.convert(implied_rates="taux-implicites" in options)
     text = dossier.write(target)
     print("\n".join(text))
     print(f"\nFichiers écrits dans {target}.")
