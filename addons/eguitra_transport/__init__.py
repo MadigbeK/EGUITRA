@@ -4,7 +4,7 @@ from . import controllers
 # Modèles suivis par la piste d'audit (création, modification, suppression).
 AUDITED_MODELS = [
     "eguitra.transport.vehicle", "eguitra.transport.driver", "eguitra.transport.route",
-    "eguitra.transport.rotation", "eguitra.transport.tariff", "eguitra.transport.product",
+    "eguitra.transport.rotation", "eguitra.transport.tariff", "eguitra.transport.product", "eguitra.transport.tax",
 ]
 
 

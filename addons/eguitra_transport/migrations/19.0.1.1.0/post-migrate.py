@@ -5,6 +5,8 @@
 - Manquants : les rotations existantes reçoivent la masse volumique de leur produit ; tolérance et
   règle (« constat seulement ») de la société, calculées à l'ajout des colonnes : aucune déduction
   ni créance n'apparaît sur une rotation déjà facturée.
+- Taxes spécifiques : l'ancien montant saisi est devenu le forfait hors barème (pre-migrate.py) ;
+  aucune ligne du barème n'est ajoutée aux rotations existantes.
 - Seuil d'alerte des manquants hors tolérance, piste d'audit des nouveaux modèles.
 Redémarrer le noyau ensuite (module d'audit).
 """

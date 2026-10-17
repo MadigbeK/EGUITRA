@@ -5,6 +5,7 @@ import { CheckCheck, Droplet, FileText, Percent, Plus, Receipt, Smartphone, Tren
 import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
 import { Manquants } from "@/components/transport/Manquants";
 import { Parametres } from "@/components/transport/Parametres";
+import { Taxes } from "@/components/transport/Taxes";
 import { parseNumber, type Ref, type Referentials, type TransportSettings } from "@/components/transport/types";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
@@ -38,7 +39,7 @@ interface Rotation {
 }
 
 const STATE = { draft: ["Saisie", "warn"], done: ["Validée", "accent"], invoiced: ["Facturée", "ok"], cancelled: ["Annulée", "neutral"] } as const;
-type Tab = "rotations" | "rentabilite" | "manquants" | "flotte" | "routes" | "parametres";
+type Tab = "rotations" | "rentabilite" | "manquants" | "taxes" | "flotte" | "routes" | "parametres";
 
 export default function TransportPage() {
   const [tab, setTab] = useState<Tab>("rotations");
@@ -89,10 +90,11 @@ export default function TransportPage() {
           </div>
         </div>
       )}
-      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "manquants", label: "Manquants" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "manquants", label: "Manquants" }, { key: "taxes", label: "Taxes spécifiques" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
       {tab === "rotations" && <Rotations />}
       {tab === "rentabilite" && <Profitability />}
       {tab === "manquants" && <Manquants />}
+      {tab === "taxes" && <Taxes />}
       {tab === "flotte" && <Fleet />}
       {tab === "routes" && <Routes />}
       {tab === "parametres" && <Parametres />}

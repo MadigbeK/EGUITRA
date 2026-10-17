@@ -288,7 +288,7 @@ if data is not None:
     products = {p.name.lower(): p.id for p in known} | {p.code: p.id for p in known}
     Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
     costs = {"carburant": "fuel_cost", "peages": "toll_cost", "frais_chauffeur": "driver_fees",
-             "entretien": "maintenance_cost", "taxes": "specific_taxes", "autres": "other_costs"}
+             "entretien": "maintenance_cost", "taxes": "specific_taxes_manual", "autres": "other_costs"}
     count = invoiced = skipped = 0
     for line, r in data:
         where = f"rotations.csv ligne {line}"
@@ -327,6 +327,10 @@ if data is not None:
         for col, field in costs.items():
             if r.get(col):
                 values[field] = number(r[col], where)
+        if r.get("taxes"):
+            # Total des taxes de l'ancien classeur : forfait hors barème, sans les taxes du barème
+            # (elles y sont déjà comprises).
+            values["tax_rules"] = False
         # Identifiant de saisie déterministe : rejouer le fichier ne crée pas de doublon.
         key = "|".join(r.get(c, "") for c in ("date_chargement", "ensemble", "client", "route", "bl", "volume_charge"))
         values["client_uuid"] = "reprise-" + hashlib.sha1(key.encode()).hexdigest()[:24]

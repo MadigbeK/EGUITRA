@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, Field, Input, Loading, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtInt } from "@/lib/format";
-import { SHORTAGE_RULES, parseNumber, type AccountRef, type ClientTerms, type Message, type Product, type ShortageRule, type TransportSettings } from "./types";
+import { fmtDate, fmtInt } from "@/lib/format";
+import { SHORTAGE_RULES, parseNumber, type AccountRef, type ClientTerms, type Message, type Product, type Ref, type ShortageRule, type TransportSettings } from "./types";
 
 /** Envoi d'une modification avec message de retour ; renvoie vrai si elle a réussi. */
 function useSend(onDone: () => void) {
@@ -33,8 +33,122 @@ export function Parametres() {
       {!settings.can_edit && <Notice tone="accent">Paramètres tenus par la finance : consultation seulement.</Notice>}
       <Manquants settings={settings} onSaved={() => void mutate()} />
       <ConditionsClients canEdit={settings.can_edit} />
+      <BaremeTaxes canEdit={settings.can_edit} />
       <Produits canEdit={settings.can_edit} />
     </div>
+  );
+}
+
+interface TaxRule {
+  id: number;
+  name: string;
+  nature: string;
+  base: "delivered" | "loaded" | "revenue" | "fixed";
+  rate: number;
+  products: Ref[];
+  routes: Ref[];
+  account: AccountRef | null;
+  income_account: AccountRef | null;
+  rebillable: boolean;
+  rebill_vat: boolean;
+  date_from: string | null;
+  date_to: string | null;
+  active: boolean;
+}
+interface Choice { code: string; label: string }
+
+const RATE_UNIT: Record<TaxRule["base"], string> = { delivered: "GNF par m³", loaded: "GNF par m³", revenue: "% du montant", fixed: "GNF par rotation" };
+
+/** Barème des taxes spécifiques : chaque taxe applicable devient une ligne des rotations. */
+function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
+  const { data, mutate } = useApi<{ taxes: TaxRule[]; natures: Choice[]; bases: Choice[] }>("/transport/taxes");
+  const [editing, setEditing] = useState<TaxRule | "new" | null>(null);
+  const { message, send } = useSend(() => void mutate());
+  const label = (list: Choice[] | undefined, code: string) => list?.find((c) => c.code === code)?.label ?? code;
+  return (
+    <Card title="Barème des taxes spécifiques" padded={false} actions={canEdit ? <Button variant="primary" onClick={() => setEditing("new")}>Nouvelle taxe</Button> : undefined}>
+      {message && <div className="p-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
+      <p className="px-5 pt-4 text-[13px] text-muted">
+        Calculées sur chaque rotation saisie ou validée (une rotation facturée garde les siennes). Une taxe refacturée s&apos;ajoute à la facture du
+        client. Les taxes payées hors barème se saisissent sur la rotation (« Autres taxes payées »).
+      </p>
+      {!data ? <Loading /> : (
+        <DataTable rows={data.taxes} rowKey={(t) => t.id} empty="Aucune taxe au barème." onRowClick={canEdit ? (t) => setEditing(t) : undefined} columns={[
+          { key: "name", label: "Taxe", render: (t) => <span className={t.active ? "" : "text-muted line-through"}>{t.name}</span> },
+          { key: "nature", label: "Nature", render: (t) => label(data.natures, t.nature) },
+          { key: "rate", label: "Taux", align: "right", render: (t) => `${t.base === "revenue" ? String(t.rate).replace(".", ",") : fmtInt(t.rate)} ${RATE_UNIT[t.base]}` },
+          { key: "scope", label: "Portée", render: (t) => [t.products.map((p) => p.name).join(", ") || "Tous produits", t.routes.map((r) => r.name).join(", ") || "toutes routes"].join(" ; ") },
+          { key: "period", label: "Période", render: (t) => (t.date_from || t.date_to ? `${t.date_from ? fmtDate(t.date_from) : "…"} – ${t.date_to ? fmtDate(t.date_to) : "…"}` : "Permanente") },
+          { key: "account", label: "Compte", render: (t) => t.account?.code ?? "–" },
+          { key: "rebillable", label: "Refacturée", render: (t) => (t.rebillable ? <Badge tone="accent">{t.rebill_vat ? "Oui, avec TVA" : "Oui"}</Badge> : "Non") },
+        ]} />
+      )}
+      {editing && data && (
+        <TaxForm tax={editing === "new" ? null : editing} natures={data.natures} bases={data.bases} onClose={() => setEditing(null)}
+          onSave={async (body) => {
+            const ok = editing === "new" ? await send("POST", "/transport/taxes", body, "Taxe ajoutée au barème.") : await send("PATCH", `/transport/taxes/${editing.id}`, body, "Taxe modifiée.");
+            if (ok) setEditing(null);
+          }} />
+      )}
+    </Card>
+  );
+}
+
+function TaxForm({ tax, natures, bases, onClose, onSave }: { tax: TaxRule | null; natures: Choice[]; bases: Choice[]; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
+  const { data: products } = useApi<Product[]>("/transport/products");
+  const { data: routes } = useApi<Ref[]>("/transport/routes");
+  const { data: charges } = useApi<AccountRef[]>("/finance/accounts?prefix=6&limit=2000");
+  const { data: incomes } = useApi<AccountRef[]>("/finance/accounts?prefix=7&limit=2000");
+  const [f, setF] = useState({
+    name: tax?.name ?? "", nature: tax?.nature ?? "road", base: tax?.base ?? "delivered", rate: tax ? String(tax.rate).replace(".", ",") : "",
+    product_ids: tax?.products.map((p) => p.id) ?? [], route_ids: tax?.routes.map((r) => r.id) ?? [],
+    account_id: tax?.account?.id ? String(tax.account.id) : "", income_account_id: tax?.income_account?.id ? String(tax.income_account.id) : "",
+    rebillable: tax?.rebillable ?? false, rebill_vat: tax?.rebill_vat ?? false, date_from: tax?.date_from ?? "", date_to: tax?.date_to ?? "", active: tax?.active ?? true,
+  });
+  const [busy, setBusy] = useState(false);
+  const toggle = (key: "product_ids" | "route_ids", id: number) => setF({ ...f, [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] });
+  async function save() {
+    setBusy(true);
+    await onSave({
+      ...f, rate: parseNumber(f.rate) ?? 0, account_id: f.account_id ? Number(f.account_id) : null,
+      income_account_id: f.income_account_id ? Number(f.income_account_id) : null, date_from: f.date_from || null, date_to: f.date_to || null,
+    });
+    setBusy(false);
+  }
+  return (
+    <Modal open wide title={tax ? `Taxe : ${tax.name}` : "Nouvelle taxe spécifique"} onClose={onClose} footer={<Button variant="primary" loading={busy} disabled={!f.name.trim() || !f.rate} onClick={() => void save()}>Enregistrer</Button>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <Field label="Libellé" className="md:col-span-2"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label="Nature"><Select value={f.nature} onChange={(e) => setF({ ...f, nature: e.target.value })} options={natures.map((n) => ({ value: n.code, label: n.label }))} /></Field>
+          <Field label="Base"><Select value={f.base} onChange={(e) => setF({ ...f, base: e.target.value as TaxRule["base"] })} options={bases.map((b) => ({ value: b.code, label: b.label }))} /></Field>
+          <Field label={`Taux (${RATE_UNIT[f.base]})`}><Input inputMode="decimal" className="font-mono" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} /></Field>
+          <Field label="Applicable du"><Input type="date" value={f.date_from} onChange={(e) => setF({ ...f, date_from: e.target.value })} /></Field>
+          <Field label="au" hint="Un changement de taux : clore la taxe et en créer une nouvelle."><Input type="date" value={f.date_to} onChange={(e) => setF({ ...f, date_to: e.target.value })} /></Field>
+          <Field label="Compte de charge"><Select value={f.account_id} placeholder="–" onChange={(e) => setF({ ...f, account_id: e.target.value })} options={(charges ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} /></Field>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <fieldset>
+            <legend className="mb-1.5 text-[13px] font-medium text-ink-2">Produits (aucun coché : tous)</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
+              {(products ?? []).filter((p) => p.active).map((p) => <label key={p.id} className="flex items-center gap-1.5"><input type="checkbox" checked={f.product_ids.includes(p.id)} onChange={() => toggle("product_ids", p.id)} />{p.name}</label>)}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend className="mb-1.5 text-[13px] font-medium text-ink-2">Routes (aucune cochée : toutes)</legend>
+            <div className="flex max-h-40 flex-wrap gap-x-4 gap-y-1.5 overflow-y-auto text-sm">
+              {(routes ?? []).map((r) => <label key={r.id} className="flex items-center gap-1.5"><input type="checkbox" checked={f.route_ids.includes(r.id)} onChange={() => toggle("route_ids", r.id)} />{r.name}</label>)}
+            </div>
+          </fieldset>
+        </div>
+        <div className="flex flex-wrap items-end gap-5 text-sm">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={f.rebillable} onChange={(e) => setF({ ...f, rebillable: e.target.checked })} /> Refacturée au client</label>
+          {f.rebillable && <label className="flex items-center gap-2"><input type="checkbox" checked={f.rebill_vat} onChange={(e) => setF({ ...f, rebill_vat: e.target.checked })} /> Avec TVA</label>}
+          {f.rebillable && <Field label="Compte de la refacturation"><Select value={f.income_account_id} placeholder="Compte du transport (7061)" onChange={(e) => setF({ ...f, income_account_id: e.target.value })} options={(incomes ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} /></Field>}
+          <label className="flex items-center gap-2"><input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} /> Active</label>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

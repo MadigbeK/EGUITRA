@@ -10,6 +10,9 @@ ils servent à la marge par rotation et ne passent pas en comptabilité, où la 
 pièces réelles (factures d'achat, caisse, missions) imputées sur les axes ensemble routier et route.
 La rentabilité met les deux en regard (coûts déclarés, coûts comptabilisés, écart).
 
+Taxes spécifiques : lignes calculées par le barème (models/tax.py) et forfait saisi hors barème ;
+une taxe refacturée devient une ligne de la facture du client.
+
 Volumes : le manquant (chargé - livré, sur volumes ambiants ou ramenés à 15 °C) se partage entre
 le manquant toléré (tolérance en % du volume chargé : tarif, client ou société) et le manquant
 excédentaire, valorisé au prix du m³ du produit (ou du tarif). Selon la règle du client ou de la
@@ -33,6 +36,12 @@ COSTS = [
     ("specific_taxes", "Taxes spécifiques"),
     ("other_costs", "Autres frais"),
 ]
+# Frais saisis (bureau, application Rotations, reprise) : les taxes spécifiques viennent du barème ;
+# un montant saisi sous « specific_taxes » est le forfait des taxes hors barème.
+ENTRY_LABELS = {"specific_taxes": "Autres taxes payées (hors barème)"}
+# Champs dont dépendent les taxes du barème : leur modification recalcule les lignes de taxe.
+TAX_TRIGGERS = {"volume_loaded", "volume_delivered", "route_id", "product_id", "date_loading", "rate", "tax_rules",
+                "company_id"}
 
 
 def fmt_m3(value):
@@ -127,16 +136,27 @@ class EguitraTransportRotation(models.Model):
     revenue = fields.Monetary("Montant facturable", compute="_compute_amounts", store=True,
                               help="Prix du transport : volume livré (à défaut chargé) × tarif.")
     billed_amount = fields.Monetary("Montant facturé (HT)", compute="_compute_amounts", store=True,
-                                    help="Prix du transport, moins la déduction du manquant.")
+                                    help="Prix du transport et taxes refacturées, moins la déduction du manquant.")
     fuel_cost = fields.Monetary("Carburant")
     toll_cost = fields.Monetary("Péages")
     driver_fees = fields.Monetary("Frais du chauffeur")
     maintenance_cost = fields.Monetary("Entretien et réparations")
-    specific_taxes = fields.Monetary("Taxes spécifiques")
     other_costs = fields.Monetary("Autres frais")
+
+    # ─── Taxes spécifiques ────────────────────────────────────────────────
+    tax_rules = fields.Boolean(
+        "Barème des taxes appliqué", default=True,
+        help="Décoché (rotations reprises de l'ancien système) : seul le forfait saisi compte.",
+    )
+    tax_line_ids = fields.One2many("eguitra.transport.rotation.tax", "rotation_id", "Taxes du barème")
+    specific_taxes_manual = fields.Monetary(
+        "Taxes hors barème (forfait)", help="Montant saisi : taxes payées que le barème ne connaît pas, ou total repris.")
+    specific_taxes = fields.Monetary("Taxes spécifiques", compute="_compute_specific_taxes", store=True,
+                                     help="Taxes du barème et forfait saisi.")
+    taxes_rebilled = fields.Monetary("Taxes refacturées au client", compute="_compute_taxes_rebilled", store=True)
     total_cost = fields.Monetary("Coût total", compute="_compute_amounts", store=True)
     margin = fields.Monetary("Marge", compute="_compute_amounts", store=True,
-                             help="Montant facturable - coût net du manquant - coûts déclarés.")
+                             help="Montant facturable + taxes refacturées - coût net du manquant - coûts déclarés.")
     margin_rate = fields.Float("Taux de marge (%)", compute="_compute_amounts", store=True)
     note = fields.Text("Observations")
     invoice_id = fields.Many2one("account.move", "Facture", readonly=True, copy=False)
@@ -174,8 +194,20 @@ class EguitraTransportRotation(models.Model):
             rot.shortage_rule = client.transport_shortage_rule or company.transport_shortage_rule or "none"
             rot.shortage_unit_price = tariff.shortage_price or rot.product_id.shortage_price
 
+    # Deux calculs distincts : à l'ajout de la colonne des taxes refacturées, le montant des taxes
+    # spécifiques déjà enregistré n'est pas recalculé.
+    @api.depends("tax_line_ids.amount", "specific_taxes_manual")
+    def _compute_specific_taxes(self):
+        for rot in self:
+            rot.specific_taxes = sum(rot.tax_line_ids.mapped("amount")) + (rot.specific_taxes_manual or 0.0)
+
+    @api.depends("tax_line_ids.amount", "tax_line_ids.rebillable")
+    def _compute_taxes_rebilled(self):
+        for rot in self:
+            rot.taxes_rebilled = sum(rot.tax_line_ids.filtered("rebillable").mapped("amount"))
+
     @api.depends("volume_loaded", "volume_delivered", "volume_correction", "vcf_loaded", "vcf_delivered", "rate",
-                 "shortage_tolerance", "shortage_rule", "shortage_unit_price", *[c for c, _l in COSTS])
+                 "shortage_tolerance", "shortage_rule", "shortage_unit_price", "taxes_rebilled", *[c for c, _l in COSTS])
     def _compute_amounts(self):
         for rot in self:
             currency = rot.currency_id or self.env.company.currency_id
@@ -201,9 +233,10 @@ class EguitraTransportRotation(models.Model):
 
             billed = delivered or loaded
             rot.revenue = billed * (rot.rate or 0.0)
-            rot.billed_amount = rot.revenue - rot.shortage_deduction
+            rot.billed_amount = rot.revenue + rot.taxes_rebilled - rot.shortage_deduction
             rot.total_cost = sum(rot[c] or 0.0 for c, _l in COSTS)
-            rot.margin = rot.revenue - rot.shortage_net_cost - rot.total_cost
+            # Une taxe refacturée est un coût de la rotation compensé par sa refacturation.
+            rot.margin = rot.revenue + rot.taxes_rebilled - rot.shortage_net_cost - rot.total_cost
             rot.margin_rate = (rot.margin / rot.revenue * 100) if rot.revenue else 0.0
 
     @api.depends("volume_loaded", "vehicle_id.capacity_liters")
@@ -228,10 +261,37 @@ class EguitraTransportRotation(models.Model):
 
     # ─── Cycle de vie ─────────────────────────────────────────────────────
 
+    @api.model
+    def _legacy_vals(self, vals):
+        """Anciennes clés acceptées : code produit, montant libre des taxes (devenu le forfait hors barème)."""
+        vals = self.env["eguitra.transport.product"]._resolve_vals(vals)
+        if "specific_taxes" in vals:
+            vals = dict(vals)
+            legacy = vals.pop("specific_taxes")
+            vals.setdefault("specific_taxes_manual", legacy or 0.0)
+        return vals
+
+    def _apply_tax_rules(self):
+        """Lignes de taxe du barème en vigueur à la date de chargement (rotations saisies ou validées)."""
+        rotations = self.filtered(lambda r: r.state in ("draft", "done"))
+        if not rotations:
+            return
+        Line = self.env["eguitra.transport.rotation.tax"]
+        rotations.tax_line_ids.unlink()
+        rules = self.env["eguitra.transport.tax"].search([("company_id", "in", rotations.company_id.ids)])
+        values = [
+            tax._line_vals(rot)
+            for rot in rotations.filtered("tax_rules")
+            for tax in rules.filtered(lambda t: t.company_id == rot.company_id)
+            if tax._applies(rot)
+        ]
+        if values:
+            Line.create(values)
+
     @api.model_create_multi
     def create(self, vals_list):
         Product = self.env["eguitra.transport.product"]
-        vals_list = [Product._resolve_vals(vals) for vals in vals_list]
+        vals_list = [self._legacy_vals(vals) for vals in vals_list]
         for vals in vals_list:
             if vals.get("route_id") and vals.get("partner_id") and not vals.get("rate"):
                 route = self.env["eguitra.transport.route"].browse(vals["route_id"])
@@ -240,14 +300,19 @@ class EguitraTransportRotation(models.Model):
                 vals["rate"] = route._rate_for(partner, product)
             if vals.get("vehicle_id") and not vals.get("driver_id"):
                 vals["driver_id"] = self.env["eguitra.transport.vehicle"].browse(vals["vehicle_id"]).driver_id.id or False
-        return super().create(vals_list)
+        rotations = super().create(vals_list)
+        rotations._apply_tax_rules()
+        return rotations
 
     def write(self, vals):
-        vals = self.env["eguitra.transport.product"]._resolve_vals(vals)
+        vals = self._legacy_vals(vals)
         locked = self.filtered(lambda r: r.state == "invoiced")
         if locked and set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
             raise UserError("Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire.")
-        return super().write(vals)
+        result = super().write(vals)
+        if TAX_TRIGGERS & set(vals):
+            self._apply_tax_rules()
+        return result
 
     def action_validate(self):
         for rot in self:
@@ -263,6 +328,8 @@ class EguitraTransportRotation(models.Model):
                     f"de la citerne {rot.vehicle_id.name} ({fmt_m3(rot.vehicle_id.capacity_liters / 1000)}). "
                     "Corrigez le volume ou la capacité de l'ensemble."
                 )
+            # Taxes du barème en vigueur au moment de la validation.
+            rot._apply_tax_rules()
             if rot.name == "/":
                 rot.name = self.env["ir.sequence"].next_by_code("eguitra.transport.rotation") or "/"
             rot.state = "done"
@@ -331,6 +398,24 @@ class EguitraTransportRotation(models.Model):
             "tax_ids": [Command.clear()],
         }
 
+    def _tax_lines_vals(self, income_account, sale_tax):
+        """Lignes de facture des taxes refacturées au client (une par taxe du barème)."""
+        self.ensure_one()
+        lines = []
+        for line in self.tax_line_ids.filtered("rebillable"):
+            if not line.amount:
+                continue
+            vat = sale_tax if line.tax_id.rebill_vat else self.env["account.tax"]
+            lines.append({
+                "name": f"{line.name} ({self.name}, {self.vehicle_id.name}, {self.date_loading:%d/%m/%Y})",
+                "quantity": 1,
+                "price_unit": line.amount,
+                "account_id": (line.tax_id.income_account_id or income_account).id,
+                "analytic_distribution": self._analytic_distribution(),
+                "tax_ids": [Command.set(vat.ids)],
+            })
+        return lines
+
     def _create_shortage_claims(self):
         """Créance sur le chauffeur (opération diverse en brouillon, validée par la finance) : débit du
         compte du chauffeur, crédit du compte des manquants imputé sur l'ensemble et la route. Un
@@ -360,8 +445,8 @@ class EguitraTransportRotation(models.Model):
             rot.shortage_claim_move_id = move
 
     def action_invoice(self):
-        """Une facture par client, une ligne par rotation validée, la déduction du manquant
-        excédentaire en dessous ; créances sur les chauffeurs en opérations diverses."""
+        """Une facture par client, une ligne par rotation validée, suivie de ses taxes refacturées et
+        de la déduction du manquant excédentaire ; créances sur les chauffeurs en opérations diverses."""
         rotations = self.filtered(lambda r: r.state == "done")
         if not rotations:
             raise UserError("Sélectionnez des rotations validées et non encore facturées.")
@@ -379,6 +464,7 @@ class EguitraTransportRotation(models.Model):
                     if tax:
                         vals["tax_ids"] = [Command.set(tax.ids)]
                     lines.append(Command.create(vals))
+                    lines += [Command.create(v) for v in rot._tax_lines_vals(account, tax)]
                     shortage = rot._shortage_line_vals()
                     if shortage:
                         lines.append(Command.create(shortage))
@@ -406,7 +492,8 @@ class EguitraTransportRotation(models.Model):
                   ("date_loading", ">=", date_from), ("date_loading", "<=", date_to)]
         Rotation = self.sudo()
         sums = ["volume_delivered", "volume_loaded", "revenue", "billed_amount", "total_cost", "margin", "shortage",
-                "shortage_excess", "shortage_value", "shortage_deduction", "shortage_claim", "shortage_net_cost"]
+                "shortage_excess", "shortage_value", "shortage_deduction", "shortage_claim", "shortage_net_cost",
+                "taxes_rebilled"]
         groups = Rotation._read_group(
             domain, [groupby], ["__count", *[f"{f}:sum" for f in sums], *[f"{c}:sum" for c, _l in COSTS]],
         )
@@ -426,6 +513,7 @@ class EguitraTransportRotation(models.Model):
                 "key": key_id, "label": label, "rotations": count,
                 "volume": totals["volume_delivered"] or loaded, "volume_loaded": loaded,
                 "revenue": revenue, "billed_amount": totals["billed_amount"], "cost": totals["total_cost"],
+                "taxes_rebilled": totals["taxes_rebilled"],
                 "margin": margin, "margin_rate": (margin / revenue * 100) if revenue else None,
                 "shortage": totals["shortage"], "shortage_excess": totals["shortage_excess"],
                 "shortage_tolerated": totals["shortage"] - totals["shortage_excess"],

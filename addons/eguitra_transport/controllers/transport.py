@@ -1,5 +1,6 @@
 """API Transport : flotte, routes et tarifs, rotations, facturation, rentabilité, synchronisation mobile."""
 
+import io
 import logging
 
 from odoo import fields, http
@@ -7,10 +8,12 @@ from odoo.exceptions import UserError, ValidationError
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
-from ..models.rotation import COSTS
+from ..models.rotation import COSTS, ENTRY_LABELS
 from ..models.settings import SHORTAGE_RULES
+from ..models.tax import TAX_BASES, TAX_NATURES
 
 _logger = logging.getLogger(__name__)
 
@@ -22,10 +25,11 @@ MAX_SYNC = 200
 ROTATION_FIELDS = (
     "date_loading", "date_delivery", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
     "temperature_loaded", "temperature_delivered", "density_15", "vcf_loaded", "vcf_delivered",
-    *[c for c, _l in COSTS],
+    # « specific_taxes » (saisies de l'application mobile, reprise) vaut forfait hors barème.
+    *[c for c, _l in COSTS], "specific_taxes_manual",
 )
-# Conditions de manquant propres à une rotation : réservées à la finance (déduction, créance).
-FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortage_rule")
+# Conditions de manquant et barème des taxes d'une rotation : réservés à la finance.
+FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortage_rule", "tax_rules")
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
               "partner_id": "res.partner", "route_id": "eguitra.transport.route"}
 # Mesures saisies au parc (application Rotations), hors montants.
@@ -63,6 +67,10 @@ def _rotation_row(rot):
         "shortage_claim_move": _move_ref(rot.shortage_claim_move_id),
         "rate": rot.rate, "revenue": rot.revenue, "billed_amount": rot.billed_amount,
         "costs": {c: rot[c] for c, _l in COSTS},
+        "tax_rules": rot.tax_rules, "specific_taxes_manual": rot.specific_taxes_manual,
+        "taxes_rebilled": rot.taxes_rebilled,
+        "tax_lines": [{"id": t.id, "name": t.name, "nature": t.nature, "base": t.base, "base_amount": t.base_amount,
+                       "rate": t.rate, "amount": t.amount, "rebillable": t.rebillable} for t in rot.tax_line_ids],
         "total_cost": rot.total_cost, "margin": rot.margin, "margin_rate": rot.margin_rate,
         "note": rot.note or None, "invoice": {"id": rot.invoice_id.id, "name": rot.invoice_id.name} if rot.invoice_id else None,
         "client_uuid": rot.client_uuid or None,
@@ -112,6 +120,8 @@ def _rotation_values(data):
             if data[key] not in dict(SHORTAGE_RULES):
                 raise ApiError(400, "invalid_parameter", "Traitement du manquant inconnu.")
             values[key] = data[key]
+        elif key == "tax_rules":
+            values[key] = bool(data[key])
         else:
             values[key] = as_float(data[key] or 0, key)
     for key, model in REF_FIELDS.items():
@@ -175,6 +185,16 @@ def _client_row(partner):
             "shortage_rule": partner.transport_shortage_rule or None}
 
 
+def _tax_row(t):
+    return {
+        "id": t.id, "name": t.name, "nature": t.nature, "base": t.base, "rate": t.rate,
+        "products": [_ref(p) for p in t.product_ids], "routes": [_ref(r) for r in t.route_ids],
+        "account": _account_ref(t.sudo().account_id), "income_account": _account_ref(t.sudo().income_account_id),
+        "rebillable": t.rebillable, "rebill_vat": t.rebill_vat, "date_from": t.date_from or None,
+        "date_to": t.date_to or None, "sequence": t.sequence, "active": t.active,
+    }
+
+
 def _product_row(product):
     return {"id": product.id, "code": product.code, "name": product.name, "sequence": product.sequence,
             "shared": not product.company_id, "active": product.active, "density_15": product.density_15 or None,
@@ -215,7 +235,7 @@ class EguitraTransport(http.Controller):
             # Le code reste la clé des saisies du téléphone (y compris celles gardées hors réseau).
             "products": [{"id": p.id, "code": p.code, "label": p.name}
                          for p in env["eguitra.transport.product"].search([])],
-            "costs": [{"code": k, "label": v} for k, v in COSTS],
+            "costs": [{"code": k, "label": ENTRY_LABELS.get(k, v)} for k, v in COSTS],
             # Mesures facultatives du parc ; températures et masse volumique si les manquants se
             # calculent à 15 °C. Une version antérieure de l'application ignore cette liste.
             "volume_correction": env.company.transport_volume_correction,
@@ -437,6 +457,146 @@ class EguitraTransport(http.Controller):
             values["transport_shortage_rule"] = data["shortage_rule"] or False
         partner.write(values)
         return _client_row(partner)
+
+    # ─── Taxes spécifiques ────────────────────────────────────────────────
+
+    @api_route("/transport/taxes", profiles=READ)
+    def taxes(self, **_kw):
+        Tax = request.env["eguitra.transport.tax"].with_context(active_test=False)
+        return {"taxes": [_tax_row(t) for t in Tax.search([])],
+                "natures": [{"code": k, "label": v} for k, v in TAX_NATURES],
+                "bases": [{"code": k, "label": v} for k, v in TAX_BASES]}
+
+    def _tax_values(self, data):
+        values = {}
+        if "name" in data:
+            values["name"] = str(data["name"] or "").strip() or False
+        for key, choices in (("nature", TAX_NATURES), ("base", TAX_BASES)):
+            if key in data:
+                if data[key] not in dict(choices):
+                    raise ApiError(400, "invalid_parameter", f"Valeur inconnue : {key}.")
+                values[key] = data[key]
+        if "rate" in data:
+            values["rate"] = as_float(data["rate"] or 0, "rate")
+        for key in ("rebillable", "rebill_vat", "active"):
+            if key in data:
+                values[key] = bool(data[key])
+        for key in ("date_from", "date_to"):
+            if key in data:
+                values[key] = parse_date(data, key) or False
+        if "sequence" in data:
+            values["sequence"] = int(data["sequence"] or 0)
+        for key, model in (("product_ids", "eguitra.transport.product"), ("route_ids", "eguitra.transport.route")):
+            if key in data:
+                ids = [int(i) for i in data[key] or []]
+                records = request.env[model].browse(ids).exists()
+                if len(records) != len(set(ids)):
+                    raise ApiError(422, "business_rule", f"Référence inconnue : {key}.")
+                values[key] = [(6, 0, records.ids)]
+        for key in ("account_id", "income_account_id"):
+            if key in data:
+                account = request.env["account.account"]
+                if data[key]:
+                    account = account.browse(int(data[key])).exists()
+                    if not account or request.env.company not in account.company_ids:
+                        raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
+                values[key] = account.id or False
+        return values
+
+    @api_route("/transport/taxes", methods=("POST",), profiles=SETTINGS)
+    def create_tax(self, **_kw):
+        data = read_json()
+        require(data, "name", "nature", "base")
+        return _tax_row(request.env["eguitra.transport.tax"].create(self._tax_values(data)))
+
+    @api_route("/transport/taxes/<int:tax_id>", methods=("PATCH",), profiles=SETTINGS)
+    def update_tax(self, tax_id, **_kw):
+        tax = _get("eguitra.transport.tax", tax_id, "Taxe")
+        tax.write(self._tax_values(read_json()))
+        return _tax_row(tax)
+
+    def _statement_period(self, kw):
+        end = parse_date(kw, "date_to", today())
+        start = parse_date(kw, "date_from", end.replace(month=1, day=1))
+        if start > end:
+            raise ApiError(400, "invalid_parameter", "Période invalide.")
+        return start, end
+
+    @api_route("/transport/taxes/statement", profiles=READ)
+    def tax_statement(self, **kw):
+        """État mensuel des taxes spécifiques par nature."""
+        start, end = self._statement_period(kw)
+        result = request.env["eguitra.transport.rotation.tax"].statement(companies(kw), start, end)
+        return dict(result, date_from=start, date_to=end)
+
+    @api_route("/transport/taxes/statement.xlsx", profiles=READ)
+    def tax_statement_xlsx(self, **kw):
+        import xlsxwriter
+
+        start, end = self._statement_period(kw)
+        scope = companies(kw)
+        data = request.env["eguitra.transport.rotation.tax"].statement(scope, start, end)
+        out = io.BytesIO()
+        book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
+        head = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
+        bold = book.add_format({"bold": True})
+        money = book.add_format({"num_format": "#,##0"})
+        months = data["months"]
+
+        sheet = book.add_worksheet("État mensuel")
+        sheet.write_string(0, 0, "Taxes spécifiques du transport", bold)
+        xlsx_row(sheet, 1, [", ".join(scope.mapped("name")), f"Du {start:%d/%m/%Y} au {end:%d/%m/%Y}",
+                            f"Édité le {today():%d/%m/%Y}"])
+        xlsx_row(sheet, 3, ["Nature", *months, "Total", "dont refacturé", "Lignes"], head)
+        r = 4
+        for row in data["natures"]:
+            xlsx_row(sheet, r, [row["label"], *[row["months"][m] for m in months], row["total"], row["rebillable"],
+                                row["lines"]], money)
+            r += 1
+        totals = data["totals"]
+        xlsx_row(sheet, r, ["Total", *[totals["months"][m] for m in months], totals["total"], totals["rebillable"], None],
+                 bold)
+        if data["booked"]:
+            r += 2
+            sheet.write_string(r, 0, "Comptabilisé sur les comptes du barème (pièces validées)", bold)
+            r += 1
+            xlsx_row(sheet, r, ["Compte", *months, "Total"], head)
+            for item in data["booked"]:
+                r += 1
+                account = item["account"]
+                xlsx_row(sheet, r, [f"{account['code']} {account['name']}", *[item["months"][m] for m in months],
+                                    item["total"]], money)
+        sheet.set_column(0, 0, 42)
+        sheet.set_column(1, len(months) + 3, 14)
+
+        detail = book.add_worksheet("Détail")
+        xlsx_row(detail, 0, ["Date", "Rotation", "Ensemble", "Route", "Client", "Produit", "Nature", "Taxe", "Base",
+                             "Assiette", "Taux", "Montant", "Refacturée"], head)
+        natures, bases = dict(TAX_NATURES), dict(TAX_BASES)
+        domain = [("company_id", "in", scope.ids), ("rotation_id.state", "in", ("done", "invoiced")),
+                  ("date", ">=", start), ("date", "<=", end)]
+        r = 0
+        for line in request.env["eguitra.transport.rotation.tax"].search(domain, order="date, rotation_id, id"):
+            rot = line.rotation_id
+            r += 1
+            xlsx_row(detail, r, [line.date.isoformat(), rot.name, rot.vehicle_id.name, rot.route_id.name,
+                                 rot.partner_id.name, rot.product_id.name, natures.get(line.nature, ""), line.name,
+                                 bases.get(line.base, ""), line.base_amount, line.rate, line.amount,
+                                 "oui" if line.rebillable else ""])
+        manual = request.env["eguitra.transport.rotation"].search(
+            [("company_id", "in", scope.ids), ("state", "in", ("done", "invoiced")), ("date_loading", ">=", start),
+             ("date_loading", "<=", end), ("specific_taxes_manual", "!=", 0)], order="date_loading, id")
+        for rot in manual:
+            r += 1
+            xlsx_row(detail, r, [rot.date_loading.isoformat(), rot.name, rot.vehicle_id.name, rot.route_id.name,
+                                 rot.partner_id.name, rot.product_id.name, "Forfait hors barème", "Montant saisi", "", None,
+                                 None, rot.specific_taxes_manual, ""])
+        detail.set_column(0, 12, 16)
+        book.close()
+        return request.make_response(out.getvalue(), headers=[
+            ("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ("Content-Disposition", f'attachment; filename="taxes_transport_{start:%Y%m}_{end:%Y%m}.xlsx"'),
+        ])
 
     # ─── Rotations ────────────────────────────────────────────────────────
 
