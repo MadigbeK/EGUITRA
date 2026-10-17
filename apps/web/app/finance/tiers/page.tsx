@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Tabs, Tag } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Tag } from "@/components/ui";
+import { BalanceAgee } from "@/components/finance/BalanceAgee";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtPct } from "@/lib/format";
@@ -24,6 +25,7 @@ export default function PartnersPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partner | "new" | null>(null);
+  const [vue, setVue] = useState<"fiches" | "agee">("fiches");
   const params = new URLSearchParams({ limit: "300" });
   if (kind !== "all") params.set("kind", kind);
   if (search) params.set("search", search);
@@ -33,14 +35,18 @@ export default function PartnersPage() {
     <div>
       <PageHeader
         title="Tiers"
-        subtitle="Clients et fournisseurs : soldes, ancienneté des créances, limites de crédit."
+        subtitle="Clients et fournisseurs : soldes, balance âgée, retards et statut, limites de crédit."
         actions={
-          <Button variant="primary" onClick={() => setEditing("new")}>
-            <Plus className="h-4 w-4" /> Nouveau tiers
-          </Button>
+          <>
+            <Segmented label="Vue" options={[{ key: "fiches", label: "Fiches" }, { key: "agee", label: "Balance âgée" }]} value={vue} onChange={setVue} />
+            <Button variant="primary" onClick={() => setEditing("new")}>
+              <Plus className="h-4 w-4" /> Nouveau tiers
+            </Button>
+          </>
         }
       />
-      <Card padded={false}>
+      {vue === "agee" && <BalanceAgee />}
+      <Card padded={false} className={vue === "agee" ? "hidden" : undefined}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
           <Tabs
             tabs={[
