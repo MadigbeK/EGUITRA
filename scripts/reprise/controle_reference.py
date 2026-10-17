@@ -19,7 +19,9 @@ Ce que la plateforme comptabilisera, et que le contrôle reproduit :
   au jour de la mise en service, arrondi au franc), cumul repris au 31/12 en lignes de reprise,
   écart avec le plan théorique porté sur la première dotation de l'exercice (règle actuelle,
   « premiere ») ou, pour mesurer une variante, sur la dernière dotation du plan (« derniere ») ;
-  dotations comptabilisées au jour d'arrêté (fin de mois échue).
+  dotations comptabilisées au jour d'arrêté (fin de mois échue). Un bien dont la colonne methode vaut
+  « mois » (dossier_json.py --convention=prototype) suit la méthode « nombre de dotations » du module :
+  12 × durée dotations égales arrondies au franc, la dernière amortissant le reste.
 
 Formules du prototype (fonction Moteur) : balance de la période (mois de début à mois d'arrêté,
 à-nouveaux compris) ; produits = crédit - débit de la classe 7 ; dotations = solde 68 ; charges
@@ -111,11 +113,19 @@ def add_years(d, years):
         return d.replace(year=d.year + years, day=28)
 
 
-def asset_table(base, years, start):
-    """Tableau d'amortissement du module (méthode linéaire, durée en années, dotations mensuelles,
-    prorata temporis, exercice civil, sans calcul au jour ni années bissextiles) : reproduction de
-    _compute_depreciation_table et de ses étapes."""
-    stop = add_years(start, years) - timedelta(days=1)
+def add_months(d, months):
+    y, m = divmod(d.month - 1 + months, 12)
+    return min(date(d.year + y, m + 1, 1) + timedelta(days=d.day - 1), end_of_month(date(d.year + y, m + 1, 1)))
+
+
+def asset_table(base, years, start, by_months=False):
+    """Tableau d'amortissement du module (méthode linéaire, dotations mensuelles, exercice civil, sans
+    calcul au jour ni années bissextiles) : reproduction de _compute_depreciation_table et de ses
+    étapes. Méthode « durée en années » (method_time year, prorata temporis : premier exercice au jour
+    près) ou, by_months, « nombre de dotations » (method_time number : 12 × durée dotations égales à
+    partir de la fin du mois de mise en service, la dernière amortissant le reste)."""
+    count = years * 12
+    stop = (add_months(start, count) if by_months else add_years(start, years)) - timedelta(days=1)
     table, fy = [], start
     while fy <= stop:
         table.append({"date_start": date(fy.year, 1, 1), "date_stop": date(fy.year, 12, 31)})
@@ -124,10 +134,14 @@ def asset_table(base, years, start):
     while current < stop:
         line_dates.append(current)
         current = end_of_month(current + timedelta(days=1))
-    line_dates.append(current)
+    if not (by_months and len(line_dates) == count):
+        line_dates.append(current)
     # Montant par exercice (_compute_depreciation_amount_per_fiscal_year).
     residual, i_max = base, len(table) - 1
     for i, entry in enumerate(table):
+        if by_months:
+            entry.update(period_amount=odoo_round(base / count), fy_amount=None)
+            continue
         year_amount = base / years
         if i == i_max:
             fy_amount = residual
@@ -154,7 +168,7 @@ def asset_table(base, years, start):
                 break
             if line_date > min(entry["date_stop"], stop) and not (i == i_max and li == li_max):
                 break
-            if i == 0 and li == 0:
+            if i == 0 and li == 0 and not by_months:
                 full = len([x for x in line_dates if x <= entry["date_stop"]]) - 1
                 amount = odoo_round(entry["fy_amount"] - entry["period_amount"] * full)
             else:
@@ -166,7 +180,8 @@ def asset_table(base, years, start):
             check += amount
             lines.append({"date": line_date, "amount": amount, "remaining": remaining})
             depreciated += amount
-        if lines and not is_zero(check - entry["fy_amount"]):
+        # Écart d'un exercice avec son montant annuel : méthode « durée en années » seulement.
+        if lines and not by_months and not is_zero(check - entry["fy_amount"]):
             gap = check - entry["fy_amount"]
             remaining += gap
             lines[-1].update(amount=lines[-1]["amount"] - gap, remaining=remaining)
@@ -195,11 +210,11 @@ def board_lines(table, base, depreciated, start=(0, 0), first_adjustment=0.0):
     return out
 
 
-def platform_board(base, years, start, opening, accumulated, rule="premiere"):
+def platform_board(base, years, start, opening, accumulated, rule="premiere", by_months=False):
     """Plan d'un bien tel que la plateforme le tiendra : reprise du cumul au 31/12 (lignes de reprise,
     eguitra_takeover), puis plan recalculé, l'écart avec le plan théorique porté sur la première
     dotation restant à comptabiliser (règle du module) ou, en variante, sur la dernière."""
-    table = asset_table(base, years, start)
+    table = asset_table(base, years, start, by_months)
     lines = board_lines(table, base, 0.0)
     if start >= opening:
         return {"lines": lines, "theoretical": 0.0, "gap": 0.0}
@@ -208,7 +223,7 @@ def platform_board(base, years, start, opening, accumulated, rule="premiere"):
     if not before or is_zero(base - accumulated):
         return {"lines": [], "theoretical": theoretical, "gap": accumulated - theoretical}
     last = before[-1][0]
-    table = asset_table(base, years, start)
+    table = asset_table(base, years, start, by_months)
     # Position de la dernière ligne de reprise dans le tableau (compute_depreciation_board du module).
     ti = next((k for k, e in enumerate(table) if e["date_start"] <= last <= e["date_stop"]), len(table) - 1)
     entry, li = table[ti], 0
@@ -277,14 +292,16 @@ class Control:
         if not years or (r.get("non_amortissable") or "").lower() in YES:
             return
         base, start, cumul = num(r["valeur_brute"]), day(r["date_mise_en_service"]), num(r.get("cumul"))
-        board = platform_board(base, years, start, self.opening, cumul, self.rule)
+        by_months = (r.get("methode") or "").lower() == "mois"
+        board = platform_board(base, years, start, self.opening, cumul, self.rule, by_months)
         posted = [(d, a) for d, a in board["lines"] if self.opening <= d <= self.closing]
         for d, a in posted:
             self._line(d, "AMORT", f"Dotation {r['code']}", r["compte_dotation"], a, 0.0)
             self._line(d, "AMORT", f"Dotation {r['code']}", r["compte_amortissement"], 0.0, a)
         last_month = end_of_month(self.closing) if self.closing == end_of_month(self.closing) else \
             date(self.closing.year, self.closing.month, 1) - timedelta(days=1)
-        prototype = prototype_accumulated(base, years, start, last_month) - (cumul if start < self.opening else 0)
+        acquired = day(r.get("date_acquisition")) or start
+        prototype = prototype_accumulated(base, years, acquired, last_month) - (cumul if start < self.opening else 0)
         self.asset_detail.append({"code": r["code"], "platform": sum(a for _d, a in posted), "prototype": prototype,
                                   "gap": board["gap"], "start": start})
 
@@ -415,8 +432,9 @@ def main(argv):
     differing = [a for a in control.asset_detail if abs(a["platform"] - a["prototype"]) > 0.5]
     if differing:
         total = sum(a["platform"] - a["prototype"] for a in differing)
-        out += ["", "Dotations de la période par bien : plateforme (prorata au jour de la mise en service, règle de "
-                    "reprise) et convention du prototype (mois entiers à compter du mois suivant l'acquisition)"]
+        out += ["", "Dotations de la période par bien : plateforme (plan du module, méthode « mois » ou prorata au jour "
+                    "de la mise en service, règle de reprise) et convention du prototype (mois entiers à compter du "
+                    "mois suivant l'acquisition)"]
         if relative:
             out.append(f"{len(differing)} bien(s) diffèrent ; écart total {total / max(1, sum(a['prototype'] for a in control.asset_detail)) * 100:+.2f} % des dotations du prototype.")
         else:
