@@ -41,6 +41,31 @@ class TestInvoiceDisputes(FinanceDataMixin, ApiCase):
         reminders = self.env["eguitra.reminder"].generate(self.company, self.today)
         self.assertTrue(reminders.filtered(lambda r: late in r.invoice_ids), "Litige levé : la relance reprend")
 
+    def test_creance_reprise_relancee(self):
+        """Une facture de l'ancien système reprise en à-nouveau (écriture, pas facture) est relancée."""
+        journal = self.env["account.journal"].search([("company_id", "=", self.company.id), ("code", "=", "AN")], limit=1) \
+            or self.env["account.journal"].create({"name": "À-nouveaux", "code": "AN", "type": "general",
+                                                   "company_id": self.company.id})
+        receivable = self.customer.with_company(self.company).property_account_receivable_id
+        opening = self.env["account.move"].create({
+            "move_type": "entry", "journal_id": journal.id, "date": self.today - timedelta(days=60),
+            "ref": "Reprise : soldes d'ouverture",
+            "line_ids": [
+                (0, 0, {"name": "Facture FA-2025-099 du 01/08/2026", "account_id": receivable.id,
+                        "partner_id": self.customer.id, "debit": 7_500_000,
+                        "date_maturity": self.today - timedelta(days=40)}),
+                (0, 0, {"name": "Ouverture", "account_id": self.acc_loan.id, "credit": 7_500_000}),
+            ],
+        })
+        opening.action_post()
+        reminders = self.env["eguitra.reminder"].generate(self.company, self.today)
+        reminder = reminders.filtered(lambda r: r.partner_id == self.customer)
+        self.assertEqual((reminder.level, reminder.amount_due), ("3", 7_500_000), "Retard de 40 jours : mise en demeure")
+        letter = reminder.letter()
+        self.assertEqual([i["name"] for i in letter["invoices"]], ["Facture FA-2025-099 du 01/08/2026"])
+        status, rows = self.call("GET", "/finance/reminders", token=self.token)
+        self.assertEqual(status, 200, rows)
+
     def test_facture_en_devise_avec_contrat_et_litige(self):
         usd = self.env.ref("base.USD")
         usd.active = True
