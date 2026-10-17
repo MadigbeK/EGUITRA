@@ -37,14 +37,15 @@ services:
       - maintenance_work_mem=256MB
       - -c
       - max_connections=100
-      # Archivage continu des WAL (backup/archive-wal.sh) : au plus 15 minutes de données
-      # exposées même en faible activité (archive_timeout), restauration à un instant donné.
+      # Archivage continu des WAL (backup/archive-wal.sh) : un segment au moins toutes les 5 minutes,
+      # même en faible activité (archive_timeout), copié hors site dans les 5 minutes suivantes
+      # (backup/scheduler.sh) : perte de données de 15 minutes au plus, restauration à un instant donné.
       - -c
       - wal_level=replica
       - -c
       - archive_mode=on
       - -c
-      - archive_timeout=900
+      - archive_timeout=300
       - -c
       - archive_command=sh /usr/local/bin/archive-wal.sh %p %f
     volumes:

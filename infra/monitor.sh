@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Supervision du serveur, toutes les 5 minutes (crontab de l'utilisateur deploy, voir monitor-install.sh) :
 # conteneurs des deux environnements en marche et en bonne santé, API des noyaux, applications web,
-# espace disque, sauvegardes de la production, test de restauration mensuel.
+# espace disque, sauvegardes de la production, test de restauration mensuel et trimestriel à un
+# instant donné, double authentification exigée en production. Chaque contrôle réussi appelle la
+# sonde externe HEARTBEAT_URL (facultative), qui alerte si le serveur ne donne plus signe de vie.
 # Une alerte part au changement d'état (panne, retour à la normale), et toutes les 6 heures tant
 # que la panne dure, vers ALERT_WEBHOOK_URL (JSON {"text": …} : Slack, Teams, Google Chat) et/ou
 # ALERT_NTFY_URL (texte brut, application ntfy sur téléphone). Journal : ~/eguitra/logs/monitor.log.
@@ -33,6 +35,12 @@ backup=$(docker compose exec -T backup check.sh 2>/dev/null) || problems+=("sauv
 # Test de restauration mensuel (crontab) : le dernier réussi doit dater de moins de 40 jours.
 restored=$(cat "$LOG_DIR/restore-test.ok" 2>/dev/null || echo 0)
 (( $(date +%s) - restored > 40 * 86400 )) && problems+=("test de restauration : aucun réussi depuis plus de 40 jours (logs/restore-test.log)")
+# Restauration à un instant donné, trimestrielle (crontab), avec compte rendu remis au client.
+pitr=$(cat "$LOG_DIR/restore-pitr.ok" 2>/dev/null || echo 0)
+(( pitr > 0 && $(date +%s) - pitr > 100 * 86400 )) && problems+=("restauration à un instant donné : aucune réussie depuis plus de 100 jours (logs/restore-reports/)")
+# Double authentification : exigée en production (offre, chapitre 5.3), jamais désactivée.
+mfa=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$ODOO_DB" -Atc   "select value from ir_config_parameter where key = 'eguitra_api.mfa_required'" 2>/dev/null | tr -d '[:space:]')
+[ "$mfa" = "0" ] && problems+=("production : double authentification désactivée (eguitra_api.mfa_required = 0)")
 
 now=$(date +%s)
 read -r last_state last_alert < "$STATE" 2>/dev/null || { last_state=ok; last_alert=0; }
@@ -45,6 +53,9 @@ else
   message="EGUITRA $host : retour à la normale"
 fi
 echo "$(date '+%F %T') $state ${problems[*]:-}" >> "$LOG_DIR/monitor.log"
+if [ "$state" = ok ] && [ -n "${HEARTBEAT_URL:-}" ]; then
+  curl -fsS --max-time 10 -o /dev/null "$HEARTBEAT_URL" 2>/dev/null || true
+fi
 
 send() {
   [ -n "${ALERT_WEBHOOK_URL:-}" ] && curl -fsS --max-time 15 -H 'Content-Type: application/json' \

@@ -108,7 +108,11 @@ if [ "${1:-}" != "--initial" ] && prod_db_exists; then
   docker compose exec -T backup base-backup.sh
   stamp=$(date '+%F %T')
   activate "$id"
+  down_since=$(date '+%F %H:%M')
   docker compose stop web odoo
+  # Base et sauvegardes recréées seulement si leur configuration a changé (archivage des WAL, par
+  # exemple), pendant que le noyau est arrêté.
+  docker compose up -d --no-deps db backup
   log=../logs/release-$id.log
   if ! docker compose run --rm -T --no-deps odoo odoo -c /etc/odoo/odoo.conf -d "$ODOO_DB" -u "$MODULES" \
          --stop-after-init --workers 0 > "$log" 2>&1 || grep -qE " (ERROR|CRITICAL) " "$log"; then
@@ -118,6 +122,7 @@ if [ "${1:-}" != "--initial" ] && prod_db_exists; then
     echo "Code de la version précédente ($prev) remis en service. La base a pu être modifiée en partie :" >&2
     echo "la restaurer à l'instant $stamp si nécessaire (backup/README.md)." >&2
     echo "$(date '+%F %T') ÉCHEC de la version $id ($version)" >> "$RELEASES/HISTORY"
+    echo "$down_since $(date '+%F %H:%M') mise en production de la version $id (échec, retour arrière)" >> ../logs/maintenances.txt
     exit 1
   fi
   restart_production
@@ -125,6 +130,9 @@ if [ "${1:-}" != "--initial" ] && prod_db_exists; then
     echo "ATTENTION : production sans réponse après la mise en service (docker compose logs odoo web)." >&2
     exit 1
   fi
+  # Maintenance programmée (annoncée 48 heures à l'avance), exclue du calcul de la disponibilité
+  # (availability-report.py).
+  echo "$down_since $(date '+%F %H:%M') mise en production de la version $id" >> ../logs/maintenances.txt
 else
   # Pas encore de base de production : le noyau n'est pas démarré (il la créerait vide).
   activate "$id"
