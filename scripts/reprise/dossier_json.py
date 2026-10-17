@@ -531,7 +531,7 @@ class Dossier:
                 code, str(loan.get("etablissement") or ""), "credit-bail" if "bail" in plain(loan.get("type")) else "emprunt",
                 loan.get("objet") or "", amount(principal), fr(start), fr(first), months, loan.get("compte") or "",
                 next(iter(interest_accounts)) if len(interest_accounts) == 1 else "",
-                journal[0][0] if journal else "", f"{rate:.4f}" if implied_rates and rate is not None else "", "mensuelle",
+                journal[0][0] if journal else "", f"{rate:.2f}" if implied_rates and rate is not None else "", "mensuelle",
             ])
             due = defaultdict(lambda: {"capital": 0, "interets": 0, "pieces": [], "date": None})
             for t in capital + interest:
