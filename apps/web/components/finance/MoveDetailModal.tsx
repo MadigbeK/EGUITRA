@@ -16,6 +16,8 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
   const [journalId, setJournalId] = useState("");
   const [amount, setAmount] = useState("");
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [modeId, setModeId] = useState("");
+  const { data: modes } = useApi<Array<{ id: number; name: string }>>(paying ? "/finance/payment-modes" : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "danger" | "ok"; text: string } | null>(null);
 
@@ -113,9 +115,12 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
           </div>
 
           {paying && (
-            <div className="grid grid-cols-1 gap-3 rounded-lg bg-panel-2 p-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 rounded-lg bg-panel-2 p-4 md:grid-cols-5">
               <Field label="Compte de trésorerie">
                 <Select value={journalId} onChange={(e) => setJournalId(e.target.value)} placeholder="Choisir…" options={(journals ?? []).map((j) => ({ value: j.id, label: j.name }))} />
+              </Field>
+              <Field label="Mode de paiement">
+                <Select value={modeId} onChange={(e) => setModeId(e.target.value)} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
               </Field>
               <Field label="Montant" hint={`Reste : ${fmtGNF(move.amount_residual)}`}>
                 <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual))} />
@@ -135,6 +140,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                         journal_id: Number(journalId),
                         amount: amount ? Number(amount.replace(/\s/g, "")) : undefined,
                         date: payDate,
+                        payment_mode_id: modeId ? Number(modeId) : undefined,
                       }),
                     ).then(() => setPaying(false))
                   }

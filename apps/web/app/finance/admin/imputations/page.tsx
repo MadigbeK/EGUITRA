@@ -8,7 +8,7 @@ import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Account, AnalyticShare, Ref } from "@/lib/finance-types";
 
-type Tab = "regles" | "obligatoire";
+type Tab = "regles" | "obligatoire" | "modes";
 
 interface Rule {
   id: number;
@@ -35,12 +35,14 @@ export default function ImputationsPage() {
         tabs={[
           { key: "regles", label: "Règles analytiques" },
           { key: "obligatoire", label: "Imputation obligatoire" },
+          { key: "modes", label: "Modes de paiement" },
         ]}
         value={tab}
         onChange={setTab}
       />
       {tab === "regles" && <Rules />}
       {tab === "obligatoire" && <Requirements />}
+      {tab === "modes" && <PaymentModes />}
     </div>
   );
 }
@@ -170,7 +172,69 @@ function Simulation() {
   );
 }
 
-const DOMAIN_LABELS: Record<string, string> = { invoice: "Factures", bill: "Pièces d'achat", general: "Opérations diverses" };
+interface PaymentMode { id: number; name: string; sequence: number; active: boolean; company: Ref | null }
+
+/** Liste simple des modes de paiement, proposée aux opérations de trésorerie et aux règlements. */
+function PaymentModes() {
+  const { data, error, mutate } = useApi<PaymentMode[]>("/finance/payment-modes?all=1");
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  async function act(fn: () => Promise<unknown>, ok: string) {
+    setMessage(null);
+    try {
+      await fn();
+      setMessage({ tone: "ok", text: ok });
+      void mutate();
+      return true;
+    } catch (e) {
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
+      return false;
+    }
+  }
+  return (
+    <Card title="Modes de paiement" padded={false}>
+      {error && <ErrorBox error={error} />}
+      {!data ? (
+        <Loading />
+      ) : (
+        <DataTable
+          rows={data}
+          rowKey={(m) => m.id}
+          columns={[
+            { key: "name", label: "Mode" },
+            { key: "company", label: "Société", render: (m) => m.company?.name ?? "Les deux sociétés" },
+            {
+              key: "active",
+              label: "Proposé",
+              render: (m) => <input type="checkbox" checked={m.active} onChange={(e) => act(() => apiSend("PATCH", `/finance/payment-modes/${m.id}`, { active: e.target.checked }), e.target.checked ? "Mode réactivé." : "Mode archivé.")} />,
+            },
+          ]}
+        />
+      )}
+      <div className="flex flex-wrap items-end gap-3 border-t border-line p-4">
+        {message && (
+          <div className="w-full">
+            <Notice tone={message.tone}>{message.text}</Notice>
+          </div>
+        )}
+        <Field label="Nouveau mode">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Orange Money" />
+        </Field>
+        <Button
+          variant="primary"
+          disabled={!name.trim()}
+          onClick={() =>
+            act(() => apiSend("POST", "/finance/payment-modes", { name: name.trim() }), `Mode « ${name.trim()} » ajouté.`).then((ok) => ok && setName(""))
+          }
+        >
+          Ajouter
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+const DOMAIN_LABELS: Record<string, string> ={ invoice: "Factures", bill: "Pièces d'achat", general: "Opérations diverses" };
 
 function Requirements() {
   const { data, error, mutate } = useApi<Requirement[]>("/finance/analytic-requirements");

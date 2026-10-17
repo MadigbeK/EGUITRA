@@ -12,7 +12,21 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import workbook_rows
 
-from .common import FIN_READ, FIN_WRITE, as_float, companies, parse_date, today
+from .common import (
+    FIN_READ,
+    FIN_WRITE,
+    analytic_labels,
+    as_float,
+    check_mandatory_analytic,
+    companies,
+    describe_distribution,
+    distribution,
+    parse_date,
+    ref,
+    today,
+    with_rules,
+)
+from .moves import account_of_company, store_attachment
 
 MAX_FILE = 5 * 1024 * 1024
 DATE_HEADERS = ("date operation", "date opération", "date", "date valeur", "date comptable")
@@ -36,17 +50,62 @@ def _st_line(line_id):
     return line
 
 
+def _line_rows(lines):
+    """Opérations de trésorerie : imputation (comptes et analytique de la contrepartie une fois
+    rapprochée), mode de paiement, référence, nombre de justificatifs."""
+    counts = {}
+    if lines:
+        for move, count in request.env["ir.attachment"]._read_group(
+            [("res_model", "=", "account.move"), ("res_id", "in", lines.move_id.ids)], ["res_id"], ["__count"]
+        ):
+            counts[move] = count
+    counterparts = {line.id: line._eguitra_counterpart_lines() if line.is_reconciled else None for line in lines}
+    labels = analytic_labels([d for c in counterparts.values() if c for d in c.mapped("analytic_distribution")])
+    rows = []
+    for line in lines:
+        counterpart = counterparts[line.id]
+        rows.append({
+            "id": line.id,
+            "date": line.date,
+            "label": line.payment_ref,
+            "partner": {"id": line.partner_id.id, "name": line.partner_id.name} if line.partner_id else None,
+            "amount": line.amount,
+            "reconciled": line.is_reconciled,
+            "statement": line.statement_id.name or None,
+            "move_id": line.move_id.id,
+            "reference": line.move_id.ref or None,
+            "payment_mode": ref(line.eguitra_payment_mode_id),
+            "attachments": counts.get(line.move_id.id, 0),
+            "counterpart": [
+                {"code": ml.account_id.code, "name": ml.account_id.name,
+                 "analytic": describe_distribution(ml.analytic_distribution, labels)}
+                for ml in counterpart
+            ] if counterpart else None,
+        })
+    return rows
+
+
 def _line_row(line):
-    return {
-        "id": line.id,
-        "date": line.date,
-        "label": line.payment_ref,
-        "partner": {"id": line.partner_id.id, "name": line.partner_id.name} if line.partner_id else None,
-        "amount": line.amount,
-        "reconciled": line.is_reconciled,
-        "statement": line.statement_id.name or None,
-        "move_id": line.move_id.id,
-    }
+    return _line_rows(line)[0]
+
+
+def _payment_mode(value):
+    if not value:
+        return request.env["eguitra.payment.mode"]
+    mode = request.env["eguitra.payment.mode"].browse(int(value)).exists()
+    if not mode or (mode.company_id and mode.company_id != request.env.company):
+        raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
+    return mode
+
+
+def _impute_analytic(line, value, account):
+    """Imputation analytique de la contrepartie d'une opération imputée : la répartition saisie,
+    complétée par les règles ; à défaut, celle que les règles ont posée à la création."""
+    counterpart = line._eguitra_counterpart_lines()
+    dist = distribution(value, line.company_id)
+    if dist:
+        counterpart.write({"analytic_distribution": with_rules(dist, account, line.partner_id, line.company_id)})
+    check_mandatory_analytic(counterpart)
 
 
 def _number(text):
@@ -147,12 +206,14 @@ class EguitraFinanceTreasury(http.Controller):
         lines = Line.search(domain, limit=int_arg(kw, "limit", 100, 1, 1000), offset=int_arg(kw, "offset", 0, 0),
                             order="date desc, id desc")
         return {"journal": {"id": journal.id, "name": journal.name, "type": journal.type},
-                "items": [_line_row(line) for line in lines], "total_count": Line.search_count(domain)}
+                "items": _line_rows(lines), "total_count": Line.search_count(domain)}
 
     @api_route("/finance/treasury/<int:journal_id>/lines", methods=("POST",), profiles=FIN_WRITE)
     def add_line(self, journal_id, **_kw):
-        """Opération de caisse ou de banque ; avec un compte de contrepartie, elle est imputée aussitôt."""
+        """Opération de caisse ou de banque. Avec un compte de contrepartie, elle est imputée aussitôt,
+        analytique comprise ; sinon elle reste à rapprocher avec une facture ou un règlement."""
         journal = _journal(journal_id)
+        company = journal.company_id
         data = read_json()
         label, amount = require(data, "label", "amount")
         values = {
@@ -161,12 +222,34 @@ class EguitraFinanceTreasury(http.Controller):
             "payment_ref": str(label)[:250],
             "amount": as_float(amount, "amount"),
         }
+        if not values["amount"]:
+            raise ApiError(422, "business_rule", "Le montant de l'opération ne peut pas être nul.")
         if data.get("partner_id"):
-            values["partner_id"] = int(data["partner_id"])
-        if data.get("counterpart_account_id"):
-            values["counterpart_account_id"] = int(data["counterpart_account_id"])
+            partner = request.env["res.partner"].browse(int(data["partner_id"])).exists()
+            if not partner:
+                raise ApiError(404, "not_found", "Tiers introuvable.")
+            values["partner_id"] = partner.id
+        mode = _payment_mode(data.get("payment_mode_id"))
+        if mode:
+            values["eguitra_payment_mode_id"] = mode.id
+        if data.get("reference"):
+            values["ref"] = str(data["reference"]).strip()[:200]
+        counterpart = account_of_company(data.get("counterpart_account_id"), company, "Compte d'imputation")
+        if counterpart:
+            values["counterpart_account_id"] = counterpart.id
+        elif data.get("analytic_distribution"):
+            raise ApiError(422, "business_rule", "L'imputation analytique accompagne un compte d'imputation ; sans "
+                                                 "compte, l'opération se rapproche d'une facture déjà imputée.")
         line = request.env["account.bank.statement.line"].create(values)
+        if counterpart:
+            _impute_analytic(line, data.get("analytic_distribution"), counterpart)
         return _line_row(line)
+
+    @api_route("/finance/treasury/lines/<int:line_id>/attachments", methods=("POST",), profiles=FIN_WRITE)
+    def add_line_attachment(self, line_id, **_kw):
+        """Justificatif d'une opération de banque ou de caisse (reçu, bordereau, ordre de virement)."""
+        line = _st_line(line_id)
+        return store_attachment(line.move_id, request.httprequest.files.get("file"))
 
     @api_route("/finance/treasury/<int:journal_id>/import", methods=("POST",), profiles=FIN_WRITE)
     def import_statement(self, journal_id, **_kw):
@@ -205,66 +288,74 @@ class EguitraFinanceTreasury(http.Controller):
 
     @api_route("/finance/treasury/lines/<int:line_id>/candidates", profiles=FIN_READ)
     def candidates(self, line_id, **_kw):
-        """Factures et règlements en attente susceptibles de solder l'opération."""
-        line = _st_line(line_id)
-        incoming = line.amount > 0
-        domain = [
-            ("company_id", "=", line.company_id.id), ("parent_state", "=", "posted"), ("reconciled", "=", False),
-            ("account_id.reconcile", "=", True),
-            ("account_id.account_type", "=", "asset_receivable" if incoming else "liability_payable"),
-            ("amount_residual", "!=", 0),
-        ]
-        items = request.env["account.move.line"].search(domain, limit=200, order="date_maturity asc")
-        amount = abs(line.amount)
-
-        def score(ml):
-            s = 0
-            if line.partner_id and ml.partner_id == line.partner_id:
-                s += 2
-            if abs(abs(ml.amount_residual) - amount) < 1:
-                s += 3
-            if ml.move_id.name and ml.move_id.name in (line.payment_ref or ""):
-                s += 4
-            return s
-
-        ranked = sorted(items, key=lambda ml: (-score(ml), ml.date_maturity or ml.date))[:30]
-        return [
-            {"id": ml.id, "move": ml.move_id.name, "move_id": ml.move_id.id, "partner": ml.partner_id.name or None,
-             "date": ml.date, "due": ml.date_maturity, "residual": abs(ml.amount_residual), "score": score(ml)}
-            for ml in ranked
-        ]
+        """Pièces en attente susceptibles de solder l'opération (factures et règlements ; les modules
+        complètent la liste, voir models/treasury.py), les plus pertinentes d'abord."""
+        return _st_line(line_id)._eguitra_candidates()
 
     @api_route("/finance/treasury/lines/<int:line_id>/reconcile", methods=("POST",), profiles=FIN_WRITE)
     def reconcile(self, line_id, **_kw):
+        """Rapprochement avec des écritures en attente (move_line_ids), ou imputation directe à un compte
+        (account_id) avec sa répartition analytique (analytic_distribution)."""
         line = _st_line(line_id)
         if line.is_reconciled:
             raise ApiError(422, "business_rule", "Cette opération est déjà rapprochée.")
         data = read_json()
-        if data.get("move_line_ids"):
-            move_lines = request.env["account.move.line"].browse([int(i) for i in data["move_line_ids"]]).exists()
-            if not move_lines or move_lines.filtered(lambda ml: ml.reconciled or ml.company_id != line.company_id):
-                raise ApiError(422, "business_rule", "Écritures à rapprocher invalides.")
-            for move_line in move_lines:
-                line._add_account_move_line(move_line, keep_current=True)
-            line.reconcile_bank_line()
-        elif data.get("account_id"):
-            # Imputation directe (frais bancaires, produit divers…) : l'opération est recréée avec sa contrepartie.
-            values = {
-                "journal_id": line.journal_id.id, "date": line.date, "payment_ref": line.payment_ref,
-                "amount": line.amount, "partner_id": line.partner_id.id or False,
-                "statement_id": line.statement_id.id or False, "counterpart_account_id": int(data["account_id"]),
-            }
-            line.unlink()
-            line = request.env["account.bank.statement.line"].create(values)
-        else:
+        account = None
+        if data.get("account_id") and not data.get("move_line_ids"):
+            account = account_of_company(data["account_id"], line.company_id, "Compte d'imputation")
+            dist = distribution(data.get("analytic_distribution"), line.company_id)
+            data = dict(data, account_id=account.id,
+                        analytic_distribution=with_rules(dist, account, line.partner_id, line.company_id) if dist else {})
+        result = line._eguitra_reconcile(data)
+        if not result:
             raise ApiError(400, "missing_fields", "Indiquez les écritures à rapprocher ou un compte d'imputation.")
-        return _line_row(line)
+        if account:
+            check_mandatory_analytic(result._eguitra_counterpart_lines())
+        return _line_row(result)
 
     @api_route("/finance/treasury/lines/<int:line_id>/unreconcile", methods=("POST",), profiles=FIN_WRITE)
     def unreconcile(self, line_id, **_kw):
         line = _st_line(line_id)
         line.action_undo_reconciliation()
         return _line_row(line)
+
+    # ─── Modes de paiement (liste paramétrable) ───────────────────────────
+
+    @api_route("/finance/payment-modes", profiles=FIN_READ)
+    def payment_modes(self, **kw):
+        Mode = request.env["eguitra.payment.mode"].with_context(active_test=kw.get("all") != "1")
+        modes = Mode.search([("company_id", "in", [False, request.env.company.id])])
+        return [{"id": m.id, "name": m.name, "sequence": m.sequence, "active": m.active, "company": ref(m.company_id)}
+                for m in modes]
+
+    @api_route("/finance/payment-modes", methods=("POST",), profiles=FIN_WRITE)
+    def create_payment_mode(self, **_kw):
+        """Nouveau mode, commun aux deux sociétés (company_only : réservé à la société de travail)."""
+        data = read_json()
+        (name,) = require(data, "name")
+        name = str(name).strip()[:60]
+        company = request.env.company.id if data.get("company_only") else False
+        Mode = request.env["eguitra.payment.mode"].with_context(active_test=False)
+        if Mode.search_count([("name", "=ilike", name), ("company_id", "in", [False, request.env.company.id])]):
+            raise ApiError(409, "conflict", f"Le mode « {name} » existe déjà.")
+        mode = Mode.create({"name": name, "company_id": company, "sequence": int_arg(data, "sequence", 100, 0, 1000)})
+        return {"id": mode.id, "name": mode.name}
+
+    @api_route("/finance/payment-modes/<int:mode_id>", methods=("PATCH",), profiles=FIN_WRITE)
+    def update_payment_mode(self, mode_id, **_kw):
+        mode = request.env["eguitra.payment.mode"].with_context(active_test=False).browse(mode_id).exists()
+        if not mode or (mode.company_id and mode.company_id != request.env.company):
+            raise ApiError(404, "not_found", "Mode de paiement introuvable.")
+        data = read_json()
+        values = {}
+        if data.get("name"):
+            values["name"] = str(data["name"]).strip()[:60]
+        if "active" in data:
+            values["active"] = bool(data["active"])
+        if "sequence" in data:
+            values["sequence"] = int_arg(data, "sequence", 10, 0, 1000)
+        mode.write(values)
+        return {"id": mode.id, "name": mode.name, "active": mode.active}
 
     @api_route("/finance/treasury/journals", methods=("POST",), profiles=("admin",))
     def create_journal(self, **_kw):

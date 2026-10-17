@@ -4,3 +4,4 @@ from . import test_closing_loans
 from . import test_api_finance
 from . import test_assets
 from . import test_analytic
+from . import test_treasury

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Plus, Undo2, Wallet } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Undo2, Wallet } from "@/components/icons";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import type { Account, CashAccount } from "@/lib/finance-types";
+import type { Account, AnalyticShare, CashAccount, Ref } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
 
 interface StLine {
@@ -16,16 +17,30 @@ interface StLine {
   amount: number;
   reconciled: boolean;
   statement: string | null;
+  reference: string | null;
+  payment_mode: Ref | null;
+  attachments: number;
+  counterpart: Array<{ code: string; name: string; analytic: AnalyticShare[] }> | null;
 }
 interface Candidate {
+  /** Nature du candidat : « move_line » (facture, règlement) ; d'autres natures s'ajoutent côté noyau. */
+  kind: string;
   id: number;
   move: string;
   move_id: number;
   partner: string | null;
+  label: string | null;
   date: string;
   due: string | null;
   residual: number;
   score: number;
+}
+interface PaymentMode { id: number; name: string; active: boolean }
+
+const JUSTIFICATIFS = ".pdf,.jpg,.jpeg,.png,.docx,.xlsx";
+
+function usePaymentModes() {
+  return useApi<PaymentMode[]>("/finance/payment-modes");
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -38,6 +53,7 @@ export default function TreasuryPage() {
   const { data: lines, mutate } = useApi<{ items: StLine[]; total_count: number }>(current ? `/finance/treasury/${current.journal_id}/lines?state=${filter}&limit=300` : null);
   const [modal, setModal] = useState<null | "operation" | "import" | "transfer">(null);
   const [matching, setMatching] = useState<StLine | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function refresh() {
     void mutate();
@@ -107,6 +123,11 @@ export default function TreasuryPage() {
           </div>
           {current && (
             <Card title={`Opérations, ${current.name}`} padded={false}>
+              {notice && (
+                <div className="px-4 pt-3">
+                  <Notice tone="danger">{notice}</Notice>
+                </div>
+              )}
               <div className="px-4 pt-3">
                 <Tabs
                   tabs={[
@@ -126,9 +147,58 @@ export default function TreasuryPage() {
                   empty={filter === "unreconciled" ? "Toutes les opérations sont rapprochées." : "Aucune opération."}
                   columns={[
                     { key: "date", label: "Date", render: (l) => fmtDate(l.date) },
-                    { key: "label", label: "Libellé" },
+                    {
+                      key: "label",
+                      label: "Libellé",
+                      render: (l) => (
+                        <div>
+                          <div>{l.label}</div>
+                          {(l.reference || l.payment_mode) && <div className="text-[12px] text-muted">{[l.payment_mode?.name, l.reference].filter(Boolean).join(" · ")}</div>}
+                        </div>
+                      ),
+                    },
                     { key: "partner", label: "Tiers", render: (l) => l.partner?.name ?? "–" },
+                    {
+                      key: "counterpart",
+                      label: "Imputation",
+                      render: (l) =>
+                        l.counterpart?.length ? (
+                          <div className="space-y-1">
+                            <div className="font-mono text-xs">{l.counterpart.map((c) => c.code).join(", ")}</div>
+                            <AnalyticTags shares={l.counterpart.flatMap((c) => c.analytic)} />
+                          </div>
+                        ) : (
+                          "–"
+                        ),
+                    },
                     { key: "amount", label: "Montant", align: "right", render: (l) => <span className={cx("font-semibold", l.amount < 0 ? "text-danger" : "text-ok")}>{l.amount > 0 ? "+" : ""}{fmtGNF(l.amount)}</span> },
+                    {
+                      key: "attachments",
+                      label: "",
+                      render: (l) => (
+                        <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {l.attachments > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-xs text-muted" title="Justificatifs">
+                              <Paperclip className="h-3.5 w-3.5" />
+                              {l.attachments}
+                            </span>
+                          )}
+                          <FileButton
+                            small
+                            label="Justificatif"
+                            accept={JUSTIFICATIFS}
+                            onFile={(file) => {
+                              const form = new FormData();
+                              form.append("file", file);
+                              setNotice(null);
+                              apiUpload(`/finance/treasury/lines/${l.id}/attachments`, form)
+                                .then(refresh)
+                                .catch((e) => setNotice(e instanceof ApiError ? e.message : "Envoi du justificatif impossible."));
+                            }}
+                          />
+                        </span>
+                      ),
+                    },
                     {
                       key: "reconciled",
                       label: "",
@@ -165,24 +235,49 @@ function useAccounts(prefix: string) {
 
 function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; onClose: () => void; onDone: () => void }) {
   const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=2000");
+  const { data: modes } = usePaymentModes();
+  const { data: axes } = useAxes();
   const [direction, setDirection] = useState<"out" | "in">("out");
-  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "" });
+  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "", reference: "", mode: "" });
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
+  const [choice, setChoice] = useState<AxisChoice>({});
+  const [receipt, setReceipt] = useState<File | null>(null);
+  /** Opération déjà enregistrée : un nouvel essai n'envoie plus que le justificatif. */
+  const [createdId, setCreatedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const amount = Number(form.amount.replace(/\s/g, ""));
-      await apiSend("POST", `/finance/treasury/${journal.journal_id}/lines`, {
-        date: form.date,
-        label: form.label,
-        amount: direction === "out" ? -amount : amount,
-        partner_id: partner?.id,
-        counterpart_account_id: form.account ? Number(form.account) : undefined,
-      });
-      onDone();
+      let id = createdId;
+      if (!id) {
+        const amount = Number(form.amount.replace(/\s/g, ""));
+        const line = await apiSend<StLine>("POST", `/finance/treasury/${journal.journal_id}/lines`, {
+          date: form.date,
+          label: form.label,
+          amount: direction === "out" ? -amount : amount,
+          partner_id: partner?.id,
+          counterpart_account_id: form.account ? Number(form.account) : undefined,
+          analytic_distribution: form.account ? toDistribution(choice) : undefined,
+          payment_mode_id: form.mode ? Number(form.mode) : undefined,
+          reference: form.reference || undefined,
+        });
+        id = line.id;
+        setCreatedId(id);
+        onDone();
+      }
+      if (receipt) {
+        const data = new FormData();
+        data.append("file", receipt);
+        try {
+          await apiUpload(`/finance/treasury/lines/${id}/attachments`, data);
+        } catch (e) {
+          setError(`Opération enregistrée ; justificatif refusé : ${e instanceof ApiError ? e.message : "envoi impossible"}`);
+          return;
+        }
+        onDone();
+      }
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
@@ -191,26 +286,43 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
     }
   }
   return (
-    <Modal open title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount}>Enregistrer</Button>}>
+    <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
         <Tabs tabs={[{ key: "out", label: "Sortie" }, { key: "in", label: "Entrée" }]} value={direction} onChange={setDirection} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="Date">
             <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </Field>
           <Field label="Montant (GNF)">
             <Input inputMode="numeric" className="text-right font-mono" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
           </Field>
+          <Field label="Mode de paiement">
+            <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
+          </Field>
+          <Field label="Référence" hint="Facture, contrat, chèque…">
+            <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
+          </Field>
         </div>
         <Field label="Libellé">
           <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Frais de mission, achat carburant…" />
         </Field>
-        <Field label="Tiers (facultatif)">
-          <PartnerPicker value={partner} onChange={setPartner} kind={direction === "out" ? "supplier" : "customer"} />
-        </Field>
-        <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
-          <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Field label="Tiers (facultatif)">
+            <PartnerPicker value={partner} onChange={setPartner} kind={direction === "out" ? "supplier" : "customer"} />
+          </Field>
+          <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
+            <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+          </Field>
+        </div>
+        {form.account && (
+          <div>
+            <div className="mb-1.5 text-[13px] font-medium text-ink-2">Imputation analytique</div>
+            <AnalyticFields axes={axes} value={choice} onChange={setChoice} />
+          </div>
+        )}
+        <Field label="Justificatif (facultatif)" hint="PDF, JPEG, PNG, Word ou Excel, 15 Mo au plus.">
+          <input type="file" accept={JUSTIFICATIFS} onChange={(e) => setReceipt(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
         </Field>
       </div>
     </Modal>
@@ -307,16 +419,23 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
 function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => void; onDone: () => void }) {
   const { data: candidates } = useApi<Candidate[]>(`/finance/treasury/lines/${line.id}/candidates`);
   const { data: accounts } = useAccounts("");
+  const { data: axes } = useAxes();
   const [selected, setSelected] = useState<number[]>([]);
   const [account, setAccount] = useState("");
+  const [choice, setChoice] = useState<AxisChoice>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const total = (candidates ?? []).filter((c) => selected.includes(c.id)).reduce((a, c) => a + c.residual, 0);
+  const moveLines = (candidates ?? []).filter((c) => c.kind === "move_line");
+  const total = moveLines.filter((c) => selected.includes(c.id)).reduce((a, c) => a + c.residual, 0);
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      await apiSend("POST", `/finance/treasury/lines/${line.id}/reconcile`, selected.length ? { move_line_ids: selected } : { account_id: Number(account) });
+      await apiSend(
+        "POST",
+        `/finance/treasury/lines/${line.id}/reconcile`,
+        selected.length ? { move_line_ids: selected } : { account_id: Number(account), analytic_distribution: toDistribution(choice) },
+      );
       onDone();
       onClose();
     } catch (e) {
@@ -345,8 +464,8 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
         ) : (
           <DataTable
             dense
-            rows={candidates}
-            rowKey={(c) => c.id}
+            rows={moveLines}
+            rowKey={(c) => `${c.kind}-${c.id}`}
             onRowClick={(c) => setSelected((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : [...s, c.id]))}
             empty="Aucune pièce en attente."
             columns={[
@@ -362,6 +481,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
         <Field label="Ou imputer directement à un compte" hint="Frais bancaires, agios, produit divers…">
           <Select value={account} onChange={(e) => setAccount(e.target.value)} placeholder="–" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
         </Field>
+        {account && !selected.length && <AnalyticFields axes={axes} value={choice} onChange={setChoice} />}
       </div>
     </Modal>
   );

@@ -60,6 +60,27 @@ def account_of_company(value, company, label="Compte"):
     return account
 
 
+def store_attachment(move, upload):
+    """Justificatif d'une pièce (ou d'une opération de trésorerie, par sa pièce) : format reconnu au
+    contenu, 15 Mo au plus."""
+    if not upload:
+        raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
+    content = upload.read(MAX_ATTACHMENT + 1)
+    if len(content) > MAX_ATTACHMENT:
+        raise ApiError(413, "too_large", "Fichier trop volumineux (15 Mo maximum).")
+    mimetype = detect_type(content)
+    if not mimetype:
+        raise ApiError(415, "unsupported_type", f"Justificatif au format {ACCEPTED}.")
+    attachment = request.env["ir.attachment"].create({
+        "name": checked_name(upload.filename, mimetype, "piece-jointe"),
+        "datas": base64.b64encode(content),
+        "res_model": "account.move",
+        "res_id": move.id,
+        "mimetype": mimetype,
+    })
+    return {"id": attachment.id, "name": attachment.name, "mimetype": attachment.mimetype, "size": attachment.file_size}
+
+
 def _default_journal(data, sale, company):
     if data.get("journal_id"):
         journal = request.env["account.journal"].browse(int(data["journal_id"])).exists()
@@ -304,10 +325,17 @@ class EguitraFinanceMoves(http.Controller):
             values["amount"] = as_float(data["amount"], "amount")
         if data.get("memo"):
             values["communication"] = str(data["memo"])[:200]
+        mode = request.env["eguitra.payment.mode"]
+        if data.get("payment_mode_id"):
+            mode = mode.browse(int(data["payment_mode_id"])).exists()
+            if not mode or (mode.company_id and mode.company_id != move.company_id):
+                raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
         wizard = request.env["account.payment.register"].with_context(
             active_model="account.move", active_ids=move.ids
         ).create(values)
-        wizard._create_payments()
+        payments = wizard._create_payments()
+        if mode:
+            payments.write({"eguitra_payment_mode_id": mode.id})
         return move_detail(move)
 
     @api_route("/finance/moves/<int:move_id>/pdf", profiles=FIN_READ)
@@ -326,24 +354,7 @@ class EguitraFinanceMoves(http.Controller):
 
     @api_route("/finance/moves/<int:move_id>/attachments", methods=("POST",), profiles=FIN_WRITE)
     def add_attachment(self, move_id, **_kw):
-        move = _move(move_id)
-        upload = request.httprequest.files.get("file")
-        if not upload:
-            raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
-        content = upload.read(MAX_ATTACHMENT + 1)
-        if len(content) > MAX_ATTACHMENT:
-            raise ApiError(413, "too_large", "Fichier trop volumineux (15 Mo maximum).")
-        mimetype = detect_type(content)
-        if not mimetype:
-            raise ApiError(415, "unsupported_type", f"Justificatif au format {ACCEPTED}.")
-        attachment = request.env["ir.attachment"].create({
-            "name": checked_name(upload.filename, mimetype, "piece-jointe"),
-            "datas": base64.b64encode(content),
-            "res_model": "account.move",
-            "res_id": move.id,
-            "mimetype": mimetype,
-        })
-        return {"id": attachment.id, "name": attachment.name, "mimetype": attachment.mimetype, "size": attachment.file_size}
+        return store_attachment(_move(move_id), request.httprequest.files.get("file"))
 
     @api_route("/finance/attachments/<int:attachment_id>", profiles=FIN_READ)
     def download_attachment(self, attachment_id, **_kw):

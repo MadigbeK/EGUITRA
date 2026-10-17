@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Modes de paiement usuels, créés une fois (liste modifiable dans Imputations automatiques). -->
+    <function model="eguitra.payment.mode" name="ensure_defaults"/>
+</odoo>
