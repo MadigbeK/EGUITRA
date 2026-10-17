@@ -6,10 +6,13 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
 import { AlertTriangle, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronRight, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
 import { APPS, type AppCode } from "@/lib/config";
-import { navFor, type NavItem, type NavSection } from "@/lib/nav";
+import { navFor, type NavBadge, type NavItem, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
+import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
+
+type Pastilles = Partial<Record<NavBadge, { count: number; severe: boolean }>>;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -48,6 +51,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   const sections = useMemo(() => navFor(app, me.profiles, company?.entity), [app, me.profiles, company?.entity]);
   const home = APPS[app].home;
   const entity = entityOf(company, app);
+  // Finance : équilibre de l'exercice dans la barre du haut, pastilles dans la navigation.
+  const enTete = useEnTeteFinance(app, me);
+  const badges = useMemo(() => pastilles(enTete), [enTete]);
 
   useEffect(() => {
     try {
@@ -155,7 +161,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
         className={cx("no-print sticky top-0 hidden h-screen flex-none border-r border-line bg-panel transition-[width] duration-300 ease-[var(--ease-sortie)] lg:block", replie ? "w-[84px]" : "w-[272px]")}
         aria-label="Colonne de navigation"
       >
-        <Navigation app={app} me={me} sections={sections} pathname={pathname} replie={replie} onBasculer={basculer} onCompany={switchCompany} onLogout={logout} />
+        <Navigation app={app} me={me} sections={sections} pathname={pathname} replie={replie} badges={badges} onBasculer={basculer} onCompany={switchCompany} onLogout={logout} />
       </aside>
 
       {/* Tiroir (téléphone, tablette) */}
@@ -166,7 +172,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
             <button ref={closeButton} type="button" onClick={() => setOpen(false)} className="absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-panel-3" aria-label="Fermer le menu">
               <X className="h-5 w-5" />
             </button>
-            <Navigation app={app} me={me} sections={sections} pathname={pathname} replie={false} onNavigate={() => setOpen(false)} onCompany={switchCompany} onLogout={logout} />
+            <Navigation app={app} me={me} sections={sections} pathname={pathname} replie={false} badges={badges} onNavigate={() => setOpen(false)} onCompany={switchCompany} onLogout={logout} />
           </div>
         </div>
       )}
@@ -209,6 +215,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
                 <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted sm:inline">Ctrl K</kbd>
               </button>
               {(me.apps.includes("finance") || me.apps.includes("axispro")) && <Lanceur me={me} app={app} />}
+              <EquilibreExercice data={enTete} />
               <span className="hidden items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[13px] font-medium capitalize text-ink-2 xl:flex">
                 <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-accent-vif" />
                 <Aujourdhui />
@@ -255,6 +262,7 @@ function Navigation({
   sections,
   pathname,
   replie,
+  badges,
   onBasculer,
   onNavigate,
   onCompany,
@@ -265,6 +273,7 @@ function Navigation({
   sections: NavSection[];
   pathname: string;
   replie: boolean;
+  badges?: Pastilles;
   onBasculer?: () => void;
   onNavigate?: () => void;
   onCompany: (id: number) => void;
@@ -345,13 +354,15 @@ function Navigation({
                 {section.items.map((item) => {
                   const active = estActif(item, pathname, home);
                   const I: Icon = ICONES[item.icon] ?? ICONES.LayoutDashboard!;
+                  const pastille = item.badge ? badges?.[item.badge] : undefined;
+                  const nombre = pastille && pastille.count > 0 ? pastille : undefined;
                   return (
                     <li key={item.href} className="group/entree relative">
                       <Link
                         href={item.href}
                         onClick={onNavigate}
                         aria-current={active ? "page" : undefined}
-                        title={replie ? item.label : undefined}
+                        title={replie ? (nombre ? `${item.label} (${nombre.count})` : item.label) : undefined}
                         className={cx(
                           "relative z-[1] flex items-center gap-3 rounded-xl text-[14px] leading-tight transition-colors duration-200",
                           replie ? "justify-center px-0 py-2.5" : "px-3 py-[9px]",
@@ -359,7 +370,16 @@ function Navigation({
                         )}
                       >
                         <I className={cx("h-[19px] w-[19px] flex-none transition-transform duration-200", !active && "text-muted group-hover/entree:translate-x-0.5 group-hover/entree:text-accent")} />
-                        <span className={replie ? "sr-only" : "truncate"}>{item.label}</span>
+                        <span className={replie ? "sr-only" : "min-w-0 flex-1 truncate"}>{item.label}</span>
+                        {nombre &&
+                          (replie ? (
+                            <span aria-hidden className={cx("absolute right-3 top-1.5 h-2 w-2 rounded-full ring-2 ring-panel", nombre.severe ? "bg-danger-vif" : "bg-warn-vif")} />
+                          ) : (
+                            <span className={cx("flex-none rounded-full px-1.5 py-px text-[11.5px] font-bold tabular", nombre.severe ? "bg-danger text-white" : active ? "bg-white/25 text-current" : "bg-warn-doux text-warn")}>
+                              {nombre.count}
+                              <span className="sr-only">{item.badge === "approvals" ? " en attente" : item.badge === "controls" ? " contrôle(s) en anomalie" : " alerte(s)"}</span>
+                            </span>
+                          ))}
                       </Link>
                     </li>
                   );

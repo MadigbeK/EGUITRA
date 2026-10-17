@@ -7,6 +7,15 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json
 
+from ..models.alert import (
+    ALERT_CODES,
+    DOMAINS,
+    SEVERITY_ORDER,
+    THRESHOLD_UNITS,
+    TRANSPORT_CODES,
+    UNITS,
+    ZERO_DISABLES,
+)
 from .common import FIN_READ, companies, parse_date, today
 
 PLANS = {
@@ -28,7 +37,10 @@ class EguitraFinanceDashboard(http.Controller):
 
     @api_route("/finance/alerts", profiles=FIN_READ)
     def alerts(self, **kw):
-        return request.env["eguitra.alert.threshold"].sudo().active_alerts(companies(kw), today())
+        """Alertes actives ; all=1 ajoute les règles conformes et sans objet."""
+        return request.env["eguitra.alert.threshold"].sudo().active_alerts(
+            companies(kw), today(), include_ok=kw.get("all") in ("1", "true")
+        )
 
     @api_route("/finance/statements/income", profiles=FIN_READ)
     def income_statement(self, **kw):
@@ -98,10 +110,17 @@ class EguitraFinanceThresholds(http.Controller):
         Threshold = request.env["eguitra.alert.threshold"]
         Threshold.sudo().ensure_defaults(request.env.company)
         labels = dict(Threshold._fields["code"].selection)
+        order = {code: i for i, (code, _label) in enumerate(ALERT_CODES)}
+        transport = request.env.company.eguitra_entity != "cabinet"
+        records = Threshold.with_context(active_test=False).search([("company_id", "=", request.env.company.id)])
         return [
             {"id": t.id, "code": t.code, "label": labels.get(t.code, t.code), "value": t.value,
-             "severity": t.severity, "active": t.active}
-            for t in Threshold.with_context(active_test=False).search([("company_id", "=", request.env.company.id)])
+             "severity": t.severity, "active": t.active, "domain": DOMAINS.get(t.code),
+             "unit": THRESHOLD_UNITS.get(t.code, UNITS.get(t.code)),
+             # 0 éteint la règle (seuil à renseigner) ; sinon 0 vaut « aucune tolérance ».
+             "zero_disables": t.code in ZERO_DISABLES,
+             "applicable": transport or t.code not in TRANSPORT_CODES}
+            for t in records.sorted(lambda r: order.get(r.code, 99))
         ]
 
     @api_route("/finance/thresholds/<int:threshold_id>", methods=("PATCH",), profiles=("admin",))
@@ -113,7 +132,7 @@ class EguitraFinanceThresholds(http.Controller):
         values = {}
         if "value" in data:
             values["value"] = float(data["value"] or 0)
-        if data.get("severity") in ("info", "warning", "blocking"):
+        if data.get("severity") in SEVERITY_ORDER:
             values["severity"] = data["severity"]
         if "active" in data:
             values["active"] = bool(data["active"])

@@ -3,13 +3,26 @@ export interface Ref {
   name: string;
 }
 
+/** Gravités du prototype de la direction : bloquante, critique, élevée, moyenne. */
+export type Severity = "blocking" | "critical" | "warning" | "info";
+/** Unité de la valeur ou du seuil d'une règle (none : règle sans valeur de seuil). */
+export type AlertUnit = "gnf" | "pct" | "days" | "ratio" | "count" | "none";
+
 export interface Alert {
+  /** Identifiant de la règle (un même seuil peut porter plusieurs règles : cash_min.forecast…). */
+  key: string;
   code: string;
-  severity: "blocking" | "warning" | "info";
+  /** alert : seuil franchi ; ok : règle conforme ; na : sans objet (pas de budget, pas de dette…). */
+  status: "alert" | "ok" | "na";
+  severity: Severity;
+  domain: string;
   title: string;
   message: string;
   value: number | null;
   threshold: number;
+  unit: AlertUnit;
+  threshold_unit: AlertUnit;
+  action: string | null;
   link: string | null;
   company: string;
 }
@@ -26,7 +39,171 @@ export interface OpenItems {
   total: number;
   overdue: number;
   documents: number;
+  overdue_documents?: number;
   aging: Aging;
+  aging_count?: Record<keyof Aging, number>;
+}
+
+export interface WorkingCapital {
+  date_from: string;
+  date_to: string;
+  days: number;
+  receivables: number;
+  receivables_overdue: number;
+  overdue_share_pct: number | null;
+  receivables_doubtful: number;
+  payables: number;
+  payables_overdue: number;
+  stocks: number;
+  sales_ttc: number;
+  purchases_ttc: number;
+  daily_sales_ttc: number | null;
+  dso: number | null;
+  dso_12m: number | null;
+  dpo: number | null;
+  dio: number | null;
+  cycle: number | null;
+  bfr: number;
+  bfr_syscohada: number;
+  balance_sheet_difference: number;
+  revenue: number;
+  concentration: { partner: string | null; amount: number; pct: number | null };
+  receivables_aging: Aging;
+  receivables_aging_count: Record<keyof Aging, number>;
+  payables_aging: Aging;
+  payables_aging_count: Record<keyof Aging, number>;
+}
+
+export type MonthStatus = "a_venir" | "sous_seuil" | "cash_net_negatif" | "conforme";
+
+export interface CashMonth {
+  month: string;
+  label: string;
+  revenue: number;
+  receipts: number;
+  payments: number;
+  net: number;
+  end: number | null;
+  status: MonthStatus;
+  current: boolean;
+  active: boolean;
+}
+
+export interface MonthlyCash {
+  fiscal_year: { start: string; end: string };
+  opening: number;
+  threshold: number | null;
+  months: CashMonth[];
+  summary: {
+    receipts: number;
+    payments: number;
+    net: number;
+    end: number;
+    low_point: { month: string; label: string; end: number } | null;
+    negative_months: number;
+    active_months: number;
+    below_threshold_months: number;
+    average_payments: number;
+  };
+  /** Route /finance/cash/monthly seulement : prévision de l'exercice en cours. */
+  forecast?: CashForecast | null;
+}
+
+export interface ForecastStep {
+  label: string;
+  month: string;
+  date: string;
+  start: number;
+  receivables: number;
+  payables: number;
+  loans: number;
+  net: number;
+  end: number;
+}
+
+export interface CashForecast {
+  as_of: string;
+  start: number;
+  threshold: number | null;
+  month_end: ForecastStep & { doubtful_excluded: number };
+  months: ForecastStep[];
+}
+
+export interface BudgetStatus {
+  budgets: string[];
+  through: string;
+  threshold_pct: number;
+  revenue: { budget: number; actual: number; gap: number; gap_pct: number | null };
+  expenses: { budget: number; actual: number; gap: number; gap_pct: number | null };
+  lines: Array<{ code: string; name: string; kind: "produit" | "charge"; budget: number; actual: number; gap: number; gap_pct: number | null; overrun: boolean }>;
+  overruns: Array<{ code: string; name: string; kind: "produit" | "charge"; budget: number; actual: number; gap: number; gap_pct: number | null }>;
+}
+
+export interface TransportVehicle {
+  key: number | string | null;
+  label: string;
+  km: number | null;
+  revenue: number;
+  margin: number;
+  structure: number | null;
+  /** Résultat après structure (basis = net) ou marge directe (basis = margin). */
+  result: number;
+}
+
+export interface TransportKpis {
+  date_from: string;
+  date_to: string;
+  rotations: number;
+  volume: number;
+  km: number | null;
+  revenue: number;
+  margin: number;
+  margin_rate: number | null;
+  share_of_revenue_pct: number | null;
+  vehicles: { basis: "net" | "margin"; count: number; items: TransportVehicle[]; deficit: TransportVehicle[]; loss: number };
+  unbilled: { count: number; amount: number; oldest: string | null; items: Array<{ id: number; name: string; date: string; partner: string; revenue: number }> };
+}
+
+export interface DebtSummary {
+  loans: number;
+  outstanding: number;
+  overdue: number;
+  next_due_date: string | null;
+  next_due_amount: number;
+  service_last_12m: number;
+  service_next_12m: number;
+  /** Position comptable (tableau de bord, liste des financements). */
+  accounting_outstanding?: number;
+  schedule_gap?: number;
+  net_debt?: number;
+  equity?: number;
+  gearing?: number | null;
+  ebe_12m?: number;
+  debt_to_ebe?: number | null;
+  service_fy?: number;
+  service_fy_paid?: number;
+  service_fy_interest?: number;
+  dscr?: number | null;
+}
+
+export type Verdict = "green" | "orange" | "red" | "grey";
+
+export interface Question {
+  key: string;
+  question: string;
+  answer: string;
+  verdict: Verdict;
+  reading: string;
+}
+
+export interface Thresholds {
+  cash_min: number | null;
+  dscr_min: number | null;
+  dso_target_days: number | null;
+  receivable_overdue_share_pct: number | null;
+  client_concentration_pct: number | null;
+  transport_margin_min: number | null;
+  budget_overrun_pct: number;
 }
 
 export interface CashAccount {
@@ -57,17 +234,22 @@ export interface Dashboard {
   revenue_by_month: Array<{ month: string; amount: number }>;
   result_by_month: Array<{ month: string; amount: number }>;
   by_activity: Array<{ analytic_account_id: number; name: string; income: number; expense: number; margin: number; margin_rate: number | null }>;
-  debt: {
-    loans: number;
-    outstanding: number;
-    overdue: number;
-    next_due_date: string | null;
-    next_due_amount: number;
-    service_last_12m: number;
-    service_next_12m: number;
-  };
+  debt: DebtSummary;
   dscr: number | null;
   alerts: Alert[];
+  income_totals: Record<string, number>;
+  thresholds: Thresholds;
+  margins: { revenue: number; ebe_pct: number | null; net_pct: number | null };
+  working_capital: WorkingCapital;
+  cash_monthly: MonthlyCash;
+  cash_forecast: CashForecast;
+  budget: BudgetStatus | null;
+  transport: TransportKpis | null;
+  ledger: { date_from: string; date_to: string; debit: number; credit: number; difference: number; balanced: boolean };
+  expected_credit_loss: { total: number; rate_pct: number | null; by_bucket: Record<string, number>; rates: Record<string, number> };
+  lock_date: string | null;
+  decisions: Alert[];
+  questions: Question[];
 }
 
 export interface MoveSummary {

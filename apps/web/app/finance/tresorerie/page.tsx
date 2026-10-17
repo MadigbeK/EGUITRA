@@ -26,7 +26,15 @@ interface Candidate {
   due: string | null;
   residual: number;
   score: number;
+  /** loan_line : échéance d'emprunt réglée par la sortie de banque (capital et intérêts en contrepartie). */
+  kind?: "loan_line";
+  already_paid?: boolean;
+  hint?: string;
+  principal?: number;
+  interest?: number;
 }
+
+const cle = (c: Candidate) => `${c.kind ?? "move_line"}-${c.id}`;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -307,16 +315,24 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
 function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => void; onDone: () => void }) {
   const { data: candidates } = useApi<Candidate[]>(`/finance/treasury/lines/${line.id}/candidates`);
   const { data: accounts } = useAccounts("");
-  const [selected, setSelected] = useState<number[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
   const [account, setAccount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const total = (candidates ?? []).filter((c) => selected.includes(c.id)).reduce((a, c) => a + c.residual, 0);
+  const choisis = (candidates ?? []).filter((c) => selected.includes(cle(c)));
+  const total = choisis.reduce((a, c) => a + c.residual, 0);
+  const echeance = choisis.find((c) => c.kind === "loan_line");
+  // Une échéance d'emprunt se règle seule ; les pièces de tiers se cumulent.
+  function basculer(c: Candidate) {
+    const k = cle(c);
+    setSelected((s) => (s.includes(k) ? s.filter((x) => x !== k) : c.kind === "loan_line" ? [k] : [...s.filter((x) => !x.startsWith("loan_line-")), k]));
+  }
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      await apiSend("POST", `/finance/treasury/lines/${line.id}/reconcile`, selected.length ? { move_line_ids: selected } : { account_id: Number(account) });
+      const corps = echeance ? { loan_line_id: echeance.id } : choisis.length ? { move_line_ids: choisis.map((c) => c.id) } : { account_id: Number(account) };
+      await apiSend("POST", `/finance/treasury/lines/${line.id}/reconcile`, corps);
       onDone();
       onClose();
     } catch (e) {
@@ -339,19 +355,36 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
     >
       <div className="space-y-4">
         {error && <Notice tone="danger">{error}</Notice>}
-        <div className="text-xs text-muted">Pièces en attente classées par pertinence (référence citée, montant, tiers). Sélection : {fmtGNF(total)}.</div>
+        <div className="text-xs text-muted">Pièces en attente et échéances d&apos;emprunt classées par pertinence (référence citée, montant, tiers). Sélection : {fmtGNF(total)}.</div>
+        {echeance && (
+          <Notice tone={echeance.already_paid ? "warn" : "accent"}>
+            {echeance.hint} Capital {fmtGNF(echeance.principal)}, intérêts {fmtGNF(echeance.interest)}.
+          </Notice>
+        )}
         {!candidates ? (
           <Loading />
         ) : (
           <DataTable
             dense
             rows={candidates}
-            rowKey={(c) => c.id}
-            onRowClick={(c) => setSelected((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : [...s, c.id]))}
+            rowKey={(c) => cle(c)}
+            onRowClick={basculer}
             empty="Aucune pièce en attente."
             columns={[
-              { key: "sel", label: "", render: (c) => <input type="checkbox" readOnly checked={selected.includes(c.id)} /> },
-              { key: "move", label: "Pièce" },
+              { key: "sel", label: "", render: (c) => <input type="checkbox" readOnly checked={selected.includes(cle(c))} /> },
+              {
+                key: "move",
+                label: "Pièce",
+                render: (c) =>
+                  c.kind === "loan_line" ? (
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
+                      {c.move}
+                      <Badge tone={c.already_paid ? "warn" : "accent"}>{c.already_paid ? "Échéance déjà réglée en banque" : "Échéance d'emprunt"}</Badge>
+                    </span>
+                  ) : (
+                    c.move
+                  ),
+              },
               { key: "partner", label: "Tiers", render: (c) => c.partner ?? "–" },
               { key: "due", label: "Échéance", render: (c) => fmtDate(c.due) },
               { key: "residual", label: "Reste", align: "right", render: (c) => fmtGNF(c.residual) },

@@ -1,5 +1,12 @@
-"""Emprunts et crédits-bails : échéancier, comptabilisation des échéances, service de la dette."""
+"""Emprunts et crédits-bails : échéancier, comptabilisation des échéances, service de la dette.
 
+Une échéance prélevée sur un compte bancaire dont les relevés sont importés se règle depuis la
+ligne du relevé (Trésorerie, Rapprocher) : l'échéance y est proposée, et son règlement porte capital
+et intérêts en contrepartie de la sortie de banque, qui n'est ainsi comptée qu'une fois. Le bouton
+« Régler » de l'échéancier (action_pay) reste pour la caisse et les comptes sans relevé.
+"""
+
+from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -8,6 +15,12 @@ from odoo.exceptions import UserError
 from odoo.tools import float_round
 
 PERIOD_MONTHS = {"monthly": 1, "quarterly": 3, "semiannual": 6, "annual": 12}
+# Écart toléré entre la sortie de banque et le montant de l'échéance (arrondis).
+AMOUNT_TOLERANCE = 1.0
+
+
+def _gnf(amount):
+    return f"{amount:,.0f} GNF".replace(",", " ")
 
 
 class EguitraLoan(models.Model):
@@ -20,6 +33,7 @@ class EguitraLoan(models.Model):
     company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
     currency_id = fields.Many2one(related="company_id.currency_id")
     partner_id = fields.Many2one("res.partner", "Prêteur", required=True, tracking=True)
+    purpose = fields.Char("Objet", tracking=True, help="Objet du financement : acquisition de camions, fonds de roulement…")
     kind = fields.Selection([("loan", "Emprunt"), ("lease", "Crédit-bail")], default="loan", required=True)
     principal = fields.Monetary("Montant emprunté", required=True, tracking=True)
     annual_rate = fields.Float("Taux annuel (%)", digits=(6, 4), tracking=True)
@@ -138,6 +152,10 @@ class EguitraLoanLine(models.Model):
     remaining = fields.Monetary("Capital restant dû après échéance")
     paid = fields.Boolean("Réglée", readonly=True)
     move_id = fields.Many2one("account.move", "Écriture de règlement", readonly=True)
+    statement_line_id = fields.Many2one(
+        "account.bank.statement.line", "Ligne de relevé", readonly=True, copy=False, index="btree_not_null",
+        help="Sortie de banque qui a réglé l'échéance (rapprochement du relevé).",
+    )
 
     @api.depends("principal", "interest")
     def _compute_total(self):
@@ -176,3 +194,158 @@ class EguitraLoanLine(models.Model):
             if all(loan.line_ids.mapped("paid")):
                 loan.state = "closed"
         return True
+
+    # ─── Règlement depuis le relevé bancaire ──────────────────────────────
+
+    def _paid_directly_on(self, journal):
+        """Échéance déjà réglée par action_pay sur ce journal, sans ligne de relevé : si le relevé
+        est importé, la sortie de banque y figure une seconde fois."""
+        self.ensure_one()
+        return bool(self.paid and not self.statement_line_id and self.move_id and self.move_id.journal_id == journal)
+
+    @api.model
+    def _statement_candidates(self, st_line, limit=10):
+        """Échéances qu'une sortie de banque peut régler, au format des candidats du rapprochement
+        (kind='loan_line') : échéances non réglées des financements en cours, et échéances déjà
+        réglées directement sur ce compte bancaire au même montant (leur règlement direct sera
+        extourné). Classées par pertinence : montant, prêteur, référence citée, proximité de date."""
+        if st_line.amount >= 0:
+            return []
+        amount = -st_line.amount
+        lines = self.sudo().search([
+            ("loan_id.company_id", "=", st_line.company_id.id), ("loan_id.state", "in", ("active", "closed")),
+            ("statement_line_id", "=", False), ("due_date", "<=", st_line.date + timedelta(days=60)),
+        ])
+        label = (st_line.payment_ref or "").lower()
+
+        def score(line):
+            s = 0
+            if abs(line.total - amount) <= AMOUNT_TOLERANCE:
+                s += 3
+            if st_line.partner_id and line.loan_id.partner_id == st_line.partner_id:
+                s += 2
+            if line.loan_id.name and line.loan_id.name.lower() in label:
+                s += 4
+            return s
+
+        found = []
+        for line in lines:
+            direct = line._paid_directly_on(st_line.journal_id)
+            if line.paid and not direct:
+                continue
+            if direct and abs(line.total - amount) > AMOUNT_TOLERANCE:
+                continue
+            if not line.paid and line.loan_id.state != "active":
+                continue
+            found.append((line, direct))
+        found.sort(key=lambda item: (-score(item[0]), abs((item[0].due_date - st_line.date).days)))
+        return [
+            {
+                "id": line.id,
+                "kind": "loan_line",
+                "move": f"{line.loan_id.name} - échéance {line.sequence}",
+                "move_id": line.move_id.id or None,
+                "partner": line.loan_id.partner_id.name,
+                "date": line.due_date,
+                "due": line.due_date,
+                "residual": line.total,
+                "principal": line.principal,
+                "interest": line.interest,
+                "score": score(line),
+                "already_paid": direct,
+                "hint": ("Déjà réglée directement en banque : son règlement sera extourné, la ligne du relevé le remplace."
+                         if direct else "Capital et intérêts en contrepartie de la sortie de banque."),
+            }
+            for line, direct in found[:limit]
+        ]
+
+    def action_settle_from_statement(self, st_line):
+        """Règle l'échéance par la ligne de relevé : l'écriture d'échéance (capital au compte de dette,
+        intérêts en charges financières) est portée au compte du prêteur, aussitôt lettré avec la
+        sortie de banque. Une échéance déjà réglée directement sur ce compte bancaire voit d'abord ce
+        règlement extourné : la sortie de trésorerie n'est comptée qu'une fois."""
+        self.ensure_one()
+        loan = self.loan_id
+        if st_line.is_reconciled:
+            raise UserError("Cette opération est déjà rapprochée.")
+        if st_line.company_id != loan.company_id:
+            raise UserError("L'opération et le financement n'appartiennent pas à la même société.")
+        if st_line.amount >= 0:
+            raise UserError("Une échéance d'emprunt se règle par une sortie de banque.")
+        if self.statement_line_id:
+            raise UserError("Cette échéance est déjà rapprochée d'une ligne de relevé.")
+        if abs(-st_line.amount - self.total) > AMOUNT_TOLERANCE:
+            raise UserError(f"Montant différent de l'échéance : {_gnf(-st_line.amount)} au relevé, "
+                            f"{_gnf(self.total)} à l'échéancier. Imputez l'écart (frais bancaires) à part.")
+        if not (loan.principal_account_id and loan.interest_account_id):
+            raise UserError("Renseignez le compte de dette et le compte de charges financières du financement.")
+        label = f"{loan.name} - échéance {self.sequence}"
+        if self.paid:
+            if not self._paid_directly_on(st_line.journal_id):
+                raise UserError("Cette échéance est déjà réglée par un autre compte : rien à rapprocher.")
+            reversal = self.move_id._reverse_moves([{
+                "date": st_line.date, "ref": f"Extourne du règlement direct de {label} (repris par le relevé)",
+            }])
+            reversal.action_post()
+        elif loan.state != "active":
+            raise UserError("Le financement n'est pas en cours.")
+        company = loan.company_id
+        payable = loan.partner_id.with_company(company).property_account_payable_id
+        if not payable:
+            raise UserError(f"Compte fournisseur introuvable pour le prêteur {loan.partner_id.name}.")
+        journal = self.env["account.journal"].search(
+            [("company_id", "=", company.id), ("type", "=", "general")], order="sequence, id", limit=1
+        )
+        if not journal:
+            raise UserError("Aucun journal d'opérations diverses dans la société.")
+        entries = []
+        if self.principal:
+            entries.append((0, 0, {"name": label, "account_id": loan.principal_account_id.id,
+                                   "partner_id": loan.partner_id.id, "debit": self.principal}))
+        if self.interest:
+            entries.append((0, 0, {"name": f"{label} - intérêts", "account_id": loan.interest_account_id.id,
+                                   "partner_id": loan.partner_id.id, "debit": self.interest}))
+        entries.append((0, 0, {"name": label, "account_id": payable.id, "partner_id": loan.partner_id.id,
+                               "credit": self.total}))
+        move = self.env["account.move"].create({
+            "move_type": "entry", "journal_id": journal.id, "date": st_line.date, "ref": label,
+            "company_id": company.id, "line_ids": entries,
+        })
+        move.action_post()
+        st_line._add_account_move_line(move.line_ids.filtered(lambda ml: ml.account_id == payable), keep_current=True)
+        st_line.reconcile_bank_line()
+        self.write({"paid": True, "move_id": move.id, "statement_line_id": st_line.id})
+        if all(loan.line_ids.mapped("paid")):
+            loan.state = "closed"
+        return move
+
+
+class EguitraPeriodClose(models.Model):
+    _inherit = "eguitra.period.close"
+
+    def _run_controls(self):
+        """Contrôles de la dette (non bloquants) : encours comptable conforme aux échéanciers ;
+        aucune échéance réglée directement sur un compte bancaire dont les relevés sont importés."""
+        checks = super()._run_controls()
+        company = self.company_id
+        _start, end = self._bounds()
+        summary = self.env["eguitra.loan"].debt_summary(company, end)
+        accounting = -self.env["eguitra.finance.metrics"]._sum_balance(company, ["16", "17"], None, end)
+        gap = accounting - summary["outstanding"]
+        checks.append(self._check(
+            "debt_schedule", "Encours de dette conforme aux échéanciers", abs(gap) < AMOUNT_TOLERANCE, False,
+            f"Écart de {_gnf(gap)} entre la comptabilité (comptes 16 et 17 : {_gnf(accounting)}) et le capital "
+            f"restant dû des échéanciers ({_gnf(summary['outstanding'])}) : déblocage ou échéance non comptabilisé, "
+            "ou financement non saisi.",
+        ))
+        Line = self.env["account.bank.statement.line"].sudo()
+        direct = self.env["eguitra.loan.line"].sudo().search([
+            ("loan_id.company_id", "=", company.id), ("paid", "=", True), ("statement_line_id", "=", False),
+            ("move_id.journal_id.type", "=", "bank"), ("move_id.date", "<=", end),
+        ]).filtered(lambda l: Line.search_count([("journal_id", "=", l.move_id.journal_id.id)], limit=1))
+        checks.append(self._check(
+            "loan_bank_statement", "Échéances d'emprunt rapprochées des relevés", not direct, False,
+            f"{len(direct)} échéance(s) réglée(s) directement sur un compte bancaire à relevés : rapprochez la "
+            "sortie du relevé de l'échéance (Trésorerie, Rapprocher) pour ne pas la compter deux fois.", len(direct),
+        ))
+        return checks
