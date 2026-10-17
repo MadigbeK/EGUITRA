@@ -1035,6 +1035,73 @@ input[type="radio"] {
   animation: ruban-derive 24s ease-in-out infinite alternate-reverse;
 }
 
+/* ─── Lanceur d'applications (bouton à neuf points de la coque) ───────────── */
+
+/* Les neuf points ondulent en diagonale au survol ; ouverts, ils pivotent d'un quart de tour. */
+.gaufre svg {
+  transition: transform 460ms var(--ease-ressort);
+}
+.gaufre[aria-expanded="true"] svg {
+  transform: rotate(45deg);
+}
+.gaufre-point {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+:is(.gaufre:hover, .gaufre:focus-visible, .group:hover > .gaufre) .gaufre-point {
+  animation: gaufre-vague 560ms var(--ease-ressort) both;
+  animation-delay: calc(var(--n, 0) * 60ms);
+}
+@keyframes gaufre-vague {
+  40% {
+    transform: scale(1.5);
+  }
+}
+
+/* Le panneau se déploie depuis le bouton (cercle qui s'ouvre), puis les modules arrivent en vague. */
+.lanceur {
+  transform-origin: calc(100% - 20px) -28px;
+  animation: lanceur-ouvre 480ms var(--ease-sortie) backwards;
+}
+@keyframes lanceur-ouvre {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+    clip-path: circle(20px at calc(100% - 20px) -28px);
+  }
+  to {
+    clip-path: circle(160% at calc(100% - 20px) -28px);
+  }
+}
+.lanceur-sortie {
+  animation: lanceur-ferme 170ms ease-in forwards;
+  pointer-events: none;
+}
+@keyframes lanceur-ferme {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+.lanceur-item {
+  animation: lanceur-item 460ms var(--ease-ressort) backwards;
+  animation-delay: calc(70ms + var(--i, 0) * 22ms);
+}
+@keyframes lanceur-item {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.84);
+  }
+}
+.lanceur-titre {
+  animation: n-monter 380ms var(--ease-sortie) backwards;
+  animation-delay: calc(40ms + var(--i, 0) * 22ms);
+}
+.lanceur-pied {
+  animation: n-monter 420ms var(--ease-sortie) backwards;
+  animation-delay: 220ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

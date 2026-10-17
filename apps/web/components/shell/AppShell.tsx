@@ -9,6 +9,7 @@ import { APPS, type AppCode } from "@/lib/config";
 import { navFor, type NavItem, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
+import { Lanceur } from "@/components/shell/Lanceur";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -207,16 +208,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
                 <span className="hidden flex-1 text-left sm:inline">Rechercher un écran</span>
                 <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted sm:inline">Ctrl K</kbd>
               </button>
-              {(me.apps.includes("finance") || me.apps.includes("axispro")) && (
-                <Link
-                  href="/accueil"
-                  className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-panel text-ink-2 shadow-[0_1px_2px_rgb(16_36_31/0.04)] transition-colors hover:border-line-strong hover:text-ink"
-                  aria-label="Accueil NIMOVA"
-                  title="Accueil NIMOVA"
-                >
-                  <Grid className="h-4 w-4" />
-                </Link>
-              )}
+              {(me.apps.includes("finance") || me.apps.includes("axispro")) && <Lanceur me={me} app={app} />}
               <span className="hidden items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[13px] font-medium capitalize text-ink-2 xl:flex">
                 <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-accent-vif" />
                 <Aujourdhui />

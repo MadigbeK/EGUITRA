@@ -6,37 +6,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
+import { rayonsDe, sansAccents, voisine, type Tuile } from "@/components/accueil/tuiles";
 import { cx, useMouvementReduit } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
-import { navFor } from "@/lib/nav";
 import type { Me } from "@/lib/types";
-
-type Tuile = { cle: string; libelle: string; href: string; motsCles: string };
-
-/** Libellés courts des tuiles, comme sur l'accueil d'Odoo (le menu de l'espace garde les longs). */
-const COURT: Record<string, string> = {
-  "/finance/pilotage": "Budget",
-  "/finance/rapport": "Rapport mensuel",
-  "/finance/approbations": "À valider",
-  "/finance/achats": "Achats",
-  "/finance/relances": "Relances",
-  "/finance/dette": "Dette",
-  "/finance/ecritures": "Journaux",
-  "/finance/etats": "États financiers",
-  "/finance/clotures": "Clôtures",
-  "/axispro": "Dossiers",
-  "/axispro/actions": "Plan d'actions",
-  "/axispro/temps": "Temps",
-  "/axispro/grille": "Grille",
-  "/axispro/pieces": "Pièces",
-};
 
 /** Durée pendant laquelle les icônes jouent leur entrée (la vague des tuiles comprise). */
 const INTRO_MS = 3200;
-
-function sansAccents(s: string) {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -61,25 +37,8 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const grille = useRef<HTMLUListElement>(null);
   const positions = useRef(new Map<string, DOMRect>());
   const voile = useRef<HTMLDivElement | null>(null);
-  const company = me.companies.find((c) => c.id === me.company_id);
 
-  const tuiles = useMemo<Tuile[]>(() => {
-    const liste: Tuile[] = [];
-    let reglages: string | null = null;
-    for (const a of ["finance", "axispro"] as const) {
-      if (!me.apps.includes(a)) continue;
-      for (const s of navFor(a, me.profiles, a === app ? company?.entity : APPS[a].entity)) {
-        if (s.label === "Administration") {
-          reglages ??= s.items[0]?.href ?? null;
-          continue;
-        }
-        for (const i of s.items) liste.push({ cle: i.href, libelle: COURT[i.href] ?? i.label, href: i.href, motsCles: `${i.label} ${s.label} ${APPS[a].name}` });
-      }
-    }
-    if (me.apps.includes("mobile")) liste.push({ cle: "/mobile", libelle: "Rotations", href: "/mobile", motsCles: "Rotations téléphone parc camion" });
-    if (reglages) liste.push({ cle: "reglages", libelle: "Réglages", href: reglages, motsCles: "Réglages administration utilisateurs sociétés seuils audit" });
-    return liste;
-  }, [me.apps, me.profiles, app, company?.entity]);
+  const tuiles = useMemo(() => rayonsDe(me, app).flatMap((r) => r.tuiles), [me, app]);
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
   const visibles = tuiles.filter((t) => mots.every((m) => sansAccents(`${t.libelle} ${t.motsCles}`).includes(m)));
@@ -183,21 +142,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
     const i = liens.indexOf(document.activeElement as HTMLAnchorElement);
     if (i < 0) return;
     e.preventDefault();
-    let cible = i;
-    if (e.key === "ArrowRight") cible = Math.min(liens.length - 1, i + 1);
-    else if (e.key === "ArrowLeft") cible = Math.max(0, i - 1);
-    else {
-      const r = liens[i]!.getBoundingClientRect();
-      const x = r.left + r.width / 2;
-      const candidats = liens
-        .map((l, n) => ({ n, b: l.getBoundingClientRect() }))
-        .filter(({ b }) => (e.key === "ArrowDown" ? b.top > r.top + 5 : b.top < r.top - 5));
-      if (candidats.length) {
-        const ligne = e.key === "ArrowDown" ? Math.min(...candidats.map((c) => c.b.top)) : Math.max(...candidats.map((c) => c.b.top));
-        const memeLigne = candidats.filter((c) => Math.abs(c.b.top - ligne) < 5);
-        cible = memeLigne.reduce((m, c) => (Math.abs(c.b.left + c.b.width / 2 - x) < Math.abs(m.b.left + m.b.width / 2 - x) ? c : m)).n;
-      }
-    }
+    const cible = voisine(liens, i, e.key);
     liens[cible]?.focus();
   }
 

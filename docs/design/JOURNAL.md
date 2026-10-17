@@ -135,6 +135,17 @@ même branche, sans toucher à la logique des écrans :
   Tout s'arrête net avec la préférence « réduire les animations » du système. Classes
   `.tuile*`, `.ic .a-*` et `.accueil-ruban*` dans `app/globals.css`. En recette le 16 octobre
   (commit 8be3967, fusionné dans `claude/bold-shannon-gpg2hv`).
+- Lanceur d'applications (17 octobre), demandé par le gérant sur le modèle de la grille de
+  Microsoft 365 et de Google : dans la barre du haut de Finance et d'AxisPro, le bouton à neuf
+  points ouvre un panneau des modules rangés par espace (Finance, AxisPro, Outils), avec les
+  icônes de l'accueil et le module ouvert marqué. Le panneau se déploie en cercle depuis le
+  bouton, les modules arrivent en vague et leurs icônes s'animent ; les points du bouton ondulent
+  au survol et pivotent à l'ouverture. « Accueil NIMOVA », en pied de panneau, étend le panneau
+  en plein écran avant que l'accueil fasse entrer ses tuiles. Clavier : flèches, Début, Fin,
+  Échap (le focus revient au bouton) ; Tab hors du panneau ou un clic au-dehors le referment.
+  Sur téléphone, le panneau occupe la largeur de l'écran. La liste des modules est commune à
+  l'accueil et au lanceur (`components/accueil/tuiles.ts`) ; le lanceur est
+  `components/shell/Lanceur.tsx`.
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
