@@ -1,7 +1,7 @@
 {
     "name": "EGUITRA - Finance",
     "summary": "Tableau de bord du dirigeant, pièces, tiers, trésorerie, états SYSCOHADA, clôtures, dette, budget",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.1.0",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",
