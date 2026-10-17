@@ -20,12 +20,13 @@ def free_accounts():
     return request.env.user.has_group(FREE_ACCOUNTS)
 
 
-def require_free_accounts(what):
+def require_free_accounts(what, detail=None):
     """Refus (403) d'un choix de compte, ou d'une saisie qui en exige un, sans le droit de saisie libre."""
     if not free_accounts():
-        raise ApiError(403, "forbidden", f"{what} : réservé au droit « Saisie libre des comptes ». La ligne prend le "
-                                         "compte de sa catégorie de dépense, du type d'opération, de l'activité ou du "
-                                         "produit ; demandez ce droit à l'administration si nécessaire.")
+        detail = detail or ("La ligne prend le compte de sa catégorie de dépense, du type d'opération, de l'activité "
+                            "ou du produit")
+        raise ApiError(403, "forbidden", f"{what} : réservé au droit « Saisie libre des comptes ». {detail} ; "
+                                         "demandez ce droit à l'administration si nécessaire.")
 
 
 def companies(kw):

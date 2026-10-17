@@ -252,10 +252,15 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
     return request.env["account.move"].create(values)
 
 
+# Refus d'une opération diverse sans le droit de saisie libre : où saisir à la place.
+ENTRY_DETAIL = ("Saisissez une dépense par sa catégorie (Achats et dépenses) et une opération de banque ou de "
+                "caisse par son type (Trésorerie)")
+
+
 def _entry_lines(data):
     """Lignes d'une opération diverse, chacune sur un compte choisi : réservée au droit « Saisie libre
     des comptes » (refus 403 sans ce droit)."""
-    require_free_accounts("Opération diverse")
+    require_free_accounts("Opération diverse", ENTRY_DETAIL)
     lines = data.get("lines") or []
     if len(lines) < 2:
         raise ApiError(400, "missing_fields", "Une opération diverse comporte au moins deux lignes.")
@@ -346,7 +351,7 @@ class EguitraFinanceMoves(http.Controller):
         if data.get("contract_ref"):
             values["eguitra_contract_ref"] = str(data["contract_ref"]).strip()[:120]
         if move_type == "entry":
-            require_free_accounts("Opération diverse")
+            require_free_accounts("Opération diverse", ENTRY_DETAIL)
             if not data.get("journal_id"):
                 raise ApiError(400, "missing_fields", "Journal requis.", fields=["journal_id"])
             values["date"] = parse_date(data, "date", today())
