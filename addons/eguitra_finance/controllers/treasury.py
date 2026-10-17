@@ -84,6 +84,8 @@ def _line_rows(lines):
             "partner": {"id": line.partner_id.id, "name": line.partner_id.name} if line.partner_id else None,
             "amount": line.amount,
             "reconciled": line.is_reconciled,
+            "posted": line.move_id.state == "posted",
+            "approval": line.move_id._eguitra_approval_info() if line.move_id.state == "draft" else None,
             "statement": line.statement_id.name or None,
             "move_id": line.move_id.id,
             "reference": line.move_id.ref or None,
@@ -388,7 +390,9 @@ class EguitraFinanceTreasury(http.Controller):
         elif data.get("analytic_distribution"):
             raise ApiError(422, "business_rule", "L'imputation analytique accompagne un compte d'imputation ; sans "
                                                  "compte, l'opération se rapproche d'une facture déjà imputée.")
-        line = request.env["account.bank.statement.line"].create(values)
+        # Une sortie de caisse ou de banque au-delà du seuil reste en brouillon, soumise au circuit
+        # d'approbation (nature « Décaissements de trésorerie »).
+        line = request.env["account.bank.statement.line"].with_context(eguitra_cash_out_check=True).create(values)
         if counterpart:
             _impute_analytic(line, data.get("analytic_distribution"), counterpart)
         return _line_row(line)
@@ -553,7 +557,8 @@ class EguitraFinanceTreasury(http.Controller):
             dist = distribution(data.get("analytic_distribution"), line.company_id)
             data = dict(data, account_id=account.id,
                         analytic_distribution=with_rules(dist, account, line.partner_id, line.company_id) if dist else {})
-        result = line._eguitra_reconcile(data)
+        # Imputation directe d'une sortie : soumise au circuit des décaissements au-delà du seuil.
+        result = line.with_context(eguitra_cash_out_check=bool(data.get("account_id")))._eguitra_reconcile(data)
         if not result:
             raise ApiError(400, "missing_fields", "Indiquez les écritures à rapprocher ou un compte d'imputation.")
         if account:

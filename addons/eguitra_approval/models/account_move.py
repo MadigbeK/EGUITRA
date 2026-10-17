@@ -19,14 +19,34 @@ def fingerprint(data):
 class AccountMove(models.Model):
     _inherit = "account.move"
 
+    eguitra_cash_out = fields.Boolean(
+        "Décaissement soumis au circuit", copy=False, readonly=True,
+        help="Décaissement de caisse ou de banque retenu par le circuit d'approbation (nature cash_out).",
+    )
+    eguitra_paired_move_id = fields.Many2one(
+        "account.move", "Pièce liée", copy=False, readonly=True,
+        help="Entrée d'un virement interne, comptabilisée à l'approbation de la sortie.",
+    )
     eguitra_commitment_id = fields.Many2one(
         "eguitra.commitment", "Engagement", index=True, copy=False,
         help="Engagement de dépense approuvé que la pièce d'achat consomme : dans la limite du reste à "
              "engager (plus la tolérance), la pièce ne repasse pas par le circuit d'approbation.",
     )
 
+    def _eguitra_is_cash_out(self):
+        """Décaissement de trésorerie : écriture qui crédite un compte de banque ou de caisse, saisie dans
+        les applications (contexte eguitra_cash_out_check) ou déjà retenue par le circuit."""
+        self.ensure_one()
+        if self.eguitra_cash_out:
+            return True
+        if not self.env.context.get("eguitra_cash_out_check") or self.move_type != "entry":
+            return False
+        return any(line.credit > 0 and line.account_id.account_type == "asset_cash" for line in self.line_ids)
+
     def _eguitra_approval_document(self):
         self.ensure_one()
+        if self._eguitra_is_cash_out():
+            return "cash_out"
         if self.move_type in ("in_invoice", "in_refund"):
             return "in_invoice"
         # Seules les OD saisies dans les applications (marque stockée) entrent dans le circuit ; les
@@ -37,6 +57,8 @@ class AccountMove(models.Model):
 
     def _eguitra_approval_amount(self):
         self.ensure_one()
+        if self._eguitra_approval_document() == "cash_out":
+            return sum(line.credit for line in self.line_ids if line.account_id.account_type == "asset_cash")
         if self.move_type == "entry":
             return sum(self.line_ids.mapped("debit"))
         return abs(self.amount_total_signed)
@@ -78,6 +100,22 @@ class AccountMove(models.Model):
         return bool(request) and request.state == "approved" and request._matches(self)
 
     def action_post(self):
+        if not approval_granted(self.env) and self.env.context.get("eguitra_cash_out_check"):
+            # Décaissement au-delà du seuil : la pièce reste en brouillon, la demande part au circuit ;
+            # elle sera comptabilisée à la dernière approbation. Les autres pièces suivent leur cours.
+            held = self.filtered(lambda m: m.state == "draft" and m._eguitra_is_cash_out()
+                                 and m._eguitra_required_rules() and not m._eguitra_is_approved())
+            for move in held:
+                move.sudo().eguitra_cash_out = True
+                pending = move._eguitra_last_request()
+                if not (pending.state == "pending" and pending._matches(move)):
+                    self.env["eguitra.approval.request"]._open(
+                        move, "cash_out", move._eguitra_required_rules(), move._eguitra_approval_amount(),
+                        move.partner_id)
+            rest = self - held
+            if not rest:
+                return False
+            self = rest  # noqa: PLW0642 - suite du traitement sur les pièces non retenues
         if not approval_granted(self.env):
             for move in self:
                 if move._eguitra_required_rules() and not move._eguitra_is_approved():

@@ -537,7 +537,7 @@ class EguitraFinanceMoves(http.Controller):
             (source, transit, source.default_account_id),
             (target, target.default_account_id, transit),
         ):
-            move = moves.create({
+            moves |= moves.create({
                 "move_type": "entry",
                 "journal_id": journal.id,
                 "date": day,
@@ -547,9 +547,15 @@ class EguitraFinanceMoves(http.Controller):
                     Command.create({"name": label, "account_id": credit_account.id, "credit": amount}),
                 ],
             })
-            move.action_post()
-            moves |= move
-        return {"status": "ok", "moves": [move_summary(m) for m in moves]}
+        out_move, in_move = moves
+        # La sortie passe par le circuit des décaissements au-delà du seuil ; l'entrée la suit.
+        out_move.with_context(eguitra_cash_out_check=True).action_post()
+        if out_move.state == "posted":
+            in_move.action_post()
+        elif "eguitra_paired_move_id" in out_move._fields:
+            out_move.sudo().eguitra_paired_move_id = in_move
+        return {"status": "ok" if out_move.state == "posted" else "submitted",
+                "moves": [move_summary(m) for m in moves]}
 
     # ─── Référentiels de saisie ───────────────────────────────────────────
 

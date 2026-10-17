@@ -189,10 +189,10 @@ class EguitraLoanLine(models.Model):
                 "company_id": loan.company_id.id,
                 "line_ids": entries,
             })
-            move.action_post()
-            line.write({"paid": True, "move_id": move.id})
-            if all(loan.line_ids.mapped("paid")):
-                loan.state = "closed"
+            # Au-delà du seuil des décaissements, le règlement attend l'approbation : l'échéance est
+            # marquée réglée à la comptabilisation de l'écriture (AccountMove._post ci-dessous).
+            move.with_context(eguitra_cash_out_check=True).action_post()
+            line.write({"move_id": move.id})
         return True
 
     # ─── Règlement depuis le relevé bancaire ──────────────────────────────
@@ -349,3 +349,18 @@ class EguitraPeriodClose(models.Model):
             "sortie du relevé de l'échéance (Trésorerie, Rapprocher) pour ne pas la compter deux fois.", len(direct),
         ))
         return checks
+
+
+class AccountMove(models.Model):
+    _inherit = "account.move"
+
+    def _post(self, soft=True):
+        """Échéance d'emprunt réglée quand son écriture de règlement est comptabilisée (aussitôt, ou à
+        l'approbation du décaissement) ; financement soldé avec sa dernière échéance."""
+        posted = super()._post(soft)
+        lines = self.env["eguitra.loan.line"].sudo().search([("move_id", "in", posted.ids), ("paid", "=", False)])
+        for line in lines:
+            line.paid = True
+            if all(line.loan_id.line_ids.mapped("paid")):
+                line.loan_id.state = "closed"
+        return posted

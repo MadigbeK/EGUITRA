@@ -160,7 +160,10 @@ class TestAnalyticAxes(FinanceDataMixin, ApiCase):
         self.assertEqual(set(dist), {str(own.id), str(center.id)},
                          "L'activité saisie prime ; la règle du préfixe complète le centre de coût")
         status, move = self._purchase()
-        self.assertEqual(set(move["lines"][0]["analytic_distribution"]), {str(partner_activity.id), str(center.id)},
+        # Le noyau réunit les règles de deux axes en une clé combinée (« activité,centre »), forme
+        # standard d'une répartition sur plusieurs plans analytiques.
+        ids = {i for key in move["lines"][0]["analytic_distribution"] for i in key.split(",")}
+        self.assertEqual(ids, {str(partner_activity.id), str(center.id)},
                          "Sans saisie, les règles de deux axes différents se cumulent")
         status, simulation = self.call(
             "GET", f"/finance/analytic-rules/simulate?account_id={self.acc_purchase.id}&partner_id={self.supplier.id}",

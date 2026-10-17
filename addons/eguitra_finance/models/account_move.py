@@ -62,7 +62,10 @@ class AccountMove(models.Model):
             lines = move.invoice_line_ids.filtered(
                 lambda l: l.display_type == "product" and l.tax_ids.filtered(lambda t: t.amount))
             if lines:
-                lines.write({"tax_ids": [Command.set(move._eguitra_exempt_tax().ids)]})
+                # Par la pièce (et non ligne à ligne) : le noyau recalcule alors les lignes de TVA.
+                exempt = move._eguitra_exempt_tax().ids
+                move.write({"invoice_line_ids": [Command.update(line.id, {"tax_ids": [Command.set(exempt)]})
+                                                 for line in lines]})
 
     def _eguitra_post_or_submit(self):
         """Validation demandée depuis les applications ; le moteur d'approbation la transforme
