@@ -24,3 +24,6 @@ access_expense_category_direction,catégories de dépense lecture,model_eguitra_
 access_expense_category_finance,catégories de dépense finance,model_eguitra_expense_category,eguitra_base.group_profile_finance,1,1,1,0
 access_operation_type_direction,types d'opération lecture,model_eguitra_treasury_operation_type,eguitra_base.group_profile_direction,1,0,0,0
 access_operation_type_finance,types d'opération finance,model_eguitra_treasury_operation_type,eguitra_base.group_profile_finance,1,1,1,0
+access_reprise_reference_direction,références de reprise lecture,model_eguitra_reprise_reference,eguitra_base.group_profile_direction,1,0,0,0
+access_reprise_reference_finance,références de reprise finance,model_eguitra_reprise_reference,eguitra_base.group_profile_finance,1,0,0,0
+access_reprise_reference_admin,références de reprise administration,model_eguitra_reprise_reference,eguitra_base.group_profile_admin,1,1,1,1

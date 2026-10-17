@@ -20,3 +20,4 @@ from . import bank_reconciliation
 from . import budget
 from . import expense_category
 from . import res_partner
+from . import reprise_reference
