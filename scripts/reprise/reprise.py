@@ -424,12 +424,16 @@ if data is not None:
 # ─── Rotations ────────────────────────────────────────────────────────────
 data = rows("rotations.csv")
 if data is not None:
-    from odoo.addons.eguitra_transport.models.fleet import PRODUCTS
-
-    products = {label.lower(): code for code, label in PRODUCTS} | {code: code for code, _l in PRODUCTS}
+    # Produits transportés (Finance > Transport > Paramètres) : reconnus par leur code ou leur libellé.
+    # Le produit propre à la société l'emporte sur le produit commun de même code ou libellé.
+    known = env["eguitra.transport.product"].search([("company_id", "in", [False, company.id])])
+    products = {}
+    for p in known.sorted(lambda p: bool(p.company_id)):
+        products.update({p.name.lower(): p.id, p.code: p.id})
     Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
     costs = {"carburant": "fuel_cost", "peages": "toll_cost", "frais_chauffeur": "driver_fees",
-             "entretien": "maintenance_cost", "taxes": "specific_taxes", "autres": "other_costs"}
+             "entretien": "maintenance_cost", "pneus": "tyre_cost", "taxes": "specific_taxes_manual",
+             "autres": "other_costs"}
     count = invoiced = skipped = 0
     for line, r in data:
         where = f"rotations.csv ligne {line}"
@@ -447,7 +451,7 @@ if data is not None:
         if not client or "ensemble" not in refs or "route" not in refs:
             errors.append(f"{where} : ensemble, client (déclaré dans tiers.csv) et route sont obligatoires.")
             continue
-        product = products.get((r.get("produit") or "gasoil").lower())
+        product = products.get((r.get("produit") or "gasoil").strip().lower())
         if not product:
             errors.append(f"{where} : produit « {r.get('produit')} » inconnu.")
             continue
@@ -456,18 +460,29 @@ if data is not None:
             continue
         values = {
             "date_loading": loading, "vehicle_id": refs["ensemble"].id, "partner_id": client.id, "route_id": refs["route"].id,
-            "product": product, "delivery_note": r.get("bl") or False, "note": r.get("observations") or False,
+            "product_id": product, "delivery_note": r.get("bl") or False, "note": r.get("observations") or False,
             "volume_loaded": number(r.get("volume_charge"), where), "volume_delivered": number(r.get("volume_livre"), where),
         }
         if "chauffeur" in refs:
             values["driver_id"] = refs["chauffeur"].id
         if r.get("date_livraison"):
             values["date_delivery"] = day(r["date_livraison"], where)
+        # Colonnes facultatives de la rentabilité : retour au dépôt, litres de carburant, kilométrage
+        # (à défaut, l'aller-retour de la route).
+        if r.get("date_retour"):
+            values["date_return"] = day(r["date_retour"], where)
+        for col, field in (("litres", "fuel_liters"), ("km", "distance_km")):
+            if r.get(col):
+                values[field] = number(r[col], where)
         if r.get("tarif"):
             values["rate"] = number(r["tarif"], where)
         for col, field in costs.items():
             if r.get(col):
                 values[field] = number(r[col], where)
+        if r.get("taxes"):
+            # Total des taxes de l'ancien classeur : forfait hors barème, sans les taxes du barème
+            # (elles y sont déjà comprises).
+            values["tax_rules"] = False
         # Identifiant de saisie déterministe : rejouer le fichier ne crée pas de doublon.
         key = "|".join(r.get(c, "") for c in ("date_chargement", "ensemble", "client", "route", "bl", "volume_charge"))
         values["client_uuid"] = "reprise-" + hashlib.sha1(key.encode()).hexdigest()[:24]
@@ -481,7 +496,11 @@ if data is not None:
                 if yes(r.get("facturee")):
                     # Facturée dans l'ancien système : le chiffre d'affaires est déjà dans les soldes ;
                     # elle sert à l'analyse de rentabilité mais ne peut plus être refacturée.
-                    rotation.action_validate()
+                    # Le contrôle de capacité ne bloque pas une rotation déjà facturée : elle est signalée.
+                    if rotation.over_capacity:
+                        notes.append(f"{where} : volume chargé supérieur à la capacité de {rotation.vehicle_id.name} ; "
+                                     "vérifier la capacité de l'ensemble.")
+                    rotation.with_context(eguitra_transport_reprise=True).action_validate()
                     note = ((rotation.note or "") + "\nReprise : facturée dans l'ancien système.").strip()
                     rotation.write({"state": "invoiced", "note": note})
                     invoiced += 1

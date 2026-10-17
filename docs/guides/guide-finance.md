@@ -72,6 +72,23 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
   depuis leurs écrans : ne pas les ressaisir ici.
 - Impression PDF de la facture, pièces jointes, suivi du reste à encaisser.
 
+## Transport : paramètres, manquants et taxes (Métiers > Transport)
+
+- Paramètres : tolérance de manquant par défaut (en % du volume chargé) et traitement du manquant
+  hors tolérance (constat, déduction sur la facture du client, créance sur le chauffeur, ou les
+  deux), comptes des manquants et des créances sur chauffeurs, option des manquants à 15 °C ;
+  conditions propres à un client ou à un tarif ; produits transportés (masse volumique, prix du m³
+  qui valorise les manquants) ; barème des taxes spécifiques (nature, base, taux, produits, routes,
+  période, compte de charge, refacturation avec ou sans TVA).
+- À la facturation : la déduction du manquant et les taxes refacturées s'ajoutent à la facture du
+  client ; la créance sur un chauffeur devient une opération diverse en brouillon, à valider dans
+  Journaux et OD (un chauffeur sans fiche tiers est signalé dans les contrôles).
+- Taxes spécifiques : état mensuel par nature, rapproché des montants comptabilisés sur les comptes
+  du barème, export XLSX.
+- Rentabilité : imputer les achats de la flotte (carburant, pneumatiques, entretien) sur
+  l'activité Transport pétrolier et sur l'ensemble routier, pour que les coûts comptabilisés
+  répondent aux coûts déclarés sur les rotations ; rattacher chaque ensemble à son immobilisation.
+
 ## Relances clients (Comptabilité > Relances clients)
 
 Calculées chaque nuit selon le retard : rappel (dès le premier jour), relance ferme (15 jours),

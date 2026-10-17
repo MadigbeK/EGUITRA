@@ -15,6 +15,8 @@ interface Referentials {
   clients: Array<{ id: number; name: string }>;
   products: Array<{ code: string; label: string }>;
   costs: Array<{ code: string; label: string }>;
+  /** Mesures facultatives (litres, températures…) ; absentes des listes gardées par une version antérieure. */
+  measures?: Array<{ code: string; label: string }>;
 }
 
 interface SentRotation {
@@ -43,6 +45,7 @@ interface Form {
   volume_delivered: string;
   note: string;
   costs: Record<string, string>;
+  measures: Record<string, string>;
 }
 
 type View = "saisie" | "attente" | "envoyees";
@@ -57,7 +60,7 @@ const STATE_LABEL: Record<SentRotation["state"], [string, "neutral" | "ok" | "ac
 const today = () => new Date().toISOString().slice(0, 10);
 const blank = (): Form => ({
   uuid: null, date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
-  delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {},
+  delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
 
@@ -72,17 +75,22 @@ function toPayload(f: Form): Record<string, unknown> {
   if (f.volume_delivered) p.volume_delivered = num(f.volume_delivered);
   if (f.note.trim()) p.note = f.note.trim();
   for (const [k, v] of Object.entries(f.costs)) if (v) p[k] = num(v);
+  for (const [k, v] of Object.entries(f.measures ?? {})) if (v) p[k] = num(v);
   return p;
 }
 
-function fromPayload(item: QueuedRotation, costs: Referentials["costs"]): Form {
+function fromPayload(item: QueuedRotation, refs: Referentials): Form {
   const p = item.payload;
   const s = (k: string) => (p[k] === undefined || p[k] === null ? "" : String(p[k]));
+  const pick = (list: Array<{ code: string }>) => Object.fromEntries(list.map((c) => [c.code, s(c.code)]).filter(([, v]) => v));
   return {
     uuid: item.client_uuid, date_loading: s("date_loading") || today(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
     partner_id: s("partner_id"), route_id: s("route_id"), product: s("product") || "gasoil", delivery_note: s("delivery_note"),
     volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
-    costs: Object.fromEntries(costs.map((c) => [c.code, s(c.code)]).filter(([, v]) => v)),
+    // Une saisie d'avant la mise à jour garde son ancien total des taxes (« specific_taxes ») : il
+    // repart tel quel, le bureau le traite comme avant.
+    costs: { ...pick(refs.costs), ...(p.specific_taxes ? { specific_taxes: s("specific_taxes") } : {}) },
+    measures: pick(refs.measures ?? []),
   };
 }
 
@@ -95,6 +103,7 @@ function keepReferentials(r: Referentials): Referentials {
     clients: r.clients.map(({ id, name }) => ({ id, name })),
     products: r.products.map(({ code, label }) => ({ code, label })),
     costs: r.costs.map(({ code, label }) => ({ code, label })),
+    measures: (r.measures ?? []).map(({ code, label }) => ({ code, label })),
   };
 }
 
@@ -234,8 +243,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       return;
     }
     const vehicle = refs?.vehicles.find((v) => String(v.id) === form.vehicle_id);
-    if (vehicle?.capacity_liters && num(form.volume_loaded) * 1000 > vehicle.capacity_liters * 1.05 &&
-      !window.confirm(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³). Enregistrer quand même ?`)) {
+    // Le bureau ne valide pas une rotation chargée au-delà de la capacité : l'agent est prévenu dès la saisie.
+    if (vehicle?.capacity_liters && num(form.volume_loaded) * 1000 > vehicle.capacity_liters &&
+      !window.confirm(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³) : le bureau devra le corriger avant validation. Enregistrer quand même ?`)) {
       return;
     }
     const item: QueuedRotation = {
@@ -348,6 +358,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
               <section className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
                 <Field label="Volume chargé (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide" inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
                 <Field label="Volume livré (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide placeholder:font-sans placeholder:text-sm placeholder:font-normal" inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
+                {(refs.measures ?? []).map((m) => (
+                  <Field key={m.code} label={m.label}><Input className={champ} inputMode="decimal" value={form.measures[m.code] ?? ""} onChange={(e) => setForm({ ...form, measures: { ...form.measures, [m.code]: e.target.value } })} /></Field>
+                ))}
               </section>
 
               <section className="rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
@@ -395,7 +408,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} <span className="text-[15px] font-semibold text-muted">m³</span></div>
                 {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
                 <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
-                  <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs.costs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
+                  <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
                   <Button variant="danger" className="min-h-11" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
                 </div>
               </div>
