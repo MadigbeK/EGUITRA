@@ -58,7 +58,7 @@ modèle financier, risques, plan d'actions, rapports et classeur au format du ca
 
 Le dossier du prototype se convertit en fichiers de reprise, puis la plateforme recalcule les 26
 valeurs de référence du classeur et en donne la conformité (« n/26 »), annexée au procès-verbal de
-bascule. Sur le dossier reçu, 18 valeurs sur 26 sont conformes. Les 8 autres ont une seule cause :
+bascule. Le dossier reçu a été repris de bout en bout sur une base d'essai de la recette : 18 valeurs sur 26 sont conformes, toutes les valeurs du chiffre d'affaires, des créances, des dettes, de la trésorerie et du transport comprises. Les 8 autres ont une seule cause :
 la façon d'amortir. Le prototype amortit en mois entiers à compter du mois qui suit l'acquisition ;
 la plateforme amortit au jour près depuis la mise en service. Les deux sont défendables ; il faut
 choisir (décision 1 ci-dessous).

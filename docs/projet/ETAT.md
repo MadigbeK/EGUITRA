@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 17 octobre 2026
+# État du projet EGUITRA, au 17 octobre 2026 (soir)
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -236,8 +236,8 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
   questions au client dans `docs/projet/cadrage-transport.md`.
 - Fait, piste d'audit (attente 14) étendue à tous les modèles de gestion (finance, immobilier,
   AxisPro), avec test de couverture.
-- Versions : `eguitra_finance` 19.0.1.4.0, `eguitra_approval` 19.0.1.2.0, `eguitra_transport`
-  19.0.1.1.0, `eguitra_immobilier` 19.0.1.1.0, `eguitra_axispro` 19.0.1.2.1 ; mise à jour avec
+- Versions : `eguitra_finance` 19.0.1.5.0, `eguitra_approval` 19.0.1.2.0, `eguitra_transport`
+  19.0.1.2.0, `eguitra_immobilier` 19.0.1.1.0, `eguitra_axispro` 19.0.1.2.1 ; mise à jour avec
   `-u` de ces modules puis redémarrage du noyau (module d'audit).
 - Fait, vue consolidée (attente 2) : compte de résultat et bilan par société, éliminations des
   opérations entre sociétés du groupe, groupe (États > Consolidé du groupe). Les frais communs
@@ -277,7 +277,49 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
   conversion, hors dépôt) ; ne pas importer les relevés bancaires de la période reprise (comptés deux
   fois) ; activité du transport nommée « Transport pétrolier » par le module (le dossier a la sienne).
   Fichiers produits et rapports hors dépôt.
-- Reste : essai de la reprise du dossier sur la recette (simulation, puis `--appliquer`) ;
+- Fait, 17 octobre après-midi :
+  - import des relevés ISO 20022 camt.053 (XML) à côté du CSV et du XLSX (soldes OPBD et CLBD,
+    opérations en attente ignorées) ;
+  - revue de code de la méthode AxisPro traitée (deux points élevés : classeur d'évaluation en échec
+    avec des preuves datées et non datées, sommaire de la data room exposé aux formules ; sept moyens :
+    sceau étendu et vérifié sur les colonnes affichées, portail sans les critères de la grille, import
+    de grille strict, pièces antérieures à la décision figées, anomalie CAPEX, réimport du classeur,
+    évaluation calculée une fois) ; huit tests, 49 tests AxisPro au vert ; écrans vérifiés dans le
+    navigateur sur les réponses réelles de la recette (aperçu local, sans connexion à la recette) ;
+    scores affichés sans arrondi au-dessus d'un seuil ;
+  - activité analytique du transport paramétrable par société (Transport > Paramètres) ; relances
+    étendues aux créances reprises (à-nouveaux et écritures de reprise) ; comptes 52x et 57x créés en
+    trésorerie ;
+  - vérification point par point de l'audit du prototype Finance (S2 à S20) : six écarts restants,
+    confiés à un agent (export des rotations, export des flux mensuels, en-tête du registre,
+    seuils codés en dur, part d'emprunt des types d'opération, droit de saisie libre des comptes) ;
+  - dossier de conception (règles, vingt attentes), cahier de recette (73 scénarios), guide de la
+    finance et note de réponse aux vingt attentes (`docs/projet/Reponse_aux_attentes.docx`) à jour ;
+  - essai de la reprise du dossier réel sur une base jetable de la recette (`eguitra_reprise_essai`,
+    simulation) : quatre anomalies bloquantes relevées et corrigées (comptes de l'ancien classeur sans
+    racine à trois chiffres dans le plan de la localisation, d'où un à-nouveau déséquilibré) ;
+    `extraire_reference.py` produit désormais le fichier chargé par la plateforme (codes et date
+    d'arrêté) ; activité du transport et seuils de la direction repris de `parametres.json`.
+  - fusion des écarts du prototype Finance (agent) : export des rotations (L/100 km), export des flux
+    mensuels sur le calcul du tableau de bord, en-tête du registre des immobilisations, seuils à 0 sans
+    jugement codé en dur (« seuil non fixé »), types d'opération à part d'emprunt (déblocage ;
+    capital et intérêts hors échéancier), droit « Saisie libre des comptes » accordé d'office aux
+    comptes actuels (finance, direction, administration) ; `eguitra_finance` 19.0.1.5.0 avec
+    migration, `eguitra_transport` 19.0.1.2.0 ; 203 tests au vert (api, finance, approval,
+    transport) ; recette mise à jour (`-u`, noyau redémarré).
+  - **Reprise réelle essayée de bout en bout** sur la base jetable `eguitra_reprise_essai` (grappe de
+    recette, données réelles du client ; fichiers dans `~/reprise-essai` du serveur, scripts
+    `~/essai_complet.sh` et `~/validation_essai.py`) : 724 pièces, 206 lettrages, 24 immobilisations,
+    4 emprunts (taux implicites), 383 rotations, budget, seuils et activité du transport ; dotations
+    jusqu'au 15/08/2026 ; **18/26 dans la plateforme**, comme le contrôle hors ligne. Les 8 écarts ont
+    une seule cause, la convention d'amortissement (décision 1 de la note de réponse aux attentes) ;
+    bilan équilibré. Corrigé en route : mesures de la validation (créances et dettes sur 41 et 40,
+    CA et achats TTC par journal, aucune tolérance sur les nombres, report à nouveau), report à
+    nouveau du classeur repris au 121000, pièces d'achat au journal des achats, rotations non
+    facturées validées. Écart de 2,5 Md GNF entre échéanciers et comptes d'emprunts : déblocage
+    d'EMP-03 apparemment compté deux fois dans l'à-nouveau du classeur, à confirmer avec le client.
+- Reste : décision sur la convention d'amortissement (puis 26/26 attendu, aux arrondis près) ; taux
+  réels des emprunts et à-nouveau du 162 à confirmer ;
   décisions de droits signalées par l'agent transport (le parc modifie la fiche tiers d'un
   chauffeur et les coefficients à 15 °C ; la finance d'une société modifie un produit commun) ;
   choix comptables à valider avec l'expert-comptable (règlement d'échéance par le 401 du prêteur,
