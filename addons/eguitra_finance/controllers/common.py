@@ -106,8 +106,7 @@ def with_rules(dist, account, partner, company=None):
         "company_id": company.id,
         "related_root_plan_ids": given.root_plan_id,
     }
-    # Lecture des règles (aucune donnée sensible) ; le domaine du noyau borne la société.
-    rules = request.env["account.analytic.distribution.model"].sudo()._get_distribution(vals) or {}
+    rules = request.env["account.analytic.distribution.model"]._get_distribution(vals) or {}
     merged = dict(dist or {})
     for key, pct in rules.items():
         if key != "__update__":

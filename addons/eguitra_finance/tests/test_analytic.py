@@ -125,3 +125,73 @@ class TestAnalyticAxes(FinanceDataMixin, ApiCase):
         self.assertEqual(status, 400)
         status, move = invoice({str(first.id): 60, str(second.id): 40})
         self.assertEqual(status, 200, move)
+
+    def _purchase(self, dist=None, post=False):
+        return self.call("POST", "/finance/moves", {
+            "move_type": "in_invoice", "partner_id": self.supplier.id, "post": post,
+            "lines": [{"name": "Électricité du siège", "price_unit": 2_000_000, "account_id": self.acc_purchase.id,
+                       "analytic_distribution": dist}],
+        }, token=self.token)
+
+    def test_imputations_automatiques(self):
+        Analytic = self.env["account.analytic.account"]
+        plan_center = self.env.ref("eguitra_base.analytic_plan_centre_cout")
+        own = Analytic.create({"name": "Siège", "plan_id": self.plan_activity.id, "company_id": self.company.id})
+        partner_activity = Analytic.create({"name": "Stations", "plan_id": self.plan_activity.id,
+                                            "company_id": self.company.id})
+        center = Analytic.create({"name": "Direction générale", "plan_id": plan_center.id, "company_id": self.company.id})
+        prefix = self.acc_purchase.code[:4]
+        status, rule = self.call("POST", "/finance/analytic-rules", {
+            "account_prefix": prefix, "analytic_distribution": {str(center.id): 100}}, token=self.token)
+        self.assertEqual(status, 200, rule)
+        self.assertEqual(rule["axes"], ["Centre de coût"])
+        status, body = self.call("POST", "/finance/analytic-rules", {"analytic_distribution": {str(center.id): 100}},
+                                 token=self.token)
+        self.assertEqual(status, 400, "Une règle sans critère s'appliquerait à toutes les lignes")
+        status, body = self.call("POST", "/finance/analytic-rules", {"account_prefix": "6a"}, token=self.token)
+        self.assertEqual(status, 400)
+        status, rule2 = self.call("POST", "/finance/analytic-rules", {
+            "partner_id": self.supplier.id, "analytic_distribution": {str(partner_activity.id): 100}}, token=self.token)
+        self.assertEqual(status, 200, rule2)
+
+        status, move = self._purchase({str(own.id): 100})
+        self.assertEqual(status, 200, move)
+        dist = move["lines"][0]["analytic_distribution"]
+        self.assertEqual(set(dist), {str(own.id), str(center.id)},
+                         "L'activité saisie prime ; la règle du préfixe complète le centre de coût")
+        status, move = self._purchase()
+        self.assertEqual(set(move["lines"][0]["analytic_distribution"]), {str(partner_activity.id), str(center.id)},
+                         "Sans saisie, les règles de deux axes différents se cumulent")
+        status, simulation = self.call(
+            "GET", f"/finance/analytic-rules/simulate?account_id={self.acc_purchase.id}&partner_id={self.supplier.id}",
+            token=self.token)
+        self.assertEqual(status, 200, simulation)
+        self.assertEqual({s["name"] for s in simulation["distribution"]}, {"Stations", "Direction générale"})
+
+        status, _b = self.call("DELETE", f"/finance/analytic-rules/{rule2['id']}", token=self.token)
+        self.assertEqual(status, 200)
+        status, rules = self.call("GET", "/finance/analytic-rules", token=self.token)
+        self.assertEqual([r["id"] for r in rules if r["id"] in (rule["id"], rule2["id"])], [rule["id"]])
+
+    def test_imputation_obligatoire(self):
+        activity = self.env["account.analytic.account"].create(
+            {"name": "Holding", "plan_id": self.plan_activity.id, "company_id": self.company.id})
+        prefix = self.acc_purchase.code[:4]
+        status, body = self.call("POST", "/finance/analytic-requirements", {"plan": "activite", "prefix": prefix},
+                                 token=self.token)
+        self.assertEqual(status, 200, body)
+        status, requirements = self.call("GET", "/finance/analytic-requirements", token=self.token)
+        requirement = next(r for r in requirements if r["prefix"] == prefix)
+        self.assertEqual(sorted(requirement["domains"]), ["bill", "general", "invoice"])
+        self.assertEqual(requirement["axis"], "activite")
+
+        status, body = self._purchase(post=True)
+        self.assertEqual((status, body["error"]), (422, "analytic_required"), body)
+        self.assertIn("Activité", body["message"])
+        status, body = self._purchase({str(activity.id): 100}, post=True)
+        self.assertEqual(status, 200, body)
+
+        status, _b = self.call("DELETE", f"/finance/analytic-requirements/{requirement['id']}", token=self.token)
+        self.assertEqual(status, 200)
+        status, body = self._purchase(post=True)
+        self.assertEqual(status, 200, "Obligation levée")

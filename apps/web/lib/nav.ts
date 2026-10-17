@@ -60,6 +60,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
         { href: "/finance/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
         { href: "/finance/admin/axes", label: "Axes analytiques", icon: "Layers", profiles: ["admin", "finance"] },
+        { href: "/finance/admin/imputations", label: "Imputations automatiques", icon: "Target", profiles: ["admin", "finance"] },
         { href: "/finance/admin/parametres", label: "Seuils et taux", icon: "SlidersHorizontal", profiles: ["admin"] },
         { href: "/finance/admin/audit", label: "Journal d'audit", icon: "ScrollText", profiles: ["admin"] },
       ],
