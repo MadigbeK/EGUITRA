@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Undo2, Wallet } from "@/components/icons";
+import { useRouter } from "next/navigation";
+import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale, Undo2, Wallet } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
@@ -54,6 +55,7 @@ export default function TreasuryPage() {
   const [modal, setModal] = useState<null | "operation" | "import" | "transfer">(null);
   const [matching, setMatching] = useState<StLine | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const router = useRouter();
 
   function refresh() {
     void mutate();
@@ -72,6 +74,9 @@ export default function TreasuryPage() {
             </Button>
             <Button onClick={() => setModal("import")} disabled={!current || current.type !== "bank"}>
               <FileUp className="h-4 w-4" /> Importer un relevé
+            </Button>
+            <Button onClick={() => current && router.push(`/finance/tresorerie/rapprochement?journal=${current.journal_id}`)} disabled={!current}>
+              <Scale className="h-4 w-4" /> État de rapprochement
             </Button>
             <Button variant="primary" onClick={() => setModal("operation")} disabled={!current}>
               <Plus className="h-4 w-4" /> Nouvelle opération
@@ -329,37 +334,98 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
   );
 }
 
+interface ImportBalances { start: number | null; end: number | null; total: number; gap: number | null; controlled: boolean; source_start: string | null; source_end: string | null }
+interface ImportResult {
+  created: number;
+  attached: number;
+  skipped_duplicates: number;
+  statement: { id: number; name: string; balance_start: number; balance_end_real: number; is_complete: boolean } | null;
+  balances: ImportBalances;
+  warnings: string[];
+}
+
+/**
+ * Import d'un relevé : soldes initial et final lus dans le fichier (lignes de solde, colonne de solde
+ * progressif) ou saisis d'après le relevé papier ; le noyau contrôle « solde initial + opérations =
+ * solde final » et refuse un écart, sauf confirmation.
+ */
 function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<{ created: number; skipped_duplicates: number } | null>(null);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [gap, setGap] = useState<ImportBalances | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  async function submit() {
+  async function submit(force = false) {
     if (!file) return;
     setBusy(true);
     setError(null);
+    setGap(null);
     try {
       const form = new FormData();
       form.append("file", file);
-      setResult(await apiUpload(`/finance/treasury/${journal.journal_id}/import`, form));
+      if (start.trim()) form.append("balance_start", start.trim());
+      if (end.trim()) form.append("balance_end", end.trim());
+      if (force) form.append("force", "1");
+      setResult(await apiUpload<ImportResult>(`/finance/treasury/${journal.journal_id}/import`, form));
       onDone();
     } catch (e) {
+      if (e instanceof ApiError && e.body.error === "statement_gap") setGap((e.body as { balances?: ImportBalances }).balances ?? null);
       setError(e instanceof ApiError ? e.message : "Import impossible.");
     } finally {
       setBusy(false);
     }
   }
+  const money = (v: number | null) => (v === null ? "non renseigné" : fmtGNF(v, journal.currency));
   return (
-    <Modal open title={`Importer un relevé, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" onClick={submit} loading={busy} disabled={!file}>Importer</Button>}>
+    <Modal
+      open
+      title={`Importer un relevé, ${journal.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          {gap && (
+            <Button variant="danger" onClick={() => submit(true)} loading={busy}>
+              Importer malgré l&apos;écart
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => submit(false)} loading={busy} disabled={!file || Boolean(result)}>
+            Importer
+          </Button>
+        </>
+      }
+    >
       <div className="space-y-3 text-sm">
-        <p className="text-muted">Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit). Les opérations déjà importées sont ignorées.</p>
+        <p className="text-muted">
+          Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit). Les soldes du relevé sont lus dans le fichier s&apos;il les porte ; sinon saisissez-les. Les opérations déjà importées sont ignorées, celles déjà saisies à la main sont rattachées au relevé.
+        </p>
         {error && <Notice tone="danger">{error}</Notice>}
         {result && (
-          <Notice tone="ok">
-            {result.created} opération(s) importée(s), {result.skipped_duplicates} doublon(s) ignoré(s).
+          <Notice tone={result.statement && !result.statement.is_complete ? "warn" : "ok"}>
+            <div>
+              {result.created} opération(s) importée(s), {result.attached} opération(s) saisie(s) rattachée(s), {result.skipped_duplicates} doublon(s) ignoré(s).
+            </div>
+            <div>
+              Solde initial {money(result.balances.start)}
+              {result.balances.source_start ? ` (${result.balances.source_start})` : ""}, opérations {fmtGNF(result.balances.total, journal.currency)}, solde final {money(result.balances.end)}
+              {result.balances.source_end ? ` (${result.balances.source_end})` : ""}.
+            </div>
+            <div>{result.balances.controlled ? (result.balances.gap ? `Écart de ${fmtGNF(result.balances.gap, journal.currency)} accepté : le relevé reste incomplet.` : "Relevé équilibré.") : "Soldes non contrôlés : le fichier ne les porte pas tous deux."}</div>
+            {result.warnings.map((w) => (
+              <div key={w}>{w}</div>
+            ))}
           </Notice>
         )}
-        <input type="file" accept=".csv,.xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
+        <input type="file" accept=".csv,.xlsx" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setGap(null); }} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Solde initial du relevé" hint="Vide : lu dans le fichier">
+            <Input inputMode="decimal" className="text-right font-mono" value={start} onChange={(e) => setStart(e.target.value)} />
+          </Field>
+          <Field label="Solde final du relevé" hint="Vide : lu dans le fichier">
+            <Input inputMode="decimal" className="text-right font-mono" value={end} onChange={(e) => setEnd(e.target.value)} />
+          </Field>
+        </div>
       </div>
     </Modal>
   );

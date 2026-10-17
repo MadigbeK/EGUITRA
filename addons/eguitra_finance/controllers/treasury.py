@@ -7,10 +7,10 @@ import re
 from datetime import datetime
 
 from odoo import Command, http
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
-from odoo.addons.eguitra_api.files import workbook_rows
+from odoo.addons.eguitra_api.files import XLSX, workbook_rows
 
 from .common import (
     FIN_READ,
@@ -34,6 +34,19 @@ LABEL_HEADERS = ("libelle", "libellé", "description", "operation", "opération"
 AMOUNT_HEADERS = ("montant", "amount")
 DEBIT_HEADERS = ("debit", "débit", "retrait", "sortie")
 CREDIT_HEADERS = ("credit", "crédit", "versement", "entree", "entrée")
+BALANCE_HEADERS = ("solde", "balance", "solde progressif", "solde courant")
+# Lignes de solde d'un relevé : jamais importées comme opérations, elles donnent les soldes initial et
+# final. « SOLDE FACTURE 12 » reste une opération : le mot « solde » doit être suivi d'un qualificatif.
+BALANCE_LABEL = re.compile(
+    r"^\s*(?:(?:ancien|nouveau)\s+solde|solde\s+(?:initial|final|d['’]ouverture|de\s+cl[ôo]ture|de\s+d[ée]but|"
+    r"d[ée]but|fin|en\s+fin|pr[ée]c[ée]dent|report[ée]|au|à\s+la\s+date|cr[ée]diteur|d[ée]biteur)|"
+    r"solde\s*[:\-]?\s*$|report\s+(?:à\s+)?nouveau|à\s+reporter)",
+    re.IGNORECASE,
+)
+START_WORDS = ("ancien", "initial", "ouverture", "début", "debut", "précédent", "precedent", "reporté", "reporte",
+               "nouveau report", "report à nouveau", "report nouveau")
+END_WORDS = ("nouveau solde", "final", "clôture", "cloture", "fin", "à reporter")
+GAP_TOLERANCE = 0.5
 
 
 def _journal(journal_id):
@@ -87,6 +100,37 @@ def _line_rows(lines):
 
 def _line_row(line):
     return _line_rows(line)[0]
+
+
+def _fmt(value):
+    return f"{value:,.0f}".replace(",", " ") if abs(value - round(value)) < 0.005 else f"{value:,.2f}".replace(",", " ")
+
+
+def _form_number(form, name):
+    """Montant saisi dans le formulaire d'import (vide : non renseigné)."""
+    raw = (form.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return _number(raw)
+    except ValueError as e:
+        raise ApiError(400, "invalid_parameter", f"Montant illisible : {name}.") from e
+
+
+def _statement_row(statement):
+    return {
+        "id": statement.id,
+        "name": statement.name,
+        "date": statement.date,
+        "first_date": min(statement.line_ids.mapped("date"), default=None),
+        "lines": len(statement.line_ids),
+        "balance_start": statement.balance_start,
+        "balance_end": statement.balance_end,
+        "balance_end_real": statement.balance_end_real,
+        "gap": statement.balance_end_real - statement.balance_end,
+        "is_complete": statement.is_complete,
+        "is_valid": statement.is_valid,
+    }
 
 
 def _payment_mode(value):
@@ -152,33 +196,104 @@ def _find(headers, candidates):
     return None
 
 
+def _cell(row, index):
+    return row[index] if index is not None and index < len(row) else None
+
+
+def _balance_kind(text):
+    """Ligne de solde du relevé (« Solde initial », « Ancien solde », « Nouveau solde au… ») : start,
+    end, position (début ou fin selon sa place) ; None pour une opération."""
+    match = BALANCE_LABEL.match(text or "")
+    if not match:
+        return None
+    word = match.group(0).lower()
+    if any(w in word for w in END_WORDS):
+        return "end"
+    if any(w in word for w in START_WORDS):
+        return "start"
+    return "position"
+
+
+def _running_balances(lines, balances):
+    """Soldes initial et final déduits d'une colonne de solde progressif, dans l'ordre du fichier
+    (croissant ou décroissant : on retient l'hypothèse que les montants confirment)."""
+    pairs = [(line["amount"], bal) for line, bal in zip(lines, balances, strict=False) if bal is not None]
+    if len(pairs) < len(lines) or not pairs:
+        return None, None
+    forward = sum(1 for i in range(1, len(pairs)) if abs(pairs[i][1] - pairs[i - 1][1] - pairs[i][0]) < 0.5)
+    backward = sum(1 for i in range(1, len(pairs)) if abs(pairs[i - 1][1] - pairs[i][1] - pairs[i - 1][0]) < 0.5)
+    if backward > forward:
+        return pairs[-1][1] - pairs[-1][0], pairs[0][1]
+    return pairs[0][1] - pairs[0][0], pairs[-1][1]
+
+
 def parse_statement(name, content):
-    """Lignes (date, libellé, montant) d'un relevé CSV ou XLSX à en-têtes usuels."""
+    """Relevé CSV ou XLSX à en-têtes usuels : opérations (date, libellé, montant) et, s'ils figurent
+    dans le fichier, soldes initial et final (lignes de solde ou colonne de solde progressif)."""
     rows = [r for r in _rows_from_file(name, content) if any(c not in (None, "") for c in r)]
     for start, row in enumerate(rows[:15]):  # noqa: B007 (start sert après la boucle)
         headers = [str(c or "").strip().lower() for c in row]
         i_date, i_label = _find(headers, DATE_HEADERS), _find(headers, LABEL_HEADERS)
         i_amount = _find(headers, AMOUNT_HEADERS)
         i_debit, i_credit = _find(headers, DEBIT_HEADERS), _find(headers, CREDIT_HEADERS)
+        i_balance = _find(headers, BALANCE_HEADERS)
         if i_date is not None and i_label is not None and (i_amount is not None or (i_debit is not None and i_credit is not None)):
             break
     else:
         raise ApiError(422, "business_rule", "Colonnes non reconnues : il faut une date, un libellé et un montant "
                                              "(ou un débit et un crédit).")
-    lines = []
+
+    def amount_of(row):
+        if i_amount is not None and _cell(row, i_amount) not in (None, ""):
+            return _number(_cell(row, i_amount))
+        if i_debit is not None or i_credit is not None:
+            return _number(_cell(row, i_credit)) - _number(_cell(row, i_debit))
+        return 0.0
+
+    lines, running, marked = [], [], []
     for row in rows[start + 1:]:
-        if len(row) <= max(i for i in (i_date, i_label, i_amount, i_debit, i_credit) if i is not None):
+        label = str(_cell(row, i_label) or "").strip()
+        texts = [str(c).strip() for c in row if isinstance(c, str) and c.strip()]
+        kind = _balance_kind(label) or (_balance_kind(texts[0]) if texts else None)
+        if kind:
+            try:
+                value = amount_of(row)
+                if not value and i_balance is not None:
+                    value = _number(_cell(row, i_balance))
+                if not value:
+                    value = next((_number(c) for c in row if isinstance(c, (int, float)) and not isinstance(c, bool)), 0.0)
+            except ValueError:
+                continue
+            if "débiteur" in label.lower() or "debiteur" in label.lower():
+                value = -abs(value)
+            marked.append((kind, value, len(lines)))
             continue
-        if row[i_date] in (None, ""):
+        if _cell(row, i_date) in (None, ""):
             continue
         try:
-            day = _date(row[i_date])
-            amount = _number(row[i_amount]) if i_amount is not None else _number(row[i_credit]) - _number(row[i_debit])
+            day = _date(_cell(row, i_date))
+            amount = amount_of(row)
+            balance = _number(_cell(row, i_balance)) if i_balance is not None and _cell(row, i_balance) not in (None, "") else None
         except ValueError:
             continue
         if amount:
-            lines.append({"date": day, "label": str(row[i_label] or "").strip()[:250] or "/", "amount": amount})
-    return lines
+            lines.append({"date": day, "label": label[:250] or "/", "amount": amount})
+            running.append(balance)
+
+    balance_start = balance_end = source = None
+    for kind, value, position in marked:
+        if kind == "start" or (kind == "position" and position == 0 and lines):
+            balance_start = value if balance_start is None else balance_start
+        else:
+            balance_end = value
+        source = "lignes de solde du fichier"
+    if (balance_start is None or balance_end is None) and i_balance is not None and lines:
+        start_bal, end_bal = _running_balances(lines, running)
+        if start_bal is not None:
+            balance_start = start_bal if balance_start is None else balance_start
+            balance_end = end_bal if balance_end is None else balance_end
+            source = "colonne de solde du fichier"
+    return {"lines": lines, "balance_start": balance_start, "balance_end": balance_end, "source": source}
 
 
 class EguitraFinanceTreasury(http.Controller):
@@ -253,6 +368,11 @@ class EguitraFinanceTreasury(http.Controller):
 
     @api_route("/finance/treasury/<int:journal_id>/import", methods=("POST",), profiles=FIN_WRITE)
     def import_statement(self, journal_id, **_kw):
+        """Import d'un relevé : opérations, soldes initial et final (lus dans le fichier ou saisis :
+        balance_start, balance_end) et contrôle « solde initial + opérations = solde final ». Un écart
+        est refusé sauf confirmation (force=1) : le relevé garde alors les soldes de la banque et
+        apparaît incomplet dans l'état de rapprochement. Une opération déjà saisie à la main (même date,
+        montant et libellé) est rattachée au relevé ; une opération d'un relevé déjà importé est ignorée."""
         journal = _journal(journal_id)
         upload = request.httprequest.files.get("file")
         if not upload:
@@ -261,30 +381,124 @@ class EguitraFinanceTreasury(http.Controller):
         if len(content) > MAX_FILE:
             raise ApiError(413, "too_large", "Fichier trop volumineux (5 Mo maximum).")
         parsed = parse_statement(upload.filename or "releve.csv", content)
-        if not parsed:
+        items = parsed["lines"]
+        if not items:
             raise ApiError(422, "business_rule", "Aucune opération lisible dans le fichier.")
+        form = request.httprequest.form
+        entered_start, entered_end = _form_number(form, "balance_start"), _form_number(form, "balance_end")
+        start = entered_start if entered_start is not None else parsed["balance_start"]
+        end = entered_end if entered_end is not None else parsed["balance_end"]
+        currency = journal.currency_id or journal.company_id.currency_id
+        total = sum(i["amount"] for i in items)
+        warnings = []
+        for label, entered, detected in (("initial", entered_start, parsed["balance_start"]),
+                                         ("final", entered_end, parsed["balance_end"])):
+            if entered is not None and detected is not None and abs(entered - detected) >= GAP_TOLERANCE:
+                warnings.append(f"Solde {label} saisi ({_fmt(entered)}) différent de celui du fichier "
+                                f"({_fmt(detected)}) : le solde saisi est retenu.")
+        balances = {
+            "start": start, "end": end, "total": total,
+            "source_start": "saisi" if entered_start is not None else (parsed["source"] if start is not None else None),
+            "source_end": "saisi" if entered_end is not None else (parsed["source"] if end is not None else None),
+            "gap": None, "controlled": start is not None and end is not None,
+        }
+        if balances["controlled"]:
+            balances["gap"] = currency.round(start + total - end)
+            if abs(balances["gap"]) >= GAP_TOLERANCE and form.get("force") != "1":
+                raise ApiError(
+                    422, "statement_gap",
+                    f"Le relevé ne s'équilibre pas : solde initial {_fmt(start)} + opérations {_fmt(total)} = "
+                    f"{_fmt(start + total)}, pour un solde final de {_fmt(end)} (écart {_fmt(balances['gap'])}). "
+                    "Vérifiez le fichier et les soldes, ou importez-le en connaissance de cause.",
+                    balances=balances,
+                )
         Line = request.env["account.bank.statement.line"]
-        created, skipped = [], 0
-        for item in parsed:
-            duplicate = Line.search_count([
-                ("journal_id", "=", journal.id), ("date", "=", item["date"]),
-                ("amount", "=", item["amount"]), ("payment_ref", "=", item["label"]),
-            ])
-            if duplicate:
-                skipped += 1
+        created, attached, skipped, used = [], Line, [], []
+        for item in items:
+            existing = Line.search([
+                ("journal_id", "=", journal.id), ("date", "=", item["date"]), ("amount", "=", item["amount"]),
+                ("payment_ref", "=", item["label"]), ("id", "not in", used),
+            ], limit=1)
+            if existing:
+                used.append(existing.id)
+                if existing.statement_id:
+                    skipped.append(item)
+                else:
+                    attached |= existing
                 continue
             created.append(Command.create({"date": item["date"], "payment_ref": item["label"],
                                            "amount": item["amount"], "journal_id": journal.id}))
         statement = None
-        if created:
-            dates = [c[2]["date"] for c in created]
-            statement = request.env["account.bank.statement"].create({
+        if created or attached:
+            dates = [c[2]["date"] for c in created] + attached.mapped("date")
+            values = {
                 "name": f"{journal.code} {min(dates):%d/%m/%Y} - {max(dates):%d/%m/%Y}",
                 "journal_id": journal.id,
-                "line_ids": created,
-            })
-        return {"created": len(created), "skipped_duplicates": skipped,
-                "statement": {"id": statement.id, "name": statement.name} if statement else None}
+                "line_ids": created + [Command.link(line.id) for line in attached],
+            }
+            own_total = total - sum(i["amount"] for i in skipped)
+            if skipped and (start is not None or end is not None):
+                warnings.append(f"{len(skipped)} opération(s) figuraient déjà dans un relevé importé : le solde "
+                                "initial de ce relevé est recalculé sur ses seules opérations nouvelles.")
+            if end is not None:
+                values["balance_end_real"] = end
+                values["balance_start"] = currency.round(end - own_total) if skipped or start is None else start
+            elif start is not None:
+                values["balance_start"] = currency.round(start + total - own_total)
+            statement = request.env["account.bank.statement"].create(values)
+            previous = request.env["account.bank.statement"].search([
+                ("journal_id", "=", journal.id), ("id", "!=", statement.id),
+                ("first_line_index", "<", statement.first_line_index),
+            ], order="first_line_index desc", limit=1)
+            if previous and abs(previous.balance_end_real - statement.balance_start) >= GAP_TOLERANCE:
+                warnings.append(f"Le solde initial ({_fmt(statement.balance_start)}) ne prolonge pas le solde final du "
+                                f"relevé précédent {previous.name} ({_fmt(previous.balance_end_real)}).")
+        return {"created": len(created), "attached": len(attached), "skipped_duplicates": len(skipped),
+                "statement": _statement_row(statement) if statement else None,
+                "balances": balances, "warnings": warnings}
+
+    @api_route("/finance/treasury/<int:journal_id>/reconciliation-statement", profiles=FIN_READ)
+    def reconciliation_statement(self, journal_id, **kw):
+        """État de rapprochement au jour donné (date=AAAA-MM-JJ, aujourd'hui par défaut) : solde comptable,
+        solde du relevé, opérations comptabilisées absentes du relevé, opérations du relevé non
+        rapprochées, écart résiduel et son explication ; format=xlsx pour le classeur."""
+        journal = _journal(journal_id)
+        day = parse_date(kw, "date", today())
+        Reconciliation = request.env["eguitra.bank.reconciliation"]
+        data = Reconciliation.statement(journal, day)
+        if kw.get("format") == "xlsx":
+            return request.make_response(Reconciliation.to_xlsx(data), headers=[
+                ("Content-Type", XLSX),
+                ("Content-Disposition", content_disposition(f"rapprochement_{journal.code}_{day.isoformat()}.xlsx")),
+                ("Cache-Control", "no-store"),
+            ])
+        return data
+
+    @api_route("/finance/treasury/<int:journal_id>/statements", profiles=FIN_READ)
+    def statements(self, journal_id, **kw):
+        """Relevés importés du compte, du plus récent au plus ancien, avec leurs soldes."""
+        journal = _journal(journal_id)
+        statements = request.env["account.bank.statement"].search(
+            [("journal_id", "=", journal.id)], order="first_line_index desc", limit=int_arg(kw, "limit", 24, 1, 200))
+        return [_statement_row(s) for s in statements]
+
+    @api_route("/finance/treasury/statements/<int:statement_id>", methods=("PATCH",), profiles=FIN_WRITE)
+    def update_statement(self, statement_id, **_kw):
+        """Correction des soldes d'un relevé (saisis d'après le relevé papier de la banque)."""
+        statement = request.env["account.bank.statement"].browse(statement_id).exists()
+        if not statement or statement.journal_id.company_id not in request.env.user.company_ids:
+            raise ApiError(404, "not_found", "Relevé introuvable.")
+        data = read_json()
+        values = {}
+        for key in ("balance_start", "balance_end_real"):
+            if key in data:
+                values[key] = as_float(data[key], key)
+        if data.get("name"):
+            values["name"] = str(data["name"]).strip()[:120]
+        # Les deux soldes s'écrivent ensemble : le solde final ne se recalcule pas sur le solde initial.
+        values.setdefault("balance_end_real", statement.balance_end_real)
+        statement.write(values)
+        return _statement_row(statement)
 
     @api_route("/finance/treasury/lines/<int:line_id>/candidates", profiles=FIN_READ)
     def candidates(self, line_id, **_kw):

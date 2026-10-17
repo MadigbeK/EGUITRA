@@ -9,3 +9,4 @@ from . import account_asset
 from . import reminder
 from . import analytic
 from . import treasury
+from . import bank_reconciliation

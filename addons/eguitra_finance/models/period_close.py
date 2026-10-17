@@ -117,6 +117,7 @@ class EguitraPeriodClose(models.Model):
         ])
         checks.append(self._check("bank_reconciliation", "Relevés bancaires rapprochés", not unreconciled, True,
                                   f"{unreconciled} ligne(s) de relevé à rapprocher.", unreconciled))
+        checks += self._bank_statement_checks(start, end)
 
         unmapped = sheet["unmapped_accounts"]
         checks.append(self._check("statement_mapping", "Tous les comptes figurent dans les états", not unmapped, False,
@@ -129,6 +130,33 @@ class EguitraPeriodClose(models.Model):
         checks.append(self._check("blocking_alerts", "Aucune alerte bloquante active", not blocking_alerts, True,
                                   "; ".join(a["title"] for a in blocking_alerts), len(blocking_alerts)))
         return checks
+
+    def _bank_statement_checks(self, start, end):
+        """Solde du relevé = solde comptable (état de rapprochement à la fin du mois) pour chaque compte
+        de banque doté de relevés, et relevé du mois importé pour chaque compte de banque mouvementé."""
+        company = self.company_id
+        Reconciliation = self.env["eguitra.bank.reconciliation"].sudo()
+        MoveLine = self.env["account.move.line"].sudo()
+        gaps, missing = [], []
+        for journal in self.env["account.journal"].sudo().search([("company_id", "=", company.id), ("type", "=", "bank")]):
+            moved = MoveLine.search_count([("account_id", "=", journal.default_account_id.id), ("parent_state", "=", "posted"),
+                                           ("date", ">=", start), ("date", "<=", end)], limit=1)
+            state = Reconciliation.statement(journal, end)
+            if state["bank_balance"] is None:
+                if moved:
+                    missing.append(journal.name)
+                continue
+            if not state["balanced"]:
+                gaps.append(f"{journal.name} : écart de {state['residual_gap']:,.0f} {state['currency']}".replace(",", " "))
+            last = state["statement"]
+            if moved and last and last["date"] and last["date"] < start:
+                missing.append(journal.name)
+        return [
+            self._check("bank_statement_balance", "Solde des relevés égal au solde comptable", not gaps, True,
+                        "; ".join(gaps) + " (voir l'état de rapprochement).", len(gaps)),
+            self._check("bank_statement_imported", "Relevés du mois importés", not missing, False,
+                        "Sans relevé pour le mois : " + ", ".join(missing) + ".", len(missing)),
+        ]
 
     def action_check(self):
         self.ensure_one()
