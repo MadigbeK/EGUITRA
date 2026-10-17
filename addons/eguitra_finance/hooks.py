@@ -11,6 +11,18 @@ FINANCE_AUDITED_MODELS = [
     "eguitra.budget.line",
     "eguitra.expense.category",
     "eguitra.treasury.operation.type",
+    # Courrier du responsable financier, attente 14 : toute opération de gestion tracée.
+    "eguitra.alert.threshold",
+    "eguitra.loan",
+    "eguitra.loan.line",
+    "eguitra.period.close",
+    "account.asset",
+    "account.asset.profile",
+    "mis.budget.by.account",
+    "account.bank.statement",
+    "account.bank.statement.line",
+    "account.payment.term",
+    "account.analytic.plan",
 ]
 AUDITED_MODELS = FINANCE_AUDITED_MODELS
 

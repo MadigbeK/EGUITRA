@@ -21,3 +21,4 @@ from . import test_categories
 from . import test_partners
 from . import test_disputes
 from . import test_chart
+from . import test_audit_coverage
