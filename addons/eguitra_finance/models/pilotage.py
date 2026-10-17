@@ -283,22 +283,25 @@ class EguitraFinancePilotage(models.AbstractModel):
         return self.threshold_values(companies)["cash_min"] or 0.0
 
     @api.model
-    def monthly_cash(self, companies, today, year=None, threshold=None):
+    def monthly_cash(self, companies, today, year=None, threshold=None, through=None):
         """Flux mensuels de trésorerie de l'exercice, sur les comptes des journaux de banque et de
         caisse : ouverture = solde à la veille de l'exercice + à-nouveaux de l'exercice ;
         encaissements = débits du mois, décaissements = crédits du mois, hors à-nouveaux et hors
         virements internes (pièces portant le compte de passage 585) ; cash net ; solde de fin de
         mois ; chiffre d'affaires HT du mois. Contrôle de chaque mois : à venir, sous le seuil, cash
-        net négatif ou conforme."""
+        net négatif ou conforme. Seul calcul des flux mensuels : tableau de bord, rapport mensuel,
+        alertes et export des états (through : date d'arrêté de l'export, les écritures postérieures
+        sont ignorées ; par défaut, tout l'exercice)."""
         main = companies[:1]
         fy_start, fy_end = self.fiscal_year_bounds(main, date(year, 12, 31) if year else today)
+        last = min(fy_end, through) if through else fy_end
         if threshold is None:
             threshold = self._cash_threshold(companies)
         accounts = self._treasury_accounts(companies)
         opening, flows = 0.0, {}
         if accounts:
             self.env.flush_all()
-            params = {"companies": list(companies.ids), "accounts": accounts.ids, "start": fy_start, "end": fy_end,
+            params = {"companies": list(companies.ids), "accounts": accounts.ids, "start": fy_start, "end": last,
                       "journal": OPENING_JOURNAL}
             self.env.cr.execute(
                 """SELECT COALESCE(SUM(aml.balance), 0)
@@ -325,7 +328,7 @@ class EguitraFinancePilotage(models.AbstractModel):
                 params,
             )
             flows = {month: (float(debit), float(credit)) for month, debit, credit in self.env.cr.fetchall()}
-        revenue = {k: -v for k, v in self._monthly_amounts(companies, fy_start, fy_end, ["70"]).items()}
+        revenue = {k: -v for k, v in self._monthly_amounts(companies, fy_start, last, ["70"]).items()}
         current = today.strftime("%Y-%m")
         months, balance = [], opening
         month = fy_start.replace(day=1)
