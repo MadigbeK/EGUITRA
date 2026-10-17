@@ -94,6 +94,44 @@ class TestTreasuryOperations(FinanceDataMixin, ApiCase):
                                  {"account_id": self.acc_purchase.id}, token=self.token)
         self.assertEqual(status, 422, "Déjà rapprochée")
 
+    def test_types_d_operation(self):
+        def create(**values):
+            return self.call("POST", "/finance/treasury/operation-types", values, token=self.token)
+
+        status, mission = create(name="Frais de mission", direction="out", account_id=self.acc_purchase.id)
+        self.assertEqual(status, 200, mission)
+        self.assertFalse(mission["to_match"])
+        status, body = create(name="Vers la caisse", direction="out", account_id=self.bank.default_account_id.id)
+        self.assertEqual(status, 422, "Un mouvement entre comptes de trésorerie est un virement interne")
+        receivable = self.customer.property_account_receivable_id
+        status, receipt = create(name="Encaissement client", direction="in", account_id=receivable.id,
+                                 reference_required=True)
+        self.assertEqual(status, 200, receipt)
+        self.assertTrue(receipt["to_match"], "Contrepartie client : rapprochement avec la facture")
+        status, transfer = create(name="Virement vers la caisse", direction="out", is_transfer=True)
+        self.assertEqual(status, 200, transfer)
+
+        status, line = self.call("POST", f"/finance/treasury/{self.cash.id}/lines", {
+            "label": "Mission à Boké", "amount": 500_000, "operation_type_id": mission["id"]}, token=self.token)
+        self.assertEqual(status, 200, line)
+        self.assertEqual(line["amount"], -500_000, "Le type fixe le sens")
+        self.assertTrue(line["reconciled"], "Et la contrepartie")
+        self.assertEqual(line["operation_type"]["name"], "Frais de mission")
+        status, body = self.call("POST", f"/finance/treasury/{self.bank.id}/lines", {
+            "label": "Virement client", "amount": 118_000_000, "operation_type_id": receipt["id"]}, token=self.token)
+        self.assertEqual(status, 400, "Référence obligatoire")
+        status, line = self.call("POST", f"/finance/treasury/{self.bank.id}/lines", {
+            "label": "Virement client", "amount": 118_000_000, "operation_type_id": receipt["id"],
+            "reference": "FAC/2026/0001"}, token=self.token)
+        self.assertEqual(status, 200, line)
+        self.assertFalse(line["reconciled"], "Reste à rapprocher de la facture")
+        status, body = self.call("POST", f"/finance/treasury/{self.bank.id}/lines", {
+            "label": "Retrait", "amount": 1_000_000, "operation_type_id": transfer["id"]}, token=self.token)
+        self.assertEqual(status, 422)
+        status, body = self.call("POST", "/finance/treasury/operation-types/defaults", token=self.token)
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body["created"])
+
     def test_reglement_avec_mode_de_paiement(self):
         invoice = self.make_invoice("out_invoice", 10_000_000)
         mode = self.env["eguitra.payment.mode"].search([("name", "=", "Virement")], limit=1)

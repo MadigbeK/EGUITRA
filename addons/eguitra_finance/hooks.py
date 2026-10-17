@@ -6,6 +6,7 @@ FINANCE_AUDITED_MODELS = [
     "eguitra.payment.mode",
     "eguitra.budget.line",
     "eguitra.expense.category",
+    "eguitra.treasury.operation.type",
 ]
 
 

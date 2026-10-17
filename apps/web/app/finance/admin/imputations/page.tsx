@@ -8,7 +8,7 @@ import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Account, AnalyticShare, ExpenseCategory, Ref } from "@/lib/finance-types";
 
-type Tab = "regles" | "obligatoire" | "categories" | "modes";
+type Tab = "regles" | "obligatoire" | "categories" | "types" | "modes";
 
 interface Rule {
   id: number;
@@ -36,6 +36,7 @@ export default function ImputationsPage() {
           { key: "regles", label: "Règles analytiques" },
           { key: "obligatoire", label: "Imputation obligatoire" },
           { key: "categories", label: "Catégories de dépense" },
+          { key: "types", label: "Types d'opération" },
           { key: "modes", label: "Modes de paiement" },
         ]}
         value={tab}
@@ -44,6 +45,7 @@ export default function ImputationsPage() {
       {tab === "regles" && <Rules />}
       {tab === "obligatoire" && <Requirements />}
       {tab === "categories" && <Categories />}
+      {tab === "types" && <OperationTypes />}
       {tab === "modes" && <PaymentModes />}
     </div>
   );
@@ -330,6 +332,150 @@ function CategoryForm({ category, onClose, onSaved }: { category: ExpenseCategor
             </Field>
           )}
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+interface OperationType {
+  id: number;
+  name: string;
+  direction: "in" | "out";
+  account: { id: number; code: string; name: string } | null;
+  reference_required: boolean;
+  is_transfer: boolean;
+  to_match: boolean;
+  note: string | null;
+  active: boolean;
+}
+
+/** Types d'opération de trésorerie : sens et contrepartie de chaque mouvement de banque ou de caisse. */
+function OperationTypes() {
+  const { data, error, mutate } = useApi<OperationType[]>("/finance/treasury/operation-types?all=1");
+  const [editing, setEditing] = useState<OperationType | "new" | null>(null);
+  const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  async function defaults() {
+    setMessage(null);
+    try {
+      const res = await apiSend<{ created: number }>("POST", "/finance/treasury/operation-types/defaults");
+      setMessage({ tone: "ok", text: res.created ? `${res.created} type(s) usuel(s) ajouté(s).` : "Les types usuels sont déjà présents." });
+      void mutate();
+    } catch (e) {
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
+    }
+  }
+  return (
+    <Card
+      title="Types d'opération de trésorerie"
+      padded={false}
+      actions={
+        <>
+          <Button onClick={defaults}>Proposer les types usuels</Button>
+          <Button variant="primary" onClick={() => setEditing("new")}>
+            <Plus className="h-4 w-4" /> Nouveau type
+          </Button>
+        </>
+      }
+    >
+      <p className="px-5 pb-3 text-sm text-muted">
+        À la saisie d&apos;une opération, le type fixe le sens et le compte de contrepartie. Un type client ou fournisseur laisse l&apos;opération à rapprocher de la facture ; un type « virement interne » ouvre le virement par le compte de passage 585.
+      </p>
+      {message && (
+        <div className="px-5 pb-3">
+          <Notice tone={message.tone}>{message.text}</Notice>
+        </div>
+      )}
+      {error && <ErrorBox error={error} />}
+      {!data ? (
+        <Loading />
+      ) : (
+        <DataTable
+          rows={data}
+          rowKey={(k) => k.id}
+          onRowClick={(k) => setEditing(k)}
+          empty="Aucun type d'opération : la saisie reste libre."
+          columns={[
+            { key: "name", label: "Type d'opération" },
+            { key: "direction", label: "Sens", render: (k) => (k.is_transfer ? <Badge tone="accent">Virement</Badge> : k.direction === "in" ? <Badge tone="ok">Entrée</Badge> : <Badge tone="warn">Sortie</Badge>) },
+            { key: "account", label: "Contrepartie", render: (k) => (k.account ? <span>{k.account.code} {k.account.name} {k.to_match && <Badge>À rapprocher</Badge>}</span> : "–") },
+            { key: "reference_required", label: "Référence", render: (k) => (k.reference_required ? "Obligatoire" : "–") },
+            { key: "active", label: "Statut", render: (k) => (k.active ? <Badge tone="ok">Actif</Badge> : <Badge>Archivé</Badge>) },
+          ]}
+        />
+      )}
+      {editing && <OperationTypeForm kind={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
+    </Card>
+  );
+}
+
+function OperationTypeForm({ kind, onClose, onSaved }: { kind: OperationType | null; onClose: () => void; onSaved: () => void }) {
+  const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=3000");
+  const [form, setForm] = useState({
+    name: kind?.name ?? "",
+    direction: kind?.direction ?? "out",
+    account_id: kind?.account ? String(kind.account.id) : "",
+    reference_required: kind?.reference_required ?? false,
+    is_transfer: kind?.is_transfer ?? false,
+    note: kind?.note ?? "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function save(patch?: { active: boolean }) {
+    setBusy(true);
+    setError(null);
+    const body = patch ?? { ...form, account_id: form.account_id && !form.is_transfer ? Number(form.account_id) : null };
+    try {
+      if (kind) await apiSend("PATCH", `/finance/treasury/operation-types/${kind.id}`, body);
+      else await apiSend("POST", "/finance/treasury/operation-types", body);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal
+      open
+      title={kind ? `Type « ${kind.name} »` : "Nouveau type d'opération"}
+      onClose={onClose}
+      footer={
+        <>
+          {kind && (
+            <Button variant={kind.active ? "danger" : "secondary"} loading={busy} onClick={() => save({ active: !kind.active })}>
+              {kind.active ? "Archiver" : "Réactiver"}
+            </Button>
+          )}
+          <Button variant="primary" loading={busy} disabled={!form.name.trim() || (!form.is_transfer && !form.account_id)} onClick={() => save()}>
+            Enregistrer
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {error && <Notice tone="danger">{error}</Notice>}
+        <Field label="Type d'opération">
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Frais bancaires, encaissement client…" />
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.is_transfer} onChange={(e) => setForm({ ...form, is_transfer: e.target.checked })} /> Virement interne (entre banques et caisses)
+        </label>
+        {!form.is_transfer && (
+          <>
+            <Field label="Sens">
+              <Select value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as "in" | "out" })} options={[{ value: "out", label: "Sortie" }, { value: "in", label: "Entrée" }]} />
+            </Field>
+            <Field label="Compte de contrepartie" hint="Client (41) ou fournisseur (40) : l'opération reste à rapprocher de la facture.">
+              <Select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} placeholder="Choisir…" options={(accounts ?? []).filter((a) => !/^5[2-7]/.test(a.code)).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+            </Field>
+          </>
+        )}
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.reference_required} onChange={(e) => setForm({ ...form, reference_required: e.target.checked })} /> Référence obligatoire (facture, contrat, chèque)
+        </label>
+        <Field label="Commentaire">
+          <Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+        </Field>
       </div>
     </Modal>
   );

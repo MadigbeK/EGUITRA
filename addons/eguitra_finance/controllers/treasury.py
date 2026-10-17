@@ -88,6 +88,7 @@ def _line_rows(lines):
             "move_id": line.move_id.id,
             "reference": line.move_id.ref or None,
             "payment_mode": ref(line.eguitra_payment_mode_id),
+            "operation_type": ref(line.eguitra_operation_type_id),
             "attachments": counts.get(line.move_id.id, 0),
             "counterpart": [
                 {"code": ml.account_id.code, "name": ml.account_id.name,
@@ -140,6 +141,24 @@ def _payment_mode(value):
     if not mode or (mode.company_id and mode.company_id != request.env.company):
         raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
     return mode
+
+
+def _operation_type(value, company):
+    if not value:
+        return request.env["eguitra.treasury.operation.type"]
+    kind = request.env["eguitra.treasury.operation.type"].browse(int(value)).exists()
+    if not kind or kind.company_id != company or not kind.active:
+        raise ApiError(422, "business_rule", "Type d'opération inconnu dans la société.")
+    return kind
+
+
+def _operation_type_row(kind):
+    return {
+        "id": kind.id, "sequence": kind.sequence, "name": kind.name, "direction": kind.direction,
+        "account": {"id": kind.account_id.id, "code": kind.code(), "name": kind.account_id.name} if kind.account_id else None,
+        "reference_required": kind.reference_required, "is_transfer": kind.is_transfer,
+        "to_match": kind.to_match() if kind.account_id else False, "note": kind.note or None, "active": kind.active,
+    }
 
 
 def _impute_analytic(line, value, account):
@@ -326,7 +345,9 @@ class EguitraFinanceTreasury(http.Controller):
     @api_route("/finance/treasury/<int:journal_id>/lines", methods=("POST",), profiles=FIN_WRITE)
     def add_line(self, journal_id, **_kw):
         """Opération de caisse ou de banque. Avec un compte de contrepartie, elle est imputée aussitôt,
-        analytique comprise ; sinon elle reste à rapprocher avec une facture ou un règlement."""
+        analytique comprise ; sinon elle reste à rapprocher avec une facture ou un règlement. Un type
+        d'opération fixe le sens et la contrepartie (operation_type_id) ; un type client ou fournisseur
+        laisse l'opération à rapprocher de la facture."""
         journal = _journal(journal_id)
         company = journal.company_id
         data = read_json()
@@ -339,6 +360,18 @@ class EguitraFinanceTreasury(http.Controller):
         }
         if not values["amount"]:
             raise ApiError(422, "business_rule", "Le montant de l'opération ne peut pas être nul.")
+        kind = _operation_type(data.get("operation_type_id"), company)
+        if kind:
+            if kind.is_transfer:
+                raise ApiError(422, "business_rule", "Un virement entre comptes de trésorerie se saisit par « Virement "
+                                                     "interne » (compte de passage 585).")
+            if kind.reference_required and not str(data.get("reference") or "").strip():
+                raise ApiError(400, "missing_fields", f"« {kind.name} » : la référence est obligatoire.",
+                               fields=["reference"])
+            values["amount"] = abs(values["amount"]) * (1 if kind.direction == "in" else -1)
+            values["eguitra_operation_type_id"] = kind.id
+            if not data.get("counterpart_account_id") and not kind.to_match():
+                data = dict(data, counterpart_account_id=kind.account_id.id)
         if data.get("partner_id"):
             partner = request.env["res.partner"].browse(int(data["partner_id"])).exists()
             if not partner:
@@ -532,6 +565,61 @@ class EguitraFinanceTreasury(http.Controller):
         line = _st_line(line_id)
         line.action_undo_reconciliation()
         return _line_row(line)
+
+    # ─── Types d'opération de trésorerie ──────────────────────────────────
+
+    @api_route("/finance/treasury/operation-types", profiles=FIN_READ)
+    def operation_types(self, **kw):
+        Kind = request.env["eguitra.treasury.operation.type"].with_context(active_test=kw.get("all") != "1")
+        return [_operation_type_row(k) for k in Kind.search([("company_id", "=", request.env.company.id)])]
+
+    def _operation_type_values(self, data, company):
+        values = {}
+        if "name" in data:
+            name = str(data.get("name") or "").strip()
+            if not name:
+                raise ApiError(400, "missing_fields", "Libellé requis.", fields=["name"])
+            values["name"] = name[:120]
+        if "direction" in data:
+            if data["direction"] not in ("in", "out"):
+                raise ApiError(400, "invalid_parameter", "Sens : in (entrée) ou out (sortie).")
+            values["direction"] = data["direction"]
+        if "account_id" in data:
+            values["account_id"] = account_of_company(data["account_id"], company, "Compte de contrepartie").id or False
+        for key in ("reference_required", "is_transfer", "active"):
+            if key in data:
+                values[key] = bool(data[key])
+        if "note" in data:
+            values["note"] = str(data.get("note") or "").strip() or False
+        if "sequence" in data:
+            values["sequence"] = int_arg(data, "sequence", 10, 0, 10000)
+        return values
+
+    @api_route("/finance/treasury/operation-types", methods=("POST",), profiles=FIN_WRITE)
+    def create_operation_type(self, **_kw):
+        data = read_json()
+        require(data, "name", "direction")
+        company = request.env.company
+        Kind = request.env["eguitra.treasury.operation.type"].with_context(active_test=False)
+        if Kind.search_count([("company_id", "=", company.id), ("name", "=ilike", str(data["name"]).strip())]):
+            raise ApiError(409, "conflict", f"Le type « {data['name']} » existe déjà.")
+        values = self._operation_type_values(data, company)
+        values["company_id"] = company.id
+        return _operation_type_row(Kind.create(values))
+
+    @api_route("/finance/treasury/operation-types/<int:type_id>", methods=("PATCH",), profiles=FIN_WRITE)
+    def update_operation_type(self, type_id, **_kw):
+        kind = request.env["eguitra.treasury.operation.type"].with_context(active_test=False).browse(type_id).exists()
+        company = request.env.company
+        if not kind or kind.company_id != company:
+            raise ApiError(404, "not_found", "Type d'opération introuvable dans la société de travail.")
+        kind.write(self._operation_type_values(read_json(), company))
+        return _operation_type_row(kind)
+
+    @api_route("/finance/treasury/operation-types/defaults", methods=("POST",), profiles=FIN_WRITE)
+    def create_operation_type_defaults(self, **_kw):
+        created = request.env["eguitra.treasury.operation.type"].create_defaults(request.env.company)
+        return {"created": len(created), "items": [_operation_type_row(k) for k in created]}
 
     # ─── Modes de paiement (liste paramétrable) ───────────────────────────
 

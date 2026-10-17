@@ -9,7 +9,7 @@ _eguitra_reconcile (traiter cette nature, puis appeler super() pour les autres).
 from datetime import date
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 DEFAULT_PAYMENT_MODES = ("Virement", "Chèque", "Espèces", "Mobile money", "Carte bancaire", "Prélèvement",
                          "Effet de commerce")
@@ -36,6 +36,89 @@ class EguitraPaymentMode(models.Model):
             self.create({"name": name, "sequence": sequence * 10})
 
 
+DEFAULT_OPERATION_TYPES = [
+    # (libellé, sens, préfixes du compte de contrepartie, référence obligatoire, virement interne)
+    ("Encaissement client", "in", ("411",), True, False),
+    ("Paiement fournisseur", "out", ("401",), True, False),
+    ("Frais bancaires", "out", ("631",), False, False),
+    ("Intérêts et agios bancaires", "out", ("6741", "674"), False, False),
+    ("Avance au personnel", "out", ("4211", "421"), False, False),
+    ("Paiement des salaires", "out", ("422",), False, False),
+    ("Cotisations sociales", "out", ("431",), True, False),
+    ("Impôts et taxes", "out", ("447", "44"), True, False),
+    ("Produits divers", "in", ("758", "75"), False, False),
+    ("Virement interne (banque, caisse)", "out", (), False, True),
+]
+# Contrepartie client ou fournisseur : l'opération se rapproche d'une facture, jamais imputée en bloc.
+MATCHED_PREFIXES = ("40", "41")
+
+
+class EguitraTreasuryOperationType(models.Model):
+    """Type d'opération de trésorerie : sens et contrepartie comptable de chaque mouvement de banque ou
+    de caisse (prototype de la direction). Un type « virement interne » ouvre le virement par le compte
+    de passage 585 ; un type client ou fournisseur laisse l'opération à rapprocher d'une facture."""
+
+    _name = "eguitra.treasury.operation.type"
+    _description = "Type d'opération de trésorerie"
+    _order = "company_id, sequence, name"
+
+    company_id = fields.Many2one("res.company", "Société", required=True, default=lambda self: self.env.company, index=True)
+    sequence = fields.Integer(default=10)
+    name = fields.Char("Type d'opération", required=True)
+    direction = fields.Selection([("in", "Entrée"), ("out", "Sortie")], "Sens", required=True, default="out")
+    account_id = fields.Many2one("account.account", "Compte de contrepartie")
+    reference_required = fields.Boolean("Référence obligatoire")
+    is_transfer = fields.Boolean("Virement interne")
+    note = fields.Text("Commentaire")
+    active = fields.Boolean(default=True)
+
+    _name_company_unique = models.Constraint("unique(company_id, name)", "Ce type d'opération existe déjà.")
+
+    def code(self):
+        self.ensure_one()
+        return self.account_id.with_company(self.company_id).code or ""
+
+    def to_match(self):
+        """Contrepartie client ou fournisseur : rapprochement avec la facture plutôt qu'imputation."""
+        self.ensure_one()
+        return self.code().startswith(MATCHED_PREFIXES)
+
+    @api.constrains("account_id", "is_transfer", "company_id")
+    def _check_type(self):
+        for kind in self:
+            if kind.is_transfer:
+                continue
+            if not kind.account_id:
+                raise ValidationError(f"« {kind.name} » : indiquez le compte de contrepartie.")
+            if kind.company_id not in kind.account_id.company_ids:
+                raise ValidationError(f"« {kind.name} » : compte absent du plan de comptes de la société.")
+            if kind.code().startswith(("52", "53", "54", "57")):
+                raise ValidationError(f"« {kind.name} » : un mouvement entre comptes de trésorerie est un virement interne.")
+
+    @api.model
+    def create_defaults(self, company):
+        """Types usuels pour la société (ceux dont le compte existe), sans doublon."""
+        Account = self.env["account.account"]
+        existing = set(self.with_context(active_test=False).search([("company_id", "=", company.id)]).mapped("name"))
+        created = self.browse()
+        for sequence, (name, direction, prefixes, reference, transfer) in enumerate(DEFAULT_OPERATION_TYPES, start=1):
+            if name in existing:
+                continue
+            account = Account
+            for prefix in prefixes:
+                account = Account.search([("code", "=like", prefix + "%"), ("company_ids", "in", company.ids)],
+                                         order="code", limit=1)
+                if account:
+                    break
+            if not transfer and not account:
+                continue
+            created |= self.create({
+                "company_id": company.id, "sequence": sequence * 10, "name": name, "direction": direction,
+                "account_id": account.id or False, "reference_required": reference, "is_transfer": transfer,
+            })
+        return created
+
+
 class AccountPayment(models.Model):
     _inherit = "account.payment"
 
@@ -46,6 +129,7 @@ class AccountBankStatementLine(models.Model):
     _inherit = "account.bank.statement.line"
 
     eguitra_payment_mode_id = fields.Many2one("eguitra.payment.mode", "Mode de paiement")
+    eguitra_operation_type_id = fields.Many2one("eguitra.treasury.operation.type", "Type d'opération")
 
     def _eguitra_counterpart_lines(self):
         """Lignes de contrepartie de l'opération (hors ligne de banque ou de caisse)."""
@@ -127,6 +211,7 @@ class AccountBankStatementLine(models.Model):
             "amount": self.amount, "partner_id": self.partner_id.id or False,
             "statement_id": self.statement_id.id or False, "counterpart_account_id": account_id,
             "eguitra_payment_mode_id": self.eguitra_payment_mode_id.id or False, "ref": self.move_id.ref or False,
+            "eguitra_operation_type_id": self.eguitra_operation_type_id.id or False,
         }
         if self.foreign_currency_id:
             values.update({"foreign_currency_id": self.foreign_currency_id.id, "amount_currency": self.amount_currency})

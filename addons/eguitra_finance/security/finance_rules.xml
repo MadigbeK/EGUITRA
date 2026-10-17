@@ -36,6 +36,11 @@
         <field name="model_id" ref="model_eguitra_expense_category"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_operation_type_company" model="ir.rule">
+        <field name="name">Types d'opération de trésorerie : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_treasury_operation_type"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_period_close_company" model="ir.rule">
         <field name="name">Clôtures : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_period_close"/>

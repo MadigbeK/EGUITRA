@@ -226,7 +226,7 @@ export default function TreasuryPage() {
           )}
         </>
       )}
-      {current && modal === "operation" && <OperationModal journal={current} onClose={() => setModal(null)} onDone={refresh} />}
+      {current && modal === "operation" && <OperationModal journal={current} onClose={() => setModal(null)} onDone={refresh} onTransfer={() => setModal("transfer")} />}
       {current && modal === "import" && <ImportModal journal={current} onClose={() => setModal(null)} onDone={refresh} />}
       {modal === "transfer" && position && <TransferModal accounts={position.accounts} onClose={() => setModal(null)} onDone={refresh} />}
       {matching && <MatchModal line={matching} onClose={() => setMatching(null)} onDone={refresh} />}
@@ -238,12 +238,27 @@ function useAccounts(prefix: string) {
   return useApi<Account[]>(`/finance/accounts?prefix=${prefix}&limit=2000`);
 }
 
-function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; onClose: () => void; onDone: () => void }) {
+interface OperationType { id: number; name: string; direction: "in" | "out"; account: { id: number; code: string; name: string } | null; reference_required: boolean; is_transfer: boolean; to_match: boolean }
+
+function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: CashAccount; onClose: () => void; onDone: () => void; onTransfer: () => void }) {
   const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=2000");
   const { data: modes } = usePaymentModes();
+  const { data: kinds } = useApi<OperationType[]>("/finance/treasury/operation-types");
   const { data: axes } = useAxes();
   const [direction, setDirection] = useState<"out" | "in">("out");
-  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "", reference: "", mode: "" });
+  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "", reference: "", mode: "", kind: "" });
+  const kind = kinds?.find((k) => String(k.id) === form.kind);
+
+  /** Le type d'opération fixe le sens et la contrepartie (sauf client ou fournisseur : à rapprocher). */
+  function chooseKind(id: string) {
+    const next = kinds?.find((k) => String(k.id) === id);
+    if (next?.is_transfer) {
+      onTransfer();
+      return;
+    }
+    if (next) setDirection(next.direction);
+    setForm({ ...form, kind: id, account: next && !next.to_match && next.account ? String(next.account.id) : next ? "" : form.account });
+  }
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
   const [choice, setChoice] = useState<AxisChoice>({});
   const [receipt, setReceipt] = useState<File | null>(null);
@@ -267,6 +282,7 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
           analytic_distribution: form.account ? toDistribution(choice) : undefined,
           payment_mode_id: form.mode ? Number(form.mode) : undefined,
           reference: form.reference || undefined,
+          operation_type_id: form.kind ? Number(form.kind) : undefined,
         });
         id = line.id;
         setCreatedId(id);
@@ -294,7 +310,12 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
     <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
-        <Tabs tabs={[{ key: "out", label: "Sortie" }, { key: "in", label: "Entrée" }]} value={direction} onChange={setDirection} />
+        {kinds && kinds.length > 0 && (
+          <Field label="Type d'opération" hint={kind?.to_match ? "Opération client ou fournisseur : elle reste à rapprocher de la facture." : kind ? "Le type fixe le sens et le compte de contrepartie." : undefined}>
+            <Select value={form.kind} onChange={(e) => chooseKind(e.target.value)} placeholder="Saisie libre" options={kinds.map((k) => ({ value: k.id, label: `${k.name} (${k.is_transfer ? "virement" : k.direction === "in" ? "entrée" : "sortie"})` }))} />
+          </Field>
+        )}
+        {!kind && <Tabs tabs={[{ key: "out", label: "Sortie" }, { key: "in", label: "Entrée" }]} value={direction} onChange={setDirection} />}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="Date">
             <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
@@ -305,7 +326,7 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
           <Field label="Mode de paiement">
             <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
           </Field>
-          <Field label="Référence" hint="Facture, contrat, chèque…">
+          <Field label={kind?.reference_required ? "Référence (obligatoire)" : "Référence"} hint="Facture, contrat, chèque…">
             <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
           </Field>
         </div>
