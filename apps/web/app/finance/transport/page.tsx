@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { CheckCheck, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
 import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
+import { Manquants } from "@/components/transport/Manquants";
 import { Parametres } from "@/components/transport/Parametres";
-import type { Ref, Referentials } from "@/components/transport/types";
+import { parseNumber, type Ref, type Referentials, type TransportSettings } from "@/components/transport/types";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
@@ -23,7 +24,11 @@ interface Rotation {
   delivery_note: string | null;
   volume_loaded: number;
   volume_delivered: number;
+  over_capacity: boolean;
+  capacity_liters: number;
   shortage: number;
+  shortage_excess: number;
+  shortage_value: number;
   rate: number;
   revenue: number;
   total_cost: number;
@@ -33,11 +38,11 @@ interface Rotation {
 }
 
 const STATE = { draft: ["Saisie", "warn"], done: ["Validée", "accent"], invoiced: ["Facturée", "ok"], cancelled: ["Annulée", "neutral"] } as const;
-type Tab = "rotations" | "rentabilite" | "flotte" | "routes" | "parametres";
+type Tab = "rotations" | "rentabilite" | "manquants" | "flotte" | "routes" | "parametres";
 
 export default function TransportPage() {
   const [tab, setTab] = useState<Tab>("rotations");
-  const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; to_invoice: { count: number; amount: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
+  const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
   return (
     <div>
       <PageHeader title="Transport pétrolier" subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge." />
@@ -55,6 +60,12 @@ export default function TransportPage() {
               <IconTile icon={Droplet} teinte="corail" />
             </div>
             <Compteur value={summary.volume} unit="m³" className="mt-5 text-[42px] text-ink sm:text-[50px]" />
+            {summary.shortage_excess.count > 0 && (
+              <p className="mt-2 text-[13px] font-medium text-danger">
+                {fmtDec(summary.shortage_excess.volume)} m³ manquants au-delà de la tolérance sur {summary.shortage_excess.count} rotation(s)
+                {summary.shortage_excess.value ? `, ${fmtGNF(summary.shortage_excess.value)}` : ""}
+              </p>
+            )}
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-[13px]">
                 <span className="font-semibold text-ink-2">Flotte</span>
@@ -78,9 +89,10 @@ export default function TransportPage() {
           </div>
         </div>
       )}
-      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "manquants", label: "Manquants" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
       {tab === "rotations" && <Rotations />}
       {tab === "rentabilite" && <Profitability />}
+      {tab === "manquants" && <Manquants />}
       {tab === "flotte" && <Fleet />}
       {tab === "routes" && <Routes />}
       {tab === "parametres" && <Parametres />}
@@ -104,8 +116,10 @@ function Rotations() {
         await apiSend("POST", "/transport/rotations/validate", { ids: chosen.filter((r) => r.state === "draft").map((r) => r.id) });
         setMessage({ tone: "ok", text: "Rotations validées." });
       } else {
-        const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
-        setMessage({ tone: "ok", text: `${res.invoices.length} facture(s) créée(s) en brouillon, à valider dans Ventes.` });
+        const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
+        const claims = res.claims.length ? ` ${res.claims.length} créance(s) sur chauffeur en opérations diverses, à valider dans Écritures.` : "";
+        const unclaimed = res.unclaimed.length ? ` Sans fiche tiers, créance à passer à la main : ${res.unclaimed.map((u) => `${u.driver?.name ?? "chauffeur non renseigné"} (${u.rotation}, ${fmtGNF(u.amount)})`).join(", ")}.` : "";
+        setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${res.invoices.length} facture(s) créée(s) en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
       }
       setSelected([]);
       void mutate();
@@ -150,7 +164,8 @@ function Rotations() {
               { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name, sortValue: (r) => r.vehicle.name },
               { key: "client", label: "Client", render: (r) => r.client.name, sortValue: (r) => r.client.name },
               { key: "route", label: "Route", render: (r) => r.route.name },
-              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => fmtDec(r.volume_delivered || r.volume_loaded) },
+              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => <span title={r.over_capacity ? `Chargé au-delà de la capacité (${fmtDec(r.capacity_liters / 1000)} m³)` : undefined} className={r.over_capacity ? "text-danger" : ""}>{fmtDec(r.volume_delivered || r.volume_loaded)}</span> },
+              { key: "shortage", label: "Manquant", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtDec(r.shortage)}</span> : "–") },
               { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
               { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span> },
               { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]} vivant={r.state === "draft"}>{STATE[r.state][0]}</Badge> },
@@ -160,6 +175,7 @@ function Rotations() {
                 <tr>
                   <td className="px-3 py-2" colSpan={6}>Total ({data.total_count})</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtDec(data.totals.volume)}</td>
+                  <td />
                   <td className="px-3 py-2 text-right font-mono">{fmtGNF(data.totals.revenue)}</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtShort(data.totals.margin)}</td>
                   <td />
@@ -186,7 +202,10 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
     try {
       const body: Record<string, unknown> = { ...f, validate };
       for (const k of ["vehicle_id", "partner_id", "route_id", "driver_id"]) if (f[k]) body[k] = Number(f[k]);
-      for (const k of ["volume_loaded", "volume_delivered", ...(ref?.costs.map((c) => c.code) ?? [])]) if (f[k]) body[k] = Number(f[k].replace(/\s/g, "").replace(",", "."));
+      for (const k of ["volume_loaded", "volume_delivered", "rate", ...(ref?.measures ?? []).map((m) => m.code), ...(ref?.costs.map((c) => c.code) ?? [])]) {
+        if (f[k]) body[k] = parseNumber(f[k]) ?? 0;
+        else delete body[k];
+      }
       await apiSend("POST", "/transport/rotations", body);
       onDone();
     } catch (e) {
@@ -213,7 +232,17 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <Field label="Volume livré (m³)"><Input inputMode="decimal" value={f.volume_delivered ?? ""} onChange={set("volume_delivered")} /></Field>
             <Field label="Bon de livraison"><Input value={f.delivery_note ?? ""} onChange={set("delivery_note")} /></Field>
             <Field label="Tarif (m³)" hint="Vide : tarif du client ou de la route"><Input inputMode="numeric" value={f.rate ?? ""} onChange={set("rate")} /></Field>
+            {(ref.measures ?? []).map((m) => (
+              <Field key={m.code} label={m.label}><Input inputMode="decimal" className="font-mono" value={f[m.code] ?? ""} onChange={set(m.code)} /></Field>
+            ))}
           </div>
+          {(() => {
+            const vehicle = ref.vehicles.find((v) => String(v.id) === f.vehicle_id);
+            const loaded = parseNumber(f.volume_loaded ?? "") ?? 0;
+            return vehicle?.capacity_liters && loaded * 1000 > vehicle.capacity_liters ? (
+              <Notice tone="danger">Le volume chargé dépasse la capacité de {vehicle.name} ({fmtDec(vehicle.capacity_liters / 1000)} m³) : la rotation ne pourra pas être validée.</Notice>
+            ) : null;
+          })()}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
             {ref.costs.map((c) => (
               <Field key={c.code} label={c.label}><Input inputMode="numeric" className="font-mono" value={f[c.code] ?? ""} onChange={set(c.code)} /></Field>
@@ -229,7 +258,7 @@ function Profitability() {
   const [group, setGroup] = useState("vehicle");
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const { data } = useApi<{ rows: Array<{ key: string | number | null; label: string; rotations: number; volume: number; revenue: number; cost: number; margin: number; margin_rate: number | null; shortage: number }> }>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
+  const { data } = useApi<{ rows: Array<{ key: string | number | null; label: string; rotations: number; volume: number; revenue: number; cost: number; margin: number; margin_rate: number | null; shortage: number; shortage_excess: number; shortage_net_cost: number }> }>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -244,8 +273,9 @@ function Profitability() {
             { key: "rotations", label: "Rotations", align: "right", render: (r) => String(r.rotations) },
             { key: "volume", label: "Volume (m³)", align: "right", render: (r) => fmtDec(r.volume) },
             { key: "shortage", label: "Manquants (m³)", align: "right", render: (r) => fmtDec(r.shortage) },
+            { key: "shortage_excess", label: "Hors tolérance (m³)", align: "right", render: (r) => <span className={r.shortage_excess > 0 ? "text-danger" : ""}>{fmtDec(r.shortage_excess)}</span> },
             { key: "revenue", label: "Chiffre d'affaires", align: "right", render: (r) => fmtGNF(r.revenue) },
-            { key: "cost", label: "Coûts", align: "right", render: (r) => fmtGNF(r.cost) },
+            { key: "cost", label: "Coûts", align: "right", render: (r) => fmtGNF(r.cost + r.shortage_net_cost) },
             { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : "text-ok"}>{fmtGNF(r.margin)}</span> },
             { key: "margin_rate", label: "Taux", align: "right", render: (r) => fmtPct(r.margin_rate) },
           ]} />
@@ -299,9 +329,19 @@ function Fleet() {
   );
 }
 
+interface Tariff { id: number; partner: Ref; product: string | null; rate: number; shortage_tolerance: number | null; shortage_price: number | null }
+
 function Routes() {
-  const { data: routes, mutate } = useApi<Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ id: number; partner: Ref; product: string | null; rate: number }> }>>("/transport/routes");
+  const { data: routes, mutate } = useApi<Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Tariff[] }>>("/transport/routes");
   const { data: ref } = useApi<Referentials>("/transport/referentials");
+  const { data: settings } = useApi<TransportSettings>("/transport/settings");
+  const [message, setMessage] = useState<string | null>(null);
+  const productLabel = (code: string | null) => (code ? ref?.products.find((p) => p.code === code)?.label ?? code : "Tous produits");
+  const tariffs = (routes ?? []).flatMap((route) => route.tariffs.map((t) => ({ ...t, route: route.name })));
+  function saveTerms(t: Tariff, body: Record<string, unknown>) {
+    setMessage(null);
+    apiSend("PATCH", `/transport/tariffs/${t.id}`, body).then(() => { setMessage(`Conditions de manquant de ${t.partner.name} enregistrées.`); void mutate(); }).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"));
+  }
   const [r, setR] = useState({ name: "", distance_km: "", default_rate: "" });
   const [tariff, setTariff] = useState({ route_id: "", partner_id: "", product: "", rate: "" });
   return (
@@ -311,7 +351,7 @@ function Routes() {
           { key: "name", label: "Route" },
           { key: "distance_km", label: "Distance (km)", align: "right", render: (x) => String(x.distance_km) },
           { key: "default_rate", label: "Tarif par m³", align: "right", render: (x) => fmtGNF(x.default_rate) },
-          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${ref?.products.find((p) => p.code === t.product)?.label ?? t.product})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
+          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${productLabel(t.product)})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-4">
           <Input placeholder="Conakry - Siguiri" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} />
@@ -339,6 +379,18 @@ function Routes() {
             Enregistrer le tarif
           </Button>
         </div>
+      </Card>
+      <Card title="Conditions de manquant par tarif" padded={false}>
+        {message && <div className="p-3"><Notice>{message}</Notice></div>}
+        <p className="px-5 pt-4 text-[13px] text-muted">Tolérance et prix du m³ prévus au contrat du client ; vides, ceux du client ou de la société et le prix du produit s&apos;appliquent. Fixés par la finance.</p>
+        <DataTable rows={tariffs} rowKey={(t) => t.id} empty="Aucun tarif négocié." columns={[
+          { key: "route", label: "Route" },
+          { key: "partner", label: "Client", render: (t) => t.partner.name },
+          { key: "product", label: "Produit", render: (t) => productLabel(t.product) },
+          { key: "rate", label: "Tarif par m³", align: "right", render: (t) => fmtGNF(t.rate) },
+          { key: "shortage_tolerance", label: "Tolérance (%)", align: "right", render: (t) => <Input disabled={!settings?.can_edit} className="w-24 text-right font-mono" placeholder="–" defaultValue={t.shortage_tolerance === null ? "" : String(t.shortage_tolerance).replace(".", ",")} onBlur={(e) => { const v = parseNumber(e.target.value); if (v !== t.shortage_tolerance) saveTerms(t, { shortage_tolerance: v }); }} /> },
+          { key: "shortage_price", label: "Prix du m³ manquant", align: "right", render: (t) => <Input disabled={!settings?.can_edit} className="w-36 text-right font-mono" placeholder="Prix du produit" defaultValue={t.shortage_price ? String(t.shortage_price) : ""} onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== (t.shortage_price ?? 0)) saveTerms(t, { shortage_price: v }); }} /> },
+        ]} />
       </Card>
     </div>
   );

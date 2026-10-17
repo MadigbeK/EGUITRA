@@ -10,6 +10,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
 from ..models.rotation import COSTS
+from ..models.settings import SHORTAGE_RULES
 
 _logger = logging.getLogger(__name__)
 
@@ -20,14 +21,25 @@ MAX_SYNC = 200
 
 ROTATION_FIELDS = (
     "date_loading", "date_delivery", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
+    "temperature_loaded", "temperature_delivered", "density_15", "vcf_loaded", "vcf_delivered",
     *[c for c, _l in COSTS],
 )
+# Conditions de manquant propres à une rotation : réservées à la finance (déduction, créance).
+FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortage_rule")
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
               "partner_id": "res.partner", "route_id": "eguitra.transport.route"}
+# Mesures saisies au parc (application Rotations), hors montants.
+MEASURES = [("temperature_loaded", "Température au chargement (°C)"),
+            ("temperature_delivered", "Température à la livraison (°C)"),
+            ("density_15", "Masse volumique à 15 °C (kg/m³)")]
 
 
 def _ref(record):
     return {"id": record.id, "name": record.display_name} if record else None
+
+
+def _move_ref(move):
+    return {"id": move.id, "name": move.name if move.name and move.name != "/" else None, "state": move.state} if move else None
 
 
 def _rotation_row(rot):
@@ -37,8 +49,20 @@ def _rotation_row(rot):
         "vehicle": _ref(rot.vehicle_id), "driver": _ref(rot.driver_id), "client": _ref(rot.partner_id),
         "route": _ref(rot.route_id), "product": rot.product, "product_id": rot.product_id.id,
         "product_label": rot.product_id.name, "delivery_note": rot.delivery_note or None,
-        "volume_loaded": rot.volume_loaded, "volume_delivered": rot.volume_delivered, "shortage": rot.shortage,
-        "rate": rot.rate, "revenue": rot.revenue, "costs": {c: rot[c] for c, _l in COSTS},
+        "volume_loaded": rot.volume_loaded, "volume_delivered": rot.volume_delivered,
+        "capacity_liters": rot.vehicle_id.capacity_liters, "over_capacity": rot.over_capacity,
+        "volume_correction": rot.volume_correction, "temperature_loaded": rot.temperature_loaded or None,
+        "temperature_delivered": rot.temperature_delivered or None, "density_15": rot.density_15 or None,
+        "vcf_loaded": rot.vcf_loaded, "vcf_delivered": rot.vcf_delivered,
+        "volume_loaded_15": rot.volume_loaded_15, "volume_delivered_15": rot.volume_delivered_15,
+        "shortage": rot.shortage, "shortage_tolerance": rot.shortage_tolerance,
+        "shortage_tolerated": rot.shortage_tolerated, "shortage_excess": rot.shortage_excess,
+        "shortage_unit_price": rot.shortage_unit_price, "shortage_value": rot.shortage_value,
+        "shortage_rule": rot.shortage_rule, "shortage_deduction": rot.shortage_deduction,
+        "shortage_claim": rot.shortage_claim, "shortage_net_cost": rot.shortage_net_cost,
+        "shortage_claim_move": _move_ref(rot.shortage_claim_move_id),
+        "rate": rot.rate, "revenue": rot.revenue, "billed_amount": rot.billed_amount,
+        "costs": {c: rot[c] for c, _l in COSTS},
         "total_cost": rot.total_cost, "margin": rot.margin, "margin_rate": rot.margin_rate,
         "note": rot.note or None, "invoice": {"id": rot.invoice_id.id, "name": rot.invoice_id.name} if rot.invoice_id else None,
         "client_uuid": rot.client_uuid or None,
@@ -60,6 +84,10 @@ def _product(data):
     return product
 
 
+def _is_finance():
+    return bool(set(SETTINGS) & set(request.env.user._eguitra_profiles()))
+
+
 def _rotation_values(data):
     values = {}
     if data.get("product") or data.get("product_id"):
@@ -74,6 +102,18 @@ def _rotation_values(data):
             values[key] = value or False
         else:
             values[key] = as_float(value or 0, key)
+    if "volume_correction" in data:
+        values["volume_correction"] = bool(data["volume_correction"])
+    wanted = [k for k in FINANCE_ROTATION_FIELDS if k in data]
+    if wanted and not _is_finance():
+        raise ApiError(403, "forbidden", "Les conditions de manquant d'une rotation relèvent de la finance.")
+    for key in wanted:
+        if key == "shortage_rule":
+            if data[key] not in dict(SHORTAGE_RULES):
+                raise ApiError(400, "invalid_parameter", "Traitement du manquant inconnu.")
+            values[key] = data[key]
+        else:
+            values[key] = as_float(data[key] or 0, key)
     for key, model in REF_FIELDS.items():
         if data.get(key):
             record = request.env[model].browse(int(data[key])).exists()
@@ -83,9 +123,62 @@ def _rotation_values(data):
     return values
 
 
+def _tolerance(value, name):
+    """Tolérance de manquant : None (valeur héritée) ou un pourcentage entre 0 et 100."""
+    if value in (None, ""):
+        return None
+    value = as_float(value, name)
+    if not 0 <= value <= 100:
+        raise ApiError(400, "invalid_parameter", "Tolérance de manquant attendue entre 0 et 100 %.")
+    return value
+
+
+def _tariff_terms(data):
+    values = {}
+    if "shortage_tolerance" in data:
+        tolerance = _tolerance(data["shortage_tolerance"], "shortage_tolerance")
+        values.update(tolerance_custom=tolerance is not None, shortage_tolerance=tolerance or 0.0)
+    if "shortage_price" in data:
+        values["shortage_price"] = as_float(data["shortage_price"] or 0, "shortage_price")
+    return values
+
+
+def _tariff_row(t):
+    return {"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None, "product_id": t.product_id.id or None,
+            "rate": t.rate, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
+            "shortage_price": t.shortage_price or None}
+
+
+def _settings_payload():
+    company = request.env.company
+    finance = _is_finance()
+    # Les comptes ne sont lus que pour la finance (le parc n'a pas accès au plan de comptes).
+    accounts = company.sudo() if finance else None
+    return {
+        "shortage_tolerance": company.transport_shortage_tolerance,
+        "shortage_rule": company.transport_shortage_rule,
+        "volume_correction": company.transport_volume_correction,
+        "shortage_account": _account_ref(accounts.transport_shortage_account_id) if accounts else None,
+        "claim_account": _account_ref(accounts.transport_claim_account_id) if accounts else None,
+        "rules": [{"code": k, "label": v} for k, v in SHORTAGE_RULES],
+        "can_edit": finance,
+    }
+
+
+def _account_ref(account):
+    return {"id": account.id, "code": account.code, "name": account.name} if account else None
+
+
+def _client_row(partner):
+    return {"id": partner.id, "name": partner.name,
+            "shortage_tolerance": partner.transport_shortage_tolerance if partner.transport_tolerance_custom else None,
+            "shortage_rule": partner.transport_shortage_rule or None}
+
+
 def _product_row(product):
     return {"id": product.id, "code": product.code, "name": product.name, "sequence": product.sequence,
-            "shared": not product.company_id, "active": product.active}
+            "shared": not product.company_id, "active": product.active, "density_15": product.density_15 or None,
+            "shortage_price": product.shortage_price}
 
 
 def _get(model, record_id, label):
@@ -123,6 +216,10 @@ class EguitraTransport(http.Controller):
             "products": [{"id": p.id, "code": p.code, "label": p.name}
                          for p in env["eguitra.transport.product"].search([])],
             "costs": [{"code": k, "label": v} for k, v in COSTS],
+            # Mesures facultatives du parc ; températures et masse volumique si les manquants se
+            # calculent à 15 °C. Une version antérieure de l'application ignore cette liste.
+            "volume_correction": env.company.transport_volume_correction,
+            "measures": [{"code": k, "label": v} for k, v in MEASURES] if env.company.transport_volume_correction else [],
         }
 
     @api_route("/transport/vehicles", profiles=READ)
@@ -192,13 +289,11 @@ class EguitraTransport(http.Controller):
         return [
             {"id": r.id, "name": r.name, "origin": r.origin or None, "destination": r.destination or None,
              "distance_km": r.distance_km, "default_rate": r.default_rate, "active": r.active,
-             "tariffs": [{"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None,
-                          "product_id": t.product_id.id or None, "rate": t.rate}
-                         for t in r.tariff_ids]}
+             "tariffs": [_tariff_row(t) for t in r.tariff_ids]}
             for r in request.env["eguitra.transport.route"].with_context(active_test=False).search([])
         ]
 
-    def _route_values(self, data):
+    def _route_values(self, data, route=None):
         values = {k: data[k] or False for k in ("name", "origin", "destination") if k in data}
         if "distance_km" in data:
             values["distance_km"] = int(data["distance_km"] or 0)
@@ -207,11 +302,22 @@ class EguitraTransport(http.Controller):
         if "active" in data:
             values["active"] = bool(data["active"])
         if "tariffs" in data:
+            # Les tarifs sont renvoyés en entier ; les conditions de manquant fixées par la finance
+            # (tolérance, prix du m³) suivent le tarif du même client et du même produit.
+            kept = {(t.partner_id.id, t.product_id.id): t for t in (route.tariff_ids if route else [])}
+            finance = _is_finance()
             commands = [(5, 0, 0)]
             for t in data["tariffs"] or []:
                 product = _product(t).id if (t.get("product") or t.get("product_id")) else False
-                commands.append((0, 0, {"partner_id": int(t["partner_id"]), "product_id": product,
-                                        "rate": as_float(t.get("rate", 0), "rate")}))
+                line = {"partner_id": int(t["partner_id"]), "product_id": product,
+                        "rate": as_float(t.get("rate", 0), "rate")}
+                previous = kept.get((line["partner_id"], product))
+                if previous:
+                    line.update(tolerance_custom=previous.tolerance_custom, shortage_tolerance=previous.shortage_tolerance,
+                                shortage_price=previous.shortage_price)
+                if finance:
+                    line.update(_tariff_terms(t))
+                commands.append((0, 0, line))
             values["tariff_ids"] = commands
         return values
 
@@ -224,8 +330,16 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/routes/<int:route_id>", methods=("PATCH",), profiles=WRITE)
     def update_route(self, route_id, **_kw):
-        _get("eguitra.transport.route", route_id, "Route").write(self._route_values(read_json()))
+        route = _get("eguitra.transport.route", route_id, "Route")
+        route.write(self._route_values(read_json(), route))
         return {"status": "ok"}
+
+    @api_route("/transport/tariffs/<int:tariff_id>", methods=("PATCH",), profiles=SETTINGS)
+    def update_tariff(self, tariff_id, **_kw):
+        """Conditions de manquant d'un tarif client (tolérance, prix du m³), fixées par la finance."""
+        tariff = _get("eguitra.transport.tariff", tariff_id, "Tarif")
+        tariff.write(_tariff_terms(read_json()))
+        return _tariff_row(tariff)
 
     # ─── Produits transportés ─────────────────────────────────────────────
 
@@ -244,6 +358,9 @@ class EguitraTransport(http.Controller):
             values["sequence"] = int(data["sequence"] or 0)
         if "active" in data:
             values["active"] = bool(data["active"])
+        for key in ("density_15", "shortage_price"):
+            if key in data:
+                values[key] = as_float(data[key] or 0, key)
         return values
 
     @api_route("/transport/products", methods=("POST",), profiles=SETTINGS)
@@ -264,6 +381,63 @@ class EguitraTransport(http.Controller):
         product.write(values)
         return _product_row(product)
 
+    # ─── Paramètres : manquants ───────────────────────────────────────────
+
+    @api_route("/transport/settings", profiles=READ)
+    def settings(self, **_kw):
+        return _settings_payload()
+
+    @api_route("/transport/settings", methods=("PATCH",), profiles=SETTINGS)
+    def update_settings(self, **_kw):
+        data = read_json()
+        company = request.env.company
+        values = {}
+        if "shortage_tolerance" in data:
+            values["transport_shortage_tolerance"] = _tolerance(data["shortage_tolerance"], "shortage_tolerance") or 0.0
+        if "shortage_rule" in data:
+            if data["shortage_rule"] not in dict(SHORTAGE_RULES):
+                raise ApiError(400, "invalid_parameter", "Traitement du manquant inconnu.")
+            values["transport_shortage_rule"] = data["shortage_rule"]
+        if "volume_correction" in data:
+            values["transport_volume_correction"] = bool(data["volume_correction"])
+        for key, field in (("shortage_account_id", "transport_shortage_account_id"),
+                           ("claim_account_id", "transport_claim_account_id")):
+            if key in data:
+                account = request.env["account.account"]
+                if data[key]:
+                    account = account.browse(int(data[key])).exists()
+                    if not account or company not in account.company_ids:
+                        raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
+                values[field] = account.id or False
+        # La fiche société n'est modifiable que par l'administration du noyau : écriture limitée
+        # à ces paramètres, pour la société de travail.
+        company.sudo().write(values)
+        return _settings_payload()
+
+    @api_route("/transport/clients", profiles=READ)
+    def clients(self, **_kw):
+        """Clients du transport et leurs conditions de manquant (tolérance, traitement)."""
+        env = request.env
+        clients = env["eguitra.transport.tariff"].search([]).partner_id
+        for (partner,) in env["eguitra.transport.rotation"]._read_group([], ["partner_id"]):
+            clients |= partner
+        return [_client_row(c) for c in clients.commercial_partner_id.sorted("name")]
+
+    @api_route("/transport/clients/<int:partner_id>", methods=("PATCH",), profiles=SETTINGS)
+    def update_client(self, partner_id, **_kw):
+        partner = _get("res.partner", partner_id, "Client")
+        data = read_json()
+        values = {}
+        if "shortage_tolerance" in data:
+            tolerance = _tolerance(data["shortage_tolerance"], "shortage_tolerance")
+            values.update(transport_tolerance_custom=tolerance is not None, transport_shortage_tolerance=tolerance or 0.0)
+        if "shortage_rule" in data:
+            if data["shortage_rule"] and data["shortage_rule"] not in dict(SHORTAGE_RULES):
+                raise ApiError(400, "invalid_parameter", "Traitement du manquant inconnu.")
+            values["transport_shortage_rule"] = data["shortage_rule"] or False
+        partner.write(values)
+        return _client_row(partner)
+
     # ─── Rotations ────────────────────────────────────────────────────────
 
     @api_route("/transport/rotations", profiles=READ)
@@ -274,6 +448,8 @@ class EguitraTransport(http.Controller):
         for key in ("vehicle_id", "partner_id", "route_id", "driver_id"):
             if kw.get(key):
                 domain.append((key, "=", int_arg(kw, key)))
+        if kw.get("shortage") == "excess":
+            domain.append(("shortage_excess", ">", 0))
         start, end = parse_date(kw, "date_from"), parse_date(kw, "date_to")
         if start:
             domain.append(("date_loading", ">=", start))
@@ -327,7 +503,12 @@ class EguitraTransport(http.Controller):
         ids = [int(i) for i in read_json().get("rotation_ids") or []]
         rots = request.env["eguitra.transport.rotation"].browse(ids).exists()
         invoices = rots.action_invoice()
-        return {"invoices": [move_summary(m) for m in invoices]}
+        claims = rots.shortage_claim_move_id
+        unclaimed = rots.filtered(lambda r: r.shortage_claim and not r.shortage_claim_move_id)
+        return {"invoices": [move_summary(m) for m in invoices], "claims": [move_summary(m) for m in claims],
+                # Manquant à porter sur un chauffeur sans fiche tiers : à régulariser à la main.
+                "unclaimed": [{"rotation": r.name, "driver": _ref(r.driver_id), "amount": r.shortage_claim}
+                              for r in unclaimed]}
 
     @api_route("/transport/profitability", profiles=READ)
     def profitability(self, **kw):
@@ -347,10 +528,14 @@ class EguitraTransport(http.Controller):
             domain, aggregates=["__count", "volume_delivered:sum", "revenue:sum", "total_cost:sum", "margin:sum"]
         )
         [(to_invoice_count, to_invoice)] = Rotation._read_group([("state", "=", "done")], aggregates=["__count", "revenue:sum"])
+        [(excess_count, excess, excess_value)] = Rotation._read_group(
+            domain + [("shortage_excess", ">", 0)], aggregates=["__count", "shortage_excess:sum", "shortage_value:sum"]
+        )
         return {
             "date_from": start, "date_to": end, "rotations": count, "volume": volume or 0.0, "revenue": revenue or 0.0,
             "cost": cost or 0.0, "margin": margin or 0.0, "margin_rate": (margin / revenue * 100) if revenue else None,
             "to_invoice": {"count": to_invoice_count, "amount": to_invoice or 0.0},
+            "shortage_excess": {"count": excess_count, "volume": excess or 0.0, "value": excess_value or 0.0},
             "drafts": Rotation.search_count([("state", "=", "draft")]),
             "fleet": {s: request.env["eguitra.transport.vehicle"].search_count([("state", "=", s)])
                       for s in ("service", "maintenance", "off")},

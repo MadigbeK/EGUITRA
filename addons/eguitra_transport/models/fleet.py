@@ -106,6 +106,12 @@ class EguitraTransportTariff(models.Model):
     product = fields.Char("Code produit", compute="_compute_product_code")
     rate = fields.Monetary("Tarif par m³", currency_field="currency_id", required=True)
     currency_id = fields.Many2one(related="route_id.currency_id")
+    tolerance_custom = fields.Boolean("Tolérance de manquant propre au tarif")
+    shortage_tolerance = fields.Float("Tolérance de manquant (%)", digits=(5, 3))
+    shortage_price = fields.Monetary(
+        "Prix de valorisation du manquant (par m³)", currency_field="currency_id",
+        help="Prix contractuel du m³ manquant pour ce client ; vide : prix du produit.",
+    )
 
     @api.depends("product_id.code")
     def _compute_product_code(self):
