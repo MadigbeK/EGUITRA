@@ -1,6 +1,9 @@
 import type { AppCode, EntiteSociete } from "./config";
 import type { Profile } from "./types";
 
+/** Pastille de l'entrée : nombre d'alertes actives, de validations en attente, de contrôles en anomalie. */
+export type NavBadge = "alerts" | "approvals" | "controls";
+
 export interface NavItem {
   href: string;
   label: string;
@@ -8,6 +11,7 @@ export interface NavItem {
   profiles?: Profile[];
   /** Module réservé à une société : masqué quand la société de travail est l'autre. */
   entity?: EntiteSociete;
+  badge?: NavBadge;
 }
 
 export interface NavSection {
@@ -26,8 +30,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance", label: "Tableau de bord", icon: "LayoutDashboard", profiles: FIN },
         { href: "/finance/pilotage", label: "Activités et budget", icon: "TrendingUp", profiles: FIN },
         { href: "/finance/rapport", label: "Rapport mensuel", icon: "FileText", profiles: FIN },
-        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck" },
-        { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN },
+        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", badge: "approvals" },
+        { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
       ],
     },
     {
@@ -43,7 +47,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/ecritures", label: "Journaux et OD", icon: "BookOpen", profiles: FIN },
         { href: "/finance/etats", label: "Balance et états", icon: "FileSpreadsheet", profiles: FIN },
         { href: "/finance/fiscalite", label: "Fiscalité", icon: "Scale", profiles: FIN },
-        { href: "/finance/clotures", label: "Clôtures et contrôles", icon: "Lock", profiles: FIN },
+        { href: "/finance/clotures", label: "Clôtures et contrôles", icon: "Lock", profiles: FIN, badge: "controls" },
       ],
     },
     {
