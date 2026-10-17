@@ -60,6 +60,9 @@ export function MoveForm({
   const [narration, setNarration] = useState("");
   const [currencyId, setCurrencyId] = useState("");
   const [contractRef, setContractRef] = useState("");
+  const [commitmentId, setCommitmentId] = useState("");
+  const { data: commitments } = useApi<Array<{ id: number; name: string; object: string; remaining: number }>>(
+    open && moveType === "in_invoice" && partner ? `/finance/commitments/for-bill?partner_id=${partner.id}` : null);
   const [dispute, setDispute] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const { data: currencies } = useApi<Array<{ id: number; name: string; inverse_rate: number; date: string | null }>>(open ? "/finance/currencies" : null);
@@ -135,6 +138,7 @@ export function MoveForm({
         narration: narration || undefined,
         currency_id: currencyId ? Number(currencyId) : undefined,
         contract_ref: contractRef.trim() || undefined,
+        commitment_id: commitmentId ? Number(commitmentId) : undefined,
         dispute: dispute || undefined,
         dispute_reason: dispute ? disputeReason.trim() : undefined,
         post,
@@ -211,6 +215,11 @@ export function MoveForm({
           <Field label="Contrat ou bon de commande" className={sale ? "md:col-span-2" : undefined}>
             <Input value={contractRef} onChange={(e) => setContractRef(e.target.value)} />
           </Field>
+          {moveType === "in_invoice" && (commitments?.length ?? 0) > 0 && (
+            <Field label="Engagement de dépense" hint="Dans la limite du reste à engager, la pièce ne repasse pas par le circuit d'approbation.">
+              <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtDec(c.remaining)})` }))} />
+            </Field>
+          )}
           <Field label="Devise" hint={currency && currency.name !== "GNF" ? `1 ${currency.name} = ${fmtDec(currency.inverse_rate)} GNF${currency.date ? ` au ${fmtDate(currency.date)}` : ""}` : undefined}>
             <Select value={currencyId} onChange={(e) => setCurrencyId(e.target.value)} placeholder="Devise de la société" options={(currencies ?? []).map((c) => ({ value: c.id, label: c.name }))} />
           </Field>

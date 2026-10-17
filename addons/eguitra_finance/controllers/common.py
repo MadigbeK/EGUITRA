@@ -223,6 +223,9 @@ def move_summary(move):
         "dispute": move.eguitra_dispute,
         "dispute_reason": move.eguitra_dispute_reason or None,
         "dispute_date": move.eguitra_dispute_date,
+        "commitment": ({"id": move.eguitra_commitment_id.id, "name": move.eguitra_commitment_id.name,
+                        "object": move.eguitra_commitment_id.object}
+                       if "eguitra_commitment_id" in move._fields and move.eguitra_commitment_id else None),
     }
 
 

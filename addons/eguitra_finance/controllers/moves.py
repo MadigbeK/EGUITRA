@@ -158,6 +158,16 @@ def _invoice_lines(data, move_type, partner=None):
     return commands
 
 
+def _commitment(value, move_type, partner):
+    """Engagement de dépense approuvé du fournisseur, que la pièce d'achat consomme (eguitra_approval)."""
+    if move_type != "in_invoice":
+        raise ApiError(422, "business_rule", "Seule une pièce d'achat consomme un engagement.")
+    commitment = request.env["eguitra.commitment"].browse(int(value)).exists()
+    if not commitment or commitment.state != "approved" or commitment.company_id != request.env.company             or commitment.partner_id.commercial_partner_id != partner.commercial_partner_id:
+        raise ApiError(422, "business_rule", "Engagement inconnu, non approuvé ou d'un autre fournisseur.")
+    return commitment.id
+
+
 def category_of(value, company):
     """Catégorie de dépense active de la société, désignée par la saisie."""
     Category = request.env["eguitra.expense.category"]
@@ -342,6 +352,8 @@ class EguitraFinanceMoves(http.Controller):
                 if not currency or not currency.active:
                     raise ApiError(422, "business_rule", "Devise inconnue ou inactive.")
                 values["currency_id"] = currency.id
+            if data.get("commitment_id"):
+                values["eguitra_commitment_id"] = _commitment(data["commitment_id"], move_type, partner)
         move = request.env["account.move"].create(values)
         if data.get("dispute") and move.move_type != "entry":
             move.eguitra_set_dispute(True, data.get("dispute_reason"))
@@ -364,6 +376,10 @@ class EguitraFinanceMoves(http.Controller):
             values["eguitra_contract_ref"] = str(data["contract_ref"] or "").strip()[:120] or False
         if "partner_id" in data:
             values["partner_id"] = int(data["partner_id"])
+        if "commitment_id" in data and move.move_type == "in_invoice":
+            partner = _partner(values["partner_id"]) if values.get("partner_id") else move.partner_id
+            values["eguitra_commitment_id"] = (_commitment(data["commitment_id"], move.move_type, partner)
+                                               if data["commitment_id"] else False)
         for key in ("invoice_date", "invoice_date_due", "date"):
             if key in data:
                 values[key] = parse_date(data, key)

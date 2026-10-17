@@ -13,7 +13,7 @@ type View = "lignes" | "activite" | "centre_cout";
 interface BudgetRef { id: number; name: string; date_from: string; budget_lines: number; underrun_pct: number }
 interface Ref { id: number; name: string }
 interface BudgetLine { id: number; nature: Nature; name: string; account_prefixes: string | null; residual: boolean; activity: Ref | null; cost_center: Ref | null; months: number[]; annual: number }
-interface ExecLine extends BudgetLine { budget: number; actual: number; gap: number; gap_pct: number | null; status: string; status_label: string; alert: boolean }
+interface ExecLine extends BudgetLine { budget: number; actual: number; gap: number; gap_pct: number | null; status: string; status_label: string; alert: boolean; committed?: number; available?: number | null }
 interface AxisRow { analytic_account_id: number | null; name: string; income_budget: number; income_actual: number; expense_budget: number; expense_actual: number; capex_budget: number; capex_actual: number; margin_budget: number; margin_actual: number }
 interface Execution {
   budget: { id: number; name: string; year: number; underrun_pct: number };
@@ -122,6 +122,8 @@ export function BudgetLines() {
                   { key: "budget", label: "Budget cumulé", align: "right", render: (l) => fmtShort(l.budget) },
                   { key: "actual", label: "Réalisé", align: "right", render: (l) => fmtShort(l.actual) },
                   { key: "gap", label: "Écart", align: "right", render: (l) => <span className={l.gap < 0 === (l.nature === "income") && Math.abs(l.gap) > 0.5 ? "text-danger" : ""}>{fmtShort(l.gap)}</span> },
+                  { key: "committed", label: "Engagé", align: "right", render: (l) => (l.nature === "income" ? "–" : fmtShort(l.committed ?? 0)) },
+                  { key: "available", label: "Disponible (année)", align: "right", render: (l) => (l.available === null || l.available === undefined ? "–" : <span className={l.available < 0 ? "text-danger" : ""}>{fmtShort(l.available)}</span>) },
                   { key: "gap_pct", label: "Écart %", align: "right", render: (l) => fmtPct(l.gap_pct) },
                   { key: "status", label: "Statut", render: (l) => <Badge tone={STATUS_TONE[l.status] ?? "neutral"}>{l.status_label}</Badge> },
                 ]}
