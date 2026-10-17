@@ -9,9 +9,24 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 
 from ..models.analytic import ACTIVITY_PLAN, account_shares, distribution_ids, plan_key
+from ..models.res_users import FREE_ACCOUNTS
 
 FIN_READ = ("admin", "direction", "finance")
 FIN_WRITE = ("admin", "finance")
+
+
+def free_accounts():
+    """L'utilisateur a-t-il le droit « Saisie libre des comptes » (models/res_users.py) ?"""
+    return request.env.user.has_group(FREE_ACCOUNTS)
+
+
+def require_free_accounts(what, detail=None):
+    """Refus (403) d'un choix de compte, ou d'une saisie qui en exige un, sans le droit de saisie libre."""
+    if not free_accounts():
+        detail = detail or ("La ligne prend le compte de sa catégorie de dépense, du type d'opération, de l'activité "
+                            "ou du produit")
+        raise ApiError(403, "forbidden", f"{what} : réservé au droit « Saisie libre des comptes ». {detail} ; "
+                                         "demandez ce droit à l'administration si nécessaire.")
 
 
 def companies(kw):

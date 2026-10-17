@@ -52,7 +52,34 @@ class ResUsers(models.Model):
             "password_change_required": bool(user.eguitra_password_temporary),
             "lang": user.lang,
             "tz": user.tz or "Africa/Conakry",
+            "rights": self._eguitra_rights(),
         }
+
+    # ─── Droits complémentaires aux profils ──────────────────────────────
+
+    def _eguitra_right_groups(self):
+        """Droits complémentaires aux profils, code -> groupe du noyau (xmlid). Les modules déclarent les
+        leurs par héritage (eguitra_finance : free_accounts, saisie libre des comptes) ; l'administration
+        des utilisateurs les accorde ou les retire, la session les transmet aux applications."""
+        return {}
+
+    def _eguitra_rights(self):
+        """Droits complémentaires du compte : {code: accordé}."""
+        self.ensure_one()
+        return {code: self.has_group(xmlid) for code, xmlid in self._eguitra_right_groups().items()}
+
+    def _eguitra_set_rights(self, rights):
+        """Accorde (True) ou retire (False) les droits complémentaires cités ; les autres sont inchangés."""
+        self.ensure_one()
+        groups = self._eguitra_right_groups()
+        if not isinstance(rights, dict):
+            raise ValueError("Droits complémentaires invalides.")
+        unknown = set(rights) - set(groups)
+        if unknown:
+            raise ValueError(f"Droits inconnus : {', '.join(sorted(unknown))}")
+        commands = [(4 if granted else 3, self.env.ref(groups[code]).id) for code, granted in rights.items()]
+        if commands:
+            self.sudo().write({"group_ids": commands})
 
     def _eguitra_set_profiles(self, profiles):
         """Remplace les profils de la plateforme ; un porteur de projet n'a que ce profil."""

@@ -283,22 +283,25 @@ class EguitraFinancePilotage(models.AbstractModel):
         return self.threshold_values(companies)["cash_min"] or 0.0
 
     @api.model
-    def monthly_cash(self, companies, today, year=None, threshold=None):
+    def monthly_cash(self, companies, today, year=None, threshold=None, through=None):
         """Flux mensuels de trésorerie de l'exercice, sur les comptes des journaux de banque et de
         caisse : ouverture = solde à la veille de l'exercice + à-nouveaux de l'exercice ;
         encaissements = débits du mois, décaissements = crédits du mois, hors à-nouveaux et hors
         virements internes (pièces portant le compte de passage 585) ; cash net ; solde de fin de
         mois ; chiffre d'affaires HT du mois. Contrôle de chaque mois : à venir, sous le seuil, cash
-        net négatif ou conforme."""
+        net négatif ou conforme. Seul calcul des flux mensuels : tableau de bord, rapport mensuel,
+        alertes et export des états (through : date d'arrêté de l'export, les écritures postérieures
+        sont ignorées ; par défaut, tout l'exercice)."""
         main = companies[:1]
         fy_start, fy_end = self.fiscal_year_bounds(main, date(year, 12, 31) if year else today)
+        last = min(fy_end, through) if through else fy_end
         if threshold is None:
             threshold = self._cash_threshold(companies)
         accounts = self._treasury_accounts(companies)
         opening, flows = 0.0, {}
         if accounts:
             self.env.flush_all()
-            params = {"companies": list(companies.ids), "accounts": accounts.ids, "start": fy_start, "end": fy_end,
+            params = {"companies": list(companies.ids), "accounts": accounts.ids, "start": fy_start, "end": last,
                       "journal": OPENING_JOURNAL}
             self.env.cr.execute(
                 """SELECT COALESCE(SUM(aml.balance), 0)
@@ -325,7 +328,7 @@ class EguitraFinancePilotage(models.AbstractModel):
                 params,
             )
             flows = {month: (float(debit), float(credit)) for month, debit, credit in self.env.cr.fetchall()}
-        revenue = {k: -v for k, v in self._monthly_amounts(companies, fy_start, fy_end, ["70"]).items()}
+        revenue = {k: -v for k, v in self._monthly_amounts(companies, fy_start, last, ["70"]).items()}
         current = today.strftime("%Y-%m")
         months, balance = [], opening
         month = fy_start.replace(day=1)
@@ -674,15 +677,22 @@ class EguitraFinancePilotage(models.AbstractModel):
 
     @api.model
     def questions(self, companies, d):
-        """Les onze questions du dirigeant : réponse, verdict (green, orange, red, grey) et lecture."""
+        """Les onze questions du dirigeant : réponse, verdict (green, orange, red, grey) et lecture.
+
+        Le verdict d'une question suit le seuil de sa règle d'alerte (Administration > Seuils et taux) :
+        un seuil laissé à 0 éteint la règle, la question ne juge plus (verdict grey, « seuil non fixé »)
+        au lieu de se comparer à une valeur codée. Seule exception : une trésorerie négative reste en
+        rouge, constat que couvre la règle toujours active « compte de trésorerie à solde négatif »."""
         th = d["thresholds"]
         wc = d["working_capital"]
         totals = d["income_totals"]
         result, xd, xb = totals.get("XI", 0.0), totals.get("XD", 0.0), totals.get("XB", 0.0)
         out = []
 
-        def q(key, question, answer, verdict, reading):
-            out.append({"key": key, "question": question, "answer": answer, "verdict": verdict, "reading": reading})
+        def q(key, question, answer, verdict, reading, unset=False):
+            """unset : verdict grey faute de seuil (règle éteinte), l'écran l'affiche « seuil non fixé »."""
+            out.append({"key": key, "question": question, "answer": answer, "verdict": verdict, "reading": reading,
+                        "threshold_unset": bool(unset) and verdict == "grey"})
 
         # 1. Résultat
         net_pct = _pct(result, xb) if xb else None
@@ -717,18 +727,19 @@ class EguitraFinancePilotage(models.AbstractModel):
                         f"{_num(max(cash, 0.0) / avg)} mois. ")
         reading += f"Prévue fin {forecast['label']} : {_money(forecast['end'])}."
         verdict = ("red" if cash < 0 or (floor and cash < floor)
-                   else "orange" if not floor or (floor and forecast["end"] < floor) else "green")
-        q("cash", "Ai-je de quoi payer le mois prochain ?", _money(cash), verdict, reading)
+                   else "grey" if not floor else "orange" if forecast["end"] < floor else "green")
+        q("cash", "Ai-je de quoi payer le mois prochain ?", _money(cash), verdict, reading, unset=not floor)
 
         # 4. Créances
         rec = d["receivables"]
         share = wc["overdue_share_pct"]
-        limit = th["receivable_overdue_share_pct"] or 20.0
+        limit = th["receivable_overdue_share_pct"]
         q("receivables", "Combien mes clients me doivent-ils ?", _money(rec["total"]),
-          "grey" if share is None else "red" if share > limit else "orange" if share > limit / 2 else "green",
+          "grey" if share is None or not limit else "red" if share > limit else "orange" if share > limit / 2 else "green",
           (f"{_num(share)} % sont échues, soit {_money(rec['overdue'])}, dont {_money(rec['aging']['plus_90'])} "
-           "depuis plus de 90 jours. C'est le premier gisement de trésorerie disponible.")
-          if share is not None else "Aucune créance client en cours.")
+           "depuis plus de 90 jours. C'est le premier gisement de trésorerie disponible."
+           + (f" Part échue tolérée : {_num(limit, 0)} %." if limit else " Part échue tolérée : seuil non fixé."))
+          if share is not None else "Aucune créance client en cours.", unset=share is not None and not limit)
 
         # 5. DSO
         dso = wc["dso"]
@@ -737,20 +748,21 @@ class EguitraFinancePilotage(models.AbstractModel):
         if wc["daily_sales_ttc"]:
             reading += f"Chaque jour de retard immobilise environ {_money(wc['daily_sales_ttc'])}."
         q("dso", "À quelle vitesse suis-je payé ?", "–" if dso is None else f"{_num(dso, 0)} jours",
-          "grey" if dso is None else "orange" if not target else
-          "green" if dso <= target else "orange" if dso <= target + 15 else "red", reading)
+          "grey" if dso is None or not target else
+          "green" if dso <= target else "orange" if dso <= target + 15 else "red", reading,
+          unset=dso is not None and not target)
 
         # 6. DSCR
         dscr = d["dscr"]
-        minimum = th["dscr_min"] or 1.2
+        minimum = th["dscr_min"]
         debt = d["debt"]
         q("dscr", "Puis-je honorer mes échéances bancaires ?", "–" if dscr is None else _num(dscr, 2),
-          "grey" if dscr is None else "red" if dscr < 1 else "orange" if dscr < minimum else "green",
-          (f"L'EBE des douze derniers mois couvre {_num(dscr, 2)} fois le service de la dette. Minimum "
-           f"{'fixé' if th['dscr_min'] else 'bancaire usuel'} : {_num(minimum, 2)}."
+          "grey" if dscr is None or not minimum else "red" if dscr < 1 else "orange" if dscr < minimum else "green",
+          (f"L'EBE des douze derniers mois couvre {_num(dscr, 2)} fois le service de la dette. "
+           + (f"Minimum fixé : {_num(minimum, 2)}." if minimum else "Minimum : seuil non fixé.")
            + (f" Prochaine échéance le {debt['next_due_date']:%d/%m/%Y} : {_money(debt['next_due_amount'])}."
               if debt.get("next_due_date") else ""))
-          if dscr is not None else "Aucun service de dette sur douze mois.")
+          if dscr is not None else "Aucun service de dette sur douze mois.", unset=dscr is not None and not minimum)
 
         # 7 et 8. Transport
         tr = d.get("transport")
@@ -763,10 +775,11 @@ class EguitraFinancePilotage(models.AbstractModel):
             after = (f" {len(v['deficit'])} camion(s) sur {v['count']} déficitaire(s) une fois la structure absorbée."
                      if v["basis"] == "net" else " Résultat après charges de structure non encore calculé.")
             q("transport", "Mon métier principal est-il rentable ?", "–" if rate is None else f"{_num(rate)} %",
-              "grey" if rate is None else "red" if rate < 0 else "orange" if seuil and rate < seuil else "green",
+              "grey" if rate is None or not seuil else "red" if rate < 0 else "orange" if rate < seuil else "green",
               f"Marge directe du transport sur {tr['rotations']} rotation(s)"
               + (f", {_num(tr['share_of_revenue_pct'])} % du chiffre d'affaires" if tr["share_of_revenue_pct"] else "")
-              + (f", seuil {_num(seuil, 0)} %." if seuil else ".") + after)
+              + (f", seuil {_num(seuil, 0)} %." if seuil else ", seuil non fixé.") + after,
+              unset=rate is not None and not seuil)
             names = ", ".join(x["label"] for x in v["deficit"][:6])
             q("vehicles", "Quels camions me coûtent de l'argent ?", f"{len(v['deficit'])} sur {v['count']}",
               "red" if v["deficit"] else "green",
@@ -922,9 +935,10 @@ class EguitraFinancePilotage(models.AbstractModel):
             text = (f"La dette financière s'élève à {_money(debt['accounting_outstanding'])} en comptabilité ; le service "
                     f"de la dette de l'exercice atteint {_money(debt['service_fy'])}")
             if k["dscr"] is not None:
-                minimum = dash["thresholds"]["dscr_min"] or 1.2
-                text += (f", couvert {_num(k['dscr'], 2)} fois par l'EBE des douze derniers mois "
-                         f"({'au-dessus' if k['dscr'] >= minimum else 'en dessous'} du minimum de {_num(minimum, 2)})")
+                minimum = dash["thresholds"]["dscr_min"]
+                text += f", couvert {_num(k['dscr'], 2)} fois par l'EBE des douze derniers mois"
+                text += (f" ({'au-dessus' if k['dscr'] >= minimum else 'en dessous'} du minimum de {_num(minimum, 2)})"
+                         if minimum else " (minimum : seuil non fixé)")
             paragraphs.append(text + ".")
 
         tr = report.get("transport_summary")

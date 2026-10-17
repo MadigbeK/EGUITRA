@@ -1,19 +1,16 @@
 """Immobilisations et amortissements (module account_asset_management) : registre, catégories,
 plans d'amortissement à dotations mensuelles, reprise des biens déjà en service, sorties d'actif."""
 
-import csv
-import io
-
 from dateutil.relativedelta import relativedelta
 
-from odoo import fields, http
+from odoo import http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text, xlsx_row
 
 from ..models.account_asset import PERIOD_LABELS
 from .common import FIN_READ, FIN_WRITE, as_float, parse_date, today
+from .exporting import export_meta, table_response
 
 PERIODS = ("month", "quarter", "year")
 STATES = {"draft": "Brouillon", "open": "En service", "close": "Totalement amorti", "removed": "Sorti de l'actif"}
@@ -265,19 +262,22 @@ class EguitraFinanceAssets(http.Controller):
 
     @api_route("/finance/assets/export", profiles=FIN_READ)
     def export_register(self, **kw):
-        """Registre des immobilisations : valeur, durée, mois amortis, cumul, VNC (CSV ou XLSX)."""
+        """Registre des immobilisations : valeur, durée, mois amortis, cumul, VNC (CSV ou XLSX). En-tête des
+        exports d'états : société, exercice, date d'arrêté (dotations comptabilisées à ce jour), date d'export."""
         company = request.env.company
         assets = request.env["account.asset"].search([("company_id", "=", company.id), ("state", "!=", "draft")],
                                                      order="code, name, id")
-        headers = ["Code", "Désignation", "Catégorie", "Compte", "Mise en service", "Valeur brute", "Durée (ans)",
-                   "Dotations", "Mois amortis", "Durée (mois)", "Amortissements cumulés", "Valeur nette comptable",
-                   "État", "Activité", "Localisation", "Responsable", "Cumul repris", "Reprise au"]
+        columns = [("Code", "text"), ("Désignation", "text"), ("Catégorie", "text"), ("Compte", "text"),
+                   ("Mise en service", "date"), ("Valeur brute", "money"), ("Durée (ans)", "int"), ("Dotations", "text"),
+                   ("Mois amortis", "int"), ("Durée (mois)", "int"), ("Amortissements cumulés", "money"),
+                   ("Valeur nette comptable", "money"), ("État", "text"), ("Activité", "text"), ("Localisation", "text"),
+                   ("Responsable", "text"), ("Cumul repris", "money"), ("Reprise au", "date")]
         rows = []
         for asset in assets:
             activity = _activity(asset)
             rows.append([
                 asset.code or "", asset.name, asset.profile_id.name, asset.profile_id.account_asset_id.code or "",
-                asset.date_start, asset.purchase_value,
+                asset.date_start or None, asset.purchase_value,
                 0 if asset.eguitra_non_depreciable else asset.method_number,
                 "non amortissable" if asset.eguitra_non_depreciable else PERIOD_LABELS.get(asset.method_period, ""),
                 asset.eguitra_months_depreciated, asset.eguitra_months_total, asset.value_depreciated, asset.value_residual,
@@ -288,49 +288,11 @@ class EguitraFinanceAssets(http.Controller):
         totals = ["TOTAL", "", "", "", None, sum(r[5] for r in rows), None, "", None, None, sum(r[10] for r in rows),
                   sum(r[11] for r in rows), "", "", "", "", None, None]
         stamp = today()
-        name = f"registre_immobilisations_{stamp:%Y%m%d}"
-        if kw.get("format") == "csv":
-            buf = io.StringIO()
-            buf.write("﻿")
-            writer = csv.writer(buf, delimiter=";")
-            writer.writerow(headers)
-            for row in rows + [totals]:
-                writer.writerow([
-                    "" if v is None else v.strftime("%d/%m/%Y") if hasattr(v, "strftime")
-                    else f"{v:.0f}" if isinstance(v, float) else v if isinstance(v, int) else csv_text(v)
-                    for v in row
-                ])
-            content, mime, ext = buf.getvalue().encode("utf-8"), "text/csv; charset=utf-8", "csv"
-        else:
-            import xlsxwriter
-
-            out = io.BytesIO()
-            book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
-            sheet = book.add_worksheet("Registre")
-            bold = book.add_format({"bold": True})
-            head = book.add_format({"bold": True, "bg_color": "#10133A", "font_color": "#FFFFFF", "border": 1})
-            money = book.add_format({"num_format": "# ##0"})
-            day = book.add_format({"num_format": "dd/mm/yyyy"})
-            total = book.add_format({"bold": True, "num_format": "# ##0", "top": 2})
-            xlsx_row(sheet, 0, ["Registre des immobilisations", company.name], bold)
-            xlsx_row(sheet, 1, ["Exporté le", fields.Datetime.now().strftime("%d/%m/%Y %H:%M")])
-            xlsx_row(sheet, 3, headers, head)
-            for r, row in enumerate(rows + [totals], start=4):
-                is_total = r == len(rows) + 4
-                for c, value in enumerate(row):
-                    if hasattr(value, "strftime"):
-                        sheet.write_datetime(r, c, fields.Datetime.to_datetime(value), day)
-                    elif isinstance(value, (int, float)):
-                        sheet.write_number(r, c, value, total if is_total else money)
-                    else:
-                        xlsx_row(sheet, r, [value], bold if is_total else None, col=c)
-            sheet.freeze_panes(4, 2)
-            sheet.set_column(0, 0, 12)
-            sheet.set_column(1, 2, 32)
-            sheet.set_column(3, 17, 15)
-            book.close()
-            content, mime, ext = out.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
-        return request.make_response(content, headers=[
-            ("Content-Type", mime), ("Content-Disposition", f'attachment; filename="{name}.{ext}"'),
-            ("Cache-Control", "no-store"),
-        ])
+        fy_start, fy_end = request.env["eguitra.finance.metrics"].fiscal_year_bounds(company, stamp)
+        sheet = {
+            "title": "Registre des immobilisations",
+            "meta": export_meta(company, [("Exercice", f"{fy_start:%d/%m/%Y} au {fy_end:%d/%m/%Y}"),
+                                          ("Arrêté au", stamp), ("Immobilisations", len(rows))]),
+            "columns": columns, "rows": rows, "totals": totals,
+        }
+        return table_response(f"registre_immobilisations_{stamp:%Y%m%d}", [sheet], kw.get("format", "xlsx"))

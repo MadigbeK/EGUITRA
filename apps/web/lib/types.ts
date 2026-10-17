@@ -29,6 +29,8 @@ export interface Me {
   password_change_required: boolean;
   lang: string;
   tz: string;
+  /** Droits complémentaires aux profils (free_accounts : saisie libre des comptes, eguitra_finance). */
+  rights?: { free_accounts?: boolean };
 }
 
 export interface ApiErrorBody {

@@ -13,11 +13,17 @@ interface UserRow extends Me {
 }
 /** entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro). */
 interface ProfileDef { code: string; name: string; description: string | null; entity: "groupe" | "cabinet" | null }
+/** Droit complémentaire aux profils (free_accounts : saisie libre des comptes). */
+interface RightDef { code: string; name: string; description: string | null }
+type Rights = Record<string, boolean | undefined>;
+/** Profils de saisie comptable : la saisie libre des comptes les concerne, accordée d'office à leur ouverture. */
+const PROFILS_COMPTABLES = ["admin", "direction", "finance"];
 
-/** Utilisateurs : profils, sociétés, mot de passe provisoire, double authentification. */
+/** Utilisateurs : profils, droits complémentaires, sociétés, mot de passe provisoire, double authentification. */
 export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]; defaultCompany: number }) {
   const { data: users, error, mutate } = useApi<UserRow[]>("/admin/users");
   const { data: profiles } = useApi<ProfileDef[]>("/admin/profiles");
+  const { data: rights } = useApi<RightDef[]>("/admin/rights");
   const [editing, setEditing] = useState<UserRow | "new" | null>(null);
   const label = (code: string) => profiles?.find((p) => p.code === code)?.name ?? code;
   return (
@@ -52,23 +58,27 @@ export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]
           />
         )}
       </Card>
-      {editing && profiles && <UserForm user={editing === "new" ? null : editing} profiles={profiles} companies={companies} defaultCompany={defaultCompany} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
+      {editing && profiles && <UserForm user={editing === "new" ? null : editing} profiles={profiles} rights={rights ?? []} companies={companies} defaultCompany={defaultCompany} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
     </div>
   );
 }
 
-function UserForm({ user, profiles, companies, defaultCompany, onClose, onSaved }: { user: UserRow | null; profiles: ProfileDef[]; companies: Company[]; defaultCompany: number; onClose: () => void; onSaved: () => void }) {
+function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, onSaved }: { user: UserRow | null; profiles: ProfileDef[]; rights: RightDef[]; companies: Company[]; defaultCompany: number; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ name: user?.name ?? "", login: user?.login ?? "", email: user?.email ?? "", password: "" });
   const [companyIds, setCompanyIds] = useState<number[]>(user ? user.companies.map((c) => c.id) : [defaultCompany]);
   const [mainCompany, setMainCompany] = useState<number>(user?.company_id ?? defaultCompany);
   // Sociétés de l'utilisateur hors du périmètre de l'administrateur : conservées, non modifiables ici.
   const foreign = user ? user.companies.filter((c) => !companies.some((m) => m.id === c.id)) : [];
   const [selected, setSelected] = useState<string[]>(user?.profiles.filter((p) => !(p === "direction" || p === "finance") || !user.profiles.includes("admin")) ?? []);
+  const [granted, setGranted] = useState<Rights>(user?.rights ?? {});
+  const comptable = selected.some((p) => PROFILS_COMPTABLES.includes(p));
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   function toggle(code: string) {
     const ajout = !selected.includes(code);
+    // Premier profil comptable : la saisie libre des comptes est accordée d'office (décochable).
+    if (ajout && PROFILS_COMPTABLES.includes(code) && !comptable) setGranted((g) => ({ ...g, free_accounts: true }));
     if (code === "porteur") setSelected(ajout ? ["porteur"] : []);
     else setSelected((s) => (s.includes(code) ? s.filter((x) => x !== code) : [...s.filter((x) => x !== "porteur"), code]));
     // Un profil propre à une société ouvre cette société au compte.
@@ -102,10 +112,12 @@ function UserForm({ user, profiles, companies, defaultCompany, onClose, onSaved 
     if (!next.includes(mainCompany) && next.length) setMainCompany(next[0]!);
   }
   const companyPayload = { company_ids: companyIds, company_id: companyIds.includes(mainCompany) ? mainCompany : companyIds[0] };
+  // Droits envoyés tels qu'affichés, pour un compte à profil comptable (sinon inchangés).
+  const rightsPayload = comptable && rights.length ? { rights: Object.fromEntries(rights.map((r) => [r.code, Boolean(granted[r.code])])) } : {};
   const save = () =>
     user
-      ? run(() => apiSend("PATCH", `/admin/users/${user.id}`, { name: form.name, email: form.email, profiles: selected, ...(foreign.length ? {} : companyPayload) }), "", true)
-      : run(() => apiSend("POST", "/admin/users", { ...form, profiles: selected, ...companyPayload }), "", true);
+      ? run(() => apiSend("PATCH", `/admin/users/${user.id}`, { name: form.name, email: form.email, profiles: selected, ...rightsPayload, ...(foreign.length ? {} : companyPayload) }), "", true)
+      : run(() => apiSend("POST", "/admin/users", { ...form, profiles: selected, ...rightsPayload, ...companyPayload }), "", true);
 
   return (
     <Modal open wide title={user ? user.name : "Nouvel utilisateur"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={save} disabled={!form.name || !form.login || !selected.length || !companyIds.length || (!user && form.password.length < 10)}>Enregistrer</Button>}>
@@ -163,6 +175,22 @@ function UserForm({ user, profiles, companies, defaultCompany, onClose, onSaved 
             ))}
           </div>
         </div>
+        {comptable && rights.length > 0 && (
+          <div>
+            <div className="mb-2 text-xs font-medium text-ink-2">Droits complémentaires</div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {rights.map((r) => (
+                <label key={r.code} className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-panel-2 px-3 py-2">
+                  <input type="checkbox" className="mt-1" checked={Boolean(granted[r.code])} onChange={(e) => setGranted({ ...granted, [r.code]: e.target.checked })} />
+                  <span>
+                    <span className="block text-sm text-ink">{r.name}</span>
+                    <span className="block text-xs text-muted">{r.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         {manquantes.length > 0 && (
           <Notice tone="warn">
             {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro Consulting" : "EGUITRA GROUP SARLU")}.`).join(" ")}

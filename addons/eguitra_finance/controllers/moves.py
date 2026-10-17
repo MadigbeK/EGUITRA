@@ -20,9 +20,11 @@ from .common import (
     as_float,
     check_mandatory_analytic,
     distribution,
+    free_accounts,
     move_detail,
     move_summary,
     parse_date,
+    require_free_accounts,
     today,
     with_rules,
 )
@@ -61,6 +63,16 @@ def account_of_company(value, company, label="Compte"):
     if not account or company not in account.company_ids:
         raise ApiError(422, "business_rule", f"{label} absent du plan de comptes de la société.")
     return account.sudo(False)
+
+
+def chosen_account(value, company, label="Compte", allowed=None):
+    """Compte choisi à la saisie (account_of_company), réservé au droit « Saisie libre des comptes »,
+    sauf s'il est celui que la saisie déduit déjà (allowed : compte de la catégorie, du type d'opération,
+    ou compte actuel d'un référentiel modifié)."""
+    account = account_of_company(value, company, label)
+    if account and not (allowed and account.id == allowed.id):
+        require_free_accounts(f"{label} choisi à la saisie")
+    return account
 
 
 def mandatory_prefixes(company):
@@ -107,10 +119,12 @@ def _default_journal(data, sale, company):
 
 
 def _invoice_lines(data, move_type, partner=None):
-    """Lignes d'une facture ou d'une pièce d'achat. Compte : celui saisi, sinon le compte de produit de
-    l'activité (ventes) ou de la catégorie de dépense (achats), sinon le compte par défaut du journal.
-    TVA : celle saisie, sinon celle de la catégorie, sinon la taxe par défaut. Analytique : la
-    répartition saisie, complétée par les imputations automatiques pour les axes laissés vides."""
+    """Lignes d'une facture ou d'une pièce d'achat. Compte : celui saisi (droit « Saisie libre des
+    comptes »), sinon le compte de la catégorie de dépense (achats) ou du produit, sinon le compte de
+    produit de l'activité (ventes), sinon le compte par défaut du journal ; sans ce droit, une ligne
+    d'achat se saisit par catégorie (ou produit). TVA : celle saisie, sinon celle de la catégorie, sinon
+    la taxe par défaut. Analytique : la répartition saisie, complétée par les imputations automatiques
+    pour les axes laissés vides."""
     lines = data.get("lines") or []
     if not isinstance(lines, list) or not lines:
         raise ApiError(400, "missing_fields", "Au moins une ligne est requise.", fields=["lines"])
@@ -129,8 +143,11 @@ def _invoice_lines(data, move_type, partner=None):
             "price_unit": as_float(line.get("price_unit", 0), "price_unit"),
         }
         dist = distribution(line.get("analytic_distribution"), company)
-        account = account_of_company(line.get("account_id"), company, f"Ligne {i} : compte")
         category = category_of(line.get("category_id"), company) if not sale else request.env["eguitra.expense.category"]
+        account = chosen_account(line.get("account_id"), company, f"Ligne {i} : compte", allowed=category.account_id)
+        if not sale and not (category or account or line.get("product_id")) and not free_accounts():
+            raise ApiError(422, "business_rule", f"Ligne {i} : choisissez la catégorie de dépense, dont la ligne prend "
+                                                 "le compte.")
         if category:
             values["eguitra_expense_category_id"] = category.id
             account = account or category.account_id
@@ -213,7 +230,8 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
         amount = as_float(line.get("quantity", 1), "quantity") * as_float(line.get("price_unit", 0), "price_unit")
         if amount <= 0:
             raise ApiError(422, "business_rule", "Chaque ligne doit avoir un montant positif.")
-        account = account_of_company(line.get("account_id"), company, "Compte") or category.account_id
+        account = (chosen_account(line.get("account_id"), company, "Compte", allowed=category.account_id)
+                   or category.account_id)
         dist = with_rules(distribution(line.get("analytic_distribution"), company), account, partner, company)
         values = {"name": str(line["name"])[:500], "account_id": account.id, "eguitra_expense_category_id": category.id,
                   "debit": 0.0 if refund else amount, "credit": amount if refund else 0.0}
@@ -234,7 +252,15 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
     return request.env["account.move"].create(values)
 
 
+# Refus d'une opération diverse sans le droit de saisie libre : où saisir à la place.
+ENTRY_DETAIL = ("Saisissez une dépense par sa catégorie (Achats et dépenses) et une opération de banque ou de "
+                "caisse par son type (Trésorerie)")
+
+
 def _entry_lines(data):
+    """Lignes d'une opération diverse, chacune sur un compte choisi : réservée au droit « Saisie libre
+    des comptes » (refus 403 sans ce droit)."""
+    require_free_accounts("Opération diverse", ENTRY_DETAIL)
     lines = data.get("lines") or []
     if len(lines) < 2:
         raise ApiError(400, "missing_fields", "Une opération diverse comporte au moins deux lignes.")
@@ -325,6 +351,7 @@ class EguitraFinanceMoves(http.Controller):
         if data.get("contract_ref"):
             values["eguitra_contract_ref"] = str(data["contract_ref"]).strip()[:120]
         if move_type == "entry":
+            require_free_accounts("Opération diverse", ENTRY_DETAIL)
             if not data.get("journal_id"):
                 raise ApiError(400, "missing_fields", "Journal requis.", fields=["journal_id"])
             values["date"] = parse_date(data, "date", today())

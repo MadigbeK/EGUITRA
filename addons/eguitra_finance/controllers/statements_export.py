@@ -1,8 +1,11 @@
 """Exports des états (offre, chapitre 3.3 : « exports CSV et XLSX de tous les journaux et états ») :
 bilan, compte de résultat (mois, exercice, % du chiffre d'affaires, exercice précédent), tableau des
 flux, balance (classe, soldes d'ouverture, mouvements, soldes débiteur et créditeur), flux mensuels
-de trésorerie et grand livre (activité, solde progressif, totaux par compte). Un onglet par état,
-en-tête société, exercice, date d'arrêté et date d'export."""
+de trésorerie (calcul du tableau de bord, avec le contrôle de chaque mois) et grand livre (activité,
+solde progressif, totaux par compte). Un onglet par état, en-tête société, exercice, date d'arrêté et
+date d'export."""
+
+from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -20,6 +23,13 @@ from .exporting import export_meta, table_response
 KINDS = ("bilan", "resultat", "flux", "balance", "flux_mensuels", "grand_livre")
 ALL = ("bilan", "resultat", "flux", "balance", "flux_mensuels")
 MAX_LEDGER_DAYS = 400
+# Contrôle de chaque mois des flux mensuels (libellés de l'écran Activités et budget).
+CASH_STATUS = {"a_venir": "À venir", "sous_seuil": "Sous le seuil", "cash_net_negatif": "Cash net négatif",
+               "conforme": "Conforme"}
+
+
+def _gnf(amount):
+    return f"{amount:,.0f} GNF".replace(",", " ")
 
 
 def income_with_month(scope, start, end):
@@ -175,66 +185,45 @@ class EguitraFinanceStatementsExport(http.Controller):
 
     def _monthly_cash(self, scope, start, end, meta):
         rows = self._monthly_cash_rows(scope, start, end)
+        threshold = request.env["eguitra.finance.metrics"].sudo()._cash_threshold(scope)
+        # Seuil du contrôle « sous le seuil », propre à cet onglet (avant la date d'export).
+        meta = meta[:-1] + [("Seuil de sécurité", _gnf(threshold) if threshold else "non fixé (contrôle éteint)")] + meta[-1:]
         return {"title": "Flux mensuels", "meta": meta,
                 "columns": [("Mois", "text"), ("Trésorerie d'ouverture", "money"), ("Encaissements", "money"),
                             ("Décaissements", "money"), ("Cash net", "money"), ("Trésorerie de fin de mois", "money"),
-                            ("CA HT du mois", "money")],
-                "rows": [[r["month"], r["opening"], r["receipts"], r["disbursements"], r["net"], r["closing"], r["revenue"]]
-                         for r in rows],
+                            ("CA HT du mois", "money"), ("Contrôle", "text")],
+                "rows": [[r["month"], r["opening"], r["receipts"], r["disbursements"], r["net"], r["closing"], r["revenue"],
+                          CASH_STATUS.get(r["status"], r["status"])] for r in rows],
                 "totals": ["Période", rows[0]["opening"] if rows else 0.0, sum(r["receipts"] for r in rows),
                            sum(r["disbursements"] for r in rows), sum(r["net"] for r in rows),
-                           rows[-1]["closing"] if rows else 0.0, sum(r["revenue"] for r in rows)]}
+                           rows[-1]["closing"] if rows else 0.0, sum(r["revenue"] for r in rows), None]}
 
     def _monthly_cash_rows(self, scope, start, end):
-        """Flux mensuels de trésorerie (comptes des journaux de banque et de caisse).
-
-        Point d'extension : la session « flux mensuels » (S9) ajoute ce calcul à
-        eguitra.finance.metrics (route /finance/cash/monthly). À la fusion, remplacer le calcul de
-        repli ci-dessous par l'appel à sa fonction, en gardant les clés month, opening, receipts,
-        disbursements, net, closing et revenue. Repli : ouverture = solde à la veille de la période
-        plus à-nouveaux ; encaissements et décaissements = débits et crédits du mois, hors
-        virements internes (pièces qui mouvementent le 585)."""
-        journals = request.env["account.journal"].sudo().search(
-            [("company_id", "in", scope.ids), ("type", "in", ("bank", "cash"))])
-        accounts = journals.default_account_id.ids
-        if not accounts:
-            return []
-        request.env.flush_all()
-        cr = request.env.cr
-        params = {"accounts": accounts, "companies": list(scope.ids), "start": start, "end": end, "an": OPENING_JOURNAL}
-        cr.execute(
-            """SELECT COALESCE(SUM(aml.balance), 0) FROM account_move_line aml
-                 JOIN account_journal aj ON aj.id = aml.journal_id
-                WHERE aml.parent_state = 'posted' AND aml.account_id = ANY(%(accounts)s)
-                  AND (aml.date < %(start)s OR (aml.date <= %(end)s AND aj.code = %(an)s))""",
-            params,
-        )
-        opening = float(cr.fetchone()[0])
-        cr.execute(
-            f"""SELECT to_char(date_trunc('month', aml.date), 'YYYY-MM'), COALESCE(SUM(aml.debit), 0),
-                       COALESCE(SUM(aml.credit), 0)
-                  FROM account_move_line aml
-                  JOIN account_journal aj ON aj.id = aml.journal_id
-                 WHERE aml.parent_state = 'posted' AND aml.account_id = ANY(%(accounts)s)
-                   AND aml.date BETWEEN %(start)s AND %(end)s AND aj.code != %(an)s
-                   AND NOT EXISTS (SELECT 1 FROM account_move_line t JOIN account_account ta ON ta.id = t.account_id
-                                    WHERE t.move_id = aml.move_id AND {ACC_CODE.replace('aml.', 't.').replace('aa.', 'ta.')} LIKE '585%%')
-              GROUP BY 1""",
-            params,
-        )
-        flows = {month: (float(d), float(c)) for month, d, c in cr.fetchall()}
-        revenue = {r["month"]: r["amount"] for r in request.env["eguitra.finance.metrics"].sudo().monthly_series(
-            scope, (end.year - start.year) * 12 + end.month - start.month + 1, end, ["70"])}
-        rows, month = [], start.replace(day=1)
-        balance = opening
-        while month <= end:
-            key = f"{month:%Y-%m}"
-            receipts, disbursements = flows.get(key, (0.0, 0.0))
-            net = receipts - disbursements
-            rows.append({"month": key, "opening": balance, "receipts": receipts, "disbursements": disbursements,
-                         "net": net, "closing": balance + net, "revenue": revenue.get(key, 0.0)})
-            balance += net
-            month += relativedelta(months=1)
+        """Flux mensuels de trésorerie : le calcul du tableau de bord (eguitra.finance.metrics.monthly_cash),
+        écritures arrêtées à la date d'arrêté, du mois de début de la période au mois de cette date (mois
+        entiers ; une période sur deux exercices les parcourt l'un après l'autre). Ouverture de chaque
+        mois = solde de fin du mois précédent ; contrôle du mois : à venir, sous le seuil de sécurité,
+        cash net négatif, conforme."""
+        metrics = request.env["eguitra.finance.metrics"].sudo()
+        # Dates d'arrêté de chaque exercice couvert, du plus ancien au plus récent.
+        stops, day = [], end
+        while True:
+            stops.insert(0, day)
+            fy_start = metrics.fiscal_year_bounds(scope[:1], day)[0]
+            if fy_start <= start:
+                break
+            day = fy_start - timedelta(days=1)
+        first = f"{start:%Y-%m}"
+        rows = []
+        for stop in stops:
+            data = metrics.monthly_cash(scope, stop, through=stop)
+            balance = data["opening"]
+            for month in data["months"]:
+                opening, balance = balance, balance + month["net"]
+                if first <= month["month"] <= f"{stop:%Y-%m}":
+                    rows.append({"month": month["month"], "opening": opening, "receipts": month["receipts"],
+                                 "disbursements": month["payments"], "net": month["net"], "closing": balance,
+                                 "revenue": month["revenue"], "status": month["status"]})
         return rows
 
     def _ledger(self, scope, start, end, meta):

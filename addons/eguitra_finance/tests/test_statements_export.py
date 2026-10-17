@@ -1,9 +1,13 @@
+import csv
 import io
+from datetime import timedelta
 
+from odoo import Command
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 
+from ..controllers.statements_export import CASH_STATUS
 from .common import FinanceDataMixin
 
 
@@ -41,6 +45,45 @@ class TestStatementsExport(FinanceDataMixin, ApiCase):
 
         status, body = self.call("GET", "/finance/statements/export?kind=all&format=csv", token=self.token)
         self.assertEqual(status, 400, "Un export CSV porte sur un seul état")
+
+    def test_flux_mensuels_du_tableau_de_bord(self):
+        """Flux mensuels exportés : le calcul du tableau de bord (monthly_cash), contrôle de chaque mois,
+        écritures arrêtées à la date d'arrêté."""
+        metrics = self.env["eguitra.finance.metrics"]
+        fy_start = metrics.fiscal_year_bounds(self.company, self.today)[0]
+        bank, receivable = self.bank.default_account_id, self.customer.property_account_receivable_id
+        for day, amount in ((fy_start, 30_000_000), (fy_start + timedelta(days=1), 5_000_000)):
+            self.env["account.move"].create({
+                "move_type": "entry", "journal_id": self.bank.id, "date": day,
+                "line_ids": [
+                    Command.create({"name": "Règlement client", "account_id": bank.id, "debit": amount}),
+                    Command.create({"name": "Règlement client", "account_id": receivable.id,
+                                    "partner_id": self.customer.id, "credit": amount}),
+                ],
+            }).action_post()
+        self.env.flush_all()  # visible des requêtes HTTP
+
+        def rows(day):
+            text = self._get(f"/finance/statements/export?kind=flux_mensuels&format=csv&date_to={day.isoformat()}")
+            return list(csv.reader(io.StringIO(text.content.decode("utf-8-sig")), delimiter=";"))
+
+        table = rows(self.today)
+        header, body, totals = table[0], table[1:-1], table[-1]
+        self.assertEqual(header[-1], "Contrôle")
+        self.assertEqual(totals[0], "Période")
+        months = [m for m in metrics.monthly_cash(self.company, self.today)["months"] if m["month"] <= f"{self.today:%Y-%m}"]
+        self.assertEqual([r[0] for r in body], [m["month"] for m in months], "Mois de l'exercice jusqu'à l'arrêté")
+        for row, month in zip(body, months, strict=True):
+            self.assertEqual(row[header.index("Encaissements")], f"{month['receipts']:.0f}")
+            self.assertEqual(row[header.index("Décaissements")], f"{month['payments']:.0f}")
+            self.assertEqual(row[header.index("Trésorerie de fin de mois")], f"{month['end']:.0f}")
+            self.assertEqual(row[header.index("CA HT du mois")], f"{month['revenue']:.0f}")
+            self.assertEqual(row[header.index("Contrôle")], CASH_STATUS[month["status"]])
+
+        first = rows(fy_start)
+        self.assertEqual(len(first), 3, "Un mois, entre l'en-tête et les totaux")
+        self.assertEqual(first[1][first[0].index("Encaissements")], "30000000",
+                         "Le règlement du lendemain de l'arrêté n'est pas compté")
 
     def test_balance_classes_et_soldes(self):
         text = self._get("/finance/statements/export?kind=balance&format=csv").content.decode("utf-8-sig")

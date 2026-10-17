@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
-import { apiSend, useApi, ApiError } from "@/lib/api-client";
+import { apiSend, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 
@@ -28,6 +28,7 @@ const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", a
 /**
  * Saisie d'une facture de vente ou d'une pièce d'achat ; contreparties, TVA et échéance sont déduites.
  * Une pièce d'achat se saisit par catégorie de dépense (compte, TVA et compte de tiers en découlent).
+ * Le choix du compte d'une ligne n'apparaît qu'avec le droit « Saisie libre des comptes ».
  * Chaque ligne s'impute sur les axes de la société de travail (activité, centre de coût et axes des
  * métiers) ; les axes laissés vides suivent les imputations automatiques.
  */
@@ -43,6 +44,9 @@ export function MoveForm({
   moveType: "out_invoice" | "out_refund" | "in_invoice" | "in_refund";
 }) {
   const sale = moveType.startsWith("out_");
+  // Sans le droit « Saisie libre des comptes », le compte n'est pas choisi : il découle de la catégorie
+  // (achats), de l'activité ou du compte par défaut (ventes).
+  const libre = useSaisieLibre(open);
   const { data: accounts } = useApi<Account[]>(open ? `/finance/accounts?prefix=${sale ? "7" : "6"}&limit=2000` : null);
   const { data: categories } = useApi<ExpenseCategory[]>(open && !sale ? "/finance/expense-categories" : null);
   const { data: axes } = useAxes(open);
@@ -111,6 +115,7 @@ export function MoveForm({
   function accountPlaceholder(l: LineDraft) {
     const category = categoryOf(l);
     if (category?.account) return `Compte de la catégorie (${category.account.code})`;
+    if (!sale && !libre) return "Selon la catégorie";
     if (sale && l.axes.activite) {
       const income = activities.find((a) => String(a.id) === l.axes.activite)?.income_account_id;
       const account = accounts?.find((a) => a.id === income);
@@ -126,6 +131,7 @@ export function MoveForm({
       return setError("Chaque ligne doit avoir un libellé et un montant.");
     }
     if (mixed) return setError("Séparez la pièce : une dépense passée en opération diverse ne se mêle pas aux achats.");
+    if (!sale && !libre && lines.some((l) => !l.category_id)) return setError("Choisissez la catégorie de dépense de chaque ligne : le compte en découle.");
     if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
     setBusy(true);
     try {
@@ -148,7 +154,7 @@ export function MoveForm({
             name: l.name,
             quantity: Number(l.quantity) || 1,
             price_unit: Number(l.price_unit.replace(/\s/g, "")),
-            account_id: l.account_id ? Number(l.account_id) : undefined,
+            account_id: libre && l.account_id ? Number(l.account_id) : undefined,
             category_id: l.category_id ? Number(l.category_id) : undefined,
             tax_ids: tax === "none" ? [] : [Number(tax)],
             withholding_tax_ids: l.withholding === "" ? undefined : l.withholding === "none" ? [] : [Number(l.withholding)],
@@ -270,7 +276,13 @@ export function MoveForm({
                       <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" />
                     </td>
                     <td className="px-2 pt-1.5">
-                      <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+                      {libre ? (
+                        <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+                      ) : (
+                        <span className="block truncate px-1 py-2 text-[12.5px] text-muted" title="Choix du compte : droit « Saisie libre des comptes »">
+                          {accountPlaceholder(l)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 pt-1.5">
                       <Select value={effectiveTax(l)} disabled={exempt} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} />

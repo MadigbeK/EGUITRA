@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import os
 from datetime import date
 
@@ -173,6 +174,17 @@ class TestAssetsApi(FinanceDataMixin, ApiCase):
                                  headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.content.startswith(b"PK"))
+        import openpyxl
+
+        book = openpyxl.load_workbook(io.BytesIO(response.content), read_only=True)
+        header = {row[0]: row[1] if len(row) > 1 else None
+                  for row in book.worksheets[0].iter_rows(max_row=9, values_only=True) if row and row[0]}
+        fy_start, fy_end = self.env["eguitra.finance.metrics"].fiscal_year_bounds(self.company, self.today)
+        self.assertEqual(header.get("Société"), self.company.name)
+        self.assertEqual(header.get("Exercice"), f"{fy_start:%d/%m/%Y} au {fy_end:%d/%m/%Y}",
+                         "En-tête des exports d'états : exercice")
+        self.assertIn("Arrêté au", header, "Et date d'arrêté")
+        self.assertIn("Exporté le", header)
         response = self.url_open("/api/v1/finance/assets/export?format=csv",
                                  headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
         self.assertIn("Coyah, km 36", response.content.decode("utf-8-sig"))

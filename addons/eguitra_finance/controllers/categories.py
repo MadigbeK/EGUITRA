@@ -7,7 +7,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 
 from ..models.expense_category import NATURES
 from .common import FIN_READ, FIN_WRITE, account_ref, ref
-from .moves import account_of_company
+from .moves import chosen_account
 
 
 def category_row(category):
@@ -28,7 +28,10 @@ def category_row(category):
     }
 
 
-def _values(data, company):
+def _values(data, company, current=None):
+    """Champs d'une catégorie. Ses comptes deviennent ceux des pièces des autres : les fixer (ou les
+    changer, current : catégorie modifiée) relève du droit « Saisie libre des comptes »."""
+    current = current or request.env["eguitra.expense.category"]
     values = {}
     if "name" in data:
         name = str(data.get("name") or "").strip()
@@ -40,9 +43,11 @@ def _values(data, company):
             raise ApiError(400, "invalid_parameter", "Nature de dépense inconnue.")
         values["nature"] = data["nature"]
     if "account_id" in data:
-        values["account_id"] = account_of_company(data["account_id"], company, "Compte de charge").id or False
+        values["account_id"] = chosen_account(data["account_id"], company, "Compte de charge",
+                                              allowed=current.account_id).id or False
     if "partner_account_id" in data:
-        values["partner_account_id"] = account_of_company(data["partner_account_id"], company, "Compte de tiers").id or False
+        values["partner_account_id"] = chosen_account(data["partner_account_id"], company, "Compte de tiers",
+                                                      allowed=current.partner_account_id).id or False
     if "tax_mode" in data:
         if data["tax_mode"] not in ("deductible", "none"):
             raise ApiError(400, "invalid_parameter", "TVA : deductible ou none.")
@@ -88,7 +93,7 @@ class EguitraFinanceExpenseCategories(http.Controller):
         company = request.env.company
         if not category or category.company_id != company:
             raise ApiError(404, "not_found", "Catégorie introuvable dans la société de travail.")
-        category.write(_values(read_json(), company))
+        category.write(_values(read_json(), company, current=category))
         return category_row(category)
 
     @api_route("/finance/expense-categories/defaults", methods=("POST",), profiles=FIN_WRITE)

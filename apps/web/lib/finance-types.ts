@@ -194,6 +194,8 @@ export interface Question {
   answer: string;
   verdict: Verdict;
   reading: string;
+  /** Verdict grey faute de seuil (laissé à 0 : règle éteinte) : affiché « Seuil non fixé ». */
+  threshold_unset?: boolean;
 }
 
 export interface Thresholds {

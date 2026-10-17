@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { type SWRConfiguration } from "swr";
-import type { ApiErrorBody } from "./types";
+import type { ApiErrorBody, Me } from "./types";
 
 /** Erreur d'appel à l'API, avec le message destiné à l'utilisateur. */
 export class ApiError extends Error {
@@ -86,4 +86,14 @@ export function useApi<T>(path: string | null, config?: SWRConfiguration<T, ApiE
     shouldRetryOnError: false,
     ...config,
   });
+}
+
+/**
+ * Droit « Saisie libre des comptes » de l'utilisateur (session) : sans lui, la ligne prend le compte de
+ * sa catégorie, du type d'opération ou de l'activité, et les opérations diverses sont refusées. Faux
+ * tant que la session n'est pas lue : le choix du compte n'apparaît qu'une fois le droit confirmé.
+ */
+export function useSaisieLibre(enabled = true): boolean {
+  const { data } = useApi<Me>(enabled ? "/auth/me" : null);
+  return data?.rights?.free_accounts === true;
 }

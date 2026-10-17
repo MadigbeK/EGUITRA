@@ -1,4 +1,5 @@
-"""Administration des utilisateurs : profils, sociétés, mots de passe, double authentification."""
+"""Administration des utilisateurs : profils, droits complémentaires, sociétés, mots de passe, double
+authentification."""
 
 from odoo import http
 from odoo.http import request
@@ -134,6 +135,13 @@ class EguitraAdminController(http.Controller):
                 user._eguitra_set_profiles(list(data["profiles"]))
             except ValueError as e:
                 raise ApiError(422, "business_rule", str(e)) from e
+        # Après les profils : un droit accordé d'office avec un profil (saisie libre des comptes) peut
+        # être retiré dans le même enregistrement.
+        if "rights" in data:
+            try:
+                user._eguitra_set_rights(data["rights"] or {})
+            except ValueError as e:
+                raise ApiError(422, "business_rule", str(e)) from e
         try:
             user._eguitra_check_companies()
         except ValueError as e:
@@ -146,6 +154,15 @@ class EguitraAdminController(http.Controller):
             {"code": code, "name": env.ref(xmlid).name, "description": env.ref(xmlid).comment,
              "entity": PROFILE_ENTITY.get(code)}
             for code, xmlid in PROFILE_GROUPS.items()
+        ]
+
+    @api_route("/admin/rights", methods=("GET",), profiles=ADMIN)
+    def rights(self, **_kw):
+        """Droits complémentaires aux profils (déclarés par les modules, voir res.users._eguitra_right_groups)."""
+        env = sudo_env()
+        return [
+            {"code": code, "name": env.ref(xmlid).name, "description": env.ref(xmlid).comment or None}
+            for code, xmlid in env["res.users"]._eguitra_right_groups().items()
         ]
 
     @api_route("/admin/users", methods=("GET",), profiles=ADMIN)
@@ -174,7 +191,7 @@ class EguitraAdminController(http.Controller):
             "password": password,
             "eguitra_password_temporary": True,
         })
-        self._apply(user, {k: v for k, v in data.items() if k in ("company_ids", "company_id", "profiles")})
+        self._apply(user, {k: v for k, v in data.items() if k in ("company_ids", "company_id", "profiles", "rights")})
         return _user_row(user)
 
     @api_route("/admin/users/<int:user_id>", methods=("GET",), profiles=ADMIN)
@@ -185,8 +202,9 @@ class EguitraAdminController(http.Controller):
     def update_user(self, user_id, **_kw):
         user = self._get_user(user_id)
         data = read_json()
-        if user == request.env.user and ("active" in data or "profiles" in data):
-            raise ApiError(422, "business_rule", "Vous ne pouvez pas modifier vos propres profils ni vous désactiver.")
+        if user == request.env.user and ("active" in data or "profiles" in data or "rights" in data):
+            raise ApiError(422, "business_rule", "Vous ne pouvez pas modifier vos propres profils ou droits ni vous "
+                                                 "désactiver.")
         self._apply(user, data)
         if data.get("active") is False:
             sudo_env()["eguitra.api.token"]._revoke_user(user)

@@ -6,6 +6,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
 from .common import FIN_READ, FIN_WRITE, as_float, companies, parse_date, today
+from .moves import chosen_account
 
 FIELDS = ("name", "purpose", "kind", "periodicity", "method")
 
@@ -77,9 +78,13 @@ class EguitraFinanceLoans(http.Controller):
         })
         if data.get("first_due_date"):
             values["first_due_date"] = parse_date(data, "first_due_date")
-        for key in ("principal_account_id", "interest_account_id", "journal_id"):
+        # Comptes du financement : contrepartie de ses échéances et de ses opérations de trésorerie,
+        # fixés avec le droit « Saisie libre des comptes ».
+        for key, label in (("principal_account_id", "Compte de dette"), ("interest_account_id", "Compte de charges financières")):
             if data.get(key):
-                values[key] = int(data[key])
+                values[key] = chosen_account(data[key], request.env.company, label).id
+        if data.get("journal_id"):
+            values["journal_id"] = int(data["journal_id"])
         loan = request.env["eguitra.loan"].create(values)
         loan.compute_schedule()
         if data.get("activate"):

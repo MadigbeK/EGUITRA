@@ -6,7 +6,7 @@ import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale,
 import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
 import type { Account, AnalyticShare, CashAccount, Ref } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
 
@@ -252,7 +252,22 @@ function useAccounts(prefix: string) {
   return useApi<Account[]>(`/finance/accounts?prefix=${prefix}&limit=2000`);
 }
 
-interface OperationType { id: number; name: string; direction: "in" | "out"; account: { id: number; code: string; name: string } | null; reference_required: boolean; is_transfer: boolean; to_match: boolean }
+type LoanPart = "none" | "disbursement" | "principal" | "interest";
+interface OperationType { id: number; name: string; direction: "in" | "out"; account: { id: number; code: string; name: string } | null; reference_required: boolean; is_transfer: boolean; loan_part: LoanPart; to_match: boolean }
+interface LoanRef { id: number; name: string; state: "draft" | "active" | "closed"; lender: { id: number; name: string }; principal: number; outstanding: number; principal_account: string | null; interest_account: string | null }
+
+/** Types à part d'emprunt : la contrepartie est le compte du financement désigné. */
+const PART_HINT: Record<Exclude<LoanPart, "none">, string> = {
+  disbursement: "Déblocage reçu : crédit du compte de dette du financement. C'est ainsi que le déblocage se comptabilise.",
+  principal: "Remboursement anticipé hors échéancier : débit du compte de dette. Une échéance de l'échéancier se règle depuis la ligne du relevé (Rapprocher) ou par « Régler ».",
+  interest: "Intérêts hors échéancier (intercalaires, de retard) : débit du compte de charges financières du financement.",
+};
+
+/** Financements en cours de la société, pour les types d'opération à part d'emprunt. */
+function useActiveLoans(enabled: boolean) {
+  const { data } = useApi<{ items: LoanRef[] }>(enabled ? "/finance/loans" : null);
+  return (data?.items ?? []).filter((l) => l.state === "active");
+}
 
 function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: CashAccount; onClose: () => void; onDone: () => void; onTransfer: () => void }) {
   const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=2000");
@@ -260,8 +275,15 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
   const { data: kinds } = useApi<OperationType[]>("/finance/treasury/operation-types");
   const { data: axes } = useAxes();
   const [direction, setDirection] = useState<"out" | "in">("out");
-  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "", reference: "", mode: "", kind: "" });
+  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "", reference: "", mode: "", kind: "", loan: "" });
   const kind = kinds?.find((k) => String(k.id) === form.kind);
+  const financement = kind && kind.loan_part !== "none" ? kind.loan_part : null;
+  const loans = useActiveLoans(Boolean(financement));
+  const loan = loans.find((l) => String(l.id) === form.loan);
+  // Sans le droit « Saisie libre des comptes », seul le compte du type d'opération s'applique.
+  const libre = useSaisieLibre();
+  // Analytique sur un compte d'imputation, et sur les intérêts (charges financières) d'un financement.
+  const analytique = Boolean(form.account) || financement === "interest";
 
   /** Le type d'opération fixe le sens et la contrepartie (sauf client ou fournisseur : à rapprocher). */
   function chooseKind(id: string) {
@@ -271,7 +293,8 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
       return;
     }
     if (next) setDirection(next.direction);
-    setForm({ ...form, kind: id, account: next && !next.to_match && next.account ? String(next.account.id) : next ? "" : form.account });
+    const account = next && next.loan_part === "none" && !next.to_match && next.account ? String(next.account.id) : next ? "" : form.account;
+    setForm({ ...form, kind: id, account, loan: "" });
   }
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
   const [choice, setChoice] = useState<AxisChoice>({});
@@ -292,11 +315,12 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
           label: form.label,
           amount: direction === "out" ? -amount : amount,
           partner_id: partner?.id,
-          counterpart_account_id: form.account ? Number(form.account) : undefined,
-          analytic_distribution: form.account ? toDistribution(choice) : undefined,
+          counterpart_account_id: form.account && !financement ? Number(form.account) : undefined,
+          analytic_distribution: analytique ? toDistribution(choice) : undefined,
           payment_mode_id: form.mode ? Number(form.mode) : undefined,
           reference: form.reference || undefined,
           operation_type_id: form.kind ? Number(form.kind) : undefined,
+          loan_id: financement && form.loan ? Number(form.loan) : undefined,
         });
         id = line.id;
         setCreatedId(id);
@@ -321,7 +345,7 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
     }
   }
   return (
-    <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
+    <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount || (createdId === null && Boolean(financement) && !form.loan) || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
         {kinds && kinds.length > 0 && (
@@ -351,11 +375,22 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
           <Field label="Tiers (facultatif)">
             <PartnerPicker value={partner} onChange={setPartner} kind={direction === "out" ? "supplier" : "customer"} />
           </Field>
-          <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
-            <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
-          </Field>
+          {financement ? (
+            <Field label="Financement" hint={loan ? `${loan.lender.name} · capital restant dû ${fmtGNF(loan.outstanding)} · compte ${financement === "interest" ? loan.interest_account : loan.principal_account}` : "Financements en cours (Dette et financement)."}>
+              <Select value={form.loan} onChange={(e) => setForm({ ...form, loan: e.target.value })} placeholder="Choisir…" options={loans.map((l) => ({ value: l.id, label: `${l.name}, ${l.lender.name}` }))} />
+            </Field>
+          ) : libre ? (
+            <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
+              <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+            </Field>
+          ) : (
+            <Field label="Compte d'imputation" hint="Le compte vient du type d'opération ; le choisir librement demande le droit « Saisie libre des comptes ».">
+              <div className="py-2 text-sm text-ink-2">{kind?.account && !kind.to_match ? `${kind.account.code} ${kind.account.name}` : "À rapprocher plus tard"}</div>
+            </Field>
+          )}
         </div>
-        {form.account && (
+        {financement && <Notice tone="accent">{PART_HINT[financement]}</Notice>}
+        {analytique && (
           <div>
             <div className="mb-1.5 text-[13px] font-medium text-ink-2">Imputation analytique</div>
             <AnalyticFields axes={axes} value={choice} onChange={setChoice} />
@@ -521,9 +556,20 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
   const { data: candidates } = useApi<Candidate[]>(`/finance/treasury/lines/${line.id}/candidates`);
   const { data: accounts } = useAccounts("");
   const { data: axes } = useAxes();
+  const { data: allKinds } = useApi<OperationType[]>("/finance/treasury/operation-types");
+  // Types qui s'imputent (ni virement, ni client ou fournisseur), dans le sens de l'opération.
+  const kinds = (allKinds ?? []).filter((k) => !k.is_transfer && !k.to_match && k.direction === (line.amount > 0 ? "in" : "out"));
+  const [kindId, setKindId] = useState("");
+  const [loanId, setLoanId] = useState("");
+  const kind = kinds.find((k) => String(k.id) === kindId);
+  const financement = kind && kind.loan_part !== "none" ? kind.loan_part : null;
+  const loans = useActiveLoans(Boolean(financement));
+  // L'imputation directe à un compte choisi relève du droit « Saisie libre des comptes ».
+  const libre = useSaisieLibre();
   const [selected, setSelected] = useState<string[]>([]);
   const [account, setAccount] = useState("");
   const [choice, setChoice] = useState<AxisChoice>({});
+  const imputation = Boolean(account) || (Boolean(kind) && (!financement || Boolean(loanId)));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const choisis = (candidates ?? []).filter((c) => selected.includes(cle(c)));
@@ -538,7 +584,13 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
     setBusy(true);
     setError(null);
     try {
-      const corps = echeance ? { loan_line_id: echeance.id } : choisis.length ? { move_line_ids: choisis.map((c) => c.id) } : { account_id: Number(account), analytic_distribution: toDistribution(choice) };
+      const corps = echeance
+        ? { loan_line_id: echeance.id }
+        : choisis.length
+          ? { move_line_ids: choisis.map((c) => c.id) }
+          : kind
+            ? { operation_type_id: kind.id, loan_id: financement ? Number(loanId) : undefined, analytic_distribution: toDistribution(choice) }
+            : { account_id: Number(account), analytic_distribution: toDistribution(choice) };
       await apiSend("POST", `/finance/treasury/lines/${line.id}/reconcile`, corps);
       onDone();
       onClose();
@@ -555,7 +607,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
       title={`Rapprocher, ${line.label}, ${fmtGNF(line.amount)}`}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!selected.length && !account} onClick={submit}>
+        <Button variant="primary" loading={busy} disabled={!selected.length && !imputation} onClick={submit}>
           Rapprocher
         </Button>
       }
@@ -599,10 +651,22 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
             ]}
           />
         )}
-        <Field label="Ou imputer directement à un compte" hint="Frais bancaires, agios, produit divers…">
-          <Select value={account} onChange={(e) => setAccount(e.target.value)} placeholder="–" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
-        </Field>
-        {account && !selected.length && <AnalyticFields axes={axes} value={choice} onChange={setChoice} />}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Field label="Ou imputer selon un type d'opération" hint="Le type fixe le compte : frais bancaires, déblocage d'emprunt…">
+            <Select value={kindId} onChange={(e) => { setKindId(e.target.value); setLoanId(""); setAccount(""); }} placeholder="–" options={kinds.map((k) => ({ value: k.id, label: k.name }))} />
+          </Field>
+          {financement ? (
+            <Field label="Financement">
+              <Select value={loanId} onChange={(e) => setLoanId(e.target.value)} placeholder="Choisir…" options={loans.map((l) => ({ value: l.id, label: `${l.name}, ${l.lender.name}` }))} />
+            </Field>
+          ) : libre ? (
+            <Field label="Ou imputer directement à un compte" hint="Frais bancaires, agios, produit divers…">
+              <Select value={account} onChange={(e) => { setAccount(e.target.value); setKindId(""); }} placeholder="–" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+            </Field>
+          ) : null}
+        </div>
+        {financement && <Notice tone="accent">{PART_HINT[financement]}</Notice>}
+        {imputation && !selected.length && financement !== "disbursement" && financement !== "principal" && <AnalyticFields axes={axes} value={choice} onChange={setChoice} />}
       </div>
     </Modal>
   );

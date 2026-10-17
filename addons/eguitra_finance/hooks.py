@@ -37,3 +37,6 @@ def post_init_hook(env):
     # Nature fiscale des groupes de taxes du plan (TVA ou autre) : la déclaration de TVA s'y limite.
     env["account.tax"].eguitra_classify_groups()
     env["eguitra.setup"].ensure_audit_rules(FINANCE_AUDITED_MODELS)
+    # Saisie libre des comptes : accordée aux comptes déjà ouverts aux profils finance, direction et
+    # administration (fonctionnement inchangé ; models/res_users.py).
+    env["res.users"]._eguitra_grant_free_accounts()

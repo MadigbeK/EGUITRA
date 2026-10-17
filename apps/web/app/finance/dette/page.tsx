@@ -34,7 +34,8 @@ export default function DebtPage() {
   const [selected, setSelected] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const { data: seuils } = useApi<Array<{ code: string; value: number; active: boolean }>>("/finance/thresholds");
-  const dscrMin = seuils?.find((t) => t.code === "dscr_min" && t.active && t.value)?.value ?? 1.2;
+  // Minimum de la règle d'alerte ; null : seuil à 0 ou désactivé (règle éteinte), le DSCR n'est pas jugé.
+  const dscrMin = seuils?.find((t) => t.code === "dscr_min" && t.active && t.value)?.value ?? null;
   const s = data?.summary;
   const ecart = Math.abs(s?.schedule_gap ?? 0) >= 1;
   return (
@@ -58,7 +59,7 @@ export default function DebtPage() {
             <Kpi label="Dette nette" value={fmtShort(s.net_debt)} hint="Encours comptable moins la trésorerie" />
             <Kpi label="Gearing" value={ratio(s.gearing)} hint={s.equity !== undefined && s.equity <= 0 ? "Capitaux propres négatifs ou nuls" : "Dette / capitaux propres"} tone={(s.gearing ?? 0) > 1 ? "warn" : "neutral"} />
             <Kpi label="Dette / EBE 12 mois" value={ratio(s.debt_to_ebe)} hint={(s.ebe_12m ?? 0) <= 0 ? "EBE des 12 derniers mois négatif ou nul" : `EBE 12 mois : ${fmtShort(s.ebe_12m)}`} />
-            <Kpi label="DSCR" value={ratio(s.dscr)} hint={`EBE 12 mois / service de la dette, minimum ${ratio(dscrMin)}`} tone={s.dscr === null || s.dscr === undefined ? "neutral" : s.dscr < dscrMin ? "danger" : "ok"} />
+            <Kpi label="DSCR" value={ratio(s.dscr)} hint={`EBE 12 mois / service de la dette, ${dscrMin ? `minimum ${ratio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={s.dscr === null || s.dscr === undefined || dscrMin === null ? "neutral" : s.dscr < dscrMin ? "danger" : "ok"} />
             <Kpi label="Service de la dette de l'exercice" value={fmtShort(s.service_fy)} hint={`Réglé : ${fmtShort(s.service_fy_paid)} · intérêts ${fmtShort(s.service_fy_interest)}`} />
             <Kpi label="Prochaine échéance" value={fmtShort(s.next_due_amount)} hint={s.next_due_date ? `Le ${fmtDate(s.next_due_date)}${s.overdue > 0 ? ` · impayé ${fmtShort(s.overdue)}` : ""}` : "Aucune"} tone={s.overdue > 0 ? "danger" : "neutral"} />
           </div>
