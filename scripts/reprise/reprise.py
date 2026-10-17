@@ -3,12 +3,19 @@
 
 Lancé par scripts/reprise/reprise.sh, qui monte le dossier des fichiers en /reprise. Fichiers lus
 s'ils sont présents, dans cet ordre (modèles dans scripts/reprise/modeles/) :
-  tiers.csv            clients, fournisseurs, prêteurs
-  soldes_ouverture.csv une écriture d'à-nouveaux équilibrée, à la date d'ouverture
+  comptes.csv          comptes absents du plan de la société, créés sous leur racine (nature du voisin)
+  axes.csv             activités et centres de coût (code et libellé)
+  journaux.csv         comptes de banque et de caisse (journal, compte, devise)
+  tiers.csv            clients, fournisseurs, prêteurs (code, conditions de paiement, limite de crédit…)
+  soldes_ouverture.csv une écriture d'à-nouveaux équilibrée, à la date d'ouverture, comptes de tiers
+                       détaillés par facture (échéance, référence de lettrage)
   immobilisations.csv  biens en service : valeur brute, cumul des amortissements à la veille de
                        l'ouverture (lignes de reprise sans écriture), contrôle face aux 2x et 28x
+  routes.csv, chauffeurs.csv, ensembles.csv
+                       référentiels du transport (distances, tarifs, capacités, immobilisation liée)
   ecritures.csv        écritures de l'exercice, pièce par pièce, imputées sur les axes analytiques, puis
-                       lettrage des comptes de tiers
+                       lettrage des comptes de tiers (par référence, sinon par tiers)
+  emprunts.csv         emprunts et crédits-bails en cours, échéances passées réglées (echeances.csv)
   budget.csv           lignes budgétaires mensuelles par compte, activité et centre de coût
   rotations.csv        rotations 2026 (facturées dans l'ancien système ou à facturer)
 
@@ -20,11 +27,17 @@ import hashlib
 import io
 import os
 import re
+from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
 
 from odoo import Command
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import float_round
+
+from odoo.addons.eguitra_finance.controllers.chart import CLASS_RULES, LETTERED_PREFIXES
+from odoo.addons.eguitra_finance.controllers.partners import DELAYS
+from odoo.addons.eguitra_finance.models.budget import split_prefixes
 
 FOLDER = Path("/reprise")
 APPLY = os.environ.get("REPRISE_APPLIQUER") == "1"
@@ -83,10 +96,76 @@ def yes(value):
 
 
 Partner = env["res.partner"]
+Account = env["account.account"]
+opening = date.fromisoformat(OPENING)
+# Codes des tiers déclarés dans tiers.csv : les fiches sont communes aux deux sociétés, un même code
+# peut désigner ailleurs un autre tiers ; le code du fichier l'emporte.
+partner_codes = {}
 
 
-def find_partner(name):
-    return Partner.search([("name", "=ilike", name), ("parent_id", "=", False)], limit=1)
+def find_partner(value):
+    """Tiers par son code (tiers.csv, sinon référence unique d'une fiche), sinon par son nom."""
+    value = (value or "").strip()
+    if not value:
+        return Partner
+    if value in partner_codes:
+        return partner_codes[value]
+    by_ref = Partner.search([("ref", "=", value), ("parent_id", "=", False)], limit=2)
+    if len(by_ref) == 1:
+        return by_ref
+    return Partner.search([("name", "=ilike", value), ("parent_id", "=", False)], limit=1)
+
+
+def find_account(code):
+    return Account.search([("code", "=", (code or "").strip()), ("company_ids", "in", company.ids)], limit=1)
+
+
+def currency_of(code, where):
+    """Devise d'une ligne (code ISO) ; vide ou devise de la société : aucune."""
+    code = (code or "").strip().upper()
+    if not code or code == company.currency_id.name:
+        return env["res.currency"]
+    currency = env["res.currency"].with_context(active_test=False).search([("name", "=", code)], limit=1)
+    if not currency or not currency.active:
+        errors.append(f"{where} : devise « {code} » inconnue ou inactive (l'activer d'abord dans le noyau).")
+        return env["res.currency"]
+    return currency
+
+
+# Lettrage : chaque ligne d'écriture créée avec une référence (factures, règlements, à-nouveaux
+# détaillés par facture) est retenue sous (compte, tiers, référence) ; le lettrage rapproche ensuite
+# les lignes d'une même référence, comme les encours facture par facture de l'ancien système.
+lettering = defaultdict(list)
+
+
+def register_letters(move, commands, keys, where):
+    """Retient la référence de lettrage de chaque ligne créée, dans l'ordre des commandes."""
+    created = move.line_ids.sorted("id")
+    expected = [(c[2]["account_id"], company.currency_id.round(c[2].get("debit") or 0.0)) for c in commands]
+    if [(line.account_id.id, company.currency_id.round(line.debit)) for line in created] != expected:
+        errors.append(f"{where} : lignes créées dans un ordre inattendu, lettrage par référence impossible.")
+        return
+    for line, key in zip(created, keys):
+        if key and line.account_id.reconcile:
+            lettering[(line.account_id.id, line.partner_id.id, key)].append(line.id)
+
+
+def payment_term(days, end_of_month):
+    """Condition de paiement à une échéance de 100 % (même recherche que la fiche tiers de Finance)."""
+    Term = env["account.payment.term"]
+    delay = DELAYS[end_of_month]
+    for term in Term.search([("company_id", "in", [False, company.id])]):
+        lines = term.line_ids
+        if (len(lines) == 1 and lines.value == "percent" and abs(lines.value_amount - 100) < 0.01
+                and lines.nb_days == days and lines.delay_type == delay and not term.early_discount):
+            return term
+    if end_of_month:
+        name = f"Fin de mois + {days} jours" if days else "Fin de mois"
+    else:
+        name = f"{days} jours" if days else "Comptant"
+    return Term.create({"name": name, "company_id": False, "line_ids": [
+        Command.create({"value": "percent", "value_amount": 100, "nb_days": days, "delay_type": delay}),
+    ]})
 
 
 # Axes analytiques des écritures et du budget : colonne -> (plan, fiche métier qui porte le compte,
@@ -119,7 +198,7 @@ def analytic_account(column, value, where):
     account = Analytic.search([("plan_id", "=", plan.id), ("company_id", "in", [False, company.id]),
                                "|", ("name", "=ilike", value), ("code", "=ilike", value)], limit=1)
     if not account and model and model in env:
-        record = env[model].search([("name", "=ilike", value)], limit=1)
+        record = env[model].search([("company_id", "=", company.id), ("name", "=ilike", value)], limit=1)
         if not record and creatable:
             record = env[model].create({"name": value})
             notes.append(f"{where} : {column} « {value} » ajouté(e) ; vérifier qu'il ne s'agit pas d'une faute de frappe.")
@@ -145,6 +224,104 @@ def distribution(row, where, columns=tuple(AXES)):
     return result
 
 
+# ─── Plan de comptes ──────────────────────────────────────────────────────
+data = rows("comptes.csv")
+if data is not None:
+    # Comptes absents du plan de la société : créés sous une racine existante, nature et lettrage repris
+    # du compte voisin (fournisseurs 40 et clients 41 toujours lettrables, 585 lettrable), comme l'écran
+    # Plan comptable de Finance.
+    Chart = Account.with_context(active_test=False).with_company(company)
+    created = []
+    for line, r in data:
+        where = f"comptes.csv ligne {line}"
+        code = re.sub(r"\s", "", r.get("code", ""))
+        if not re.fullmatch(r"\d{4,12}", code):
+            errors.append(f"{where} : code de compte « {r.get('code')} » invalide (4 à 12 chiffres).")
+            continue
+        if Chart.search_count([("code", "=", code), ("company_ids", "in", company.ids)]):
+            continue
+        sibling = next((s for s in (Chart.search([("code", "=like", code[:size] + "%"), ("company_ids", "in", company.ids)],
+                                                 order="code", limit=1) for size in range(len(code) - 1, 2, -1)) if s), None)
+        if not sibling:
+            errors.append(f"{where} : le compte {code} doit se rattacher à une racine existante du plan "
+                          f"(comptes {code[:3]}…).")
+            continue
+        account_type, reconcile = sibling.account_type, sibling.reconcile
+        for prefix, forced_type, forced_reconcile in CLASS_RULES:
+            if code.startswith(prefix):
+                account_type, reconcile = forced_type, forced_reconcile
+        if code.startswith(LETTERED_PREFIXES):
+            reconcile = True
+        Chart.create({"code": code, "name": (r.get("libelle") or code)[:200], "account_type": account_type,
+                      "reconcile": reconcile, "company_ids": [Command.set(company.ids)]})
+        created.append(f"{code} {r.get('libelle') or ''} (nature de {sibling.code})".strip())
+    notes.append(f"Plan de comptes : {len(created)} compte(s) créé(s)" + (" : " + " ; ".join(created) if created else "")
+                 + ".")
+
+# ─── Axes analytiques : activités et centres de coût ──────────────────────
+data = rows("axes.csv")
+if data is not None:
+    Analytic = env["account.analytic.account"]
+    created = 0
+    for line, r in data:
+        where = f"axes.csv ligne {line}"
+        column = (r.get("axe") or "").lower()
+        if column not in ("activite", "centre_cout") or not r.get("code"):
+            errors.append(f"{where} : axe (activite ou centre_cout) et code obligatoires.")
+            continue
+        plan = env.ref(AXES[column][0])
+        domain = [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])]
+        account = (Analytic.search(domain + [("code", "=ilike", r["code"])], limit=1)
+                   or Analytic.search(domain + [("name", "=ilike", r.get("libelle") or r["code"])], limit=1))
+        if account:
+            if not account.code:
+                account.code = r["code"]
+            continue
+        Analytic.create({"name": r.get("libelle") or r["code"], "code": r["code"], "plan_id": plan.id,
+                         "company_id": company.id})
+        created += 1
+    notes.append(f"Axes analytiques : {created} compte(s) créé(s) (les écritures les désignent par leur code).")
+
+# ─── Comptes de banque et de caisse ───────────────────────────────────────
+data = rows("journaux.csv")
+if data is not None:
+    Journal = env["account.journal"]
+    created = 0
+    for line, r in data:
+        where = f"journaux.csv ligne {line}"
+        code = (r.get("code") or "").strip().upper()
+        kind = (r.get("type") or "bank").lower()
+        if not code or len(code) > 5 or kind not in ("bank", "cash"):
+            errors.append(f"{where} : code de 5 caractères au plus et type bank ou cash obligatoires.")
+            continue
+        account = find_account(r.get("compte"))
+        if not account:
+            errors.append(f"{where} : compte « {r.get('compte')} » absent du plan (le déclarer dans comptes.csv).")
+            continue
+        journal = Journal.search([("company_id", "=", company.id), ("code", "=", code)], limit=1)
+        if journal:
+            if journal.default_account_id != account:
+                notes.append(f"{where} : journal {code} déjà présent sur le compte {journal.default_account_id.code}, "
+                             f"et non {account.code} ; les écritures reprises mouvementent le compte du fichier.")
+            continue
+        if account.account_type != "asset_cash":
+            notes.append(f"{where} : compte {account.code} de nature « {account.account_type} » et non trésorerie ; "
+                         "vérifier sa nature dans le plan comptable.")
+        values = {"name": r.get("libelle") or code, "code": code, "type": kind, "company_id": company.id,
+                  "default_account_id": account.id}
+        currency = currency_of(r.get("devise"), where)
+        if currency:
+            values["currency_id"] = currency.id
+        if kind == "bank" and r.get("numero"):
+            values["bank_acc_number"] = r["numero"]
+        try:
+            with env.cr.savepoint():
+                Journal.create(values)
+            created += 1
+        except (UserError, ValidationError) as e:
+            errors.append(f"{where} : {e.args[0]}")
+    notes.append(f"Comptes de trésorerie : {created} journal(aux) de banque ou de caisse créé(s).")
+
 # ─── Tiers ────────────────────────────────────────────────────────────────
 data = rows("tiers.csv")
 if data is not None:
@@ -157,34 +334,62 @@ if data is not None:
         kind = (r.get("type") or "client").lower()
         values = {"name": r["nom"], "is_company": True}
         for col, field in (("nif", "vat"), ("telephone", "phone"), ("email", "email"), ("adresse", "street"),
-                           ("ville", "city")):
+                           ("ville", "city"), ("code", "ref"), ("secteur", "eguitra_sector"),
+                           ("contact", "eguitra_contact")):
             if r.get(col):
                 values[field] = r[col]
         if r.get("rccm"):
             values["company_registry"] = r["rccm"]
+        if r.get("non_assujetti"):
+            values["eguitra_vat_exempt"] = yes(r["non_assujetti"])
         if "client" in kind:
             values["customer_rank"] = 1
+            if r.get("limite_credit"):
+                limit = number(r["limite_credit"], where)
+                values.update(use_partner_credit_limit=bool(limit), credit_limit=limit)
         if "fournisseur" in kind or "preteur" in kind or "prêteur" in kind:
             values["supplier_rank"] = 1
-        partner = find_partner(r["nom"])
+        if r.get("delai"):
+            # Condition de paiement à N jours (« fin de mois » : N jours après la fin du mois).
+            days = int(number(r["delai"], where))
+            if not 0 <= days <= 365:
+                errors.append(f"{where} : délai de paiement compris entre 0 et 365 jours attendu.")
+                continue
+            term = payment_term(days, yes(r.get("fin_de_mois")))
+            if "client" in kind:
+                values["property_payment_term_id"] = term.id
+            if "supplier_rank" in values:
+                values["property_supplier_payment_term_id"] = term.id
+        # Fiche existante : même code et même nom, sinon même nom. Une fiche qui porte déjà un autre code
+        # (utilisé par l'autre société) le garde ; le code du fichier la désigne pour cette reprise.
+        same = Partner.search([("ref", "=", r["code"]), ("name", "=ilike", r["nom"]), ("parent_id", "=", False)],
+                              limit=1) if r.get("code") else Partner
+        partner = same or Partner.search([("name", "=ilike", r["nom"]), ("parent_id", "=", False)], limit=1)
+        if partner and partner.ref and r.get("code") and partner.ref != r["code"]:
+            values.pop("ref")
+            notes.append(f"{where} : « {r['nom']} » porte déjà le code {partner.ref}, conservé (code du fichier : "
+                         f"{r['code']}).")
         if partner:
             partner.write({k: v for k, v in values.items() if k not in ("customer_rank", "supplier_rank")}
                           | {k: max(partner[k], v) for k, v in values.items() if k in ("customer_rank", "supplier_rank")})
             updated += 1
         else:
             values["country_id"] = env.ref("base.gn").id
-            Partner.create(values)
+            partner = Partner.create(values)
             created += 1
+        if r.get("code"):
+            partner_codes[r["code"]] = partner
     notes.append(f"Tiers : {created} créé(s), {updated} mis à jour.")
 
 # ─── Soldes d'ouverture ───────────────────────────────────────────────────
 data = rows("soldes_ouverture.csv")
 if data is not None:
-    Account = env["account.account"]
-    lines, debit, credit = [], 0.0, 0.0
+    # Comptes de tiers détaillés par facture : échéance (balance âgée) et référence (lettrage avec les
+    # règlements de l'exercice).
+    lines, keys, debit, credit = [], [], 0.0, 0.0
     for line, r in data:
         where = f"soldes_ouverture.csv ligne {line}"
-        account = Account.search([("code", "=", r.get("compte", "")), ("company_ids", "in", company.ids)], limit=1)
+        account = find_account(r.get("compte"))
         if not account:
             errors.append(f"{where} : compte « {r.get('compte')} » absent du plan de comptes.")
             continue
@@ -203,8 +408,12 @@ if data is not None:
             continue
         debit += d
         credit += c
-        lines.append(Command.create({"account_id": account.id, "partner_id": partner.id or False,
-                                     "name": r.get("libelle") or "Solde d'ouverture", "debit": d, "credit": c}))
+        values = {"account_id": account.id, "partner_id": partner.id or False,
+                  "name": r.get("libelle") or "Solde d'ouverture", "debit": d, "credit": c}
+        if r.get("echeance"):
+            values["date_maturity"] = day(r["echeance"], where)
+        lines.append(Command.create(values))
+        keys.append(r.get("reference") or "")
     if round(debit - credit, 2):
         errors.append(f"soldes_ouverture.csv : écriture déséquilibrée (débit {gnf(debit)}, crédit {gnf(credit)}).")
     elif env["account.move"].search_count([("company_id", "=", company.id), ("ref", "=", "Reprise : soldes d'ouverture"),
@@ -221,6 +430,7 @@ if data is not None:
             "line_ids": lines,
         })
         move.action_post()
+        register_letters(move, lines, keys, "soldes_ouverture.csv")
         notes.append(f"Soldes d'ouverture : {len(lines)} lignes, {gnf(debit)} GNF au débit et au crédit, au {OPENING}.")
 
 # ─── Immobilisations en service ───────────────────────────────────────────
@@ -228,21 +438,51 @@ data = rows("immobilisations.csv")
 assets_loaded = data is not None
 if data is not None:
     Asset = env["account.asset"]
-    opening = date.fromisoformat(OPENING)
     profiles = {p.name.lower(): p for p in env["account.asset.profile"].search([("company_id", "=", company.id)])}
-    plan = env.ref("eguitra_base.analytic_plan_activite", raise_if_not_found=False)
-    activities = {a.name.lower(): a for a in env["account.analytic.account"].search(
-        [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])])} if plan else {}
+
+    def create_profile(r, where):
+        """Catégorie absente, décrite par ses comptes : dotations mensuelles au prorata de la mise en
+        service, comme l'écran Immobilisations ; durée par défaut celle du premier bien."""
+        accounts = [find_account(r.get(col)) for col in ("compte_immobilisation", "compte_amortissement")]
+        expense = (find_account(r["compte_dotation"]) if r.get("compte_dotation") else
+                   Account.search([("code", "=like", "681%"), ("company_ids", "in", company.ids)], order="code", limit=1))
+        Journal = env["account.journal"]
+        journal = (Journal.search([("company_id", "=", company.id), ("code", "=", "OD")], limit=1)
+                   or Journal.search([("company_id", "=", company.id), ("type", "=", "general"), ("code", "!=", "AN")],
+                                     order="sequence, id", limit=1))
+        if not all(accounts) or not expense or not journal:
+            errors.append(f"{where} : catégorie « {r['profil']} » à créer, mais comptes {r.get('compte_immobilisation')}, "
+                          f"{r.get('compte_amortissement')}, dotation ou journal d'opérations diverses introuvable(s).")
+            return None
+        flat = yes(r.get("non_amortissable"))
+        years = int(number(r["duree"], where)) if r.get("duree") and not flat else 1
+        profile = env["account.asset.profile"].create({
+            "name": r["profil"], "account_asset_id": accounts[0].id, "account_depreciation_id": accounts[1].id,
+            "account_expense_depreciation_id": expense.id, "journal_id": journal.id, "method": "linear",
+            "method_number": max(1, years), "method_time": "year", "method_period": "month", "prorata": True,
+            "eguitra_non_depreciable": flat, "company_id": company.id,
+        })
+        profiles[profile.name.lower()] = profile
+        notes.append(f"{where} : catégorie « {profile.name} » créée (comptes {accounts[0].code}, {accounts[1].code}, "
+                     f"{expense.code}" + (", non amortissable" if flat else f", {years} ans, dotations mensuelles") + ").")
+        return profile
+
     created = skipped = 0
+    takeover_gaps = []
     for line, r in data:
         where = f"immobilisations.csv ligne {line}"
         if not r.get("libelle") or not r.get("profil"):
             errors.append(f"{where} : libellé et catégorie (profil) obligatoires.")
             continue
         profile = profiles.get(r["profil"].lower())
+        if not profile and r.get("compte_immobilisation") and r.get("compte_amortissement"):
+            profile = create_profile(r, where)
+            if not profile:
+                continue
         if not profile:
             errors.append(f"{where} : catégorie « {r['profil']} » inconnue ; la créer dans l'écran Immobilisations "
-                          f"(catégories : {', '.join(sorted(p.name for p in profiles.values())) or 'aucune'}).")
+                          f"(catégories : {', '.join(sorted(p.name for p in profiles.values())) or 'aucune'}) "
+                          "ou donner ses comptes (compte_immobilisation, compte_amortissement).")
             continue
         if r.get("code") and Asset.search_count([("company_id", "=", company.id), ("code", "=", r["code"])]):
             skipped += 1
@@ -266,12 +506,11 @@ if data is not None:
                 errors.append(f"{where} : durée en années entières attendue (« {r['duree']} »).")
                 continue
             values["method_number"] = int(years)
-        if r.get("activite") and plan:
-            activity = activities.get(r["activite"].lower())
+        if r.get("activite"):
+            # Activité désignée par son nom ou son code (axes.csv), créée au besoin.
+            activity = analytic_account("activite", r["activite"], where)
             if not activity:
-                activity = activities[r["activite"].lower()] = env["account.analytic.account"].create(
-                    {"name": r["activite"], "plan_id": plan.id, "company_id": company.id})
-                notes.append(f"{where} : activité « {r['activite']} » ajoutée au plan analytique.")
+                continue
             values["analytic_distribution"] = {str(activity.id): 100}
         try:
             with env.cr.savepoint():
@@ -281,11 +520,18 @@ if data is not None:
                 asset.validate()
             created += 1
             if result and abs(result["difference"]) >= 1:
+                takeover_gaps.append(result["difference"])
                 notes.append(f"{where} : cumul repris différent du plan théorique de {gnf(result['difference'])} GNF, "
                              f"écart porté sur la première dotation de {opening.year}.")
         except (UserError, ValidationError) as e:
             errors.append(f"{where} : {e.args[0]}")
     notes.append(f"Immobilisations : {created} reprise(s), {skipped} déjà présente(s) (même code).")
+    if takeover_gaps:
+        # Le plan de la plateforme court au jour de la mise en service ; un ancien système qui amortit à
+        # compter du mois suivant laisse un cumul plus faible : la première dotation le rattrape.
+        notes.append(f"Immobilisations : {len(takeover_gaps)} bien(s) dont le cumul repris s'écarte du plan de la "
+                     f"plateforme ; la première dotation de {opening.year} porte au total {gnf(-sum(takeover_gaps))} GNF "
+                     "de rattrapage (à valider avec l'expert-comptable).")
     # Contrôle : cumul du registre = solde d'ouverture des 28x, valeur brute = solde d'ouverture des 2x.
     control = Asset.eguitra_takeover_control(company, opening)
     if not control["has_opening_entry"]:
@@ -296,10 +542,70 @@ if data is not None:
                           f"({', '.join(check['profiles'])}) : registre {gnf(check['register'])}, solde d'ouverture "
                           f"{gnf(check['ledger'])}, écart {gnf(check['difference'])}.")
 
+# ─── Transport : routes, chauffeurs et ensembles routiers ─────────────────
+Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
+
+
+def upsert(model, name, values):
+    """Fiche de la société retrouvée par son nom (mise à jour), sinon créée."""
+    record = model.search([("company_id", "=", company.id), ("name", "=ilike", name)], limit=1)
+    if record:
+        record.write(values)
+        return record, False
+    return model.create(dict(values, name=name, company_id=company.id)), True
+
+
+for name, model, columns in (
+    ("routes.csv", Route, (("origine", "origin", str), ("destination", "destination", str), ("distance_km", "distance_km", int),
+                           ("distance_ar_km", "distance_return_km", int), ("duree_jours", "duration_days", float),
+                           ("tarif_m3", "default_rate", float))),
+    ("chauffeurs.csv", Driver, (("telephone", "phone", str), ("permis", "license_number", str))),
+    ("ensembles.csv", Vehicle, (("immatriculation", "tractor_plate", str), ("marque", "brand", str),
+                                ("capacite_litres", "capacity_liters", int), ("annee", "year", int))),
+):
+    data = rows(name)
+    if data is None:
+        continue
+    created = updated = 0
+    for line, r in data:
+        where = f"{name} ligne {line}"
+        key = r.get("code") if name == "ensembles.csv" else r.get("nom")
+        if not key:
+            errors.append(f"{where} : {'code' if name == 'ensembles.csv' else 'nom'} obligatoire.")
+            continue
+        values = {field: kind(number(r[col], where)) if kind is not str else r[col]
+                  for col, field, kind in columns if r.get(col)}
+        if name == "ensembles.csv":
+            if r.get("mise_en_service"):
+                values["date_service"] = day(r["mise_en_service"], where)
+            if r.get("etat") in ("service", "maintenance", "off", "sold"):
+                values["state"] = r["etat"]
+            if r.get("chauffeur"):
+                driver = Driver.search([("company_id", "=", company.id), ("name", "=ilike", r["chauffeur"])], limit=1)
+                if not driver:
+                    errors.append(f"{where} : chauffeur « {r['chauffeur']} » inconnu (le déclarer dans chauffeurs.csv).")
+                    continue
+                values["driver_id"] = driver.id
+            if r.get("immobilisation"):
+                asset = env["account.asset"].search([("company_id", "=", company.id), ("code", "=", r["immobilisation"])],
+                                                    limit=1)
+                if asset:
+                    values["asset_id"] = asset.id
+                else:
+                    notes.append(f"{where} : immobilisation {r['immobilisation']} absente, ensemble non rattaché.")
+        try:
+            with env.cr.savepoint():
+                _record, new = upsert(model, key, values)
+            created += new
+            updated += not new
+        except (UserError, ValidationError) as e:
+            errors.append(f"{where} : {e.args[0]}")
+    notes.append(f"{name[:-4].capitalize()} : {created} créé(e)s, {updated} mis(es) à jour.")
+
 # ─── Écritures de l'exercice ──────────────────────────────────────────────
 data = rows("ecritures.csv")
 if data is not None:
-    Account, Journal = env["account.account"], env["account.journal"]
+    Journal = env["account.journal"]
     journals = {j.code.upper(): j for j in Journal.search([("company_id", "=", company.id)])}
     pieces = {}
     for line, r in data:
@@ -327,9 +633,10 @@ if data is not None:
         if None in days or len(days) != 1:
             errors.append(f"{lines[0][0]} : pièce {piece} sans date unique et lisible.")
             continue
-        move_lines, debit, credit = [], 0.0, 0.0
+        move_lines, keys, debit, credit = [], [], 0.0, 0.0
+        currencies = set()
         for where, r in lines:
-            account = Account.search([("code", "=", r.get("compte", "")), ("company_ids", "in", company.ids)], limit=1)
+            account = find_account(r.get("compte"))
             if not account:
                 errors.append(f"{where} : compte « {r.get('compte')} » absent du plan de comptes.")
                 continue
@@ -340,13 +647,26 @@ if data is not None:
                     errors.append(f"{where} : tiers « {r['tiers']} » inconnu (le déclarer dans tiers.csv).")
                     continue
             values = {"account_id": account.id, "partner_id": partner.id or False, "name": r.get("libelle") or piece,
-                      "debit": number(r.get("debit"), where), "credit": number(r.get("credit"), where)}
+                      "debit": number(r.get("debit"), where), "credit": number(r.get("credit"), where),
+                      "currency_id": company.currency_id.id}
+            # Facultatif : échéance (balance âgée), référence de lettrage, montant en devise (taux de la ligne).
+            if r.get("echeance"):
+                values["date_maturity"] = day(r["echeance"], where)
+            currency = currency_of(r.get("devise"), where)
+            if currency:
+                foreign = number(r.get("montant_devise"), where)
+                if not foreign:
+                    errors.append(f"{where} : montant en {currency.name} manquant (colonne montant_devise).")
+                    continue
+                values.update(currency_id=currency.id, amount_currency=foreign if values["debit"] else -foreign)
+                currencies.add(currency.id)
             analytic = distribution(r, where)
             if analytic:
                 values["analytic_distribution"] = analytic
             debit += values["debit"]
             credit += values["credit"]
             move_lines.append(Command.create(values))
+            keys.append(r.get("lettrage") or "")
         if round(debit - credit, 2):
             errors.append(f"{lines[0][0]} : pièce {piece} déséquilibrée (débit {gnf(debit)}, crédit {gnf(credit)}).")
             continue
@@ -354,30 +674,142 @@ if data is not None:
             continue
         try:
             with env.cr.savepoint():
-                env["account.move"].create({"move_type": "entry", "journal_id": journal.id, "date": days.pop(),
-                                            "ref": ref, "line_ids": move_lines}).action_post()
+                move = env["account.move"].create({
+                    "move_type": "entry", "journal_id": journal.id, "date": days.pop(), "ref": ref, "line_ids": move_lines,
+                    "currency_id": next(iter(currencies)) if len(currencies) == 1 else company.currency_id.id,
+                })
+                move.action_post()
                 created += 1
+            register_letters(move, move_lines, keys, lines[0][0])
         except (UserError, ValidationError) as e:
             errors.append(f"{lines[0][0]} : pièce {piece} refusée : {e.args[0]}")
-    # Lettrage des comptes de tiers : factures et règlements d'un même tiers se compensent.
-    lettered = 0
-    if created and not errors:
-        groups = env["account.move.line"]._read_group(
+    # Lettrage : une ligne qui porte une référence se lettre avec les lignes de même compte, même tiers et
+    # même référence (facture et ses règlements) ; les autres lignes des comptes de tiers se compensent
+    # par tiers, entre elles.
+    by_reference = by_partner = 0
+    if (created or lettering) and not errors:
+        AML = env["account.move.line"]
+        keyed = set()
+        for ids in lettering.values():
+            keyed.update(ids)
+            amls = AML.browse(ids).filtered(lambda a: not a.reconciled)
+            if amls.filtered(lambda a: a.balance > 0) and amls.filtered(lambda a: a.balance < 0):
+                amls.reconcile()
+                by_reference += 1
+        groups = AML._read_group(
             [("company_id", "=", company.id), ("parent_state", "=", "posted"), ("reconciled", "=", False),
-             ("account_id.account_type", "in", ("asset_receivable", "liability_payable")), ("partner_id", "!=", False)],
+             ("account_id.account_type", "in", ("asset_receivable", "liability_payable")), ("partner_id", "!=", False),
+             ("id", "not in", list(keyed))],
             ["account_id", "partner_id"], ["id:recordset"])
         for _account, _partner, amls in groups:
             if amls.filtered(lambda a: a.balance > 0) and amls.filtered(lambda a: a.balance < 0):
                 amls.reconcile()
-                lettered += 1
-    notes.append(f"Écritures : {created} pièce(s) reprise(s), {skipped} déjà présente(s) ; {lettered} compte(s) de "
-                 "tiers lettré(s).")
+                by_partner += 1
+    notes.append(f"Écritures : {created} pièce(s) reprise(s), {skipped} déjà présente(s) ; lettrage de {by_reference} "
+                 f"référence(s) (facture et règlements) et de {by_partner} compte(s) de tiers sans référence.")
+
+# ─── Emprunts et crédits-bails ────────────────────────────────────────────
+data = rows("emprunts.csv")
+if data is not None:
+    # Financement en cours : échéancier de la plateforme (taux du fichier, 0 s'il manque), échéances
+    # antérieures à l'ouverture réglées dans l'ancien système, échéances de l'exercice réglées aux montants
+    # payés en trésorerie (echeances.csv), capital restant réparti sur les échéances à venir. Aucune
+    # écriture : les règlements sont dans ecritures.csv.
+    installments = defaultdict(list)
+    for line, r in rows("echeances.csv") or []:
+        where = f"echeances.csv ligne {line}"
+        due = day(r.get("date"), where)
+        if due:
+            installments[r.get("reference", "")].append((where, due, number(r.get("capital"), where),
+                                                          number(r.get("interets"), where)))
+    Loan = env["eguitra.loan"]
+    periodicities = {"mensuelle": "monthly", "trimestrielle": "quarterly", "semestrielle": "semiannual",
+                     "annuelle": "annual"}
+    created = skipped = 0
+    for line, r in data:
+        where = f"emprunts.csv ligne {line}"
+        reference = r.get("reference")
+        if not reference:
+            errors.append(f"{where} : référence du financement obligatoire.")
+            continue
+        if Loan.search_count([("company_id", "=", company.id), ("name", "=", reference)]):
+            skipped += 1
+            continue
+        lender = find_partner(r.get("preteur"))
+        debt, interest_account = find_account(r.get("compte_dette")), find_account(r.get("compte_interets"))
+        journal = env["account.journal"].search([("company_id", "=", company.id),
+                                                 ("code", "=", (r.get("journal") or "").upper())], limit=1)
+        start, months = day(r.get("date_deblocage"), where), int(number(r.get("duree_mois"), where))
+        if not (lender and debt and interest_account and journal and start and months > 0):
+            errors.append(f"{where} : prêteur (tiers.csv), compte de dette, compte d'intérêts, journal, date de "
+                          "déblocage et durée obligatoires.")
+            continue
+        rate = number(r.get("taux"), where)
+        if not rate:
+            notes.append(f"{where} : taux de {reference} inconnu, échéancier calculé à 0 % (le corriger d'après le "
+                         "tableau d'amortissement du prêteur).")
+        values = {
+            "name": reference, "company_id": company.id, "partner_id": lender.id, "purpose": r.get("objet") or False,
+            "kind": "lease" if "bail" in (r.get("nature") or "").lower() else "loan", "principal": number(r.get("montant"), where),
+            "annual_rate": rate, "start_date": start, "duration_months": months, "method": "annuity",
+            "periodicity": periodicities.get((r.get("periodicite") or "mensuelle").lower(), "monthly"),
+            "principal_account_id": debt.id, "interest_account_id": interest_account.id, "journal_id": journal.id,
+        }
+        if r.get("premiere_echeance"):
+            values["first_due_date"] = day(r["premiere_echeance"], where)
+        try:
+            with env.cr.savepoint():
+                loan = Loan.create(values)
+                loan.compute_schedule()
+                schedule = loan.line_ids.sorted("sequence")
+                schedule.filtered(lambda s: s.due_date < opening).write({"paid": True})
+                for at, due, capital, interest in installments.get(reference, []):
+                    match = schedule.filtered(lambda s: (s.due_date.year, s.due_date.month) == (due.year, due.month))[:1]
+                    if not match:
+                        raise ValidationError(f"{at} : aucune échéance de {reference} en {due:%m/%Y} dans l'échéancier.")
+                    match.write({"principal": capital, "interest": interest, "paid": True})
+                # Capital restant dû réparti sur les échéances à venir (échéances constantes au taux du
+                # financement, capital constant sans taux).
+                remaining = loan.principal - sum(schedule.filtered("paid").mapped("principal"))
+                upcoming = schedule.filtered(lambda s: not s.paid)
+                if remaining < -0.5 or (upcoming and remaining <= 0):
+                    raise ValidationError(f"{where} : remboursements supérieurs au montant emprunté de {reference}.")
+                period_rate, count = loan._period_rate(), len(upcoming)
+                annuity = remaining * period_rate / (1 - (1 + period_rate) ** -count) if period_rate and count else None
+                for i, slot in enumerate(upcoming):
+                    interest = float_round(remaining * period_rate, 0)
+                    if i == count - 1:
+                        capital = remaining
+                    elif annuity:
+                        capital = float_round(annuity - remaining * period_rate, 0)
+                    else:
+                        capital = float_round(remaining / (count - i), 0)
+                    remaining -= capital
+                    slot.write({"principal": capital, "interest": interest})
+                outstanding = loan.principal
+                for slot in schedule:
+                    outstanding -= slot.principal
+                    slot.remaining = max(0.0, outstanding)
+                loan.action_activate()
+            created += 1
+        except (UserError, ValidationError) as e:
+            errors.append(f"{where} : {e.args[0]}")
+    notes.append(f"Emprunts : {created} financement(s) en cours repris, {skipped} déjà présent(s).")
+    if created:
+        # Contrôle de la clôture « encours de dette conforme aux échéanciers », au jour de la reprise.
+        loans = Loan.search([("company_id", "=", company.id), ("state", "in", ("active", "closed"))])
+        schedules = sum(loans.line_ids.filtered(lambda s: not s.paid).mapped("principal"))
+        ledger = -env["eguitra.finance.metrics"]._sum_balance(company, ["16", "17"])
+        if abs(schedules - ledger) >= 1:
+            notes.append(f"Emprunts : capital restant dû des échéanciers {gnf(schedules)} GNF, comptes 16 et 17 "
+                         f"{gnf(ledger)} GNF, écart {gnf(schedules - ledger)} GNF (contrôle de clôture non bloquant).")
 
 # ─── Budget ───────────────────────────────────────────────────────────────
 data = rows("budget.csv")
 if data is not None:
-    # Une ligne budgétaire par compte (ou préfixe), activité et centre de coût ; un montant par mois.
-    # Nature déduite de la classe : 7 produits, 2 investissements, sinon charges.
+    # Une ligne budgétaire par compte (ou préfixes « 6611, 664 », ou « résiduel » : charges de la classe 6
+    # qu'aucune autre ligne ne couvre), activité et centre de coût ; un montant par mois. Nature déduite de
+    # la classe : 7 produits, 2 investissements, sinon charges.
     year = int(os.environ.get("REPRISE_BUDGET_ANNEE") or date.today().year)
     Budget, BudgetLine = env["mis.budget.by.account"], env["eguitra.budget.line"]
     budget = Budget.search([("company_id", "=", company.id), ("date_from", "=", f"{year}-01-01")], limit=1)
@@ -386,27 +818,31 @@ if data is not None:
     grouped = {}
     for line, r in data:
         where = f"budget.csv ligne {line}"
-        prefix = re.sub(r"\s", "", r.get("compte", ""))
+        text = (r.get("compte") or "").strip()
+        residual = bool(re.fullmatch(r"(solde\s+)?r[ée]siduel", text, re.I))
+        prefixes = [] if residual else split_prefixes(text)
         month = int(r.get("mois") or 0) if (r.get("mois") or "").isdigit() else 0
-        account = env["account.account"].search([("code", "=like", prefix + "%"), ("company_ids", "in", company.ids)],
-                                                order="code", limit=1) if prefix.isdigit() else None
-        if not account or not 1 <= month <= 12:
-            errors.append(f"{where} : compte (ou préfixe) inconnu, ou mois hors 1 à 12.")
+        accounts = [Account.search([("code", "=like", p + "%"), ("company_ids", "in", company.ids)], order="code", limit=1)
+                    if p.isdigit() else Account for p in prefixes]
+        if not (residual or (accounts and all(accounts))) or not 1 <= month <= 12:
+            errors.append(f"{where} : compte (préfixes ou « résiduel ») inconnu, ou mois hors 1 à 12.")
             continue
         analytic = {column: analytic_account(column, r[column], where) if r.get(column) else None
                     for column in ("activite", "centre_cout")}
         if any(r.get(c) and not a for c, a in analytic.items()):
             continue
-        key = (prefix, analytic["activite"], analytic["centre_cout"])
-        entry = grouped.setdefault(key, {"name": r.get("ligne") or account.name, "months": {}})
+        key = (", ".join(prefixes), analytic["activite"], analytic["centre_cout"])
+        default = "Autres charges (solde résiduel)" if residual else accounts[0].name
+        entry = grouped.setdefault(key, {"name": r.get("ligne") or default, "months": {}})
         entry["months"][month] = entry["months"].get(month, 0.0) + number(r.get("montant"), where)
     created = updated = 0
     for (prefix, activity, center), entry in grouped.items():
         nature = "income" if prefix.startswith("7") else "capex" if prefix.startswith("2") else "expense"
-        values = {"nature": nature, "name": entry["name"], "account_prefixes": prefix,
+        values = {"nature": nature, "name": entry["name"], "account_prefixes": prefix or False, "residual": not prefix,
                   "activity_id": activity.id if activity else False, "cost_center_id": center.id if center else False}
         values.update({f"amount_{m:02d}": amount for m, amount in entry["months"].items()})
-        existing = BudgetLine.search([("budget_id", "=", budget.id), ("account_prefixes", "=", prefix),
+        existing = BudgetLine.search([("budget_id", "=", budget.id),
+                                      ("account_prefixes", "=", prefix) if prefix else ("residual", "=", True),
                                       ("activity_id", "=", values["activity_id"]),
                                       ("cost_center_id", "=", values["cost_center_id"])], limit=1)
         try:
@@ -430,7 +866,6 @@ if data is not None:
     products = {}
     for p in known.sorted(lambda p: bool(p.company_id)):
         products.update({p.name.lower(): p.id, p.code: p.id})
-    Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
     costs = {"carburant": "fuel_cost", "peages": "toll_cost", "frais_chauffeur": "driver_fees",
              "entretien": "maintenance_cost", "pneus": "tyre_cost", "taxes": "specific_taxes_manual",
              "autres": "other_costs"}
@@ -442,9 +877,9 @@ if data is not None:
                                   ("route", Route, "route")):
             if not r.get(col):
                 continue
-            record = model.search([("name", "=ilike", r[col])], limit=1)
+            record = model.search([("company_id", "=", company.id), ("name", "=ilike", r[col])], limit=1)
             if not record:
-                record = model.create({"name": r[col]})
+                record = model.create({"name": r[col], "company_id": company.id})
                 notes.append(f"{where} : {label} « {r[col]} » ajouté(e) ; vérifier qu'il ne s'agit pas d'une faute de frappe.")
             refs[col] = record
         client = find_partner(r.get("client", ""))

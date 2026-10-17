@@ -1,4 +1,5 @@
-type;nom;nif;rccm;telephone;email;adresse;ville
-client;Exemple Distribution SA;123456789;GN.TCC.2020.B.00001;+224 620 00 00 00;compta@exemple.gn;Kaloum;Conakry
-fournisseur;Exemple Carburants SARL;;;;;;Conakry
-preteur;Exemple Banque SA;;;;;;Conakry
+type;code;nom;nif;rccm;telephone;email;adresse;ville;delai;fin_de_mois;limite_credit;non_assujetti;secteur;contact
+client;CL-901;Exemple Distribution SA;123456789;GN.TCC.2020.B.00001;+224 620 00 00 00;compta@exemple.gn;Kaloum;Conakry;45;oui;500 000 000;;Distribution pétrolière;Service comptable
+client;CL-902;Exemple Résidence (locataires);;;;;;Conakry;5;;;oui;Immobilier;Gestion locative
+fournisseur;FR-901;Exemple Carburants SARL;;;;;;Conakry;30;;;;Carburant;
+preteur;;Exemple Banque SA;;;;;;Conakry;;;;;;
