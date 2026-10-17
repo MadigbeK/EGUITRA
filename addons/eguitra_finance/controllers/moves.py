@@ -196,7 +196,7 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
         if not line.get("name"):
             raise ApiError(400, "missing_fields", f"Ligne {i} : libellé requis.")
         category = category_of(line.get("category_id"), company)
-        amount =as_float(line.get("quantity", 1), "quantity") * as_float(line.get("price_unit", 0), "price_unit")
+        amount = as_float(line.get("quantity", 1), "quantity") * as_float(line.get("price_unit", 0), "price_unit")
         if amount <= 0:
             raise ApiError(422, "business_rule", "Chaque ligne doit avoir un montant positif.")
         account = account_of_company(line.get("account_id"), company, "Compte") or category.account_id
@@ -371,7 +371,7 @@ class EguitraFinanceMoves(http.Controller):
                     raise ApiError(422, "business_rule", "Ces catégories font de la dépense une opération diverse : "
                                                          "supprimez ce brouillon et ressaisissez la pièce.")
                 partner = _partner(values["partner_id"]) if values.get("partner_id") else move.partner_id
-                values["invoice_line_ids"] =[Command.clear()] + _invoice_lines(
+                values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(
                     dict(data, journal_id=move.journal_id.id), move.move_type, partner)
         move.write(values)
         return move_detail(move)
