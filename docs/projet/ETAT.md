@@ -305,8 +305,8 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
     jugement codé en dur (« seuil non fixé »), types d'opération à part d'emprunt (déblocage ;
     capital et intérêts hors échéancier), droit « Saisie libre des comptes » accordé d'office aux
     comptes actuels (finance, direction, administration) ; `eguitra_finance` 19.0.1.5.0 avec
-    migration, `eguitra_transport` 19.0.1.2.0 ; 203 tests au vert (api, finance, approval,
-    transport) ; recette mise à jour (`-u`, noyau redémarré).
+    migration, `eguitra_transport` 19.0.1.2.0 ; 268 tests au vert sur les huit modules (203 pour api,
+    finance, approval et transport, 65 pour les autres) ; recette mise à jour (`-u`, noyau redémarré).
   - **Reprise réelle essayée de bout en bout** sur la base jetable `eguitra_reprise_essai` (grappe de
     recette, données réelles du client ; fichiers dans `~/reprise-essai` du serveur, scripts
     `~/essai_complet.sh` et `~/validation_essai.py`) : 724 pièces, 206 lettrages, 24 immobilisations,
