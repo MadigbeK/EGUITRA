@@ -33,6 +33,7 @@ COSTS = [
     ("toll_cost", "Péages"),
     ("driver_fees", "Frais du chauffeur"),
     ("maintenance_cost", "Entretien et réparations"),
+    ("tyre_cost", "Pneumatiques"),
     ("specific_taxes", "Taxes spécifiques"),
     ("other_costs", "Autres frais"),
 ]
@@ -68,6 +69,7 @@ class EguitraTransportRotation(models.Model):
     )
     date_loading = fields.Date("Chargement", required=True, default=fields.Date.context_today)
     date_delivery = fields.Date("Livraison")
+    date_return = fields.Date("Retour au dépôt")
     vehicle_id = fields.Many2one("eguitra.transport.vehicle", "Ensemble routier", required=True, check_company=True)
     driver_id = fields.Many2one("eguitra.transport.driver", "Chauffeur", check_company=True)
     partner_id = fields.Many2one("res.partner", "Client", required=True, check_company=True)
@@ -141,7 +143,22 @@ class EguitraTransportRotation(models.Model):
     toll_cost = fields.Monetary("Péages")
     driver_fees = fields.Monetary("Frais du chauffeur")
     maintenance_cost = fields.Monetary("Entretien et réparations")
+    tyre_cost = fields.Monetary("Pneumatiques")
     other_costs = fields.Monetary("Autres frais")
+
+    # ─── Kilométrage et ratios ────────────────────────────────────────────
+    distance_km = fields.Float(
+        "Distance parcourue (km)", digits=(10, 1), compute="_compute_distance", store=True, readonly=False,
+        help="Aller-retour de la route ; à corriger d'après le compteur si le trajet a différé.",
+    )
+    fuel_liters = fields.Float("Carburant (litres)", digits=(10, 1))
+    duration_days = fields.Float("Durée (jours)", digits=(5, 1), compute="_compute_ratios", store=True,
+                                 help="Retour (à défaut livraison) moins chargement, au moins un jour ; sans date, "
+                                      "durée standard de la route.")
+    revenue_per_km = fields.Monetary("Chiffre d'affaires par km", compute="_compute_ratios", store=True)
+    cost_per_km = fields.Monetary("Coût par km", compute="_compute_ratios", store=True)
+    cost_per_liter = fields.Monetary("Coût par litre transporté", compute="_compute_ratios", store=True)
+    fuel_per_100km = fields.Float("Consommation (L/100 km)", digits=(6, 1), compute="_compute_ratios", store=True)
 
     # ─── Taxes spécifiques ────────────────────────────────────────────────
     tax_rules = fields.Boolean(
@@ -238,6 +255,28 @@ class EguitraTransportRotation(models.Model):
             # Une taxe refacturée est un coût de la rotation compensé par sa refacturation.
             rot.margin = rot.revenue + rot.taxes_rebilled - rot.shortage_net_cost - rot.total_cost
             rot.margin_rate = (rot.margin / rot.revenue * 100) if rot.revenue else 0.0
+
+    @api.depends("route_id")
+    def _compute_distance(self):
+        for rot in self:
+            rot.distance_km = rot.route_id._round_trip_km() if rot.route_id else 0.0
+
+    @api.depends("date_loading", "date_delivery", "date_return", "route_id", "distance_km", "fuel_liters", "revenue",
+                 "total_cost", "shortage_net_cost", "volume_loaded", "volume_delivered")
+    def _compute_ratios(self):
+        for rot in self:
+            end = rot.date_return or rot.date_delivery
+            if end and rot.date_loading:
+                rot.duration_days = max(1, (end - rot.date_loading).days)
+            else:
+                rot.duration_days = rot.route_id.duration_days or 1
+            km = rot.distance_km or 0.0
+            cost = rot.total_cost + rot.shortage_net_cost
+            liters = (rot.volume_delivered or rot.volume_loaded or 0.0) * 1000
+            rot.revenue_per_km = rot.revenue / km if km else 0.0
+            rot.cost_per_km = cost / km if km else 0.0
+            rot.cost_per_liter = cost / liters if liters else 0.0
+            rot.fuel_per_100km = rot.fuel_liters / km * 100 if km and rot.fuel_liters else 0.0
 
     @api.depends("volume_loaded", "vehicle_id.capacity_liters")
     def _compute_over_capacity(self):
@@ -493,11 +532,13 @@ class EguitraTransportRotation(models.Model):
         Rotation = self.sudo()
         sums = ["volume_delivered", "volume_loaded", "revenue", "billed_amount", "total_cost", "margin", "shortage",
                 "shortage_excess", "shortage_value", "shortage_deduction", "shortage_claim", "shortage_net_cost",
-                "taxes_rebilled"]
+                "taxes_rebilled", "distance_km", "fuel_liters"]
         groups = Rotation._read_group(
             domain, [groupby], ["__count", *[f"{f}:sum" for f in sums], *[f"{c}:sum" for c, _l in COSTS]],
         )
         excess_counts = dict(Rotation._read_group(domain + [("shortage_excess", ">", 0)], [groupby], ["__count"]))
+        # Consommation : sur les seules rotations dont les litres sont connus.
+        fuel_km = dict(Rotation._read_group(domain + [("fuel_liters", ">", 0)], [groupby], ["distance_km:sum"]))
         rows = []
         for key, count, *values in groups:
             totals = dict(zip(sums, values[:len(sums)]))
@@ -509,11 +550,17 @@ class EguitraTransportRotation(models.Model):
                 label = key.display_name if key else "Non renseigné"
                 key_id = key.id if key else None
             revenue, margin, loaded = totals["revenue"], totals["margin"], totals["volume_loaded"]
+            km, volume = totals["distance_km"], totals["volume_delivered"] or loaded
+            declared = totals["total_cost"] + totals["shortage_net_cost"]
             rows.append({
                 "key": key_id, "label": label, "rotations": count,
-                "volume": totals["volume_delivered"] or loaded, "volume_loaded": loaded,
+                "volume": volume, "volume_loaded": loaded,
                 "revenue": revenue, "billed_amount": totals["billed_amount"], "cost": totals["total_cost"],
-                "taxes_rebilled": totals["taxes_rebilled"],
+                "declared_cost": declared, "taxes_rebilled": totals["taxes_rebilled"],
+                "km": km, "fuel_liters": totals["fuel_liters"], "fuel_km": fuel_km.get(key) or 0.0,
+                "revenue_per_km": revenue / km if km else None, "cost_per_km": declared / km if km else None,
+                "cost_per_liter": declared / (volume * 1000) if volume else None,
+                "fuel_per_100km": totals["fuel_liters"] / fuel_km[key] * 100 if fuel_km.get(key) else None,
                 "margin": margin, "margin_rate": (margin / revenue * 100) if revenue else None,
                 "shortage": totals["shortage"], "shortage_excess": totals["shortage_excess"],
                 "shortage_tolerated": totals["shortage"] - totals["shortage_excess"],

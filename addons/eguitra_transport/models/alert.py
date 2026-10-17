@@ -55,3 +55,22 @@ class EguitraAlertThreshold(models.Model):
                     excess, "/finance/transport",
                 ))
         return alerts
+
+
+class EguitraPeriodClose(models.Model):
+    _inherit = "eguitra.period.close"
+
+    def _run_controls(self):
+        """Contrôles permanents de la flotte (vigilance, non bloquants) pour une société du transport."""
+        checks = super()._run_controls()
+        company = self.company_id
+        if company.eguitra_entity != "groupe" and not self.env["eguitra.transport.vehicle"].sudo().search_count(
+                [("company_id", "=", company.id)], limit=1):
+            return checks
+        for control in self.env["eguitra.transport.analysis"].sudo().controls(company):
+            detail = "; ".join(control["items"][:6])
+            if control["count"] > 6:
+                detail += f" (et {control['count'] - 6} autre(s))"
+            checks.append(self._check(f"transport_{control['code']}", control["label"], control["ok"], False,
+                                      f"{detail}. {control['hint']}", control["count"]))
+        return checks

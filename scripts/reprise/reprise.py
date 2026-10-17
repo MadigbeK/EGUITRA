@@ -288,7 +288,8 @@ if data is not None:
     products = {p.name.lower(): p.id for p in known} | {p.code: p.id for p in known}
     Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
     costs = {"carburant": "fuel_cost", "peages": "toll_cost", "frais_chauffeur": "driver_fees",
-             "entretien": "maintenance_cost", "taxes": "specific_taxes_manual", "autres": "other_costs"}
+             "entretien": "maintenance_cost", "pneus": "tyre_cost", "taxes": "specific_taxes_manual",
+             "autres": "other_costs"}
     count = invoiced = skipped = 0
     for line, r in data:
         where = f"rotations.csv ligne {line}"
@@ -322,6 +323,13 @@ if data is not None:
             values["driver_id"] = refs["chauffeur"].id
         if r.get("date_livraison"):
             values["date_delivery"] = day(r["date_livraison"], where)
+        # Colonnes facultatives de la rentabilité : retour au dépôt, litres de carburant, kilométrage
+        # (à défaut, l'aller-retour de la route).
+        if r.get("date_retour"):
+            values["date_return"] = day(r["date_retour"], where)
+        for col, field in (("litres", "fuel_liters"), ("km", "distance_km")):
+            if r.get(col):
+                values[field] = number(r[col], where)
         if r.get("tarif"):
             values["rate"] = number(r["tarif"], where)
         for col, field in costs.items():

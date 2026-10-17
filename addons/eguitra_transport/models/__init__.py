@@ -3,4 +3,5 @@ from . import settings
 from . import fleet
 from . import tax
 from . import rotation
+from . import analysis
 from . import alert
