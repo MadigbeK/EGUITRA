@@ -14,3 +14,5 @@ access_reminder_direction,relances lecture,model_eguitra_reminder,eguitra_base.g
 access_reminder_finance,relances finance,model_eguitra_reminder,eguitra_base.group_profile_finance,1,1,1,0
 access_payment_mode_user,modes de paiement lecture,model_eguitra_payment_mode,base.group_user,1,0,0,0
 access_payment_mode_finance,modes de paiement finance,model_eguitra_payment_mode,eguitra_base.group_profile_finance,1,1,1,0
+access_budget_line_direction,lignes budgétaires lecture,model_eguitra_budget_line,eguitra_base.group_profile_direction,1,0,0,0
+access_budget_line_finance,lignes budgétaires finance,model_eguitra_budget_line,eguitra_base.group_profile_finance,1,1,1,1

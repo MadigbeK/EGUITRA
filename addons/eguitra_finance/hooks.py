@@ -4,6 +4,7 @@ FINANCE_AUDITED_MODELS = [
     "account.analytic.distribution.model",
     "account.analytic.applicability",
     "eguitra.payment.mode",
+    "eguitra.budget.line",
 ]
 
 

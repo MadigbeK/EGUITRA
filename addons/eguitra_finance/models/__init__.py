@@ -10,3 +10,4 @@ from . import reminder
 from . import analytic
 from . import treasury
 from . import bank_reconciliation
+from . import budget
