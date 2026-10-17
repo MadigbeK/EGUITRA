@@ -7,7 +7,6 @@ from odoo.addons.eguitra_api.controllers.framework import api_route
 from odoo.addons.eguitra_finance.controllers.common import parse_date, today
 from odoo.addons.eguitra_finance.controllers.exporting import export_meta, table_response
 
-from ..models.fleet import PRODUCTS
 from ..models.rotation import COSTS
 from .transport import READ
 
@@ -33,7 +32,6 @@ class EguitraTransportExports(http.Controller):
             domain.append(("state", "in", kw["state"].split(",")))
         rotations = Rotation.search(domain, order="date_loading, id")
         optional = [(f, label, kind) for f, label, kind in OPTIONAL if f in Rotation._fields]
-        products = dict(PRODUCTS)
         columns = [("Numéro", "text"), ("État", "text"), ("Chargement", "date"), ("Livraison", "date"),
                    ("Ensemble", "text"), ("Chauffeur", "text"), ("Client", "text"), ("Route", "text"),
                    ("Produit", "text"), ("Bon de livraison", "text"), ("Volume chargé (m³)", "number"),
@@ -46,7 +44,7 @@ class EguitraTransportExports(http.Controller):
             rows.append([
                 rot.name if rot.name != "/" else "", STATES.get(rot.state, rot.state), rot.date_loading, rot.date_delivery,
                 rot.vehicle_id.name or "", rot.driver_id.name or "", rot.partner_id.name or "", rot.route_id.name or "",
-                products.get(rot.product, rot.product or ""), rot.delivery_note or "", rot.volume_loaded,
+                rot.product_id.name or rot.product or "", rot.delivery_note or "", rot.volume_loaded,
                 rot.volume_delivered, rot.shortage, rot.rate, rot.revenue, *[rot[f] for f, _l in COSTS],
                 rot.total_cost, rot.margin, rot.margin_rate, *[rot[f] for f, _l, _k in optional],
                 rot.invoice_id.name or "",
