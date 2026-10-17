@@ -131,7 +131,7 @@ séparément. Règles, décrites en un seul endroit, `addons/eguitra_api/organis
 | `apps/web` | Les quatre surfaces web (33 écrans), la passerelle sécurisée, l'application Rotations hors ligne. |
 | `scripts/dev/sync.sh` | Envoi du code sur le serveur de recette. |
 | `scripts/recette/donnees_demo.py` | Données fictives « Démo » pour la recette (transport, achats, chantier, biens, AxisPro). |
-| `scripts/reprise/` | Reprise contrôlée depuis des CSV (tiers, soldes d'ouverture, écritures de l'exercice avec lettrage, budget, rotations 2026), modèles de fichiers ; vérifiée sur une base jetable. |
+| `scripts/reprise/` | Reprise contrôlée depuis des CSV (comptes, axes, journaux de trésorerie, tiers, soldes d'ouverture par facture, immobilisations, référentiels du transport, écritures de l'exercice avec lettrage par référence, emprunts, budget, rotations 2026), modèles de fichiers ; conversion du dossier JSON du prototype (`dossier_json.py`) et contrôle des 26 valeurs de référence (`extraire_reference.py`, `controle_reference.py`). |
 | `docs/guides/` | Guides des utilisateurs par profil (direction, finance, exploitation, chantiers, immobilier, cabinet, porteur, administration) en Markdown et en Word (`word/`, générés par `build.js`). |
 | `docs/projet/` | Dossier de conception (Markdown source et `Dossier_de_conception.docx` généré), cahier de recette (`Cahier_de_recette.xlsx`, 61 scénarios, généré par `cahier-de-recette.py`), plan de bascule vers la production (`Plan_de_bascule.docx`), accord de confidentialité (ajouté par une autre session), support de cadrage. |
 | `docs/outils/md-docx.js` | Conversion Markdown vers Word aux couleurs du projet. |
@@ -239,7 +239,30 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
 - Versions : `eguitra_finance` 19.0.1.4.0, `eguitra_approval` 19.0.1.2.0, `eguitra_transport`
   19.0.1.1.0, `eguitra_immobilier` 19.0.1.1.0, `eguitra_axispro` 19.0.1.2.1 ; mise à jour avec
   `-u` de ces modules puis redémarrage du noyau (module d'audit).
-- Reste : reprise du classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt) ;
+- Fait, reprise du dossier du prototype (`scripts/reprise/`, à essayer sur la recette) :
+  `dossier_json.py` convertit le dossier JSON du prototype (schéma 1) en fichiers de reprise selon
+  l'imputation du moteur du prototype (à-nouveaux client et fournisseur éclatés par facture avec
+  échéance et référence, ventes et achats avec TVA, trésorerie lettrée par référence et en devise,
+  OD sauf dotations, immobilisations avec cumul au 31/12, emprunts et échéances payées, budget,
+  rotations en m³, référentiels du transport) ; `reprise.py` crée désormais les comptes absents (nature
+  du voisin), activités et centres de coût par code, journaux de banque et de caisse, catégories
+  d'immobilisations, routes, chauffeurs, ensembles, emprunts (eguitra.loan en cours), fiches tiers
+  enrichies (code, conditions, limite, non-assujetti, secteur, interlocuteur), lettre par référence,
+  accepte devise, échéance et budget à préfixes multiples ou résiduel. `extraire_reference.py` lit
+  les 26 valeurs de référence du prototype, `controle_reference.py` les recalcule sur les fichiers
+  comme la plateforme les comptabilisera : 18 conformes ; les 8 autres (dotations, résultats,
+  capitaux propres, totaux de balance et de bilan) ont une seule cause, la convention
+  d'amortissement (prototype : mois entiers à compter du mois suivant l'acquisition ; plateforme :
+  prorata au jour de la mise en service, l'écart de reprise des biens rattrapé sur la première
+  dotation 2026). **Décision à prendre avec l'expert-comptable** : accepter ce rattrapage, ou porter
+  l'écart de reprise en fin de plan (modification d'`eguitra_takeover`, mesurée par
+  `--ecart-reprise=derniere` : ne resterait que le prorata du mois d'acquisition des biens acquis dans
+  l'exercice). Autres
+  points : taux des emprunts absents du dossier (0 par défaut ; `--taux-implicites` reprend le taux
+  déduit des échéances) ; ne pas importer les relevés bancaires de la période reprise (comptés deux
+  fois) ; activité du transport nommée « Transport pétrolier » par le module (le dossier a la sienne).
+  Fichiers produits et rapports hors dépôt.
+- Reste : essai de la reprise du dossier sur la recette (simulation, puis `--appliquer`) ;
   décisions de droits signalées par l'agent transport (le parc modifie la fiche tiers d'un
   chauffeur et les coefficients à 15 °C ; la finance d'une société modifie un produit commun) ;
   choix comptables à valider avec l'expert-comptable (règlement d'échéance par le 401 du prêteur,
