@@ -259,7 +259,8 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
   `--ecart-reprise=derniere` : ne resterait que le prorata du mois d'acquisition des biens acquis dans
   l'exercice). Autres
   points : taux des emprunts absents du dossier (0 par défaut ; `--taux-implicites` reprend le taux
-  déduit des échéances) ; ne pas importer les relevés bancaires de la période reprise (comptés deux
+  déduit des échéances) ; à-nouveau des emprunts à vérifier avec le client (compte rendu de
+  conversion, hors dépôt) ; ne pas importer les relevés bancaires de la période reprise (comptés deux
   fois) ; activité du transport nommée « Transport pétrolier » par le module (le dossier a la sienne).
   Fichiers produits et rapports hors dépôt.
 - Reste : essai de la reprise du dossier sur la recette (simulation, puis `--appliquer`) ;
