@@ -35,9 +35,30 @@ class AccountMove(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        for vals in vals_list:
+            self._eguitra_exempt_vals(vals)
         moves = super().create(vals_list)
         moves._eguitra_apply_vat_exemption()
         return moves
+
+    @api.model
+    def _eguitra_exempt_vals(self, vals):
+        """Client non assujetti : les lignes d'une facture ou d'un avoir de vente sont créées en
+        exonération (taxe à 0 % de la société, à défaut sans taxe), avant le calcul des lignes de TVA."""
+        move_type = vals.get("move_type") or self.env.context.get("default_move_type")
+        if move_type not in SALE_DOCUMENTS or not vals.get("partner_id"):
+            return
+        partner = self.env["res.partner"].browse(vals["partner_id"]).commercial_partner_id
+        if not partner.eguitra_vat_exempt:
+            return
+        company = self.env["res.company"].browse(vals.get("company_id") or self.env.company.id)
+        exempt = self.env["account.tax"].search([
+            ("company_id", "=", company.id), ("type_tax_use", "=", "sale"), ("amount", "=", 0),
+            ("amount_type", "=", "percent"),
+        ], limit=1)
+        for command in vals.get("invoice_line_ids") or []:
+            if isinstance(command, (list, tuple)) and len(command) > 2 and command[0] == 0                     and isinstance(command[2], dict) and command[2].get("display_type", "product") == "product":
+                command[2]["tax_ids"] = [Command.set(exempt.ids)]
 
     def write(self, vals):
         result = super().write(vals)

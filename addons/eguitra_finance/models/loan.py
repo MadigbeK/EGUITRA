@@ -191,8 +191,8 @@ class EguitraLoanLine(models.Model):
             })
             # Au-delà du seuil des décaissements, le règlement attend l'approbation : l'échéance est
             # marquée réglée à la comptabilisation de l'écriture (AccountMove._post ci-dessous).
-            move.with_context(eguitra_cash_out_check=True).action_post()
             line.write({"move_id": move.id})
+            move.with_context(eguitra_cash_out_check=True).action_post()
         return True
 
     # ─── Règlement depuis le relevé bancaire ──────────────────────────────

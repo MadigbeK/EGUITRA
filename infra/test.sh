@@ -32,11 +32,18 @@ fi
 
 "${ODOO[@]}" db "${CONF[@]}" duplicate --force "$BASE" "$CI"
 
-MODS=$(IFS=,; echo "$*")
+# Arguments : modules, ou module:Classe pour ne lancer qu'une classe de tests (module installé quand même).
+MODS=$(printf '%s\n' "$@" | cut -d: -f1 | sort -u | paste -sd, -)
 TAGS=$(printf '/%s,' "$@")
 LOG=$(mktemp)
-"${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -i "$MODS" --test-enable --test-tags "${TAGS%,}" \
-  --stop-after-init --workers 0 --log-level=test 2>&1 | tee "$LOG" | grep -E " (ERROR|CRITICAL) |FAIL|Ran |tests? in " || true
+# Installation, puis tests dans un second processus : le module d'audit remplace create et write des
+# modèles suivis au moment où leurs règles sont posées ; installés et testés dans le même processus,
+# les surcharges des modules chargés ensuite seraient court-circuitées. En production, le noyau est
+# redémarré après chaque installation (infra/README.md) ; les tests reproduisent cet état.
+"${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -i "$MODS" --stop-after-init --workers 0 \
+  --log-level=info > "$LOG" 2>&1 || true
+"${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -u "$MODS" --test-enable --test-tags "${TAGS%,}" \
+  --stop-after-init --workers 0 --log-level=test 2>&1 | tee -a "$LOG" | grep -E " (ERROR|CRITICAL) |FAIL|Ran |tests? in " || true
 
 if grep -qE " (ERROR|CRITICAL) " "$LOG"; then
   echo "ÉCHEC : voir les erreurs ci-dessus (journal complet : $LOG)"

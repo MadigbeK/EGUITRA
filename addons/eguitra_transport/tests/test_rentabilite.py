@@ -98,7 +98,7 @@ class TestRentabilite(TransportCase):
         self.assertAlmostEqual(indicators["structure_per_km"], 5_000_000 / 1_580)
         self.assertAlmostEqual(indicators["revenue_share"], 50.0)
         self.assertEqual((indicators["vehicles"], indicators["deficit_vehicles"]), (1, 0))
-        self.assertEqual(indicators["margin_threshold"], 15)
+        self.assertEqual(indicators["margin_threshold"], 30, "Seuil de marge du prototype (30 %)")
         self.assertFalse(indicators["below_threshold"])
 
     def test_ensemble_deficitaire(self):

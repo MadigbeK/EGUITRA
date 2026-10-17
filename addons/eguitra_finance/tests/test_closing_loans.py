@@ -31,6 +31,9 @@ class TestClosingAndLoans(FinanceDataMixin, TransactionCase):
         loan.action_activate()
         first = loan.line_ids[0]
         first.action_pay()
+        if not first.paid:
+            # Échéance au-delà du seuil des décaissements : réglée à l'approbation (eguitra_approval).
+            first.move_id.with_context(eguitra_approval_granted=True).sudo().action_post()
         self.assertTrue(first.paid)
         self.assertEqual(first.move_id.state, "posted")
         summary = self.env["eguitra.loan"].debt_summary(self.company, self.today)

@@ -89,7 +89,8 @@ class TestTaxes(TransportCase):
     def test_etat_mensuel(self):
         tax = self._tax(account_id=self.acc_purchase.id, rebillable=True)
         self._tax(name="Laissez-passer", nature="permit", base="fixed", rate=75_000)
-        rots = self._rotation() | self._rotation(specific_taxes=20_000)
+        # Taxe payée hors barème (clé des nouvelles saisies) : le barème s'y ajoute.
+        rots = self._rotation() | self._rotation(specific_taxes_manual=20_000)
         rots.action_validate()
         self._rotation()  # en saisie : hors de l'état
         self.make_invoice("in_invoice", amount=500_000)  # taxe payée, comptabilisée sur le compte du barème
