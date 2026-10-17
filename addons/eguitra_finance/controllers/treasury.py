@@ -27,7 +27,7 @@ from .common import (
     today,
     with_rules,
 )
-from .moves import account_of_company, store_attachment
+from .moves import chosen_account, store_attachment
 
 MAX_FILE = 5 * 1024 * 1024
 DATE_HEADERS = ("date operation", "date opération", "date", "date valeur", "date comptable")
@@ -485,7 +485,9 @@ class EguitraFinanceTreasury(http.Controller):
                                                      f"{typed.with_company(company).code} du financement {loan.name}.")
             counterpart = typed
         else:
-            counterpart = account_of_company(data.get("counterpart_account_id"), company, "Compte d'imputation") or typed
+            # Un compte choisi relève de la saisie libre des comptes, sauf celui du type d'opération.
+            counterpart = chosen_account(data.get("counterpart_account_id"), company, "Compte d'imputation",
+                                         allowed=typed) or typed
         if counterpart:
             values["counterpart_account_id"] = counterpart.id
         elif data.get("analytic_distribution"):
@@ -669,7 +671,7 @@ class EguitraFinanceTreasury(http.Controller):
             # Reportés sur l'opération recréée par l'imputation (_eguitra_impute).
             line.write({"eguitra_operation_type_id": kind.id, "eguitra_loan_id": loan.id or False})
         elif data.get("account_id") and direct:
-            account = account_of_company(data["account_id"], line.company_id, "Compte d'imputation")
+            account = chosen_account(data["account_id"], line.company_id, "Compte d'imputation")
         if account:
             dist = distribution(data.get("analytic_distribution"), line.company_id)
             data = dict(data, account_id=account.id,
@@ -695,7 +697,10 @@ class EguitraFinanceTreasury(http.Controller):
         Kind = request.env["eguitra.treasury.operation.type"].with_context(active_test=kw.get("all") != "1")
         return [_operation_type_row(k) for k in Kind.search([("company_id", "=", request.env.company.id)])]
 
-    def _operation_type_values(self, data, company):
+    def _operation_type_values(self, data, company, current=None):
+        """Champs d'un type d'opération. Son compte devient celui des opérations des autres : le fixer (ou
+        le changer, current : type modifié) relève du droit « Saisie libre des comptes »."""
+        current = current or request.env["eguitra.treasury.operation.type"]
         values = {}
         if "name" in data:
             name = str(data.get("name") or "").strip()
@@ -707,7 +712,8 @@ class EguitraFinanceTreasury(http.Controller):
                 raise ApiError(400, "invalid_parameter", "Sens : in (entrée) ou out (sortie).")
             values["direction"] = data["direction"]
         if "account_id" in data:
-            values["account_id"] = account_of_company(data["account_id"], company, "Compte de contrepartie").id or False
+            values["account_id"] = chosen_account(data["account_id"], company, "Compte de contrepartie",
+                                                  allowed=current.account_id).id or False
         for key in ("reference_required", "is_transfer", "active"):
             if key in data:
                 values[key] = bool(data[key])
@@ -739,7 +745,7 @@ class EguitraFinanceTreasury(http.Controller):
         company = request.env.company
         if not kind or kind.company_id != company:
             raise ApiError(404, "not_found", "Type d'opération introuvable dans la société de travail.")
-        kind.write(self._operation_type_values(read_json(), company))
+        kind.write(self._operation_type_values(read_json(), company, current=kind))
         return _operation_type_row(kind)
 
     @api_route("/finance/treasury/operation-types/defaults", methods=("POST",), profiles=FIN_WRITE)

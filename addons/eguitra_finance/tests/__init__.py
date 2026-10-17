@@ -24,3 +24,4 @@ from . import test_chart
 from . import test_audit_coverage
 from . import test_reprise_reference
 from . import test_consolidation
+from . import test_saisie_libre

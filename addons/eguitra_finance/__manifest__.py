@@ -15,6 +15,7 @@
     ],
     "external_dependencies": {"python": ["xlsxwriter"]},
     "data": [
+        "security/finance_groups.xml",
         "security/ir.model.access.csv",
         "security/finance_rules.xml",
         "data/alert_thresholds.xml",

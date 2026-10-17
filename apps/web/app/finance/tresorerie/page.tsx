@@ -6,7 +6,7 @@ import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale,
 import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
 import type { Account, AnalyticShare, CashAccount, Ref } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
 
@@ -280,6 +280,8 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
   const financement = kind && kind.loan_part !== "none" ? kind.loan_part : null;
   const loans = useActiveLoans(Boolean(financement));
   const loan = loans.find((l) => String(l.id) === form.loan);
+  // Sans le droit « Saisie libre des comptes », seul le compte du type d'opération s'applique.
+  const libre = useSaisieLibre();
   // Analytique sur un compte d'imputation, et sur les intérêts (charges financières) d'un financement.
   const analytique = Boolean(form.account) || financement === "interest";
 
@@ -377,9 +379,13 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
             <Field label="Financement" hint={loan ? `${loan.lender.name} · capital restant dû ${fmtGNF(loan.outstanding)} · compte ${financement === "interest" ? loan.interest_account : loan.principal_account}` : "Financements en cours (Dette et financement)."}>
               <Select value={form.loan} onChange={(e) => setForm({ ...form, loan: e.target.value })} placeholder="Choisir…" options={loans.map((l) => ({ value: l.id, label: `${l.name}, ${l.lender.name}` }))} />
             </Field>
-          ) : (
+          ) : libre ? (
             <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
               <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+            </Field>
+          ) : (
+            <Field label="Compte d'imputation" hint="Le compte vient du type d'opération ; le choisir librement demande le droit « Saisie libre des comptes ».">
+              <div className="py-2 text-sm text-ink-2">{kind?.account && !kind.to_match ? `${kind.account.code} ${kind.account.name}` : "À rapprocher plus tard"}</div>
             </Field>
           )}
         </div>
@@ -558,6 +564,8 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
   const kind = kinds.find((k) => String(k.id) === kindId);
   const financement = kind && kind.loan_part !== "none" ? kind.loan_part : null;
   const loans = useActiveLoans(Boolean(financement));
+  // L'imputation directe à un compte choisi relève du droit « Saisie libre des comptes ».
+  const libre = useSaisieLibre();
   const [selected, setSelected] = useState<string[]>([]);
   const [account, setAccount] = useState("");
   const [choice, setChoice] = useState<AxisChoice>({});
@@ -651,11 +659,11 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
             <Field label="Financement">
               <Select value={loanId} onChange={(e) => setLoanId(e.target.value)} placeholder="Choisir…" options={loans.map((l) => ({ value: l.id, label: `${l.name}, ${l.lender.name}` }))} />
             </Field>
-          ) : (
+          ) : libre ? (
             <Field label="Ou imputer directement à un compte" hint="Frais bancaires, agios, produit divers…">
               <Select value={account} onChange={(e) => { setAccount(e.target.value); setKindId(""); }} placeholder="–" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
             </Field>
-          )}
+          ) : null}
         </div>
         {financement && <Notice tone="accent">{PART_HINT[financement]}</Notice>}
         {imputation && !selected.length && financement !== "disbursement" && financement !== "principal" && <AnalyticFields axes={axes} value={choice} onChange={setChoice} />}
