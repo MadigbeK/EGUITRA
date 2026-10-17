@@ -30,10 +30,10 @@ def insight(key, domain, severity, title, narrative, *, metric=None, impact_gnf=
 
 def rank(items, limit=6):
     """Constats triés par score décroissant, `limit` au plus, au moins un constat positif s'il en
-    existe un (à la dernière place s'il n'entre pas dans le classement)."""
+    existe un et que la liste en compte trois ou plus (à la dernière place)."""
     ordered = sorted(items, key=lambda i: (-i["score"], i["id"]))
     selected = ordered[:limit]
-    if limit and not any(i["severity"] == "positive" for i in selected):
+    if limit >= 3 and not any(i["severity"] == "positive" for i in selected):
         positive = next((i for i in ordered if i["severity"] == "positive"), None)
         if positive:
             selected = selected[:limit - 1] + [positive]
