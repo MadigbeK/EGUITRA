@@ -11,15 +11,19 @@ SYSCOHADA (rubriques XD, XI) et sont donc documentées ici :
   EBITDA − dotations ; charges financières = solde du 67 ; résultat net = résultat d'exploitation −
   charges financières ;
 - trésorerie = solde de la classe 5 ; stocks = solde de la classe 3 ;
-- créances et dettes fournisseurs : restes dus des comptes clients et fournisseurs, dont échus (échéance
-  antérieure à la date d'arrêté) ;
-- CA TTC et achats TTC : factures et avoirs de l'exercice ;
-- total actif = total passif : bilan à la date d'arrêté ; capitaux propres = −(101 + 106 + 110) +
-  résultat net ;
+- créances et dettes fournisseurs : restes dus des comptes clients (41) et fournisseurs (40), dont
+  échus (échéance antérieure à la date d'arrêté) ; les comptes de personnel ou d'État que la
+  localisation type aussi en créances ou dettes n'y entrent pas ;
+- CA TTC : comptes de tiers des journaux de ventes (factures, avoirs et ventes reprises en écritures),
+  TVA exclue ; achats TTC : comptes de tiers des journaux d'achats et des opérations diverses passées
+  par catégorie de dépense (salaires, impôts : les achats du classeur), TVA déductible exclue ;
+- total actif = total passif : bilan à la date d'arrêté ; capitaux propres = −(101 + 106 + 110 + 12) +
+  résultat net (le report à nouveau du classeur, compte 110000, se reprend au 12 du plan SYSCOHADA) ;
 - transport (module transport) : chiffre d'affaires et coûts directs des rotations, nombre de
   rotations et non facturées, volume en litres, kilomètres.
 
-Tolérance par défaut : 10 GNF. Le résultat, horodaté, accompagne le procès-verbal de bascule.
+Tolérance par défaut : 10 GNF pour les montants, aucune pour les nombres (rotations, litres,
+kilomètres). Le résultat, horodaté, accompagne le procès-verbal de bascule.
 """
 
 from odoo import api, fields, models
@@ -76,10 +80,12 @@ class EguitraRepriseReference(models.Model):
         unknown = sorted(set(values) - set(order))
         if unknown:
             raise ValueError("Indicateurs inconnus : " + ", ".join(unknown))
+        units = {c: unit for c, _label, unit in INDICATORS}
         self.sudo().search([("company_id", "=", company.id)]).unlink()
         return self.sudo().create([
             {"company_id": company.id, "code": code, "expected": float(value), "date_to": date_to,
-             "sequence": order[code], "source": source or False, "tolerance": tolerance}
+             "sequence": order[code], "source": source or False,
+             "tolerance": tolerance if units[code] == "gnf" else 0.0}
             for code, value in values.items()
         ])
 
@@ -109,26 +115,41 @@ class EguitraRepriseReference(models.Model):
         ebitda = revenue - operating
         net = ebitda - depreciation - financial
 
-        def open_items(account_type):
+        class4 = self.env["account.account"].with_company(company).search(
+            [("code", "=like", "4%"), ("company_ids", "in", company.ids)])
+
+        def codes(prefix, excluded=()):
+            return class4.filtered(lambda a: a.code.startswith(prefix) and not a.code.startswith(excluded)).ids
+
+        def open_items(prefix):
             cr.execute(
                 """SELECT COALESCE(SUM(aml.amount_residual), 0),
                           COALESCE(SUM(CASE WHEN aml.date_maturity < %(day)s THEN aml.amount_residual END), 0)
-                     FROM account_move_line aml JOIN account_account aa ON aa.id = aml.account_id
+                     FROM account_move_line aml
                     WHERE aml.parent_state = 'posted' AND aml.company_id = %(company)s AND aml.date <= %(day)s
-                      AND aa.account_type = %(type)s AND NOT aml.reconciled""",
-                {"day": date_to, "company": company.id, "type": account_type},
+                      AND aml.account_id = ANY(%(accounts)s) AND NOT aml.reconciled""",
+                {"day": date_to, "company": company.id, "accounts": codes(prefix)},
             )
             return [float(v) for v in cr.fetchone()]
 
-        receivables, receivables_overdue = open_items("asset_receivable")
-        payables, payables_overdue = open_items("liability_payable")
+        receivables, receivables_overdue = open_items("41")
+        payables, payables_overdue = open_items("40")
 
-        def invoices(types):
+        def documents(journal_type, excluded, categories=False):
+            """Montant TTC des pièces : comptes de tiers (classe 4 hors TVA) des journaux du type, et pour
+            les achats, des opérations diverses passées par catégorie de dépense."""
             cr.execute(
-                """SELECT COALESCE(SUM(ABS(am.amount_total_signed) * CASE WHEN am.move_type LIKE '%%_refund' THEN -1 ELSE 1 END), 0)
-                     FROM account_move am WHERE am.state = 'posted' AND am.company_id = %s
-                      AND am.move_type = ANY(%s) AND am.invoice_date BETWEEN %s AND %s""",
-                (company.id, list(types), date_from, date_to),
+                """SELECT COALESCE(SUM(aml.debit - aml.credit), 0)
+                     FROM account_move_line aml
+                     JOIN account_move am ON am.id = aml.move_id
+                     JOIN account_journal aj ON aj.id = am.journal_id
+                    WHERE am.state = 'posted' AND am.company_id = %(company)s
+                      AND aml.date BETWEEN %(start)s AND %(end)s AND aml.account_id = ANY(%(accounts)s)
+                      AND (aj.type = %(type)s OR (%(categories)s AND aj.type = 'general' AND EXISTS (
+                           SELECT 1 FROM account_move_line c
+                            WHERE c.move_id = am.id AND c.eguitra_expense_category_id IS NOT NULL)))""",
+                {"company": company.id, "start": date_from, "end": date_to, "type": journal_type,
+                 "accounts": codes("4", excluded), "categories": categories},
             )
             return float(cr.fetchone()[0])
 
@@ -141,9 +162,10 @@ class EguitraRepriseReference(models.Model):
             "cash": bal(["5"], None), "inventory": bal(["3"], None),
             "receivables": receivables, "receivables_overdue": receivables_overdue,
             "payables": -payables, "payables_overdue": -payables_overdue,
-            "sales_ttc": invoices(("out_invoice", "out_refund")), "purchases_ttc": invoices(("in_invoice", "in_refund")),
+            "sales_ttc": documents("sale", ("443", "445")),
+            "purchases_ttc": -documents("purchase", ("445",), categories=True),
             "assets_total": assets, "liabilities_total": liabilities,
-            "equity": -bal(["101", "106", "110"], None) + net,
+            "equity": -bal(["101", "106", "110", "12"], None) + net,
         }
 
     @api.model

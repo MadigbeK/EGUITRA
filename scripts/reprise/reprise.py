@@ -951,6 +951,9 @@ if data is not None:
                     note = ((rotation.note or "") + "\nReprise : facturée dans l'ancien système.").strip()
                     rotation.write({"state": "invoiced", "note": note})
                     invoiced += 1
+                else:
+                    # Réalisée et non facturée dans l'ancien système : validée, elle attend sa facture.
+                    rotation.with_context(eguitra_transport_reprise=True).action_validate()
         except (UserError, ValidationError) as e:
             errors.append(f"{where} : {e.args[0]}")
             continue

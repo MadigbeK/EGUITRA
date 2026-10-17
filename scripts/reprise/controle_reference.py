@@ -336,7 +336,7 @@ class Control:
         amort = sum(c - d for a, (d, c) in bal.items() if a.startswith("28"))
         vat = sum(d - c for a, (d, c) in bal.items() if a.startswith("445"))
         m["totalActif"] = brute - amort + m["stocks"] + m["creances"] + vat + m["tresorerie"]
-        equity = net("101") + net("106") + net("110") + m["resultatNet"]
+        equity = net("101") + net("106") + net("110") + net("12") + m["resultatNet"]
         m["capitauxPropres"] = equity
         m["totalPassif"] = (equity + net("162") + net("173") + m["dettes"] + net("42") + net("43") + net("443")
                             + net("444") + net("447") + net("448") + net("46"))

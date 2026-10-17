@@ -139,11 +139,35 @@ def accumulated(asset, day):
     return R(float(asset.get("valeur") or 0) * months / (years * 12))
 
 
+
+# Comptes du classeur hors du plan SYSCOHADA de la localisation, repris sur leur compte normalisé.
+ACCOUNT_MAP = {"110000": "121000"}  # report à nouveau créditeur
+ACCOUNT_KEYS = ("compte", "compteProduit", "compteCharge", "compteTiers", "contrepartie", "compteImmo", "compteAmort")
+
+
+def remap_accounts(data):
+    """Remplace dans tout le dossier les comptes de ACCOUNT_MAP par leur compte normalisé."""
+    def walk(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ACCOUNT_KEYS and str(value) in ACCOUNT_MAP:
+                    node[key] = ACCOUNT_MAP[str(value)]
+                elif key == "comptes" and isinstance(value, str):
+                    node[key] = ",".join(ACCOUNT_MAP.get(c.strip(), c.strip()) for c in value.split(","))
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(data)
+
 class Dossier:
     def __init__(self, data, convention="plateforme"):
         self.convention = convention
         if data.get("schema") != 1:
             sys.exit(f"Schéma du dossier non pris en charge : {data.get('schema')!r} (attendu : 1).")
+        remap_accounts(data)
         self.d = data
         p = data["parametres"]
         self.start = iso(p["dateDebut"])
@@ -471,7 +495,9 @@ class Dossier:
                 continue
             count += 1
             followed = p["partner_account"] == SUPPLIERS
-            journal = JOURNALS["achats"] if followed else JOURNALS["od"]
+            # Toutes les pièces d'achat du classeur au journal des achats, y compris celles d'un compte de
+            # tiers autre que fournisseur (salaires, impôts) : ce sont les achats TTC du classeur.
+            journal = JOURNALS["achats"]
             od += not followed
             piece, day = p["piece"], p["day"]
             label = p.get("description") or f"Pièce {piece}"
@@ -483,8 +509,8 @@ class Dossier:
             debit, credit = signed(-p["ttc"])
             self.entry(piece, day, journal, p["partner_account"], debit, credit, partner=p["fournisseur"], label=label,
                        due=p["due"] if followed else None, letter=piece if followed else "")
-        self.report.append(f"Achats : {count} pièces de l'exercice, dont {od} hors compte fournisseur passées en OD "
-                           f"(journal {JOURNALS['od']}) contre leur compte de tiers.")
+        self.report.append(f"Achats : {count} pièces de l'exercice (journal {JOURNALS['achats']}), dont {od} hors compte "
+                           "fournisseur, passées contre leur compte de tiers.")
 
     def treasury_entries(self):
         foreign = 0
