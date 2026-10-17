@@ -138,7 +138,7 @@ export function QuestionsDirigeant({ questions }: { questions: Question[] }) {
           </div>
           <div className="flex items-center gap-2.5 pl-9 md:flex-col md:items-end md:pl-0">
             <span className="whitespace-nowrap font-display text-[17px] font-bold tabular text-ink">{q.answer}</span>
-            <Badge tone={VERDICT[q.verdict].tone}>{VERDICT[q.verdict].label}</Badge>
+            <Badge tone={VERDICT[q.verdict].tone}>{q.threshold_unset ? "Seuil non fixé" : VERDICT[q.verdict].label}</Badge>
           </div>
           <p className="pl-9 text-[12.5px] leading-relaxed text-muted md:pl-0">{q.reading}</p>
         </li>
@@ -326,20 +326,23 @@ function Chiffre({ label, value, hint, tone }: { label: string; value: ReactNode
 
 const jours = (v: number | null) => (v === null ? "–" : `${fmtDec(Math.round(v * 10) / 10)} j`);
 
-/** BFR et délais : DSO face à la cible, DPO, DIO, cycle, part échue, concentration. */
+/**
+ * BFR et délais : DSO face à la cible, DPO, DIO, cycle, part échue, concentration. Un seuil null (laissé
+ * à 0 : règle éteinte) ne juge pas la valeur : « seuil non fixé ».
+ */
 export function CarteBfr({ wc, thresholds }: { wc: WorkingCapital; thresholds: Thresholds }) {
   const cible = thresholds.dso_target_days;
-  const partMax = thresholds.receivable_overdue_share_pct ?? 20;
-  const concMax = thresholds.client_concentration_pct ?? 40;
+  const partMax = thresholds.receivable_overdue_share_pct;
+  const concMax = thresholds.client_concentration_pct;
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       <Chiffre label="BFR" value={`${fmtShort(wc.bfr)}`} hint={`SYSCOHADA : ${fmtShort(wc.bfr_syscohada)}`} />
       <Chiffre label="Cycle d'exploitation" value={jours(wc.cycle)} hint="DSO + DIO - DPO" />
       <Chiffre label="DSO (recouvrement)" value={jours(wc.dso)} hint={cible ? `Cible ${fmtInt(cible)} j · 12 mois ${jours(wc.dso_12m)}` : `12 mois glissants ${jours(wc.dso_12m)}`} tone={wc.dso !== null && cible ? (wc.dso > cible ? "danger" : "ok") : undefined} />
       <Chiffre label="DPO (fournisseurs)" value={jours(wc.dpo)} hint={wc.dio !== null && wc.stocks ? `DIO ${jours(wc.dio)}` : "Sans stock"} />
-      <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} GNF sur ${fmtShort(wc.receivables)} GNF`} tone={wc.overdue_share_pct !== null && wc.overdue_share_pct > partMax ? "danger" : undefined} />
+      <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} GNF sur ${fmtShort(wc.receivables)} GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
       <Chiffre label="Dettes fournisseurs échues" value={`${fmtShort(wc.payables_overdue)}`} hint={`sur ${fmtShort(wc.payables)} GNF`} tone={wc.payables_overdue > 0.5 ? "warn" : undefined} />
-      <Chiffre label="Premier client" value={fmtPct(wc.concentration.pct)} hint={wc.concentration.partner ?? "du chiffre d'affaires"} tone={wc.concentration.pct !== null && wc.concentration.pct > concMax ? "warn" : undefined} />
+      <Chiffre label="Premier client" value={fmtPct(wc.concentration.pct)} hint={`${wc.concentration.partner ?? "du chiffre d'affaires"} · ${concMax ? `seuil ${fmtPct(concMax, 0)}` : "seuil non fixé"}`} tone={wc.concentration.pct !== null && concMax && wc.concentration.pct > concMax ? "warn" : undefined} />
       <Chiffre label="Douteux (+ de 90 j)" value={`${fmtShort(wc.receivables_doubtful)}`} hint={`${wc.receivables_aging_count.plus_90} pièce(s)`} tone={wc.receivables_doubtful > 0 ? "danger" : undefined} />
     </div>
   );

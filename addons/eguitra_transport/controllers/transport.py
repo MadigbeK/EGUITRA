@@ -764,9 +764,13 @@ class EguitraTransport(http.Controller):
         [(excess_count, excess, excess_value)] = Rotation._read_group(
             domain + [("shortage_excess", ">", 0)], aggregates=["__count", "shortage_excess:sum", "shortage_value:sum"]
         )
+        # Marge minimale de la règle d'alerte (Seuils et taux) ; None : seuil à 0, la marge n'est pas jugée.
+        margin_min = request.env["eguitra.finance.metrics"].sudo().threshold_values(request.env.company)[
+            "transport_margin_min"]
         return {
             "date_from": start, "date_to": end, "rotations": count, "volume": volume or 0.0, "revenue": revenue or 0.0,
             "cost": cost or 0.0, "margin": margin or 0.0, "margin_rate": (margin / revenue * 100) if revenue else None,
+            "margin_min": margin_min,
             "to_invoice": {"count": to_invoice_count, "amount": to_invoice or 0.0},
             "shortage_excess": {"count": excess_count, "volume": excess or 0.0, "value": excess_value or 0.0},
             "drafts": Rotation.search_count([("state", "=", "draft")]),

@@ -81,8 +81,9 @@ function DashboardBody({ d }: { d: Dashboard }) {
   const activites = [...d.by_activity].sort((a, b) => b.margin - a.margin).slice(0, 6);
   const parts = [...d.by_activity].filter((a) => a.income > 0).sort((a, b) => b.income - a.income);
   const th = d.thresholds;
-  const dscrMin = th.dscr_min ?? 1.2;
-  const maxDscr = Math.max(2, Math.ceil(((d.dscr ?? 0) * 1.25) / 0.5) * 0.5, dscrMin + 0.5);
+  // Minimum de la règle d'alerte ; null : seuil à 0 (règle éteinte), le DSCR n'est pas jugé.
+  const dscrMin = th.dscr_min;
+  const maxDscr = Math.max(2, Math.ceil(((d.dscr ?? 0) * 1.25) / 0.5) * 0.5, (dscrMin ?? 1) + 0.5);
   const wc = d.working_capital;
   const ecl = d.expected_credit_loss.total;
   const budget = d.budget;
@@ -160,8 +161,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
             value={ratio(d.dscr)}
             icon={HandCoins}
             teinte="lagon"
-            tone={d.dscr === null ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
-            hint={`Minimum ${th.dscr_min ? "fixé" : "bancaire usuel"} : ${ratio(dscrMin)}`}
+            tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
+            hint={dscrMin ? `Minimum fixé : ${ratio(dscrMin)}` : "Minimum : seuil non fixé"}
           />
         </div>
       </div>
@@ -276,12 +277,16 @@ function DashboardBody({ d }: { d: Dashboard }) {
             value={d.dscr === null ? null : Math.round(d.dscr * 100) / 100}
             max={maxDscr}
             format={(v) => fmtDec(v)}
-            zones={[
-              { jusqua: 1, couleur: "#ec4f49", label: "Insuffisante" },
-              { jusqua: dscrMin, couleur: "#df8f17", label: "Sous le minimum" },
-              { jusqua: maxDscr, couleur: "#12956a", label: "Confortable" },
-            ]}
-            sousTitre={`DSCR sur 12 mois : EBE divisé par le service de la dette, ${ratio(dscrMin)} au moins ${th.dscr_min ? "(seuil fixé)" : "(usage bancaire)"}`}
+            zones={
+              dscrMin
+                ? [
+                    { jusqua: 1, couleur: "#ec4f49", label: "Insuffisante" },
+                    { jusqua: dscrMin, couleur: "#df8f17", label: "Sous le minimum" },
+                    { jusqua: maxDscr, couleur: "#12956a", label: "Confortable" },
+                  ]
+                : [{ jusqua: maxDscr, couleur: "#9aa3b5", label: "Seuil non fixé" }]
+            }
+            sousTitre={`DSCR sur 12 mois : EBE divisé par le service de la dette, ${dscrMin ? `${ratio(dscrMin)} au moins (seuil fixé)` : "minimum non fixé (Administration > Seuils et taux)"}`}
             vide="Aucun service de dette sur 12 mois"
           />
         </Card>

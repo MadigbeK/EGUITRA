@@ -45,7 +45,9 @@ type Tab = "rotations" | "rentabilite" | "manquants" | "taxes" | "flotte" | "rou
 
 export default function TransportPage() {
   const [tab, setTab] = useState<Tab>("rotations");
-  const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
+  // margin_min : marge minimale de la règle d'alerte (30 % par défaut) ; null : seuil à 0, la marge n'est pas jugée.
+  const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; margin_min: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
+  const sousMinimum = Boolean(summary && summary.margin_rate !== null && summary.margin_min !== null && summary.margin_rate < summary.margin_min);
   return (
     <div>
       <PageHeader
@@ -94,7 +96,14 @@ export default function TransportPage() {
           </section>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
             <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} icon={TrendingUp} teinte="jade" hint="Rotations validées et facturées" />
-            <Kpi label="Marge du mois" value={fmtShort(summary.margin)} icon={Percent} teinte={(summary.margin_rate ?? 0) < 15 ? "ambre" : "jade"} tone={(summary.margin_rate ?? 0) < 15 ? "warn" : "ok"} hint={`Taux de marge ${fmtPct(summary.margin_rate)}`} />
+            <Kpi
+              label="Marge du mois"
+              value={fmtShort(summary.margin)}
+              icon={Percent}
+              teinte={sousMinimum ? "ambre" : "jade"}
+              tone={summary.margin_rate === null || summary.margin_min === null ? "neutral" : sousMinimum ? "warn" : "ok"}
+              hint={`Taux de marge ${fmtPct(summary.margin_rate)}, ${summary.margin_min !== null ? `minimum ${fmtPct(summary.margin_min, 0)}` : "seuil non fixé"}`}
+            />
             <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={`${summary.to_invoice.count} rotation(s) validée(s)`} />
             <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>

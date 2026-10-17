@@ -51,6 +51,8 @@ interface Report {
 
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+/** Mention d'un seuil laissé à 0 (règle éteinte) : la valeur s'affiche sans être jugée. */
+const NON_FIXE = <span className="ml-1.5 font-sans text-[11.5px] font-normal text-muted">seuil non fixé</span>;
 const jours = (v: number | null) => (v === null ? "–" : `${fmtDec(Math.round(v * 10) / 10)} jours`);
 
 function delta(current: number, previous: number) {
@@ -104,7 +106,9 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
   const k = r.kpis;
   const wc = r.working_capital;
   const t = r.transport_summary;
-  const dscrMin = k.dscr_min ?? 1.2;
+  // Seuils de la règle d'alerte ; null : seuil à 0 (règle éteinte), la valeur n'est pas jugée.
+  const dscrMin = k.dscr_min;
+  const partMax = r.thresholds.receivable_overdue_share_pct;
   const actives = r.alerts.filter((a) => a.status === "alert");
   const variation = delta(k.revenue_month, k.revenue_prev_month);
   return (
@@ -117,7 +121,7 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
         <Kpi label="Encours clients" value={fmtShort(k.receivables)} hint={`dont échu ${fmtShort(k.receivables_overdue)}`} tone={k.receivables_overdue ? "warn" : "neutral"} />
         <Kpi label="Délai de recouvrement" value={jours(k.dso)} hint={k.dso_target_days ? `Cible ${k.dso_target_days} jours` : "Cible non fixée"} tone={k.dso !== null && k.dso_target_days ? (k.dso > k.dso_target_days ? "danger" : "ok") : "neutral"} />
         <Kpi label="Dette financière" value={fmtShort(r.debt.accounting_outstanding ?? r.debt.outstanding)} hint={r.debt.next_due_date ? `Prochaine échéance ${fmtDate(r.debt.next_due_date)}` : undefined} />
-        <Kpi label="DSCR" value={ratio(k.dscr)} hint={`EBE 12 mois / service de la dette, minimum ${ratio(dscrMin)}`} tone={k.dscr !== null && k.dscr < dscrMin ? "danger" : "ok"} />
+        <Kpi label="DSCR" value={ratio(k.dscr)} hint={`EBE 12 mois / service de la dette, ${dscrMin ? `minimum ${ratio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={k.dscr === null || !dscrMin ? "neutral" : k.dscr < dscrMin ? "danger" : "ok"} />
       </div>
 
       <Card title="Lecture de la période">
@@ -165,14 +169,14 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
             ["Cash net du mois", fmtInt(k.cash_net_month), k.cash_net_month < 0],
             ["Dette financière (comptes 16 et 17)", fmtInt(r.debt.accounting_outstanding ?? r.debt.outstanding)],
             ["Service de la dette de l'exercice", fmtInt(k.debt_service_fy)],
-            ["Couverture du service de la dette (DSCR)", ratio(k.dscr), k.dscr !== null && k.dscr < dscrMin],
+            ["Couverture du service de la dette (DSCR)", dscrMin ? ratio(k.dscr) : <>{ratio(k.dscr)}{NON_FIXE}</>, k.dscr !== null && !!dscrMin && k.dscr < dscrMin],
           ]}
         />
         <Synthese
           titre="Clients et fournisseurs"
           lignes={[
             ["Créances clients", fmtInt(wc.receivables)],
-            ["Dont échues", `${fmtInt(wc.receivables_overdue)} (${fmtPct(wc.overdue_share_pct)})`, (wc.overdue_share_pct ?? 0) > (r.thresholds.receivable_overdue_share_pct ?? 20)],
+            ["Dont échues", <>{`${fmtInt(wc.receivables_overdue)} (${fmtPct(wc.overdue_share_pct)})`}{partMax ? null : NON_FIXE}</>, !!partMax && (wc.overdue_share_pct ?? 0) > partMax],
             ["Délai moyen de recouvrement", jours(wc.dso), wc.dso !== null && !!k.dso_target_days && wc.dso > k.dso_target_days],
             ["Dettes fournisseurs", fmtInt(wc.payables)],
             ["Dont échues", fmtInt(wc.payables_overdue), wc.payables_overdue > 0.5],
@@ -188,7 +192,7 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
               ["Kilomètres parcourus", t.km === null ? "Non calculé" : fmtInt(t.km)],
               ["Chiffre d'affaires transport", fmtInt(t.revenue)],
               ["Marge directe", fmtInt(t.margin)],
-              ["Taux de marge directe", fmtPct(t.margin_rate), t.margin_rate !== null && !!r.thresholds.transport_margin_min && t.margin_rate < r.thresholds.transport_margin_min],
+              ["Taux de marge directe", <>{fmtPct(t.margin_rate)}{r.thresholds.transport_margin_min ? null : NON_FIXE}</>, t.margin_rate !== null && !!r.thresholds.transport_margin_min && t.margin_rate < r.thresholds.transport_margin_min],
               ["Camions déficitaires après structure", t.vehicles.basis === "net" ? `${t.vehicles.deficit.length} sur ${t.vehicles.count}` : "Non calculé", t.vehicles.basis === "net" && t.vehicles.deficit.length > 0],
               ["Rotations non facturées", fmtInt(t.unbilled.count), t.unbilled.count > 0],
             ]}

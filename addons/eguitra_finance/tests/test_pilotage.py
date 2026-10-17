@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from dateutil.relativedelta import relativedelta
+
 from odoo.tests import TransactionCase, tagged
 
 from .pilotage_common import PilotageMixin
@@ -110,6 +112,44 @@ class TestPilotage(PilotageMixin, TransactionCase):
         self.assertAlmostEqual(dash["expected_credit_loss"]["total"], 1_180_000_000 * 0.01, 0)
         self.assertEqual(len(dash["cash_monthly"]["months"]), 12)
         self.assertIn("month_end", dash["cash_forecast"])
+
+    def test_questions_avec_un_seuil_a_zero(self):
+        """Un seuil laissé à 0 éteint sa règle : la question ne juge plus (grey, « seuil non fixé ») au lieu de
+        se comparer à une valeur codée (20 % de part échue, DSCR de 1,2)."""
+        self.env["mis.budget.by.account"].search([]).write({"state": "cancelled"})
+        # Douze échéances sur les douze derniers mois : service de 720 M pour un EBE de 800 M (DSCR 1,11).
+        self.loan(principal=720_000_000, start_date=self.today - relativedelta(months=12),
+                  first_due=self.today - relativedelta(months=11))
+        Threshold = self.env["eguitra.alert.threshold"]
+        Threshold.ensure_defaults(self.company)
+        thresholds = Threshold.search([("company_id", "=", self.company.id)])
+        thresholds.filtered(lambda t: t.code == "dscr_min").write({"value": 1.2})
+        thresholds.filtered(lambda t: t.code == "receivable_overdue_share_pct").write({"value": 20})
+        thresholds.filtered(lambda t: t.code == "dso_target_days").write({"value": 60})
+        thresholds.filtered(lambda t: t.code == "cash_min").write({"value": 0})
+
+        questions = {q["key"]: q for q in self.metrics.dashboard(self.company, self.today)["questions"]}
+        self.assertAlmostEqual(self.metrics.dscr(self.company, self.today)["dscr"], 800 / 720, 2)
+        self.assertEqual(questions["dscr"]["verdict"], "orange", "DSCR de 1,11 sous le minimum fixé à 1,2")
+        self.assertEqual(questions["receivables"]["verdict"], "green", "Aucune créance échue, seuil de 20 %")
+        self.assertNotEqual(questions["dso"]["verdict"], "grey", "Délai jugé contre la cible de 60 jours")
+        self.assertFalse(questions["dscr"]["threshold_unset"])
+        self.assertEqual((questions["cash"]["verdict"], questions["cash"]["threshold_unset"]), ("grey", True),
+                         "Trésorerie nulle, seuil de sécurité laissé à 0 : pas de verdict")
+        self.assertFalse(questions["transport"]["threshold_unset"], "Sans rotation : sans objet, non « seuil non fixé »")
+
+        thresholds.filtered(lambda t: t.code in ("dscr_min", "receivable_overdue_share_pct", "dso_target_days")).write(
+            {"value": 0})
+        questions = {q["key"]: q for q in self.metrics.dashboard(self.company, self.today)["questions"]}
+        for key in ("dscr", "receivables", "dso"):
+            self.assertEqual((questions[key]["verdict"], questions[key]["threshold_unset"]), ("grey", True),
+                             f"{key} : seuil à 0, pas de comparaison à une valeur codée")
+        self.assertIn("seuil non fixé", questions["dscr"]["reading"])
+        self.assertIn("seuil non fixé", questions["receivables"]["reading"])
+        self.assertIn("non fixée", questions["dso"]["reading"])
+        report = self.metrics.management_report(self.company, self.today)
+        self.assertTrue(any("minimum : seuil non fixé" in p for p in report["reading"]),
+                        "Lecture du rapport mensuel : DSCR sans minimum codé")
 
     def test_rapport_mensuel_enrichi(self):
         report = self.metrics.management_report(self.company, self.today)
