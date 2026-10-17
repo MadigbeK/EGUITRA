@@ -344,10 +344,20 @@ interface OperationType {
   account: { id: number; code: string; name: string } | null;
   reference_required: boolean;
   is_transfer: boolean;
+  loan_part: LoanPart;
   to_match: boolean;
   note: string | null;
   active: boolean;
 }
+
+type LoanPart = "none" | "disbursement" | "principal" | "interest";
+/** Part d'emprunt : la contrepartie est le compte du financement désigné à la saisie ; le sens en découle. */
+const PARTS: Record<LoanPart, { label: string; direction?: "in" | "out"; account?: string }> = {
+  none: { label: "Aucune" },
+  disbursement: { label: "Déblocage", direction: "in", account: "Compte de dette du financement (crédit)" },
+  principal: { label: "Capital, hors échéancier", direction: "out", account: "Compte de dette du financement (débit)" },
+  interest: { label: "Intérêts, hors échéancier", direction: "out", account: "Charges financières du financement" },
+};
 
 /** Types d'opération de trésorerie : sens et contrepartie de chaque mouvement de banque ou de caisse. */
 function OperationTypes() {
@@ -378,7 +388,7 @@ function OperationTypes() {
       }
     >
       <p className="px-5 pb-3 text-sm text-muted">
-        À la saisie d&apos;une opération, le type fixe le sens et le compte de contrepartie. Un type client ou fournisseur laisse l&apos;opération à rapprocher de la facture ; un type « virement interne » ouvre le virement par le compte de passage 585.
+        À la saisie d&apos;une opération, le type fixe le sens et le compte de contrepartie. Un type client ou fournisseur laisse l&apos;opération à rapprocher de la facture ; un type « virement interne » ouvre le virement par le compte de passage 585. Un type à part d&apos;emprunt demande le financement concerné et prend son compte : déblocage au crédit du compte de dette, remboursement anticipé et intérêts hors échéancier ; les échéances de l&apos;échéancier se règlent depuis le relevé ou par « Régler ».
       </p>
       {message && (
         <div className="px-5 pb-3">
@@ -397,7 +407,18 @@ function OperationTypes() {
           columns={[
             { key: "name", label: "Type d'opération" },
             { key: "direction", label: "Sens", render: (k) => (k.is_transfer ? <Badge tone="accent">Virement</Badge> : k.direction === "in" ? <Badge tone="ok">Entrée</Badge> : <Badge tone="warn">Sortie</Badge>) },
-            { key: "account", label: "Contrepartie", render: (k) => (k.account ? <span>{k.account.code} {k.account.name} {k.to_match && <Badge>À rapprocher</Badge>}</span> : "–") },
+            {
+              key: "account",
+              label: "Contrepartie",
+              render: (k) =>
+                k.loan_part !== "none" ? (
+                  <span>{PARTS[k.loan_part].account} <Badge tone="accent">Financement</Badge></span>
+                ) : k.account ? (
+                  <span>{k.account.code} {k.account.name} {k.to_match && <Badge>À rapprocher</Badge>}</span>
+                ) : (
+                  "–"
+                ),
+            },
             { key: "reference_required", label: "Référence", render: (k) => (k.reference_required ? "Obligatoire" : "–") },
             { key: "active", label: "Statut", render: (k) => (k.active ? <Badge tone="ok">Actif</Badge> : <Badge>Archivé</Badge>) },
           ]}
@@ -416,14 +437,20 @@ function OperationTypeForm({ kind, onClose, onSaved }: { kind: OperationType | n
     account_id: kind?.account ? String(kind.account.id) : "",
     reference_required: kind?.reference_required ?? false,
     is_transfer: kind?.is_transfer ?? false,
+    loan_part: kind?.loan_part ?? ("none" as LoanPart),
     note: kind?.note ?? "",
   });
+  const financement = form.loan_part !== "none";
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function save(patch?: { active: boolean }) {
     setBusy(true);
     setError(null);
-    const body = patch ?? { ...form, account_id: form.account_id && !form.is_transfer ? Number(form.account_id) : null };
+    const body = patch ?? {
+      ...form,
+      loan_part: form.is_transfer ? "none" : form.loan_part,
+      account_id: form.account_id && !form.is_transfer && !financement ? Number(form.account_id) : null,
+    };
     try {
       if (kind) await apiSend("PATCH", `/finance/treasury/operation-types/${kind.id}`, body);
       else await apiSend("POST", "/finance/treasury/operation-types", body);
@@ -446,7 +473,7 @@ function OperationTypeForm({ kind, onClose, onSaved }: { kind: OperationType | n
               {kind.active ? "Archiver" : "Réactiver"}
             </Button>
           )}
-          <Button variant="primary" loading={busy} disabled={!form.name.trim() || (!form.is_transfer && !form.account_id)} onClick={() => save()}>
+          <Button variant="primary" loading={busy} disabled={!form.name.trim() || (!form.is_transfer && !financement && !form.account_id)} onClick={() => save()}>
             Enregistrer
           </Button>
         </>
@@ -462,12 +489,26 @@ function OperationTypeForm({ kind, onClose, onSaved }: { kind: OperationType | n
         </label>
         {!form.is_transfer && (
           <>
+            <Field label="Part d'emprunt" hint="Déblocage reçu en banque, remboursement anticipé ou intérêts hors échéancier : l'opération désigne le financement et prend son compte.">
+              <Select
+                value={form.loan_part}
+                onChange={(e) => {
+                  const part = e.target.value as LoanPart;
+                  setForm({ ...form, loan_part: part, direction: PARTS[part].direction ?? form.direction });
+                }}
+                options={(Object.keys(PARTS) as LoanPart[]).map((p) => ({ value: p, label: PARTS[p].label }))}
+              />
+            </Field>
             <Field label="Sens">
-              <Select value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as "in" | "out" })} options={[{ value: "out", label: "Sortie" }, { value: "in", label: "Entrée" }]} />
+              <Select value={form.direction} disabled={financement} onChange={(e) => setForm({ ...form, direction: e.target.value as "in" | "out" })} options={[{ value: "out", label: "Sortie" }, { value: "in", label: "Entrée" }]} />
             </Field>
-            <Field label="Compte de contrepartie" hint="Client (41) ou fournisseur (40) : l'opération reste à rapprocher de la facture.">
-              <Select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} placeholder="Choisir…" options={(accounts ?? []).filter((a) => !/^5[2-7]/.test(a.code)).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
-            </Field>
+            {financement ? (
+              <Notice tone="accent">{PARTS[form.loan_part].account} : choisi à la saisie de l&apos;opération, avec le financement.</Notice>
+            ) : (
+              <Field label="Compte de contrepartie" hint="Client (41) ou fournisseur (40) : l'opération reste à rapprocher de la facture.">
+                <Select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} placeholder="Choisir…" options={(accounts ?? []).filter((a) => !/^5[2-7]/.test(a.code)).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+              </Field>
+            )}
           </>
         )}
         <label className="flex items-center gap-2 text-sm">

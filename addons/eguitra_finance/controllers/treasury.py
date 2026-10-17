@@ -12,6 +12,7 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import XLSX, workbook_rows
 
+from ..models.treasury import LOAN_PARTS
 from .common import (
     FIN_READ,
     FIN_WRITE,
@@ -91,6 +92,7 @@ def _line_rows(lines):
             "reference": line.move_id.ref or None,
             "payment_mode": ref(line.eguitra_payment_mode_id),
             "operation_type": ref(line.eguitra_operation_type_id),
+            "loan": ref(line.eguitra_loan_id),
             "attachments": counts.get(line.move_id.id, 0),
             "counterpart": [
                 {"code": ml.account_id.code, "name": ml.account_id.name,
@@ -158,9 +160,31 @@ def _operation_type_row(kind):
     return {
         "id": kind.id, "sequence": kind.sequence, "name": kind.name, "direction": kind.direction,
         "account": {"id": kind.account_id.id, "code": kind.code(), "name": kind.account_id.name} if kind.account_id else None,
-        "reference_required": kind.reference_required, "is_transfer": kind.is_transfer,
+        "reference_required": kind.reference_required, "is_transfer": kind.is_transfer, "loan_part": kind.loan_part,
         "to_match": kind.to_match() if kind.account_id else False, "note": kind.note or None, "active": kind.active,
     }
+
+
+def _loan_of(value, company):
+    """Financement désigné par une opération d'un type à part d'emprunt, dans la société du compte."""
+    if not value:
+        raise ApiError(400, "missing_fields", "Indiquez le financement concerné (déblocage, remboursement ou intérêts).",
+                       fields=["loan_id"])
+    loan = request.env["eguitra.loan"].browse(int(value)).exists()
+    if not loan or loan.company_id != company:
+        raise ApiError(404, "not_found", "Financement introuvable dans la société.")
+    return loan
+
+
+def _type_counterpart(kind, data, amount, company, exclude=None):
+    """Contrepartie que fixe un type d'opération : son compte (aucun pour un type client ou fournisseur,
+    l'opération se rapproche de la facture) ; pour un type à part d'emprunt, le compte du financement
+    désigné (loan_id), contrôlé par eguitra.loan._treasury_counterpart. Renvoie (compte, financement)."""
+    Loan = request.env["eguitra.loan"]
+    if kind.loan_part == "none":
+        return (request.env["account.account"] if kind.to_match() else kind.account_id), Loan
+    loan = _loan_of(data.get("loan_id"), company)
+    return loan._treasury_counterpart(kind.loan_part, amount, exclude=exclude), loan
 
 
 def _impute_analytic(line, value, account):
@@ -414,7 +438,9 @@ class EguitraFinanceTreasury(http.Controller):
         """Opération de caisse ou de banque. Avec un compte de contrepartie, elle est imputée aussitôt,
         analytique comprise ; sinon elle reste à rapprocher avec une facture ou un règlement. Un type
         d'opération fixe le sens et la contrepartie (operation_type_id) ; un type client ou fournisseur
-        laisse l'opération à rapprocher de la facture."""
+        laisse l'opération à rapprocher de la facture ; un type à part d'emprunt désigne le financement
+        (loan_id), dont il prend le compte : déblocage au crédit du compte de dette, remboursement
+        anticipé au débit, intérêts hors échéancier en charges financières (models/loan.py)."""
         journal = _journal(journal_id)
         company = journal.company_id
         data = read_json()
@@ -428,6 +454,7 @@ class EguitraFinanceTreasury(http.Controller):
         if not values["amount"]:
             raise ApiError(422, "business_rule", "Le montant de l'opération ne peut pas être nul.")
         kind = _operation_type(data.get("operation_type_id"), company)
+        typed, loan = request.env["account.account"], request.env["eguitra.loan"]
         if kind:
             if kind.is_transfer:
                 raise ApiError(422, "business_rule", "Un virement entre comptes de trésorerie se saisit par « Virement "
@@ -437,19 +464,28 @@ class EguitraFinanceTreasury(http.Controller):
                                fields=["reference"])
             values["amount"] = abs(values["amount"]) * (1 if kind.direction == "in" else -1)
             values["eguitra_operation_type_id"] = kind.id
-            if not data.get("counterpart_account_id") and not kind.to_match():
-                data = dict(data, counterpart_account_id=kind.account_id.id)
+            typed, loan = _type_counterpart(kind, data, abs(values["amount"]), company)
+            if loan:
+                values["eguitra_loan_id"] = loan.id
         if data.get("partner_id"):
             partner = request.env["res.partner"].browse(int(data["partner_id"])).exists()
             if not partner:
                 raise ApiError(404, "not_found", "Tiers introuvable.")
             values["partner_id"] = partner.id
+        elif loan:
+            values["partner_id"] = loan.partner_id.id
         mode = _payment_mode(data.get("payment_mode_id"))
         if mode:
             values["eguitra_payment_mode_id"] = mode.id
         if data.get("reference"):
             values["ref"] = str(data["reference"]).strip()[:200]
-        counterpart = account_of_company(data.get("counterpart_account_id"), company, "Compte d'imputation")
+        if loan:
+            if data.get("counterpart_account_id") and int(data["counterpart_account_id"]) != typed.id:
+                raise ApiError(422, "business_rule", f"« {kind.name} » : la contrepartie est le compte "
+                                                     f"{typed.with_company(company).code} du financement {loan.name}.")
+            counterpart = typed
+        else:
+            counterpart = account_of_company(data.get("counterpart_account_id"), company, "Compte d'imputation") or typed
         if counterpart:
             values["counterpart_account_id"] = counterpart.id
         elif data.get("analytic_distribution"):
@@ -611,14 +647,30 @@ class EguitraFinanceTreasury(http.Controller):
     @api_route("/finance/treasury/lines/<int:line_id>/reconcile", methods=("POST",), profiles=FIN_WRITE)
     def reconcile(self, line_id, **_kw):
         """Rapprochement avec des écritures en attente (move_line_ids), ou imputation directe à un compte
-        (account_id) avec sa répartition analytique (analytic_distribution)."""
+        (account_id) ou selon un type d'opération (operation_type_id, et loan_id pour un type à part
+        d'emprunt : déblocage reçu en banque, remboursement anticipé, intérêts hors échéancier), avec sa
+        répartition analytique (analytic_distribution)."""
         line = _st_line(line_id)
         if line.is_reconciled:
             raise ApiError(422, "business_rule", "Cette opération est déjà rapprochée.")
         data = read_json()
         account = None
-        if data.get("account_id") and not data.get("move_line_ids"):
+        direct = not data.get("move_line_ids") and not data.get("loan_line_id")
+        if data.get("operation_type_id") and direct:
+            kind = _operation_type(data["operation_type_id"], line.company_id)
+            if kind.is_transfer or kind.to_match():
+                raise ApiError(422, "business_rule", f"« {kind.name} » ne s'impute pas : un virement interne se saisit par "
+                                                     "« Virement interne », une opération client ou fournisseur se "
+                                                     "rapproche de sa facture.")
+            if (line.amount > 0) != (kind.direction == "in"):
+                raise ApiError(422, "business_rule", f"« {kind.name} » est une {'entrée' if kind.direction == 'in' else 'sortie'} "
+                                                     "de trésorerie : il ne s'applique pas à cette opération.")
+            account, loan = _type_counterpart(kind, data, abs(line.amount), line.company_id, exclude=line)
+            # Reportés sur l'opération recréée par l'imputation (_eguitra_impute).
+            line.write({"eguitra_operation_type_id": kind.id, "eguitra_loan_id": loan.id or False})
+        elif data.get("account_id") and direct:
             account = account_of_company(data["account_id"], line.company_id, "Compte d'imputation")
+        if account:
             dist = distribution(data.get("analytic_distribution"), line.company_id)
             data = dict(data, account_id=account.id,
                         analytic_distribution=with_rules(dist, account, line.partner_id, line.company_id) if dist else {})
@@ -659,6 +711,10 @@ class EguitraFinanceTreasury(http.Controller):
         for key in ("reference_required", "is_transfer", "active"):
             if key in data:
                 values[key] = bool(data[key])
+        if "loan_part" in data:
+            if (data["loan_part"] or "none") not in dict(LOAN_PARTS):
+                raise ApiError(400, "invalid_parameter", "Part d'emprunt : none, disbursement, principal ou interest.")
+            values["loan_part"] = data["loan_part"] or "none"
         if "note" in data:
             values["note"] = str(data.get("note") or "").strip() or False
         if "sequence" in data:

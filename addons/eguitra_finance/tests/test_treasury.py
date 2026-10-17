@@ -1,12 +1,16 @@
+import importlib.util
 import io
+import os
 from datetime import date
 
 from odoo import Command
+from odoo.modules.module import get_module_path
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 
 from .common import FinanceDataMixin
+from .pilotage_common import PilotageMixin
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
@@ -288,3 +292,125 @@ class TestBankReconciliationStatement(FinanceDataMixin, ApiCase):
 
         status, body = self._import("<Document><Autre/></Document>", name="autre.xml")
         self.assertEqual(status, 422, body)
+
+
+@tagged("post_install", "-at_install")
+class TestTreasuryLoanOperations(PilotageMixin, ApiCase):
+    """Types d'opération à part d'emprunt : le déblocage se comptabilise par l'opération de trésorerie
+    (crédit du compte de dette du financement) ; capital et intérêts servent aux seuls mouvements hors
+    échéancier et ne règlent jamais une échéance (pas de double comptabilisation)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.setup_finance_data()
+        cls.metrics = cls.env["eguitra.finance.metrics"]
+        cls._create_user("mariama", "finance")
+
+    def setUp(self):
+        super().setUp()
+        self.token = self.open_session("mariama")["access_token"]
+        status, body = self.call("POST", "/finance/treasury/operation-types/defaults", token=self.token)
+        self.assertEqual(status, 200, body)
+        status, kinds = self.call("GET", "/finance/treasury/operation-types", token=self.token)
+        self.kinds = {k["loan_part"]: k for k in kinds if k["loan_part"] != "none"}
+
+    def _operation(self, part, amount, **extra):
+        return self.call("POST", f"/finance/treasury/{self.bank.id}/lines", dict(
+            {"label": f"Financement, {part}", "amount": amount, "operation_type_id": self.kinds[part]["id"]}, **extra),
+            token=self.token)
+
+    def test_types_de_financement(self):
+        self.assertEqual(set(self.kinds), {"disbursement", "principal", "interest"}, "Types usuels des financements")
+        self.assertEqual(self.kinds["disbursement"]["direction"], "in")
+        self.assertEqual((self.kinds["principal"]["direction"], self.kinds["interest"]["direction"]), ("out", "out"))
+        self.assertIsNone(self.kinds["disbursement"]["account"], "Compte du financement désigné à la saisie")
+        status, body = self.call("POST", "/finance/treasury/operation-types", {
+            "name": "Déblocage à l'envers", "direction": "out", "loan_part": "disbursement"}, token=self.token)
+        self.assertEqual(status, 422, "Un déblocage est une entrée")
+
+    def test_deblocage_comptabilise(self):
+        loan = self.loan(principal=120_000_000, rate=12)
+        self.env.flush_all()  # visible des requêtes HTTP
+        self.assertAlmostEqual(self.metrics.debt_position(self.company, self.today)["schedule_gap"], -120_000_000,
+                               msg="Déblocage pas encore comptabilisé")
+        status, body = self._operation("disbursement", 120_000_000)
+        self.assertEqual((status, body.get("fields")), (400, ["loan_id"]), "Le financement est demandé")
+        draft = self.env["eguitra.loan"].create({
+            "name": "Crédit en préparation", "partner_id": self.supplier.id, "principal": 10_000_000,
+            "start_date": self.today, "duration_months": 12,
+        })
+        self.env.flush_all()
+        status, body = self._operation("disbursement", 10_000_000, loan_id=draft.id)
+        self.assertEqual(status, 422, "Financement en brouillon : pas encore de comptes arrêtés")
+
+        status, line = self._operation("disbursement", 120_000_000, loan_id=loan.id)
+        self.assertEqual(status, 200, line)
+        self.assertTrue(line["reconciled"])
+        self.assertEqual(line["amount"], 120_000_000, "Entrée de banque")
+        self.assertEqual([c["code"] for c in line["counterpart"]], [self.acc_loan.code], "Crédit du compte de dette")
+        self.assertEqual(line["loan"]["id"], loan.id)
+        self.assertEqual(line["partner"]["id"], self.supplier.id, "Le prêteur en tiers")
+        position = self.metrics.debt_position(self.company, self.today)
+        self.assertAlmostEqual(position["accounting_outstanding"], 120_000_000)
+        self.assertAlmostEqual(position["schedule_gap"], 0, msg="Le déblocage comptabilisé ferme l'écart")
+        status, body = self._operation("disbursement", 1_000_000, loan_id=loan.id)
+        self.assertEqual(status, 422, "Déblocages cumulés au-delà du montant emprunté")
+        self.assertFalse(loan.line_ids.filtered("paid"), "Aucune échéance touchée")
+
+    def test_remboursement_anticipe_et_interets_hors_echeancier(self):
+        loan = self.loan(principal=120_000_000, rate=12)
+        self.env.flush_all()  # visible des requêtes HTTP
+        status, line = self._operation("disbursement", 120_000_000, loan_id=loan.id)
+        self.assertEqual(status, 200, line)
+        first = loan.line_ids[0]
+        for part, amount in (("principal", first.total), ("principal", first.principal), ("interest", first.interest)):
+            status, body = self._operation(part, amount, loan_id=loan.id)
+            self.assertEqual(status, 422, f"{amount} : montant d'une échéance, réglée par le relevé ou « Régler »")
+        status, body = self._operation("principal", 130_000_000, loan_id=loan.id)
+        self.assertEqual(status, 422, "Au-delà du capital restant dû")
+        status, body = self._operation("principal", 7_000_000, loan_id=loan.id, counterpart_account_id=self.acc_purchase.id)
+        self.assertEqual(status, 422, "La contrepartie est le compte du financement")
+
+        status, line = self._operation("principal", 7_000_000, loan_id=loan.id)
+        self.assertEqual(status, 200, line)
+        self.assertEqual(line["amount"], -7_000_000, "Sortie de banque")
+        self.assertEqual([c["code"] for c in line["counterpart"]], [self.acc_loan.code], "Débit du compte de dette")
+        status, line = self._operation("interest", 345_678, loan_id=loan.id)
+        self.assertEqual(status, 200, line)
+        self.assertEqual([c["code"] for c in line["counterpart"]], [self.acc_interest.code], "Charges financières")
+        self.assertFalse(loan.line_ids.filtered("paid"), "Aucune échéance réglée par ces types")
+        self.assertAlmostEqual(self.metrics.debt_position(self.company, self.today)["schedule_gap"], -7_000_000,
+                               msg="Remboursement anticipé : écart signalé jusqu'à la révision de l'échéancier")
+
+    def test_rapprochement_selon_un_type(self):
+        loan = self.loan(principal=50_000_000, rate=0)
+        self.env.flush_all()  # visible des requêtes HTTP
+        status, line = self.call("POST", f"/finance/treasury/{self.bank.id}/lines", {
+            "label": "VIR RECU BICIGUI DEBLOCAGE", "amount": 50_000_000}, token=self.token)
+        self.assertEqual(status, 200, line)
+        self.assertFalse(line["reconciled"])
+        path = f"/finance/treasury/lines/{line['id']}/reconcile"
+        status, body = self.call("POST", path, {"operation_type_id": self.kinds["principal"]["id"], "loan_id": loan.id},
+                                 token=self.token)
+        self.assertEqual(status, 422, "Un remboursement est une sortie : pas pour une entrée de banque")
+        status, done = self.call("POST", path, {"operation_type_id": self.kinds["disbursement"]["id"], "loan_id": loan.id},
+                                 token=self.token)
+        self.assertEqual(status, 200, done)
+        self.assertTrue(done["reconciled"])
+        self.assertEqual([c["code"] for c in done["counterpart"]], [self.acc_loan.code])
+        self.assertEqual(done["operation_type"]["id"], self.kinds["disbursement"]["id"])
+        self.assertEqual(done["loan"]["id"], loan.id, "Le financement suit l'opération recréée")
+        self.assertAlmostEqual(self.metrics.debt_position(self.company, self.today)["schedule_gap"], 0)
+
+    def test_migration_des_types_de_financement(self):
+        """La migration 19.0.1.5.0 ajoute les types des financements aux sociétés déjà équipées."""
+        path = os.path.join(get_module_path("eguitra_finance"), "migrations", "19.0.1.5.0", "post-migrate.py")
+        spec = importlib.util.spec_from_file_location("eguitra_finance_migration_19_0_1_5_0", path)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        Kind = self.env["eguitra.treasury.operation.type"].with_context(active_test=False)
+        Kind.search([("company_id", "=", self.company.id), ("loan_part", "!=", "none")]).unlink()
+        migration._loan_operation_types(self.env)
+        parts = Kind.search([("company_id", "=", self.company.id), ("loan_part", "!=", "none")]).mapped("loan_part")
+        self.assertEqual(sorted(parts), ["disbursement", "interest", "principal"])

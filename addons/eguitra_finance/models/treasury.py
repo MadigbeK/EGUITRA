@@ -37,26 +37,42 @@ class EguitraPaymentMode(models.Model):
 
 
 DEFAULT_OPERATION_TYPES = [
-    # (libellé, sens, préfixes du compte de contrepartie, référence obligatoire, virement interne)
-    ("Encaissement client", "in", ("411",), True, False),
-    ("Paiement fournisseur", "out", ("401",), True, False),
-    ("Frais bancaires", "out", ("631",), False, False),
-    ("Intérêts et agios bancaires", "out", ("6741", "674"), False, False),
-    ("Avance au personnel", "out", ("4211", "421"), False, False),
-    ("Paiement des salaires", "out", ("422",), False, False),
-    ("Cotisations sociales", "out", ("431",), True, False),
-    ("Impôts et taxes", "out", ("447", "44"), True, False),
-    ("Produits divers", "in", ("758", "75"), False, False),
-    ("Virement interne (banque, caisse)", "out", (), False, True),
+    # (libellé, sens, préfixes du compte de contrepartie, référence obligatoire, virement interne, part d'emprunt)
+    ("Encaissement client", "in", ("411",), True, False, "none"),
+    ("Paiement fournisseur", "out", ("401",), True, False, "none"),
+    ("Frais bancaires", "out", ("631",), False, False, "none"),
+    ("Intérêts et agios bancaires", "out", ("6741", "674"), False, False, "none"),
+    ("Avance au personnel", "out", ("4211", "421"), False, False, "none"),
+    ("Paiement des salaires", "out", ("422",), False, False, "none"),
+    ("Cotisations sociales", "out", ("431",), True, False, "none"),
+    ("Impôts et taxes", "out", ("447", "44"), True, False, "none"),
+    ("Produits divers", "in", ("758", "75"), False, False, "none"),
+    ("Virement interne (banque, caisse)", "out", (), False, True, "none"),
+    # Financements : la contrepartie est le compte du financement désigné à la saisie.
+    ("Déblocage d'emprunt", "in", (), False, False, "disbursement"),
+    ("Remboursement anticipé d'emprunt (capital)", "out", (), False, False, "principal"),
+    ("Intérêts d'emprunt hors échéancier", "out", (), False, False, "interest"),
 ]
+# Types des financements, ajoutés aux sociétés déjà équipées par la migration 19.0.1.5.0.
+LOAN_TYPE_NAMES = tuple(name for name, *_rest, part in DEFAULT_OPERATION_TYPES if part != "none")
 # Contrepartie client ou fournisseur : l'opération se rapproche d'une facture, jamais imputée en bloc.
 MATCHED_PREFIXES = ("40", "41")
+# Part d'emprunt d'un type d'opération et sens qu'elle impose (voir eguitra.loan._treasury_counterpart).
+LOAN_PARTS = [("none", "Aucune"), ("disbursement", "Déblocage"), ("principal", "Capital"), ("interest", "Intérêts")]
+LOAN_PART_DIRECTIONS = {"disbursement": "in", "principal": "out", "interest": "out"}
 
 
 class EguitraTreasuryOperationType(models.Model):
     """Type d'opération de trésorerie : sens et contrepartie comptable de chaque mouvement de banque ou
     de caisse (prototype de la direction). Un type « virement interne » ouvre le virement par le compte
-    de passage 585 ; un type client ou fournisseur laisse l'opération à rapprocher d'une facture."""
+    de passage 585 ; un type client ou fournisseur laisse l'opération à rapprocher d'une facture.
+
+    Un type à part d'emprunt (déblocage, capital, intérêts) n'a pas de compte propre : l'opération
+    désigne le financement (eguitra.loan), dont elle prend la contrepartie. Le déblocage reçu en banque
+    crédite le compte de dette (c'est ainsi qu'il se comptabilise) ; le capital et les intérêts servent
+    aux seuls mouvements hors échéancier (remboursement anticipé, intérêts intercalaires ou de retard) :
+    une échéance de l'échéancier se règle depuis la ligne du relevé ou par « Régler », qui la marquent
+    réglée, jamais par ces types (pas de double comptabilisation)."""
 
     _name = "eguitra.treasury.operation.type"
     _description = "Type d'opération de trésorerie"
@@ -69,6 +85,12 @@ class EguitraTreasuryOperationType(models.Model):
     account_id = fields.Many2one("account.account", "Compte de contrepartie")
     reference_required = fields.Boolean("Référence obligatoire")
     is_transfer = fields.Boolean("Virement interne")
+    loan_part = fields.Selection(
+        LOAN_PARTS, "Part d'emprunt", required=True, default="none",
+        help="Déblocage : crédit du compte de dette du financement (entrée). Capital : débit du compte de dette, "
+             "remboursement anticipé hors échéancier (sortie). Intérêts : débit du compte de charges financières, "
+             "intérêts hors échéancier (sortie). L'opération désigne le financement, dont elle prend le compte.",
+    )
     note = fields.Text("Commentaire")
     active = fields.Boolean(default=True)
 
@@ -81,11 +103,18 @@ class EguitraTreasuryOperationType(models.Model):
     def to_match(self):
         """Contrepartie client ou fournisseur : rapprochement avec la facture plutôt qu'imputation."""
         self.ensure_one()
-        return self.code().startswith(MATCHED_PREFIXES)
+        return self.loan_part == "none" and self.code().startswith(MATCHED_PREFIXES)
 
-    @api.constrains("account_id", "is_transfer", "company_id")
+    @api.constrains("account_id", "is_transfer", "company_id", "loan_part", "direction")
     def _check_type(self):
         for kind in self:
+            if kind.loan_part != "none":
+                if kind.is_transfer:
+                    raise ValidationError(f"« {kind.name} » : un type de financement n'est pas un virement interne.")
+                if kind.direction != LOAN_PART_DIRECTIONS[kind.loan_part]:
+                    raise ValidationError(f"« {kind.name} » : un déblocage est une entrée, un remboursement de capital "
+                                          "ou d'intérêts une sortie.")
+                continue  # compte du financement désigné à la saisie
             if kind.is_transfer:
                 continue
             if not kind.account_id:
@@ -96,13 +125,15 @@ class EguitraTreasuryOperationType(models.Model):
                 raise ValidationError(f"« {kind.name} » : un mouvement entre comptes de trésorerie est un virement interne.")
 
     @api.model
-    def create_defaults(self, company):
-        """Types usuels pour la société (ceux dont le compte existe), sans doublon."""
+    def create_defaults(self, company, only=None):
+        """Types usuels pour la société (ceux dont le compte existe ; les types de financement n'en ont
+        pas), sans doublon ; only : libellés à créer, les autres sont ignorés."""
         Account = self.env["account.account"]
         existing = set(self.with_context(active_test=False).search([("company_id", "=", company.id)]).mapped("name"))
         created = self.browse()
-        for sequence, (name, direction, prefixes, reference, transfer) in enumerate(DEFAULT_OPERATION_TYPES, start=1):
-            if name in existing:
+        for sequence, (name, direction, prefixes, reference, transfer, part) in enumerate(DEFAULT_OPERATION_TYPES,
+                                                                                          start=1):
+            if name in existing or (only is not None and name not in only):
                 continue
             account = Account
             for prefix in prefixes:
@@ -110,11 +141,12 @@ class EguitraTreasuryOperationType(models.Model):
                                          order="code", limit=1)
                 if account:
                     break
-            if not transfer and not account:
+            if not transfer and part == "none" and not account:
                 continue
             created |= self.create({
                 "company_id": company.id, "sequence": sequence * 10, "name": name, "direction": direction,
                 "account_id": account.id or False, "reference_required": reference, "is_transfer": transfer,
+                "loan_part": part,
             })
         return created
 

@@ -4,6 +4,10 @@ Une échéance prélevée sur un compte bancaire dont les relevés sont importé
 ligne du relevé (Trésorerie, Rapprocher) : l'échéance y est proposée, et son règlement porte capital
 et intérêts en contrepartie de la sortie de banque, qui n'est ainsi comptée qu'une fois. Le bouton
 « Régler » de l'échéancier (action_pay) reste pour la caisse et les comptes sans relevé.
+
+Le déblocage reçu en banque se comptabilise par une opération de trésorerie de type « Déblocage
+d'emprunt » (crédit du compte de dette) ; les remboursements anticipés et les intérêts hors
+échéancier, par les types à part « capital » et « intérêts » (voir _treasury_counterpart).
 """
 
 from datetime import timedelta
@@ -116,6 +120,57 @@ class EguitraLoan(models.Model):
                 raise UserError("Renseignez le compte de dette, le compte de charges financières et le journal.")
             loan.state = "active"
         return True
+
+    # ─── Opérations de trésorerie du financement ──────────────────────────
+
+    def _treasury_counterpart(self, part, amount, exclude=None):
+        """Compte de contrepartie d'une opération de banque ou de caisse d'un type à part d'emprunt
+        (models/treasury.py), pour un montant positif :
+
+        - déblocage (entrée) : crédit du compte de dette ; c'est la comptabilisation du déblocage, que
+          la mise en service du financement ne passe pas. Déblocages cumulés dans la limite du montant
+          emprunté (déblocage en plusieurs tranches possible) ;
+        - capital (sortie) : débit du compte de dette, remboursement anticipé hors échéancier, dans la
+          limite du capital restant dû ;
+        - intérêts (sortie) : débit du compte de charges financières, intérêts hors échéancier
+          (intercalaires, de retard, pénalités).
+
+        Solution retenue, la plus sûre : une échéance de l'échéancier ne se règle jamais par ces types,
+        mais depuis la ligne du relevé (Trésorerie, Rapprocher) ou par « Régler », qui la marquent réglée
+        une seule fois. Un type capital ou intérêts ne touche aucune échéance, et un montant égal à une
+        échéance non réglée (total, capital ou intérêts) est refusé : l'échéance serait sinon comptée deux
+        fois, ici puis à son règlement. Après un remboursement anticipé, l'encours comptable passe sous le
+        capital restant dû de l'échéancier, jusqu'à la révision de l'échéancier par la banque : le contrôle
+        de clôture « Encours de dette conforme aux échéanciers » le signale. exclude : opération à ne pas
+        compter dans les cumuls (celle que l'on rapproche)."""
+        self.ensure_one()
+        if part not in ("disbursement", "principal", "interest"):
+            raise UserError("Part d'emprunt inconnue.")
+        if self.state != "active":
+            raise UserError(f"Le financement {self.name} n'est pas en cours : mettez-le en service (échéancier, "
+                            "comptes et journal arrêtés) avant d'en passer les opérations de trésorerie.")
+        if amount <= 0:
+            raise UserError("Le montant de l'opération doit être positif.")
+        domain = [("eguitra_loan_id", "=", self.id), ("eguitra_operation_type_id.loan_part", "=", part)]
+        if exclude:
+            domain.append(("id", "not in", exclude.ids))
+        recorded = sum(abs(line.amount) for line in self.env["account.bank.statement.line"].sudo().search(domain))
+        if part == "disbursement":
+            if recorded + amount > self.principal + AMOUNT_TOLERANCE:
+                raise UserError(f"Déblocages cumulés de {_gnf(recorded + amount)} pour un montant emprunté de "
+                                f"{_gnf(self.principal)} : vérifiez le montant ou le financement.")
+            return self.principal_account_id
+        if part == "principal" and recorded + amount > self.outstanding + AMOUNT_TOLERANCE:
+            raise UserError(f"Remboursement de capital de {_gnf(amount)} supérieur au capital restant dû "
+                            f"({_gnf(max(0.0, self.outstanding - recorded))}).")
+        twin = self.line_ids.filtered(lambda line: not line.paid and any(
+            value and abs(value - amount) <= AMOUNT_TOLERANCE
+            for value in (line.total, line.principal if part == "principal" else line.interest)))[:1]
+        if twin:
+            raise UserError(f"{_gnf(amount)} est le montant de l'échéance {twin.sequence} du {twin.due_date:%d/%m/%Y} : "
+                            "une échéance de l'échéancier se règle depuis la ligne du relevé (Trésorerie, Rapprocher) "
+                            "ou par « Régler » ; ce type d'opération sert aux mouvements hors échéancier.")
+        return self.principal_account_id if part == "principal" else self.interest_account_id
 
     @api.model
     def debt_summary(self, companies, today):
