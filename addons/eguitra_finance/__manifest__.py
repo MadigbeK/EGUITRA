@@ -19,6 +19,7 @@
         "security/finance_rules.xml",
         "data/alert_thresholds.xml",
         "data/ir_cron.xml",
+        "report/period_close_report.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- PV de clôture mensuelle : imprimé et conservé hors du système ; le sceau se recalcule à tout
+         moment dans Clôtures et contrôles, toute altération des écritures du mois le modifie. -->
+    <record id="action_report_period_close" model="ir.actions.report">
+        <field name="name">PV de clôture mensuelle</field>
+        <field name="model">eguitra.period.close</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_finance.report_period_close</field>
+        <field name="report_file">eguitra_finance.report_period_close</field>
+        <field name="print_report_name">'PV de clôture %s' % object.period.strftime('%m-%Y')</field>
+    </record>
+
+    <template id="report_period_close">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <t t-set="snap" t-value="o.snapshot or {}"/>
+                    <t t-set="sealed" t-value="o.seal_data or {}"/>
+                    <div class="page">
+                        <h3>Procès-verbal de clôture mensuelle</h3>
+                        <p>
+                            <strong t-esc="o.company_id.name"/>
+                            <t t-if="o.company_id.vat">, NIF <t t-esc="o.company_id.vat"/></t>
+                            <br/>Période : <strong t-esc="o.period.strftime('%m/%Y')"/>
+                            <br/>Clôturée par <t t-esc="o.closed_by.name"/> le
+                            <t t-esc="o.closed_at and o.closed_at.strftime('%d/%m/%Y à %H:%M') or ''"/> (heure UTC)
+                        </p>
+
+                        <h5>Contrôles</h5>
+                        <table class="table table-sm">
+                            <thead><tr><th>Contrôle</th><th>Résultat</th></tr></thead>
+                            <tbody>
+                                <tr t-foreach="(o.last_check or {}).get('checks', [])" t-as="c">
+                                    <td t-esc="c.get('label')"/>
+                                    <td>
+                                        <t t-if="c.get('status') == 'ok'">Conforme</t>
+                                        <t t-elif="c.get('status') == 'warning'">À examiner : <t t-esc="c.get('detail')"/></t>
+                                        <t t-else="">Bloquant : <t t-esc="c.get('detail')"/></t>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h5>Écritures passées par la clôture</h5>
+                        <table class="table table-sm">
+                            <thead><tr><th>Nature</th><th>Pièce</th><th>Référence</th><th>Date</th><th class="text-end">Montant</th></tr></thead>
+                            <tbody>
+                                <tr t-foreach="snap.get('generated', [])" t-as="g">
+                                    <td t-esc="g.get('label')"/>
+                                    <td t-esc="g.get('move')"/>
+                                    <td t-esc="g.get('ref')"/>
+                                    <td t-esc="g.get('date')"/>
+                                    <td class="text-end" t-out="g.get('amount') or 0" t-options='{"widget": "float", "precision": 0}'/>
+                                </tr>
+                                <tr t-if="not snap.get('generated')"><td colspan="5">Aucune écriture générée.</td></tr>
+                            </tbody>
+                        </table>
+                        <p>Dotations aux amortissements du mois : <t t-out="snap.get('depreciations') or 0" t-options='{"widget": "float", "precision": 0}'/> GNF.</p>
+
+                        <h5>Situation à la fin du mois (GNF)</h5>
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr><td>Chiffre d'affaires du mois</td><td class="text-end" t-out="snap.get('revenue_month') or 0" t-options='{"widget": "float", "precision": 0}'/></tr>
+                                <tr><td>Résultat net du mois</td><td class="text-end" t-out="snap.get('net_result_month') or 0" t-options='{"widget": "float", "precision": 0}'/></tr>
+                                <tr><td>Résultat net cumulé de l'exercice</td><td class="text-end" t-out="snap.get('net_result_ytd') or 0" t-options='{"widget": "float", "precision": 0}'/></tr>
+                                <tr><td>Trésorerie nette</td><td class="text-end" t-out="snap.get('cash') or 0" t-options='{"widget": "float", "precision": 0}'/></tr>
+                                <tr><td>Total de l'actif</td><td class="text-end" t-out="snap.get('total_assets') or 0" t-options='{"widget": "float", "precision": 0}'/></tr>
+                                <tr><td>Total du passif</td><td class="text-end" t-out="snap.get('total_liabilities') or 0" t-options='{"widget": "float", "precision": 0}'/></tr>
+                                <tr><td>Lignes d'écritures verrouillées (depuis l'origine)</td><td class="text-end" t-esc="snap.get('lines_locked')"/></tr>
+                                <tr><td>Total des débits et des crédits</td><td class="text-end"><t t-out="snap.get('total_debit') or 0" t-options='{"widget": "float", "precision": 0}'/> / <t t-out="snap.get('total_credit') or 0" t-options='{"widget": "float", "precision": 0}'/></td></tr>
+                            </tbody>
+                        </table>
+
+                        <h5>Chaînage des journaux</h5>
+                        <table class="table table-sm">
+                            <thead><tr><th>Journal</th><th class="text-end">Pièces</th><th>Dernière pièce chaînée</th><th>Empreinte</th></tr></thead>
+                            <tbody>
+                                <tr t-foreach="sealed.get('journals', [])" t-as="j">
+                                    <td t-esc="j.get('journal')"/>
+                                    <td class="text-end" t-esc="j.get('moves')"/>
+                                    <td t-esc="j.get('last_move') or '–'"/>
+                                    <td style="font-family: monospace; font-size: 8px;" t-esc="j.get('last_hash') or '–'"/>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h5>Sceau de la période (SHA-256)</h5>
+                        <p style="font-family: monospace; font-size: 13px; word-break: break-all;" t-esc="o.seal"/>
+                        <p>
+                            À conserver hors du système. Le sceau se recalcule à tout moment dans « Clôtures et
+                            contrôles » : toute écriture du mois modifiée, ajoutée ou supprimée, ou toute rupture du
+                            chaînage, le fait changer.
+                        </p>
+                        <table class="table table-borderless" style="margin-top: 40px;">
+                            <tr>
+                                <td>Le responsable financier</td>
+                                <td>La direction générale</td>
+                            </tr>
+                        </table>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>
