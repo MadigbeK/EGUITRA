@@ -1,6 +1,8 @@
 # Dossier de conception : EGUITRA Finance et AxisPro Suite
 
-Projet de document, version de travail du 14 octobre 2026, à relire par le gérant avant envoi au client.
+Projet de document, version de travail du 17 octobre 2026, à relire par le gérant avant envoi au client.
+Il intègre les prototypes de la direction (M. Diallo, DGA), adoptés comme cahier des charges (offre,
+§ 2.3), et le courrier du responsable financier (M. Kalissa) énumérant les vingt attentes.
 Référence : offre OTF-EGUITRA-2026-37. Objet : arrêter la conception (offre, chapitre 6.2, jalon de
 la semaine 1) et la liste définitive des composants (offre, chapitre 3.8). Les montants et délais
 de l'offre ne changent pas.
@@ -12,8 +14,9 @@ Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro Consulting :
 - **EGUITRA Finance** : pilotage du dirigeant, comptabilité SYSCOHADA, trésorerie, approbations,
   clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers transport,
   chantiers et immobilier.
-- **AxisPro Suite** : évaluation des projets par stage gates, scoring, data room, comités, rapports,
-  temps et honoraires du cabinet.
+- **AxisPro Suite** : évaluation des projets selon la méthode MB AxisPro (stage gates, scoring
+  Readiness et Bankability, knock-outs, écarts prioritaires), data room, comités et décisions
+  scellées, rapports, modèle financier, risques et plan d'actions, temps et honoraires du cabinet.
 - **Portail des porteurs de projets** : suivi du dossier, dépôt des pièces, échanges avec le cabinet.
 - **Rotations** : application de saisie au parc, installable sur téléphone, utilisable sans réseau.
 
@@ -88,16 +91,18 @@ modifiée, aucun contournement possible hors du moteur.
 
 | Règle | Valeur proposée |
 |---|---|
+| Engagements de dépense | approuvés avant la commande, devis joint : contrôle de la finance ; au-delà de 50 M GNF : accord de la direction ; les factures du fournisseur consomment l'engagement sans refaire le circuit, dans la limite du reste à engager (tolérance 5 %) |
 | Approbation des pièces d'achat | toutes : contrôle de la finance ; au-delà de 50 M GNF : accord de la direction |
-| Approbation des règlements | au-delà de 100 M GNF : accord de la direction |
-| Alertes du tableau de bord | marge transport < 15 % ; créances échues depuis plus de 60 jours ; clôture mensuelle en retard de plus de 10 jours ; compte de passage 585 non soldé (bloquant) ; dépassement budgétaire > 10 % ; validation en attente depuis plus de 3 jours ; trésorerie minimale et encours échu maximal à fixer |
+| Approbation des règlements et décaissements | règlements, sorties de caisse et de banque, échéances d'emprunt, virements internes : au-delà de 100 M GNF, accord de la direction ; l'opération reste en brouillon jusqu'à la dernière approbation |
+| Alertes de gestion (gravités bloquante, critique, élevée, moyenne, avec l'action recommandée) | compte de passage 585 non soldé (bloquant) ; trésorerie sous le minimum (à fixer par société) et compte de banque ou de caisse négatif ; DSCR < 1,20 ; créances échues depuis plus de 90 jours, part échue > 20 %, délai de recouvrement > 60 jours, concentration sur un client > 40 % ; dettes fournisseurs échues ; résultat net cumulé négatif ; marge transport < 30 %, rotations non facturées, ensembles routiers déficitaires après charges de structure ; dépassement budgétaire > 10 % ; clôture en retard de plus de 10 jours ; validation en attente depuis plus de 3 jours |
+| Pertes attendues (IFRS 9, retraitement hors livres SYSCOHADA) | non échu 1 %, 1 à 30 jours 3 %, 31 à 60 jours 10 %, 61 à 90 jours 25 %, au-delà 50 % |
 | Relances des clients | rappel dès 1 jour de retard, relance ferme à 15 jours, mise en demeure à 30 jours (jamais envoyée sans décision de la finance) |
 | Clôture mensuelle | contrôles bloquants (équilibres, compte de passage, pièces en attente, relevés rapprochés), verrouillage et empreinte de chaînage des écritures, réouverture tracée |
 | Transport | tarif du client sur la route, à défaut tarif de la route ; facture par client, une ligne par rotation |
 | Chantiers | retenue de garantie (5 % par défaut) portée en 4117 jusqu'à sa libération |
 | Immobilier | quittancement chaque nuit : une facture par échéance passée, datée de l'échéance, validée aussitôt (rattrapage compris) ; impayés relancés comme les autres créances |
 | Pièces déposées | PDF, JPEG, PNG, Word .docx et Excel .xlsx, reconnus d'après leur contenu ; 20 Mo par fichier ; dossier d'un porteur limité à 400 pièces ou 1 Go, 50 messages par jour |
-| AxisPro | score par domaine pondéré ; éliminatoire non satisfait : NO-GO ; GO à partir de 70/100 sans critère critique ouvert ; conditionnel à partir de 50/100 ; preuve exigée pour les critères qui le demandent |
+| AxisPro (méthode MB AxisPro, réf. SC-01) | grille officielle de 111 critères, 15 domaines, 8 gates ; atteint 1, partiel 0,5, non disponible 0, non évalué compté non disponible ; preuve exigée ou périmée : critère ramené à partiel ; scores Project Readiness, APD Readiness et Bankability ; knock-out non atteint (ou incomplet) : NO-GO ; BANKABLE à partir de 80/100, APD READY à partir de 65, CONDITIONAL GO à partir de 50, HOLD à partir de 30 ; décision du comité scellée, dossier figé jusqu'à une nouvelle révision |
 
 ## 6. Sécurité
 
@@ -140,23 +145,25 @@ des comptes de tiers, budget mensuel, rotations. Chaque chargement est d'abord c
 écriture en cas d'anomalie), rejoué autant que nécessaire en recette, puis appliqué en production.
 Les relevés bancaires 2026 se chargent par l'écran Trésorerie ; immobilisations et emprunts se
 saisissent dans leurs écrans. Les balances obtenues sont confrontées au classeur et validées par le
-responsable financier avant la mise en production (offre, chapitre 6.3).
+responsable financier avant la mise en production (offre, chapitre 6.3) : les 26 valeurs de
+référence du classeur (équilibre, résultat, trésorerie, créances, dettes, transport, bilan) sont
+recalculées par la plateforme et leur conformité (« n/26 ») est annexée au procès-verbal de bascule.
 
 ## 9. Cahier de recette : les vingt attentes du département Finance
 
 | # | Attente | Où la vérifier | Vérification |
 |---|---|---|---|
-| 1 | Visibilité temps réel CA, résultat, trésorerie | Tableau de bord, Rapport mensuel | Saisir une facture : CA et encours à jour immédiatement |
-| 2 | Vue consolidée, décomposable | Sélecteur de société, bouton Groupe ; Activités et budget | Un même compte passe d'une société à l'autre, comptabilités séparées ; vue groupe ; marge par activité, chantier, ensemble, route |
-| 3 | Comptabilité SYSCOHADA révisé | Balance et états | Bilan équilibré, compte de résultat, tableau des flux rapproché de la trésorerie |
-| 4 | Analytique multi-axes | Activités et budget | Imputation automatique depuis rotations, chantiers, loyers |
-| 5 | Trésorerie et rapprochement | Trésorerie | Import d'un relevé réel, rapprochement des lignes |
-| 6 | Immobilisations et amortissements | Immobilisations | Dotations mensuelles automatiques, sortie d'actif (cession) |
-| 7 | Budget et écarts | Activités et budget | Budget mensuel, réalisé, écarts, alerte de dépassement |
-| 8 | Facturation clients et fournisseurs | Ventes, Achats, Relances clients | Facture, avoir, échéance, relance |
-| 9 | Fiscalité, TVA, déclarations | Fiscalité | TVA du mois rapprochée des écritures, modèle validé par l'expert-comptable |
-| 10 | Approbation des engagements et paiements | À valider | Pièce au-delà du seuil bloquée jusqu'à approbation |
-| 11 | Coûts et rentabilité transport | Transport, application Rotations | Rotation saisie au parc hors réseau, marge par ensemble et par route |
+| 1 | Visibilité temps réel CA, résultat, trésorerie | Tableau de bord, Pilotage, Rapport mensuel | Saisir une facture : CA et encours à jour immédiatement ; onze questions du dirigeant avec leur verdict ; « ce qui demande une décision » ; arrêté à une date |
+| 2 | Vue consolidée, décomposable | Sélecteur de société, bouton Groupe ; États > Consolidé du groupe ; Activités et budget | Un même compte passe d'une société à l'autre, comptabilités séparées ; compte de résultat et bilan par société, éliminations intra-groupe, groupe ; marge par activité, centre de coût, chantier, ensemble, route |
+| 3 | Comptabilité SYSCOHADA révisé | Balance et états, Clôtures | Bilan équilibré, compte de résultat, tableau des flux rapproché de la trésorerie ; clôture mensuelle complète (dotations, liquidation de la TVA, factures à établir, sceau et procès-verbal) ; exports XLSX et CSV des états ; SAF-T |
+| 4 | Analytique multi-axes | Activités et budget, saisie des pièces | Imputation automatique depuis rotations, chantiers, loyers, catégories de dépense ; saisie sur plusieurs axes par ligne ; imputation obligatoire contrôlée |
+| 5 | Trésorerie et rapprochement | Trésorerie | Import d'un relevé réel (CSV, XLSX ou camt.053), soldes du relevé contrôlés, rapprochement des lignes, état de rapprochement ; flux mensuels et prévision à trois mois |
+| 6 | Immobilisations et amortissements | Immobilisations | Dotations mensuelles automatiques ventilées par activité, sortie d'actif (cession), registre exporté |
+| 7 | Budget et écarts | Activités et budget | Budget mensuel par ligne budgétaire, réalisé, engagé, disponible, écarts, alerte de dépassement |
+| 8 | Facturation clients et fournisseurs | Ventes, Achats, Relances clients | Facture, avoir, échéance, relance ; litige qui suspend les relances ; balance âgée clients et fournisseurs |
+| 9 | Fiscalité, TVA, déclarations | Fiscalité | TVA du mois rapprochée des écritures et liquidée à la clôture, retenues à la source, déclarations et historique, modèle validé par l'expert-comptable |
+| 10 | Approbation des engagements et paiements | Engagements, À valider | Engagement approuvé avant la commande ; pièce, règlement ou décaissement au-delà du seuil bloqué jusqu'à approbation |
+| 11 | Coûts et rentabilité transport | Transport, application Rotations | Rotation saisie au parc hors réseau, marge par ensemble et par route, coût au km, charges de structure ; volumes, manquants et taxes spécifiques au barème |
 | 12 | Chantiers, avancement, retenues | Chantiers | Situation facturée, retenue en 4117, libération |
 | 13 | Gestion locative et patrimoine | Immobilier | Bail, loyers générés, impayés, quittance |
 | 14 | Traçabilité, piste d'audit | Journal d'audit | Modification visible avec valeurs avant et après |
