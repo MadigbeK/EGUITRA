@@ -92,3 +92,13 @@ suivant l'acquisition : la différence des deux conventions se lit dans le déta
 bien, et se retrouve dans les dotations, les résultats, les capitaux propres et les totaux de la
 balance et du bilan. Elle relève d'une décision avec l'expert-comptable (accepter le rattrapage de la
 première dotation, ou porter l'écart de reprise en fin de plan).
+
+Mesure de la permanence des méthodes : `dossier_json.py --convention=prototype` produit un registre
+dont le plan suit la convention du prototype (méthode « mois » : 12 × durée dotations égales du
+module, `method_time` « nombre de dotations », à compter du 1er du mois qui suit l'acquisition) ;
+`controle_reference.py` la reproduit. Aucun réglage d'une catégorie en « durée en années » (prorata
+ou non, calcul au jour, années bissextiles) ne donne des mois entiers ; la méthode se poserait bien
+par bien (le module la porte sur chaque immobilisation), pas sur la catégorie dont la durée resterait
+en années pour les acquisitions nouvelles. Il reste des écarts d'arrondi au-delà de la tolérance du
+prototype (dotation mensuelle constante arrondie au franc, là où le prototype arrondit le cumul) :
+variante de mesure seulement, que `reprise.py` refuse tant que la convention n'est pas décidée.
