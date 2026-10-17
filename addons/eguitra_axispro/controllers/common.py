@@ -7,6 +7,8 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
+from ..models.dossier import HYPOTHESES
+
 MAX_FILE = 20 * 1024 * 1024
 # Espace d'un dossier côté porteur : large pour une data room de 42 pièces et leurs versions,
 # borné pour qu'un compte porteur ne puisse pas remplir le disque du serveur.
@@ -14,31 +16,42 @@ MAX_DOSSIER_FILES = 400
 MAX_DOSSIER_BYTES = 1024 * 1024 * 1024
 
 
-def dossier_summary(d):
-    score = d.scoring()
-    docs = d.documents_status()
+def dossier_summary(d, result=None):
+    """Synthèse d'un dossier ; `result` : évaluation déjà calculée (dossier.evaluate()), pour ne la
+    calculer qu'une fois par requête."""
+    r = result or d.evaluate()
+    score = d.scoring(r)
+    docs = d.documents_status(r)
     due = [x for x in docs if x["due"] and x["required"]]
+    next_gate = score["next_gate"]
     return {
         "id": d.id, "reference": d.reference, "name": d.name, "state": d.state,
         "promoter": {"id": d.promoter_id.id, "name": d.promoter_id.name},
         "consultant": d.consultant_id.name or None, "sector": d.sector or None, "location": d.location or None,
         "investment": d.investment, "financing_need": d.financing_need,
+        "currency": {"id": d.currency_id.id, "name": d.currency_id.name, "symbol": d.currency_id.symbol},
         "current_gate": {"id": d.current_gate_id.id, "code": d.current_gate_id.code, "name": d.current_gate_id.name}
         if d.current_gate_id else None,
         "gates": [{"id": g.id, "code": g.code, "name": g.name, "sequence": g.sequence} for g in d.policy_id.gate_ids],
-        "score": score["global_score"], "recommendation": score["recommendation"],
+        "score": score["global_score"], "readiness": score["readiness"], "apd": score["apd"],
+        "bankability": score["bankability"], "completeness": score["completeness"],
+        "dataroom_completeness": score["dataroom_completeness"], "classification": score["classification"],
+        "recommendation": score["recommendation"],
+        "next_gate": {"code": next_gate["code"], "name": next_gate["name"], "decision": next_gate["decision"]}
+        if next_gate else None,
         "knockouts": len(score["knockouts"]), "decision": d.decision or None,
         "progress": {"assessed": score["assessed"], "criteria": score["criteria"]},
-        "documents": {"due": len(due), "received": len([x for x in due if x["state"] in ("received", "validated")])},
+        "documents": {"due": len(due), "received": len([x for x in due if x["state"] in ("received", "validated")]),
+                      "available": len([x for x in docs if x["available"]]), "total": len(docs)},
         "policy_version": d.policy_id.version,
-        "financial": _financial_brief(d),
+        "revision": d.revision, "locked": bool(d.locked_review_id),
+        "financial": _financial_brief(r.get("financial")),
         "risks": d.risk_summary(),
         "actions": d.action_summary(),
     }
 
 
-def _financial_brief(d):
-    indicators = d.financial_indicators()
+def _financial_brief(indicators):
     if not indicators:
         return None
     return {k: indicators[k] for k in ("npv", "irr_project", "irr_equity", "dscr_min", "payback", "equity_share",
@@ -46,23 +59,37 @@ def _financial_brief(d):
 
 
 def dossier_detail(d):
-    data = dossier_summary(d)
+    r = d.evaluate()
+    data = dossier_summary(d, r)
+    locked = d.locked_review_id
     data.update({
-        "capacity": d.capacity or None, "date_start": d.date_start, "description": d.description or None,
-        "hypotheses": d.hypotheses or None, "scoring": d.scoring(), "gaps": d.gaps(5),
+        "capacity": d.capacity or None, "date_start": d.date_start, "date_evaluation": d.date_evaluation,
+        "description": d.description or None, "hypotheses": d.hypotheses or None,
+        "decision_inputs": {
+            "dscr_manual": d.dscr_manual or None, "irr_manual": d.irr_manual or None,
+            **{key: d[key] or None for key in HYPOTHESES},
+        },
+        "scoring": d.scoring(r), "gaps": d.gaps(5, r),
         "portal_users": [{"id": u.id, "name": u.name, "login": u.login} for u in d.portal_user_ids],
-        "reviews": [review_row(r) for r in d.review_ids],
+        "reviews": [review_row(x) for x in d.review_ids],
+        "locked_review": {"id": locked.id, "date": locked.date, "decision": locked.decision,
+                          "fingerprint": locked.fingerprint, "locked_by": locked.locked_by.name or None}
+        if locked else None,
     })
     return data
 
 
 def review_row(r):
+    snapshot = r.snapshot or {}
     return {
         "id": r.id, "date": r.date, "gate": r.gate_id.code or None, "members": r.members or None,
+        "instance": r.instance or None, "motive": r.motive or None,
         "recommendation": r.recommendation, "decision": r.decision, "conditions": r.conditions or None,
         "minutes": r.minutes or None, "state": r.state, "locked_by": r.locked_by.name or None,
-        "locked_at": r.locked_at, "policy_version": r.policy_version,
-        "score": (r.snapshot or {}).get("global_score"),
+        "locked_at": r.locked_at, "policy_version": r.policy_version, "revision": r.revision or None,
+        "fingerprint": r.fingerprint or None,
+        "score": snapshot.get("global_score"), "readiness": snapshot.get("readiness"), "apd": snapshot.get("apd"),
+        "bankability": snapshot.get("bankability"), "classification": snapshot.get("classification"),
     }
 
 
@@ -71,7 +98,8 @@ def document_row(doc):
         "id": doc.id, "name": doc.name, "version": doc.version, "state": doc.state, "comment": doc.comment or None,
         "document_type_id": doc.document_type_id.id or None, "uploaded_by": doc.uploaded_by.name,
         "uploaded_at": doc.uploaded_at, "mimetype": doc.attachment_id.mimetype, "size": doc.attachment_id.file_size,
-        "portal_visible": doc.portal_visible,
+        "portal_visible": doc.portal_visible, "validity_date": doc.validity_date, "after_lock": doc.after_lock,
+        "criteria": [{"id": e.criterion_id.id, "code": e.criterion_id.code} for e in doc.evaluation_ids],
     }
 
 
@@ -80,7 +108,7 @@ def message_row(m):
             "date": m.date, "internal": m.internal}
 
 
-def store_upload(dossier, document_type_id=None, name=None, portal_visible=True, quota=False):
+def store_upload(dossier, document_type_id=None, name=None, portal_visible=True, quota=False, validity_date=None):
     """Enregistre le fichier reçu comme nouvelle version de pièce ; contrôle taille, format réel et,
     pour un dépôt du porteur (quota), l'espace occupé par le dossier."""
     upload = request.httprequest.files.get("file")
@@ -110,6 +138,7 @@ def store_upload(dossier, document_type_id=None, name=None, portal_visible=True,
         "dossier_id": dossier.id, "document_type_id": doc_type.id if doc_type else False,
         "name": name or (doc_type.name if doc_type else filename) or "Pièce",
         "attachment_id": attachment.id, "portal_visible": portal_visible, "uploaded_by": request.env.user.id,
+        "validity_date": validity_date or False,
     })
 
 

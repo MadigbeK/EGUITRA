@@ -77,9 +77,10 @@ class TestAxispro(ApiCase):
         self._set(dossier, "C003", "met")
         score = dossier.scoring()
         marche = next(d for d in score["domains"] if d["code"] == "D01")
-        self.assertAlmostEqual(marche["score"], (3 * 1 + 1 * 0.5) / 4 * 100)
-        self.assertAlmostEqual(score["global_score"], (87.5 * 2 + 100 * 1) / 3)
-        self.assertEqual(score["recommendation"], "go")
+        # Méthode MB AxisPro : un critère non encore évalué (C004, gate suivant) compte comme non disponible.
+        self.assertAlmostEqual(marche["score"], (3 * 1 + 1 * 0.5 + 2 * 0) / 6 * 100)
+        self.assertAlmostEqual(score["global_score"], (marche["score"] * 2 + 100 * 1) / 3)
+        self.assertEqual(score["recommendation"], "go", "Ancienne grille : pondération par domaine, seuil de 70")
 
         self._set(dossier, "C003", "not_met")
         self.assertEqual(dossier.scoring()["recommendation"], "no_go", "Un éliminatoire non satisfait impose le NO-GO")
@@ -116,6 +117,11 @@ class TestAxispro(ApiCase):
         r1.action_lock()
         with self.assertRaises(UserError):
             r1.write({"decision": "go"})
+        with self.assertRaises(UserError, msg="Dossier figé par la décision verrouillée"):
+            self._set(dossier, "C001", "met")
+        self.assertEqual(r1.verify(), {"sealed": True, "intact": True, "unchanged": True, "fingerprint": r1.fingerprint})
+        dossier.action_new_revision()
+        self.assertEqual(dossier.revision, 2)
         self._set(dossier, "C001", "met")
         r2 = self.env["axispro.review"].create({"dossier_id": dossier.id, "decision": "go", "snapshot": dossier.scoring()})
         diff = r2.compare(r1)

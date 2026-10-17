@@ -167,7 +167,14 @@ class TestAxisproExpert(ApiCase):
         actions = self.dossier.action_ids.filtered(lambda a: a.source == "committee")
         self.assertEqual(sorted(actions.mapped("name")), ["Lever les garanties", "Signer le bail du site"],
                          "Chaque condition du comité devient une action du porteur")
-        self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30}, token=self.token)
+        status, _b = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30},
+                               token=self.token)
+        self.assertEqual(status, 422, "Modèle financier figé par la décision verrouillée")
+        status, _b = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self.token)
+        self.assertEqual(status, 200, _b)
+        status, _b = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30},
+                               token=self.token)
+        self.assertEqual(status, 200, _b)
         status, second = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews", {"decision": "go"},
                                    token=self.token)
         status, diff = self.call("GET", f"/axispro/reviews/compare?a={review['id']}&b={second['id']}", token=self.token)

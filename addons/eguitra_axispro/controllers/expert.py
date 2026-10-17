@@ -511,16 +511,19 @@ class EguitraAxisproExpert(http.Controller):
                                                       "count": 0, "need": 0.0})
                 entry["count"] += 1
                 entry["need"] += d.financing_need
-            score = d.scoring()
+            result = d.evaluate()
+            score = d.scoring(result)
             recommendations[score["recommendation"]] = recommendations.get(score["recommendation"], 0) + 1
             sector = (d.sector or "Non renseigné").strip()
             item = sectors.setdefault(sector, {"label": sector, "count": 0, "investment": 0.0})
             item["count"] += 1
             item["investment"] += d.investment
-            fin = d.financial_indicators()
+            fin = result.get("financial")
             projects.append({
                 "id": d.id, "reference": d.reference, "name": d.name, "promoter": d.promoter_id.name,
                 "state": d.state, "gate": gate.code or None, "score": score["global_score"],
+                "readiness": score["readiness"], "apd": score["apd"], "bankability": score["bankability"],
+                "classification": score["classification"], "knockouts": len(score["knockouts"]),
                 "recommendation": score["recommendation"], "financing_need": d.financing_need,
                 "npv": fin["npv"] if fin else None, "irr_project": fin["irr_project"] if fin else None,
                 "dscr_min": fin["dscr_min"] if fin else None, "consultant": d.consultant_id.name or None,
@@ -586,5 +589,5 @@ class EguitraAxisproExpert(http.Controller):
                      "invoiced_year": sum(invoices.mapped("amount_untaxed"))},
             "committees": {"last_90_days": len(reviews),
                            "decisions": {k: len(reviews.filtered(lambda r, k=k: r.decision == k))
-                                         for k in ("go", "conditional", "no_go", "postponed")}},
+                                         for k in ("go", "conditional", "hold", "no_go", "postponed")}},
         }

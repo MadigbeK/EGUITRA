@@ -12,6 +12,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
 from .common import document_row, download, message_row, store_upload
+from .rapports import pieces_pdf
 
 PORTEUR = ("porteur",)
 MAX_DAILY_MESSAGES = 50
@@ -64,6 +65,11 @@ class EguitraPortal(http.Controller):
     @api_route("/portail/dossiers/<int:dossier_id>", profiles=PORTEUR)
     def dossier(self, dossier_id, **_kw):
         return _portal_view(_own(dossier_id))
+
+    @api_route("/portail/dossiers/<int:dossier_id>/pieces.pdf", profiles=PORTEUR)
+    def pieces(self, dossier_id, **_kw):
+        """Liste imprimable des pièces attendues du porteur et des compléments demandés."""
+        return pieces_pdf(_own(dossier_id))
 
     @api_route("/portail/dossiers/<int:dossier_id>/documents", profiles=PORTEUR)
     def documents(self, dossier_id, **_kw):

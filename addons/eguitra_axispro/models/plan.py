@@ -68,6 +68,10 @@ class AxisproPlan(models.Model):
         first_year = self.first_year or (self.dossier_id.date_start.year if self.dossier_id.date_start else None)
         return params, lines, first_year
 
+    def write(self, vals):
+        self.dossier_id._check_unlocked()
+        return super().write(vals)
+
     def analysis(self, factors=None):
         params, lines, first_year = self._inputs()
         return engine.analyse(params, lines, factors, first_year=first_year)
@@ -103,6 +107,20 @@ class AxisproPlanLine(models.Model):
     category = fields.Selection(FIXED_CATEGORIES, "Rubrique")
     funding_type = fields.Selection(FUNDING_TYPES, "Ressource")
     repayment = fields.Selection(REPAYMENTS, "Remboursement", default="annuity")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records.plan_id.dossier_id._check_unlocked()
+        return records
+
+    def write(self, vals):
+        self.plan_id.dossier_id._check_unlocked()
+        return super().write(vals)
+
+    def unlink(self):
+        self.plan_id.dossier_id._check_unlocked()
+        return super().unlink()
 
     @api.constrains("kind", "amount", "quantity", "price", "unit_cost", "rate", "year", "life", "grace", "funding_type")
     def _check_line(self):

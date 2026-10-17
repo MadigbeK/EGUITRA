@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Rapports imprimables d'un dossier AxisPro. Les valeurs sont préparées et mises en forme par
+         controllers/rapports.py (pdf_context, pieces_context) ; les gabarits ne font que les disposer. -->
+
+    <template id="report_axispro_style">
+        <style>
+            .ax { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10pt; color: #1d2320; }
+            .ax h1 { font-size: 17pt; margin: 0 0 2mm 0; color: #11221d; }
+            .ax h2 { font-size: 12pt; margin: 6mm 0 2mm 0; color: #11221d; border-bottom: 1px solid #c9d3cf; padding-bottom: 1mm; }
+            .ax .muted { color: #5b6662; }
+            .ax table { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
+            .ax th { background: #11221d; color: #fff; text-align: left; padding: 1.2mm 1.6mm; font-weight: 600; font-size: 9pt; }
+            .ax td { border-bottom: 1px solid #e3e8e6; padding: 1.2mm 1.6mm; vertical-align: top; }
+            .ax .kv td:first-child { width: 42%; color: #5b6662; }
+            .ax .scores td { text-align: center; border: 1px solid #c9d3cf; padding: 2.5mm 1mm; }
+            .ax .scores .v { font-size: 16pt; font-weight: 700; color: #11221d; }
+            .ax .verdict { border: 2px solid #11221d; padding: 3mm 4mm; margin: 3mm 0; }
+            .ax .verdict .v { font-size: 14pt; font-weight: 700; }
+            .ax .go { color: #1f7a4d; } .ax .conditional { color: #a46a00; } .ax .hold { color: #b25400; } .ax .no_go { color: #b3261e; }
+            .ax ul { margin: 0 0 2mm 0; padding-left: 5mm; }
+            .ax .seal { font-family: monospace; font-size: 8pt; word-break: break-all; }
+            .ax .small { font-size: 8.5pt; }
+        </style>
+    </template>
+
+    <template id="report_dossier_committee_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="report"/>
+            <div class="page ax">
+                <t t-call="eguitra_axispro.report_axispro_style"/>
+                <h1>Rapport d'évaluation : <t t-esc="r['title']"/></h1>
+                <p class="muted small">Méthode MB AxisPro « Project Readiness &amp; Bankability Assessment ». Édité le
+                    <t t-esc="r['generated']"/>.</p>
+
+                <h2>Fiche projet</h2>
+                <table class="kv">
+                    <tr t-foreach="r['fiche']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/></tr>
+                </table>
+
+                <h2>Scores</h2>
+                <table class="scores">
+                    <tr>
+                        <td t-foreach="r['scores']" t-as="row">
+                            <div class="v" t-esc="row[1]"/>
+                            <div class="muted small" t-esc="row[0]"/>
+                        </td>
+                    </tr>
+                </table>
+                <div class="verdict">
+                    <div class="muted small">Classification : <t t-esc="r['classification']"/></div>
+                    <div class="v">Recommandation : <t t-esc="r['recommendation']"/></div>
+                    <div t-esc="r['recommendation_detail']"/>
+                    <div class="muted small">Prochain gate : <t t-esc="r['next_gate']"/></div>
+                </div>
+
+                <t t-if="r['knockouts']">
+                    <h2>Knock-outs actifs</h2>
+                    <ul><li t-foreach="r['knockouts']" t-as="k" t-esc="k"/></ul>
+                </t>
+                <t t-if="r['critical']">
+                    <h2>Critères critiques à lever</h2>
+                    <ul><li t-foreach="r['critical']" t-as="k" t-esc="k"/></ul>
+                </t>
+
+                <h2>Stage gates</h2>
+                <table>
+                    <tr><th>Gate</th><th>Règle de passage</th><th>Décision</th><th>Motifs</th></tr>
+                    <tr t-foreach="r['gates']" t-as="g">
+                        <td><b t-esc="g['code']"/> <t t-esc="g['name']"/></td>
+                        <td class="small" t-esc="g['rule']"/>
+                        <td><b t-att-class="g['decision_key']" t-esc="g['decision']"/></td>
+                        <td class="small"><div t-foreach="g['motifs']" t-as="m" t-esc="m"/></td>
+                    </tr>
+                </table>
+
+                <h2>Scores par domaine</h2>
+                <table>
+                    <tr><th>Domaine</th><th>Score /100</th><th>Priorité</th><th>Évalués</th><th>Écarts</th><th>Knock-outs</th></tr>
+                    <tr t-foreach="r['domains']" t-as="d">
+                        <td><t t-esc="d['code']"/> <t t-esc="d['name']"/></td>
+                        <td t-esc="d['score']"/><td t-esc="d['priority']"/><td t-esc="d['progress']"/>
+                        <td t-esc="d['gaps']"/><td t-esc="d['knockouts']"/>
+                    </tr>
+                </table>
+
+                <h2>Écarts prioritaires</h2>
+                <table>
+                    <tr><th>#</th><th>Critère</th><th>Statut retenu</th><th>Priorité</th><th>Action attendue</th><th>Responsable</th><th>Échéance</th></tr>
+                    <tr t-foreach="r['gaps']" t-as="g">
+                        <td t-esc="g['rank']"/>
+                        <td><b t-esc="g['code']"/> <t t-esc="g['name']"/><div class="muted small" t-esc="g['domain']"/></td>
+                        <td class="small" t-esc="g['status']"/><td t-esc="g['priority']"/>
+                        <td class="small" t-esc="g['action']"/><td class="small" t-esc="g['responsible']"/>
+                        <td class="small" t-esc="g['due']"/>
+                    </tr>
+                </table>
+
+                <t t-if="r['requalified'] or r['anomalies']">
+                    <h2>Requalifications et anomalies</h2>
+                    <ul class="small">
+                        <li t-foreach="r['requalified']" t-as="x" t-esc="x"/>
+                        <li t-foreach="r['anomalies']" t-as="x" t-esc="x"/>
+                    </ul>
+                </t>
+
+                <h2>Hypothèses de décision</h2>
+                <table class="kv">
+                    <tr t-foreach="r['hypotheses']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/></tr>
+                </table>
+
+                <t t-if="r['financial']">
+                    <h2>Modèle financier</h2>
+                    <table class="kv">
+                        <tr t-foreach="r['financial']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/></tr>
+                    </table>
+                </t>
+
+                <t t-if="r['risks']">
+                    <h2>Principaux risques</h2>
+                    <table>
+                        <tr><th>Risque</th><th>Criticité</th><th>Atténuation</th></tr>
+                        <tr t-foreach="r['risks']" t-as="x">
+                            <td t-esc="x['name']"/><td t-esc="x['score']"/><td class="small" t-esc="x['mitigation'] or ''"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>Data room</h2>
+                <table>
+                    <tr><th>Pièce</th><th>État</th><th>Disponibilité</th></tr>
+                    <tr t-foreach="r['documents']" t-as="x">
+                        <td><b t-esc="x['code']"/> <t t-esc="x['name']"/></td>
+                        <td class="small" t-esc="x['state']"/>
+                        <td class="small"><t t-if="x['available']">Disponible</t><t t-else="">Non disponible</t>
+                            <div class="muted" t-if="x['origin']" t-esc="x['origin']"/></td>
+                    </tr>
+                </table>
+
+                <h2>Décision du comité</h2>
+                <t t-if="r['decision']['label']">
+                    <t t-set="rv" t-value="r['decision']['review']"/>
+                    <table class="kv">
+                        <tr><td>Décision</td><td><b t-esc="r['decision']['label']"/> du <t t-esc="r['decision']['date']"/></td></tr>
+                        <tr t-if="rv and rv['instance']"><td>Instance</td><td t-esc="rv['instance']"/></tr>
+                        <tr t-if="rv and rv['members']"><td>Membres</td><td t-esc="rv['members']"/></tr>
+                        <tr t-if="rv and rv['motive']"><td>Motif</td><td t-esc="rv['motive']"/></tr>
+                        <tr t-if="rv and rv['conditions']"><td>Conditions</td><td t-esc="rv['conditions']"/></tr>
+                        <tr><td>Empreinte de la décision scellée</td><td class="seal" t-esc="r['decision']['fingerprint']"/></tr>
+                    </table>
+                </t>
+                <p t-else="" class="muted">Aucune décision verrouillée pour cette révision.</p>
+
+                <p t-if="r['notes']" class="muted small">Principes de la politique : <t t-esc="r['notes']"/></p>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_dossier_committee">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_axispro.report_dossier_committee_document"/>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_dossier_pieces_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="pieces"/>
+            <div class="page ax">
+                <t t-call="eguitra_axispro.report_axispro_style"/>
+                <h1>Pièces à fournir : <t t-esc="r['title']"/></h1>
+                <p class="muted small">Étape en cours : <t t-esc="r['gate']"/>. Consultant : <t t-esc="r['consultant']"/>.
+                    Liste établie le <t t-esc="r['generated']"/>. Déposez les pièces dans votre espace du portail.</p>
+
+                <h2>Pièces attendues à cette étape</h2>
+                <table t-if="r['todo']">
+                    <tr><th>Pièce</th><th>Rubrique</th><th>État</th><th>Consignes</th></tr>
+                    <tr t-foreach="r['todo']" t-as="x">
+                        <td><b t-esc="x['code']"/> <t t-esc="x['name']"/></td>
+                        <td class="small" t-esc="x['category']"/><td class="small" t-esc="x['state']"/>
+                        <td class="small" t-esc="x['guidance']"/>
+                    </tr>
+                </table>
+                <p t-else="">Toutes les pièces attendues à cette étape sont disponibles.</p>
+
+                <t t-if="r['gaps']">
+                    <h2>Compléments demandés par le cabinet</h2>
+                    <table>
+                        <tr><th>Point</th><th>Ce qui est attendu</th><th>Échéance</th></tr>
+                        <tr t-foreach="r['gaps']" t-as="g">
+                            <td t-esc="g['name']"/><td class="small" t-esc="g['action']"/><td class="small" t-esc="g['due']"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <t t-if="r['tasks']">
+                    <h2>Actions qui vous sont confiées</h2>
+                    <table>
+                        <tr><th>Action</th><th>Échéance</th></tr>
+                        <tr t-foreach="r['tasks']" t-as="a"><td t-esc="a['name']"/><td class="small" t-esc="a['due']"/></tr>
+                    </table>
+                </t>
+
+                <t t-if="r['later']">
+                    <h2>Pièces des étapes suivantes</h2>
+                    <table>
+                        <tr><th>Pièce</th><th>Attendue au gate</th></tr>
+                        <tr t-foreach="r['later']" t-as="x">
+                            <td><b t-esc="x['code']"/> <t t-esc="x['name']"/></td><td class="small" t-esc="x['gate']"/>
+                        </tr>
+                    </table>
+                </t>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_dossier_pieces">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_axispro.report_dossier_pieces_document"/>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_dossier_committee" model="ir.actions.report">
+        <field name="name">Rapport d'évaluation AxisPro</field>
+        <field name="model">axispro.dossier</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_axispro.report_dossier_committee</field>
+        <field name="report_file">eguitra_axispro.report_dossier_committee</field>
+    </record>
+
+    <record id="action_report_dossier_pieces" model="ir.actions.report">
+        <field name="name">Pièces à fournir AxisPro</field>
+        <field name="model">axispro.dossier</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_axispro.report_dossier_pieces</field>
+        <field name="report_file">eguitra_axispro.report_dossier_pieces</field>
+    </record>
+</odoo>
