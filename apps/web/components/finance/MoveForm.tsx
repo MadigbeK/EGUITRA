@@ -15,9 +15,12 @@ interface LineDraft {
   account_id: string;
   tax_id: string;
   activity_id: string;
+  /** "" : retenues par défaut du tiers ; "none" : aucune ; sinon identifiant de la retenue. */
+  withholding: string;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "", withholding: "" });
 
 /** Saisie d'une facture de vente ou d'une pièce d'achat ; contreparties, TVA et échéance sont déduites. */
 export function MoveForm({
@@ -33,29 +36,37 @@ export function MoveForm({
 }) {
   const sale = moveType.startsWith("out_");
   const { data: accounts } = useApi<Account[]>(open ? `/finance/accounts?prefix=${sale ? "7" : "6"}&limit=2000` : null);
-  const { data: taxes } = useApi<Tax[]>(open ? `/finance/taxes?use=${sale ? "sale" : "purchase"}` : null);
-  const { data: activities } = useApi<Array<{ id: number; name: string }>>(open ? "/finance/analytic-accounts?plan=activite" : null);
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
+  const { data: allTaxes } = useApi<Tax[]>(open ? `/finance/taxes?use=${sale ? "sale" : "purchase"}${partner ? `&partner_id=${partner.id}` : ""}` : null);
+  const { data: activities } = useApi<Array<{ id: number; name: string }>>(open ? "/finance/analytic-accounts?plan=activite" : null);
   const [invoiceDate, setInvoiceDate] = useState(today());
   const [dueDate, setDueDate] = useState("");
   const [reference, setReference] = useState("");
   const [narration, setNarration] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([{ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "" }]);
+  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const defaultTax = taxes?.find((t) => t.amount === 18) ?? taxes?.[0];
-  const totals = useMemo(() => {
+  // TVA d'un côté, retenues à la source de l'autre (taxes à taux négatif, hors TVA).
+  const taxes = useMemo(() => (allTaxes ?? []).filter((t) => t.kind !== "withholding"), [allTaxes]);
+  const withholdings = useMemo(() => (allTaxes ?? []).filter((t) => t.kind === "withholding"), [allTaxes]);
+  const partnerDefaults = withholdings.filter((t) => t.partner_default);
+  const defaultTax = taxes.find((t) => t.amount === 18) ?? taxes[0];
+  const lineWithholdings = (l: LineDraft) =>
+    l.withholding === "none" ? [] : l.withholding ? withholdings.filter((t) => String(t.id) === l.withholding) : partnerDefaults;
+  const totals = (() => {
     let ht = 0;
     let tva = 0;
+    let retenues = 0;
     for (const l of lines) {
       const amount = (Number(l.quantity) || 0) * (Number(l.price_unit.replace(/\s/g, "")) || 0);
       ht += amount;
-      const tax = taxes?.find((t) => String(t.id) === (l.tax_id || String(defaultTax?.id ?? "")));
+      const tax = taxes.find((t) => String(t.id) === (l.tax_id || String(defaultTax?.id ?? "")));
       tva += tax ? (amount * tax.amount) / 100 : 0;
+      retenues += lineWithholdings(l).reduce((sum, t) => sum + (amount * t.amount) / 100, 0);
     }
-    return { ht, tva, ttc: ht + tva };
-  }, [lines, taxes, defaultTax]);
+    return { ht, tva, retenues, ttc: ht + tva + retenues };
+  })();
 
   function update(i: number, patch: Partial<LineDraft>) {
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -83,12 +94,13 @@ export function MoveForm({
           price_unit: Number(l.price_unit.replace(/\s/g, "")),
           account_id: l.account_id ? Number(l.account_id) : undefined,
           tax_ids: [Number(l.tax_id || defaultTax?.id)].filter(Boolean),
+          withholding_tax_ids: l.withholding === "" ? undefined : l.withholding === "none" ? [] : [Number(l.withholding)],
           analytic_distribution: l.activity_id ? { [l.activity_id]: 100 } : undefined,
         })),
       });
       onCreated(move);
       setPartner(null);
-      setLines([{ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "" }]);
+      setLines([emptyLine()]);
       setReference("");
       setNarration("");
     } catch (e) {
@@ -149,6 +161,7 @@ export function MoveForm({
                 <th className="w-48 px-2 py-2 text-left">Compte</th>
                 <th className="w-28 px-2 py-2 text-left">TVA</th>
                 <th className="w-40 px-2 py-2 text-left">Activité</th>
+                {withholdings.length > 0 && <th className="w-40 px-2 py-2 text-left">Retenue</th>}
                 <th className="w-8" />
               </tr>
             </thead>
@@ -168,11 +181,24 @@ export function MoveForm({
                     <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder="Compte par défaut" options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
                   </td>
                   <td className="px-2 py-1.5">
-                    <Select value={l.tax_id || String(defaultTax?.id ?? "")} onChange={(e) => update(i, { tax_id: e.target.value })} options={(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))} />
+                    <Select value={l.tax_id || String(defaultTax?.id ?? "")} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxes.map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))} />
                   </td>
                   <td className="px-2 py-1.5">
                     <Select value={l.activity_id} onChange={(e) => update(i, { activity_id: e.target.value })} placeholder="–" options={(activities ?? []).map((a) => ({ value: a.id, label: a.name }))} />
                   </td>
+                  {withholdings.length > 0 && (
+                    <td className="px-2 py-1.5">
+                      <Select
+                        value={l.withholding}
+                        onChange={(e) => update(i, { withholding: e.target.value })}
+                        options={[
+                          { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => `${Math.abs(t.amount)} %`).join(", ")})` : "Aucune (tiers)" },
+                          { value: "none", label: "Aucune" },
+                          ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${Math.abs(t.amount)} %)` })),
+                        ]}
+                      />
+                    </td>
+                  )}
                   <td className="px-1">
                     {lines.length > 1 && (
                       <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label="Supprimer la ligne">
@@ -186,7 +212,7 @@ export function MoveForm({
           </table>
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <Button variant="ghost" onClick={() => setLines((ls) => [...ls, { name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "" }])}>
+          <Button variant="ghost" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
             <Plus className="h-4 w-4" /> Ajouter une ligne
           </Button>
           <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
@@ -194,7 +220,13 @@ export function MoveForm({
             <dd className="text-right font-mono">{fmtGNF(totals.ht)}</dd>
             <dt className="text-muted">TVA</dt>
             <dd className="text-right font-mono">{fmtGNF(totals.tva)}</dd>
-            <dt className="font-semibold">Total TTC</dt>
+            {totals.retenues !== 0 && (
+              <>
+                <dt className="text-muted">Retenues à la source</dt>
+                <dd className="text-right font-mono">{fmtGNF(totals.retenues)}</dd>
+              </>
+            )}
+            <dt className="font-semibold">{totals.retenues !== 0 ? "Net à payer" : "Total TTC"}</dt>
             <dd className="text-right font-mono font-semibold">{fmtGNF(totals.ttc)}</dd>
           </dl>
         </div>

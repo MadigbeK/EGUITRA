@@ -607,14 +607,18 @@ class EguitraFinancePilotage(models.AbstractModel):
 
     @api.model
     def expected_credit_loss(self, companies, day, aging=None):
-        """Perte attendue sur les créances clients (IFRS 9, matrice par ancienneté). Se surcharge
-        quand la matrice devient paramétrable par société."""
+        """Perte attendue sur les créances clients (IFRS 9, matrice par ancienneté) : matrice de la
+        société paramétrée dans Fiscalité > IFRS (eguitra.ifrs.policy), celle de la société principale
+        pour une vue de groupe."""
         aging = aging or self.open_items(companies, "asset_receivable", day)["aging"]
-        by_bucket = {k: max(0.0, aging.get(k, 0.0)) * rate for k, rate in ECL_RATES.items()}
+        policy = self.env["eguitra.ifrs.policy"]._get(companies[:1]).rates() if companies else None
+        rates = {"non_echu": policy["not_due"] / 100, "1_30": policy["1_30"] / 100, "31_60": policy["31_60"] / 100,
+                 "61_90": policy["61_90"] / 100, "plus_90": policy["over_90"] / 100} if policy else dict(ECL_RATES)
+        by_bucket = {k: max(0.0, aging.get(k, 0.0)) * rate for k, rate in rates.items()}
         total = sum(by_bucket.values())
         exposure = sum(max(0.0, v) for v in aging.values())
         return {"total": total, "rate_pct": _pct(total, exposure) if exposure else None, "by_bucket": by_bucket,
-                "rates": ECL_RATES}
+                "rates": rates}
 
     # ─── Tableau de bord ──────────────────────────────────────────────────
 

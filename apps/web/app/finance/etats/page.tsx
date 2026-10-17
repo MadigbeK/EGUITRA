@@ -4,14 +4,29 @@ import { useMemo, useState } from "react";
 import { Download, Printer } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
+import { IfrsPanel } from "@/components/finance/IfrsPanel";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtGNF, fmtInt } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtInt, fmtPct } from "@/lib/format";
 
 type Tab = "bilan" | "resultat" | "flux" | "rapports" | "ifrs" | "export";
-interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number }
+interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number; month?: number; pct_revenue?: number | null }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
+
+/** Boutons d'export d'un état (XLSX et CSV), sur la période affichée. */
+function ExportButtons({ kind, query }: { kind: string; query: string }) {
+  return (
+    <div className="no-print flex gap-2">
+      <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=xlsx&${query}`, `${kind}.xlsx`)}>
+        <Download className="h-3.5 w-3.5" /> XLSX
+      </Button>
+      <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=csv&${query}`, `${kind}.csv`)}>
+        <Download className="h-3.5 w-3.5" /> CSV
+      </Button>
+    </div>
+  );
+}
 
 export default function StatementsPage() {
   const [tab, setTab] = useState<Tab>("bilan");
@@ -24,6 +39,9 @@ export default function StatementsPage() {
         actions={
           <>
             <ScopeToggle value={scope} onChange={setScope} />
+            <Button onClick={() => apiDownload(`/finance/statements/export?kind=all&format=xlsx&date_to=${todayIso()}&scope=${scope}`, "etats.xlsx")}>
+              <Download className="h-4 w-4" /> Tous les états (XLSX)
+            </Button>
             <Button onClick={() => window.print()}>
               <Printer className="h-4 w-4" /> Imprimer
             </Button>
@@ -46,20 +64,22 @@ export default function StatementsPage() {
       {tab === "resultat" && <IncomeStatement scope={scope} />}
       {tab === "flux" && <CashFlow scope={scope} />}
       {tab === "rapports" && <ReportBuilder scope={scope} />}
-      {tab === "ifrs" && <Ifrs scope={scope} />}
+      {tab === "ifrs" && <IfrsPanel scope={scope} />}
       {tab === "export" && <AuditExport scope={scope} />}
     </div>
   );
 }
 
-function StatementTable({ lines, compare }: { lines: StatementLine[]; compare?: boolean }) {
+function StatementTable({ lines, compare, monthly }: { lines: StatementLine[]; compare?: boolean; monthly?: boolean }) {
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-line text-[12.5px] font-medium text-muted">
           <th className="w-14 px-3 py-2 text-left">Réf.</th>
           <th className="px-3 py-2 text-left">Rubrique</th>
+          {monthly && <th className="px-3 py-2 text-right">Mois</th>}
           <th className="px-3 py-2 text-right">Exercice</th>
+          {monthly && <th className="px-3 py-2 text-right">% du CA</th>}
           {compare && <th className="px-3 py-2 text-right">Exercice précédent</th>}
         </tr>
       </thead>
@@ -68,7 +88,9 @@ function StatementTable({ lines, compare }: { lines: StatementLine[]; compare?: 
           <tr key={l.code} className={cx("border-b border-line/50", l.total && "bg-panel-2 font-semibold")}>
             <td className="px-3 py-1.5 font-mono text-xs text-muted">{l.code}</td>
             <td className="px-3 py-1.5">{l.label}</td>
+            {monthly && <td className={cx("px-3 py-1.5 text-right font-mono", (l.month ?? 0) < 0 && "text-danger")}>{fmtInt(l.month)}</td>}
             <td className={cx("px-3 py-1.5 text-right font-mono", l.amount < 0 && "text-danger")}>{fmtInt(l.amount)}</td>
+            {monthly && <td className="px-3 py-1.5 text-right font-mono text-muted">{l.pct_revenue === null || l.pct_revenue === undefined ? "–" : fmtPct(l.pct_revenue)}</td>}
             {compare && <td className="px-3 py-1.5 text-right font-mono text-muted">{fmtInt(l.previous)}</td>}
           </tr>
         ))}
@@ -84,10 +106,11 @@ function BalanceSheet({ scope }: { scope: string }) {
   );
   return (
     <div className="space-y-4">
-      <div className="no-print flex items-end gap-3">
+      <div className="no-print flex items-end justify-between gap-3">
         <Field label="Arrêté au">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
+        <ExportButtons kind="bilan" query={`date_to=${date}&scope=${scope}`} />
       </div>
       {error && <ErrorBox error={error} />}
       {!data && !error && <Loading />}
@@ -124,12 +147,15 @@ function IncomeStatement({ scope }: { scope: string }) {
         <Field label="Au">
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </Field>
+        <div className="ml-auto">
+          <ExportButtons kind="resultat" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
+        </div>
       </div>
       {error && <ErrorBox error={error} />}
       {!data && !error && <Loading />}
       {data && (
         <Card title="Compte de résultat (système normal)" padded={false}>
-          <StatementTable lines={data.lines} compare />
+          <StatementTable lines={data.lines} compare monthly />
         </Card>
       )}
     </div>
@@ -151,6 +177,12 @@ function CashFlow({ scope }: { scope: string }) {
         <Field label="Au">
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </Field>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <ExportButtons kind="flux" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
+          <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/statements/export?kind=flux_mensuels&format=xlsx&date_from=${from}&date_to=${to}&scope=${scope}`, "flux_mensuels.xlsx")}>
+            <Download className="h-3.5 w-3.5" /> Flux mensuels
+          </Button>
+        </div>
       </div>
       {error && <ErrorBox error={error} />}
       {!data && !error && <Loading />}
@@ -309,37 +341,6 @@ function ReportBuilder({ scope }: { scope: string }) {
   );
 }
 
-function Ifrs({ scope }: { scope: string }) {
-  const [date, setDate] = useState(todayIso());
-  const { data, error } = useApi<{ lines: Array<{ label: string; section: string; amount: number; syscohada: string[] }>; note: string }>(`/finance/ifrs?date=${date}&scope=${scope}`);
-  return (
-    <div className="space-y-4">
-      <Field label="Arrêté au" className="no-print max-w-xs">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </Field>
-      {error && <ErrorBox error={error} />}
-      {data && (
-        <>
-          <Notice tone="warn">{data.note}</Notice>
-          <Card padded={false}>
-            <DataTable
-              dense
-              rows={data.lines}
-              rowKey={(l) => l.label}
-              columns={[
-                { key: "section", label: "État", render: (l) => ({ actif: "Bilan, actif", passif: "Bilan, passif", resultat: "Résultat" })[l.section] ?? l.section },
-                { key: "label", label: "Poste IFRS" },
-                { key: "syscohada", label: "Rubriques SYSCOHADA", render: (l) => l.syscohada.join(", ") },
-                { key: "amount", label: "Montant", align: "right", render: (l) => fmtInt(l.amount) },
-              ]}
-            />
-          </Card>
-        </>
-      )}
-    </div>
-  );
-}
-
 function AuditExport({ scope }: { scope: string }) {
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
@@ -359,6 +360,28 @@ function AuditExport({ scope }: { scope: string }) {
         <Button variant="primary" onClick={() => apiDownload(`/finance/exports/entries?date_from=${from}&date_to=${to}&scope=${scope}&format=xlsx`, "ecritures.xlsx")}>
           <Download className="h-4 w-4" /> Excel
         </Button>
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-lg bg-panel-2 p-4">
+          <div className="mb-1 text-sm font-semibold">Grand livre</div>
+          <p className="mb-3 text-xs text-muted">Par compte : report à nouveau, lignes avec activité et solde progressif, total du compte.</p>
+          <ExportButtons kind="grand_livre" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
+        </div>
+        <div className="rounded-lg bg-panel-2 p-4">
+          <div className="mb-1 text-sm font-semibold">Balance générale</div>
+          <p className="mb-3 text-xs text-muted">Par classe : soldes d&apos;ouverture, mouvements, soldes débiteur et créditeur.</p>
+          <ExportButtons kind="balance" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
+        </div>
+        <div className="rounded-lg bg-panel-2 p-4 md:col-span-2">
+          <div className="mb-1 text-sm font-semibold">Fichier SAF-T (norme OCDE 2.0)</div>
+          <p className="mb-3 text-xs text-muted">
+            Société de travail : en-tête (NIF, RCCM), comptes avec soldes d&apos;ouverture et de clôture, clients et fournisseurs avec leur compte, table des taxes, une transaction par pièce.
+          </p>
+          <Button className="px-2 py-1 text-xs" disabled={scope === "group"} onClick={() => apiDownload(`/finance/exports/saft?date_from=${from}&date_to=${to}`, "SAF-T.xml")}>
+            <Download className="h-3.5 w-3.5" /> SAF-T (XML)
+          </Button>
+          {scope === "group" && <span className="ml-2 text-xs text-muted">Un fichier par société : quittez la vue consolidée.</span>}
+        </div>
       </div>
     </Card>
   );

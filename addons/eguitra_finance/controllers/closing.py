@@ -1,9 +1,9 @@
-"""Clôtures mensuelles, contrôles d'intégrité et registre des clôtures."""
+"""Clôtures mensuelles, contrôles d'intégrité, registre des clôtures, sceau et PV de clôture."""
 
 from dateutil.relativedelta import relativedelta
 
 from odoo import http
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
@@ -26,8 +26,16 @@ def _row(close):
         "closed_at": close.closed_at,
         "last_check": close.last_check or None,
         "events": [
-            {"action": e.action, "user": e.user_id.name, "date": e.date, "reason": e.reason or None}
+            {"action": e.action, "user": e.user_id.name, "date": e.date, "reason": e.reason or None,
+             "seal": e.seal or None}
             for e in close.event_ids
+        ],
+        "seal": close.seal or None,
+        "snapshot": close.snapshot or None,
+        "generated": [
+            {"id": m.id, "name": m.name, "ref": m.ref or None, "date": m.date, "kind": m.eguitra_close_kind,
+             "amount": sum(m.line_ids.mapped("debit"))}
+            for m in close.generated_move_ids.sorted("id")
         ],
     }
 
@@ -54,6 +62,7 @@ class EguitraFinanceClosing(http.Controller):
         close = request.env["eguitra.period.close"]._get(request.env.company, _period(read_json()))
         checks = close.action_check()
         return {"period": close.period, "checks": checks,
+                "generations": close._closing_preview() if close.state == "open" else [],
                 "can_close": close.state == "open" and not any(c["status"] == "blocking" for c in checks)}
 
     @api_route("/finance/closing/close", methods=("POST",), profiles=FIN_WRITE)
@@ -85,4 +94,26 @@ class EguitraFinanceClosing(http.Controller):
                 "journal": r["journal_name"], "status": r["status"], "message": r.get("msg_cover"),
                 "first": r.get("first_move_name"), "last": r.get("last_move_name"), "last_date": r.get("last_move_date"),
             } for r in report["results"]]
-        return {"period": close.period, "checks": checks, "hash_chains": chains}
+        # Sceaux des mois clôturés depuis le début de l'exercice précédent, recalculés.
+        sealed = request.env["eguitra.period.close"].search([
+            ("company_id", "=", request.env.company.id), ("state", "=", "closed"), ("seal", "!=", False),
+            ("period", ">=", day.replace(month=1, day=1) - relativedelta(years=1)),
+        ], order="period")
+        seals = [c.sudo().eguitra_verify_seal() for c in sealed]
+        return {"period": close.period, "checks": checks, "hash_chains": chains, "seals": seals}
+
+    @api_route("/finance/closing/pv", profiles=FIN_READ)
+    def closing_pv(self, **kw):
+        """PV de clôture du mois (PDF), avec le sceau de la période, à conserver hors du système."""
+        close = request.env["eguitra.period.close"].search([
+            ("company_id", "=", request.env.company.id), ("period", "=", _period(kw)), ("state", "=", "closed"),
+        ], limit=1)
+        if not close or not close.seal:
+            raise ApiError(404, "not_found", "Aucune clôture scellée pour ce mois.")
+        pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf(
+            "eguitra_finance.action_report_period_close", close.ids)
+        return request.make_response(pdf, headers=[
+            ("Content-Type", "application/pdf"),
+            ("Content-Disposition", content_disposition(f"PV-cloture-{close.period:%Y-%m}.pdf")),
+            ("Cache-Control", "no-store"),
+        ])

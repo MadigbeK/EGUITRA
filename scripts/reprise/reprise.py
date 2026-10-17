@@ -5,6 +5,8 @@ Lancé par scripts/reprise/reprise.sh, qui monte le dossier des fichiers en /rep
 s'ils sont présents, dans cet ordre (modèles dans scripts/reprise/modeles/) :
   tiers.csv            clients, fournisseurs, prêteurs
   soldes_ouverture.csv une écriture d'à-nouveaux équilibrée, à la date d'ouverture
+  immobilisations.csv  biens en service : valeur brute, cumul des amortissements à la veille de
+                       l'ouverture (lignes de reprise sans écriture), contrôle face aux 2x et 28x
   ecritures.csv        écritures de l'exercice, pièce par pièce, puis lettrage des comptes de tiers
   budget.csv           budget mensuel par compte
   rotations.csv        rotations 2026 (facturées dans l'ancien système ou à facturer)
@@ -163,6 +165,79 @@ if data is not None:
         })
         move.action_post()
         notes.append(f"Soldes d'ouverture : {len(lines)} lignes, {gnf(debit)} GNF au débit et au crédit, au {OPENING}.")
+
+# ─── Immobilisations en service ───────────────────────────────────────────
+data = rows("immobilisations.csv")
+assets_loaded = data is not None
+if data is not None:
+    Asset = env["account.asset"]
+    opening = date.fromisoformat(OPENING)
+    profiles = {p.name.lower(): p for p in env["account.asset.profile"].search([("company_id", "=", company.id)])}
+    plan = env.ref("eguitra_base.analytic_plan_activite", raise_if_not_found=False)
+    activities = {a.name.lower(): a for a in env["account.analytic.account"].search(
+        [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])])} if plan else {}
+    created = skipped = 0
+    for line, r in data:
+        where = f"immobilisations.csv ligne {line}"
+        if not r.get("libelle") or not r.get("profil"):
+            errors.append(f"{where} : libellé et catégorie (profil) obligatoires.")
+            continue
+        profile = profiles.get(r["profil"].lower())
+        if not profile:
+            errors.append(f"{where} : catégorie « {r['profil']} » inconnue ; la créer dans l'écran Immobilisations "
+                          f"(catégories : {', '.join(sorted(p.name for p in profiles.values())) or 'aucune'}).")
+            continue
+        if r.get("code") and Asset.search_count([("company_id", "=", company.id), ("code", "=", r["code"])]):
+            skipped += 1
+            continue
+        start = day(r.get("date_mise_en_service"), where)
+        gross, cumul = number(r.get("valeur_brute"), where), number(r.get("cumul"), where)
+        if not start:
+            continue
+        if gross <= 0 or not 0 <= cumul <= gross:
+            errors.append(f"{where} : valeur brute positive et cumul compris entre 0 et la valeur brute attendus.")
+            continue
+        if start >= opening and cumul:
+            errors.append(f"{where} : mis en service après le {opening:%d/%m/%Y}, le bien ne porte pas de cumul repris.")
+            continue
+        values = {"name": r["libelle"], "code": r.get("code") or False, "profile_id": profile.id, "purchase_value": gross,
+                  "date_start": start, "company_id": company.id,
+                  "eguitra_location": r.get("localisation") or False, "eguitra_custodian": r.get("responsable") or False}
+        if r.get("duree"):
+            years = number(r["duree"], where)
+            if years < 1 or years != int(years):
+                errors.append(f"{where} : durée en années entières attendue (« {r['duree']} »).")
+                continue
+            values["method_number"] = int(years)
+        if r.get("activite") and plan:
+            activity = activities.get(r["activite"].lower())
+            if not activity:
+                activity = activities[r["activite"].lower()] = env["account.analytic.account"].create(
+                    {"name": r["activite"], "plan_id": plan.id, "company_id": company.id})
+                notes.append(f"{where} : activité « {r['activite']} » ajoutée au plan analytique.")
+            values["analytic_distribution"] = {str(activity.id): 100}
+        try:
+            with env.cr.savepoint():
+                asset = Asset.create(values)
+                asset.compute_depreciation_board()
+                result = asset.eguitra_takeover(opening, cumul) if start < opening else None
+                asset.validate()
+            created += 1
+            if result and abs(result["difference"]) >= 1:
+                notes.append(f"{where} : cumul repris différent du plan théorique de {gnf(result['difference'])} GNF, "
+                             f"écart porté sur la première dotation de {opening.year}.")
+        except (UserError, ValidationError) as e:
+            errors.append(f"{where} : {e.args[0]}")
+    notes.append(f"Immobilisations : {created} reprise(s), {skipped} déjà présente(s) (même code).")
+    # Contrôle : cumul du registre = solde d'ouverture des 28x, valeur brute = solde d'ouverture des 2x.
+    control = Asset.eguitra_takeover_control(company, opening)
+    if not control["has_opening_entry"]:
+        notes.append("Immobilisations : soldes d'ouverture non repris, contrôle des comptes 2x et 28x impossible.")
+    for check in control["rows"] if control["has_opening_entry"] else []:
+        if not check["ok"]:
+            errors.append(f"Immobilisations : {check['label'].lower()} du compte {check['account']} "
+                          f"({', '.join(check['profiles'])}) : registre {gnf(check['register'])}, solde d'ouverture "
+                          f"{gnf(check['ledger'])}, écart {gnf(check['difference'])}.")
 
 # ─── Écritures de l'exercice ──────────────────────────────────────────────
 data = rows("ecritures.csv")
@@ -350,6 +425,19 @@ if data is not None:
         count += 1
     notes.append(f"Rotations : {count} reprise(s), dont {invoiced} déjà facturée(s) dans l'ancien système ; "
                  f"{skipped} déjà présente(s), ignorée(s).")
+
+# ─── Dotations passées hors du registre ───────────────────────────────────
+# Les dotations de l'exercice sont calculées par la plateforme ; une dotation de l'ancien système
+# reprise dans ecritures.csv (compte 28x hors à-nouveaux et hors registre) serait comptée deux fois.
+if assets_loaded:
+    accounts = env["account.asset.profile"].search([("company_id", "=", company.id)]).account_depreciation_id
+    doubles = env["account.move.line"].search_count([
+        ("company_id", "=", company.id), ("parent_state", "=", "posted"), ("account_id", "in", accounts.ids),
+        ("date", ">=", OPENING), ("asset_id", "=", False), ("journal_id.code", "!=", "AN"),
+    ]) if accounts else 0
+    if doubles:
+        errors.append(f"Immobilisations : {doubles} ligne(s) d'amortissement de l'exercice passée(s) hors du registre "
+                      "(ecritures.csv) ; retirer ces écritures : dotations et sorties d'actif passent par le registre.")
 
 # ─── Bilan ────────────────────────────────────────────────────────────────
 print("\n".join(notes) or "Aucun fichier de reprise trouvé dans le dossier.")

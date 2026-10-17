@@ -8,3 +8,8 @@ from . import account_move
 from . import account_asset
 from . import reminder
 from . import pilotage
+from . import tax_withholding
+from . import tax_return
+from . import fiscal_declarations
+from . import period_close_complete
+from . import ifrs

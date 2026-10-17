@@ -8,3 +8,9 @@ from . import test_pilotage
 from . import test_alertes
 from . import test_dette
 from . import test_api_pilotage
+from . import test_api_assets
+from . import test_fiscal
+from . import test_closing_complete
+from . import test_statements_export
+from . import test_ifrs
+from . import test_saft

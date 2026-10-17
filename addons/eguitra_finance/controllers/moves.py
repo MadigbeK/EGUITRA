@@ -13,6 +13,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 from .common import FIN_READ, FIN_WRITE, as_float, move_detail, move_summary, parse_date, today
+from .withholding import invoice_partner, line_withholdings, with_withholdings
 
 MOVE_TYPES = {
     "out_invoice": "Facture client",
@@ -52,6 +53,7 @@ def _invoice_lines(data, move_type):
         raise ApiError(400, "missing_fields", "Au moins une ligne est requise.", fields=["lines"])
     company = request.env.company
     default_tax = company.account_sale_tax_id if move_type.startswith("out_") else company.account_purchase_tax_id
+    partner = invoice_partner(data)
     commands = []
     for i, line in enumerate(lines, start=1):
         if not isinstance(line, dict) or not line.get("name"):
@@ -69,6 +71,7 @@ def _invoice_lines(data, move_type):
             values["tax_ids"] = [Command.set([int(t) for t in line["tax_ids"] or []])]
         elif data.get("apply_default_tax", True) and default_tax:
             values["tax_ids"] = [Command.set(default_tax.ids)]
+        with_withholdings(values, line_withholdings(line, partner, move_type))
         distribution = _distribution(line.get("analytic_distribution"))
         if distribution:
             values["analytic_distribution"] = distribution
@@ -200,7 +203,8 @@ class EguitraFinanceMoves(http.Controller):
             if move.move_type == "entry":
                 values["line_ids"] = [Command.clear()] + _entry_lines(data)
             else:
-                values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(data, move.move_type)
+                values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(
+                    dict({"partner_id": move.partner_id.id}, **data), move.move_type)
         move.write(values)
         return move_detail(move)
 
@@ -388,7 +392,12 @@ class EguitraFinanceMoves(http.Controller):
         domain = [("company_id", "=", request.env.company.id)]
         if kw.get("use") in ("sale", "purchase"):
             domain.append(("type_tax_use", "=", kw["use"]))
-        return [{"id": t.id, "name": t.name, "amount": t.amount, "use": t.type_tax_use, "price_include": t.price_include}
+        # Nature fiscale (TVA ou retenue) ; avec partner_id, les retenues par défaut du tiers sont signalées.
+        partner = invoice_partner(kw)
+        defaults = set(partner.eguitra_withholding_tax_ids.ids) if partner else set()
+        return [{"id": t.id, "name": t.name, "amount": t.amount, "use": t.type_tax_use, "price_include": t.price_include,
+                 "kind": t.tax_group_id.eguitra_kind or None, "nature": t.eguitra_withholding_nature or None,
+                 "partner_default": t.id in defaults}
                 for t in request.env["account.tax"].search(domain, order="sequence, id")]
 
     @api_route("/finance/currencies", profiles=FIN_READ)

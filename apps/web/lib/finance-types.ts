@@ -329,6 +329,11 @@ export interface Tax {
   amount: number;
   use: string;
   price_include: boolean;
+  /** Nature fiscale du groupe de taxes : TVA, retenue à la source ou autre. */
+  kind?: "vat" | "withholding" | "other" | null;
+  nature?: string | null;
+  /** Retenue appliquée d'office aux factures du tiers demandé (partner_id). */
+  partner_default?: boolean;
 }
 
 export interface Partner {
