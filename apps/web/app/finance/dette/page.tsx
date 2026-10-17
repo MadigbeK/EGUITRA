@@ -5,12 +5,13 @@ import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import type { Account, Journal } from "@/lib/finance-types";
+import type { Account, DebtSummary, Journal } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 
 interface Loan {
   id: number;
   name: string;
+  purpose: string | null;
   kind: "loan" | "lease";
   lender: { id: number; name: string };
   principal: number;
@@ -21,21 +22,26 @@ interface Loan {
   method: string;
   state: "draft" | "active" | "closed";
   outstanding: number;
-  schedule?: Array<{ id: number; sequence: number; due_date: string; principal: number; interest: number; total: number; remaining: number; paid: boolean }>;
+  journal: string | null;
+  schedule?: Array<{ id: number; sequence: number; due_date: string; principal: number; interest: number; total: number; remaining: number; paid: boolean; statement_line_id: number | null }>;
 }
-interface Summary { loans: number; outstanding: number; overdue: number; next_due_date: string | null; next_due_amount: number; service_last_12m: number; service_next_12m: number }
 
 const STATE = { draft: { label: "Brouillon", tone: "neutral" as const }, active: { label: "En cours", tone: "accent" as const }, closed: { label: "Soldé", tone: "ok" as const } };
+const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
 export default function DebtPage() {
-  const { data, error, mutate } = useApi<{ items: Loan[]; summary: Summary }>("/finance/loans");
+  const { data, error, mutate } = useApi<{ items: Loan[]; summary: DebtSummary }>("/finance/loans");
   const [selected, setSelected] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
+  const { data: seuils } = useApi<Array<{ code: string; value: number; active: boolean }>>("/finance/thresholds");
+  const dscrMin = seuils?.find((t) => t.code === "dscr_min" && t.active && t.value)?.value ?? 1.2;
+  const s = data?.summary;
+  const ecart = Math.abs(s?.schedule_gap ?? 0) >= 1;
   return (
     <div>
       <PageHeader
         title="Dette et financement"
-        subtitle="Emprunts et crédits-bails : échéanciers, règlements comptabilisés, service de la dette."
+        subtitle="Emprunts et crédits-bails : échéanciers, règlements comptabilisés, encours comptable, service de la dette et ratios."
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" /> Nouveau financement
@@ -44,14 +50,23 @@ export default function DebtPage() {
       />
       {error && <ErrorBox error={error} />}
       {!data && !error && <Loading />}
-      {data && (
+      {data && s && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Capital restant dû" value={fmtShort(data.summary.outstanding)} hint={`${data.summary.loans} financement(s)`} tone="accent" />
-            <Kpi label="Échéances impayées" value={fmtShort(data.summary.overdue)} tone={data.summary.overdue > 0 ? "danger" : "ok"} />
-            <Kpi label="Prochaine échéance" value={fmtShort(data.summary.next_due_amount)} hint={data.summary.next_due_date ? `Le ${fmtDate(data.summary.next_due_date)}` : "Aucune"} />
-            <Kpi label="Service de la dette, 12 prochains mois" value={fmtShort(data.summary.service_next_12m)} hint={`12 derniers mois : ${fmtShort(data.summary.service_last_12m)}`} />
+            <Kpi label="Encours comptable" value={fmtShort(s.accounting_outstanding)} hint={`Comptes 16 et 17 · ${s.loans} financement(s)`} tone="accent" />
+            <Kpi label="Capital restant dû des échéanciers" value={fmtShort(s.outstanding)} hint={ecart ? `Écart avec la comptabilité : ${fmtShort(s.schedule_gap)}` : "Conforme à la comptabilité"} tone={ecart ? "warn" : "ok"} />
+            <Kpi label="Dette nette" value={fmtShort(s.net_debt)} hint="Encours comptable moins la trésorerie" />
+            <Kpi label="Gearing" value={ratio(s.gearing)} hint={s.equity !== undefined && s.equity <= 0 ? "Capitaux propres négatifs ou nuls" : "Dette / capitaux propres"} tone={(s.gearing ?? 0) > 1 ? "warn" : "neutral"} />
+            <Kpi label="Dette / EBE 12 mois" value={ratio(s.debt_to_ebe)} hint={(s.ebe_12m ?? 0) <= 0 ? "EBE des 12 derniers mois négatif ou nul" : `EBE 12 mois : ${fmtShort(s.ebe_12m)}`} />
+            <Kpi label="DSCR" value={ratio(s.dscr)} hint={`EBE 12 mois / service de la dette, minimum ${ratio(dscrMin)}`} tone={s.dscr === null || s.dscr === undefined ? "neutral" : s.dscr < dscrMin ? "danger" : "ok"} />
+            <Kpi label="Service de la dette de l'exercice" value={fmtShort(s.service_fy)} hint={`Réglé : ${fmtShort(s.service_fy_paid)} · intérêts ${fmtShort(s.service_fy_interest)}`} />
+            <Kpi label="Prochaine échéance" value={fmtShort(s.next_due_amount)} hint={s.next_due_date ? `Le ${fmtDate(s.next_due_date)}${s.overdue > 0 ? ` · impayé ${fmtShort(s.overdue)}` : ""}` : "Aucune"} tone={s.overdue > 0 ? "danger" : "neutral"} />
           </div>
+          {ecart && (
+            <Notice tone="warn">
+              L&apos;encours comptable (comptes 16 et 17) diffère de {fmtGNF(s.schedule_gap)} du capital restant dû des échéanciers : déblocage ou échéance non comptabilisé, ou financement non saisi. La clôture le signale.
+            </Notice>
+          )}
           <Card padded={false}>
             <DataTable
               rows={data.items}
@@ -62,6 +77,7 @@ export default function DebtPage() {
                 { key: "name", label: "Référence" },
                 { key: "kind", label: "Nature", render: (l) => (l.kind === "lease" ? "Crédit-bail" : "Emprunt") },
                 { key: "lender", label: "Prêteur", render: (l) => l.lender.name },
+                { key: "purpose", label: "Objet", render: (l) => l.purpose ?? "–" },
                 { key: "principal", label: "Montant", align: "right", render: (l) => fmtGNF(l.principal) },
                 { key: "annual_rate", label: "Taux", align: "right", render: (l) => `${l.annual_rate} %` },
                 { key: "outstanding", label: "Restant dû", align: "right", render: (l) => fmtGNF(l.outstanding) },
@@ -90,6 +106,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
       setError(e instanceof ApiError ? e.message : "Action impossible.");
     }
   }
+  const [objet, setObjet] = useState<string | null>(null);
   return (
     <Modal open wide title={loan ? `${loan.name}, ${loan.lender.name}` : "Financement"} onClose={onClose} footer={loan?.state === "draft" && <Button variant="primary" onClick={() => act(() => apiSend("POST", `/finance/loans/${id}/activate`))}>Mettre en service</Button>}>
       {!loan ? (
@@ -97,6 +114,19 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
       ) : (
         <div className="space-y-4">
           {error && <Notice tone="danger">{error}</Notice>}
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Objet du financement" className="min-w-0 flex-1">
+              <Input value={objet ?? loan.purpose ?? ""} onChange={(e) => setObjet(e.target.value)} placeholder="Acquisition de camions, fonds de roulement…" />
+            </Field>
+            <Button disabled={objet === null || objet === (loan.purpose ?? "")} onClick={() => act(() => apiSend("PATCH", `/finance/loans/${id}`, { purpose: objet }).then(() => setObjet(null)))}>
+              Enregistrer l&apos;objet
+            </Button>
+          </div>
+          {loan.state === "active" && (
+            <p className="text-[12.5px] leading-snug text-muted">
+              Échéance prélevée sur un compte bancaire dont vous importez les relevés : réglez-la depuis la ligne du relevé (Trésorerie, Rapprocher), qui propose l&apos;échéance. « Régler » ci-dessous comptabilise la sortie directement sur {loan.journal ?? "le journal de règlement"} : à réserver à la caisse et aux comptes sans relevé, sinon la sortie serait comptée deux fois.
+            </p>
+          )}
           <DataTable
             dense
             rows={loan.schedule ?? []}
@@ -113,7 +143,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
                 label: "",
                 align: "right",
                 render: (l) =>
-                  l.paid ? <Badge tone="ok">Réglée</Badge> : loan.state === "active" ? <Button className="px-2 py-1 text-xs" onClick={() => act(() => apiSend("POST", `/finance/loans/lines/${l.id}/pay`, {}))}>Régler</Button> : null,
+                  l.paid ? <Badge tone="ok">{l.statement_line_id ? "Rapprochée du relevé" : "Réglée"}</Badge> : loan.state === "active" ? <Button className="px-2 py-1 text-xs" onClick={() => act(() => apiSend("POST", `/finance/loans/lines/${l.id}/pay`, {}))}>Régler</Button> : null,
               },
             ]}
           />
@@ -128,7 +158,7 @@ function LoanForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
   const { data: interestAccounts } = useApi<Account[]>("/finance/accounts?prefix=67&limit=200");
   const { data: journals } = useApi<Journal[]>("/finance/journals?type=bank,cash");
   const [lender, setLender] = useState<{ id: number; name: string } | null>(null);
-  const [f, setF] = useState({ name: "", kind: "loan", principal: "", annual_rate: "", start_date: new Date().toISOString().slice(0, 10), duration_months: "36", grace_months: "0", periodicity: "monthly", method: "annuity", principal_account_id: "", interest_account_id: "", journal_id: "" });
+  const [f, setF] = useState({ name: "", purpose: "", kind: "loan", principal: "", annual_rate: "", start_date: new Date().toISOString().slice(0, 10), duration_months: "36", grace_months: "0", periodicity: "monthly", method: "annuity", principal_account_id: "", interest_account_id: "", journal_id: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function submit() {
@@ -167,6 +197,9 @@ function LoanForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
         </Field>
         <Field label="Prêteur" className="md:col-span-2">
           <PartnerPicker value={lender} onChange={setLender} kind="supplier" />
+        </Field>
+        <Field label="Objet" className="md:col-span-3">
+          <Input value={f.purpose} onChange={set("purpose")} placeholder="Acquisition de camions, fonds de roulement…" />
         </Field>
         <Field label="Nature">
           <Select value={f.kind} onChange={set("kind")} options={[{ value: "loan", label: "Emprunt" }, { value: "lease", label: "Crédit-bail" }]} />
