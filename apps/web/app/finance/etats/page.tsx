@@ -372,6 +372,16 @@ function AuditExport({ scope }: { scope: string }) {
           <p className="mb-3 text-xs text-muted">Par classe : soldes d&apos;ouverture, mouvements, soldes débiteur et créditeur.</p>
           <ExportButtons kind="balance" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
         </div>
+        <div className="rounded-lg bg-panel-2 p-4 md:col-span-2">
+          <div className="mb-1 text-sm font-semibold">Fichier SAF-T (norme OCDE 2.0)</div>
+          <p className="mb-3 text-xs text-muted">
+            Société de travail : en-tête (NIF, RCCM), comptes avec soldes d&apos;ouverture et de clôture, clients et fournisseurs avec leur compte, table des taxes, une transaction par pièce.
+          </p>
+          <Button className="px-2 py-1 text-xs" disabled={scope === "group"} onClick={() => apiDownload(`/finance/exports/saft?date_from=${from}&date_to=${to}`, "SAF-T.xml")}>
+            <Download className="h-3.5 w-3.5" /> SAF-T (XML)
+          </Button>
+          {scope === "group" && <span className="ml-2 text-xs text-muted">Un fichier par société : quittez la vue consolidée.</span>}
+        </div>
       </div>
     </Card>
   );
