@@ -280,6 +280,106 @@ class EguitraPeriodClose(models.Model):
                 return data
         return None
 
+    # ─── Devises (réévaluation à la clôture) ──────────────────────────────
+
+    def _fx_line(self, label, account, amount, currency, partner=False):
+        """Ligne d'écart de change : montant en GNF seulement, montant en devise nul."""
+        values = {"name": label, "account_id": account.id, "debit": max(amount, 0.0), "credit": max(-amount, 0.0),
+                  "partner_id": partner or False}
+        if currency:
+            values.update({"currency_id": currency.id, "amount_currency": 0.0})
+        return Command.create(values)
+
+    def _fx_bank_differences(self, end):
+        """Disponibilités en devises : (solde en devise × cours de clôture) − solde en GNF, par journal."""
+        company = self.company_id
+        journals = self.env["account.journal"].sudo().search([
+            ("company_id", "=", company.id), ("type", "in", ("bank", "cash")), ("currency_id", "!=", False),
+            ("currency_id", "!=", company.currency_id.id),
+        ])
+        rows = []
+        self.env.flush_all()
+        for journal in journals.filtered("default_account_id"):
+            self.env.cr.execute(
+                """SELECT COALESCE(SUM(balance), 0), COALESCE(SUM(amount_currency), 0) FROM account_move_line
+                    WHERE account_id = %s AND company_id = %s AND parent_state = 'posted' AND date <= %s""",
+                (journal.default_account_id.id, company.id, end),
+            )
+            balance, foreign = (float(v) for v in self.env.cr.fetchone())
+            target = journal.currency_id._convert(foreign, company.currency_id, company, end)
+            difference = company.currency_id.round(target - balance)
+            if difference:
+                rows.append({"journal": journal, "foreign": foreign, "balance": balance, "target": target,
+                             "difference": difference})
+        return rows
+
+    def _close_fx_bank(self):
+        """Réévaluation des banques et caisses en devises au cours de clôture : gain en 776, perte en 676."""
+        _start, end = self._bounds()
+        rows = self._fx_bank_differences(end)
+        if not rows:
+            return None
+        gain, loss = self._close_account("776"), self._close_account("676")
+        lines, details = [], []
+        for row in rows:
+            journal, diff = row["journal"], row["difference"]
+            label = f"Réévaluation {journal.name} au {end:%d/%m/%Y}"
+            lines.append(self._fx_line(label, journal.default_account_id, diff, journal.currency_id))
+            lines.append(self._fx_line(label, gain if diff > 0 else loss, -diff, None))
+            details.append({"journal": journal.code, "foreign": row["foreign"], "difference": diff})
+        return self._close_post("fx_bank", end, f"DEV-{self._label()}", lines, {"journals": details})
+
+    @api.model
+    def _fx_open_items(self, company, end):
+        """Écarts de conversion latents des créances et dettes en devises non lettrées, au cours de
+        la date : {(compte, tiers, devise): écart en GNF} (positif : gain latent)."""
+        self.env.flush_all()
+        self.env.cr.execute(
+            """SELECT aml.account_id, aml.partner_id, aml.currency_id, SUM(aml.amount_residual),
+                      SUM(aml.amount_residual_currency)
+                 FROM account_move_line aml
+                 JOIN account_account aa ON aa.id = aml.account_id
+                WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date <= %s AND NOT aml.reconciled
+                  AND aa.account_type IN ('asset_receivable', 'liability_payable') AND aml.currency_id != %s
+             GROUP BY 1, 2, 3""",
+            (company.id, end, company.currency_id.id),
+        )
+        Currency = self.env["res.currency"].sudo()
+        result = {}
+        for account_id, partner_id, currency_id, residual, residual_currency in self.env.cr.fetchall():
+            target = Currency.browse(currency_id)._convert(float(residual_currency), company.currency_id, company, end)
+            difference = company.currency_id.round(target - float(residual))
+            if difference:
+                result[(account_id, partner_id or 0, currency_id)] = difference
+        return result
+
+    def _close_fx_items(self):
+        """Créances et dettes en devises : écart de conversion actif (478, perte latente) ou passif
+        (479, gain latent) en contrepartie du compte de tiers, extourné le premier jour du mois suivant."""
+        _start, end = self._bounds()
+        targets = {f"{a}:{p}:{c}": d for (a, p, c), d in self._fx_open_items(self.company_id, end).items()}
+        previous = {}
+        for move in self._previous_moves("fx"):
+            for key, amount in ((move.eguitra_close_data or {}).get("amounts") or {}).items():
+                previous[key] = previous.get(key, 0.0) + amount
+        rounding = self.company_id.currency_id.round
+        deltas = {k: rounding(targets.get(k, 0.0) - previous.get(k, 0.0)) for k in set(targets) | set(previous)}
+        deltas = {k: v for k, v in deltas.items() if v}
+        if not deltas:
+            return None
+        asset, liability = self._close_account("478"), self._close_account("479")
+        Account, Currency = self.env["account.account"].sudo(), self.env["res.currency"].sudo()
+        label = f"Écarts de conversion au {end:%d/%m/%Y}"
+        lines = []
+        for key in sorted(deltas):
+            account_id, partner_id, currency_id = (int(x) for x in key.split(":"))
+            diff = deltas[key]
+            lines.append(self._fx_line(label, Account.browse(account_id), diff, Currency.browse(currency_id), partner_id))
+            lines.append(self._fx_line(label, liability if diff > 0 else asset, -diff, None))
+        move = self._close_post("fx", end, f"ECA-{self._label()}", lines, {"amounts": deltas})
+        self._close_reverse(move, "fx_reversal", end + relativedelta(days=1))
+        return move
+
     def _closing_generate(self):
         """Générations de la clôture, dans l'ordre ; renvoie les écritures passées."""
         self.ensure_one()
@@ -290,8 +390,9 @@ class EguitraPeriodClose(models.Model):
         return self.env["account.move"].sudo().search([("eguitra_close_id", "=", self.id)]) - before
 
     def _closing_steps(self):
-        """Étapes de génération après les dotations (les sessions suivantes en ajoutent)."""
-        return [self._close_vat, self._close_accruals]
+        """Étapes de génération après les dotations : devises d'abord (les écarts de change n'ont pas
+        de TVA), puis TVA et factures à établir."""
+        return [self._close_fx_bank, self._close_fx_items, self._close_vat, self._close_accruals]
 
     def _closing_preview(self):
         """Ce que la clôture passerait, sans rien écrire (affiché avec les contrôles)."""
@@ -308,6 +409,18 @@ class EguitraPeriodClose(models.Model):
                           "amount": max(-position, 0.0) or max(position, 0.0),
                           "detail": f"TVA due {_gnf(max(-position, 0.0))} GNF" if position <= 0
                           else f"Crédit de TVA à reporter {_gnf(position)} GNF"})
+        bank = self._fx_bank_differences(end)
+        if bank:
+            items.append({"kind": "fx_bank", "label": f"Réévaluation des disponibilités en devises (DEV-{self._label()})",
+                          "amount": sum(r["difference"] for r in bank),
+                          "detail": ", ".join(f"{r['journal'].name} {_gnf(r['difference'])}" for r in bank)})
+        fx = self._fx_open_items(self.company_id, end)
+        if fx:
+            items.append({"kind": "fx", "label": f"Écarts de conversion des créances et dettes (ECA-{self._label()})",
+                          "amount": sum(fx.values()),
+                          "detail": f"gains latents {_gnf(sum(v for v in fx.values() if v > 0))} GNF (479), pertes "
+                                    f"latentes {_gnf(-sum(v for v in fx.values() if v < 0))} GNF (478), extournés le "
+                                    f"{end + relativedelta(days=1):%d/%m/%Y}"})
         targets = self._close_accrual_targets(self.company_id, end)
         if targets:
             items.append({"kind": "accrual", "label": f"Factures à établir (FAE-{self._label()})",

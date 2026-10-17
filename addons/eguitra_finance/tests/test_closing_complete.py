@@ -86,6 +86,53 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         self.assertAlmostEqual(-self._balance("4441"), 27_000_000, 2)
         self.assertNotEqual(close.seal, first_seal)
 
+    def test_reevaluation_des_devises(self):
+        """Banque en devise réévaluée (776/676) ; créance en devise : écart de conversion (479/478)
+        extourné le mois suivant."""
+        env = self.env
+        usd, eur = env.ref("base.USD"), env.ref("base.EUR")
+        foreign = eur if self.company.currency_id == usd else usd
+        foreign.active = True
+        Rate = env["res.currency.rate"]
+        Rate.create({"currency_id": foreign.id, "name": self.month - relativedelta(months=1),
+                     "inverse_company_rate": 8_600, "company_id": self.company.id})
+        Rate.create({"currency_id": foreign.id, "name": self.end, "inverse_company_rate": 9_000,
+                     "company_id": self.company.id})
+        bank = env["account.journal"].create({"name": "Banque en devise DEMO", "type": "bank", "code": "BDV1",
+                                              "currency_id": foreign.id, "company_id": self.company.id})
+        deposit = env["account.move"].create({
+            "move_type": "entry", "journal_id": bank.id, "date": self.month + relativedelta(days=1),
+            "line_ids": [
+                (0, 0, {"name": "Apport en devise", "account_id": bank.default_account_id.id, "currency_id": foreign.id,
+                        "amount_currency": 1_000, "debit": 8_600_000}),
+                (0, 0, {"name": "Apport en devise", "account_id": self.acc_services.id, "currency_id": foreign.id,
+                        "amount_currency": -1_000, "credit": 8_600_000}),
+            ],
+        })
+        deposit.action_post()
+        invoice = env["account.move"].create({
+            "move_type": "out_invoice", "partner_id": self.customer.id, "currency_id": foreign.id,
+            "invoice_date": self.month + relativedelta(days=1),
+            "invoice_line_ids": [(0, 0, {"name": "Transport en devise", "quantity": 1, "price_unit": 10_000,
+                                         "account_id": self.acc_services.id, "tax_ids": [(6, 0, [])]})],
+        })
+        invoice.with_context(eguitra_approval_granted=True).action_post()
+        self.assertAlmostEqual(invoice.amount_residual_signed, 86_000_000, 0)
+
+        close = self._close()
+        reval = close.generated_move_ids.filtered(lambda m: m.eguitra_close_kind == "fx_bank")
+        self.assertTrue(reval, "Réévaluation de la banque en devise")
+        self.assertAlmostEqual(self._balance(bank.default_account_id.code), 9_000_000, 0,
+                               msg="1 000 au cours de clôture de 9 000")
+        self.assertAlmostEqual(-self._balance("776"), 400_000, 0)
+        fx = close.generated_move_ids.filtered(lambda m: m.eguitra_close_kind == "fx")
+        self.assertAlmostEqual(-self._balance("479"), 4_000_000, 0, msg="Gain latent sur la créance : 10 000 × 400")
+        self.assertAlmostEqual(self._balance("478"), 0, 0)
+        reversal = close.generated_move_ids.filtered(lambda m: m.eguitra_close_kind == "fx_reversal")
+        self.assertEqual(reversal.date, self.end + relativedelta(days=1))
+        self.assertAlmostEqual(self._balance("479", self.end + relativedelta(days=1)), 0, 0, msg="Extourné le mois suivant")
+        self.assertEqual(fx.line_ids.filtered(lambda line: line.partner_id).partner_id, self.customer)
+
     def test_dotations_du_mois_a_la_cloture(self):
         def account(prefix):
             return self.env["account.account"].search(
