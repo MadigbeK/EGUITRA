@@ -1,5 +1,5 @@
-compte;libelle;tiers;debit;credit
-521001;Banque, solde au 31/12;;150 000 000;
-411100;Créance client;Exemple Distribution SA;45 000 000;
-401100;Dette fournisseur;Exemple Carburants SARL;;12 500 000
-101300;Capital;;;182 500 000
+compte;libelle;tiers;debit;credit;echeance;reference
+521001;Banque, solde au 31/12;;150 000 000;;;
+411100;Facture FV-2025-120 du 10/12/2025;CL-901;45 000 000;;24/01/2026;FV-2025-120
+401100;Pièce FA-2025-088 du 20/12/2025;FR-901;;12 500 000;19/01/2026;FA-2025-088
+101300;Capital;;;182 500 000;;
