@@ -11,6 +11,7 @@ from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
 DOCUMENTS = [
+    ("commitment", "Engagements de dépense"),
     ("in_invoice", "Pièces d'achat et avoirs fournisseurs"),
     ("payment_out", "Règlements fournisseurs"),
     ("entry", "Opérations diverses"),
@@ -22,7 +23,13 @@ APPROVER_PROFILES = [
 ]
 # Circuit par défaut, à ajuster en atelier de cadrage : la finance valide toute pièce d'achat,
 # la direction au-delà de 50 millions ; la direction valide les règlements au-delà de 100 millions.
-DEFAULT_RULES = [
+COMMITMENT_RULES = [
+    {"document": "commitment", "sequence": 1, "min_amount": 0, "approver_profile": "finance",
+     "name": "Engagements de dépense : contrôle de la finance"},
+    {"document": "commitment", "sequence": 2, "min_amount": 50_000_000, "approver_profile": "direction",
+     "name": "Engagements de plus de 50 M GNF : accord de la direction"},
+]
+DEFAULT_RULES = COMMITMENT_RULES + [
     {"document": "in_invoice", "sequence": 1, "min_amount": 0, "approver_profile": "finance",
      "name": "Pièces d'achat : contrôle de la finance"},
     {"document": "in_invoice", "sequence": 2, "min_amount": 50_000_000, "approver_profile": "direction",
@@ -154,6 +161,8 @@ class EguitraApprovalRequest(models.Model):
             return self.amount
         if self.res_model == "account.move":
             return record._eguitra_approval_amount()
+        if self.res_model == "eguitra.commitment":
+            return record.amount
         return abs(record.amount_company_currency_signed or record.amount)
 
     def _matches(self, record=None):
@@ -190,12 +199,18 @@ class EguitraApprovalRequest(models.Model):
         })
         self.step_ids.filtered(lambda s: s.state == "pending").sudo().write({"state": "skipped"})
         self.sudo().state = "rejected"
+        record = self._record()
+        if record and self.res_model == "eguitra.commitment":
+            record._eguitra_on_rejected()
         return True
 
     def _on_approved(self):
         """Dernière approbation : la pièce ou le règlement est comptabilisé."""
         record = self._record()
         if not record:
+            return
+        if self.res_model == "eguitra.commitment":
+            record._eguitra_on_approved()
             return
         bypass = record.with_context(eguitra_approval_granted=True).sudo()
         if self.res_model == "account.move" and record.state == "draft":

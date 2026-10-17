@@ -31,6 +31,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/pilotage", label: "Activités et budget", icon: "TrendingUp", profiles: FIN },
         { href: "/finance/rapport", label: "Rapport mensuel", icon: "FileText", profiles: FIN },
         { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", badge: "approvals" },
+        { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"] },
         { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
         { href: "/finance/guide", label: "Guide de la finance", icon: "Info", profiles: FIN },
       ],

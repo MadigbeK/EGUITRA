@@ -197,10 +197,33 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
   selon le prototype EGUITRA_App et les vingt attentes (axes analytiques multiples et imputations,
   budget réparti, fiscalité et retenues, immobilisations, clôture mensuelle complète, réévaluation
   des devises, produits transportés, manquants et taxes spécifiques, pilotage et alertes).
-- Reste : engagements et couverture des paiements par l'approbation (attentes 3 et 4) ; sauvegardes
-  (alerte de copie hors site), règles d'audit, disponibilité, rapport de restauration, procédure de
-  support, dossier technique, contrôle de la double authentification (attentes 7, 13 à 16, 18, 19) ;
-  reprise du classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt).
+- Fait, exploitation (courrier, attentes 16 et 18, à appliquer en production à la prochaine
+  `release.sh`, qui reconstruit désormais la base et les sauvegardes si leur configuration change,
+  puis relancer `infra/monitor-install.sh`) : archivage des WAL toutes les 5 minutes et copie hors
+  site dans les 5 minutes suivantes (perte de 15 minutes au plus même en cas de perte du serveur),
+  alerte au-delà de 15 minutes et si la copie hors site exigée (`OFFSITE_REQUIRED=1`) n'est pas
+  configurée ; supervision de la double authentification en production et sonde externe
+  (`HEARTBEAT_URL`) ; restauration trimestrielle à un instant donné avec compte rendu ; rapport
+  mensuel de disponibilité (`infra/availability-report.py`) hors maintenances, que `release.sh`
+  inscrit ; procédure de support (`docs/projet/procedure-de-support.md`) et dossier technique
+  (`docs/projet/dossier-technique.md`) ; cahier de recette mis à jour.
+- Fait, finance (fusion des agents, tests du serveur au vert après correction de leurs jeux
+  d'essai) : pilotage (BFR, flux mensuels et prévision, dette réglée depuis le relevé, alertes à
+  quatre gravités, tableau de bord et questions du dirigeant, rapport mensuel enrichi, balance âgée,
+  guide intégré `/finance/guide`) ; fiscalité (retenues à la source configurables, déclarations et
+  historique), immobilisations (dotations mensuelles, reprise des biens en service), clôture
+  mensuelle complète (dotations, liquidation de la TVA, factures à établir, sceau, PV), réévaluation
+  des devises, exports des états, IFRS (pertes attendues, passerelle), SAF-T. Matrice des pertes
+  attendues unique (Fiscalité > IFRS) pour le tableau de bord et la clôture.
+- Fait, engagements de dépense (attente 10, `eguitra_approval` 19.0.1.2.0) : engagement approuvé
+  avant la commande (mêmes seuils que les pièces : finance, direction au-delà de 50 M), devis joint,
+  consommation par les pièces d'achat qui ne refont pas le circuit dans la limite du reste à engager
+  (tolérance 5 %, paramètre `eguitra_approval.commitment_tolerance_pct`) ; écran `/finance/engagements`.
+- Reste : rattachement d'un engagement à la saisie d'une pièce d'achat, colonne « engagé » du budget
+  et état des engagements non soldés (après la fusion de l'agent analytique et budget) ;
+  couverture des décaissements de caisse, imputations de relevé, échéances et virements par le
+  circuit des paiements (attente 4) ; piste d'audit des nouveaux modèles (attente 14) ; reprise du
+  classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt).
 
 **Décisions du gérant, 16 octobre (suite de la vérification de l'organisation)** :
 - Autres services de MB AxisPro (formation et coaching, conseil, audit d'évaluation des transporteurs,

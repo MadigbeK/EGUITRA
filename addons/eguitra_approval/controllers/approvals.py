@@ -59,6 +59,12 @@ def _row(rec, detail=False):
                 "lines": [{"name": l.name, "account": l.account_id.code, "amount": l.price_subtotal or l.debit}
                           for l in (record.invoice_line_ids or record.line_ids.filtered("debit"))],
             }
+        elif rec.res_model == "eguitra.commitment" and record:
+            data["document_detail"] = {"name": record.name, "date": record.date, "state": record.state,
+                                       "object": record.object, "note": record.note or None,
+                                       "account": record.account_id.code or None,
+                                       "lines": [{"name": record.object, "account": record.account_id.code,
+                                                  "amount": record.amount}]}
         elif rec.res_model == "account.payment" and record:
             data["document_detail"] = {"name": record.name, "date": record.date, "state": record.state,
                                        "journal": record.journal_id.name, "memo": record.memo or None}

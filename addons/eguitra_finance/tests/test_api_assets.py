@@ -90,7 +90,8 @@ class TestAssetsApi(FinanceDataMixin, ApiCase):
                                   token=self.token)
         self.assertEqual(status, 200, asset)
         record = self.env["account.asset"].browse(asset["id"])
-        takeover = record.depreciation_line_ids.filtered("init_entry")
+        # Lignes de dotation reprises (la ligne de création du bien porte aussi init_entry dans le module OCA).
+        takeover = record.depreciation_line_ids.filtered(lambda line: line.init_entry and line.type == "depreciate")
         self.assertTrue(takeover)
         self.assertTrue(all(line.line_date < self.opening for line in takeover), "Reprise : lignes antérieures à l'ouverture")
         self.assertFalse(takeover.move_id, "Les lignes de reprise ne produisent aucune écriture")

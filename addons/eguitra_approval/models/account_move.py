@@ -1,7 +1,7 @@
 import hashlib
 import json
 
-from odoo import models
+from odoo import fields, models
 from odoo.exceptions import UserError
 
 
@@ -18,6 +18,12 @@ def fingerprint(data):
 
 class AccountMove(models.Model):
     _inherit = "account.move"
+
+    eguitra_commitment_id = fields.Many2one(
+        "eguitra.commitment", "Engagement", index=True, copy=False,
+        help="Engagement de dépense approuvé que la pièce d'achat consomme : dans la limite du reste à "
+             "engager (plus la tolérance), la pièce ne repasse pas par le circuit d'approbation.",
+    )
 
     def _eguitra_approval_document(self):
         self.ensure_one()
@@ -39,6 +45,8 @@ class AccountMove(models.Model):
         self.ensure_one()
         document = self._eguitra_approval_document()
         if not document:
+            return self.env["eguitra.approval.rule"]
+        if document == "in_invoice" and self.move_type == "in_invoice" and self.eguitra_commitment_id                 and self.eguitra_commitment_id.covers(self):
             return self.env["eguitra.approval.rule"]
         codes = [code for code in self.line_ids.account_id.mapped("code") if code]
         return self.env["eguitra.approval.rule"]._applicable(
