@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 14 octobre 2026 (fin d'après-midi)
+# État du projet EGUITRA, au 17 octobre 2026
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -154,7 +154,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Restauration de la base de production vérifiée le 14 octobre (sauvegarde de 13 h 21).
 
 ### Recette
-- Base `eguitra_recette` (grappe `db-recette`), huit modules installés, données de démonstration chargées (fictives, repérées « Démo » ; la grille AxisPro est une grille de démonstration de 10 critères).
+- Base `eguitra_recette` (grappe `db-recette`), huit modules installés, données de démonstration chargées (fictives, repérées « Démo »). Grille AxisPro en vigueur depuis le 17 octobre : la grille officielle MB AxisPro (111 critères, version 2) ; les dossiers de démonstration antérieurs restent sur la grille de démonstration de 10 critères (version 1).
 - Compte d'administration de recette `recette.admin` : mot de passe et clé de double authentification dans `infra/.env` du serveur (`RECETTE_ADMIN_PASSWORD`, `RECETTE_ADMIN_TOTP`, à saisir dans une application d'authentification), jamais dans le dépôt. Il dispose aussi des profils cabinet et exploitation pour les démonstrations.
 - Compte porteur de démonstration `porteur.demo` (« Démo - Porteur Briqueterie de Kindia »), rattaché au seul dossier AX/2026/0002, profil porteur, ouvert au portail uniquement (AxisPro Suite et Finance refusés, vérifié le 16 octobre) : mot de passe définitif `RECETTE_PORTEUR_PASSWORD` dans le même fichier ; double authentification remise à zéro le 16 octobre, à activer à la première connexion (code QR).
 - Compte `emkouyate` présent aussi en recette (mot de passe provisoire, double authentification à activer).
@@ -164,6 +164,43 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**17 octobre : conformité aux prototypes du DGA (M. Diallo) et au courrier du responsable financier
+(M. Kalissa)**, demandée par le gérant (« tout en mieux », carte blanche). Sources : prototypes
+reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-09-courrier-responsable-financier.md`.
+- Fait, AxisPro (module 19.0.1.2.0, migration) : méthode MB AxisPro du prototype (réf.
+  MBAP/PROJECT-DEVELOPMENT/SC-01) dans `addons/eguitra_axispro/scoring.py` : statuts et points du
+  prototype, non évalué compté non disponible, requalification sans toucher la saisie (preuve
+  manquante sur un critère exigeant, preuve périmée), scores Project Readiness, APD Readiness (hors DD,
+  SPV, closing) et Bankability, knock-outs (incomplet bloquant), priorité des écarts (formule de la
+  colonne P), data room alimentée par les preuves des critères (42 pièces, 102 rattachements), huit
+  règles de passage des gates, cinq classes, recommandation BANKABLE / APD READY / CONDITIONAL GO /
+  HOLD / NO-GO. Décisions prises : portée « cumulée » (critères des gates atteints) pour les seuils des
+  gates 1 et 2, sinon inatteignables tôt ; pondération à plat pour la grille officielle, par domaine
+  pour les anciennes ; recommandation « à compléter » tant que les critères des gates atteints ne sont
+  pas tous évalués ; décision HOLD au comité, motif obligatoire pour HOLD et NO-GO. En plus du
+  prototype : décision scellée (HMAC-SHA256 avec le secret du serveur) qui fige le dossier jusqu'à
+  une nouvelle révision, vérification de l'empreinte, journal du dossier, passage de gate forcé et
+  motivé, devise par dossier, contrôles de cohérence (investissement, financements, suggestions du
+  modèle financier), rapports PDF (comité, pièces à fournir, aussi au portail), classeur au plan du
+  modèle du cabinet (Dashboard, Scoring, Gaps_Prioritaires, Data_Room_Index, Stage_Gate, Politique),
+  fiche d'évaluation exportable et réimportable (par code ou par intitulé, aperçu), export JSON, data
+  room compressée. Écrans : synthèse « où en est le dossier », check-list par domaine (saisie guidée,
+  filtres, preuves déposées sur le critère avec validité), gates, comité, journal, grille (réglages de
+  la méthode, règles des gates). Tests : `tests/test_methode.py` (formules et parcours), 41 tests
+  AxisPro au vert.
+- Fait, grille officielle : `scripts/grille/extraire_prototype.py` tire du prototype le classeur
+  d'import (111 critères, 15 domaines, 8 gates, 42 pièces, 9 knock-outs) ; importée et en vigueur en
+  recette (« Grille officielle MB AxisPro (SC-01) », version 2) avec un dossier fictif « Centrale
+  solaire de Kindia (démonstration) ». Le classeur n'est pas versionné (document du client).
+- En cours (agents dans des arbres de travail séparés, à fusionner, tester et déployer) : Finance
+  selon le prototype EGUITRA_App et les vingt attentes (axes analytiques multiples et imputations,
+  budget réparti, fiscalité et retenues, immobilisations, clôture mensuelle complète, réévaluation
+  des devises, produits transportés, manquants et taxes spécifiques, pilotage et alertes).
+- Reste : engagements et couverture des paiements par l'approbation (attentes 3 et 4) ; sauvegardes
+  (alerte de copie hors site), règles d'audit, disponibilité, rapport de restauration, procédure de
+  support, dossier technique, contrôle de la double authentification (attentes 7, 13 à 16, 18, 19) ;
+  reprise du classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt).
 
 **Décisions du gérant, 16 octobre (suite de la vérification de l'organisation)** :
 - Autres services de MB AxisPro (formation et coaching, conseil, audit d'évaluation des transporteurs,
