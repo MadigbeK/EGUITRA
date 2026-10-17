@@ -145,7 +145,8 @@ même branche, sans toucher à la logique des écrans :
   Échap (le focus revient au bouton) ; Tab hors du panneau ou un clic au-dehors le referment.
   Sur téléphone, le panneau occupe la largeur de l'écran. La liste des modules est commune à
   l'accueil et au lanceur (`components/accueil/tuiles.ts`) ; le lanceur est
-  `components/shell/Lanceur.tsx`.
+  `components/shell/Lanceur.tsx`. En recette le 17 octobre (commit 130e7c0, fusionné dans
+  `claude/bold-shannon-gpg2hv`).
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
