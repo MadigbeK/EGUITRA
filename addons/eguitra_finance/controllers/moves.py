@@ -258,6 +258,8 @@ class EguitraFinanceMoves(http.Controller):
         if kw.get("overdue") == "1":
             domain += [("invoice_date_due", "<", today()), ("payment_state", "in", ("not_paid", "partial")),
                        ("state", "=", "posted")]
+        if kw.get("dispute") in ("0", "1"):
+            domain.append(("eguitra_dispute", "=", kw["dispute"] == "1"))
         if kw.get("search"):
             s = kw["search"]
             domain += ["|", "|", ("name", "ilike", s), ("ref", "ilike", s), ("partner_id.name", "ilike", s)]
@@ -293,6 +295,8 @@ class EguitraFinanceMoves(http.Controller):
             values["ref"] = str(data["ref"])[:200]
         if data.get("narration"):
             values["narration"] = str(data["narration"])
+        if data.get("contract_ref"):
+            values["eguitra_contract_ref"] = str(data["contract_ref"]).strip()[:120]
         if move_type == "entry":
             if not data.get("journal_id"):
                 raise ApiError(400, "missing_fields", "Journal requis.", fields=["journal_id"])
@@ -317,8 +321,13 @@ class EguitraFinanceMoves(http.Controller):
             if data.get("invoice_date_due"):
                 values["invoice_date_due"] = parse_date(data, "invoice_date_due")
             if data.get("currency_id"):
-                values["currency_id"] = int(data["currency_id"])
+                currency = request.env["res.currency"].browse(int(data["currency_id"])).exists()
+                if not currency or not currency.active:
+                    raise ApiError(422, "business_rule", "Devise inconnue ou inactive.")
+                values["currency_id"] = currency.id
         move = request.env["account.move"].create(values)
+        if data.get("dispute") and move.move_type != "entry":
+            move.eguitra_set_dispute(True, data.get("dispute_reason"))
         if data.get("post"):
             check_mandatory_analytic(move.line_ids)
             move._eguitra_post_or_submit()
@@ -334,6 +343,8 @@ class EguitraFinanceMoves(http.Controller):
         for key in ("ref", "narration"):
             if key in data:
                 values[key] = data[key] or False
+        if "contract_ref" in data:
+            values["eguitra_contract_ref"] = str(data["contract_ref"] or "").strip()[:120] or False
         if "partner_id" in data:
             values["partner_id"] = int(data["partner_id"])
         for key in ("invoice_date", "invoice_date_due", "date"):
@@ -369,6 +380,17 @@ class EguitraFinanceMoves(http.Controller):
             raise ApiError(422, "business_rule", "La pièce n'est pas en brouillon.")
         check_mandatory_analytic(move.line_ids)
         move._eguitra_post_or_submit()
+        return move_detail(move)
+
+    @api_route("/finance/moves/<int:move_id>/dispute", methods=("POST",), profiles=FIN_WRITE)
+    def dispute(self, move_id, **_kw):
+        """Déclare (dispute=true, motif obligatoire) ou lève (dispute=false) un litige sur une facture : le
+        statut « Litige » prime et la facture sort des relances tant que le litige dure."""
+        move = _move(move_id)
+        data = read_json()
+        if "dispute" not in data:
+            raise ApiError(400, "missing_fields", "Indiquez dispute (true ou false).", fields=["dispute"])
+        move.eguitra_set_dispute(bool(data["dispute"]), data.get("reason"))
         return move_detail(move)
 
     @api_route("/finance/moves/<int:move_id>/cancel", methods=("POST",), profiles=FIN_WRITE)

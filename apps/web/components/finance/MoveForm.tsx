@@ -7,7 +7,7 @@ import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
 import { apiSend, useApi, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
-import { fmtGNF } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 
 interface LineDraft {
   name: string;
@@ -50,6 +50,12 @@ export function MoveForm({
   const [dueDate, setDueDate] = useState("");
   const [reference, setReference] = useState("");
   const [narration, setNarration] = useState("");
+  const [currencyId, setCurrencyId] = useState("");
+  const [contractRef, setContractRef] = useState("");
+  const [dispute, setDispute] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const { data: currencies } = useApi<Array<{ id: number; name: string; inverse_rate: number; date: string | null }>>(open ? "/finance/currencies" : null);
+  const currency = currencies?.find((c) => String(c.id) === currencyId);
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -105,6 +111,7 @@ export function MoveForm({
       return setError("Chaque ligne doit avoir un libellé et un montant.");
     }
     if (mixed) return setError("Séparez la pièce : une dépense passée en opération diverse ne se mêle pas aux achats.");
+    if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
     setBusy(true);
     try {
       const move = await apiSend<MoveDetail>("POST", "/finance/moves", {
@@ -114,6 +121,10 @@ export function MoveForm({
         invoice_date_due: dueDate || undefined,
         ref: reference || undefined,
         narration: narration || undefined,
+        currency_id: currencyId ? Number(currencyId) : undefined,
+        contract_ref: contractRef.trim() || undefined,
+        dispute: dispute || undefined,
+        dispute_reason: dispute ? disputeReason.trim() : undefined,
         post,
         lines: lines.map((l) => {
           const tax = effectiveTax(l);
@@ -133,6 +144,9 @@ export function MoveForm({
       setLines([emptyLine()]);
       setReference("");
       setNarration("");
+      setContractRef("");
+      setDispute(false);
+      setDisputeReason("");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
     } finally {
@@ -177,10 +191,22 @@ export function MoveForm({
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </Field>
           {!sale && (
-            <Field label="Référence du fournisseur" className="md:col-span-2">
+            <Field label="Référence du fournisseur">
               <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="N° de facture du fournisseur" />
             </Field>
           )}
+          <Field label="Contrat ou bon de commande" className={sale ? "md:col-span-2" : undefined}>
+            <Input value={contractRef} onChange={(e) => setContractRef(e.target.value)} />
+          </Field>
+          <Field label="Devise" hint={currency && currency.name !== "GNF" ? `1 ${currency.name} = ${fmtDec(currency.inverse_rate)} GNF${currency.date ? ` au ${fmtDate(currency.date)}` : ""}` : undefined}>
+            <Select value={currencyId} onChange={(e) => setCurrencyId(e.target.value)} placeholder="Devise de la société" options={(currencies ?? []).map((c) => ({ value: c.id, label: c.name }))} />
+          </Field>
+          <div className="space-y-1.5 md:col-span-2">
+            <label className="flex items-center gap-2 pt-6 text-sm">
+              <input type="checkbox" checked={dispute} onChange={(e) => setDispute(e.target.checked)} /> Pièce en litige (exclue des relances)
+            </label>
+            {dispute && <Input value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Motif du litige" />}
+          </div>
         </div>
         {exempt && <Notice tone="accent">Client non assujetti à la TVA : la facture est émise en exonération.</Notice>}
         {entryCategories.length > 0 && !mixed && (
@@ -250,11 +276,11 @@ export function MoveForm({
           </Button>
           <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <dt className="text-muted">Total HT</dt>
-            <dd className="text-right font-mono">{fmtGNF(totals.ht)}</dd>
+            <dd className="text-right font-mono">{fmtGNF(totals.ht, currency?.name ?? "GNF")}</dd>
             <dt className="text-muted">TVA</dt>
-            <dd className="text-right font-mono">{fmtGNF(totals.tva)}</dd>
+            <dd className="text-right font-mono">{fmtGNF(totals.tva, currency?.name ?? "GNF")}</dd>
             <dt className="font-semibold">Total TTC</dt>
-            <dd className="text-right font-mono font-semibold">{fmtGNF(totals.ttc)}</dd>
+            <dd className="text-right font-mono font-semibold">{fmtGNF(totals.ttc, currency?.name ?? "GNF")}</dd>
           </dl>
         </div>
         <p className="text-xs text-muted">Les axes laissés vides suivent les imputations automatiques de la société (préfixe de compte, tiers).</p>

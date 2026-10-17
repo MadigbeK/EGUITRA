@@ -89,6 +89,11 @@ export interface MoveSummary {
   payment_state: string;
   company: Ref;
   approval?: { state: string; level: number | null; pending_with: string | null } | null;
+  contract_ref?: string | null;
+  /** Facture contestée : statut « Litige » prioritaire, hors relances. */
+  dispute?: boolean;
+  dispute_reason?: string | null;
+  dispute_date?: string | null;
 }
 
 /** Compte analytique d'une répartition, avec son axe (clé de /finance/analytic-axes) et sa part. */

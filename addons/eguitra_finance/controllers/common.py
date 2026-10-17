@@ -217,6 +217,10 @@ def move_summary(move):
         "payment_state": move.payment_state,
         "company": ref(move.company_id),
         "approval": move._eguitra_approval_info(),
+        "contract_ref": move.eguitra_contract_ref or None,
+        "dispute": move.eguitra_dispute,
+        "dispute_reason": move.eguitra_dispute_reason or None,
+        "dispute_date": move.eguitra_dispute_date,
     }
 
 

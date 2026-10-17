@@ -1,4 +1,5 @@
 from odoo import Command, api, fields, models
+from odoo.exceptions import UserError
 
 SALE_DOCUMENTS = ("out_invoice", "out_refund")
 
@@ -10,6 +11,27 @@ class AccountMove(models.Model):
         "Saisie manuelle", copy=False, readonly=True,
         help="Opération diverse saisie dans les applications (et non produite par le noyau).",
     )
+    eguitra_contract_ref = fields.Char("Contrat ou bon de commande", tracking=True)
+    eguitra_dispute = fields.Boolean(
+        "En litige", copy=False, tracking=True, index=True,
+        help="Facture contestée : statut « Litige » prioritaire, exclue des relances tant que le litige dure.",
+    )
+    eguitra_dispute_reason = fields.Char("Motif du litige", copy=False, tracking=True)
+    eguitra_dispute_date = fields.Date("Litige depuis le", copy=False)
+
+    def eguitra_set_dispute(self, dispute, reason=None):
+        """Déclare ou lève un litige sur une facture (motif obligatoire pour le déclarer)."""
+        for move in self:
+            if not move.is_invoice(include_receipts=True):
+                raise UserError("Seule une facture ou une pièce d'achat peut être mise en litige.")
+            if dispute and not (reason or "").strip():
+                raise UserError("Le motif du litige est obligatoire.")
+            move.write({
+                "eguitra_dispute": bool(dispute),
+                "eguitra_dispute_reason": (reason or "").strip()[:250] if dispute else False,
+                "eguitra_dispute_date": (move.eguitra_dispute_date or fields.Date.context_today(move)) if dispute else False,
+            })
+        return True
 
     @api.model_create_multi
     def create(self, vals_list):
