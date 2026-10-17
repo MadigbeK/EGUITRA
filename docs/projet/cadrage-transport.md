@@ -7,9 +7,13 @@ décision contraire du gérant).
 
 ## Ce qui existe
 
-- Module `eguitra_transport` : ensembles routiers (citernes), chauffeurs, routes et tarifs, rotations
-  d'hydrocarbures (chargement, livraison, volumes en m³, écarts), validation, facturation, rentabilité
-  par ensemble, route, client et mois ; application Rotations (saisie hors réseau au parc).
+- Module `eguitra_transport` : ensembles routiers (citernes), chauffeurs, routes et tarifs, produits
+  transportés paramétrables, rotations d'hydrocarbures (chargement, livraison, volumes en m³,
+  manquants tolérés et excédentaires, option des volumes à 15 °C, contrôle de la capacité), taxes
+  spécifiques au barème, validation, facturation (déduction des manquants, taxes refacturées),
+  créances sur les chauffeurs, rentabilité par ensemble, route, chauffeur, client et mois (coûts
+  déclarés et comptabilisés, km, structure, résultat net) ; application Rotations (saisie hors réseau
+  au parc).
 - Axes analytiques : activité, ensemble routier, route.
 
 ## Activités affichées par EGUITRA GROUP (site eguitragroup.com)
@@ -48,3 +52,55 @@ décider avec ce module ou dans un module « Parc » distinct.
 
 Pièces à fournir : grilles tarifaires, exemples de bons et de factures, contrats de location et de
 transport du personnel, liste de la flotte.
+
+## Transport pétrolier : volumes, taxes et rentabilité (attente du courrier du responsable financier)
+
+Le courrier demande le « suivi des coûts et de la rentabilité par trajet/véhicule pour l'activité
+transport pétrolier, incluant la gestion des volumes et des taxes spécifiques ». La plateforme le
+couvre (module `eguitra_transport` 19.0.1.1.0) ; les valeurs ci-dessous sont paramétrables dans
+Finance > Transport > Paramètres et doivent venir du client. Valeurs livrées par défaut, à
+confirmer : tolérance de manquant 0,5 % du volume chargé, manquant hors tolérance « constat
+seulement », pas de correction à 15 °C, aucun prix de valorisation, aucune taxe au barème.
+
+### Manquants et volumes
+
+6. Tolérances contractuelles de manquant : quel pourcentage du volume chargé, par client (et par
+   produit ou par route s'il y a lieu) ? Les contrats ou cahiers des charges des distributeurs sont
+   à fournir.
+7. Au-delà de la tolérance, qui supporte le manquant : le client le déduit-il de notre facture, le
+   réclame-t-il par une note de débit, est-il retenu au chauffeur (sur salaire, sur frais de
+   mission) ? Les chauffeurs sont-ils salariés (compte 421) ou prestataires ?
+8. Base de valorisation du manquant : prix de cession du dépôt, prix à la pompe, prix fixé au
+   contrat ? Hors taxes ou toutes taxes ? Le prix change-t-il en cours d'année (date d'effet) ?
+9. La déduction sur notre facture porte-t-elle la TVA ? Sur quel compte la comptabiliser (6588,
+   réduction du chiffre d'affaires) ?
+10. Les manquants se constatent-ils sur les volumes ambiants ou ramenés à 15 °C ? Les bons du dépôt
+    (SGP ou autre) donnent-ils les températures, la masse volumique et le coefficient de correction ?
+    Un exemple de bon de chargement et de livraison est à fournir.
+11. La facturation du transport se fait-elle sur le volume livré, le volume chargé, ou le volume à
+    15 °C ?
+12. Capacité des citernes : jauge officielle de chaque compartiment (certificats de jaugeage) ?
+
+### Taxes spécifiques
+
+13. Liste des taxes et redevances payées par rotation : nature (taxe de roulage, taxes communales ou
+    préfectorales, pesage, laissez-passer, redevances pétrolières, douane), base (par m³ livré ou
+    chargé, en % du montant facturé, forfait par voyage), taux, routes et produits concernés, date
+    d'effet des taux en vigueur.
+14. Lesquelles sont refacturées aux clients, avec ou sans TVA, et sur quelle ligne de la facture ?
+15. Comment sont-elles payées et justifiées (caisse du chauffeur, virement, quittance) ? Sur quels
+    comptes de charge l'expert-comptable veut-il les voir (64x, 63x) ?
+16. Le classeur 2026 porte-t-il un total des taxes par rotation (repris comme forfait) ou le détail
+    par taxe ?
+
+### Rentabilité
+
+17. Les factures de carburant, de pneumatiques et d'entretien peuvent-elles être imputées par
+    ensemble routier (et par route) dès la saisie ? C'est la condition des « coûts comptabilisés »
+    par véhicule.
+18. Kilométrage : aller-retour standard et durée de chaque route ; relevé du compteur par rotation
+    souhaité ?
+19. Charges de structure : la répartition au km parcouru convient-elle, ou une autre clé (rotations,
+    volume, chiffre d'affaires) ? Quelles charges du siège imputer au transport ?
+20. Fiches d'immobilisation des tracteurs et citernes (valeur, date de mise en service, durée) pour
+    rattacher les dotations à chaque ensemble.
