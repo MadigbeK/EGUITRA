@@ -6,3 +6,4 @@ from . import test_assets
 from . import test_api_assets
 from . import test_fiscal
 from . import test_closing_complete
+from . import test_statements_export

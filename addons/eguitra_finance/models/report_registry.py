@@ -35,6 +35,15 @@ MOVES_BASE = (
     "LEFT JOIN res_partner p ON p.id = am.partner_id"
 )
 POSTED_LINES = "am.state = 'posted' AND aml.display_type NOT IN ('line_section', 'line_note')"
+# Activité analytique de la ligne (axe « Activité » de sa répartition), nom traduit ou non.
+ACTIVITY = (
+    "COALESCE((SELECT string_agg(DISTINCT COALESCE(to_jsonb(aaa.name)->>'fr_FR', to_jsonb(aaa.name)->>'en_US', "
+    "to_jsonb(aaa.name)#>>'{}'), ', ') "
+    "FROM jsonb_object_keys(COALESCE(aml.analytic_distribution, '{}'::jsonb)) AS dk(key) "
+    "JOIN account_analytic_account aaa ON aaa.id::text = ANY(string_to_array(dk.key, ',')) "
+    "WHERE aaa.plan_id IN (SELECT res_id FROM ir_model_data WHERE model = 'account.analytic.plan' "
+    "AND module = 'eguitra_base' AND name = 'analytic_plan_activite')), '')"
+)
 MAX_LIMIT = 5000
 
 
@@ -107,6 +116,7 @@ _reg(Report(
         Column("libelle_compte", "Libellé du compte", ACC_NAME, default=False),
         Column("tiers", "Tiers", PARTNER),
         Column("libelle", "Libellé", "COALESCE(aml.name, '')"),
+        Column("activite", "Activité", ACTIVITY),
         Column("debit", "Débit", "aml.debit", "money", "sum", align="right"),
         Column("credit", "Crédit", "aml.credit", "money", "sum", align="right"),
         Column("solde", "Solde", "aml.balance", "money", "sum", default=False, align="right"),
@@ -114,15 +124,19 @@ _reg(Report(
     ],
 ))
 _reg(Report(
-    "balance", "Balance générale", "Comptabilité", "Débit, crédit et solde par compte sur la période.",
+    "balance", "Balance générale", "Comptabilité",
+    "Débit, crédit, soldes débiteur et créditeur par compte sur la période, par classe.",
     "group", LINES_BASE, "aml.company_id", "aml.date",
     base_where=POSTED_LINES, default_order="compte", default_order_dir="asc", filters=[ACCOUNT_PREFIX],
     columns=[
+        Column("classe", "Classe", f"LEFT({ACC_CODE}, 1)"),
         Column("compte", "Compte", ACC_CODE),
         Column("libelle", "Libellé", ACC_NAME),
         Column("debit", "Débit", "aml.debit", "money", "sum", align="right"),
         Column("credit", "Crédit", "aml.credit", "money", "sum", align="right"),
-        Column("solde", "Solde", "aml.balance", "money", "sum", align="right"),
+        Column("solde_debiteur", "Solde débiteur", "aml.balance", "money", "debit_balance", align="right"),
+        Column("solde_crediteur", "Solde créditeur", "aml.balance", "money", "credit_balance", align="right"),
+        Column("solde", "Solde", "aml.balance", "money", "sum", default=False, align="right"),
     ],
 ))
 _reg(Report(
@@ -287,6 +301,11 @@ def list_catalog():
 def _agg(column):
     if column.agg == "count":
         return f"COUNT({column.expr})"
+    # Solde débiteur ou créditeur d'un regroupement (compte) : max(0, D - C) ou max(0, C - D).
+    if column.agg == "debit_balance":
+        return f"GREATEST(SUM({column.expr}), 0)"
+    if column.agg == "credit_balance":
+        return f"GREATEST(-SUM({column.expr}), 0)"
     return f"{column.agg.upper()}({column.expr})"
 
 
@@ -358,6 +377,12 @@ class EguitraReportEngine(models.AbstractModel):
             cr.execute(f"SELECT {', '.join(f'{_agg(c)} AS {c.key}' for c in measures)} {report.base} WHERE {where_sql}", params)
             first = cr.fetchone()
             totals = {c.key: float(v or 0) for c, v in zip(measures, first)}
+        # Soldes débiteurs et créditeurs : total des soldes de chaque regroupement, pas solde du total.
+        balances = [c for c in selected if c.agg in ("debit_balance", "credit_balance")]
+        if balances and dims:
+            cr.execute(f"SELECT {', '.join(f'SUM({c.key})' for c in balances)} FROM ({base_sql}) t", params)
+            first = cr.fetchone()
+            totals.update({c.key: float(v or 0) for c, v in zip(balances, first)})
         if dims:
             cr.execute(f"SELECT COUNT(*) FROM (SELECT 1 {report.base} WHERE {where_sql} GROUP BY {', '.join(dims)}) t", params)
         else:

@@ -8,6 +8,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json
 
 from .common import FIN_READ, companies, parse_date, today
+from .statements_export import income_with_month
 
 PLANS = {
     "activite": "eguitra_base.analytic_plan_activite",
@@ -34,7 +35,8 @@ class EguitraFinanceDashboard(http.Controller):
     def income_statement(self, **kw):
         end = parse_date(kw, "date_to", today())
         start = parse_date(kw, "date_from", end.replace(month=1, day=1))
-        current = request.env["eguitra.syscohada"].sudo().income_statement(companies(kw), start, end)
+        # Colonnes « Mois » (mois de la date d'arrêté) et « % du CA » en plus de l'exercice.
+        current = income_with_month(companies(kw), start, end)
         if kw.get("compare") == "previous_year":
             previous = request.env["eguitra.syscohada"].sudo().income_statement(
                 companies(kw), start - relativedelta(years=1), end - relativedelta(years=1)

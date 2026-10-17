@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCheck, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
+import { CheckCheck, Download, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
 import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
 interface Ref { id: number; name: string }
@@ -46,7 +46,15 @@ export default function TransportPage() {
   const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; to_invoice: { count: number; amount: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
   return (
     <div>
-      <PageHeader title="Transport pétrolier" subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge." />
+      <PageHeader
+        title="Transport pétrolier"
+        subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge."
+        actions={
+          <Button onClick={() => apiDownload(`/transport/exports/rotations?format=xlsx`, "rotations.xlsx")}>
+            <Download className="h-4 w-4" /> Exporter les rotations
+          </Button>
+        }
+      />
       {summary && (
         <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
           {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne ; l'état de la flotte dessous. */}
