@@ -179,7 +179,7 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
 
     anomalies = []
     capex = by_criterion.get(context.get("capex_criterion_id"))
-    if (context.get("investment") or 0) > 0 and capex and capex["status"] == "not_met":
+    if (context.get("investment") or 0) > 0 and capex and capex["entered"] == "not_met":
         anomalies.append(f"Un investissement est saisi dans la fiche projet alors que le critère « {capex['name']} » "
                          "est déclaré non disponible.")
     for x in lines:

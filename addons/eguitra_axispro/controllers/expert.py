@@ -523,6 +523,7 @@ class EguitraAxisproExpert(http.Controller):
                 "id": d.id, "reference": d.reference, "name": d.name, "promoter": d.promoter_id.name,
                 "state": d.state, "gate": gate.code or None, "score": score["global_score"],
                 "readiness": score["readiness"], "apd": score["apd"], "bankability": score["bankability"],
+                "assessed": score["assessed"],
                 "classification": score["classification"], "knockouts": len(score["knockouts"]),
                 "recommendation": score["recommendation"], "financing_need": d.financing_need,
                 "npv": fin["npv"] if fin else None, "irr_project": fin["irr_project"] if fin else None,

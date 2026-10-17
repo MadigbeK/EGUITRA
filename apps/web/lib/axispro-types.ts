@@ -288,6 +288,7 @@ export interface StandardDoc {
   version: number;
   document_id: number | null;
   validity_date: string | null;
+  after_lock: boolean;
   available: boolean;
   origin: string | null;
   criteria: Array<{ code: string; name: string }>;
@@ -568,6 +569,7 @@ export interface Portfolio {
     readiness: number;
     apd: number;
     bankability: number;
+    assessed: number;
     classification: string;
     knockouts: number;
     recommendation: Recommendation;

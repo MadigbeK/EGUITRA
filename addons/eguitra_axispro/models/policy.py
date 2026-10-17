@@ -12,6 +12,7 @@ gates sont des données de la grille.
 """
 
 import io
+import math
 import unicodedata
 
 from odoo import api, fields, models
@@ -61,8 +62,8 @@ class AxisproPolicy(models.Model):
     weighting = fields.Selection(WEIGHTINGS, "Pondération des scores", default="flat", required=True)
     ko_partial_blocks = fields.Boolean("Un knock-out incomplet bloque aussi", default=True)
     evidence_check = fields.Boolean("Preuve obligatoire pour valider un critère exigeant", default=True,
-                                    help="Sans pièce, un critère éliminatoire, bloquant ou à preuve requise déclaré "
-                                         "disponible est compté comme incomplet ; la saisie n'est pas modifiée.")
+                                    help="Sans pièce, un critère à preuve requise (colonne « preuve » de la grille) "
+                                         "déclaré disponible est compté comme incomplet ; la saisie n'est pas modifiée.")
     exclude_na = fields.Boolean("Exclure les non applicables du score", default=True)
     expiry_check = fields.Boolean("Signaler les preuves périmées", default=True)
     capex_criterion_id = fields.Many2one("axispro.criterion", "Critère contrôlé contre l'investissement",
@@ -120,11 +121,21 @@ class AxisproPolicy(models.Model):
         self.ensure_one()
         if not self.criterion_ids or not self.gate_ids:
             raise UserError("Une politique sans gates ni critères ne peut pas entrer en vigueur.")
+        self._check_thresholds()
         self.search([("company_id", "=", self.company_id.id), ("state", "=", "active"), ("id", "!=", self.id)]).write(
             {"state": "archived"}
         )
         self.write({"state": "active", "date_active": fields.Date.context_today(self)})
         return True
+
+    def _check_thresholds(self):
+        """Seuils de classement entre 0 et 100 et ordonnés : HOLD ≤ CONDITIONAL GO ≤ APD READY ≤ BANKABLE."""
+        for policy in self:
+            values = [policy.threshold_hold, policy.conditional_threshold, policy.go_threshold,
+                      policy.threshold_bankable]
+            if any(not 0 <= v <= 100 for v in values) or values != sorted(values):
+                raise UserError("Seuils de la politique incohérents : ils vont de 0 à 100, HOLD ≤ CONDITIONAL GO ≤ "
+                                "APD READY ≤ BANKABLE.")
 
     @api.model
     def import_grid(self, company, name, filename, content, go=None, conditional=50.0, notes=None):
@@ -145,11 +156,49 @@ class AxisproPolicy(models.Model):
             "notes": notes, "weighting": "flat" if method else "domain",
         })
         gates, domains, criteria, errors = {}, {}, {}, []
-        gate_domains = {}
+        gate_domains, seen = {}, {}
         seq = 0
-        for kind in ("gate", "domaine", "critere", "piece"):
+        kinds = ("gate", "domaine", "critere", "piece")
+
+        def num(line_no, code, column, default=0.0, low=None, high=None):
+            """Nombre d'une cellule : vide, la valeur par défaut ; illisible ou hors bornes, une erreur."""
+            value = _num(row_value(line_no, column), None)
+            if value is None:
+                if row_value(line_no, column) in (None, ""):
+                    return default
+                errors.append(f"Ligne {line_no} ({code}) : « {row_value(line_no, column)} » n'est pas un nombre "
+                              f"(colonne {column}).")
+                return default
+            if not math.isfinite(value) or (low is not None and value < low) or (high is not None and value > high):
+                errors.append(f"Ligne {line_no} ({code}) : {column} hors limites ({fnum_plain(value)}).")
+                return default
+            return value
+
+        def flag(line_no, code, column):
+            """Oui ou non ; toute autre réponse est une erreur (un éliminatoire ne disparaît pas en silence)."""
+            value = row_value(line_no, column)
+            if _plain(value) not in TRUE_TOKENS | FALSE_TOKENS:
+                errors.append(f"Ligne {line_no} ({code}) : « {value} » attendu oui ou non (colonne {column}).")
+                return False
+            return _bool(value)
+
+        by_line = dict(rows)
+
+        def row_value(line_no, column):
+            return by_line[line_no].get(column, "")
+
+        for line_no, row in rows:
+            if row["type"] not in kinds:
+                errors.append(f"Ligne {line_no} : type « {row['type']} » inconnu (gate, domaine, critere ou piece).")
+            elif row["code"]:
+                key = (row["type"], row["code"])
+                if key in seen:
+                    errors.append(f"Ligne {line_no} ({row['code']}) : code déjà employé à la ligne {seen[key]}.")
+                else:
+                    seen[key] = line_no
+        for kind in kinds:
             for line_no, row in rows:
-                if row["type"] != kind:
+                if row["type"] != kind or (row["code"] and seen.get((kind, row["code"])) != line_no):
                     continue
                 seq += 1
                 code, label = row["code"], row["libelle"]
@@ -165,15 +214,15 @@ class AxisproPolicy(models.Model):
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
                         "description": row["aide"] or False, "entry_requirements": row["entree"] or False,
                         "deliverables": row["livrable"] or False, "exit_criteria": row["passage"] or False,
-                        "rule_code": rule, "threshold_hold": _num(row["seuil_attente"]),
-                        "threshold_go": _num(row["seuil_go"]),
+                        "rule_code": rule, "threshold_hold": num(line_no, code, "seuil_attente", 0.0, 0, 100),
+                        "threshold_go": num(line_no, code, "seuil_go", 0.0, 0, 100),
                         "score_scope": "cumulative" if _plain(row["portee"]).startswith("cumul") else "global",
                     })
                     gate_domains[code] = (line_no, _codes(row["domaines"]))
                 elif kind == "domaine":
                     domains[code] = self.env["axispro.domain"].create({
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
-                        "weight": _num(row["poids"], 1), "deliverable": row["livrable"] or False,
+                        "weight": num(line_no, code, "poids", 1.0, 0), "deliverable": row["livrable"] or False,
                     })
                 elif kind == "critere":
                     if row["domaine"] not in domains or row["gate"] not in gates:
@@ -186,10 +235,11 @@ class AxisproPolicy(models.Model):
                     values = {
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
                         "domain_id": domains[row["domaine"]].id, "gate_id": gates[row["gate"]].id,
-                        "weight": _num(row["poids"], 1), "critical": _bool(row["critique"]),
-                        "knockout": _bool(row["eliminatoire"]), "evidence_required": _bool(row["preuve"]),
+                        "weight": num(line_no, code, "poids", 1.0, 0), "critical": flag(line_no, code, "critique"),
+                        "knockout": flag(line_no, code, "eliminatoire"),
+                        "evidence_required": flag(line_no, code, "preuve"),
                         "guidance": row["aide"] or False, "requirement_type": requirement,
-                        "bankability": _bool(row["bancabilite"]) if method else True,
+                        "bankability": flag(line_no, code, "bancabilite") if method else True,
                         "deliverable": row["livrable"] or False,
                     }
                     if row["indicateur"]:
@@ -197,9 +247,9 @@ class AxisproPolicy(models.Model):
                         if not indicator or row["seuil"] == "":
                             errors.append(f"Ligne {line_no} ({code}) : indicateur inconnu ou seuil manquant.")
                             continue
-                        values.update({"indicator": indicator, "indicator_threshold": _num(row["seuil"]),
+                        values.update({"indicator": indicator, "indicator_threshold": num(line_no, code, "seuil"),
                                        "indicator_has_partial": row["seuil_partiel"] != "",
-                                       "indicator_partial": _num(row["seuil_partiel"])})
+                                       "indicator_partial": num(line_no, code, "seuil_partiel")})
                     criteria[code] = self.env["axispro.criterion"].create(values)
                     if _plain(row["role"]) == "capex":
                         policy.capex_criterion_id = criteria[code]
@@ -213,7 +263,8 @@ class AxisproPolicy(models.Model):
                     self.env["axispro.document.type"].create({
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
                         "gate_id": gates[row["gate"]].id if row["gate"] in gates else False,
-                        "required": not row["critique"] or _bool(row["critique"]), "category": row["domaine"] or False,
+                        "required": not row["critique"] or flag(line_no, code, "critique"),
+                        "category": row["domaine"] or False,
                         "guidance": row["aide"] or False,
                         "criterion_ids": [(6, 0, [criteria[c].id for c in linked])],
                     })
@@ -225,6 +276,11 @@ class AxisproPolicy(models.Model):
         if not policy.capex_criterion_id:
             capex = policy.criterion_ids.filtered(lambda c: _plain(c.name).startswith("capex detaille"))[:1]
             policy.capex_criterion_id = capex
+        if not errors:
+            try:
+                policy._check_thresholds()
+            except UserError as e:
+                errors.append(str(e.args[0]))
         if errors:
             raise UserError("Grille refusée :\n" + "\n".join(errors[:20]))
         return policy
@@ -276,8 +332,16 @@ def _indicator(value):
     return None
 
 
+TRUE_TOKENS = {"1", "oui", "o", "x", "yes", "y", "vrai", "true"}
+FALSE_TOKENS = {"", "0", "non", "n", "no", "faux", "false", "-"}
+
+
 def _bool(value):
-    return str(value or "").strip().lower() in ("1", "oui", "o", "x", "yes", "vrai", "true")
+    return _plain(value) in TRUE_TOKENS
+
+
+def fnum_plain(value):
+    return f"{value:g}".replace(".", ",")
 
 
 def _read_rows(filename, content):

@@ -45,6 +45,11 @@ interface Diff {
  * motif et conditions. Verrouillée, la décision est scellée (empreinte HMAC-SHA256) et fige le dossier
  * jusqu'à une nouvelle révision ; l'empreinte se contrôle à tout moment.
  */
+/** Revue verrouillée la plus récente (ordre de verrouillage, pas de séance). */
+function dernierVerrou(d: DossierDetail) {
+  return d.reviews.filter((r) => r.state === "locked" && r.locked_at).sort((a, b) => (b.locked_at ?? "").localeCompare(a.locked_at ?? ""))[0];
+}
+
 export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const [f, setF] = useState({ decision: PROPOSEE[d.scoring.recommendation], instance: "Comité d'investissement MB AxisPro", members: "", motive: "", conditions: "", minutes: "" });
   const [compare, setCompare] = useState<number[]>([]);
@@ -112,7 +117,7 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
         {d.reviews.some((r) => r.state === "locked" && r.locked_at) && (
           <p className="px-4 py-2 text-[11.5px] text-muted">
             <ShieldOff className="mr-1 inline h-3 w-3" />
-            Une décision scellée ne se modifie ni ne se supprime ; dernière : {fmtDateTime(d.reviews.find((r) => r.state === "locked")?.locked_at)} par {d.reviews.find((r) => r.state === "locked")?.locked_by}.
+            Une décision scellée ne se modifie ni ne se supprime ; dernière : {fmtDateTime(dernierVerrou(d)?.locked_at)} par {dernierVerrou(d)?.locked_by}.
           </p>
         )}
       </Card>

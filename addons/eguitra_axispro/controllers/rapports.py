@@ -2,6 +2,7 @@
 liste des pièces à fournir (PDF), fiche d'évaluation (export et import), export JSON, data room
 compressée."""
 
+import csv
 import io
 import json
 import unicodedata
@@ -13,7 +14,7 @@ from odoo.exceptions import UserError
 from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, xlsx_row
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text, workbook_rows, xlsx_row
 
 from ..engine import INDICATORS
 from ..models.dossier import HYPOTHESES, RECOMMENDATIONS, STATUSES
@@ -57,7 +58,8 @@ STATUS_INPUTS = {
 
 
 def _dossier(dossier_id):
-    dossier = request.env["axispro.dossier"].browse(dossier_id).exists()
+    # Recherche sous l'identité de l'utilisateur : ses règles d'accès s'appliquent.
+    dossier = request.env["axispro.dossier"].search([("id", "=", dossier_id)], limit=1)
     if not dossier:
         raise ApiError(404, "not_found", "Dossier introuvable.")
     return dossier
@@ -76,7 +78,7 @@ def report_payload(dossier):
     anomalies, modèle financier, risques, actions, financements, décision scellée."""
     result = dossier.evaluate()
     policy = dossier.policy_id
-    detail = dossier_detail(dossier)
+    detail = dossier_detail(dossier, result)
     locked = dossier.locked_review_id
     plan = dossier.plan_ids[:1]
     analysis = plan.analysis() if plan and plan.line_ids else None
@@ -297,7 +299,7 @@ class EguitraAxisproRapports(http.Controller):
             c = e.criterion_id
             line = lines.get(c.id, {})
             proofs = e.document_ids.filtered(lambda d: d.state != "rejected")
-            validity = max(proofs.mapped("validity_date"), default=None) if proofs.filtered("validity_date") else None
+            validity = max([day for day in proofs.mapped("validity_date") if day], default=None)
             xlsx_row(crit, r, [
                 c.code, c.domain_id.name, c.name, REQUIREMENTS.get(c.requirement_type, ""), statuses[e.status],
                 statuses.get(line.get("status"), ""), line.get("points", ""), c.weight,
@@ -538,6 +540,9 @@ class EguitraAxisproRapports(http.Controller):
                 values["status"] = status
             for key in ("comment", "deliverable", "responsible"):
                 value = row.get(key)
+                if key == "deliverable" and not evaluation.deliverable and value not in (None, "") \
+                        and str(value).strip() == (evaluation.criterion_id.default_deliverable() or ""):
+                    continue  # livrable par défaut de la grille, exporté tel quel : rien à figer
                 if value not in (None, "") and str(value).strip() != (evaluation[key] or ""):
                     values[key] = str(value).strip()[:2000]
             if row.get("due_date"):
@@ -574,7 +579,9 @@ class EguitraAxisproRapports(http.Controller):
         if total > MAX_ZIP_BYTES:
             raise ApiError(422, "business_rule", "Data room trop volumineuse pour un export unique (300 Mo).")
         out = io.BytesIO()
-        summary = ["Code;Pièce;Version;État;Valable jusqu'au;Fichier"]
+        summary = io.StringIO()
+        sheet = csv.writer(summary, delimiter=";", lineterminator="\n")
+        sheet.writerow(["Code", "Pièce", "Version", "État", "Valable jusqu'au", "Fichier"])
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
             used = set()
             for doc in sorted(docs, key=lambda d: (d.document_type_id.category or "Z", d.document_type_id.code or "", d.id)):
@@ -585,9 +592,10 @@ class EguitraAxisproRapports(http.Controller):
                     name = name.replace("/", f"/{doc.id}_", 1)
                 used.add(name)
                 archive.writestr(name, att.raw or b"")
-                summary.append(";".join([doc.document_type_id.code or "", doc.name.replace(";", ","), str(doc.version),
-                                         doc.state, _date(doc.validity_date), name]))
-            archive.writestr("SOMMAIRE.csv", "﻿" + "\n".join(summary))
+                # Nom saisi par le porteur : jamais de formule ni de saut de ligne dans le sommaire.
+                sheet.writerow([csv_text(v) for v in (doc.document_type_id.code or "", " ".join(doc.name.split()),
+                                                      doc.version, doc.state, _date(doc.validity_date), name)])
+            archive.writestr("SOMMAIRE.csv", "\ufeff" + summary.getvalue())
         return request.make_response(out.getvalue(), headers=[
             ("Content-Type", "application/zip"), ("Content-Disposition", content_disposition(_file_name(dossier, "data_room.zip"))),
         ])
@@ -640,17 +648,19 @@ def _evaluation_rows(filename, content):
             data = json.loads(content.decode("utf-8-sig"))
         except ValueError as e:
             raise UserError("Fichier JSON illisible.") from e
-        if data.get("format") != EXPORT_FORMAT:
+        if not isinstance(data, dict) or data.get("format") != EXPORT_FORMAT \
+                or not isinstance(data.get("evaluations") or [], list):
             raise UserError("Ce fichier JSON n'est pas un export d'évaluation AxisPro.")
-        return [(n, item) for n, item in enumerate(data.get("evaluations") or [], start=1)]
+        return [(n, item) for n, item in enumerate(data.get("evaluations") or [], start=1) if isinstance(item, dict)]
     if filename.lower().endswith((".xlsx", ".xlsm")):
         raw = workbook_rows(content, sheets=("Scoring", "Évaluation"))
     else:
-        import csv
-
         text = content.decode("utf-8-sig", errors="replace")
         delimiter = ";" if text.count(";") >= text.count(",") else ","
-        raw = list(csv.reader(io.StringIO(text), delimiter=delimiter))
+        try:
+            raw = list(csv.reader(io.StringIO(text.replace("\x00", "")), delimiter=delimiter))
+        except csv.Error as e:
+            raise UserError("Fichier CSV illisible.") from e
     if not raw:
         raise UserError("Fichier vide.")
     header = [_plain(h) for h in raw[0]]

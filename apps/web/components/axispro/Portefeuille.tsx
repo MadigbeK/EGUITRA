@@ -131,7 +131,7 @@ export function Portefeuille() {
                         </Link>
                         <div className="text-[12px] text-muted">{p.reference}{p.gate ? `, ${p.gate}` : ""}</div>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular">{p.score === null ? "–" : `${Math.round(p.readiness)} / ${Math.round(p.apd)} / ${Math.round(p.bankability)}`}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular">{!p.assessed ? "–" : `${Math.round(p.readiness)} / ${Math.round(p.apd)} / ${Math.round(p.bankability)}`}</td>
                       <td className="px-3 py-2 text-right">{fmtPct(p.irr_project)}</td>
                       <td className={cx("px-3 py-2 text-right", p.dscr_min !== null && p.dscr_min < 1.3 && "font-semibold text-danger")}>{ratio(p.dscr_min)}</td>
                       <td className={cx("px-3 py-2 text-right", (p.npv ?? 0) < 0 && "text-danger")}>{fmtShort(p.npv)}</td>

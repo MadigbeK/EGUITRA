@@ -11,12 +11,14 @@ décision. L'empreinte se vérifie à tout moment (contenu scellé intact, dossi
 import hashlib
 import hmac
 import json
+import math
 
 from odoo import fields, models
 from odoo.exceptions import UserError
 
 from ..scoring import DECISIONS
 from .dossier import COMMITTEE_DECISIONS, HYPOTHESES, RECOMMENDATIONS
+from .plan import LINE_FIELDS, PLAN_PARAMS
 
 
 class AxisproReview(models.Model):
@@ -45,7 +47,7 @@ class AxisproReview(models.Model):
     fingerprint = fields.Char("Empreinte", readonly=True, copy=False)
 
     def write(self, vals):
-        if self.filtered(lambda r: r.state == "locked") and set(vals) - {"state"}:
+        if self.filtered(lambda r: r.state == "locked"):
             raise UserError("Une décision verrouillée ne se modifie plus.")
         return super().write(vals)
 
@@ -66,7 +68,8 @@ class AxisproReview(models.Model):
             snapshot = dossier.scoring(result)
             snapshot["financial"] = {k: (result.get("financial") or {}).get(k) for k in SNAPSHOT_FINANCIAL} \
                 if result.get("financial") else None
-            content = _canonical(dossier, review, snapshot)
+            snapshot = _normalized(snapshot)
+            content = _normalized(_canonical(dossier, review, snapshot))
             fingerprint = _seal(self.env, content)
             super(AxisproReview, review).write({
                 "state": "locked", "locked_by": self.env.user.id, "locked_at": fields.Datetime.now(),
@@ -84,15 +87,23 @@ class AxisproReview(models.Model):
         return True
 
     def verify(self):
-        """Contrôle de l'empreinte : contenu scellé intact, et dossier inchangé depuis la décision."""
+        """Contrôle de l'empreinte : contenu scellé intact, colonnes lues par l'application (décision,
+        motif, conditions, instantané…) identiques à leur copie scellée, et dossier inchangé depuis
+        la décision. Seules les rubriques présentes au scellement sont comparées (sceaux antérieurs)."""
         self.ensure_one()
         if self.state != "locked" or not self.fingerprint:
             return {"sealed": False}
-        intact = hmac.compare_digest(_seal(self.env, self.sealed_content), self.fingerprint)
+        sealed = self.sealed_content or {}
+        intact = hmac.compare_digest(_seal(self.env, sealed), self.fingerprint)
+        live = _decision_content(self)
+        decision = {k: v for k, v in (sealed.get("decision") or {}).items() if k != "locked_by"}
+        intact = (intact and all(live.get(k) == v for k, v in decision.items())
+                  and _digest(_normalized(self.snapshot or {})) == _digest(sealed.get("snapshot") or {}))
         current = None
         if self.dossier_id.locked_review_id == self:
-            content = _canonical(self.dossier_id, self, self.sealed_content.get("snapshot", {}))
-            current = _digest(content["dossier"]) == _digest(self.sealed_content.get("dossier", {}))
+            content = _normalized(_canonical(self.dossier_id, self, sealed.get("snapshot", {})))["dossier"]
+            before = sealed.get("dossier", {})
+            current = _digest({k: content.get(k) for k in before}) == _digest(before)
         return {"sealed": True, "intact": intact, "unchanged": current, "fingerprint": self.fingerprint}
 
     def compare(self, other):
@@ -146,6 +157,9 @@ def _canonical(dossier, review, snapshot):
     lines = sorted([str(v) for v in line.read(["kind", "name", "amount", "quantity", "price", "unit_cost", "rate",
                                                    "year", "life", "grace", "growth", "price_growth", "ramp"])[0].values()]
                    for line in plan.line_ids) if plan else []
+    details = sorted([str(line[f] if line[f] is not False else "") for f in LINE_FIELDS] for line in plan.line_ids) \
+        if plan else []
+    params = {key: plan[key] for key in PLAN_PARAMS} if plan else {}
     dossier_content = {
         "reference": dossier.reference, "revision": dossier.revision, "name": dossier.name,
         "promoter": dossier.promoter_id.name, "sector": dossier.sector or "", "location": dossier.location or "",
@@ -156,14 +170,35 @@ def _canonical(dossier, review, snapshot):
         "policy": {"name": dossier.policy_id.name, "version": dossier.policy_id.version,
                    "settings": dossier.policy_id.scoring_settings()},
         "evaluations": evaluations, "documents": documents, "plan": lines,
+        "plan_lines": details, "plan_params": params, "plan_notes": plan.notes or "" if plan else "",
     }
     return {
         "dossier": dossier_content,
-        "decision": {"decision": review.decision, "date": str(review.date), "instance": review.instance or "",
-                     "motive": review.motive or "", "conditions": review.conditions or "",
-                     "members": review.members or "", "locked_by": review.env.user.name},
+        "decision": dict(_decision_content(review), locked_by=review.env.user.name),
         "snapshot": snapshot,
     }
+
+
+def _decision_content(review):
+    """Décision du comité telle que l'application l'affiche."""
+    return {"decision": review.decision, "date": str(review.date), "instance": review.instance or "",
+            "motive": review.motive or "", "conditions": review.conditions or "",
+            "members": review.members or "", "minutes": review.minutes or "", "gate": review.gate_id.code or ""}
+
+
+def _normalized(content):
+    """Contenu tel que la base le restitue (JSON) : dates en texte, zéro négatif ramené à 0, valeur
+    non finie remplacée par nulle. Le sceau porte sur ce contenu, que verify relit à l'identique."""
+    def clean(value):
+        if isinstance(value, float):
+            return 0.0 if value == 0 else value if math.isfinite(value) else None
+        if isinstance(value, dict):
+            return {str(k): clean(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [clean(v) for v in value]
+        return value
+
+    return clean(json.loads(json.dumps(content, ensure_ascii=False, default=str)))
 
 
 def _digest(content):
@@ -171,6 +206,8 @@ def _digest(content):
 
 
 def _seal(env, content):
-    secret = env["ir.config_parameter"].sudo().get_param("database.secret") or ""
+    secret = env["ir.config_parameter"].sudo().get_param("database.secret")
+    if not secret:
+        raise UserError("Secret du serveur absent : la décision ne peut pas être scellée.")
     payload = json.dumps(content, sort_keys=True, ensure_ascii=False, default=str).encode()
     return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()

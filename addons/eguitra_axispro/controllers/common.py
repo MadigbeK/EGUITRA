@@ -1,6 +1,7 @@
 """Représentations JSON communes au cabinet et au portail."""
 
 import base64
+import re
 
 from odoo.http import content_disposition, request
 
@@ -58,8 +59,8 @@ def _financial_brief(indicators):
                                        "cash_min")}
 
 
-def dossier_detail(d):
-    r = d.evaluate()
+def dossier_detail(d, result=None):
+    r = result or d.evaluate()
     data = dossier_summary(d, r)
     locked = d.locked_review_id
     data.update({
@@ -93,14 +94,18 @@ def review_row(r):
     }
 
 
-def document_row(doc):
-    return {
+def document_row(doc, portal=False):
+    """Pièce déposée ; pour le portail, sans les critères de la grille qu'elle justifie."""
+    row = {
         "id": doc.id, "name": doc.name, "version": doc.version, "state": doc.state, "comment": doc.comment or None,
         "document_type_id": doc.document_type_id.id or None, "uploaded_by": doc.uploaded_by.name,
         "uploaded_at": doc.uploaded_at, "mimetype": doc.attachment_id.mimetype, "size": doc.attachment_id.file_size,
         "portal_visible": doc.portal_visible, "validity_date": doc.validity_date, "after_lock": doc.after_lock,
         "criteria": [{"id": e.criterion_id.id, "code": e.criterion_id.code} for e in doc.evaluation_ids],
     }
+    if portal:
+        row.pop("criteria")
+    return row
 
 
 def message_row(m):
@@ -126,7 +131,11 @@ def store_upload(dossier, document_type_id=None, name=None, portal_visible=True,
             raise ApiError(422, "quota_exceeded", "L'espace de ce dossier est plein (400 pièces ou 1 Go) : contactez votre consultant.")
     doc_type = None
     if document_type_id:
-        doc_type = request.env["axispro.document.type"].sudo().browse(int(document_type_id)).exists()
+        try:
+            type_id = int(document_type_id)
+        except (TypeError, ValueError) as e:
+            raise ApiError(400, "invalid_parameter", "Pièce standard inconnue.") from e
+        doc_type = request.env["axispro.document.type"].sudo().browse(type_id).exists()
         if not doc_type or doc_type.policy_id != dossier.policy_id:
             raise ApiError(422, "business_rule", "Pièce standard inconnue pour ce dossier.")
     filename = checked_name(upload.filename, mimetype)
@@ -136,7 +145,9 @@ def store_upload(dossier, document_type_id=None, name=None, portal_visible=True,
     })
     return request.env["axispro.document"].sudo().create({
         "dossier_id": dossier.id, "document_type_id": doc_type.id if doc_type else False,
-        "name": name or (doc_type.name if doc_type else filename) or "Pièce",
+        # Nom libre du déposant : une ligne, sans caractère de contrôle, 200 caractères au plus.
+        "name": " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", name or "").split())[:200]
+        or (doc_type.name if doc_type else filename) or "Pièce",
         "attachment_id": attachment.id, "portal_visible": portal_visible, "uploaded_by": request.env.user.id,
         "validity_date": validity_date or False,
     })

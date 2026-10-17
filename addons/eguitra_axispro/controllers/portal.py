@@ -15,6 +15,9 @@ from .common import document_row, download, message_row, store_upload
 from .rapports import pieces_pdf
 
 PORTEUR = ("porteur",)
+# Ce que le porteur voit d'une pièce attendue : jamais les critères de la grille qu'elle justifie.
+PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
+                        "state", "version")
 MAX_DAILY_MESSAGES = 50
 
 
@@ -26,7 +29,8 @@ def _own(dossier_id):
 
 
 def _portal_view(dossier):
-    docs = dossier.documents_status()
+    result = dossier.evaluate()
+    docs = [{k: d[k] for k in PORTAL_DOCUMENT_KEYS} for d in dossier.documents_status(result)]
     due = [d for d in docs if d["due"] and d["required"]]
     return {
         "id": dossier.id, "reference": dossier.reference, "name": dossier.name, "state": dossier.state,
@@ -37,7 +41,7 @@ def _portal_view(dossier):
                   for g in dossier.policy_id.gate_ids],
         "documents": docs,
         "documents_progress": {"due": len(due), "received": len([d for d in due if d["state"] in ("received", "validated")])},
-        "actions": [{"name": g["name"], "action": g["action"]} for g in dossier.gaps(5)],
+        "actions": [{"name": g["name"], "action": g["action"]} for g in dossier.gaps(5, result)],
         "tasks": [_task_row(a) for a in _tasks(dossier)],
         "decision": dossier.decision or None,
     }
@@ -75,7 +79,7 @@ class EguitraPortal(http.Controller):
     def documents(self, dossier_id, **_kw):
         dossier = _own(dossier_id)
         files = dossier.document_ids.filtered("portal_visible")
-        return [document_row(d) for d in files]
+        return [document_row(d, portal=True) for d in files]
 
     @api_route("/portail/dossiers/<int:dossier_id>/documents", methods=("POST",), profiles=PORTEUR)
     def upload(self, dossier_id, **_kw):
@@ -83,7 +87,8 @@ class EguitraPortal(http.Controller):
         if dossier.state == "closed":
             raise ApiError(422, "business_rule", "Ce dossier est clos.")
         form = request.httprequest.form
-        return document_row(store_upload(dossier, form.get("document_type_id"), form.get("name"), quota=True))
+        return document_row(store_upload(dossier, form.get("document_type_id"), form.get("name"), quota=True),
+                            portal=True)
 
     @api_route("/portail/documents/<int:document_id>/download", profiles=PORTEUR)
     def download_document(self, document_id, **_kw):

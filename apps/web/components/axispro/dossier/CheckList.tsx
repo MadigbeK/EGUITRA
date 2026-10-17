@@ -313,7 +313,7 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
                 <li key={doc.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-panel px-2.5 py-1.5 text-[12.5px]">
                   <span className="font-medium">{doc.name} v{doc.version}</span>
                   {doc.state === "rejected" && <Badge tone="warn">À reprendre</Badge>}
-                  {doc.validity_date && new Date(doc.validity_date) < new Date() && <Badge tone="danger">Périmée</Badge>}
+                  {doc.validity_date && doc.validity_date < new Date().toISOString().slice(0, 10) && <Badge tone="danger">Périmée</Badge>}
                   <span className="ml-auto inline-flex items-center gap-1.5 text-muted">
                     valable jusqu&apos;au
                     <Input type="date" disabled={verrou} className="w-[150px] py-0.5 text-[12px]" defaultValue={doc.validity_date ?? ""} onBlur={(e) => e.target.value !== (doc.validity_date ?? "") && onValidite(doc.id, e.target.value)} />

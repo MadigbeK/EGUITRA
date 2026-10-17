@@ -26,6 +26,9 @@ export function DataRoom({ d }: { d: DossierDetail }) {
     if (r !== undefined) void mutate();
   }
   if (!data) return <Loading />;
+  // Une pièce déposée avant la décision verrouillée entre dans le score scellé : elle ne change plus
+  // avant une nouvelle révision ; une pièce reçue après la décision se traite librement.
+  const figee = (s: StandardDoc) => Boolean(d.locked_review) && !s.after_lock;
   const disponibles = data.standard.filter((x) => x.available).length;
   const dues = data.standard.filter((x) => x.due && x.required);
   const rows = data.standard.filter((x) => (filtre === "dues" ? x.due : filtre === "manquantes" ? !x.available : true));
@@ -58,12 +61,12 @@ export function DataRoom({ d }: { d: DossierDetail }) {
           { key: "gate", label: "Gate", render: (s) => s.gate ?? "–" },
           { key: "available", label: "Disponibilité", render: (s) => (s.available ? <div><Badge tone="ok">Disponible</Badge>{s.origin && <div className="mt-0.5 max-w-[220px] text-[11.5px] text-muted">{s.origin}</div>}</div> : <Badge tone={s.due ? "danger" : "neutral"}>{s.due ? "Manquante" : "Pas encore due"}</Badge>) },
           { key: "state", label: "Dépôt", render: (s) => (s.state === "missing" ? "–" : <Badge tone={DOC_STATE[s.state]?.tone}>{DOC_STATE[s.state]?.label} v{s.version}</Badge>) },
-          { key: "validity", label: "Valable jusqu'au", render: (s) => (s.document_id ? <Input type="date" className="w-[150px] py-1 text-[12px]" defaultValue={s.validity_date ?? ""} onBlur={(e) => e.target.value !== (s.validity_date ?? "") && patch(s.document_id!, { validity_date: e.target.value || null })} /> : "–") },
+          { key: "validity", label: "Valable jusqu'au", render: (s) => (s.document_id ? <Input type="date" disabled={figee(s)} className="w-[150px] py-1 text-[12px]" defaultValue={s.validity_date ?? ""} onBlur={(e) => e.target.value !== (s.validity_date ?? "") && patch(s.document_id!, { validity_date: e.target.value || null })} /> : "–") },
           { key: "actions", label: "", render: (s) => (
             <div className="flex items-center justify-end gap-2">
               {s.document_id && <Button aria-label="Télécharger" title="Télécharger" className="px-2 py-1 text-xs" onClick={() => apiDownload(`/axispro/documents/${s.document_id}/download`, s.name)}><Download className="h-3.5 w-3.5" /></Button>}
-              {s.document_id && s.state === "received" && <Button className="px-2 py-1 text-xs" onClick={() => patch(s.document_id!, { state: "validated" })}>Valider</Button>}
-              {s.document_id && s.state === "received" && <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => { const comment = window.prompt("Motif de la reprise demandée au porteur :"); if (comment) void patch(s.document_id!, { state: "rejected", comment }); }}>À reprendre</Button>}
+              {s.document_id && s.state === "received" && !figee(s) && <Button className="px-2 py-1 text-xs" onClick={() => patch(s.document_id!, { state: "validated" })}>Valider</Button>}
+              {s.document_id && s.state === "received" && !figee(s) && <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => { const comment = window.prompt("Motif de la reprise demandée au porteur :"); if (comment) void patch(s.document_id!, { state: "rejected", comment }); }}>À reprendre</Button>}
               <FileButton small label="Déposer" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(f) => upload(f, s.document_type_id)} />
             </div>
           ) },

@@ -31,8 +31,16 @@ POLICY_FLAGS = ("ko_partial_blocks", "evidence_check", "exclude_na", "expiry_che
 MIN_FORCE_REASON = 10
 
 
+def int_value(value, key):
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"{key} : identifiant attendu.") from e
+
+
 def _dossier(dossier_id):
-    dossier = request.env["axispro.dossier"].browse(dossier_id).exists()
+    # Recherche sous l'identité de l'utilisateur : ses règles d'accès s'appliquent.
+    dossier = request.env["axispro.dossier"].search([("id", "=", dossier_id)], limit=1)
     if not dossier:
         raise ApiError(404, "not_found", "Dossier introuvable.")
     return dossier
@@ -271,9 +279,9 @@ class EguitraAxispro(http.Controller):
                     raise ApiError(400, "invalid_parameter", f"{key} : oui (yes) ou non (no).")
                 values[key] = data[key] or False
         if data.get("promoter_id"):
-            values["promoter_id"] = int(data["promoter_id"])
+            values["promoter_id"] = int_value(data["promoter_id"], "promoter_id")
         if data.get("currency_id"):
-            currency = request.env["res.currency"].browse(int(data["currency_id"])).exists()
+            currency = request.env["res.currency"].browse(int_value(data["currency_id"], "currency_id")).exists()
             if not currency:
                 raise ApiError(400, "invalid_parameter", "Devise inconnue.")
             values["currency_id"] = currency.id

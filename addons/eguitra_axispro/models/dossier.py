@@ -209,7 +209,9 @@ class AxisproDossier(models.Model):
         for e in self.evaluation_ids.filtered(lambda e: e.status == "met" and e.document_ids):
             if all(d.state == "rejected" for d in e.document_ids):
                 notes.append(f"{e.criterion_id.code} : déclaré disponible alors que toutes ses preuves sont à reprendre.")
-        if self.decision in ("go", "conditional") and result["knockouts"]:
+        # La décision rappelée est celle de la révision en cours (verrouillée) ; après une nouvelle
+        # révision, la décision précédente n'est plus confrontée au dossier qui évolue.
+        if self.locked_review_id and self.decision in ("go", "conditional") and result["knockouts"]:
             notes.append("Décision favorable du comité alors qu'un knock-out est actif.")
         return notes
 
@@ -312,6 +314,7 @@ class AxisproDossier(models.Model):
                 "gate": doc_type.gate_id.code or None, "guidance": doc_type.guidance or None,
                 "state": latest.state if latest else "missing", "version": latest.version if latest else 0,
                 "document_id": latest.id if latest else None, "validity_date": latest.validity_date if latest else None,
+                "after_lock": bool(latest.after_lock) if latest else False,
                 "available": bool(info.get("available")), "origin": info.get("origin"),
                 "criteria": info.get("criteria", []),
             })
@@ -420,6 +423,21 @@ class AxisproDocument(models.Model):
             doc.dossier_id.log("document", note=f"Pièce déposée : {doc.name} (version {doc.version})"
                                                 + (", après la décision verrouillée" if doc.after_lock else "") + ".")
         return records
+
+    def write(self, vals):
+        """Une pièce antérieure à la décision verrouillée entre dans le score scellé : son état et sa
+        validité ne changent plus avant une nouvelle révision. Une pièce reçue après la décision se
+        traite librement. Tout changement de validité est inscrit au journal du dossier."""
+        if {"state", "validity_date", "evaluation_ids"} & set(vals) and not self.env.context.get("axispro_unlocked"):
+            self.filtered(lambda d: not d.after_lock).dossier_id._check_unlocked()
+        before = {d.id: d.validity_date for d in self} if "validity_date" in vals else {}
+        result = super().write(vals)
+        for doc in self.filtered(lambda d: d.id in before and before[d.id] != d.validity_date):
+            old, new = before[doc.id], doc.validity_date
+            doc.dossier_id.log("document", note=f"{doc.name} (version {doc.version}) : validité "
+                                                f"{f'{old:%d/%m/%Y}' if old else 'sans date'} → "
+                                                f"{f'{new:%d/%m/%Y}' if new else 'sans date'}.")
+        return result
 
 
 class AxisproMessage(models.Model):

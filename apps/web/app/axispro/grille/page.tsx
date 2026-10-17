@@ -88,7 +88,7 @@ interface Policy {
 const STATE = { draft: ["Brouillon", "warn"], active: ["En vigueur", "ok"], archived: ["Archivée", "neutral"] } as const;
 const FLAGS: Array<{ key: "ko_partial_blocks" | "evidence_check" | "exclude_na" | "expiry_check"; label: string }> = [
   { key: "ko_partial_blocks", label: "Un knock-out incomplet bloque aussi" },
-  { key: "evidence_check", label: "Preuve obligatoire pour valider un critère exigeant (knock-out, bloquant)" },
+  { key: "evidence_check", label: "Preuve obligatoire pour valider un critère à preuve requise (colonne « preuve » de la grille)" },
   { key: "exclude_na", label: "Exclure les non applicables du score (sinon comptés 1 point)" },
   { key: "expiry_check", label: "Signaler les preuves périmées (retenues incomplètes)" },
 ];
