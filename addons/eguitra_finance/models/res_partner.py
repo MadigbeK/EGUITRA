@@ -8,7 +8,7 @@ class ResPartner(models.Model):
     _inherit = "res.partner"
 
     eguitra_sector = fields.Char("Secteur")
-    eguitra_contact = fields.Char("Contact", help="Interlocuteur chez le tiers (nom, fonction).")
+    eguitra_contact = fields.Char("Interlocuteur", help="Interlocuteur chez le tiers (nom, fonction).")
     eguitra_vat_exempt = fields.Boolean(
         "Non assujetti à la TVA",
         help="Ses factures et avoirs de vente sont émis en exonération de TVA, quel que soit le module qui les crée.",

@@ -219,11 +219,31 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
   avant la commande (mêmes seuils que les pièces : finance, direction au-delà de 50 M), devis joint,
   consommation par les pièces d'achat qui ne refont pas le circuit dans la limite du reste à engager
   (tolérance 5 %, paramètre `eguitra_approval.commitment_tolerance_pct`) ; écran `/finance/engagements`.
-- Reste : rattachement d'un engagement à la saisie d'une pièce d'achat, colonne « engagé » du budget
-  et état des engagements non soldés (après la fusion de l'agent analytique et budget) ;
-  couverture des décaissements de caisse, imputations de relevé, échéances et virements par le
-  circuit des paiements (attente 4) ; piste d'audit des nouveaux modèles (attente 14) ; reprise du
-  classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt).
+  Engagement proposé à la saisie d'une pièce d'achat du fournisseur, colonnes « engagé » et
+  « disponible » du suivi budgétaire, état « Engagements de dépense non soldés » au registre des
+  rapports.
+- Fait, décaissements (attente 10, nature « Décaissements de trésorerie », direction au-delà de
+  100 M) : sorties de caisse et de banque saisies, imputation directe d'une ligne de relevé,
+  règlement d'une échéance d'emprunt et virement interne restent en brouillon et passent au circuit
+  au-delà du seuil ; comptabilisés à la dernière approbation (l'entrée d'un virement suit sa sortie).
+- Fait, analytique et budget (fusion) : axes analytiques tenus par la finance, saisie multi-axes,
+  imputations automatiques et imputation obligatoire, trésorerie (modes de paiement, types
+  d'opération, justificatifs), état de rapprochement et soldes des relevés, budget par ligne
+  budgétaire affecté aux activités et centres de coût, catégories de dépense, fiche tiers enrichie,
+  litiges, plan comptable tenu par la finance. Transport (fusion) : produits paramétrables,
+  manquants tolérés et excédentaires (déduction, créance chauffeur, 15 °C, capacité), taxes
+  spécifiques au barème et état mensuel, rentabilité avec coûts comptabilisés et structure au km ;
+  questions au client dans `docs/projet/cadrage-transport.md`.
+- Fait, piste d'audit (attente 14) étendue à tous les modèles de gestion (finance, immobilier,
+  AxisPro), avec test de couverture.
+- Versions : `eguitra_finance` 19.0.1.4.0, `eguitra_approval` 19.0.1.2.0, `eguitra_transport`
+  19.0.1.1.0, `eguitra_immobilier` 19.0.1.1.0, `eguitra_axispro` 19.0.1.2.1 ; mise à jour avec
+  `-u` de ces modules puis redémarrage du noyau (module d'audit).
+- Reste : reprise du classeur du prototype et contrôle des 26 valeurs de référence (hors dépôt) ;
+  décisions de droits signalées par l'agent transport (le parc modifie la fiche tiers d'un
+  chauffeur et les coefficients à 15 °C ; la finance d'une société modifie un produit commun) ;
+  choix comptables à valider avec l'expert-comptable (règlement d'échéance par le 401 du prêteur,
+  factures à établir hors taxes, pas de provision de change, comptes 6588 et 4211 des manquants).
 
 **Décisions du gérant, 16 octobre (suite de la vérification de l'organisation)** :
 - Autres services de MB AxisPro (formation et coaching, conseil, audit d'évaluation des transporteurs,
