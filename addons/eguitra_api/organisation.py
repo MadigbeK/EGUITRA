@@ -9,6 +9,8 @@ Le département finance tient leurs deux comptabilités, séparément, dans la m
   immobilier) ne concernent qu'EGUITRA GROUP.
 - AxisPro Suite et le portail des porteurs de projets ne servent que MB AxisPro Consulting.
 - Rotations (saisie mobile des rotations) ne sert qu'EGUITRA GROUP.
+- Analyse (NIMOVA · Analyse) sert les deux sociétés, avec des analyses propres à chacune : celles du
+  groupe sous /analyse/groupe/, celles du cabinet sous /analyse/cabinet/.
 
 Un compte reçoit des profils (eguitra_base, PROFILE_GROUPS) et des sociétés ; ses applications en
 découlent : un profil peut tout ouvrir (administration, direction) ou une seule application.
@@ -26,6 +28,7 @@ APPS = {
     "axispro": {"profiles": {"admin", "direction", "cabinet"}, "entity": "cabinet"},
     "portail": {"profiles": {"porteur"}, "entity": "cabinet"},
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
+    "analyse": {"profiles": {"admin", "direction", "finance", "cabinet"}, "entity": None},
 }
 
 # Préfixe des routes de l'API -> société servie par le module : ses routes refusent de travailler
@@ -36,6 +39,8 @@ MODULE_ENTITY = {
     "/immobilier/": "groupe",
     "/axispro/": "cabinet",
     "/portail/": "cabinet",
+    "/analyse/groupe/": "groupe",
+    "/analyse/cabinet/": "cabinet",
 }
 
 # Profil propre à une société : un compte qui le porte doit être ouvert à cette société.

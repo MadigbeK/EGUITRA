@@ -16,7 +16,7 @@ umask 022  # le code figé doit rester lisible par l'utilisateur odoo des conten
 
 RELEASES=releases
 KEEP=5
-MODULES=eguitra_base,eguitra_api,eguitra_finance,eguitra_approval,eguitra_transport,eguitra_chantier,eguitra_immobilier,eguitra_axispro
+MODULES=eguitra_base,eguitra_api,eguitra_finance,eguitra_approval,eguitra_transport,eguitra_chantier,eguitra_immobilier,eguitra_axispro,eguitra_analytics
 mkdir -p "$RELEASES" ../logs
 
 current() { readlink "$RELEASES/current" 2>/dev/null || true; }
@@ -114,7 +114,8 @@ if [ "${1:-}" != "--initial" ] && prod_db_exists; then
   # exemple), pendant que le noyau est arrêté.
   docker compose up -d --no-deps --build db backup
   log=../logs/release-$id.log
-  if ! docker compose run --rm -T --no-deps odoo odoo -c /etc/odoo/odoo.conf -d "$ODOO_DB" -u "$MODULES" \
+  # -i installe un module nouveau de la version (sans effet sur un module déjà installé), -u met à jour les autres.
+  if ! docker compose run --rm -T --no-deps odoo odoo -c /etc/odoo/odoo.conf -d "$ODOO_DB" -i "$MODULES" -u "$MODULES" \
          --stop-after-init --workers 0 > "$log" 2>&1 || grep -qE " (ERROR|CRITICAL) " "$log"; then
     echo "ÉCHEC de la mise à jour des modules (journal : $log)." >&2
     if [ -n "$prev" ]; then activate "$prev"; fi

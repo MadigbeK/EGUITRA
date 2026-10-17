@@ -1,0 +1,1 @@
+"""Routes /analyse/cabinet/... (spécification)."""
