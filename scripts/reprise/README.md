@@ -61,8 +61,9 @@ dettes, budget). Dossier et prototype sont des documents du client : ils se lise
 se versionnent pas.
 
 ```bash
-# 1. Valeurs de référence du prototype (vue « Validation face au classeur »)
-python -I scripts/reprise/extraire_reference.py chemin/EGUITRA_App.html sortie/reference.json
+# 1. Valeurs de référence du prototype (vue « Validation face au classeur ») ; --date : dateArrete du
+#    dossier (parametres.json de l'étape 2), pour le chargement dans la plateforme (étape 5)
+python -I scripts/reprise/extraire_reference.py chemin/EGUITRA_App.html sortie/reference.json --date=AAAA-MM-JJ
 # 2. Conversion du dossier en fichiers de reprise (+ parametres.json, rapport_conversion.txt)
 python -I scripts/reprise/dossier_json.py chemin/EGUITRA_dossier_2026.json sortie
 #    --taux-implicites : reprend le taux des emprunts déduit des échéances (sinon 0, signalé)
@@ -72,7 +73,16 @@ python -I scripts/reprise/controle_reference.py sortie sortie/reference.json --r
 # 4. Sur le serveur : simulation, puis enregistrement
 scripts/reprise/reprise.sh recette ~/reprise
 REPRISE_DATE_OUVERTURE=2026-01-01 REPRISE_BUDGET_ANNEE=2026 scripts/reprise/reprise.sh recette ~/reprise --appliquer
+# 5. Dans Finance, compte d'administration : Clôtures et contrôles > Validation de la reprise, charger
+#    sortie/reference.json (valeurs sous les codes de la plateforme), après avoir comptabilisé les
+#    dotations jusqu'à la date d'arrêté ; résultat « n/26 » et annexe du procès-verbal de bascule.
 ```
+
+`parametres.json` porte aussi l'activité des ventes du transport (posée dans Transport > Paramètres)
+et les seuils d'alerte de la direction (trésorerie minimale, marge transport, dépassement budgétaire,
+délai de recouvrement, DSCR), appliqués par `reprise.py`. Un compte de l'ancien classeur dont la racine
+à trois chiffres manque au plan de la localisation se rattache à sa sous-classe (signalé, à valider
+avec l'expert-comptable) ; les comptes 52x et 57x créés sont des comptes de trésorerie.
 
 La conversion suit l'imputation du moteur du prototype : ventes (client 411000, produit de
 l'activité, TVA collectée si le client est assujetti), achats (charge ou immobilisation de la

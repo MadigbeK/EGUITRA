@@ -19,6 +19,8 @@ CODE = re.compile(r"^\d{4,12}$")
 CLASS_RULES = (
     ("40", "liability_payable", True),
     ("41", "asset_receivable", True),
+    ("52", "asset_cash", False),  # banques
+    ("57", "asset_cash", False),  # caisses
 )
 LETTERED_PREFIXES = ("585",)  # compte de passage des virements internes : lettrable
 

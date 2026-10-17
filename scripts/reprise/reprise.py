@@ -242,11 +242,16 @@ if data is not None:
         if Chart.search_count([("code", "=", code), ("company_ids", "in", company.ids)]):
             continue
         sibling = next((s for s in (Chart.search([("code", "=like", code[:size] + "%"), ("company_ids", "in", company.ids)],
-                                                 order="code", limit=1) for size in range(len(code) - 1, 2, -1)) if s), None)
+                                                 order="code", limit=1) for size in range(len(code) - 1, 1, -1)) if s), None)
         if not sibling:
             errors.append(f"{where} : le compte {code} doit se rattacher à une racine existante du plan "
-                          f"(comptes {code[:3]}…).")
+                          f"(comptes {code[:2]}…).")
             continue
+        if not sibling.code.startswith(code[:3]):
+            # Racine à trois chiffres absente du plan de la localisation (compte propre à l'ancien
+            # classeur) : nature reprise de la sous-classe, à valider avec l'expert-comptable.
+            notes.append(f"{where} : compte {code} rattaché à la sous-classe {code[:2]} (racine {code[:3]} absente du "
+                         "plan) ; à valider avec l'expert-comptable.")
         account_type, reconcile = sibling.account_type, sibling.reconcile
         for prefix, forced_type, forced_reconcile in CLASS_RULES:
             if code.startswith(prefix):
