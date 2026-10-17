@@ -267,7 +267,11 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
   dotation 2026). **Décision à prendre avec l'expert-comptable** : accepter ce rattrapage, ou porter
   l'écart de reprise en fin de plan (modification d'`eguitra_takeover`, mesurée par
   `--ecart-reprise=derniere` : ne resterait que le prorata du mois d'acquisition des biens acquis dans
-  l'exercice). Autres
+  l'exercice). Troisième voie mesurée, permanence des méthodes (`dossier_json.py
+  --convention=prototype`) : plan en méthode « nombre de dotations » du module, posée bien par bien,
+  à compter du 1er du mois qui suit l'acquisition ; il ne reste que de l'arrondi (dotation mensuelle
+  constante arrondie au franc, le prototype arrondit le cumul), au-delà toutefois de la tolérance de
+  10 GNF du prototype ; non appliquée par `reprise.py` tant que la convention n'est pas décidée. Autres
   points : taux des emprunts absents du dossier (0 par défaut ; `--taux-implicites` reprend le taux
   déduit des échéances) ; à-nouveau des emprunts à vérifier avec le client (compte rendu de
   conversion, hors dépôt) ; ne pas importer les relevés bancaires de la période reprise (comptés deux
