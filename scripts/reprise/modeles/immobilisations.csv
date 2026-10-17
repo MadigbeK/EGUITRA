@@ -1,0 +1,3 @@
+code;libelle;profil;date_mise_en_service;valeur_brute;cumul;duree;activite;localisation;responsable
+IMMO-0001;Exemple : tracteur et citerne 40 000 L;Matériel de transport;15/06/2023;650 000 000;162 500 000;5;Transport pétrolier;Parc de Kaloum;Chef de parc
+IMMO-0002;Exemple : terrain du dépôt;Terrains;10/03/2021;400 000 000;0;;;Dépôt de Coyah;Direction générale
