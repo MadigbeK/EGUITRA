@@ -433,4 +433,47 @@ class EguitraFinanceFiscal(http.Controller):
             else:
                 amount = sum(values.get(c, 0.0) for c in codes)
             lines.append({"label": label, "section": kind.split("_")[0], "amount": amount, "syscohada": codes})
-        return {"date": end, "lines": lines, "note": "Correspondance indicative, à valider avec l'expert-comptable."}
+        bridge = request.env["eguitra.ifrs.policy"].sudo().restatements(companies(kw), end)
+        return dict(bridge, date=end, lines=lines,
+                    note="Correspondance indicative et retraitements à valider avec l'expert-comptable.")
+
+    # ─── IFRS 9 : pertes de crédit attendues ──────────────────────────────
+
+    @api_route("/finance/ifrs/ecl", profiles=FIN_READ)
+    def ifrs_ecl(self, **kw):
+        """Matrice par ancienneté, perte attendue facture par facture, exposition par client."""
+        day = parse_date(kw, "date", today())
+        return request.env["eguitra.ifrs.policy"].sudo().expected_credit_loss(request.env.company, day)
+
+    @api_route("/finance/ifrs/policy", profiles=FIN_READ)
+    def ifrs_policy(self, **_kw):
+        policy = request.env["eguitra.ifrs.policy"]._get(request.env.company)
+        return dict(policy.rates(), deferred_tax_rate=policy.deferred_tax_rate)
+
+    @api_route("/finance/ifrs/policy", methods=("PATCH",), profiles=FIN_WRITE)
+    def update_ifrs_policy(self, **_kw):
+        data = read_json()
+        policy = request.env["eguitra.ifrs.policy"]._get(request.env.company).sudo(False)
+        values = {}
+        for key in ("not_due", "1_30", "31_60", "61_90", "over_90"):
+            if key in data:
+                rate = as_float(data[key], key)
+                if not 0 <= rate <= 100:
+                    raise ApiError(422, "business_rule", "Un taux de perte attendue est compris entre 0 et 100 %.")
+                values[f"ecl_{key}"] = rate
+        if "deferred_tax_rate" in data:
+            rate = as_float(data["deferred_tax_rate"], "deferred_tax_rate")
+            if not 0 <= rate < 100:
+                raise ApiError(422, "business_rule", "Taux d'impôt différé invalide.")
+            values["deferred_tax_rate"] = rate
+        policy.write(values)
+        return dict(policy.rates(), deferred_tax_rate=policy.deferred_tax_rate)
+
+    @api_route("/finance/ifrs/ecl/post", methods=("POST",), profiles=FIN_WRITE)
+    def post_ecl(self, **_kw):
+        """Comptabilise l'ajustement de dépréciation du mois (choix explicite : par défaut, la perte
+        attendue reste un retraitement hors des livres SYSCOHADA)."""
+        day = parse_date(read_json(), "date", today())
+        move = request.env["eguitra.ifrs.policy"].post_expected_credit_loss(request.env.company, day)
+        return {"id": move.id, "name": move.name, "ref": move.ref, "date": move.date,
+                "amount": sum(move.line_ids.mapped("debit"))}

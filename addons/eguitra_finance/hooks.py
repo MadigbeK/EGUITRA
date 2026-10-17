@@ -1,5 +1,5 @@
 # Modèles du module journalisés dans la piste d'audit (création, modification, suppression).
-AUDITED_MODELS = ["eguitra.tax.return"]
+AUDITED_MODELS = ["eguitra.tax.return", "eguitra.ifrs.policy"]
 
 
 def post_init_hook(env):

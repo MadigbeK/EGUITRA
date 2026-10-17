@@ -14,3 +14,5 @@ access_reminder_direction,relances lecture,model_eguitra_reminder,eguitra_base.g
 access_reminder_finance,relances finance,model_eguitra_reminder,eguitra_base.group_profile_finance,1,1,1,0
 access_tax_return_direction,déclarations fiscales lecture,model_eguitra_tax_return,eguitra_base.group_profile_direction,1,0,0,0
 access_tax_return_finance,déclarations fiscales finance,model_eguitra_tax_return,eguitra_base.group_profile_finance,1,1,1,0
+access_ifrs_policy_direction,politique IFRS lecture,model_eguitra_ifrs_policy,eguitra_base.group_profile_direction,1,0,0,0
+access_ifrs_policy_finance,politique IFRS finance,model_eguitra_ifrs_policy,eguitra_base.group_profile_finance,1,1,1,0

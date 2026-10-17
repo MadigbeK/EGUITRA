@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Download, Printer } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
+import { IfrsPanel } from "@/components/finance/IfrsPanel";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt, fmtPct } from "@/lib/format";
 
@@ -63,7 +64,7 @@ export default function StatementsPage() {
       {tab === "resultat" && <IncomeStatement scope={scope} />}
       {tab === "flux" && <CashFlow scope={scope} />}
       {tab === "rapports" && <ReportBuilder scope={scope} />}
-      {tab === "ifrs" && <Ifrs scope={scope} />}
+      {tab === "ifrs" && <IfrsPanel scope={scope} />}
       {tab === "export" && <AuditExport scope={scope} />}
     </div>
   );
@@ -335,37 +336,6 @@ function ReportBuilder({ scope }: { scope: string }) {
             }
           />
         </Card>
-      )}
-    </div>
-  );
-}
-
-function Ifrs({ scope }: { scope: string }) {
-  const [date, setDate] = useState(todayIso());
-  const { data, error } = useApi<{ lines: Array<{ label: string; section: string; amount: number; syscohada: string[] }>; note: string }>(`/finance/ifrs?date=${date}&scope=${scope}`);
-  return (
-    <div className="space-y-4">
-      <Field label="Arrêté au" className="no-print max-w-xs">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </Field>
-      {error && <ErrorBox error={error} />}
-      {data && (
-        <>
-          <Notice tone="warn">{data.note}</Notice>
-          <Card padded={false}>
-            <DataTable
-              dense
-              rows={data.lines}
-              rowKey={(l) => l.label}
-              columns={[
-                { key: "section", label: "État", render: (l) => ({ actif: "Bilan, actif", passif: "Bilan, passif", resultat: "Résultat" })[l.section] ?? l.section },
-                { key: "label", label: "Poste IFRS" },
-                { key: "syscohada", label: "Rubriques SYSCOHADA", render: (l) => l.syscohada.join(", ") },
-                { key: "amount", label: "Montant", align: "right", render: (l) => fmtInt(l.amount) },
-              ]}
-            />
-          </Card>
-        </>
       )}
     </div>
   );

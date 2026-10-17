@@ -11,3 +11,4 @@ from . import tax_withholding
 from . import tax_return
 from . import fiscal_declarations
 from . import period_close_complete
+from . import ifrs
