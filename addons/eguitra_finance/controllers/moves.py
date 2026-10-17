@@ -55,10 +55,11 @@ def account_of_company(value, company, label="Compte"):
     """Compte général du plan de la société (jamais celui de l'autre société)."""
     if not value:
         return request.env["account.account"]
-    account = request.env["account.account"].browse(int(value)).exists()
+    # Contrôle en lecture seule : un compte de l'autre société se refuse par un message métier.
+    account = request.env["account.account"].sudo().browse(int(value)).exists()
     if not account or company not in account.company_ids:
         raise ApiError(422, "business_rule", f"{label} absent du plan de comptes de la société.")
-    return account
+    return account.sudo(False)
 
 
 def mandatory_prefixes(company):
@@ -159,10 +160,10 @@ def category_of(value, company):
     Category = request.env["eguitra.expense.category"]
     if not value:
         return Category
-    category = Category.browse(int(value)).exists()
+    category = Category.sudo().browse(int(value)).exists()
     if not category or category.company_id != company or not category.active:
         raise ApiError(422, "business_rule", "Catégorie de dépense inconnue dans la société.")
-    return category
+    return category.sudo(False)
 
 
 def _entry_categories(data, move_type, company):
@@ -447,9 +448,10 @@ class EguitraFinanceMoves(http.Controller):
             values["communication"] = str(data["memo"])[:200]
         mode = request.env["eguitra.payment.mode"]
         if data.get("payment_mode_id"):
-            mode = mode.browse(int(data["payment_mode_id"])).exists()
+            mode = mode.sudo().browse(int(data["payment_mode_id"])).exists()
             if not mode or (mode.company_id and mode.company_id != move.company_id):
                 raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
+            mode = mode.sudo(False)
         wizard = request.env["account.payment.register"].with_context(
             active_model="account.move", active_ids=move.ids
         ).create(values)

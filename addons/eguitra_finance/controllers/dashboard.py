@@ -31,9 +31,10 @@ def _analytic_row(account, company):
 def _managed_account(account_id):
     """Compte d'un axe tenu par la finance (activité, centre de coût), dans la société de travail."""
     company = request.env.company
-    account = request.env["account.analytic.account"].with_context(active_test=False).browse(account_id).exists()
+    account = request.env["account.analytic.account"].sudo().with_context(active_test=False).browse(account_id).exists()
     if not account or (account.company_id and account.company_id != company):
         raise ApiError(404, "not_found", "Compte analytique introuvable dans la société de travail.")
+    account = account.sudo(False)
     if plan_key(request.env, account.root_plan_id) not in MANAGED_AXES:
         raise ApiError(422, "business_rule", "Cet axe est tenu par son module (chantier, ensemble routier, route, bien "
                                              "ou dossier) : modifiez la fiche d'origine.")

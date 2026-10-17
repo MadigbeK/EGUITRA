@@ -64,7 +64,9 @@ def distribution(value, company=None):
     if not isinstance(value, dict):
         raise ApiError(400, "invalid_parameter", "Répartition analytique invalide.")
     company = company or request.env.company
-    Analytic = request.env["account.analytic.account"].with_context(active_test=False)
+    # Lecture de contrôle (société, axe, état) : un compte de l'autre société se refuse par un message
+    # métier, non par une erreur d'accès.
+    Analytic = request.env["account.analytic.account"].sudo().with_context(active_test=False)
     result, by_plan = {}, {}
     for key, pct in value.items():
         parts = [p.strip() for p in str(key).split(",") if p.strip()]

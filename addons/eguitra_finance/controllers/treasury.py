@@ -137,19 +137,19 @@ def _statement_row(statement):
 def _payment_mode(value):
     if not value:
         return request.env["eguitra.payment.mode"]
-    mode = request.env["eguitra.payment.mode"].browse(int(value)).exists()
+    mode = request.env["eguitra.payment.mode"].sudo().browse(int(value)).exists()
     if not mode or (mode.company_id and mode.company_id != request.env.company):
         raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
-    return mode
+    return mode.sudo(False)
 
 
 def _operation_type(value, company):
     if not value:
         return request.env["eguitra.treasury.operation.type"]
-    kind = request.env["eguitra.treasury.operation.type"].browse(int(value)).exists()
+    kind = request.env["eguitra.treasury.operation.type"].sudo().browse(int(value)).exists()
     if not kind or kind.company_id != company or not kind.active:
         raise ApiError(422, "business_rule", "Type d'opération inconnu dans la société.")
-    return kind
+    return kind.sudo(False)
 
 
 def _operation_type_row(kind):
