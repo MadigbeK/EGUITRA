@@ -248,9 +248,74 @@ def _running_balances(lines, balances):
     return pairs[0][1] - pairs[0][0], pairs[-1][1]
 
 
+def _is_camt(name, content):
+    """Relevé XML : extension .xml ou contenu balisé (un CSV ou un classeur ne commence pas par « < »)."""
+    return name.lower().endswith(".xml") or content.lstrip()[:1] == b"<"
+
+
+def parse_camt(content):
+    """Relevé ISO 20022 camt.053 (ou camt.052) : opérations comptabilisées (date de comptabilisation,
+    à défaut de valeur ; libellé de remise, à défaut informations de l'opération ; montant signé selon
+    CRDT ou DBIT), soldes d'ouverture (OPBD, à défaut PRCD) et de clôture (CLBD). Un fichier ne porte
+    qu'un compte. Lecture sans résolution d'entités ni accès réseau."""
+    from lxml import etree
+
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False, remove_comments=True)
+    try:
+        root = etree.fromstring(content, parser)
+    except etree.XMLSyntaxError as e:
+        raise ApiError(422, "business_rule", "Relevé XML illisible.") from e
+
+    def text(node, *names):
+        """Texte du premier élément trouvé, chemin par noms locaux (indifférent à la version camt)."""
+        path = "/".join(f"*[local-name()='{n}']" for n in names)
+        return node.xpath(f"normalize-space(./{path})")
+
+    def signed(node):
+        amount = float(text(node, "Amt") or 0)
+        return -amount if text(node, "CdtDbtInd") == "DBIT" else amount
+
+    statements = root.xpath("//*[local-name()='Stmt' or local-name()='Rpt']")
+    if not statements:
+        raise ApiError(422, "business_rule", "Ce fichier XML n'est pas un relevé camt.053.")
+    accounts = {text(st, "Acct", "Id", "IBAN") or text(st, "Acct", "Id", "Othr", "Id") for st in statements}
+    if len(accounts) > 1:
+        raise ApiError(422, "business_rule", "Le fichier contient les relevés de plusieurs comptes : "
+                                             "importer un fichier par compte.")
+    lines, opening, closing = [], {}, None
+    for stmt in statements:
+        for bal in stmt.xpath("./*[local-name()='Bal']"):
+            code = text(bal, "Tp", "CdOrPrtry", "Cd") or text(bal, "Tp", "Cd")
+            if code in ("OPBD", "PRCD"):
+                opening.setdefault(code, signed(bal))
+            elif code == "CLBD":
+                closing = signed(bal)
+        for entry in stmt.xpath("./*[local-name()='Ntry']"):
+            status = text(entry, "Sts", "Cd") or text(entry, "Sts")
+            if status and status != "BOOK":
+                continue  # opérations en attente (PDNG) ou d'information (INFO) : pas encore au relevé
+            raw_day = (text(entry, "BookgDt", "Dt") or text(entry, "BookgDt", "DtTm")
+                       or text(entry, "ValDt", "Dt") or text(entry, "ValDt", "DtTm"))
+            label = (" ".join(entry.xpath(".//*[local-name()='RmtInf']/*[local-name()='Ustrd']/text()")).strip()
+                     or text(entry, "AddtlNtryInf") or text(entry, "NtryRef") or "/")
+            try:
+                day = _date(raw_day[:10])
+            except ValueError:
+                continue
+            amount = signed(entry)
+            if amount:
+                lines.append({"date": day, "label": label[:250], "amount": amount})
+    balance_start = opening.get("OPBD", opening.get("PRCD"))
+    return {"lines": lines, "balance_start": balance_start, "balance_end": closing,
+            "source": "soldes du relevé camt.053" if balance_start is not None or closing is not None else None}
+
+
 def parse_statement(name, content):
     """Relevé CSV ou XLSX à en-têtes usuels : opérations (date, libellé, montant) et, s'ils figurent
-    dans le fichier, soldes initial et final (lignes de solde ou colonne de solde progressif)."""
+    dans le fichier, soldes initial et final (lignes de solde ou colonne de solde progressif). Un
+    relevé ISO 20022 camt.053 (XML) est lu par parse_camt."""
+    if _is_camt(name, content):
+        return parse_camt(content)
     rows = [r for r in _rows_from_file(name, content) if any(c not in (None, "") for c in r)]
     for start, row in enumerate(rows[:15]):  # noqa: B007 (start sert après la boucle)
         headers = [str(c or "").strip().lower() for c in row]

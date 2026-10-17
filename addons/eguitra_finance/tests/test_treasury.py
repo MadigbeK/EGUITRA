@@ -156,10 +156,10 @@ class TestBankReconciliationStatement(FinanceDataMixin, ApiCase):
         super().setUp()
         self.token = self.open_session("fatou")["access_token"]
 
-    def _import(self, text, **form):
+    def _import(self, text, name="releve.csv", **form):
         response = self.url_open(
             f"/api/v1/finance/treasury/{self.bank.id}/import", data=form,
-            files={"file": ("releve.csv", io.BytesIO(text.encode()), "text/csv")},
+            files={"file": (name, io.BytesIO(text.encode()), "text/csv")},
             headers={"Authorization": f"Bearer {self.token}"}, method="POST", timeout=60,
         )
         return response.status_code, response.json()
@@ -257,3 +257,34 @@ class TestBankReconciliationStatement(FinanceDataMixin, ApiCase):
         self.assertEqual((body["created"], body["attached"], body["skipped_duplicates"]), (1, 1, 0))
         st_line = self.env["account.bank.statement.line"].browse(line["id"])
         self.assertEqual(st_line.statement_id.id, body["statement"]["id"], "La banque confirme l'opération saisie")
+
+    def test_releve_camt053(self):
+        """Relevé normalisé ISO 20022 : soldes OPBD et CLBD, sens CRDT et DBIT, opération en attente ignorée."""
+        def entry(amount, sign, day, label, status="BOOK"):
+            return (f"<Ntry><Amt Ccy='GNF'>{amount}</Amt><CdtDbtInd>{sign}</CdtDbtInd><Sts><Cd>{status}</Cd></Sts>"
+                    f"<BookgDt><Dt>{day}</Dt></BookgDt><ValDt><Dt>{day}</Dt></ValDt>"
+                    f"<NtryDtls><TxDtls><RmtInf><Ustrd>{label}</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>")
+
+        def balance(code, amount):
+            return (f"<Bal><Tp><CdOrPrtry><Cd>{code}</Cd></CdOrPrtry></Tp><Amt Ccy='GNF'>{amount}</Amt>"
+                    f"<CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-12-01</Dt></Dt></Bal>")
+
+        xml = ("<?xml version='1.0' encoding='UTF-8'?>"
+               "<Document xmlns='urn:iso:std:iso:20022:tech:xsd:camt.053.001.08'><BkToCstmrStmt><Stmt>"
+               "<Id>REL-12</Id><Acct><Id><Othr><Id>0001234567</Id></Othr></Id></Acct>"
+               + balance("OPBD", "2000000.00") + balance("CLBD", "2650000.00")
+               + entry("800000.00", "CRDT", "2026-12-02", "REGLEMENT FACTURE FA-12")
+               + entry("150000.00", "DBIT", "2026-12-03", "LOYER DECEMBRE")
+               + entry("99000.00", "DBIT", "2026-12-04", "PRELEVEMENT A VENIR", status="PDNG")
+               + "</Stmt></BkToCstmrStmt></Document>")
+        status, body = self._import(xml, name="releve.xml")
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["created"], 2, "L'opération en attente n'est pas au relevé")
+        self.assertEqual((body["balances"]["start"], body["balances"]["end"]), (2_000_000, 2_650_000))
+        self.assertEqual(body["balances"]["gap"], 0)
+        lines = self.env["account.bank.statement.line"].search([("journal_id", "=", self.bank.id),
+                                                                ("payment_ref", "=", "LOYER DECEMBRE")])
+        self.assertEqual(lines.amount, -150_000)
+
+        status, body = self._import("<Document><Autre/></Document>", name="autre.xml")
+        self.assertEqual(status, 422, body)

@@ -433,7 +433,7 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
     >
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit). Les soldes du relevé sont lus dans le fichier s&apos;il les porte ; sinon saisissez-les. Les opérations déjà importées sont ignorées, celles déjà saisies à la main sont rattachées au relevé.
+          Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit), ou relevé normalisé ISO 20022 camt.053 (XML). Les soldes du relevé sont lus dans le fichier s&apos;il les porte ; sinon saisissez-les. Les opérations déjà importées sont ignorées, celles déjà saisies à la main sont rattachées au relevé.
         </p>
         {error && <Notice tone="danger">{error}</Notice>}
         {result && (
@@ -452,7 +452,7 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
             ))}
           </Notice>
         )}
-        <input type="file" accept=".csv,.xlsx" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setGap(null); }} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
+        <input type="file" accept=".csv,.xlsx,.xml" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setGap(null); }} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Solde initial du relevé" hint="Vide : lu dans le fichier">
             <Input inputMode="decimal" className="text-right font-mono" value={start} onChange={(e) => setStart(e.target.value)} />
