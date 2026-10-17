@@ -11,8 +11,6 @@ pièces réelles (carburant, péages, missions), pour ne pas compter deux fois l
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
-from .fleet import PRODUCTS
-
 COSTS = [
     ("fuel_cost", "Carburant"),
     ("toll_cost", "Péages"),
@@ -46,7 +44,12 @@ class EguitraTransportRotation(models.Model):
     driver_id = fields.Many2one("eguitra.transport.driver", "Chauffeur", check_company=True)
     partner_id = fields.Many2one("res.partner", "Client", required=True, check_company=True)
     route_id = fields.Many2one("eguitra.transport.route", "Route", required=True, check_company=True)
-    product = fields.Selection(PRODUCTS, "Produit", required=True, default="gasoil")
+    product_id = fields.Many2one(
+        "eguitra.transport.product", "Produit", required=True, check_company=True, ondelete="restrict", index=True,
+        default=lambda self: self.env["eguitra.transport.product"]._default_product(),
+    )
+    # Code du produit, échangé avec l'application mobile et les fichiers de reprise.
+    product = fields.Char("Code produit", compute="_compute_product_code")
     delivery_note = fields.Char("Bon de livraison")
     volume_loaded = fields.Float("Volume chargé (m³)", digits=(12, 3))
     volume_delivered = fields.Float("Volume livré (m³)", digits=(12, 3))
@@ -77,18 +80,27 @@ class EguitraTransportRotation(models.Model):
             rot.margin = rot.revenue - rot.total_cost
             rot.margin_rate = (rot.margin / rot.revenue * 100) if rot.revenue else 0.0
 
+    @api.depends("product_id.code")
+    def _compute_product_code(self):
+        for rot in self:
+            rot.product = rot.product_id.code or False
+
     @api.model_create_multi
     def create(self, vals_list):
+        Product = self.env["eguitra.transport.product"]
+        vals_list = [Product._resolve_vals(vals) for vals in vals_list]
         for vals in vals_list:
             if vals.get("route_id") and vals.get("partner_id") and not vals.get("rate"):
                 route = self.env["eguitra.transport.route"].browse(vals["route_id"])
                 partner = self.env["res.partner"].browse(vals["partner_id"])
-                vals["rate"] = route._rate_for(partner, vals.get("product", "gasoil"))
+                product = Product.browse(vals["product_id"]) if vals.get("product_id") else Product._default_product()
+                vals["rate"] = route._rate_for(partner, product)
             if vals.get("vehicle_id") and not vals.get("driver_id"):
                 vals["driver_id"] = self.env["eguitra.transport.vehicle"].browse(vals["vehicle_id"]).driver_id.id or False
         return super().create(vals_list)
 
     def write(self, vals):
+        vals = self.env["eguitra.transport.product"]._resolve_vals(vals)
         locked = self.filtered(lambda r: r.state == "invoiced")
         if locked and set(vals) - {"note", "state", "invoice_id"}:
             raise UserError("Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire.")
@@ -128,8 +140,7 @@ class EguitraTransportRotation(models.Model):
     def _invoice_line_vals(self, account):
         self.ensure_one()
         billed = self.volume_delivered or self.volume_loaded
-        product = dict(PRODUCTS).get(self.product, self.product)
-        label = f"Transport {product.lower()} {self.route_id.name}, {billed:,.3f} m³".replace(",", " ")
+        label = f"Transport {self.product_id.name.lower()} {self.route_id.name}, {billed:,.3f} m³".replace(",", " ")
         if self.delivery_note:
             label += f", BL {self.delivery_note}"
         label += f" ({self.name}, {self.vehicle_id.name}, {self.date_loading:%d/%m/%Y})"

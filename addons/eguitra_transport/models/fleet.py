@@ -2,15 +2,6 @@
 
 from odoo import api, fields, models
 
-PRODUCTS = [
-    ("gasoil", "Gasoil"),
-    ("essence", "Essence"),
-    ("jet", "Jet A1"),
-    ("petrole", "Pétrole lampant"),
-    ("fuel", "Fuel"),
-    ("autre", "Autre produit"),
-]
-
 
 def _analytic(env, plan_xmlid, name, company):
     plan = env.ref(plan_xmlid)
@@ -92,12 +83,16 @@ class EguitraTransportRoute(models.Model):
             )
         return records
 
-    def _rate_for(self, partner, product):
-        """Tarif au m³ : tarif du client pour le produit, sinon du client, sinon tarif de la route."""
+    def _tariff_for(self, partner, product):
+        """Tarif négocié du client pour le produit, sinon pour tous les produits ; vide à défaut."""
         self.ensure_one()
         tariffs = self.tariff_ids.filtered(lambda t: t.partner_id == partner)
-        exact = tariffs.filtered(lambda t: t.product == product)[:1] or tariffs.filtered(lambda t: not t.product)[:1]
-        return exact.rate if exact else self.default_rate
+        return tariffs.filtered(lambda t: t.product_id == product)[:1] or tariffs.filtered(lambda t: not t.product_id)[:1]
+
+    def _rate_for(self, partner, product):
+        """Tarif au m³ : tarif du client pour le produit, sinon du client, sinon tarif de la route."""
+        tariff = self._tariff_for(partner, product)
+        return tariff.rate if tariff else self.default_rate
 
 
 class EguitraTransportTariff(models.Model):
@@ -106,6 +101,21 @@ class EguitraTransportTariff(models.Model):
 
     route_id = fields.Many2one("eguitra.transport.route", required=True, ondelete="cascade", index=True)
     partner_id = fields.Many2one("res.partner", "Client", required=True)
-    product = fields.Selection(PRODUCTS, "Produit", help="Vide : tous les produits.")
+    product_id = fields.Many2one("eguitra.transport.product", "Produit", ondelete="restrict",
+                                 help="Vide : tous les produits.")
+    product = fields.Char("Code produit", compute="_compute_product_code")
     rate = fields.Monetary("Tarif par m³", currency_field="currency_id", required=True)
     currency_id = fields.Many2one(related="route_id.currency_id")
+
+    @api.depends("product_id.code")
+    def _compute_product_code(self):
+        for tariff in self:
+            tariff.product = tariff.product_id.code or False
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        Product = self.env["eguitra.transport.product"]
+        return super().create([Product._resolve_vals(vals, empty_means_all=True) for vals in vals_list])
+
+    def write(self, vals):
+        return super().write(self.env["eguitra.transport.product"]._resolve_vals(vals, empty_means_all=True))

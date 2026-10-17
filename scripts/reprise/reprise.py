@@ -283,9 +283,9 @@ if data is not None:
 # ─── Rotations ────────────────────────────────────────────────────────────
 data = rows("rotations.csv")
 if data is not None:
-    from odoo.addons.eguitra_transport.models.fleet import PRODUCTS
-
-    products = {label.lower(): code for code, label in PRODUCTS} | {code: code for code, _l in PRODUCTS}
+    # Produits transportés (Finance > Transport > Paramètres) : reconnus par leur code ou leur libellé.
+    known = env["eguitra.transport.product"].search([("company_id", "in", [False, company.id])])
+    products = {p.name.lower(): p.id for p in known} | {p.code: p.id for p in known}
     Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
     costs = {"carburant": "fuel_cost", "peages": "toll_cost", "frais_chauffeur": "driver_fees",
              "entretien": "maintenance_cost", "taxes": "specific_taxes", "autres": "other_costs"}
@@ -306,7 +306,7 @@ if data is not None:
         if not client or "ensemble" not in refs or "route" not in refs:
             errors.append(f"{where} : ensemble, client (déclaré dans tiers.csv) et route sont obligatoires.")
             continue
-        product = products.get((r.get("produit") or "gasoil").lower())
+        product = products.get((r.get("produit") or "gasoil").strip().lower())
         if not product:
             errors.append(f"{where} : produit « {r.get('produit')} » inconnu.")
             continue
@@ -315,7 +315,7 @@ if data is not None:
             continue
         values = {
             "date_loading": loading, "vehicle_id": refs["ensemble"].id, "partner_id": client.id, "route_id": refs["route"].id,
-            "product": product, "delivery_note": r.get("bl") or False, "note": r.get("observations") or False,
+            "product_id": product, "delivery_note": r.get("bl") or False, "note": r.get("observations") or False,
             "volume_loaded": number(r.get("volume_charge"), where), "volume_delivered": number(r.get("volume_livre"), where),
         }
         if "chauffeur" in refs:

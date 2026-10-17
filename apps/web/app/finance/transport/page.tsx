@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { CheckCheck, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
 import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
+import { Parametres } from "@/components/transport/Parametres";
+import type { Ref, Referentials } from "@/components/transport/types";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
-interface Ref { id: number; name: string }
 interface Rotation {
   id: number;
   name: string | null;
@@ -18,6 +19,7 @@ interface Rotation {
   client: Ref;
   route: Ref;
   product: string;
+  product_label: string;
   delivery_note: string | null;
   volume_loaded: number;
   volume_delivered: number;
@@ -29,17 +31,9 @@ interface Rotation {
   margin_rate: number;
   invoice: { id: number; name: string } | null;
 }
-interface Referentials {
-  vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string }>;
-  drivers: Array<{ id: number; name: string; phone: string | null }>;
-  routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number }> }>;
-  clients: Ref[];
-  products: Array<{ code: string; label: string }>;
-  costs: Array<{ code: string; label: string }>;
-}
 
 const STATE = { draft: ["Saisie", "warn"], done: ["Validée", "accent"], invoiced: ["Facturée", "ok"], cancelled: ["Annulée", "neutral"] } as const;
-type Tab = "rotations" | "rentabilite" | "flotte" | "routes";
+type Tab = "rotations" | "rentabilite" | "flotte" | "routes" | "parametres";
 
 export default function TransportPage() {
   const [tab, setTab] = useState<Tab>("rotations");
@@ -84,11 +78,12 @@ export default function TransportPage() {
           </div>
         </div>
       )}
-      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
       {tab === "rotations" && <Rotations />}
       {tab === "rentabilite" && <Profitability />}
       {tab === "flotte" && <Fleet />}
       {tab === "routes" && <Routes />}
+      {tab === "parametres" && <Parametres />}
     </div>
   );
 }
@@ -316,7 +311,7 @@ function Routes() {
           { key: "name", label: "Route" },
           { key: "distance_km", label: "Distance (km)", align: "right", render: (x) => String(x.distance_km) },
           { key: "default_rate", label: "Tarif par m³", align: "right", render: (x) => fmtGNF(x.default_rate) },
-          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${t.product})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
+          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${ref?.products.find((p) => p.code === t.product)?.label ?? t.product})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-4">
           <Input placeholder="Conakry - Siguiri" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} />

@@ -9,17 +9,17 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
-from ..models.fleet import PRODUCTS
 from ..models.rotation import COSTS
 
 _logger = logging.getLogger(__name__)
 
 READ = ("admin", "direction", "finance", "exploitation")
 WRITE = ("admin", "finance", "exploitation")
+SETTINGS = ("admin", "finance")
 MAX_SYNC = 200
 
 ROTATION_FIELDS = (
-    "date_loading", "date_delivery", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note", "product",
+    "date_loading", "date_delivery", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
     *[c for c, _l in COSTS],
 )
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
@@ -35,7 +35,8 @@ def _rotation_row(rot):
         "id": rot.id, "name": rot.name if rot.name != "/" else None, "state": rot.state, "source": rot.source,
         "date_loading": rot.date_loading, "date_delivery": rot.date_delivery,
         "vehicle": _ref(rot.vehicle_id), "driver": _ref(rot.driver_id), "client": _ref(rot.partner_id),
-        "route": _ref(rot.route_id), "product": rot.product, "delivery_note": rot.delivery_note or None,
+        "route": _ref(rot.route_id), "product": rot.product, "product_id": rot.product_id.id,
+        "product_label": rot.product_id.name, "delivery_note": rot.delivery_note or None,
         "volume_loaded": rot.volume_loaded, "volume_delivered": rot.volume_delivered, "shortage": rot.shortage,
         "rate": rot.rate, "revenue": rot.revenue, "costs": {c: rot[c] for c, _l in COSTS},
         "total_cost": rot.total_cost, "margin": rot.margin, "margin_rate": rot.margin_rate,
@@ -44,8 +45,25 @@ def _rotation_row(rot):
     }
 
 
+def _product(data):
+    """Produit d'une saisie : product_id, ou le code (« gasoil ») des saisies de l'application mobile."""
+    Product = request.env["eguitra.transport.product"]
+    if data.get("product_id"):
+        try:
+            product = Product.browse(int(data["product_id"])).exists()
+        except (TypeError, ValueError) as e:
+            raise ApiError(400, "invalid_parameter", "Produit inconnu.") from e
+    else:
+        product = Product._by_code(data.get("product"))
+    if not product:
+        raise ApiError(400, "invalid_parameter", "Produit inconnu.")
+    return product
+
+
 def _rotation_values(data):
     values = {}
+    if data.get("product") or data.get("product_id"):
+        values["product_id"] = _product(data).id
     for key in ROTATION_FIELDS:
         if key not in data:
             continue
@@ -54,10 +72,6 @@ def _rotation_values(data):
             values[key] = parse_date(data, key)
         elif key in ("delivery_note", "note"):
             values[key] = value or False
-        elif key == "product":
-            if value not in dict(PRODUCTS):
-                raise ApiError(400, "invalid_parameter", "Produit inconnu.")
-            values[key] = value
         else:
             values[key] = as_float(value or 0, key)
     for key, model in REF_FIELDS.items():
@@ -67,6 +81,11 @@ def _rotation_values(data):
                 raise ApiError(422, "business_rule", f"Référence inconnue : {key}.")
             values[key] = record.id
     return values
+
+
+def _product_row(product):
+    return {"id": product.id, "code": product.code, "name": product.name, "sequence": product.sequence,
+            "shared": not product.company_id, "active": product.active}
 
 
 def _get(model, record_id, label):
@@ -100,7 +119,9 @@ class EguitraTransport(http.Controller):
                         "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids]}
                        for r in routes],
             "clients": [{"id": c.id, "name": c.name} for c in clients],
-            "products": [{"code": k, "label": v} for k, v in PRODUCTS],
+            # Le code reste la clé des saisies du téléphone (y compris celles gardées hors réseau).
+            "products": [{"id": p.id, "code": p.code, "label": p.name}
+                         for p in env["eguitra.transport.product"].search([])],
             "costs": [{"code": k, "label": v} for k, v in COSTS],
         }
 
@@ -171,7 +192,8 @@ class EguitraTransport(http.Controller):
         return [
             {"id": r.id, "name": r.name, "origin": r.origin or None, "destination": r.destination or None,
              "distance_km": r.distance_km, "default_rate": r.default_rate, "active": r.active,
-             "tariffs": [{"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None, "rate": t.rate}
+             "tariffs": [{"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None,
+                          "product_id": t.product_id.id or None, "rate": t.rate}
                          for t in r.tariff_ids]}
             for r in request.env["eguitra.transport.route"].with_context(active_test=False).search([])
         ]
@@ -187,7 +209,8 @@ class EguitraTransport(http.Controller):
         if "tariffs" in data:
             commands = [(5, 0, 0)]
             for t in data["tariffs"] or []:
-                commands.append((0, 0, {"partner_id": int(t["partner_id"]), "product": t.get("product") or False,
+                product = _product(t).id if (t.get("product") or t.get("product_id")) else False
+                commands.append((0, 0, {"partner_id": int(t["partner_id"]), "product_id": product,
                                         "rate": as_float(t.get("rate", 0), "rate")}))
             values["tariff_ids"] = commands
         return values
@@ -203,6 +226,43 @@ class EguitraTransport(http.Controller):
     def update_route(self, route_id, **_kw):
         _get("eguitra.transport.route", route_id, "Route").write(self._route_values(read_json()))
         return {"status": "ok"}
+
+    # ─── Produits transportés ─────────────────────────────────────────────
+
+    @api_route("/transport/products", profiles=READ)
+    def products(self, **_kw):
+        Product = request.env["eguitra.transport.product"].with_context(active_test=False)
+        return [_product_row(p) for p in Product.search([])]
+
+    def _product_values(self, data):
+        values = {}
+        if "name" in data:
+            values["name"] = str(data["name"] or "").strip() or False
+        if "code" in data:
+            values["code"] = str(data["code"] or "").strip().lower() or False
+        if "sequence" in data:
+            values["sequence"] = int(data["sequence"] or 0)
+        if "active" in data:
+            values["active"] = bool(data["active"])
+        return values
+
+    @api_route("/transport/products", methods=("POST",), profiles=SETTINGS)
+    def create_product(self, **_kw):
+        data = read_json()
+        require(data, "name", "code")
+        # Un produit créé à l'écran appartient à la société de travail.
+        values = dict(self._product_values(data), company_id=request.env.company.id)
+        return _product_row(request.env["eguitra.transport.product"].create(values))
+
+    @api_route("/transport/products/<int:product_id>", methods=("PATCH",), profiles=SETTINGS)
+    def update_product(self, product_id, **_kw):
+        product = _get("eguitra.transport.product", product_id, "Produit")
+        values = self._product_values(read_json())
+        if "code" in values and values["code"] != product.code:
+            # Le code est la clé des saisies gardées sur les téléphones et des fichiers de reprise.
+            raise ApiError(422, "business_rule", "Le code d'un produit ne change pas : créez un autre produit.")
+        product.write(values)
+        return _product_row(product)
 
     # ─── Rotations ────────────────────────────────────────────────────────
 
