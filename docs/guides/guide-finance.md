@@ -13,6 +13,7 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 | Vous voulez enregistrer… | Écran | Point d'attention |
 |---|---|---|
 | Une facture de vente | Comptabilité > Ventes | Rotations, situations de chantier et loyers produisent leurs factures : ne pas les ressaisir. |
+| Une dépense à engager (commande, contrat) | Pilotage > Engagements de dépense | Engager avant de commander, devis joint : l'engagement approuvé couvre ensuite les factures du fournisseur. |
 | Un achat ou une dépense | Comptabilité > Achats et dépenses | Joindre la pièce numérisée, puis « Soumettre » au circuit d'approbation. |
 | Un encaissement ou un paiement | Comptabilité > Trésorerie | Rapprocher chaque ligne du relevé de sa facture : c'est ce qui solde la créance ou la dette. |
 | Une échéance d'emprunt prélevée en banque | Comptabilité > Trésorerie, « Rapprocher » | L'échéance est proposée sur la ligne du relevé : capital et intérêts en contrepartie, la sortie n'est comptée qu'une fois. |
@@ -96,6 +97,16 @@ mise en demeure (30 jours). Ouvrir une relance pour voir la lettre, l'imprimer e
 « remise par courrier », ou l'envoyer par courriel si un serveur d'envoi est paramétré. La mise en
 demeure n'est jamais envoyée sans votre décision.
 
+## Engagements de dépense (Pilotage > Engagements de dépense)
+
+Avant toute commande ou tout contrat : « Nouvel engagement » (fournisseur, objet, montant, axes
+analytiques, devis joint), puis « Soumettre ». L'engagement suit le circuit d'approbation (finance,
+direction au-delà de 50 M GNF). Une fois approuvé, les factures du fournisseur rattachées à
+l'engagement (il est proposé à la saisie) se comptabilisent sans refaire le circuit, tant qu'elles
+restent dans le reste à engager (tolérance de 5 %). Le suivi budgétaire montre l'engagé et le
+disponible de chaque ligne ; l'état « Engagements de dépense non soldés » est au registre des
+rapports. Solder un engagement libère son reste.
+
 ## Achats et dépenses (Comptabilité > Achats et dépenses)
 
 Saisir la pièce du fournisseur avec sa pièce jointe numérisée, puis « Soumettre » : elle part au
@@ -110,9 +121,14 @@ diverse ; une catégorie d'investissement crée l'immobilisation à la validatio
 - Nouvelle opération : type d'opération (il fixe le sens et la contrepartie ; un type client ou
   fournisseur laisse l'opération à rapprocher de la facture), mode de paiement, référence,
   justificatif et, avec un compte d'imputation, les axes analytiques.
-- Import du relevé bancaire (CSV ou XLSX avec date, libellé et montant, ou débit et crédit). Les
-  soldes initial et final sont lus dans le fichier (lignes « Solde initial », « Nouveau solde », ou
-  colonne de solde) ou saisis : un relevé qui ne s'équilibre pas est refusé, sauf confirmation.
+- Import du relevé bancaire : CSV ou XLSX avec date, libellé et montant (ou débit et crédit), ou
+  relevé normalisé ISO 20022 camt.053 (XML) fourni par la banque. Les soldes initial et final sont lus
+  dans le fichier (lignes « Solde initial », « Nouveau solde », colonne de solde, soldes d'ouverture
+  et de clôture du camt.053) ou saisis : un relevé qui ne s'équilibre pas est refusé, sauf
+  confirmation. Les opérations en attente d'un camt.053 ne sont pas importées.
+- Sorties de caisse et de banque, règlement d'une échéance d'emprunt, virement interne : au-delà
+  de 100 M GNF, l'opération reste en brouillon et part au circuit d'approbation (« À valider ») ;
+  elle se comptabilise à la dernière approbation.
 - Rapprochement : pour chaque ligne du relevé, la plateforme propose les factures et règlements en
   attente, et pour une sortie de banque les échéances d'emprunt ; valider la proposition ou imputer
   directement à un compte, avec ses axes. Une échéance déjà réglée directement en banque et retrouvée
@@ -178,14 +194,33 @@ ligne du relevé.
 Clôture mensuelle : la plateforme exécute les contrôles (équilibres, compte de passage, relevés
 rapprochés et soldes des relevés égaux au solde comptable, pièces en attente, encours de dette
 conforme aux échéanciers, échéances rapprochées des relevés, centres de coût imputés avec leur
-activité…). Une anomalie bloquante empêche la clôture ; une clôture verrouille les écritures de la
-période. La réouverture est réservée et tracée dans le registre.
+activité…). Une anomalie bloquante empêche la clôture. La clôture passe ensuite, chacune une seule
+fois : les dotations aux amortissements du mois, la liquidation de la TVA (pièce « TVA-mm/aaaa »
+datée de la fin du mois, TVA due au 4441 ou crédit reporté au 4451), les factures à établir des
+rotations validées non facturées (pièce « FAE-mm/aaaa », extournée le premier jour du mois suivant)
+et, si des comptes sont en devise, la réévaluation au cours de clôture. Elle verrouille enfin les
+écritures et scelle la période : l'empreinte figure sur le procès-verbal de clôture, à imprimer et
+conserver hors du système ; les contrôles d'intégrité la recalculent. La réouverture est réservée et
+tracée dans le registre.
+
+Validation de la reprise (même écran) : la valeur de référence de chaque indicateur du classeur est
+chargée depuis le fichier fourni à la reprise ; la plateforme recalcule les 26 indicateurs
+(équilibre, produits, charges, EBITDA, résultat, trésorerie, stocks, créances et dettes dont échues,
+CA et achats TTC, transport, bilan, capitaux propres) et donne l'écart de chacun. Le résultat
+« n/26 », horodaté, s'imprime en annexe du procès-verbal de bascule.
 
 ## Balance et états (Comptabilité > Balance et états)
 
 Bilan, compte de résultat et tableau des flux de trésorerie SYSCOHADA ; balance, grand livre,
-rapports paramétrables, passerelle IFRS et export d'audit, en CSV ou XLSX.
+rapports paramétrables, passerelle IFRS et export d'audit (SAF-T), en CSV ou XLSX. L'onglet
+« Consolidé du groupe » donne le compte de résultat et le bilan de chaque société, les éliminations
+des opérations entre sociétés du groupe (ventes et achats réciproques, créances et dettes, comptes
+courants) et le total du groupe ; il demande un compte ouvert aux deux sociétés.
 
 ## Fiscalité (Comptabilité > Fiscalité)
 
-TVA collectée et déductible par période, préparation des déclarations à partir des écritures.
+TVA collectée et déductible par période, préparation des déclarations à partir des écritures,
+historique des déclarations. Retenues à la source : taux et comptes paramétrables, appliqués à la
+saisie d'une pièce d'achat (ou par défaut depuis la fiche du fournisseur) et repris dans la
+déclaration du mois. IFRS : matrice des pertes attendues par ancienneté des créances (retraitement
+hors des livres SYSCOHADA) et passerelle des retraitements.
