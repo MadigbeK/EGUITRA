@@ -37,7 +37,8 @@ class TestPilotage(PilotageMixin, TransactionCase):
         self.assertEqual(wc["receivables_aging_count"]["non_echu"], 1, "Nombre de pièces par tranche")
 
     def test_balance_agee_et_statut_des_tiers(self):
-        late = self.make_invoice("in_invoice", 50_000_000, day=self.today - timedelta(days=100))
+        late = self.make_invoice("in_invoice", 50_000_000, day=self.today - timedelta(days=100),
+                                 due=self.today - timedelta(days=100))
         rows = {r["partner_id"]: r for r in self.metrics.partner_aging(self.company, "liability_payable", self.today)}
         supplier = rows[self.supplier.id]
         self.assertAlmostEqual(supplier["total"], 236_000_000 + late.amount_total)
@@ -77,7 +78,7 @@ class TestPilotage(PilotageMixin, TransactionCase):
                                msg="Le tableau rejoint le solde des banques et caisses")
 
     def test_prevision_de_tresorerie(self):
-        self.make_invoice("out_invoice", 100_000_000, day=self.today - timedelta(days=120))
+        self.make_invoice("out_invoice", 100_000_000, day=self.today - timedelta(days=120), due=self.today - timedelta(days=120))
         loan = self.loan()
         forecast = self.metrics.cash_forecast(self.company, self.today)
         current = forecast["month_end"]

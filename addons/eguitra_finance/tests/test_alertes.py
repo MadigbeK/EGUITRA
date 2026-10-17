@@ -24,7 +24,7 @@ class TestAlertes(PilotageMixin, TransactionCase):
         self.assertEqual(thresholds["dso_target_days"].value, 60)
         self.assertEqual(thresholds["dscr_min"].severity, "critical")
         thresholds["cash_min"].value = 5_000_000_000
-        self.make_invoice("in_invoice", 10_000_000, day=self.today - timedelta(days=10))
+        self.make_invoice("in_invoice", 10_000_000, day=self.today - timedelta(days=10), due=self.today - timedelta(days=10))
 
         alerts = Threshold.active_alerts(self.company, self.today)
         by_key = {a["key"]: a for a in alerts}

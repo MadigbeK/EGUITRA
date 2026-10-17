@@ -32,12 +32,15 @@ class FinanceDataMixin:
         cls.today = date.today()
 
     @classmethod
-    def make_invoice(cls, move_type="out_invoice", amount=1_000_000_000, day=None, post=True, partner=None):
+    def make_invoice(cls, move_type="out_invoice", amount=1_000_000_000, day=None, post=True, partner=None, due=None):
+        """Facture de test. Sans condition de paiement, le noyau fixe l'échéance au jour de la saisie :
+        `due` la fixe explicitement (facture ancienne échue, par exemple)."""
         sale = move_type.startswith("out_")
         move = cls.env["account.move"].create({
             "move_type": move_type,
             "partner_id": (partner or (cls.customer if sale else cls.supplier)).id,
             "invoice_date": day or cls.today,
+            **({"invoice_date_due": due} if due else {}),
             "invoice_line_ids": [Command.create({
                 "name": "Transport Conakry - Siguiri" if sale else "Électricité",
                 "quantity": 1,
