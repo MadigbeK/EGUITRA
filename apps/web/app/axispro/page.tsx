@@ -10,6 +10,7 @@ import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSum
 import { fmtPct, fmtShort } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
 import { ratio } from "@/components/axispro/cellules";
+import { note } from "@/components/axispro/dossier/commun";
 
 type Vue = "tableau" | "liste";
 
@@ -214,14 +215,14 @@ function CarteDossier({ d }: { d: DossierSummary }) {
     <Link href={`/axispro/dossiers/${d.id}`} className="n-levable block rounded-xl border border-line bg-panel p-3.5 shadow-[var(--ombre-carte)]">
       <div className="flex items-center justify-between gap-2">
         <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
-        <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.progress.assessed ? d.readiness : null))} title="Project Readiness Score">{d.progress.assessed ? `${Math.round(d.readiness)} / 100` : "Non noté"}</span>
+        <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.progress.assessed ? d.readiness : null))} title="Project Readiness Score">{d.progress.assessed ? `${note(d.readiness)} / 100` : "Non noté"}</span>
       </div>
       <div className="mt-2.5 line-clamp-2 text-[14px] font-semibold leading-snug text-ink">{d.name}</div>
       <div className="mt-0.5 truncate text-[12.5px] text-muted">{d.promoter.name}</div>
       {d.progress.assessed > 0 && (
         <div className="mt-2 flex gap-3 text-[11.5px] text-muted">
-          <span>APD <b className="tabular text-ink-2">{Math.round(d.apd)}</b></span>
-          <span>Bankability <b className="tabular text-ink-2">{Math.round(d.bankability)}</b></span>
+          <span>APD <b className="tabular text-ink-2">{note(d.apd)}</b></span>
+          <span>Bankability <b className="tabular text-ink-2">{note(d.bankability)}</b></span>
           {d.locked && <span className="font-semibold text-accent">Décision verrouillée</span>}
         </div>
       )}
@@ -290,9 +291,9 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
             </div>
           ),
         },
-        { key: "readiness", label: "Readiness", align: "right", sortValue: (d) => d.readiness, render: (d) => <span className={cx("inline-block min-w-12 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.progress.assessed ? d.readiness : null))}>{d.progress.assessed ? Math.round(d.readiness) : "–"}</span> },
-        { key: "apd", label: "APD", align: "right", sortValue: (d) => d.apd, render: (d) => (d.progress.assessed ? Math.round(d.apd) : "–") },
-        { key: "bankability", label: "Bankability", align: "right", sortValue: (d) => d.bankability, render: (d) => (d.progress.assessed ? Math.round(d.bankability) : "–") },
+        { key: "readiness", label: "Readiness", align: "right", sortValue: (d) => d.readiness, render: (d) => <span className={cx("inline-block min-w-12 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.progress.assessed ? d.readiness : null))}>{d.progress.assessed ? note(d.readiness) : "–"}</span> },
+        { key: "apd", label: "APD", align: "right", sortValue: (d) => d.apd, render: (d) => (d.progress.assessed ? note(d.apd) : "–") },
+        { key: "bankability", label: "Bankability", align: "right", sortValue: (d) => d.bankability, render: (d) => (d.progress.assessed ? note(d.bankability) : "–") },
         { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
         { key: "next_gate", label: "Prochain gate", render: (d) => (d.next_gate ? <span className="whitespace-nowrap text-[12.5px]">{d.next_gate.code} · {GATE_DECISION[d.next_gate.decision].label}</span> : "–") },
         { key: "irr", label: "TRI", align: "right", sortValue: (d) => d.financial?.irr_project ?? null, render: (d) => fmtPct(d.financial?.irr_project) },

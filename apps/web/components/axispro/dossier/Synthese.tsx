@@ -7,7 +7,7 @@ import { apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type Currency, type DossierDetail, type RiskLevel } from "@/lib/axispro-types";
 import { fmtDate, fmtPct, fmtShort } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PRIORITE_TON, arrondi, couleurScore, montant, useRetour } from "./commun";
+import { PRIORITE_TON, arrondi, couleurScore, montant, note, useRetour } from "./commun";
 
 /** « Où en est le dossier » : trois scores, classification, recommandation, prochain gate et les
  * cinq actions prioritaires, puis anomalies, domaines, fiche projet et hypothèses de décision. */
@@ -30,7 +30,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
           <div className="flex flex-wrap justify-center gap-5">
             {scores.map((x) => (
               <div key={x.titre} className="flex flex-col items-center text-center">
-                <Anneau value={s.assessed ? x.valeur : null} taille={112} epaisseur={10} couleur={couleurScore(x.valeur)} sous="/ 100" />
+                <Anneau value={s.assessed ? note(x.valeur) : null} taille={112} epaisseur={10} couleur={couleurScore(x.valeur)} sous="/ 100" />
                 <div className="mt-1.5 text-[13px] font-semibold text-ink">{x.titre}</div>
                 <div className="max-w-[140px] text-[11.5px] text-muted">{x.aide}</div>
               </div>

@@ -17,7 +17,7 @@ import { DataRoom } from "@/components/axispro/dossier/DataRoom";
 import { Gates } from "@/components/axispro/dossier/Gates";
 import { Journal, Rapport } from "@/components/axispro/dossier/Rapport";
 import { Synthese } from "@/components/axispro/dossier/Synthese";
-import { arrondi, montant } from "@/components/axispro/dossier/commun";
+import { montant, note } from "@/components/axispro/dossier/commun";
 
 type Tab = "synthese" | "evaluation" | "gates" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "comites" | "journal" | "echanges" | "rapport" | "temps";
 
@@ -73,16 +73,16 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-5">
-            <Anneau value={s.assessed ? s.readiness : null} taille={104} epaisseur={9} couleur="#ffffff" clair sous="Readiness" />
+            <Anneau value={s.assessed ? note(s.readiness) : null} taille={104} epaisseur={9} couleur="#ffffff" clair sous="Readiness" />
             <div className="space-y-2 text-[13px]">
               <div className="flex gap-4">
                 <div>
                   <div className="text-white/85">APD</div>
-                  <div className="font-display text-[20px] font-bold tabular">{s.assessed ? arrondi(s.apd) : "–"}</div>
+                  <div className="font-display text-[20px] font-bold tabular">{s.assessed ? note(s.apd) : "–"}</div>
                 </div>
                 <div>
                   <div className="text-white/85">Bankability</div>
-                  <div className="font-display text-[20px] font-bold tabular">{s.assessed ? arrondi(s.bankability) : "–"}</div>
+                  <div className="font-display text-[20px] font-bold tabular">{s.assessed ? note(s.bankability) : "–"}</div>
                 </div>
               </div>
               <div>

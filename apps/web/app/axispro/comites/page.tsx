@@ -5,7 +5,7 @@ import { Gavel, Lock } from "@/components/icons";
 import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, Loading, PageHeader, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { RECO, type DossierSummary, type Review } from "@/lib/axispro-types";
-import { couleurScore } from "@/components/axispro/dossier/commun";
+import { couleurScore, note } from "@/components/axispro/dossier/commun";
 import { fmtDate, fmtShort } from "@/lib/format";
 
 type ReviewRow = Review & { dossier: { id: number; reference: string; name: string; promoter: string } };
@@ -28,7 +28,7 @@ export default function ComitesPage() {
             <div className="n-cascade grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               {agenda.map((d) => (
                 <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className="n-levable flex items-center gap-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
-                  <Anneau value={d.progress.assessed ? d.readiness : null} taille={72} epaisseur={10} couleur={couleurScore(d.readiness)} sous="Readiness" />
+                  <Anneau value={d.progress.assessed ? note(d.readiness) : null} taille={72} epaisseur={10} couleur={couleurScore(d.readiness)} sous="Readiness" />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>

@@ -37,6 +37,11 @@ export function montant(d: Pick<DossierDetail, "currency">, v: number | null | u
   return `${fmtShort(v ?? 0)} ${d.currency?.name ?? "GNF"}`;
 }
 
+/** Score affiché sans jamais franchir un seuil par l'arrondi : 64,6 s'affiche 64, sous APD READY (65). */
+export function note(v: number) {
+  return Math.floor(v + 1e-9);
+}
+
 export function arrondi(v: number | null | undefined, digits = 0) {
   if (v === null || v === undefined || Number.isNaN(v)) return "–";
   return v.toLocaleString("fr-FR", { maximumFractionDigits: digits, minimumFractionDigits: digits });
