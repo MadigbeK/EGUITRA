@@ -14,3 +14,10 @@ from . import test_closing_complete
 from . import test_statements_export
 from . import test_ifrs
 from . import test_saft
+from . import test_analytic
+from . import test_treasury
+from . import test_budget
+from . import test_categories
+from . import test_partners
+from . import test_disputes
+from . import test_chart

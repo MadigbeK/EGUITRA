@@ -47,6 +47,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/immobilisations", label: "Immobilisations", icon: "Boxes", profiles: FIN },
         { href: "/finance/dette", label: "Dette et financement", icon: "HandCoins", profiles: FIN },
         { href: "/finance/ecritures", label: "Journaux et OD", icon: "BookOpen", profiles: FIN },
+        { href: "/finance/plan-comptable", label: "Plan comptable", icon: "ListChecks", profiles: ["admin", "finance"] },
         { href: "/finance/etats", label: "Balance et états", icon: "FileSpreadsheet", profiles: FIN },
         { href: "/finance/fiscalite", label: "Fiscalité", icon: "Scale", profiles: FIN },
         { href: "/finance/clotures", label: "Clôtures et contrôles", icon: "Lock", profiles: FIN, badge: "controls" },
@@ -65,6 +66,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/finance/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
         { href: "/finance/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
+        { href: "/finance/admin/axes", label: "Axes analytiques", icon: "Layers", profiles: ["admin", "finance"] },
+        { href: "/finance/admin/imputations", label: "Imputations automatiques", icon: "Target", profiles: ["admin", "finance"] },
         { href: "/finance/admin/parametres", label: "Seuils et taux", icon: "SlidersHorizontal", profiles: ["admin"] },
         { href: "/finance/admin/audit", label: "Journal d'audit", icon: "ScrollText", profiles: ["admin"] },
       ],

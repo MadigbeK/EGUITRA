@@ -481,9 +481,10 @@ class EguitraFinancePilotage(models.AbstractModel):
 
     @api.model
     def budget_status(self, companies, day, threshold=None):
-        """Réalisé contre budget cumulé, du début du budget à la fin du mois de day, compte par compte
-        (budgets par compte de mis_builder_budget, écran Activités et budget) : produits et charges,
-        lignes hors de la tolérance (charges au-dessus, produits en dessous). None sans budget."""
+        """Réalisé contre budget cumulé, du début du budget à la fin du mois de day : par ligne
+        budgétaire (eguitra.budget.line, écran Activités et budget) quand le budget en porte, sinon
+        compte par compte (budgets par compte de mis_builder_budget) ; produits et charges, lignes hors
+        de la tolérance (charges au-dessus, produits en dessous). None sans budget."""
         if "mis.budget.by.account" not in self.env:
             return None
         Budget = self.env["mis.budget.by.account"].sudo()
@@ -501,6 +502,16 @@ class EguitraFinancePilotage(models.AbstractModel):
         rows = {}
         self.env.flush_all()
         for budget in budgets:
+            if "eguitra_line_ids" in budget._fields and budget.eguitra_line_ids:
+                months = (m_end.year - budget.date_from.year) * 12 + m_end.month - budget.date_from.month + 1
+                execution = self.env["eguitra.budget.line"].sudo().execution(budget, max(1, min(12, months)))
+                for r in execution["lines"]:
+                    row = rows.setdefault(f"L{r['id']}", {
+                        "code": r["account_prefixes"] or "", "name": r["name"], "budget": 0.0, "actual": 0.0,
+                        "kind": "produit" if r["nature"] == "income" else "charge"})
+                    row["budget"] += r["budget"]
+                    row["actual"] += r["actual"]
+                continue
             planned = {}
             for item in budget.item_ids.filtered(lambda i, b=budget: b.date_from <= i.date_from <= m_end):
                 planned[item.account_id.id] = planned.get(item.account_id.id, 0.0) + item.balance
@@ -517,7 +528,7 @@ class EguitraFinancePilotage(models.AbstractModel):
             accounts = self.env["account.account"].sudo().with_company(budget.company_id).browse(list(planned))
             for account in accounts:
                 code = account.code or ""
-                row = rows.setdefault(code, {"code": code, "name": account.name, "budget": 0.0, "actual": 0.0,
+                row = rows.setdefault(f"A{code}", {"code": code, "name": account.name, "budget": 0.0, "actual": 0.0,
                                              "kind": "produit" if code.startswith("7") else "charge"})
                 sign = -1 if code.startswith("7") else 1
                 row["budget"] += sign * planned[account.id]

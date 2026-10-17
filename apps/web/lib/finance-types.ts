@@ -271,6 +271,21 @@ export interface MoveSummary {
   payment_state: string;
   company: Ref;
   approval?: { state: string; level: number | null; pending_with: string | null } | null;
+  contract_ref?: string | null;
+  /** Facture contestée : statut « Litige » prioritaire, hors relances. */
+  dispute?: boolean;
+  dispute_reason?: string | null;
+  dispute_date?: string | null;
+}
+
+/** Compte analytique d'une répartition, avec son axe (clé de /finance/analytic-axes) et sa part. */
+export interface AnalyticShare {
+  id: number;
+  name: string;
+  code: string | null;
+  plan: string;
+  axis: string | null;
+  percentage: number;
 }
 
 export interface MoveLine {
@@ -286,7 +301,49 @@ export interface MoveLine {
   debit: number;
   credit: number;
   analytic_distribution: Record<string, number>;
+  analytic?: AnalyticShare[];
+  category?: Ref | null;
   display_type: string;
+}
+
+/** Axe analytique proposé dans la société de travail (activité, centre de coût, axes métier). */
+export interface AnalyticAxis {
+  key: string;
+  label: string;
+  plan_id: number;
+  /** Tenu par la finance (activité, centre de coût) ; sinon créé par son module. */
+  managed: boolean;
+  accounts: Array<{ id: number; name: string; code: string | null; active: boolean; activity_id: number | null; income_account_id: number | null }>;
+}
+
+/** Catégorie de dépense : compte, TVA et compte de tiers des pièces d'achat (Imputations automatiques). */
+export interface ExpenseCategory {
+  id: number;
+  sequence: number;
+  name: string;
+  nature: string;
+  nature_label: string;
+  account: { id: number; code: string; name: string } | null;
+  partner_account: { id: number; code: string; name: string } | null;
+  tax_mode: "deductible" | "none";
+  tax: { id: number; name: string; amount: number } | null;
+  asset_profile: Ref | null;
+  active: boolean;
+  /** Compte de tiers non fournisseur : la dépense se passe en opération diverse. */
+  entry: boolean;
+}
+
+/** Compte analytique détaillé (écran Axes analytiques). */
+export interface AnalyticAccount {
+  id: number;
+  name: string;
+  code: string | null;
+  plan: string;
+  axis: string | null;
+  active: boolean;
+  company: Ref | null;
+  activity: Ref | null;
+  income_account: { id: number; code: string; name: string } | null;
 }
 
 export interface MoveDetail extends MoveSummary {
@@ -346,6 +403,11 @@ export interface Partner {
   city: string | null;
   customer: boolean;
   supplier: boolean;
+  ref?: string | null;
+  sector?: string | null;
+  contact?: string | null;
+  /** Client non assujetti : factures de vente en exonération de TVA. */
+  vat_exempt?: boolean;
   /** Soldes : null pour les profils hors finance et direction. */
   receivable: number | null;
   payable: number | null;

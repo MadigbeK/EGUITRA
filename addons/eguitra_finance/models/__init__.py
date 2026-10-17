@@ -13,3 +13,10 @@ from . import tax_return
 from . import fiscal_declarations
 from . import period_close_complete
 from . import ifrs
+from . import analytic
+from . import treasury
+from . import treasury_loan
+from . import bank_reconciliation
+from . import budget
+from . import expense_category
+from . import res_partner

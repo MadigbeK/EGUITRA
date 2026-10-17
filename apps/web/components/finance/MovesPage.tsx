@@ -9,13 +9,14 @@ import { useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type MoveSummary, type Paged } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 
-type View = "all" | "draft" | "open" | "overdue" | "paid";
+type View = "all" | "draft" | "open" | "overdue" | "dispute" | "paid";
 
 const VIEWS: Array<{ key: View; label: string }> = [
   { key: "all", label: "Toutes" },
   { key: "draft", label: "Brouillons" },
   { key: "open", label: "À régler" },
   { key: "overdue", label: "Échues" },
+  { key: "dispute", label: "Litiges" },
   { key: "paid", label: "Soldées" },
 ];
 
@@ -28,6 +29,7 @@ function query(kind: "sales" | "purchases", view: View, search: string) {
     params.set("payment_state", "not_paid,partial");
   }
   if (view === "overdue") params.set("overdue", "1");
+  if (view === "dispute") params.set("dispute", "1");
   if (view === "paid") params.set("payment_state", "paid,in_payment");
   if (search) params.set("search", search);
   return `/finance/moves?${params.toString()}`;
@@ -93,7 +95,11 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
                 key: "state",
                 label: "Statut",
                 render: (m) =>
-                  m.state === "posted" ? (
+                  m.dispute && m.state !== "cancel" ? (
+                    <span title={m.dispute_reason ?? undefined}>
+                      <Badge tone="danger">Litige</Badge>
+                    </span>
+                  ) : m.state === "posted" ? (
                     <Badge tone={PAYMENT_STATES[m.payment_state]?.tone}>{PAYMENT_STATES[m.payment_state]?.label ?? m.payment_state}</Badge>
                   ) : (
                     <Badge tone={MOVE_STATES[m.state]?.tone}>{MOVE_STATES[m.state]?.label ?? m.state}</Badge>

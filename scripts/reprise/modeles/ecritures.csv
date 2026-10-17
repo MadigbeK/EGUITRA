@@ -1,9 +1,9 @@
-piece;date;journal;compte;tiers;libelle;debit;credit;activite
-FV-2026-001;15/01/2026;FAC;411100;Exemple Distribution SA;Transport de janvier;59 000 000;;
-FV-2026-001;15/01/2026;FAC;706100;;Transport de janvier;;50 000 000;Transport pétrolier
-FV-2026-001;15/01/2026;FAC;443100;;TVA facturée;;9 000 000;
-FA-2026-001;20/01/2026;FACTU;604200;;Gasoil de janvier;10 000 000;;Transport pétrolier
-FA-2026-001;20/01/2026;FACTU;445200;;TVA récupérable;1 800 000;;
-FA-2026-001;20/01/2026;FACTU;401100;Exemple Carburants SARL;Gasoil de janvier;;11 800 000;
-BQ-2026-001;31/01/2026;BNK1;521001;;Règlement Exemple Distribution;59 000 000;;
-BQ-2026-001;31/01/2026;BNK1;411100;Exemple Distribution SA;Règlement facture FV-2026-001;;59 000 000;
+piece;date;journal;compte;tiers;libelle;debit;credit;activite;centre_cout;chantier;ensemble;route;bien
+FV-2026-001;15/01/2026;FAC;411100;Exemple Distribution SA;Transport de janvier;59 000 000;;;;;;;
+FV-2026-001;15/01/2026;FAC;706100;;Transport de janvier;;50 000 000;Transport pétrolier;;;ER-01;Conakry - Kankan;
+FV-2026-001;15/01/2026;FAC;443100;;TVA facturée;;9 000 000;;;;;;
+FA-2026-001;20/01/2026;FACTU;604200;;Gasoil de janvier;10 000 000;;Transport pétrolier;Parc de Matoto;;ER-01;;
+FA-2026-001;20/01/2026;FACTU;445200;;TVA récupérable;1 800 000;;;;;;;
+FA-2026-001;20/01/2026;FACTU;401100;Exemple Carburants SARL;Gasoil de janvier;;11 800 000;;;;;;
+BQ-2026-001;31/01/2026;BNK1;521001;;Règlement Exemple Distribution;59 000 000;;;;;;;
+BQ-2026-001;31/01/2026;BNK1;411100;Exemple Distribution SA;Règlement facture FV-2026-001;;59 000 000;;;;;;

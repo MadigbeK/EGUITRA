@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Paperclip, RotateCcw, Send, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { AnalyticTags } from "./AnalyticFields";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
@@ -15,6 +16,10 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
   const [journalId, setJournalId] = useState("");
   const [amount, setAmount] = useState("");
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [modeId, setModeId] = useState("");
+  const [disputing, setDisputing] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const { data: modes } = useApi<Array<{ id: number; name: string }>>(paying ? "/finance/payment-modes" : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "danger" | "ok"; text: string } | null>(null);
 
@@ -48,19 +53,28 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 {move.approval.state === "rejected" ? "Refusée" : `En validation${move.approval.pending_with ? ` : ${move.approval.pending_with}` : ""}`}
               </Badge>
             )}
+            {move.dispute && <Badge tone="danger">Litige</Badge>}
             <span className="text-xs text-muted">
               Pièce du {fmtDate(move.invoice_date ?? move.date)}, échéance {fmtDate(move.invoice_date_due)}
               {move.ref ? `, réf. ${move.ref}` : ""}
+              {move.contract_ref ? `, contrat ${move.contract_ref}` : ""}
+              {move.currency !== "GNF" ? `, en ${move.currency}` : ""}
             </span>
           </div>
+          {move.dispute && (
+            <Notice tone="danger">
+              En litige depuis le {fmtDate(move.dispute_date)} : {move.dispute_reason}. La facture n&apos;est pas relancée tant que le litige dure.
+            </Notice>
+          )}
 
           <DataTable
             dense
             rows={move.lines.filter((l) => !l.display_type || l.display_type === "product")}
             rowKey={(l) => l.id}
             columns={[
-              { key: "name", label: "Libellé" },
+              { key: "name", label: "Libellé", render: (l) => <div>{l.name}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div> },
               { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
+              { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
               { key: "quantity", label: "Qté", align: "right", render: (l) => String(l.quantity) },
               { key: "price_unit", label: "PU HT", align: "right", render: (l) => fmtGNF(l.price_unit) },
               { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => `${t.amount} %`).join(", ") || "–" },
@@ -111,9 +125,12 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
           </div>
 
           {paying && (
-            <div className="grid grid-cols-1 gap-3 rounded-lg bg-panel-2 p-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 rounded-lg bg-panel-2 p-4 md:grid-cols-5">
               <Field label="Compte de trésorerie">
                 <Select value={journalId} onChange={(e) => setJournalId(e.target.value)} placeholder="Choisir…" options={(journals ?? []).map((j) => ({ value: j.id, label: j.name }))} />
+              </Field>
+              <Field label="Mode de paiement">
+                <Select value={modeId} onChange={(e) => setModeId(e.target.value)} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
               </Field>
               <Field label="Montant" hint={`Reste : ${fmtGNF(move.amount_residual)}`}>
                 <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual))} />
@@ -133,6 +150,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                         journal_id: Number(journalId),
                         amount: amount ? Number(amount.replace(/\s/g, "")) : undefined,
                         date: payDate,
+                        payment_mode_id: modeId ? Number(modeId) : undefined,
                       }),
                     ).then(() => setPaying(false))
                   }
@@ -163,6 +181,22 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               <Button loading={busy === "reverse"} onClick={() => act("reverse", () => apiSend("POST", `/finance/moves/${move.id}/reverse`, { reason: `Avoir sur ${move.name}` }))}>
                 <RotateCcw className="h-4 w-4" /> Avoir / extourne
               </Button>
+            )}
+            {move.move_type !== "entry" && move.state !== "cancel" && (
+              move.dispute ? (
+                <Button loading={busy === "dispute"} onClick={() => act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: false }))}>
+                  Lever le litige
+                </Button>
+              ) : disputing ? (
+                <span className="inline-flex items-center gap-2">
+                  <Input className="w-64" placeholder="Motif du litige" value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} />
+                  <Button loading={busy === "dispute"} disabled={!disputeReason.trim()} onClick={() => act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: true, reason: disputeReason })).then(() => setDisputing(false))}>
+                    Déclarer
+                  </Button>
+                </span>
+              ) : (
+                <Button onClick={() => setDisputing(true)}>Déclarer un litige</Button>
+              )
             )}
             {move.state !== "cancel" && (
               <Button variant="danger" loading={busy === "cancel"} onClick={() => act("cancel", () => apiSend("POST", `/finance/moves/${move.id}/cancel`))}>

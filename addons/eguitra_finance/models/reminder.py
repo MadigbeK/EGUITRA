@@ -59,9 +59,11 @@ class EguitraReminder(models.Model):
         thresholds = self._thresholds()
         created = self.browse()
         for company in companies or self.env["res.company"].search([]):
+            # Une facture en litige n'est pas relancée tant que le litige dure.
             invoices = self.env["account.move"].search([
                 ("company_id", "=", company.id), ("move_type", "=", "out_invoice"), ("state", "=", "posted"),
                 ("payment_state", "in", ("not_paid", "partial")), ("invoice_date_due", "<", today),
+                ("eguitra_dispute", "=", False),
             ])
             for partner in invoices.partner_id.commercial_partner_id:
                 mine = invoices.filtered(lambda m, p=partner: m.partner_id.commercial_partner_id == p)

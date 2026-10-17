@@ -11,6 +11,8 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from .analytic import ACTIVITY_PLAN, distribution_ids
+
 SECURED_JOURNAL_TYPES = ("sale", "purchase", "general", "bank", "cash")
 
 
@@ -117,6 +119,8 @@ class EguitraPeriodClose(models.Model):
         ])
         checks.append(self._check("bank_reconciliation", "Relevés bancaires rapprochés", not unreconciled, True,
                                   f"{unreconciled} ligne(s) de relevé à rapprocher.", unreconciled))
+        checks += self._bank_statement_checks(start, end)
+        checks.append(self._analytic_consistency_check(start, end))
 
         unmapped = sheet["unmapped_accounts"]
         checks.append(self._check("statement_mapping", "Tous les comptes figurent dans les états", not unmapped, False,
@@ -129,6 +133,61 @@ class EguitraPeriodClose(models.Model):
         checks.append(self._check("blocking_alerts", "Aucune alerte bloquante active", not blocking_alerts, True,
                                   "; ".join(a["title"] for a in blocking_alerts), len(blocking_alerts)))
         return checks
+
+    def _bank_statement_checks(self, start, end):
+        """Solde du relevé = solde comptable (état de rapprochement à la fin du mois) pour chaque compte
+        de banque doté de relevés, et relevé du mois importé pour chaque compte de banque mouvementé."""
+        company = self.company_id
+        Reconciliation = self.env["eguitra.bank.reconciliation"].sudo()
+        MoveLine = self.env["account.move.line"].sudo()
+        gaps, missing = [], []
+        for journal in self.env["account.journal"].sudo().search([("company_id", "=", company.id), ("type", "=", "bank")]):
+            moved = MoveLine.search_count([("account_id", "=", journal.default_account_id.id), ("parent_state", "=", "posted"),
+                                           ("date", ">=", start), ("date", "<=", end)], limit=1)
+            state = Reconciliation.statement(journal, end)
+            if state["bank_balance"] is None:
+                if moved:
+                    missing.append(journal.name)
+                continue
+            if not state["balanced"]:
+                gaps.append(f"{journal.name} : écart de {state['residual_gap']:,.0f} {state['currency']}".replace(",", " "))
+            last = state["statement"]
+            if moved and last and last["date"] and last["date"] < start:
+                missing.append(journal.name)
+        return [
+            self._check("bank_statement_balance", "Solde des relevés égal au solde comptable", not gaps, True,
+                        "; ".join(gaps) + " (voir l'état de rapprochement).", len(gaps)),
+            self._check("bank_statement_imported", "Relevés du mois importés", not missing, False,
+                        "Sans relevé pour le mois : " + ", ".join(missing) + ".", len(missing)),
+        ]
+
+    def _analytic_consistency_check(self, start, end):
+        """Vigilance : une ligne imputée à un centre de coût et à une autre activité que la sienne."""
+        company = self.company_id
+        Analytic = self.env["account.analytic.account"].sudo().with_context(active_test=False)
+        centers = Analytic.search([("eguitra_activity_id", "!=", False), ("company_id", "in", [False, company.id])])
+        parent = {c.id: c.eguitra_activity_id.id for c in centers}
+        activity_plan = self.env.ref(ACTIVITY_PLAN, raise_if_not_found=False)
+        wrong, names = 0, set()
+        if parent and activity_plan:
+            activities = set(Analytic.search([("plan_id", "child_of", activity_plan.id)]).ids)
+            self.env.cr.execute(
+                """SELECT analytic_distribution FROM account_move_line
+                    WHERE company_id = %s AND parent_state = 'posted' AND date BETWEEN %s AND %s
+                      AND analytic_distribution IS NOT NULL""",
+                (company.id, start, end),
+            )
+            for (dist,) in self.env.cr.fetchall():
+                ids = set(distribution_ids(dist))
+                line_activities = ids & activities
+                for center in ids & parent.keys():
+                    if line_activities and parent[center] not in line_activities:
+                        wrong += 1
+                        names.add(center)
+                        break
+        labels = ", ".join(sorted(Analytic.browse(list(names)).mapped("name"))[:5])
+        return self._check("analytic_consistency", "Centres de coût imputés avec leur activité", not wrong, False,
+                           f"{wrong} ligne(s) avec une autre activité que celle du centre de coût ({labels}).", wrong)
 
     def action_check(self):
         self.ensure_one()

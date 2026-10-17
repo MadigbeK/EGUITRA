@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Plus, Undo2, Wallet } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale, Undo2, Wallet } from "@/components/icons";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import type { Account, CashAccount } from "@/lib/finance-types";
+import type { Account, AnalyticShare, CashAccount, Ref } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
 
 interface StLine {
@@ -16,22 +18,35 @@ interface StLine {
   amount: number;
   reconciled: boolean;
   statement: string | null;
+  reference: string | null;
+  payment_mode: Ref | null;
+  attachments: number;
+  counterpart: Array<{ code: string; name: string; analytic: AnalyticShare[] }> | null;
 }
 interface Candidate {
+  /** Nature du candidat : « move_line » (facture, règlement) ou « loan_line » (échéance d'emprunt réglée
+   * par la sortie de banque, capital et intérêts en contrepartie). */
+  kind: string;
   id: number;
   move: string;
   move_id: number;
   partner: string | null;
+  label: string | null;
   date: string;
   due: string | null;
   residual: number;
   score: number;
-  /** loan_line : échéance d'emprunt réglée par la sortie de banque (capital et intérêts en contrepartie). */
-  kind?: "loan_line";
   already_paid?: boolean;
   hint?: string;
   principal?: number;
   interest?: number;
+}
+interface PaymentMode { id: number; name: string; active: boolean }
+
+const JUSTIFICATIFS = ".pdf,.jpg,.jpeg,.png,.docx,.xlsx";
+
+function usePaymentModes() {
+  return useApi<PaymentMode[]>("/finance/payment-modes");
 }
 
 const cle = (c: Candidate) => `${c.kind ?? "move_line"}-${c.id}`;
@@ -46,6 +61,8 @@ export default function TreasuryPage() {
   const { data: lines, mutate } = useApi<{ items: StLine[]; total_count: number }>(current ? `/finance/treasury/${current.journal_id}/lines?state=${filter}&limit=300` : null);
   const [modal, setModal] = useState<null | "operation" | "import" | "transfer">(null);
   const [matching, setMatching] = useState<StLine | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const router = useRouter();
 
   function refresh() {
     void mutate();
@@ -64,6 +81,9 @@ export default function TreasuryPage() {
             </Button>
             <Button onClick={() => setModal("import")} disabled={!current || current.type !== "bank"}>
               <FileUp className="h-4 w-4" /> Importer un relevé
+            </Button>
+            <Button onClick={() => current && router.push(`/finance/tresorerie/rapprochement?journal=${current.journal_id}`)} disabled={!current}>
+              <Scale className="h-4 w-4" /> État de rapprochement
             </Button>
             <Button variant="primary" onClick={() => setModal("operation")} disabled={!current}>
               <Plus className="h-4 w-4" /> Nouvelle opération
@@ -115,6 +135,11 @@ export default function TreasuryPage() {
           </div>
           {current && (
             <Card title={`Opérations, ${current.name}`} padded={false}>
+              {notice && (
+                <div className="px-4 pt-3">
+                  <Notice tone="danger">{notice}</Notice>
+                </div>
+              )}
               <div className="px-4 pt-3">
                 <Tabs
                   tabs={[
@@ -134,9 +159,58 @@ export default function TreasuryPage() {
                   empty={filter === "unreconciled" ? "Toutes les opérations sont rapprochées." : "Aucune opération."}
                   columns={[
                     { key: "date", label: "Date", render: (l) => fmtDate(l.date) },
-                    { key: "label", label: "Libellé" },
+                    {
+                      key: "label",
+                      label: "Libellé",
+                      render: (l) => (
+                        <div>
+                          <div>{l.label}</div>
+                          {(l.reference || l.payment_mode) && <div className="text-[12px] text-muted">{[l.payment_mode?.name, l.reference].filter(Boolean).join(" · ")}</div>}
+                        </div>
+                      ),
+                    },
                     { key: "partner", label: "Tiers", render: (l) => l.partner?.name ?? "–" },
+                    {
+                      key: "counterpart",
+                      label: "Imputation",
+                      render: (l) =>
+                        l.counterpart?.length ? (
+                          <div className="space-y-1">
+                            <div className="font-mono text-xs">{l.counterpart.map((c) => c.code).join(", ")}</div>
+                            <AnalyticTags shares={l.counterpart.flatMap((c) => c.analytic)} />
+                          </div>
+                        ) : (
+                          "–"
+                        ),
+                    },
                     { key: "amount", label: "Montant", align: "right", render: (l) => <span className={cx("font-semibold", l.amount < 0 ? "text-danger" : "text-ok")}>{l.amount > 0 ? "+" : ""}{fmtGNF(l.amount)}</span> },
+                    {
+                      key: "attachments",
+                      label: "",
+                      render: (l) => (
+                        <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {l.attachments > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-xs text-muted" title="Justificatifs">
+                              <Paperclip className="h-3.5 w-3.5" />
+                              {l.attachments}
+                            </span>
+                          )}
+                          <FileButton
+                            small
+                            label="Justificatif"
+                            accept={JUSTIFICATIFS}
+                            onFile={(file) => {
+                              const form = new FormData();
+                              form.append("file", file);
+                              setNotice(null);
+                              apiUpload(`/finance/treasury/lines/${l.id}/attachments`, form)
+                                .then(refresh)
+                                .catch((e) => setNotice(e instanceof ApiError ? e.message : "Envoi du justificatif impossible."));
+                            }}
+                          />
+                        </span>
+                      ),
+                    },
                     {
                       key: "reconciled",
                       label: "",
@@ -159,7 +233,7 @@ export default function TreasuryPage() {
           )}
         </>
       )}
-      {current && modal === "operation" && <OperationModal journal={current} onClose={() => setModal(null)} onDone={refresh} />}
+      {current && modal === "operation" && <OperationModal journal={current} onClose={() => setModal(null)} onDone={refresh} onTransfer={() => setModal("transfer")} />}
       {current && modal === "import" && <ImportModal journal={current} onClose={() => setModal(null)} onDone={refresh} />}
       {modal === "transfer" && position && <TransferModal accounts={position.accounts} onClose={() => setModal(null)} onDone={refresh} />}
       {matching && <MatchModal line={matching} onClose={() => setMatching(null)} onDone={refresh} />}
@@ -171,26 +245,67 @@ function useAccounts(prefix: string) {
   return useApi<Account[]>(`/finance/accounts?prefix=${prefix}&limit=2000`);
 }
 
-function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; onClose: () => void; onDone: () => void }) {
+interface OperationType { id: number; name: string; direction: "in" | "out"; account: { id: number; code: string; name: string } | null; reference_required: boolean; is_transfer: boolean; to_match: boolean }
+
+function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: CashAccount; onClose: () => void; onDone: () => void; onTransfer: () => void }) {
   const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=2000");
+  const { data: modes } = usePaymentModes();
+  const { data: kinds } = useApi<OperationType[]>("/finance/treasury/operation-types");
+  const { data: axes } = useAxes();
   const [direction, setDirection] = useState<"out" | "in">("out");
-  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "" });
+  const [form, setForm] = useState({ date: today(), label: "", amount: "", account: "", reference: "", mode: "", kind: "" });
+  const kind = kinds?.find((k) => String(k.id) === form.kind);
+
+  /** Le type d'opération fixe le sens et la contrepartie (sauf client ou fournisseur : à rapprocher). */
+  function chooseKind(id: string) {
+    const next = kinds?.find((k) => String(k.id) === id);
+    if (next?.is_transfer) {
+      onTransfer();
+      return;
+    }
+    if (next) setDirection(next.direction);
+    setForm({ ...form, kind: id, account: next && !next.to_match && next.account ? String(next.account.id) : next ? "" : form.account });
+  }
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
+  const [choice, setChoice] = useState<AxisChoice>({});
+  const [receipt, setReceipt] = useState<File | null>(null);
+  /** Opération déjà enregistrée : un nouvel essai n'envoie plus que le justificatif. */
+  const [createdId, setCreatedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const amount = Number(form.amount.replace(/\s/g, ""));
-      await apiSend("POST", `/finance/treasury/${journal.journal_id}/lines`, {
-        date: form.date,
-        label: form.label,
-        amount: direction === "out" ? -amount : amount,
-        partner_id: partner?.id,
-        counterpart_account_id: form.account ? Number(form.account) : undefined,
-      });
-      onDone();
+      let id = createdId;
+      if (!id) {
+        const amount = Number(form.amount.replace(/\s/g, ""));
+        const line = await apiSend<StLine>("POST", `/finance/treasury/${journal.journal_id}/lines`, {
+          date: form.date,
+          label: form.label,
+          amount: direction === "out" ? -amount : amount,
+          partner_id: partner?.id,
+          counterpart_account_id: form.account ? Number(form.account) : undefined,
+          analytic_distribution: form.account ? toDistribution(choice) : undefined,
+          payment_mode_id: form.mode ? Number(form.mode) : undefined,
+          reference: form.reference || undefined,
+          operation_type_id: form.kind ? Number(form.kind) : undefined,
+        });
+        id = line.id;
+        setCreatedId(id);
+        onDone();
+      }
+      if (receipt) {
+        const data = new FormData();
+        data.append("file", receipt);
+        try {
+          await apiUpload(`/finance/treasury/lines/${id}/attachments`, data);
+        } catch (e) {
+          setError(`Opération enregistrée ; justificatif refusé : ${e instanceof ApiError ? e.message : "envoi impossible"}`);
+          return;
+        }
+        onDone();
+      }
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
@@ -199,63 +314,146 @@ function OperationModal({ journal, onClose, onDone }: { journal: CashAccount; on
     }
   }
   return (
-    <Modal open title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount}>Enregistrer</Button>}>
+    <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
-        <Tabs tabs={[{ key: "out", label: "Sortie" }, { key: "in", label: "Entrée" }]} value={direction} onChange={setDirection} />
-        <div className="grid grid-cols-2 gap-3">
+        {kinds && kinds.length > 0 && (
+          <Field label="Type d'opération" hint={kind?.to_match ? "Opération client ou fournisseur : elle reste à rapprocher de la facture." : kind ? "Le type fixe le sens et le compte de contrepartie." : undefined}>
+            <Select value={form.kind} onChange={(e) => chooseKind(e.target.value)} placeholder="Saisie libre" options={kinds.map((k) => ({ value: k.id, label: `${k.name} (${k.is_transfer ? "virement" : k.direction === "in" ? "entrée" : "sortie"})` }))} />
+          </Field>
+        )}
+        {!kind && <Tabs tabs={[{ key: "out", label: "Sortie" }, { key: "in", label: "Entrée" }]} value={direction} onChange={setDirection} />}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="Date">
             <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </Field>
           <Field label="Montant (GNF)">
             <Input inputMode="numeric" className="text-right font-mono" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
           </Field>
+          <Field label="Mode de paiement">
+            <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
+          </Field>
+          <Field label={kind?.reference_required ? "Référence (obligatoire)" : "Référence"} hint="Facture, contrat, chèque…">
+            <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
+          </Field>
         </div>
         <Field label="Libellé">
           <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Frais de mission, achat carburant…" />
         </Field>
-        <Field label="Tiers (facultatif)">
-          <PartnerPicker value={partner} onChange={setPartner} kind={direction === "out" ? "supplier" : "customer"} />
-        </Field>
-        <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
-          <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Field label="Tiers (facultatif)">
+            <PartnerPicker value={partner} onChange={setPartner} kind={direction === "out" ? "supplier" : "customer"} />
+          </Field>
+          <Field label="Compte d'imputation" hint="Renseigné : l'opération est imputée aussitôt. Vide : elle reste à rapprocher avec une facture.">
+            <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} placeholder="À rapprocher plus tard" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+          </Field>
+        </div>
+        {form.account && (
+          <div>
+            <div className="mb-1.5 text-[13px] font-medium text-ink-2">Imputation analytique</div>
+            <AnalyticFields axes={axes} value={choice} onChange={setChoice} />
+          </div>
+        )}
+        <Field label="Justificatif (facultatif)" hint="PDF, JPEG, PNG, Word ou Excel, 15 Mo au plus.">
+          <input type="file" accept={JUSTIFICATIFS} onChange={(e) => setReceipt(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
         </Field>
       </div>
     </Modal>
   );
 }
 
+interface ImportBalances { start: number | null; end: number | null; total: number; gap: number | null; controlled: boolean; source_start: string | null; source_end: string | null }
+interface ImportResult {
+  created: number;
+  attached: number;
+  skipped_duplicates: number;
+  statement: { id: number; name: string; balance_start: number; balance_end_real: number; is_complete: boolean } | null;
+  balances: ImportBalances;
+  warnings: string[];
+}
+
+/**
+ * Import d'un relevé : soldes initial et final lus dans le fichier (lignes de solde, colonne de solde
+ * progressif) ou saisis d'après le relevé papier ; le noyau contrôle « solde initial + opérations =
+ * solde final » et refuse un écart, sauf confirmation.
+ */
 function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<{ created: number; skipped_duplicates: number } | null>(null);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [gap, setGap] = useState<ImportBalances | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  async function submit() {
+  async function submit(force = false) {
     if (!file) return;
     setBusy(true);
     setError(null);
+    setGap(null);
     try {
       const form = new FormData();
       form.append("file", file);
-      setResult(await apiUpload(`/finance/treasury/${journal.journal_id}/import`, form));
+      if (start.trim()) form.append("balance_start", start.trim());
+      if (end.trim()) form.append("balance_end", end.trim());
+      if (force) form.append("force", "1");
+      setResult(await apiUpload<ImportResult>(`/finance/treasury/${journal.journal_id}/import`, form));
       onDone();
     } catch (e) {
+      if (e instanceof ApiError && e.body.error === "statement_gap") setGap((e.body as { balances?: ImportBalances }).balances ?? null);
       setError(e instanceof ApiError ? e.message : "Import impossible.");
     } finally {
       setBusy(false);
     }
   }
+  const money = (v: number | null) => (v === null ? "non renseigné" : fmtGNF(v, journal.currency));
   return (
-    <Modal open title={`Importer un relevé, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" onClick={submit} loading={busy} disabled={!file}>Importer</Button>}>
+    <Modal
+      open
+      title={`Importer un relevé, ${journal.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          {gap && (
+            <Button variant="danger" onClick={() => submit(true)} loading={busy}>
+              Importer malgré l&apos;écart
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => submit(false)} loading={busy} disabled={!file || Boolean(result)}>
+            Importer
+          </Button>
+        </>
+      }
+    >
       <div className="space-y-3 text-sm">
-        <p className="text-muted">Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit). Les opérations déjà importées sont ignorées.</p>
+        <p className="text-muted">
+          Fichier CSV ou XLSX exporté de la banque, avec une date, un libellé et un montant (ou un débit et un crédit). Les soldes du relevé sont lus dans le fichier s&apos;il les porte ; sinon saisissez-les. Les opérations déjà importées sont ignorées, celles déjà saisies à la main sont rattachées au relevé.
+        </p>
         {error && <Notice tone="danger">{error}</Notice>}
         {result && (
-          <Notice tone="ok">
-            {result.created} opération(s) importée(s), {result.skipped_duplicates} doublon(s) ignoré(s).
+          <Notice tone={result.statement && !result.statement.is_complete ? "warn" : "ok"}>
+            <div>
+              {result.created} opération(s) importée(s), {result.attached} opération(s) saisie(s) rattachée(s), {result.skipped_duplicates} doublon(s) ignoré(s).
+            </div>
+            <div>
+              Solde initial {money(result.balances.start)}
+              {result.balances.source_start ? ` (${result.balances.source_start})` : ""}, opérations {fmtGNF(result.balances.total, journal.currency)}, solde final {money(result.balances.end)}
+              {result.balances.source_end ? ` (${result.balances.source_end})` : ""}.
+            </div>
+            <div>{result.balances.controlled ? (result.balances.gap ? `Écart de ${fmtGNF(result.balances.gap, journal.currency)} accepté : le relevé reste incomplet.` : "Relevé équilibré.") : "Soldes non contrôlés : le fichier ne les porte pas tous deux."}</div>
+            {result.warnings.map((w) => (
+              <div key={w}>{w}</div>
+            ))}
           </Notice>
         )}
-        <input type="file" accept=".csv,.xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
+        <input type="file" accept=".csv,.xlsx" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setGap(null); }} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Solde initial du relevé" hint="Vide : lu dans le fichier">
+            <Input inputMode="decimal" className="text-right font-mono" value={start} onChange={(e) => setStart(e.target.value)} />
+          </Field>
+          <Field label="Solde final du relevé" hint="Vide : lu dans le fichier">
+            <Input inputMode="decimal" className="text-right font-mono" value={end} onChange={(e) => setEnd(e.target.value)} />
+          </Field>
+        </div>
       </div>
     </Modal>
   );
@@ -315,8 +513,10 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
 function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => void; onDone: () => void }) {
   const { data: candidates } = useApi<Candidate[]>(`/finance/treasury/lines/${line.id}/candidates`);
   const { data: accounts } = useAccounts("");
+  const { data: axes } = useAxes();
   const [selected, setSelected] = useState<string[]>([]);
   const [account, setAccount] = useState("");
+  const [choice, setChoice] = useState<AxisChoice>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const choisis = (candidates ?? []).filter((c) => selected.includes(cle(c)));
@@ -331,7 +531,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
     setBusy(true);
     setError(null);
     try {
-      const corps = echeance ? { loan_line_id: echeance.id } : choisis.length ? { move_line_ids: choisis.map((c) => c.id) } : { account_id: Number(account) };
+      const corps = echeance ? { loan_line_id: echeance.id } : choisis.length ? { move_line_ids: choisis.map((c) => c.id) } : { account_id: Number(account), analytic_distribution: toDistribution(choice) };
       await apiSend("POST", `/finance/treasury/lines/${line.id}/reconcile`, corps);
       onDone();
       onClose();
@@ -395,6 +595,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
         <Field label="Ou imputer directement à un compte" hint="Frais bancaires, agios, produit divers…">
           <Select value={account} onChange={(e) => setAccount(e.target.value)} placeholder="–" options={(accounts ?? []).filter((a) => /^[2-8]/.test(a.code) && !a.code.startsWith("5")).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
         </Field>
+        {account && !selected.length && <AnalyticFields axes={axes} value={choice} onChange={setChoice} />}
       </div>
     </Modal>
   );

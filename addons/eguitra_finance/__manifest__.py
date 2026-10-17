@@ -18,6 +18,7 @@
         "security/ir.model.access.csv",
         "security/finance_rules.xml",
         "data/alert_thresholds.xml",
+        "data/referentials.xml",
         "data/ir_cron.xml",
         "report/period_close_report.xml",
     ],

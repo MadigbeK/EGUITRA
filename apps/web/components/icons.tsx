@@ -530,4 +530,6 @@ export const ICONES: Record<string, Icon> = {
   FileStack,
   FolderOpen,
   Info,
+  Layers,
+  Target,
 };

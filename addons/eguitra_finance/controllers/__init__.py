@@ -13,3 +13,6 @@ from . import reminders
 from . import pilotage
 from . import statements_export
 from . import saft
+from . import analytic_rules
+from . import categories
+from . import chart

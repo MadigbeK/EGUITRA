@@ -7,8 +7,9 @@ s'ils sont présents, dans cet ordre (modèles dans scripts/reprise/modeles/) :
   soldes_ouverture.csv une écriture d'à-nouveaux équilibrée, à la date d'ouverture
   immobilisations.csv  biens en service : valeur brute, cumul des amortissements à la veille de
                        l'ouverture (lignes de reprise sans écriture), contrôle face aux 2x et 28x
-  ecritures.csv        écritures de l'exercice, pièce par pièce, puis lettrage des comptes de tiers
-  budget.csv           budget mensuel par compte
+  ecritures.csv        écritures de l'exercice, pièce par pièce, imputées sur les axes analytiques, puis
+                       lettrage des comptes de tiers
+  budget.csv           lignes budgétaires mensuelles par compte, activité et centre de coût
   rotations.csv        rotations 2026 (facturées dans l'ancien système ou à facturer)
 
 Sans REPRISE_APPLIQUER=1, rien n'est enregistré : le script contrôle tout et affiche ce qu'il ferait.
@@ -86,6 +87,62 @@ Partner = env["res.partner"]
 
 def find_partner(name):
     return Partner.search([("name", "=ilike", name), ("parent_id", "=", False)], limit=1)
+
+
+# Axes analytiques des écritures et du budget : colonne -> (plan, fiche métier qui porte le compte,
+# création permise). Activités et centres de coût se créent comme comptes analytiques ; ensembles
+# routiers et routes, avec leur fiche (le module crée leur compte) ; chantiers et biens se créent
+# d'abord dans l'application (contrat, maître d'ouvrage, valeur), la reprise les retrouve par leur nom.
+AXES = {
+    "activite": ("eguitra_base.analytic_plan_activite", None, True),
+    "centre_cout": ("eguitra_base.analytic_plan_centre_cout", None, True),
+    "chantier": ("eguitra_base.analytic_plan_chantier", "eguitra.chantier", False),
+    "ensemble": ("eguitra_base.analytic_plan_vehicule", "eguitra.transport.vehicle", True),
+    "route": ("eguitra_base.analytic_plan_route", "eguitra.transport.route", True),
+    "bien": ("eguitra_base.analytic_plan_bien", "eguitra.property", False),
+    "dossier": ("eguitra_base.analytic_plan_dossier", None, False),
+}
+axis_cache = {}
+
+
+def analytic_account(column, value, where):
+    """Compte analytique d'une colonne d'axe, retrouvé par nom ou code (créé au besoin selon l'axe)."""
+    key = (column, value.lower())
+    if key in axis_cache:
+        return axis_cache[key]
+    xmlid, model, creatable = AXES[column]
+    plan = env.ref(xmlid, raise_if_not_found=False)
+    if not plan:
+        errors.append(f"{where} : axe « {column} » absent de la base.")
+        return None
+    Analytic = env["account.analytic.account"]
+    account = Analytic.search([("plan_id", "=", plan.id), ("company_id", "in", [False, company.id]),
+                               "|", ("name", "=ilike", value), ("code", "=ilike", value)], limit=1)
+    if not account and model and model in env:
+        record = env[model].search([("name", "=ilike", value)], limit=1)
+        if not record and creatable:
+            record = env[model].create({"name": value})
+            notes.append(f"{where} : {column} « {value} » ajouté(e) ; vérifier qu'il ne s'agit pas d'une faute de frappe.")
+        account = record.analytic_account_id if record else Analytic
+    elif not account and creatable:
+        account = Analytic.create({"name": value, "plan_id": plan.id, "company_id": company.id})
+        notes.append(f"{where} : {column} « {value} » ajouté(e) au plan analytique.")
+    if not account:
+        errors.append(f"{where} : {column} « {value} » inconnu(e) ; le créer d'abord dans l'application.")
+        return None
+    axis_cache[key] = account
+    return account
+
+
+def distribution(row, where, columns=tuple(AXES)):
+    """Répartition {compte: 100} sur chaque axe renseigné de la ligne."""
+    result = {}
+    for column in columns:
+        if row.get(column):
+            account = analytic_account(column, row[column], where)
+            if account:
+                result[str(account.id)] = 100
+    return result
 
 
 # ─── Tiers ────────────────────────────────────────────────────────────────
@@ -244,9 +301,6 @@ data = rows("ecritures.csv")
 if data is not None:
     Account, Journal = env["account.account"], env["account.journal"]
     journals = {j.code.upper(): j for j in Journal.search([("company_id", "=", company.id)])}
-    plan = env.ref("eguitra_base.analytic_plan_activite", raise_if_not_found=False)
-    activities = {a.name.lower(): a for a in env["account.analytic.account"].search(
-        [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])])} if plan else {}
     pieces = {}
     for line, r in data:
         where = f"ecritures.csv ligne {line}"
@@ -287,13 +341,9 @@ if data is not None:
                     continue
             values = {"account_id": account.id, "partner_id": partner.id or False, "name": r.get("libelle") or piece,
                       "debit": number(r.get("debit"), where), "credit": number(r.get("credit"), where)}
-            if r.get("activite") and plan:
-                activity = activities.get(r["activite"].lower())
-                if not activity:
-                    activity = activities[r["activite"].lower()] = env["account.analytic.account"].create(
-                        {"name": r["activite"], "plan_id": plan.id, "company_id": company.id})
-                    notes.append(f"{where} : activité « {r['activite']} » ajoutée au plan analytique.")
-                values["analytic_distribution"] = {str(activity.id): 100}
+            analytic = distribution(r, where)
+            if analytic:
+                values["analytic_distribution"] = analytic
             debit += values["debit"]
             credit += values["credit"]
             move_lines.append(Command.create(values))
@@ -326,34 +376,50 @@ if data is not None:
 # ─── Budget ───────────────────────────────────────────────────────────────
 data = rows("budget.csv")
 if data is not None:
+    # Une ligne budgétaire par compte (ou préfixe), activité et centre de coût ; un montant par mois.
+    # Nature déduite de la classe : 7 produits, 2 investissements, sinon charges.
     year = int(os.environ.get("REPRISE_BUDGET_ANNEE") or date.today().year)
-    Budget, Item = env["mis.budget.by.account"], env["mis.budget.by.account.item"]
+    Budget, BudgetLine = env["mis.budget.by.account"], env["eguitra.budget.line"]
     budget = Budget.search([("company_id", "=", company.id), ("date_from", "=", f"{year}-01-01")], limit=1)
     budget = budget or Budget.create({"name": f"Budget {year}", "date_from": f"{year}-01-01",
                                       "date_to": f"{year}-12-31", "company_id": company.id})
-    count = 0
+    grouped = {}
     for line, r in data:
         where = f"budget.csv ligne {line}"
-        account = env["account.account"].search([("code", "=", r.get("compte", "")), ("company_ids", "in", company.ids)],
-                                                limit=1)
+        prefix = re.sub(r"\s", "", r.get("compte", ""))
         month = int(r.get("mois") or 0) if (r.get("mois") or "").isdigit() else 0
+        account = env["account.account"].search([("code", "=like", prefix + "%"), ("company_ids", "in", company.ids)],
+                                                order="code", limit=1) if prefix.isdigit() else None
         if not account or not 1 <= month <= 12:
-            errors.append(f"{where} : compte inconnu ou mois hors 1 à 12.")
+            errors.append(f"{where} : compte (ou préfixe) inconnu, ou mois hors 1 à 12.")
             continue
-        amount = number(r.get("montant"), where)
-        start = date(year, month, 1)
-        end = date(year + (month == 12), month % 12 + 1, 1).toordinal() - 1
-        income = account.code.startswith("7")
-        values = {"debit": 0.0 if income else max(amount, 0.0), "credit": max(amount, 0.0) if income else 0.0}
-        item = Item.search([("budget_id", "=", budget.id), ("account_id", "=", account.id), ("date_from", "=", start)],
-                           limit=1)
-        if item:
-            item.write(values)
-        else:
-            Item.create(dict(values, budget_id=budget.id, account_id=account.id, date_from=start,
-                             date_to=date.fromordinal(end), name=account.name, company_id=company.id))
-        count += 1
-    notes.append(f"Budget {year} : {count} ligne(s) mensuelle(s).")
+        analytic = {column: analytic_account(column, r[column], where) if r.get(column) else None
+                    for column in ("activite", "centre_cout")}
+        if any(r.get(c) and not a for c, a in analytic.items()):
+            continue
+        key = (prefix, analytic["activite"], analytic["centre_cout"])
+        entry = grouped.setdefault(key, {"name": r.get("ligne") or account.name, "months": {}})
+        entry["months"][month] = entry["months"].get(month, 0.0) + number(r.get("montant"), where)
+    created = updated = 0
+    for (prefix, activity, center), entry in grouped.items():
+        nature = "income" if prefix.startswith("7") else "capex" if prefix.startswith("2") else "expense"
+        values = {"nature": nature, "name": entry["name"], "account_prefixes": prefix,
+                  "activity_id": activity.id if activity else False, "cost_center_id": center.id if center else False}
+        values.update({f"amount_{m:02d}": amount for m, amount in entry["months"].items()})
+        existing = BudgetLine.search([("budget_id", "=", budget.id), ("account_prefixes", "=", prefix),
+                                      ("activity_id", "=", values["activity_id"]),
+                                      ("cost_center_id", "=", values["cost_center_id"])], limit=1)
+        try:
+            with env.cr.savepoint():
+                if existing:
+                    existing.write(values)
+                    updated += 1
+                else:
+                    BudgetLine.create(dict(values, budget_id=budget.id))
+                    created += 1
+        except (UserError, ValidationError) as e:
+            errors.append(f"budget.csv, ligne « {entry['name']} » : {e.args[0]}")
+    notes.append(f"Budget {year} : {created} ligne(s) budgétaire(s) créée(s), {updated} mise(s) à jour.")
 
 # ─── Rotations ────────────────────────────────────────────────────────────
 data = rows("rotations.csv")
