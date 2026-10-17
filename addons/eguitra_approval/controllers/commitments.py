@@ -43,7 +43,7 @@ def commitment_row(c, detail=False):
         data["note"] = c.note or None
         data["moves"] = [{"id": m.id, "name": m.name if m.name != "/" else None, "date": m.invoice_date or m.date,
                           "state": m.state, "amount_untaxed": abs(m.amount_untaxed_signed), "ref": m.ref or None}
-                         for m in c.move_ids]
+                         for m in c.sudo().move_ids]
         data["tolerance_pct"] = c.tolerance_pct()
     return data
 

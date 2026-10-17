@@ -45,8 +45,10 @@ class EguitraCommitment(models.Model):
     state = fields.Selection(STATES, default="draft", required=True, index=True, copy=False)
     requested_by = fields.Many2one("res.users", default=lambda self: self.env.user, readonly=True)
     move_ids = fields.One2many("account.move", "eguitra_commitment_id", "Pièces d'achat rattachées")
-    consumed = fields.Monetary("Consommé (HT)", compute="_compute_consumed")
-    remaining = fields.Monetary("Reste à engager (HT)", compute="_compute_consumed")
+    # Calculés avec les droits du noyau : un demandeur des métiers suit la consommation de son
+    # engagement sans lire la comptabilité.
+    consumed = fields.Monetary("Consommé (HT)", compute="_compute_consumed", compute_sudo=True)
+    remaining = fields.Monetary("Reste à engager (HT)", compute="_compute_consumed", compute_sudo=True)
 
     @api.depends("amount", "move_ids.state", "move_ids.amount_untaxed_signed")
     def _compute_consumed(self):
@@ -123,7 +125,7 @@ class EguitraCommitment(models.Model):
 
     def action_cancel(self):
         for c in self:
-            if c.move_ids.filtered(lambda m: m.state == "posted"):
+            if c.sudo().move_ids.filtered(lambda m: m.state == "posted"):
                 raise UserError(f"L'engagement {c.name} est déjà consommé par des pièces : soldez-le.")
             request = c._eguitra_last_request()
             if request.state == "pending":
@@ -149,6 +151,6 @@ class EguitraCommitment(models.Model):
             return False
         if move.company_id != self.company_id:
             return False
-        already = sum(-m.amount_untaxed_signed for m in self.move_ids.filtered(lambda m: m.state == "posted" and m != move))
+        already = sum(-m.amount_untaxed_signed for m in self.sudo().move_ids.filtered(lambda m: m.state == "posted" and m != move))
         allowed = self.amount * (1 + self.tolerance_pct() / 100)
         return already + abs(move.amount_untaxed_signed) <= allowed + 0.5
