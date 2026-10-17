@@ -93,8 +93,9 @@ def _default_journal(data, sale, company):
 
 def _invoice_lines(data, move_type, partner=None):
     """Lignes d'une facture ou d'une pièce d'achat. Compte : celui saisi, sinon le compte de produit de
-    l'activité (ventes), sinon le compte par défaut du journal. Analytique : la répartition saisie,
-    complétée par les imputations automatiques pour les axes laissés vides."""
+    l'activité (ventes) ou de la catégorie de dépense (achats), sinon le compte par défaut du journal.
+    TVA : celle saisie, sinon celle de la catégorie, sinon la taxe par défaut. Analytique : la
+    répartition saisie, complétée par les imputations automatiques pour les axes laissés vides."""
     lines = data.get("lines") or []
     if not isinstance(lines, list) or not lines:
         raise ApiError(400, "missing_fields", "Au moins une ligne est requise.", fields=["lines"])
@@ -113,6 +114,12 @@ def _invoice_lines(data, move_type, partner=None):
         }
         dist = distribution(line.get("analytic_distribution"), company)
         account = account_of_company(line.get("account_id"), company, f"Ligne {i} : compte")
+        category = category_of(line.get("category_id"), company) if not sale else request.env["eguitra.expense.category"]
+        if category:
+            values["eguitra_expense_category_id"] = category.id
+            account = account or category.account_id
+            if category.asset_profile_id:
+                values["asset_profile_id"] = category.asset_profile_id.id
         if line.get("product_id"):
             values["product_id"] = int(line["product_id"])
         elif not account:
@@ -123,6 +130,8 @@ def _invoice_lines(data, move_type, partner=None):
             values["account_id"] = account.id
         if "tax_ids" in line:
             values["tax_ids"] = [Command.set([int(t) for t in line["tax_ids"] or []])]
+        elif category:
+            values["tax_ids"] = [Command.set(category.taxes(default_tax).ids)]
         elif data.get("apply_default_tax", True) and default_tax:
             values["tax_ids"] = [Command.set(default_tax.ids)]
         dist = with_rules(dist, account, partner, company) if (account or dist) else dist
@@ -130,6 +139,72 @@ def _invoice_lines(data, move_type, partner=None):
             values["analytic_distribution"] = dist
         commands.append(Command.create(values))
     return commands
+
+
+def category_of(value, company):
+    """Catégorie de dépense active de la société, désignée par la saisie."""
+    Category = request.env["eguitra.expense.category"]
+    if not value:
+        return Category
+    category = Category.browse(int(value)).exists()
+    if not category or category.company_id != company or not category.active:
+        raise ApiError(422, "business_rule", "Catégorie de dépense inconnue dans la société.")
+    return category
+
+
+def _entry_categories(data, move_type, company):
+    """Compte de tiers commun des catégories qui font d'une pièce d'achat une opération diverse
+    (personnel, organismes sociaux, État) ; vide pour une pièce d'achat ordinaire."""
+    if not move_type.startswith("in_"):
+        return request.env["account.account"]
+    lines = data.get("lines") or []
+    categories = [category_of(line.get("category_id"), company) if isinstance(line, dict) else None for line in lines]
+    entries = [c for c in categories if c and c.is_entry()]
+    if not entries:
+        return request.env["account.account"]
+    accounts = {c.partner_account_id for c in entries}
+    if len(entries) != len(lines) or len(accounts) > 1:
+        raise ApiError(422, "business_rule", "Séparez la pièce : les catégories « " + ", ".join(sorted({c.name for c in entries}))
+                       + " » se passent en opération diverse sur un même compte de tiers, sans autre ligne.")
+    return entries[0].partner_account_id
+
+
+def _purchase_as_entry(data, move_type, partner, partner_account, company):
+    """Dépense d'une catégorie à compte de tiers non fournisseur (salaires, cotisations, impôts) :
+    opération diverse, charge au débit et compte de tiers au crédit (sens inverse pour un avoir)."""
+    journal = request.env["account.journal"].search(
+        [("company_id", "=", company.id), ("type", "=", "general"), ("code", "!=", "AN")], limit=1)
+    if not journal:
+        raise ApiError(422, "business_rule", "Aucun journal d'opérations diverses dans la société.")
+    refund = move_type == "in_refund"
+    day = parse_date(data, "invoice_date", today())
+    commands, total = [], 0.0
+    for i, line in enumerate(data["lines"], start=1):
+        if not line.get("name"):
+            raise ApiError(400, "missing_fields", f"Ligne {i} : libellé requis.")
+        category = category_of(line.get("category_id"), company)
+        amount =as_float(line.get("quantity", 1), "quantity") * as_float(line.get("price_unit", 0), "price_unit")
+        if amount <= 0:
+            raise ApiError(422, "business_rule", "Chaque ligne doit avoir un montant positif.")
+        account = account_of_company(line.get("account_id"), company, "Compte") or category.account_id
+        dist = with_rules(distribution(line.get("analytic_distribution"), company), account, partner, company)
+        values = {"name": str(line["name"])[:500], "account_id": account.id, "eguitra_expense_category_id": category.id,
+                  "debit": 0.0 if refund else amount, "credit": amount if refund else 0.0}
+        if dist:
+            values["analytic_distribution"] = dist
+        commands.append(Command.create(values))
+        total += amount
+    label = data.get("ref") or data["lines"][0]["name"]
+    counterpart = {"name": str(label)[:500], "account_id": partner_account.id, "partner_id": partner.id,
+                   "debit": total if refund else 0.0, "credit": 0.0 if refund else total}
+    if data.get("invoice_date_due"):
+        counterpart["date_maturity"] = parse_date(data, "invoice_date_due")
+    commands.append(Command.create(counterpart))
+    values = {"move_type": "entry", "journal_id": journal.id, "date": day, "ref": str(label)[:200],
+              "line_ids": commands, "eguitra_manual_entry": True, "company_id": company.id}
+    if data.get("narration"):
+        values["narration"] = str(data["narration"])
+    return request.env["account.move"].create(values)
 
 
 def _entry_lines(data):
@@ -227,6 +302,13 @@ class EguitraFinanceMoves(http.Controller):
         else:
             (partner_id,) = require(data, "partner_id")
             partner = _partner(partner_id)
+            partner_account = _entry_categories(data, move_type, request.env.company)
+            if partner_account:
+                move = _purchase_as_entry(data, move_type, partner, partner_account, request.env.company)
+                if data.get("post"):
+                    check_mandatory_analytic(move.line_ids)
+                    move._eguitra_post_or_submit()
+                return dict(move_detail(move), converted_from=move_type)
             values.update({
                 "partner_id": partner.id,
                 "invoice_date": parse_date(data, "invoice_date", today()),
@@ -261,8 +343,11 @@ class EguitraFinanceMoves(http.Controller):
             if move.move_type == "entry":
                 values["line_ids"] = [Command.clear()] + _entry_lines(data)
             else:
+                if _entry_categories(data, move.move_type, move.company_id):
+                    raise ApiError(422, "business_rule", "Ces catégories font de la dépense une opération diverse : "
+                                                         "supprimez ce brouillon et ressaisissez la pièce.")
                 partner = _partner(values["partner_id"]) if values.get("partner_id") else move.partner_id
-                values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(
+                values["invoice_line_ids"] =[Command.clear()] + _invoice_lines(
                     dict(data, journal_id=move.journal_id.id), move.move_type, partner)
         move.write(values)
         return move_detail(move)

@@ -241,6 +241,7 @@ def move_detail(move):
                 "credit": line.credit,
                 "analytic_distribution": line.analytic_distribution or {},
                 "analytic": describe_distribution(line.analytic_distribution, labels),
+                "category": ref(line.eguitra_expense_category_id),
                 "display_type": line.display_type,
             }
             for line in lines

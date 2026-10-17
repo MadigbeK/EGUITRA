@@ -6,9 +6,9 @@ import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal,
 import { AnalyticFields, AnalyticTags, fromDistribution, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import type { Account, AnalyticShare, Ref } from "@/lib/finance-types";
+import type { Account, AnalyticShare, ExpenseCategory, Ref } from "@/lib/finance-types";
 
-type Tab = "regles" | "obligatoire" | "modes";
+type Tab = "regles" | "obligatoire" | "categories" | "modes";
 
 interface Rule {
   id: number;
@@ -35,6 +35,7 @@ export default function ImputationsPage() {
         tabs={[
           { key: "regles", label: "Règles analytiques" },
           { key: "obligatoire", label: "Imputation obligatoire" },
+          { key: "categories", label: "Catégories de dépense" },
           { key: "modes", label: "Modes de paiement" },
         ]}
         value={tab}
@@ -42,6 +43,7 @@ export default function ImputationsPage() {
       />
       {tab === "regles" && <Rules />}
       {tab === "obligatoire" && <Requirements />}
+      {tab === "categories" && <Categories />}
       {tab === "modes" && <PaymentModes />}
     </div>
   );
@@ -169,6 +171,167 @@ function Simulation() {
         </Field>
       </div>
     </Card>
+  );
+}
+
+const NATURES: Array<{ value: string; label: string }> = [
+  { value: "opex_transport", label: "Charges d'exploitation du transport" },
+  { value: "opex_metier", label: "Charges d'exploitation des autres métiers" },
+  { value: "personnel", label: "Personnel" },
+  { value: "frais_generaux", label: "Frais généraux" },
+  { value: "impots", label: "Impôts et taxes" },
+  { value: "financier", label: "Charges financières" },
+  { value: "capex", label: "Investissement (CAPEX)" },
+];
+
+/** Catégories de dépense : la table qui pilote l'imputation des achats (compte, TVA, compte de tiers). */
+function Categories() {
+  const { data, error, mutate } = useApi<ExpenseCategory[]>("/finance/expense-categories?all=1");
+  const [editing, setEditing] = useState<ExpenseCategory | "new" | null>(null);
+  const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  async function defaults() {
+    setMessage(null);
+    try {
+      const res = await apiSend<{ created: number }>("POST", "/finance/expense-categories/defaults");
+      setMessage({ tone: "ok", text: res.created ? `${res.created} catégorie(s) usuelle(s) ajoutée(s), à revoir avec l'expert-comptable.` : "Les catégories usuelles sont déjà présentes." });
+      void mutate();
+    } catch (e) {
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
+    }
+  }
+  return (
+    <Card
+      title="Catégories de dépense"
+      padded={false}
+      actions={
+        <>
+          <Button onClick={defaults}>Proposer les catégories usuelles</Button>
+          <Button variant="primary" onClick={() => setEditing("new")}>
+            <Plus className="h-4 w-4" /> Nouvelle catégorie
+          </Button>
+        </>
+      }
+    >
+      <p className="px-5 pb-3 text-sm text-muted">
+        À la saisie d&apos;une pièce d&apos;achat, la catégorie fixe le compte et la TVA. Un compte de tiers autre que fournisseur (personnel, organismes sociaux, État) fait de la dépense une opération diverse ; une catégorie d&apos;investissement crée l&apos;immobilisation à la validation.
+      </p>
+      {message && (
+        <div className="px-5 pb-3">
+          <Notice tone={message.tone}>{message.text}</Notice>
+        </div>
+      )}
+      {error && <ErrorBox error={error} />}
+      {!data ? (
+        <Loading />
+      ) : (
+        <DataTable
+          rows={data}
+          rowKey={(c) => c.id}
+          onRowClick={(c) => setEditing(c)}
+          empty="Aucune catégorie : proposez les catégories usuelles ou créez les vôtres."
+          columns={[
+            { key: "name", label: "Catégorie" },
+            { key: "nature", label: "Nature", render: (c) => c.nature_label },
+            { key: "account", label: "Compte", render: (c) => (c.account ? `${c.account.code} ${c.account.name}` : "–") },
+            { key: "partner_account", label: "Compte de tiers", render: (c) => (c.partner_account ? <span>{c.partner_account.code} {c.entry && <Badge tone="accent">OD</Badge>}</span> : "Fournisseur") },
+            { key: "tax_mode", label: "TVA", render: (c) => (c.tax_mode === "none" ? "Sans TVA" : c.tax?.name ?? "Par défaut") },
+            { key: "active", label: "Statut", render: (c) => (c.active ? <Badge tone="ok">Active</Badge> : <Badge>Archivée</Badge>) },
+          ]}
+        />
+      )}
+      {editing && <CategoryForm category={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
+    </Card>
+  );
+}
+
+function CategoryForm({ category, onClose, onSaved }: { category: ExpenseCategory | null; onClose: () => void; onSaved: () => void }) {
+  const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=3000");
+  const { data: taxes } = useApi<Array<{ id: number; name: string; amount: number }>>("/finance/taxes?use=purchase");
+  const { data: profiles } = useApi<Array<{ id: number; name: string; account_asset: string }>>("/finance/assets/profiles");
+  const [form, setForm] = useState({
+    name: category?.name ?? "",
+    nature: category?.nature ?? "frais_generaux",
+    account_id: category?.account ? String(category.account.id) : "",
+    partner_account_id: category?.partner_account ? String(category.partner_account.id) : "",
+    tax_mode: category?.tax_mode ?? "deductible",
+    tax_id: category?.tax ? String(category.tax.id) : "",
+    asset_profile_id: category?.asset_profile ? String(category.asset_profile.id) : "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const capex = form.nature === "capex";
+  const options = (re: RegExp) => (accounts ?? []).filter((a) => re.test(a.code)).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }));
+  async function save(patch?: { active: boolean }) {
+    setBusy(true);
+    setError(null);
+    const body = patch ?? {
+      name: form.name.trim(),
+      nature: form.nature,
+      account_id: form.account_id ? Number(form.account_id) : null,
+      partner_account_id: form.partner_account_id ? Number(form.partner_account_id) : null,
+      tax_mode: form.tax_mode,
+      tax_id: form.tax_id ? Number(form.tax_id) : null,
+      asset_profile_id: capex && form.asset_profile_id ? Number(form.asset_profile_id) : null,
+    };
+    try {
+      if (category) await apiSend("PATCH", `/finance/expense-categories/${category.id}`, body);
+      else await apiSend("POST", "/finance/expense-categories", body);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal
+      open
+      title={category ? `Catégorie « ${category.name} »` : "Nouvelle catégorie de dépense"}
+      onClose={onClose}
+      footer={
+        <>
+          {category && (
+            <Button variant={category.active ? "danger" : "secondary"} loading={busy} onClick={() => save({ active: !category.active })}>
+              {category.active ? "Archiver" : "Réactiver"}
+            </Button>
+          )}
+          <Button variant="primary" loading={busy} disabled={!form.name.trim() || (!form.account_id && !(capex && form.asset_profile_id))} onClick={() => save()}>
+            Enregistrer
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {error && <Notice tone="danger">{error}</Notice>}
+        <Field label="Catégorie">
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Carburant, entretien, salaires…" />
+        </Field>
+        <Field label="Nature">
+          <Select value={form.nature} onChange={(e) => setForm({ ...form, nature: e.target.value })} options={NATURES} />
+        </Field>
+        {capex && (
+          <Field label="Catégorie d'immobilisation" hint="L'immobilisation est créée à la validation de la pièce d'achat.">
+            <Select value={form.asset_profile_id} onChange={(e) => setForm({ ...form, asset_profile_id: e.target.value })} placeholder="Choisir…" options={(profiles ?? []).map((p) => ({ value: p.id, label: `${p.name} (${p.account_asset})` }))} />
+          </Field>
+        )}
+        <Field label={capex ? "Compte d'immobilisation" : "Compte de charge"} hint={capex ? "Vide : celui de la catégorie d'immobilisation." : undefined}>
+          <Select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} placeholder="Choisir…" options={options(capex ? /^2/ : /^6/)} />
+        </Field>
+        <Field label="Compte de tiers" hint="Vide : compte fournisseur du tiers. 42, 43 ou 44 : la dépense devient une opération diverse, sans TVA.">
+          <Select value={form.partner_account_id} onChange={(e) => setForm({ ...form, partner_account_id: e.target.value })} placeholder="Fournisseur" options={options(/^4/)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="TVA">
+            <Select value={form.tax_mode} onChange={(e) => setForm({ ...form, tax_mode: e.target.value as "deductible" | "none" })} options={[{ value: "deductible", label: "TVA déductible" }, { value: "none", label: "Sans TVA" }]} />
+          </Field>
+          {form.tax_mode === "deductible" && (
+            <Field label="Taxe">
+              <Select value={form.tax_id} onChange={(e) => setForm({ ...form, tax_id: e.target.value })} placeholder="Taxe d'achat par défaut" options={(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))} />
+            </Field>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 

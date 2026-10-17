@@ -11,3 +11,4 @@ from . import assets
 from . import budget
 from . import reminders
 from . import analytic_rules
+from . import categories

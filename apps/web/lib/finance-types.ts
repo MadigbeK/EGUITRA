@@ -115,6 +115,7 @@ export interface MoveLine {
   credit: number;
   analytic_distribution: Record<string, number>;
   analytic?: AnalyticShare[];
+  category?: Ref | null;
   display_type: string;
 }
 
@@ -126,6 +127,23 @@ export interface AnalyticAxis {
   /** Tenu par la finance (activité, centre de coût) ; sinon créé par son module. */
   managed: boolean;
   accounts: Array<{ id: number; name: string; code: string | null; active: boolean; activity_id: number | null; income_account_id: number | null }>;
+}
+
+/** Catégorie de dépense : compte, TVA et compte de tiers des pièces d'achat (Imputations automatiques). */
+export interface ExpenseCategory {
+  id: number;
+  sequence: number;
+  name: string;
+  nature: string;
+  nature_label: string;
+  account: { id: number; code: string; name: string } | null;
+  partner_account: { id: number; code: string; name: string } | null;
+  tax_mode: "deductible" | "none";
+  tax: { id: number; name: string; amount: number } | null;
+  asset_profile: Ref | null;
+  active: boolean;
+  /** Compte de tiers non fournisseur : la dépense se passe en opération diverse. */
+  entry: boolean;
 }
 
 /** Compte analytique détaillé (écran Axes analytiques). */

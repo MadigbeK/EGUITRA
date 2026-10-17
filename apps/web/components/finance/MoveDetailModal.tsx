@@ -62,7 +62,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
             rows={move.lines.filter((l) => !l.display_type || l.display_type === "product")}
             rowKey={(l) => l.id}
             columns={[
-              { key: "name", label: "Libellé" },
+              { key: "name", label: "Libellé", render: (l) => <div>{l.name}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div> },
               { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
               { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
               { key: "quantity", label: "Qté", align: "right", render: (l) => String(l.quantity) },
