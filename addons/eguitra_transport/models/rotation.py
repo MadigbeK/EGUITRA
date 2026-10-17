@@ -85,8 +85,10 @@ class EguitraTransportRotation(models.Model):
     # ─── Volumes ──────────────────────────────────────────────────────────
     volume_loaded = fields.Float("Volume chargé (m³)", digits=(12, 3))
     volume_delivered = fields.Float("Volume livré (m³)", digits=(12, 3))
+    # Option de la société au moment de la saisie (calcul plutôt que valeur par défaut : à la mise à
+    # jour du module, la colonne de la société n'est pas encore garantie quand celle-ci s'initialise).
     volume_correction = fields.Boolean(
-        "Manquant sur volumes à 15 °C", default=lambda self: self.env.company.transport_volume_correction,
+        "Manquant sur volumes à 15 °C", compute="_compute_volume_correction", store=True, readonly=False,
         help="Le manquant se calcule sur les volumes ramenés à 15 °C ; la facturation reste sur le volume livré.",
     )
     temperature_loaded = fields.Float("Température au chargement (°C)", digits=(5, 1), help="0 : non relevée.")
@@ -181,6 +183,11 @@ class EguitraTransportRotation(models.Model):
     _client_uuid_unique = models.Constraint("unique(client_uuid)", "Cette saisie a déjà été synchronisée.")
 
     # ─── Calculs ──────────────────────────────────────────────────────────
+
+    @api.depends("company_id")
+    def _compute_volume_correction(self):
+        for rot in self:
+            rot.volume_correction = (rot.company_id or self.env.company).transport_volume_correction
 
     @api.depends("product_id")
     def _compute_density(self):
