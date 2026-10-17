@@ -1,22 +1,57 @@
-export type Recommendation = "go" | "conditional" | "no_go" | "pending" | "postponed";
+export type Recommendation = "bankable" | "apd_ready" | "go" | "conditional" | "hold" | "no_go" | "pending" | "postponed";
+export type Decision = "go" | "conditional" | "hold" | "no_go" | "postponed";
+type Tone = "ok" | "warn" | "danger" | "neutral" | "accent";
 
-export const RECO: Record<Recommendation, { label: string; tone: "ok" | "warn" | "danger" | "neutral" | "accent" }> = {
+/** Recommandations et décisions, vocabulaire de la méthode MB AxisPro. */
+export const RECO: Record<Recommendation, { label: string; tone: Tone }> = {
+  bankable: { label: "BANKABLE CANDIDATE", tone: "ok" },
+  apd_ready: { label: "APD READY", tone: "ok" },
   go: { label: "GO", tone: "ok" },
-  conditional: { label: "GO sous conditions", tone: "warn" },
+  conditional: { label: "CONDITIONAL GO", tone: "warn" },
+  hold: { label: "HOLD", tone: "warn" },
   no_go: { label: "NO-GO", tone: "danger" },
   pending: { label: "À compléter", tone: "neutral" },
   postponed: { label: "Ajourné", tone: "neutral" },
 };
 
-export const STATUS_LABELS: Record<string, string> = {
-  not_assessed: "Non évalué",
-  met: "Satisfait",
-  partial: "Partiel",
-  not_met: "Non satisfait",
-  na: "Sans objet",
+export type GateDecision = "go" | "conditional" | "hold" | "no_go";
+export const GATE_DECISION: Record<GateDecision, { label: string; tone: Tone }> = {
+  go: { label: "GO", tone: "ok" },
+  conditional: { label: "CONDITIONAL GO", tone: "warn" },
+  hold: { label: "HOLD", tone: "warn" },
+  no_go: { label: "NO-GO", tone: "danger" },
 };
 
+export type Status = "not_assessed" | "met" | "partial" | "not_met" | "na";
+export const STATUS_LABELS: Record<Status, string> = {
+  not_assessed: "Non évalué",
+  met: "Disponible et exploitable",
+  partial: "Incomplet / à actualiser",
+  not_met: "Non disponible",
+  na: "Non applicable",
+};
+/** Libellés courts des statuts (puces de saisie). */
+export const STATUS_SHORT: Record<Status, string> = {
+  not_assessed: "Non évalué",
+  met: "Disponible",
+  partial: "Incomplet",
+  not_met: "Non disponible",
+  na: "Non applicable",
+};
+
+export const REQUIREMENT: Record<string, string> = { blocking: "Bloquant", apd: "Pendant l'APD", closing: "DD, SPV, closing" };
+export const YES_NO: Record<string, string> = { yes: "Oui", no: "Non" };
+export type HypothesisKey = "dd_red_flag" | "dataroom_open" | "lenders_agreement" | "cp_lifted" | "financing_signed";
+export const HYPOTHESES: Array<{ key: HypothesisKey; label: string; gate: string }> = [
+  { key: "dd_red_flag", label: "Red flag bloquant en due diligence", gate: "G5" },
+  { key: "dataroom_open", label: "Data room constituée et ouverte", gate: "G5" },
+  { key: "lenders_agreement", label: "Accord de principe des bailleurs", gate: "G6" },
+  { key: "cp_lifted", label: "Conditions précédentes levées", gate: "G7" },
+  { key: "financing_signed", label: "Documentation de financement signée", gate: "G7" },
+];
+
 export interface Gate { id: number; code: string; name: string; sequence?: number }
+export interface Currency { id: number; name: string; symbol: string }
 
 export interface DossierSummary {
   id: number;
@@ -29,15 +64,25 @@ export interface DossierSummary {
   location: string | null;
   investment: number;
   financing_need: number;
+  currency: Currency;
   current_gate: Gate | null;
   gates: Gate[];
   score: number | null;
+  readiness: number;
+  apd: number;
+  bankability: number;
+  completeness: number;
+  dataroom_completeness: number;
+  classification: string;
   recommendation: Recommendation;
+  next_gate: { code: string; name: string; decision: GateDecision } | null;
   knockouts: number;
-  decision: Recommendation | null;
+  decision: Decision | null;
   progress: { assessed: number; criteria: number };
-  documents: { due: number; received: number };
+  documents: { due: number; received: number; available: number; total: number };
   policy_version: number;
+  revision: number;
+  locked: boolean;
   financial: FinancialBrief | null;
   risks: RiskSummary;
   actions: ActionSummary;
@@ -58,15 +103,63 @@ export type RiskLevel = "critical" | "high" | "moderate" | "low";
 export interface RiskSummary { open: number; levels: Record<RiskLevel, number>; top: number }
 export interface ActionSummary { open: number; overdue: number; submitted: number; done: number }
 
-export interface Scoring {
-  global_score: number | null;
-  domains: Array<{ domain_id: number; code: string; name: string; weight: number; score: number | null; assessed: number; criteria: number }>;
-  knockouts: Array<{ code: string; name: string }>;
-  critical_open: Array<{ code: string; name: string }>;
+export interface CriterionBrief { code: string; name: string; domain: string | null; gate: string | null }
+export interface GateResult {
+  gate_id: number;
+  code: string;
+  name: string;
+  index: number;
+  rule: string;
+  decision: GateDecision;
+  motifs: string[];
+  criteria: number;
+  available: number;
+  knockouts: number;
+  entry_requirements: string | null;
+  deliverables: string | null;
+  exit_criteria: string | null;
+}
+export interface DomainScore {
+  domain_id: number;
+  code: string;
+  name: string;
+  weight: number;
+  score: number | null;
+  priority: "URGENTE" | "ÉLEVÉE" | "MOYENNE" | "FAIBLE" | null;
   assessed: number;
   criteria: number;
+  gaps: number;
+  knockouts: number;
+}
+
+export interface Scoring {
+  global_score: number | null;
+  readiness: number;
+  apd: number;
+  bankability: number;
+  completeness: number;
+  dataroom_completeness: number;
+  classification: string;
   recommendation: Recommendation;
-  thresholds: { go: number; conditional: number };
+  recommendation_detail: string;
+  method_recommendation: Recommendation;
+  domains: DomainScore[];
+  knockouts: CriterionBrief[];
+  knockouts_pending: number;
+  critical_open: CriterionBrief[];
+  critical_missing_excl_ko: number;
+  requalified: Array<CriterionBrief & { entered: Status; retained: Status; alerts: string[] }>;
+  gates: GateResult[];
+  next_gate: GateResult | null;
+  anomalies: string[];
+  proofs: number;
+  gaps_open: number;
+  documents_missing: number;
+  pending_in_scope: number;
+  assessed: number;
+  criteria: number;
+  policy: { weighting: "flat" | "domain"; ko_partial_blocks: boolean; evidence_check: boolean; exclude_na: boolean; expiry_check: boolean };
+  thresholds: { bankable: number; go: number; conditional: number; hold: number; dscr: number };
 }
 
 export interface Review {
@@ -74,26 +167,58 @@ export interface Review {
   date: string;
   gate: string | null;
   members: string | null;
+  instance: string | null;
+  motive: string | null;
   recommendation: Recommendation;
-  decision: Recommendation;
+  decision: Decision;
   conditions: string | null;
   minutes: string | null;
   state: "draft" | "locked";
   locked_by: string | null;
   locked_at: string | null;
   policy_version: number;
+  revision: number | null;
+  fingerprint: string | null;
   score: number | null;
+  readiness: number | null;
+  apd: number | null;
+  bankability: number | null;
+  classification: string | null;
 }
+
+export interface Gap {
+  criterion_id: number;
+  code: string;
+  name: string;
+  domain: string;
+  gate: string | null;
+  status: Status;
+  entered: Status;
+  knockout: boolean;
+  critical: boolean;
+  blocking: boolean;
+  priority: number;
+  action: string;
+  responsible: string | null;
+  due_date: string | null;
+  has_proof: boolean;
+  evaluation_id: number | null;
+}
+
+export type DecisionInputs = { dscr_manual: number | null; irr_manual: number | null } & Record<HypothesisKey, "yes" | "no" | null>;
 
 export interface DossierDetail extends DossierSummary {
   capacity: string | null;
   date_start: string | null;
+  date_evaluation: string | null;
   description: string | null;
   hypotheses: string | null;
+  decision_inputs: DecisionInputs;
   scoring: Scoring;
-  gaps: Array<{ criterion_id: number; code: string; name: string; domain: string; gate: string; status: string; knockout: boolean; critical: boolean; action: string }>;
+  gaps: Gap[];
   portal_users: Array<{ id: number; name: string; login: string }>;
   reviews: Review[];
+  locked_review: { id: number; date: string; decision: Decision; fingerprint: string | null; locked_by: string | null } | null;
 }
 
 export interface CriterionEval {
@@ -102,19 +227,52 @@ export interface CriterionEval {
   code: string;
   name: string;
   domain: string;
+  domain_id: number;
+  domain_code: string;
   gate_id: number;
+  gate: string;
   weight: number;
   critical: boolean;
   knockout: boolean;
   evidence_required: boolean;
+  requirement: "blocking" | "apd" | "closing";
+  bankability: boolean;
   guidance: string | null;
-  status: string;
+  status: Status;
+  retained: Status;
+  points: number;
+  alerts: string[];
+  priority: number | null;
   comment: string | null;
-  documents: number[];
+  deliverable: string | null;
+  default_deliverable: string;
+  responsible: string | null;
+  due_date: string | null;
+  documents: Array<{ id: number; name: string; version: number; state: DocFile["state"]; validity_date: string | null }>;
+  pieces: Array<{ id: number; code: string; name: string }>;
   assessed_by: string | null;
   assessed_at: string | null;
   indicator: string | null;
   suggestion: Suggestion | null;
+}
+
+export interface JournalEntry {
+  id: number;
+  date: string;
+  user: string;
+  kind: "status" | "document" | "gate" | "decision" | "revision" | "import";
+  kind_label: string;
+  criterion: string | null;
+  before: string | null;
+  after: string | null;
+  note: string | null;
+}
+
+export interface ImportResult {
+  applied: boolean;
+  changes: Array<{ code: string; name: string; before: string; after: string; fields: string[] }>;
+  unknown: string[];
+  errors: string[];
 }
 
 export interface StandardDoc {
@@ -129,6 +287,10 @@ export interface StandardDoc {
   state: "missing" | "received" | "validated" | "rejected";
   version: number;
   document_id: number | null;
+  validity_date: string | null;
+  available: boolean;
+  origin: string | null;
+  criteria: Array<{ code: string; name: string }>;
 }
 
 export interface DocFile {
@@ -143,6 +305,9 @@ export interface DocFile {
   mimetype: string;
   size: number;
   portal_visible: boolean;
+  validity_date: string | null;
+  after_lock: boolean;
+  criteria: Array<{ id: number; code: string }>;
 }
 
 export interface Message { id: number; author: string; from_promoter: boolean; body: string; date: string; internal: boolean }
@@ -297,7 +462,7 @@ export interface Risk {
   dossier?: { id: number; reference: string; name: string };
 }
 
-type Ton = "ok" | "warn" | "danger" | "neutral" | "accent";
+type Ton = Tone;
 
 export const RISK_LEVEL: Record<RiskLevel, { label: string; tone: Ton; color: string }> = {
   critical: { label: "Critique", tone: "danger", color: "#ec4f49" },
@@ -400,6 +565,11 @@ export interface Portfolio {
     state: string;
     gate: string | null;
     score: number | null;
+    readiness: number;
+    apd: number;
+    bankability: number;
+    classification: string;
+    knockouts: number;
     recommendation: Recommendation;
     financing_need: number;
     npv: number | null;

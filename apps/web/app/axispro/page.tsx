@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { AlertTriangle, CheckCircle2, FileText, FolderKanban, Plus, ShieldAlert, XCircle } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Donut, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Donut, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { RECO, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
+import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
 import { fmtPct, fmtShort } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
 import { ratio } from "@/components/axispro/cellules";
@@ -14,18 +14,23 @@ import { ratio } from "@/components/axispro/cellules";
 type Vue = "tableau" | "liste";
 
 const COULEUR_RECO: Record<Recommendation, string> = {
-  go: "#12956a",
+  bankable: "#0b7a55",
+  apd_ready: "#12956a",
+  go: "#3fb68b",
   conditional: "#df8f17",
+  hold: "#e25f35",
   no_go: "#ec4f49",
   pending: "#9aa9a2",
   postponed: "#2d82dc",
 };
 
-/** Couleur d'un score selon les seuils usuels de la grille (70 GO, 50 sous conditions). */
+/** Couleur d'un score selon les classes de la méthode (65 APD READY, 50 CONDITIONAL GO, 30 HOLD). */
 function teinteScore(score: number | null) {
   if (score === null) return "bg-panel-3 text-muted";
-  return score >= 70 ? "bg-ok-doux text-ok-texte" : score >= 50 ? "bg-warn-doux text-warn" : "bg-danger-doux text-danger";
+  return score >= 65 ? "bg-ok-doux text-ok-texte" : score >= 50 ? "bg-warn-doux text-warn" : score >= 30 ? "bg-orange-100 text-orange-700" : "bg-danger-doux text-danger";
 }
+
+const FAVORABLES: Recommendation[] = ["bankable", "apd_ready", "go"];
 
 const CLE_VUE = "nimova.axispro.vue";
 
@@ -83,9 +88,9 @@ export default function DossiersPage() {
       />
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Dossiers" value={String(rows.length)} icon={FolderKanban} teinte="azur" hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
-        <Kpi label="Recommandés GO" value={String(rows.filter((d) => d.recommendation === "go").length)} tone="ok" icon={CheckCircle2} teinte="jade" />
-        <Kpi label="Sous conditions" value={String(rows.filter((d) => d.recommendation === "conditional").length)} tone="warn" icon={AlertTriangle} teinte="ambre" />
-        <Kpi label="Éliminatoire actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" icon={XCircle} teinte="danger" />
+        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" icon={CheckCircle2} teinte="jade" hint={`${rows.filter((d) => d.recommendation === "bankable").length} bankable candidate(s)`} />
+        <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" icon={AlertTriangle} teinte="ambre" />
+        <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" icon={XCircle} teinte="danger" />
       </div>
 
       {rows.length > 0 && etapes.length > 0 && (
@@ -209,13 +214,20 @@ function CarteDossier({ d }: { d: DossierSummary }) {
     <Link href={`/axispro/dossiers/${d.id}`} className="n-levable block rounded-xl border border-line bg-panel p-3.5 shadow-[var(--ombre-carte)]">
       <div className="flex items-center justify-between gap-2">
         <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
-        <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.score))}>{d.score === null ? "Non noté" : `${Math.round(d.score)} / 100`}</span>
+        <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.progress.assessed ? d.readiness : null))} title="Project Readiness Score">{d.progress.assessed ? `${Math.round(d.readiness)} / 100` : "Non noté"}</span>
       </div>
       <div className="mt-2.5 line-clamp-2 text-[14px] font-semibold leading-snug text-ink">{d.name}</div>
       <div className="mt-0.5 truncate text-[12.5px] text-muted">{d.promoter.name}</div>
-      {d.knockouts > 0 && (
+      {d.progress.assessed > 0 && (
+        <div className="mt-2 flex gap-3 text-[11.5px] text-muted">
+          <span>APD <b className="tabular text-ink-2">{Math.round(d.apd)}</b></span>
+          <span>Bankability <b className="tabular text-ink-2">{Math.round(d.bankability)}</b></span>
+          {d.locked && <span className="font-semibold text-accent">Décision verrouillée</span>}
+        </div>
+      )}
+      {d.knockouts > 0 && d.progress.assessed > 0 && (
         <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-danger-doux px-2 py-1 text-[12px] font-semibold text-danger">
-          <ShieldAlert className="h-3.5 w-3.5" /> {d.knockouts} critère{d.knockouts > 1 ? "s" : ""} éliminatoire{d.knockouts > 1 ? "s" : ""}
+          <ShieldAlert className="h-3.5 w-3.5" /> {d.knockouts} knock-out{d.knockouts > 1 ? "s" : ""} actif{d.knockouts > 1 ? "s" : ""}
         </div>
       )}
       <div className="mt-3">
@@ -230,9 +242,9 @@ function CarteDossier({ d }: { d: DossierSummary }) {
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-2.5">
         <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge>
         <span className="flex items-center gap-3 text-[12px] font-semibold tabular text-ink-2">
-          <span className="inline-flex items-center gap-1" title="Pièces reçues sur pièces dues">
+          <span className="inline-flex items-center gap-1" title="Pièces de la data room disponibles">
             <FileText className="h-3.5 w-3.5 text-muted" />
-            {d.documents.received}/{d.documents.due}
+            {d.documents.available}/{d.documents.total}
           </span>
           <span className="whitespace-nowrap" title="Besoin de financement">{fmtShort(d.financing_need)}</span>
         </span>
@@ -278,12 +290,15 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
             </div>
           ),
         },
-        { key: "score", label: "Score", align: "right", sortValue: (d) => d.score, render: (d) => <span className={cx("inline-block min-w-16 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.score))}>{d.score === null ? "–" : `${Math.round(d.score)} / 100`}</span> },
+        { key: "readiness", label: "Readiness", align: "right", sortValue: (d) => d.readiness, render: (d) => <span className={cx("inline-block min-w-12 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.progress.assessed ? d.readiness : null))}>{d.progress.assessed ? Math.round(d.readiness) : "–"}</span> },
+        { key: "apd", label: "APD", align: "right", sortValue: (d) => d.apd, render: (d) => (d.progress.assessed ? Math.round(d.apd) : "–") },
+        { key: "bankability", label: "Bankability", align: "right", sortValue: (d) => d.bankability, render: (d) => (d.progress.assessed ? Math.round(d.bankability) : "–") },
         { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
+        { key: "next_gate", label: "Prochain gate", render: (d) => (d.next_gate ? <span className="whitespace-nowrap text-[12.5px]">{d.next_gate.code} · {GATE_DECISION[d.next_gate.decision].label}</span> : "–") },
         { key: "irr", label: "TRI", align: "right", sortValue: (d) => d.financial?.irr_project ?? null, render: (d) => fmtPct(d.financial?.irr_project) },
         { key: "dscr", label: "DSCR min.", align: "right", sortValue: (d) => d.financial?.dscr_min ?? null, render: (d) => ratio(d.financial?.dscr_min) },
         { key: "financing_need", label: "Besoin", align: "right", render: (d) => fmtShort(d.financing_need) },
-        { key: "documents", label: "Pièces", align: "right", sortValue: (d) => d.documents.received / Math.max(1, d.documents.due), render: (d) => `${d.documents.received}/${d.documents.due}` },
+        { key: "documents", label: "Data room", align: "right", sortValue: (d) => d.dataroom_completeness, render: (d) => `${Math.round(d.dataroom_completeness)} %` },
       ]}
     />
   );
@@ -291,12 +306,14 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
 
 function DossierForm({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const [promoter, setPromoter] = useState<{ id: number; name: string } | null>(null);
-  const [f, setF] = useState({ name: "", sector: "", location: "", capacity: "", investment: "", financing_need: "", description: "", hypotheses: "" });
+  const [f, setF] = useState({ name: "", sector: "", location: "", capacity: "", investment: "", financing_need: "", description: "", hypotheses: "", currency_id: "", date_evaluation: new Date().toISOString().slice(0, 10) });
+  const { data: currencies } = useApi<Currency[]>("/axispro/currencies");
+  const devise = currencies?.find((c) => String(c.id) === f.currency_id)?.name ?? currencies?.[0]?.name ?? "GNF";
   const [error, setError] = useState<string | null>(null);
   const num = (v: string) => Number(v.replace(/\s/g, "")) || 0;
   async function submit() {
     try {
-      const d = await apiSend<DossierDetail>("POST", "/axispro/dossiers", { ...f, promoter_id: promoter?.id, investment: num(f.investment), financing_need: num(f.financing_need) });
+      const d = await apiSend<DossierDetail>("POST", "/axispro/dossiers", { ...f, currency_id: f.currency_id || undefined, promoter_id: promoter?.id, investment: num(f.investment), financing_need: num(f.financing_need) });
       onDone(d.id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
@@ -311,8 +328,10 @@ function DossierForm({ onClose, onDone }: { onClose: () => void; onDone: (id: nu
         <Field label="Secteur"><Input value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value })} /></Field>
         <Field label="Localisation"><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
         <Field label="Capacité"><Input value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value })} /></Field>
-        <Field label="Investissement prévu (GNF)"><Input inputMode="numeric" className="font-mono" value={f.investment} onChange={(e) => setF({ ...f, investment: e.target.value })} /></Field>
-        <Field label="Besoin de financement (GNF)"><Input inputMode="numeric" className="font-mono" value={f.financing_need} onChange={(e) => setF({ ...f, financing_need: e.target.value })} /></Field>
+        <Field label="Devise du dossier"><Select value={f.currency_id} onChange={(e) => setF({ ...f, currency_id: e.target.value })} options={(currencies ?? []).map((c, i) => ({ value: i === 0 ? "" : String(c.id), label: c.name }))} /></Field>
+        <Field label="Date d'évaluation"><Input type="date" value={f.date_evaluation} onChange={(e) => setF({ ...f, date_evaluation: e.target.value })} /></Field>
+        <Field label={`Investissement prévu (${devise})`}><Input inputMode="numeric" className="font-mono" value={f.investment} onChange={(e) => setF({ ...f, investment: e.target.value })} /></Field>
+        <Field label={`Besoin de financement (${devise})`}><Input inputMode="numeric" className="font-mono" value={f.financing_need} onChange={(e) => setF({ ...f, financing_need: e.target.value })} /></Field>
         <Field label="Description" className="md:col-span-2"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
         <Field label="Hypothèses de décision" className="md:col-span-2"><Textarea value={f.hypotheses} onChange={(e) => setF({ ...f, hypotheses: e.target.value })} /></Field>
       </div>

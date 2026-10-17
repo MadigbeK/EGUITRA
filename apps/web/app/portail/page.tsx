@@ -132,6 +132,9 @@ function Dossier({ d }: { d: PortalDossier }) {
           <div className="mt-4">
             <ProgressBar value={pct} tone={pct >= 100 ? "ok" : "accent"} rayures epaisseur={12} />
           </div>
+          <Button className="mt-4" onClick={() => apiDownload(`/portail/dossiers/${d.id}/pieces.pdf`, `${d.reference}_pieces_a_fournir.pdf`)}>
+            <Download className="h-4 w-4" /> Liste imprimable des pièces
+          </Button>
         </Card>
       </div>
       <Card title="Data room" padded={false}>

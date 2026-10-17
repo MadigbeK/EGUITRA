@@ -115,7 +115,7 @@ export function Portefeuille() {
                 <thead className="bg-panel-2 text-[12px] text-muted">
                   <tr>
                     <th className="px-4 py-2 text-left font-semibold">Projet</th>
-                    <th className="px-3 py-2 text-right font-semibold">Score</th>
+                    <th className="px-3 py-2 text-right font-semibold" title="Project Readiness, APD Readiness, Bankability">Readiness / APD / Bank.</th>
                     <th className="px-3 py-2 text-right font-semibold">TRI</th>
                     <th className="px-3 py-2 text-right font-semibold">DSCR min.</th>
                     <th className="px-3 py-2 text-right font-semibold">VAN</th>
@@ -131,7 +131,7 @@ export function Portefeuille() {
                         </Link>
                         <div className="text-[12px] text-muted">{p.reference}{p.gate ? `, ${p.gate}` : ""}</div>
                       </td>
-                      <td className="px-3 py-2 text-right">{p.score === null ? "–" : Math.round(p.score)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular">{p.score === null ? "–" : `${Math.round(p.readiness)} / ${Math.round(p.apd)} / ${Math.round(p.bankability)}`}</td>
                       <td className="px-3 py-2 text-right">{fmtPct(p.irr_project)}</td>
                       <td className={cx("px-3 py-2 text-right", p.dscr_min !== null && p.dscr_min < 1.3 && "font-semibold text-danger")}>{ratio(p.dscr_min)}</td>
                       <td className={cx("px-3 py-2 text-right", (p.npv ?? 0) < 0 && "text-danger")}>{fmtShort(p.npv)}</td>
