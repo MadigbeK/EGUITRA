@@ -507,6 +507,7 @@ class Dossier:
         for t in self.treasury:
             if t.get("reference"):
                 refs[str(t["reference"])].append(t)
+        outstanding, drawn_in_year = defaultdict(float), defaultdict(list)
         for loan in self.d.get("dettes") or []:
             code = str(loan["code"])
             lines = refs.get(code, [])
@@ -542,6 +543,32 @@ class Dossier:
             for (_y, _m), slot in sorted(due.items()):
                 self.rows["echeances"].append([code, fr(slot["date"]), amount(slot["capital"]), amount(slot["interets"]),
                                                " ".join(slot["pieces"])])
+            # Capital restant dû à la veille de l'ouverture, échéances constantes au taux implicite : à
+            # rapprocher de l'à-nouveau du compte de dette (un financement débloqué dans l'exercice n'y
+            # figure pas).
+            if rate is not None and first and months and start and start < self.start:
+                r = rate / 1200
+                annuity = principal * r / (1 - (1 + r) ** -months) if r else principal / months
+                remaining = principal
+                for k in range(months):
+                    if add_months(first, k) >= self.start:
+                        break
+                    remaining -= annuity - remaining * r
+                outstanding[str(loan.get("compte") or "")] += remaining
+            elif start and start >= self.start:
+                drawn_in_year[str(loan.get("compte") or "")].append((code, principal))
+        for account, value in sorted(outstanding.items()):
+            ledger = -self.opening_balances.get(account, 0)
+            gap = R(ledger - value)
+            if abs(gap) < max(1000, len(self.d.get("dettes") or [])):
+                self.report.append(f"Emprunts, compte {account} : à-nouveau conforme aux échéanciers reconstitués au taux "
+                                   "implicite.")
+                continue
+            same = [c for c, p in drawn_in_year.get(account, []) if abs(R(p) - gap) < 1000]
+            self.warnings.append(f"Emprunts, compte {account} : à-nouveau supérieur de {gap} GNF au capital restant dû "
+                                 "reconstitué au taux implicite"
+                                 + (f" ; l'écart égale le montant de {', '.join(same)}, débloqué dans l'exercice : "
+                                    "l'à-nouveau semble déjà le compter (déblocage compté deux fois)" if same else "") + ".")
 
     @staticmethod
     def _implied_rate(capital):
@@ -550,7 +577,8 @@ class Dossier:
         ratios = sorted(b / a - 1 for a, b in zip(values, values[1:]) if a > 0)
         if not ratios:
             return None
-        return ratios[len(ratios) // 2] * 12 * 100
+        # Montants payés arrondis au millier : taux arrondi au centième, comme le contrat l'exprime.
+        return round(ratios[len(ratios) // 2] * 12 * 100, 2)
 
     # ─── Budget et rotations ──────────────────────────────────────────────
 
