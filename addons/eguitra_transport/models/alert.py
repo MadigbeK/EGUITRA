@@ -16,10 +16,17 @@ class EguitraAlertThreshold(models.Model):
     @api.model
     def ensure_defaults(self, company):
         super().ensure_defaults(company)
-        # Toute quantité au-delà de la tolérance est signalée (seuil 0 m³), comme le compte de passage.
-        if "transport_shortage_excess" not in self._thresholds(company):
-            self.sudo().create({"company_id": company.id, "code": "transport_shortage_excess", "value": 0,
-                                "severity": "warning"})
+        self._ensure_transport_defaults(company)
+
+    @api.model
+    def _ensure_transport_defaults(self, companies=None):
+        """Seuil des manquants hors tolérance : toute quantité au-delà de la tolérance est signalée
+        (seuil 0 m³), comme le compte de passage. Un seuil archivé (alerte coupée) n'est pas recréé."""
+        Threshold = self.sudo().with_context(active_test=False)
+        for company in companies or self.env["res.company"].sudo().search([]):
+            if not Threshold.search_count([("company_id", "=", company.id), ("code", "=", "transport_shortage_excess")]):
+                Threshold.create({"company_id": company.id, "code": "transport_shortage_excess", "value": 0,
+                                  "severity": "warning"})
 
     @api.model
     def _company_alerts(self, company, today):

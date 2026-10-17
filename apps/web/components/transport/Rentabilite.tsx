@@ -44,11 +44,11 @@ interface StructureDetail {
 interface Report {
   rows: ReportRow[];
   indicators: {
-    transport_revenue: number; income_total: number; revenue_share: number | null; margin: number; margin_rate: number | null;
+    transport_revenue: number; income_total: number | null; revenue_share: number | null; margin: number; margin_rate: number | null;
     margin_threshold: number | null; below_threshold: boolean; km: number; revenue_per_km: number | null; cost_per_km: number | null;
     fuel_per_100km: number | null; structure: number; structure_per_km: number | null; structure_booked: number;
     structure_booked_per_km: number | null; net_result: number; vehicles: number; deficit_vehicles: number; deficit_loss: number;
-    declared_cost: number; booked_cost: number; cost_gap: number;
+    declared_cost: number; booked_cost: number | null; cost_gap: number | null;
   };
   structure: { companies: StructureDetail[] };
   controls: Control[];
@@ -63,8 +63,9 @@ export function Rentabilite() {
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const { data, error } = useApi<Report>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
-  const booked = group === "vehicle" || group === "route" || group === "month";
   const ind = data?.indicators;
+  // Colonnes comptables : axes analytiques disponibles, et profil qui lit la comptabilité.
+  const booked = (group === "vehicle" || group === "route" || group === "month") && ind?.booked_cost !== null;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -75,7 +76,7 @@ export function Rentabilite() {
       {error && <Notice tone="danger">{error.message}</Notice>}
       {ind && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Chiffre d'affaires transport" value={fmtShort(ind.transport_revenue)} icon={TrendingUp} teinte="jade" hint={ind.revenue_share === null ? "Part du CA : produits non comptabilisés" : `${fmtPct(ind.revenue_share)} des produits de la période`} />
+          <Kpi label="Chiffre d'affaires transport" value={fmtShort(ind.transport_revenue)} icon={TrendingUp} teinte="jade" hint={ind.income_total === null ? "Rotations validées et facturées" : ind.revenue_share === null ? "Part du CA : produits non comptabilisés" : `${fmtPct(ind.revenue_share)} des produits de la période`} />
           <Kpi label="Marge directe" value={fmtPct(ind.margin_rate)} icon={Percent} teinte={ind.below_threshold ? "ambre" : "jade"} tone={ind.below_threshold ? "warn" : "ok"} hint={`${fmtShort(ind.margin)}${ind.margin_threshold ? `, seuil ${fmtPct(ind.margin_threshold, 0)}` : ""}`} />
           <Kpi label="Structure au km" value={ind.structure_per_km === null ? "–" : `${fmtInt(ind.structure_per_km)} GNF`} icon={RouteIcon} teinte="azur" hint={`${fmtShort(ind.structure)} sur ${fmtInt(ind.km)} km ; ${ind.cost_per_km === null ? "–" : fmtInt(ind.cost_per_km)} GNF/km de coûts directs`} />
           <Kpi label="Ensembles déficitaires" value={`${ind.deficit_vehicles} / ${ind.vehicles}`} icon={Gauge} teinte={ind.deficit_vehicles ? "danger" : "jade"} tone={ind.deficit_vehicles ? "danger" : "ok"} hint={ind.deficit_vehicles ? `Perte cumulée ${fmtShort(ind.deficit_loss)} après structure` : `Résultat net ${fmtShort(ind.net_result)}`} />
@@ -83,7 +84,8 @@ export function Rentabilite() {
       )}
       {ind && (
         <p className="text-[13px] text-muted">
-          Coûts déclarés {fmtShort(ind.declared_cost)}, comptabilisés sur l&apos;axe Ensemble routier {fmtShort(ind.booked_cost)} (écart {fmtShort(ind.cost_gap)})
+          Coûts déclarés {fmtShort(ind.declared_cost)}
+          {ind.booked_cost !== null ? `, comptabilisés sur l'axe Ensemble routier ${fmtShort(ind.booked_cost)} (écart ${fmtShort(ind.cost_gap)})` : ""}
           {ind.fuel_per_100km !== null ? `, consommation ${fmtDec(ind.fuel_per_100km)} L/100 km` : ""}{ind.revenue_per_km !== null ? `, ${fmtInt(ind.revenue_per_km)} GNF de CA par km` : ""}.
         </p>
       )}

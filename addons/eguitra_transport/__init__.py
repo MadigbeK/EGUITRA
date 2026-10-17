@@ -11,6 +11,6 @@ AUDITED_MODELS = [
 def post_init_hook(env):
     env["eguitra.setup"].ensure_audit_rules(AUDITED_MODELS)
     # Seuils d'alerte du transport (manquants hors tolérance) pour les sociétés existantes.
-    env["eguitra.alert.threshold"].ensure_defaults_all()
+    env["eguitra.alert.threshold"]._ensure_transport_defaults()
     for company in env["res.company"].sudo().search([("eguitra_entity", "=", "groupe")]):
         env["eguitra.transport.rotation"].sudo()._activity_account(company)

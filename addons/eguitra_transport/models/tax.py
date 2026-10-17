@@ -50,7 +50,7 @@ class EguitraTransportTax(models.Model):
     nature = fields.Selection(TAX_NATURES, "Nature", required=True, default="other")
     base = fields.Selection(TAX_BASES, "Base", required=True, default="delivered",
                             help="m³ livrés : volume livré, à défaut chargé (celui de la facture).")
-    rate = fields.Float("Taux", digits=(16, 4), required=True,
+    rate = fields.Float("Taux", digits=(16, 4), required=True, default=0.0,
                         help="Montant par m³, pourcentage du montant facturé ou montant du forfait, selon la base.")
     product_ids = fields.Many2many("eguitra.transport.product", "eguitra_transport_tax_product_rel", "tax_id",
                                    "product_id", "Produits", help="Vide : tous les produits.")

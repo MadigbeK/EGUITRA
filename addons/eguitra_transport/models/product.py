@@ -81,18 +81,21 @@ class EguitraTransportProduct(models.Model):
                 raise ValidationError(f"Le code produit « {product.code} » existe déjà.")
 
     @api.model
-    def _by_code(self, code):
-        """Produit d'un code, celui de la société avant le produit commun ; vide s'il est inconnu."""
+    def _by_code(self, code, company=None):
+        """Produit d'un code pour une société (par défaut la société courante) : le sien avant le
+        produit commun ; vide s'il est inconnu."""
         if not code:
             return self.browse()
-        return self.search([("code", "=", str(code).strip().lower())], order="company_id, sequence, id", limit=1)
+        company = company or self.env.company
+        products = self.search([("code", "=", str(code).strip().lower()), ("company_id", "in", [False, company.id])])
+        return (products.filtered("company_id") or products)[:1]
 
     @api.model
     def _default_product(self):
-        return self._by_code(DEFAULT_CODE) or self.search([], limit=1)
+        return self._by_code(DEFAULT_CODE) or self.search([("company_id", "in", [False, self.env.company.id])], limit=1)
 
     @api.model
-    def _resolve_vals(self, vals, empty_means_all=False):
+    def _resolve_vals(self, vals, empty_means_all=False, company=None):
         """Accepte l'ancien code produit (« product ») à la place de product_id : API, reprise, scripts.
 
         empty_means_all : un code vide vaut « tous les produits » (tarif) ; sinon il est ignoré et
@@ -102,7 +105,7 @@ class EguitraTransportProduct(models.Model):
         vals = dict(vals)
         code = vals.pop("product")
         if code and not vals.get("product_id"):
-            product = self._by_code(code)
+            product = self._by_code(code, company)
             if not product:
                 raise ValidationError(f"Produit « {code} » inconnu.")
             vals["product_id"] = product.id

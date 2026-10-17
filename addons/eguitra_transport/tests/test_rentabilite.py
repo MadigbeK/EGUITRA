@@ -181,6 +181,14 @@ class TestRentabilite(TransportCase):
         self.assertEqual(status, 200, body)
         self.assertTrue({"rows", "indicators", "structure", "controls"} <= set(body), body)
         self.assertEqual(body["rows"][0]["km"], 1_580)
+        # Le parc voit la rentabilité opérationnelle, pas les données du grand livre.
+        self.assertIsNone(body["rows"][0]["booked_result"])
+        self.assertIsNone(body["indicators"]["income_total"])
+        self.assertEqual(body["structure"]["companies"], [])
+        finance = self.open_session("fatou")["access_token"]
+        status, body = self.call("GET", "/transport/profitability?group=vehicle", token=finance)
+        self.assertEqual(body["rows"][0]["booked_cost"], 0.0, "La finance voit les coûts comptabilisés")
+        self.assertEqual(len(body["structure"]["companies"]), 1)
         status, _b = self.call("GET", "/transport/profitability?group=inconnu", token=agent)
         self.assertEqual(status, 400)
         status, refs = self.call("GET", "/transport/referentials", token=agent)

@@ -37,9 +37,11 @@ COSTS = [
     ("specific_taxes", "Taxes spécifiques"),
     ("other_costs", "Autres frais"),
 ]
-# Frais saisis (bureau, application Rotations, reprise) : les taxes spécifiques viennent du barème ;
-# un montant saisi sous « specific_taxes » est le forfait des taxes hors barème.
-ENTRY_LABELS = {"specific_taxes": "Autres taxes payées (hors barème)"}
+# Frais saisis (bureau, application Rotations) : les taxes spécifiques viennent du barème ; la
+# saisie porte les seules taxes payées hors barème (clé « specific_taxes_manual »). L'ancienne clé
+# « specific_taxes » reste acceptée avec son sens d'origine (total des taxes, voir _legacy_vals).
+ENTRY_COSTS = [(code if code != "specific_taxes" else "specific_taxes_manual",
+                label if code != "specific_taxes" else "Autres taxes payées (hors barème)") for code, label in COSTS]
 # Champs dont dépendent les taxes du barème : leur modification recalcule les lignes de taxe.
 TAX_TRIGGERS = {"volume_loaded", "volume_delivered", "route_id", "product_id", "date_loading", "rate", "tax_rules",
                 "company_id"}
@@ -98,11 +100,13 @@ class EguitraTransportRotation(models.Model):
         help="Celle du bon de chargement ; à défaut, la valeur usuelle du produit.",
     )
     vcf_loaded = fields.Float(
-        "Coefficient de correction au chargement", digits=(6, 5), compute="_compute_vcf", store=True, readonly=False,
+        "Coefficient de correction au chargement", digits=(6, 5), compute="_compute_vcf_loaded", store=True,
+        readonly=False,
         help="Calculé (table 54B) à partir de la température et de la masse volumique, ou repris du bon du dépôt.",
     )
     vcf_delivered = fields.Float(
-        "Coefficient de correction à la livraison", digits=(6, 5), compute="_compute_vcf", store=True, readonly=False,
+        "Coefficient de correction à la livraison", digits=(6, 5), compute="_compute_vcf_delivered", store=True,
+        readonly=False,
     )
     volume_loaded_15 = fields.Float("Volume chargé à 15 °C (m³)", digits=(12, 3), compute="_compute_amounts", store=True)
     volume_delivered_15 = fields.Float("Volume livré à 15 °C (m³)", digits=(12, 3), compute="_compute_amounts", store=True)
@@ -111,15 +115,15 @@ class EguitraTransportRotation(models.Model):
     # ─── Manquants ────────────────────────────────────────────────────────
     shortage = fields.Float("Manquant (m³)", digits=(12, 3), compute="_compute_amounts", store=True)
     shortage_tolerance = fields.Float(
-        "Tolérance de manquant (%)", digits=(5, 3), compute="_compute_shortage_terms", store=True, readonly=False,
+        "Tolérance de manquant (%)", digits=(5, 3), compute="_compute_shortage_tolerance", store=True, readonly=False,
         help="En % du volume chargé : tarif du client, sinon conditions du client, sinon valeur de la société.",
     )
     shortage_rule = fields.Selection(
-        SHORTAGE_RULES, "Traitement du manquant excédentaire", compute="_compute_shortage_terms", store=True,
+        SHORTAGE_RULES, "Traitement du manquant excédentaire", compute="_compute_shortage_rule", store=True,
         readonly=False,
     )
     shortage_unit_price = fields.Monetary(
-        "Prix du m³ manquant", compute="_compute_shortage_terms", store=True, readonly=False,
+        "Prix du m³ manquant", compute="_compute_shortage_unit_price", store=True, readonly=False,
         help="Prix du tarif du client, sinon du produit ; figé sur la rotation.",
     )
     shortage_tolerated = fields.Float("Manquant toléré (m³)", digits=(12, 3), compute="_compute_amounts", store=True)
@@ -194,29 +198,48 @@ class EguitraTransportRotation(models.Model):
         for rot in self:
             rot.density_15 = rot.product_id.density_15
 
-    @api.depends("temperature_loaded", "temperature_delivered", "density_15")
-    def _compute_vcf(self):
+    # Un calcul par champ modifiable : un champ fourni à la création ou modifié protège tous les
+    # champs de la même méthode, qui ne seraient plus calculés.
+    @api.depends("temperature_loaded", "density_15")
+    def _compute_vcf_loaded(self):
         for rot in self:
             rot.vcf_loaded = volume_correction_factor(rot.density_15, rot.temperature_loaded or None)
+
+    @api.depends("temperature_delivered", "density_15")
+    def _compute_vcf_delivered(self):
+        for rot in self:
             rot.vcf_delivered = volume_correction_factor(rot.density_15, rot.temperature_delivered or None)
 
-    # Seuls les champs de la rotation déclenchent le calcul : un changement ultérieur des conditions
+    # Seuls les champs de la rotation déclenchent ces calculs : un changement ultérieur des conditions
     # du client ou du prix du produit ne réécrit pas les rotations passées.
+    def _client_tariff(self):
+        self.ensure_one()
+        if not self.route_id:
+            return self.env["eguitra.transport.tariff"]
+        return self.route_id._tariff_for(self.partner_id, self.product_id)
+
     @api.depends("partner_id", "route_id", "product_id", "company_id")
-    def _compute_shortage_terms(self):
-        Tariff = self.env["eguitra.transport.tariff"]
+    def _compute_shortage_tolerance(self):
         for rot in self:
-            company = rot.company_id or self.env.company
-            client = rot.partner_id.commercial_partner_id
-            tariff = rot.route_id._tariff_for(rot.partner_id, rot.product_id) if rot.route_id else Tariff
+            tariff, client = rot._client_tariff(), rot.partner_id.commercial_partner_id
             if tariff.tolerance_custom:
                 rot.shortage_tolerance = tariff.shortage_tolerance
             elif client.transport_tolerance_custom:
                 rot.shortage_tolerance = client.transport_shortage_tolerance
             else:
-                rot.shortage_tolerance = company.transport_shortage_tolerance
-            rot.shortage_rule = client.transport_shortage_rule or company.transport_shortage_rule or "none"
-            rot.shortage_unit_price = tariff.shortage_price or rot.product_id.shortage_price
+                rot.shortage_tolerance = (rot.company_id or self.env.company).transport_shortage_tolerance
+
+    @api.depends("partner_id", "company_id")
+    def _compute_shortage_rule(self):
+        for rot in self:
+            company = rot.company_id or self.env.company
+            rot.shortage_rule = (rot.partner_id.commercial_partner_id.transport_shortage_rule
+                                 or company.transport_shortage_rule or "none")
+
+    @api.depends("partner_id", "route_id", "product_id")
+    def _compute_shortage_unit_price(self):
+        for rot in self:
+            rot.shortage_unit_price = rot._client_tariff().shortage_price or rot.product_id.shortage_price
 
     # Deux calculs distincts : à l'ajout de la colonne des taxes refacturées, le montant des taxes
     # spécifiques déjà enregistré n'est pas recalculé.
@@ -309,12 +332,21 @@ class EguitraTransportRotation(models.Model):
 
     @api.model
     def _legacy_vals(self, vals):
-        """Anciennes clés acceptées : code produit, montant libre des taxes (devenu le forfait hors barème)."""
-        vals = self.env["eguitra.transport.product"]._resolve_vals(vals)
+        """Anciennes clés acceptées : code produit, montant libre des taxes.
+
+        « specific_taxes » est l'ancien total des taxes de la rotation (saisie gardée sur un téléphone
+        avant la mise à jour, application dont les listes datent d'avant, scripts) : il devient le
+        forfait hors barème et, non nul, écarte le barème, qu'il comprenait déjà. La nouvelle clé
+        « specific_taxes_manual » porte les seules taxes payées hors barème, le barème s'y ajoute."""
+        company = self.env["res.company"].browse(vals["company_id"]) if vals.get("company_id") else None
+        vals = self.env["eguitra.transport.product"]._resolve_vals(vals, company=company)
         if "specific_taxes" in vals:
             vals = dict(vals)
-            legacy = vals.pop("specific_taxes")
-            vals.setdefault("specific_taxes_manual", legacy or 0.0)
+            legacy = vals.pop("specific_taxes") or 0.0
+            if "specific_taxes_manual" not in vals:
+                vals["specific_taxes_manual"] = legacy
+                if legacy:
+                    vals.setdefault("tax_rules", False)
         return vals
 
     def _apply_tax_rules(self):
@@ -368,7 +400,8 @@ class EguitraTransportRotation(models.Model):
                 raise UserError(f"Rotation {rot._label()} : volume chargé ou livré requis.")
             if not rot.rate:
                 raise UserError(f"Rotation {rot._label()} : tarif manquant pour cette route et ce client.")
-            if rot.over_capacity:
+            # Reprise d'une rotation déjà facturée dans l'ancien système : constatée, signalée par la reprise.
+            if rot.over_capacity and not self.env.context.get("eguitra_transport_reprise"):
                 raise UserError(
                     f"Rotation {rot._label()} : volume chargé de {fmt_m3(rot.volume_loaded)} supérieur à la capacité "
                     f"de la citerne {rot.vehicle_id.name} ({fmt_m3(rot.vehicle_id.capacity_liters / 1000)}). "

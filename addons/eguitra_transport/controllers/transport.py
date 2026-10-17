@@ -11,7 +11,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
-from ..models.rotation import COSTS, ENTRY_LABELS
+from ..models.rotation import COSTS, ENTRY_COSTS
 from ..models.settings import SHORTAGE_RULES
 from ..models.tax import TAX_BASES, TAX_NATURES
 
@@ -30,7 +30,8 @@ ROTATION_FIELDS = (
     *[c for c, _l in COSTS], "specific_taxes_manual",
 )
 # Conditions de manquant et barème des taxes d'une rotation : réservés à la finance.
-FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortage_rule", "tax_rules")
+FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortage_rule", "tax_rules",
+                           "volume_correction")
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
               "partner_id": "res.partner", "route_id": "eguitra.transport.route"}
 # Mesures saisies au parc (application Rotations), hors montants ; températures et masse volumique
@@ -71,7 +72,8 @@ def _rotation_row(rot):
         "shortage_unit_price": rot.shortage_unit_price, "shortage_value": rot.shortage_value,
         "shortage_rule": rot.shortage_rule, "shortage_deduction": rot.shortage_deduction,
         "shortage_claim": rot.shortage_claim, "shortage_net_cost": rot.shortage_net_cost,
-        "shortage_claim_move": _move_ref(rot.shortage_claim_move_id),
+        # Pièces lues en sudo : le parc n'a pas accès aux écritures, il en voit le numéro.
+        "shortage_claim_move": _move_ref(rot.sudo().shortage_claim_move_id),
         "rate": rot.rate, "revenue": rot.revenue, "billed_amount": rot.billed_amount,
         "costs": {c: rot[c] for c, _l in COSTS},
         "tax_rules": rot.tax_rules, "specific_taxes_manual": rot.specific_taxes_manual,
@@ -79,7 +81,7 @@ def _rotation_row(rot):
         "tax_lines": [{"id": t.id, "name": t.name, "nature": t.nature, "base": t.base, "base_amount": t.base_amount,
                        "rate": t.rate, "amount": t.amount, "rebillable": t.rebillable} for t in rot.tax_line_ids],
         "total_cost": rot.total_cost, "margin": rot.margin, "margin_rate": rot.margin_rate,
-        "note": rot.note or None, "invoice": {"id": rot.invoice_id.id, "name": rot.invoice_id.name} if rot.invoice_id else None,
+        "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
     }
 
@@ -103,6 +105,31 @@ def _is_finance():
     return bool(set(SETTINGS) & set(request.env.user._eguitra_profiles()))
 
 
+# Données comptables (produits et charges du grand livre, coûts comptabilisés, comptes) : réservées
+# aux profils qui lisent la comptabilité ; le parc voit la rentabilité opérationnelle.
+ACCOUNTING = ("admin", "direction", "finance")
+ACCOUNTING_ROW_KEYS = ("booked_cost", "cost_gap", "booked_result")
+ACCOUNTING_INDICATORS = ("income_total", "revenue_share", "booked_cost", "cost_gap", "structure_booked",
+                         "structure_booked_per_km")
+
+
+def _sees_accounts():
+    return bool(set(ACCOUNTING) & set(request.env.user._eguitra_profiles()))
+
+
+def _operational(report):
+    """Rapport de rentabilité sans ses données comptables, pour le parc."""
+    for row in report["rows"]:
+        for key in ACCOUNTING_ROW_KEYS:
+            row[key] = None
+    for key in ACCOUNTING_INDICATORS:
+        report["indicators"][key] = None
+    report["structure"] = {k: v for k, v in report["structure"].items()
+                           if k not in ("companies", "structure_booked", "per_km_booked")}
+    report["structure"]["companies"] = []
+    return report
+
+
 def _rotation_values(data):
     values = {}
     if data.get("product") or data.get("product_id"):
@@ -117,8 +144,6 @@ def _rotation_values(data):
             values[key] = value or False
         else:
             values[key] = as_float(value or 0, key)
-    if "volume_correction" in data:
-        values["volume_correction"] = bool(data["volume_correction"])
     wanted = [k for k in FINANCE_ROTATION_FIELDS if k in data]
     if wanted and not _is_finance():
         raise ApiError(403, "forbidden", "Les conditions de manquant d'une rotation relèvent de la finance.")
@@ -127,7 +152,7 @@ def _rotation_values(data):
             if data[key] not in dict(SHORTAGE_RULES):
                 raise ApiError(400, "invalid_parameter", "Traitement du manquant inconnu.")
             values[key] = data[key]
-        elif key == "tax_rules":
+        elif key in ("tax_rules", "volume_correction"):
             values[key] = bool(data[key])
         else:
             values[key] = as_float(data[key] or 0, key)
@@ -193,10 +218,11 @@ def _client_row(partner):
 
 
 def _tax_row(t):
+    accounts = t.sudo() if _sees_accounts() else t.browse()
     return {
         "id": t.id, "name": t.name, "nature": t.nature, "base": t.base, "rate": t.rate,
         "products": [_ref(p) for p in t.product_ids], "routes": [_ref(r) for r in t.route_ids],
-        "account": _account_ref(t.sudo().account_id), "income_account": _account_ref(t.sudo().income_account_id),
+        "account": _account_ref(accounts.account_id), "income_account": _account_ref(accounts.income_account_id),
         "rebillable": t.rebillable, "rebill_vat": t.rebill_vat, "date_from": t.date_from or None,
         "date_to": t.date_to or None, "sequence": t.sequence, "active": t.active,
     }
@@ -242,7 +268,7 @@ class EguitraTransport(http.Controller):
             # Le code reste la clé des saisies du téléphone (y compris celles gardées hors réseau).
             "products": [{"id": p.id, "code": p.code, "label": p.name}
                          for p in env["eguitra.transport.product"].search([])],
-            "costs": [{"code": k, "label": ENTRY_LABELS.get(k, v)} for k, v in COSTS],
+            "costs": [{"code": k, "label": v} for k, v in ENTRY_COSTS],
             # Mesures facultatives du parc ; températures et masse volumique si les manquants se
             # calculent à 15 °C. Une version antérieure de l'application ignore cette liste.
             "volume_correction": env.company.transport_volume_correction,
@@ -542,7 +568,7 @@ class EguitraTransport(http.Controller):
     @api_route("/transport/taxes", methods=("POST",), profiles=SETTINGS)
     def create_tax(self, **_kw):
         data = read_json()
-        require(data, "name", "nature", "base")
+        require(data, "name", "nature", "base", "rate")
         return _tax_row(request.env["eguitra.transport.tax"].create(self._tax_values(data)))
 
     @api_route("/transport/taxes/<int:tax_id>", methods=("PATCH",), profiles=SETTINGS)
@@ -563,6 +589,8 @@ class EguitraTransport(http.Controller):
         """État mensuel des taxes spécifiques par nature."""
         start, end = self._statement_period(kw)
         result = request.env["eguitra.transport.rotation.tax"].statement(companies(kw), start, end)
+        if not _sees_accounts():
+            result["booked"] = []
         return dict(result, date_from=start, date_to=end)
 
     @api_route("/transport/taxes/statement.xlsx", profiles=READ)
@@ -572,6 +600,8 @@ class EguitraTransport(http.Controller):
         start, end = self._statement_period(kw)
         scope = companies(kw)
         data = request.env["eguitra.transport.rotation.tax"].statement(scope, start, end)
+        if not _sees_accounts():
+            data["booked"] = []
         out = io.BytesIO()
         book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
         head = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
@@ -714,7 +744,8 @@ class EguitraTransport(http.Controller):
         group = kw.get("group", "vehicle")
         if group not in ("vehicle", "route", "driver", "client", "month"):
             raise ApiError(400, "invalid_parameter", "Regroupement inconnu.")
-        return request.env["eguitra.transport.analysis"].report(companies(kw), start, end, group)
+        report = request.env["eguitra.transport.analysis"].report(companies(kw), start, end, group)
+        return report if _sees_accounts() else _operational(report)
 
     @api_route("/transport/controls", profiles=READ)
     def controls(self, **kw):

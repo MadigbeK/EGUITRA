@@ -47,12 +47,16 @@ class TestTaxes(TransportCase):
 
     def test_ancien_montant_saisi_devient_forfait(self):
         self._tax()
-        rot = self._rotation(specific_taxes=150_000)
-        self.assertEqual(rot.specific_taxes_manual, 150_000)
+        legacy = self._rotation(specific_taxes=150_000)
+        self.assertEqual(legacy.specific_taxes_manual, 150_000)
+        self.assertFalse(legacy.tax_rules, "L'ancien total des taxes comprend déjà celles du barème")
+        self.assertFalse(legacy.tax_line_ids)
+        self.assertEqual(legacy.specific_taxes, 150_000)
+        rot = self._rotation(specific_taxes_manual=150_000)
+        self.assertTrue(rot.tax_rules)
         self.assertAlmostEqual(rot.specific_taxes, 150_000 + 39.8 * 5_000, msg="Barème et forfait hors barème")
-        reprise = self._rotation(specific_taxes=300_000, tax_rules=False)
-        self.assertFalse(reprise.tax_line_ids, "Rotation reprise : le total de l'ancien classeur suffit")
-        self.assertEqual(reprise.specific_taxes, 300_000)
+        none = self._rotation(specific_taxes=0)
+        self.assertTrue(none.tax_rules, "Ancien champ vide : le barème s'applique")
 
     def test_taxe_refacturee_au_client(self):
         self._tax(name="Taxe refacturée", rebillable=True, rate=10_000)
@@ -114,19 +118,25 @@ class TestTaxes(TransportCase):
                                     token=finance)
         self.assertEqual(status, 400, refused)
         status, refused = self.call("POST", "/transport/taxes", {"name": "X", "nature": "other", "base": "fixed",
-                                                                 "account_id": self.acc_services.id}, token=finance)
+                                                                 "rate": 1_000, "account_id": self.acc_services.id},
+                                    token=finance)
         self.assertEqual(status, 422, "Un compte de produit n'est pas un compte de charge")
 
         agent = self.open_session("ibrahima", app="mobile")["access_token"]
         status, _b = self.call("PATCH", f"/transport/taxes/{body['id']}", {"rate": 1}, token=agent)
         self.assertEqual(status, 403, "Le barème relève de la finance")
-        # Saisie du parc : l'ancien champ des taxes vaut forfait hors barème, le barème s'ajoute.
-        status, sync = self.call("POST", "/transport/sync", {"rotations": [{
-            "client_uuid": "taxes-parc-01", "vehicle_id": self.truck.id, "partner_id": self.customer.id,
-            "route_id": self.route.id, "product": "gasoil", "volume_loaded": 40, "specific_taxes": 25_000,
-        }]}, token=agent)
-        self.assertEqual(sync["results"][0]["status"], "created", sync)
-        status, row = self.call("GET", f"/transport/rotations/{sync['results'][0]['id']}", token=agent)
+        # Saisie gardée sur un téléphone d'avant la mise à jour : l'ancien total des taxes, sans barème.
+        # Nouvelle application : taxes payées hors barème, le barème s'y ajoute.
+        common = {"vehicle_id": self.truck.id, "partner_id": self.customer.id, "route_id": self.route.id,
+                  "product": "gasoil", "volume_loaded": 40}
+        status, sync = self.call("POST", "/transport/sync", {"rotations": [
+            dict(common, client_uuid="taxes-parc-ancien", specific_taxes=25_000),
+            dict(common, client_uuid="taxes-parc-01", specific_taxes_manual=25_000),
+        ]}, token=agent)
+        self.assertEqual([r["status"] for r in sync["results"]], ["created", "created"], sync)
+        status, old = self.call("GET", f"/transport/rotations/{sync['results'][0]['id']}", token=agent)
+        self.assertEqual((old["tax_rules"], old["costs"]["specific_taxes"], old["tax_lines"]), (False, 25_000, []))
+        status, row = self.call("GET", f"/transport/rotations/{sync['results'][1]['id']}", token=agent)
         self.assertEqual((row["specific_taxes_manual"], row["costs"]["specific_taxes"]), (25_000, 75_000))
         self.assertEqual(row["tax_lines"][0]["name"], "Taxe communale de Siguiri")
         status, _b = self.call("PATCH", f"/transport/rotations/{row['id']}", {"tax_rules": False}, token=agent)
@@ -136,7 +146,10 @@ class TestTaxes(TransportCase):
 
         status, refs = self.call("GET", "/transport/referentials", token=agent)
         labels = {c["code"]: c["label"] for c in refs["costs"]}
-        self.assertEqual(labels["specific_taxes"], "Autres taxes payées (hors barème)")
+        self.assertEqual(labels["specific_taxes_manual"], "Autres taxes payées (hors barème)")
+        self.assertNotIn("specific_taxes", labels)
+        status, tax_list = self.call("GET", "/transport/taxes", token=agent)
+        self.assertIsNone(tax_list["taxes"][0]["account"], "Le parc ne lit pas le plan de comptes")
 
         self.env["eguitra.transport.rotation"].browse(row["id"]).write({"tax_rules": True})
         self.env["eguitra.transport.rotation"].browse(row["id"]).action_validate()

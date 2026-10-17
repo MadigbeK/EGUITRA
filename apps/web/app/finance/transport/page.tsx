@@ -37,7 +37,7 @@ interface Rotation {
   total_cost: number;
   margin: number;
   margin_rate: number;
-  invoice: { id: number; name: string } | null;
+  invoice: { id: number; name: string | null } | null;
 }
 
 const STATE = { draft: ["Saisie", "warn"], done: ["Validée", "accent"], invoiced: ["Facturée", "ok"], cancelled: ["Annulée", "neutral"] } as const;
@@ -121,7 +121,7 @@ function Rotations() {
         setMessage({ tone: "ok", text: "Rotations validées." });
       } else {
         const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
-        const claims = res.claims.length ? ` ${res.claims.length} créance(s) sur chauffeur en opérations diverses, à valider dans Écritures.` : "";
+        const claims = res.claims.length ? ` ${res.claims.length} créance(s) sur chauffeur en opérations diverses, à valider dans Journaux et OD.` : "";
         const unclaimed = res.unclaimed.length ? ` Sans fiche tiers, créance à passer à la main : ${res.unclaimed.map((u) => `${u.driver?.name ?? "chauffeur non renseigné"} (${u.rotation}, ${fmtGNF(u.amount)})`).join(", ")}.` : "";
         setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${res.invoices.length} facture(s) créée(s) en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
       }

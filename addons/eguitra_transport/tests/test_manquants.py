@@ -123,6 +123,16 @@ class TestManquants(TransportCase):
         self.assertEqual(rot.shortage_net_cost, 0.0)
         self.assertAlmostEqual(rot.margin, 39.0 * 1_200_000 - 11_000_000)
 
+    def test_conditions_partielles_de_la_rotation(self):
+        """Une condition fixée sur la rotation n'empêche pas le calcul des autres."""
+        rot = self._rotation(volume_delivered=39.5, shortage_rule="invoice")
+        self.assertEqual(rot.shortage_tolerance, 0.5)
+        self.assertEqual(rot.shortage_unit_price, 10_000_000)
+        self.assertAlmostEqual(rot.shortage_deduction, 3_000_000)
+        rot = self._rotation(vcf_loaded=0.99, temperature_delivered=30)
+        self.assertEqual(rot.vcf_loaded, 0.99, "Coefficient du bon du dépôt")
+        self.assertAlmostEqual(rot.vcf_delivered, volume_correction_factor(840, 30), places=5)
+
     def test_capacite_de_la_citerne(self):
         rot = self._rotation(volume_loaded=40.5, volume_delivered=40.4)
         self.assertTrue(rot.over_capacity, "Saisie acceptée (le parc peut se tromper), signalée")

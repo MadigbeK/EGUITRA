@@ -87,7 +87,10 @@ function fromPayload(item: QueuedRotation, refs: Referentials): Form {
     uuid: item.client_uuid, date_loading: s("date_loading") || today(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
     partner_id: s("partner_id"), route_id: s("route_id"), product: s("product") || "gasoil", delivery_note: s("delivery_note"),
     volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
-    costs: pick(refs.costs), measures: pick(refs.measures ?? []),
+    // Une saisie d'avant la mise à jour garde son ancien total des taxes (« specific_taxes ») : il
+    // repart tel quel, le bureau le traite comme avant.
+    costs: { ...pick(refs.costs), ...(p.specific_taxes ? { specific_taxes: s("specific_taxes") } : {}) },
+    measures: pick(refs.measures ?? []),
   };
 }
 

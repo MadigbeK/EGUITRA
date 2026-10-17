@@ -102,9 +102,11 @@ class EguitraTransportAnalysis(models.AbstractModel):
         vehicle_col = self.env.ref("eguitra_base.analytic_plan_vehicule")._column_name()
         domain = [("company_id", "=", company.id), ("state", "in", ("done", "invoiced")),
                   ("date_loading", ">=", date_from), ("date_loading", "<=", date_to)]
-        [(revenue, cost, net_shortage, km)] = Rotation._read_group(
-            domain, aggregates=["revenue:sum", "total_cost:sum", "shortage_net_cost:sum", "distance_km:sum"])
-        revenue, km = revenue or 0.0, km or 0.0
+        [(revenue, rebilled, cost, net_shortage, km)] = Rotation._read_group(
+            domain, aggregates=["revenue:sum", "taxes_rebilled:sum", "total_cost:sum", "shortage_net_cost:sum",
+                                "distance_km:sum"])
+        # Produits du transport comme la classe 7 les porte : prix du transport et taxes refacturées.
+        revenue, km = (revenue or 0.0) + (rebilled or 0.0), km or 0.0
         direct = (cost or 0.0) + (net_shortage or 0.0)
         fleet_moves, depreciation, source = self._fleet_moves(company, date_from, date_to)
         activity = Rotation._activity_account(company)

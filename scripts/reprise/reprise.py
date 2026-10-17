@@ -284,8 +284,11 @@ if data is not None:
 data = rows("rotations.csv")
 if data is not None:
     # Produits transportés (Finance > Transport > Paramètres) : reconnus par leur code ou leur libellé.
+    # Le produit propre à la société l'emporte sur le produit commun de même code ou libellé.
     known = env["eguitra.transport.product"].search([("company_id", "in", [False, company.id])])
-    products = {p.name.lower(): p.id for p in known} | {p.code: p.id for p in known}
+    products = {}
+    for p in known.sorted(lambda p: bool(p.company_id)):
+        products.update({p.name.lower(): p.id, p.code: p.id})
     Vehicle, Driver, Route = env["eguitra.transport.vehicle"], env["eguitra.transport.driver"], env["eguitra.transport.route"]
     costs = {"carburant": "fuel_cost", "peages": "toll_cost", "frais_chauffeur": "driver_fees",
              "entretien": "maintenance_cost", "pneus": "tyre_cost", "taxes": "specific_taxes_manual",
@@ -352,7 +355,11 @@ if data is not None:
                 if yes(r.get("facturee")):
                     # Facturée dans l'ancien système : le chiffre d'affaires est déjà dans les soldes ;
                     # elle sert à l'analyse de rentabilité mais ne peut plus être refacturée.
-                    rotation.action_validate()
+                    # Le contrôle de capacité ne bloque pas une rotation déjà facturée : elle est signalée.
+                    if rotation.over_capacity:
+                        notes.append(f"{where} : volume chargé supérieur à la capacité de {rotation.vehicle_id.name} ; "
+                                     "vérifier la capacité de l'ensemble.")
+                    rotation.with_context(eguitra_transport_reprise=True).action_validate()
                     note = ((rotation.note or "") + "\nReprise : facturée dans l'ancien système.").strip()
                     rotation.write({"state": "invoiced", "note": note})
                     invoiced += 1

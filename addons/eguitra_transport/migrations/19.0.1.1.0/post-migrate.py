@@ -56,5 +56,5 @@ def _migrate_products(env):
 def migrate(cr, version):
     env = api.Environment(cr, SUPERUSER_ID, {})
     _migrate_products(env)
-    env["eguitra.alert.threshold"].ensure_defaults_all()
+    env["eguitra.alert.threshold"]._ensure_transport_defaults()
     env["eguitra.setup"].ensure_audit_rules(AUDITED_MODELS)
