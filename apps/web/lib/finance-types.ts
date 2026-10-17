@@ -211,6 +211,11 @@ export interface Partner {
   city: string | null;
   customer: boolean;
   supplier: boolean;
+  ref?: string | null;
+  sector?: string | null;
+  contact?: string | null;
+  /** Client non assujetti : factures de vente en exonération de TVA. */
+  vat_exempt?: boolean;
   /** Soldes : null pour les profils hors finance et direction. */
   receivable: number | null;
   payable: number | null;

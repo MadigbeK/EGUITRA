@@ -6,7 +6,7 @@ import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/compone
 import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
 import { apiSend, useApi, ApiError } from "@/lib/api-client";
-import type { Account, ExpenseCategory, MoveDetail, Tax } from "@/lib/finance-types";
+import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { fmtGNF } from "@/lib/format";
 
 interface LineDraft {
@@ -57,9 +57,12 @@ export function MoveForm({
   const defaultTax = taxes?.find((t) => t.amount === 18) ?? taxes?.[0];
   const activities = axes?.find((a) => a.key === "activite")?.accounts ?? [];
   const categoryOf = (l: LineDraft) => categories?.find((c) => String(c.id) === l.category_id);
+  const { data: partnerInfo } = useApi<Partner>(open && sale && partner ? `/finance/partners/${partner.id}` : null);
+  const exempt = sale && Boolean(partnerInfo?.vat_exempt);
 
-  /** Taxe appliquée : celle choisie, sinon celle de la catégorie, sinon la taxe par défaut. */
+  /** Taxe appliquée : exonération du client non assujetti, sinon celle choisie, celle de la catégorie ou la taxe par défaut. */
   function effectiveTax(l: LineDraft): string {
+    if (exempt) return "none";
     if (l.tax_id) return l.tax_id;
     const category = categoryOf(l);
     if (category) return category.tax_mode === "none" ? "none" : String(category.tax?.id ?? defaultTax?.id ?? "none");
@@ -179,6 +182,7 @@ export function MoveForm({
             </Field>
           )}
         </div>
+        {exempt && <Notice tone="accent">Client non assujetti à la TVA : la facture est émise en exonération.</Notice>}
         {entryCategories.length > 0 && !mixed && (
           <Notice tone="accent">
             Catégorie « {entryCategories[0]!.name} » : la dépense est passée en opération diverse, au crédit du compte {entryCategories[0]!.partner_account?.code} (sans TVA).
@@ -220,7 +224,7 @@ export function MoveForm({
                       <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
                     </td>
                     <td className="px-2 pt-1.5">
-                      <Select value={effectiveTax(l)} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} />
+                      <Select value={effectiveTax(l)} disabled={exempt} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} />
                     </td>
                     <td className="px-1 pt-1.5">
                       {lines.length > 1 && (

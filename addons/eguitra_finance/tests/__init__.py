@@ -7,3 +7,4 @@ from . import test_analytic
 from . import test_treasury
 from . import test_budget
 from . import test_categories
+from . import test_partners
