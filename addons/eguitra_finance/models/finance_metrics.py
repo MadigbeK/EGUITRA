@@ -45,14 +45,21 @@ class EguitraFinanceMetrics(models.AbstractModel):
         )
         return float(self.env.cr.fetchone()[0])
 
-    def account_balances(self, companies, date_to, date_from=None):
-        """Solde par code de compte (toutes sociétés confondues), à une date ou sur une période."""
+    def account_balances(self, companies, date_to, date_from=None, exclude_partner_ids=None):
+        """Solde par code de compte (toutes sociétés confondues), à une date ou sur une période ;
+        exclude_partner_ids écarte les lignes de ces tiers (éliminations intra-groupe)."""
         self.env.flush_all()  # les requêtes SQL doivent voir les écritures en attente
         where = ["aml.parent_state = 'posted'", "aml.company_id = ANY(%(companies)s)", "aml.date <= %(date_to)s"]
         params = {"companies": list(companies.ids), "date_to": date_to}
         if date_from:
             where.append("aml.date >= %(date_from)s")
             params["date_from"] = date_from
+        if exclude_partner_ids:
+            # Les comptes de trésorerie restent : un règlement entre sociétés du groupe déplace la
+            # trésorerie de l'une à l'autre, le total du groupe n'en change pas.
+            where.append("(aml.partner_id IS NULL OR aml.partner_id <> ALL(%(excluded)s) "
+                         "OR aa.account_type = 'asset_cash')")
+            params["excluded"] = list(exclude_partner_ids)
         self.env.cr.execute(
             f"""SELECT {ACC_CODE} AS code, SUM(aml.balance)
                   FROM account_move_line aml

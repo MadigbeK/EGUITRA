@@ -131,6 +131,15 @@ class EguitraFinanceDashboard(http.Controller):
                 raise ApiError(400, "invalid_parameter", "Mois invalide (AAAA-MM).") from e
         return request.env["eguitra.finance.metrics"].sudo().management_report(companies(kw), day)
 
+    @api_route("/finance/statements/consolidated", profiles=FIN_READ)
+    def consolidated(self, **kw):
+        """Vue consolidée du groupe : par société, éliminations intra-groupe, groupe (attente 2 du
+        courrier du responsable financier)."""
+        scope = request.env.user.company_ids.sorted("id")
+        end = parse_date(kw, "date_to", today())
+        start = parse_date(kw, "date_from", end.replace(month=1, day=1))
+        return request.env["eguitra.syscohada"].sudo().consolidated(scope, start, end)
+
     @api_route("/finance/statements/cash-flow", profiles=FIN_READ)
     def cash_flow(self, **kw):
         end = parse_date(kw, "date_to", today())

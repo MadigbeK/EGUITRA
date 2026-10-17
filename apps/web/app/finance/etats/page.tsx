@@ -8,7 +8,7 @@ import { IfrsPanel } from "@/components/finance/IfrsPanel";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt, fmtPct } from "@/lib/format";
 
-type Tab = "bilan" | "resultat" | "flux" | "rapports" | "ifrs" | "export";
+type Tab = "bilan" | "resultat" | "flux" | "consolide" | "rapports" | "ifrs" | "export";
 interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number; month?: number; pct_revenue?: number | null }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -53,6 +53,7 @@ export default function StatementsPage() {
           { key: "bilan", label: "Bilan" },
           { key: "resultat", label: "Compte de résultat" },
           { key: "flux", label: "Tableau des flux" },
+          { key: "consolide", label: "Consolidé du groupe" },
           { key: "rapports", label: "Balance, grand livre et rapports" },
           { key: "ifrs", label: "Passerelle IFRS" },
           { key: "export", label: "Export d'audit" },
@@ -63,6 +64,7 @@ export default function StatementsPage() {
       {tab === "bilan" && <BalanceSheet scope={scope} />}
       {tab === "resultat" && <IncomeStatement scope={scope} />}
       {tab === "flux" && <CashFlow scope={scope} />}
+      {tab === "consolide" && <Consolidated />}
       {tab === "rapports" && <ReportBuilder scope={scope} />}
       {tab === "ifrs" && <IfrsPanel scope={scope} />}
       {tab === "export" && <AuditExport scope={scope} />}
@@ -384,5 +386,67 @@ function AuditExport({ scope }: { scope: string }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+interface ConsolidatedRow { code: string; label: string; total: boolean; companies: number[]; eliminations: number; group: number }
+interface ConsolidatedData {
+  date_from: string;
+  date_to: string;
+  companies: Array<{ id: number; name: string }>;
+  intra_group_partners: number;
+  income: ConsolidatedRow[];
+  balance: ConsolidatedRow[];
+}
+
+/** Vue consolidée : chaque société, éliminations des opérations entre sociétés du groupe, groupe. */
+function Consolidated() {
+  const [from, setFrom] = useState(yearStart());
+  const [to, setTo] = useState(todayIso());
+  const { data, error } = useApi<ConsolidatedData>(`/finance/statements/consolidated?date_from=${from}&date_to=${to}`);
+  const table = (rows: ConsolidatedRow[]) => (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] text-sm">
+        <thead>
+          <tr className="border-b border-line text-[12.5px] font-medium text-muted">
+            <th className="w-14 px-3 py-2 text-left">Réf.</th>
+            <th className="px-3 py-2 text-left">Rubrique</th>
+            {data!.companies.map((c) => <th key={c.id} className="px-3 py-2 text-right">{c.name}</th>)}
+            <th className="px-3 py-2 text-right">Éliminations</th>
+            <th className="px-3 py-2 text-right">Groupe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.filter((r) => r.total || r.group || r.companies.some(Boolean)).map((r) => (
+            <tr key={r.code} className={cx("border-b border-line/60", r.total && "bg-panel-2 font-semibold")}>
+              <td className="px-3 py-1.5 font-mono text-xs text-muted">{r.code}</td>
+              <td className="px-3 py-1.5">{r.label}</td>
+              {r.companies.map((v, i) => <td key={i} className="px-3 py-1.5 text-right tabular">{fmtGNF(v)}</td>)}
+              <td className={cx("px-3 py-1.5 text-right tabular", Math.abs(r.eliminations) > 0.5 ? "text-warn" : "text-muted")}>{Math.abs(r.eliminations) > 0.5 ? fmtGNF(r.eliminations) : "–"}</td>
+              <td className="px-3 py-1.5 text-right tabular">{fmtGNF(r.group)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Du"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <Field label="Au"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+      </div>
+      {error && <ErrorBox error={error} />}
+      {!data && !error && <Loading />}
+      {data && (
+        <>
+          <Notice tone="accent">
+            Les opérations entre sociétés du groupe (ventes et achats réciproques, créances et dettes, comptes courants) s&apos;éliminent : {data.intra_group_partners} fiche(s) de tiers représentent les sociétés du groupe. Les frais communs refacturés s&apos;éliminent de même dès qu&apos;ils sont facturés entre sociétés.
+          </Notice>
+          <Card title={`Compte de résultat consolidé du ${fmtDate(data.date_from)} au ${fmtDate(data.date_to)}`} padded={false}>{table(data.income)}</Card>
+          <Card title={`Bilan consolidé au ${fmtDate(data.date_to)}`} padded={false}>{table(data.balance)}</Card>
+        </>
+      )}
+    </div>
   );
 }
