@@ -16,3 +16,5 @@ infra/odoo/production.conf
 infra/odoo/recette.conf
 infra/releases/
 infra/backup.env
+__pycache__/
+*.pyc

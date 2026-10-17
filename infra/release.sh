@@ -110,9 +110,9 @@ if [ "${1:-}" != "--initial" ] && prod_db_exists; then
   activate "$id"
   down_since=$(date '+%F %H:%M')
   docker compose stop web odoo
-  # Base et sauvegardes recréées seulement si leur configuration a changé (archivage des WAL, par
+  # Base et sauvegardes recréées seulement si leur configuration ou leurs scripts ont changé (archivage des WAL, par
   # exemple), pendant que le noyau est arrêté.
-  docker compose up -d --no-deps db backup
+  docker compose up -d --no-deps --build db backup
   log=../logs/release-$id.log
   if ! docker compose run --rm -T --no-deps odoo odoo -c /etc/odoo/odoo.conf -d "$ODOO_DB" -u "$MODULES" \
          --stop-after-init --workers 0 > "$log" 2>&1 || grep -qE " (ERROR|CRITICAL) " "$log"; then
