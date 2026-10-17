@@ -529,4 +529,5 @@ export const ICONES: Record<string, Icon> = {
   ListChecks,
   FileStack,
   FolderOpen,
+  Layers,
 };

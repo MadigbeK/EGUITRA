@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
+import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
 import { apiSend, useApi, ApiError } from "@/lib/api-client";
 import type { Account, MoveDetail, Tax } from "@/lib/finance-types";
 import { fmtGNF } from "@/lib/format";
@@ -14,12 +15,17 @@ interface LineDraft {
   price_unit: string;
   account_id: string;
   tax_id: string;
-  activity_id: string;
+  axes: AxisChoice;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", axes: {} });
 
-/** Saisie d'une facture de vente ou d'une pièce d'achat ; contreparties, TVA et échéance sont déduites. */
+/**
+ * Saisie d'une facture de vente ou d'une pièce d'achat ; contreparties, TVA et échéance sont déduites.
+ * Chaque ligne s'impute sur les axes de la société de travail (activité, centre de coût et axes des
+ * métiers) ; les axes laissés vides suivent les imputations automatiques.
+ */
 export function MoveForm({
   open,
   onClose,
@@ -34,17 +40,18 @@ export function MoveForm({
   const sale = moveType.startsWith("out_");
   const { data: accounts } = useApi<Account[]>(open ? `/finance/accounts?prefix=${sale ? "7" : "6"}&limit=2000` : null);
   const { data: taxes } = useApi<Tax[]>(open ? `/finance/taxes?use=${sale ? "sale" : "purchase"}` : null);
-  const { data: activities } = useApi<Array<{ id: number; name: string }>>(open ? "/finance/analytic-accounts?plan=activite" : null);
+  const { data: axes } = useAxes(open);
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(today());
   const [dueDate, setDueDate] = useState("");
   const [reference, setReference] = useState("");
   const [narration, setNarration] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([{ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "" }]);
+  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const defaultTax = taxes?.find((t) => t.amount === 18) ?? taxes?.[0];
+  const activities = axes?.find((a) => a.key === "activite")?.accounts ?? [];
   const totals = useMemo(() => {
     let ht = 0;
     let tva = 0;
@@ -59,6 +66,16 @@ export function MoveForm({
 
   function update(i: number, patch: Partial<LineDraft>) {
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  }
+
+  /** Invite du compte : sur une vente, le compte de produit de l'activité choisie. */
+  function accountPlaceholder(l: LineDraft) {
+    if (sale && l.axes.activite) {
+      const income = activities.find((a) => String(a.id) === l.axes.activite)?.income_account_id;
+      const account = accounts?.find((a) => a.id === income);
+      if (account) return `Compte de l'activité (${account.code})`;
+    }
+    return "Compte par défaut";
   }
 
   async function submit(post: boolean) {
@@ -83,12 +100,12 @@ export function MoveForm({
           price_unit: Number(l.price_unit.replace(/\s/g, "")),
           account_id: l.account_id ? Number(l.account_id) : undefined,
           tax_ids: [Number(l.tax_id || defaultTax?.id)].filter(Boolean),
-          analytic_distribution: l.activity_id ? { [l.activity_id]: 100 } : undefined,
+          analytic_distribution: toDistribution(l.axes),
         })),
       });
       onCreated(move);
       setPartner(null);
-      setLines([{ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "" }]);
+      setLines([emptyLine()]);
       setReference("");
       setNarration("");
     } catch (e) {
@@ -146,47 +163,50 @@ export function MoveForm({
                 <th className="px-2 py-2 text-left">Libellé</th>
                 <th className="w-20 px-2 py-2 text-right">Qté</th>
                 <th className="w-36 px-2 py-2 text-right">Prix unitaire HT</th>
-                <th className="w-48 px-2 py-2 text-left">Compte</th>
+                <th className="w-56 px-2 py-2 text-left">Compte</th>
                 <th className="w-28 px-2 py-2 text-left">TVA</th>
-                <th className="w-40 px-2 py-2 text-left">Activité</th>
                 <th className="w-8" />
               </tr>
             </thead>
             <tbody>
               {lines.map((l, i) => (
-                <tr key={i} className="border-t border-line">
-                  <td className="px-2 py-1.5">
-                    <Input value={l.name} onChange={(e) => update(i, { name: e.target.value })} placeholder={sale ? "Transport Conakry - Siguiri, 40 000 L" : "Désignation"} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Input className="text-right" inputMode="decimal" value={l.quantity} onChange={(e) => update(i, { quantity: e.target.value })} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder="Compte par défaut" options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Select value={l.tax_id || String(defaultTax?.id ?? "")} onChange={(e) => update(i, { tax_id: e.target.value })} options={(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Select value={l.activity_id} onChange={(e) => update(i, { activity_id: e.target.value })} placeholder="–" options={(activities ?? []).map((a) => ({ value: a.id, label: a.name }))} />
-                  </td>
-                  <td className="px-1">
-                    {lines.length > 1 && (
-                      <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label="Supprimer la ligne">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={i}>
+                  <tr className="border-t border-line">
+                    <td className="px-2 pt-1.5">
+                      <Input value={l.name} onChange={(e) => update(i, { name: e.target.value })} placeholder={sale ? "Transport Conakry - Siguiri, 40 000 L" : "Désignation"} />
+                    </td>
+                    <td className="px-2 pt-1.5">
+                      <Input className="text-right" inputMode="decimal" value={l.quantity} onChange={(e) => update(i, { quantity: e.target.value })} />
+                    </td>
+                    <td className="px-2 pt-1.5">
+                      <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" />
+                    </td>
+                    <td className="px-2 pt-1.5">
+                      <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+                    </td>
+                    <td className="px-2 pt-1.5">
+                      <Select value={l.tax_id || String(defaultTax?.id ?? "")} onChange={(e) => update(i, { tax_id: e.target.value })} options={(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))} />
+                    </td>
+                    <td className="px-1 pt-1.5">
+                      {lines.length > 1 && (
+                        <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label="Supprimer la ligne">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={6} className="px-2 pb-2 pt-1.5">
+                      <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next })} />
+                    </td>
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <Button variant="ghost" onClick={() => setLines((ls) => [...ls, { name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", activity_id: "" }])}>
+          <Button variant="ghost" onClick={() => setLines((ls) => [...ls, { ...emptyLine(), axes: { ...(ls[ls.length - 1]?.axes ?? {}) } }])}>
             <Plus className="h-4 w-4" /> Ajouter une ligne
           </Button>
           <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
@@ -198,6 +218,7 @@ export function MoveForm({
             <dd className="text-right font-mono font-semibold">{fmtGNF(totals.ttc)}</dd>
           </dl>
         </div>
+        <p className="text-xs text-muted">Les axes laissés vides suivent les imputations automatiques de la société (préfixe de compte, tiers).</p>
         <Field label="Note interne">
           <Textarea value={narration} onChange={(e) => setNarration(e.target.value)} />
         </Field>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Paperclip, RotateCcw, Send, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { AnalyticTags } from "./AnalyticFields";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
@@ -61,6 +62,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
             columns={[
               { key: "name", label: "Libellé" },
               { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
+              { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
               { key: "quantity", label: "Qté", align: "right", render: (l) => String(l.quantity) },
               { key: "price_unit", label: "PU HT", align: "right", render: (l) => fmtGNF(l.price_unit) },
               { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => `${t.amount} %`).join(", ") || "–" },

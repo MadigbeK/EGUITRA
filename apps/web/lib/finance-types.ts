@@ -91,6 +91,16 @@ export interface MoveSummary {
   approval?: { state: string; level: number | null; pending_with: string | null } | null;
 }
 
+/** Compte analytique d'une répartition, avec son axe (clé de /finance/analytic-axes) et sa part. */
+export interface AnalyticShare {
+  id: number;
+  name: string;
+  code: string | null;
+  plan: string;
+  axis: string | null;
+  percentage: number;
+}
+
 export interface MoveLine {
   id: number;
   name: string;
@@ -104,7 +114,31 @@ export interface MoveLine {
   debit: number;
   credit: number;
   analytic_distribution: Record<string, number>;
+  analytic?: AnalyticShare[];
   display_type: string;
+}
+
+/** Axe analytique proposé dans la société de travail (activité, centre de coût, axes métier). */
+export interface AnalyticAxis {
+  key: string;
+  label: string;
+  plan_id: number;
+  /** Tenu par la finance (activité, centre de coût) ; sinon créé par son module. */
+  managed: boolean;
+  accounts: Array<{ id: number; name: string; code: string | null; active: boolean; activity_id: number | null; income_account_id: number | null }>;
+}
+
+/** Compte analytique détaillé (écran Axes analytiques). */
+export interface AnalyticAccount {
+  id: number;
+  name: string;
+  code: string | null;
+  plan: string;
+  axis: string | null;
+  active: boolean;
+  company: Ref | null;
+  activity: Ref | null;
+  income_account: { id: number; code: string; name: string } | null;
 }
 
 export interface MoveDetail extends MoveSummary {
