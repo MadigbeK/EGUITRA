@@ -228,11 +228,14 @@ class EguitraFinanceTreasury(http.Controller):
             return s
 
         ranked = sorted(items, key=lambda ml: (-score(ml), ml.date_maturity or ml.date))[:30]
-        return [
+        result = [
             {"id": ml.id, "move": ml.move_id.name, "move_id": ml.move_id.id, "partner": ml.partner_id.name or None,
              "date": ml.date, "due": ml.date_maturity, "residual": abs(ml.amount_residual), "score": score(ml)}
             for ml in ranked
         ]
+        # Échéances d'emprunt qu'une sortie de banque peut régler (kind = loan_line) : réglées depuis le
+        # relevé, elles ne comptent pas la sortie deux fois (eguitra.loan.line._statement_candidates).
+        return result + request.env["eguitra.loan.line"]._statement_candidates(line)
 
     @api_route("/finance/treasury/lines/<int:line_id>/reconcile", methods=("POST",), profiles=FIN_WRITE)
     def reconcile(self, line_id, **_kw):
@@ -247,6 +250,12 @@ class EguitraFinanceTreasury(http.Controller):
             for move_line in move_lines:
                 line._add_account_move_line(move_line, keep_current=True)
             line.reconcile_bank_line()
+        elif data.get("loan_line_id"):
+            # Échéance d'emprunt réglée par la sortie de banque : capital et intérêts en contrepartie.
+            loan_line = request.env["eguitra.loan.line"].browse(int(data["loan_line_id"])).exists()
+            if not loan_line or loan_line.company_id != line.company_id:
+                raise ApiError(404, "not_found", "Échéance introuvable.")
+            loan_line.action_settle_from_statement(line)
         elif data.get("account_id"):
             # Imputation directe (frais bancaires, produit divers…) : l'opération est recréée avec sa contrepartie.
             values = {

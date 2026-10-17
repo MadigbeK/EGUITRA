@@ -6,3 +6,5 @@ from . import test_api_finance
 from . import test_assets
 from . import test_pilotage
 from . import test_alertes
+from . import test_dette
+from . import test_api_pilotage
