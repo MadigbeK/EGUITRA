@@ -148,6 +148,15 @@ même branche, sans toucher à la logique des écrans :
   `components/shell/Lanceur.tsx`.
 - Précaution : ne pas lancer `next build` dans `apps/web` pendant un `next dev` ; le cache
   partagé provoque une boucle de rechargement. Supprimer `apps/web/.next` avant de relancer.
+- NIMOVA · Analyse (18 octobre), sur la spécification `docs/projet/analyse/specification.md` :
+  application `analyse` inscrite partout côté web (registre, navigation par société, bascule des
+  espaces, lanceur, accueil et icônes vivantes, connexion, passerelle, garde des pages), accent
+  violet, mode nuit (jetons `[data-theme="sombre"]`, bouton dans l'en-tête de chaque section),
+  kit de treize graphiques SVG (`components/analyse/charts/`, géométrie d3, rendu React, info-bulles,
+  légendes, clavier, tables de repli), cockpit et treize sections (`components/analyse/`), cartes de
+  constats avec méthode dépliable, simulateur à curseurs, impression. Maquette d'API :
+  `docs/design/maquette-api/analyse.mjs`. Vérifié sur la maquette en grand écran, en 1440 px, sur
+  téléphone de 375 px et en mode nuit ; `tsc` et `next build` au vert.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 

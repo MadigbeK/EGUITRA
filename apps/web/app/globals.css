@@ -162,6 +162,64 @@
   --accent-lueur: rgb(47 140 230 / 0.35);
 }
 
+/* Analyse : le violet de l'intelligence des données, à part des couleurs métier. */
+[data-app="analyse"] {
+  --accent: #5b3fb8;
+  --accent-strong: #4a2f9c;
+  --accent-haut: #6a4ccd;
+  --accent-vif: #7c5ce6;
+  --accent-doux: #eee9fb;
+  --accent-lueur: rgb(124 92 230 / 0.35);
+}
+
+/*
+ * Mode nuit de l'Analyse : les mêmes jetons, redéfinis pour un cockpit sombre. Tous les graphiques
+ * du kit lisent ces variables : ils basculent sans autre réglage.
+ */
+[data-theme="sombre"] {
+  --bg: #0f1a17;
+  --panel: #16231f;
+  --panel-2: #1b2b26;
+  --panel-3: #22352f;
+  --line: #273933;
+  --line-strong: #3b5149;
+  --ink: #eef5f1;
+  --ink-2: #c3d2cb;
+  --muted: #8ea39a;
+  --ok: #4fd39e;
+  --ok-doux: #143827;
+  --ok-texte: #7ee2b8;
+  --warn: #f0b64a;
+  --warn-vif: #f3bd57;
+  --warn-doux: #3a2d10;
+  --danger: #f27b73;
+  --danger-vif: #f0665e;
+  --danger-doux: #3d1b1a;
+  --info: #6fa8f0;
+  --info-doux: #16294a;
+  --accent: #a28cf5;
+  --accent-strong: #8c73ee;
+  --accent-haut: #b19ef8;
+  --accent-vif: #b7a4ff;
+  --accent-doux: #2a2350;
+  --accent-ink: #120d2b;
+  --accent-lueur: rgb(162 140 245 / 0.4);
+  --ombre-carte: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 14px -6px rgb(0 0 0 / 0.4);
+  --ombre-levee: 0 2px 4px rgb(0 0 0 / 0.3), 0 18px 36px -16px rgb(0 0 0 / 0.6);
+  --ombre-flottante: 0 28px 70px -24px rgb(0 0 0 / 0.75), 0 4px 12px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+  background: var(--bg);
+  color: var(--ink);
+}
+[data-theme="sombre"] .n-squelette {
+  background: linear-gradient(90deg, var(--panel-3) 0%, #2b4039 50%, var(--panel-3) 100%);
+  background-size: 220% 100%;
+}
+[data-theme="sombre"] ::selection {
+  background: var(--accent-doux);
+  color: var(--ink);
+}
+
 /* Rotations : le corail du carburant et de la route. */
 [data-app="mobile"] {
   --accent: #b83e16;
@@ -572,6 +630,71 @@ input[type="radio"] {
 /* Fond des boutons et repères actifs : un dégradé dans la seule teinte de l'application. */
 .n-degrade {
   background-image: linear-gradient(135deg, var(--accent-haut) 0%, var(--accent-strong) 100%);
+}
+
+/* ─── Kit de visualisation de l'Analyse (SVG) ─────────────────────────── */
+
+/* Barre SVG qui pousse depuis sa base (ou son sommet pour une valeur négative). */
+.an-barre {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: n-pousser-y 760ms var(--ease-sortie) both;
+  animation-delay: calc(var(--i, 0) * 40ms + 120ms);
+}
+.an-barre-bas {
+  transform-box: fill-box;
+  transform-origin: center top;
+  animation: n-pousser-y 760ms var(--ease-sortie) both;
+  animation-delay: calc(var(--i, 0) * 40ms + 120ms);
+}
+/* Barre horizontale qui s'allonge depuis la gauche. */
+.an-barre-x {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: n-pousser-x 820ms var(--ease-sortie) both;
+  animation-delay: calc(var(--i, 0) * 50ms + 120ms);
+}
+/* Forme qui surgit de son centre (cases, bulles, nœuds). */
+@keyframes an-eclore {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+.an-eclore {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: an-eclore 620ms var(--ease-ressort) both;
+  animation-delay: calc(var(--i, 0) * 18ms + 80ms);
+}
+/* Apparition douce décalée (aires, bandes, liens). */
+.an-fondu {
+  animation: n-apparaitre 900ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 60ms + 200ms);
+}
+/* Trait d'un chemin fermé ou ouvert (radar, Lorenz, prévision). */
+.an-tracer {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: n-tracer 1300ms var(--ease-sortie) forwards;
+  animation-delay: calc(var(--i, 0) * 120ms + 150ms);
+}
+/* Réticule et repères du survol. */
+.an-survol {
+  transition:
+    opacity 160ms ease,
+    transform 220ms var(--ease-sortie);
+}
+.an-estompe {
+  transition:
+    opacity 200ms ease,
+    filter 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .an-tracer {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* ─── Compteur (rouleaux de chiffres) ──────────────────────────────────── */
@@ -1134,7 +1257,33 @@ input[type="radio"] {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .n-tracer {
+  .n-tracer,
+  .an-tracer {
     stroke-dashoffset: 0;
+  }
+  /* Analyse : les cartes ne se coupent pas entre deux pages, le mode nuit s'efface à l'impression. */
+  [data-theme="sombre"] {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f5f8f6;
+    --panel-3: #e9efeb;
+    --line: #e1e8e3;
+    --line-strong: #c4cfc8;
+    --ink: #10241f;
+    --ink-2: #344a42;
+    --muted: #5c6e66;
+    --accent: #5b3fb8;
+    --accent-vif: #7c5ce6;
+    --accent-doux: #eee9fb;
+    --accent-ink: #ffffff;
+    color-scheme: light;
+  }
+  .an-carte,
+  .an-page section {
+    break-inside: avoid;
+  }
+  svg {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
