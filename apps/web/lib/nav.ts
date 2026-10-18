@@ -101,6 +101,37 @@ export const NAV: Record<AppCode, NavSection[]> = {
   ],
   portail: [{ label: "Mon projet", items: [{ href: "/portail", label: "Mon dossier", icon: "FolderOpen" }] }],
   mobile: [{ label: "Rotations", items: [{ href: "/mobile", label: "Rotations", icon: "Truck" }] }],
+  // Analyse : la synthèse sert les deux sociétés ; les sections changent avec la société de travail
+  // (spécification docs/projet/analyse/specification.md, chapitres 5 et 6).
+  analyse: [
+    {
+      label: "Synthèse",
+      items: [{ href: "/analyse", label: "Cockpit", icon: "Radar", profiles: ["admin", "direction", "finance", "cabinet"] }],
+    },
+    {
+      label: "EGUITRA GROUP",
+      items: [
+        { href: "/analyse/rentabilite", label: "Rentabilité", icon: "TrendingUp", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/tresorerie", label: "Trésorerie et prévision", icon: "Landmark", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/clients", label: "Portefeuille clients", icon: "Users", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/transport", label: "Flotte et routes", icon: "Truck", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/depenses", label: "Dépenses et contrôles", icon: "ShoppingCart", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/previsions", label: "Atterrissage et simulateur", icon: "Target", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/fiabilite", label: "Fiabilité des données", icon: "ShieldCheck", profiles: FIN, entity: "groupe" },
+      ],
+    },
+    {
+      label: "MB AxisPro Consulting",
+      items: [
+        { href: "/analyse/portefeuille", label: "Projets et pipeline", icon: "FolderKanban", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/diagnostic", label: "Diagnostic des projets", icon: "Layers", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/comites", label: "Qualité des décisions", icon: "Gavel", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/financements", label: "Financements", icon: "HandCoins", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/activite", label: "Activité et honoraires", icon: "Clock", profiles: ["admin", "direction", "finance", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/risques", label: "Risques et exécution", icon: "ShieldAlert", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+      ],
+    },
+  ],
 };
 
 export function navFor(app: AppCode, profiles: Profile[], entity?: EntiteSociete | null): NavSection[] {

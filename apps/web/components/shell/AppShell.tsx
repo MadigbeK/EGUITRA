@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
 import { AlertTriangle, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronRight, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
-import { APPS, type AppCode } from "@/lib/config";
+import { APPS, ESPACES, type AppCode } from "@/lib/config";
 import { navFor, type NavBadge, type NavItem, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
@@ -32,7 +32,7 @@ function estActif(item: NavItem, pathname: string, home: string) {
   return item.href === home ? pathname === home : pathname === item.href || pathname.startsWith(item.href + "/");
 }
 
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35" };
+const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#7c5ce6" };
 
 const CLE_REPLI = "nimova.menu.replie";
 
@@ -214,7 +214,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
                 <span className="hidden flex-1 text-left sm:inline">Rechercher un écran</span>
                 <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted sm:inline">Ctrl K</kbd>
               </button>
-              {(me.apps.includes("finance") || me.apps.includes("axispro")) && <Lanceur me={me} app={app} />}
+              {ESPACES.some((a) => me.apps.includes(a)) && <Lanceur me={me} app={app} />}
               <EquilibreExercice data={enTete} />
               <span className="hidden items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[13px] font-medium capitalize text-ink-2 xl:flex">
                 <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-accent-vif" />
@@ -398,15 +398,15 @@ function Navigation({
 }
 
 /**
- * Bascule entre les deux espaces de gestion (Finance, AxisPro) : visible d'emblée, chaque espace
- * à sa couleur. Elle n'apparaît que si le compte est ouvert aux deux.
+ * Bascule entre les espaces de gestion (Finance, AxisPro, Analyse) : visible d'emblée, chaque
+ * espace à sa couleur. Elle n'apparaît que si le compte est ouvert à plusieurs d'entre eux.
  */
 function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: () => void }) {
-  const espaces = (["finance", "axispro"] as const).filter((a) => me.apps.includes(a));
+  const espaces = ESPACES.filter((a) => me.apps.includes(a));
   if (espaces.length < 2) return null;
   return (
     <div className="px-4 pb-3">
-      <div role="group" aria-label="Espace de gestion" className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-panel-2 p-1">
+      <div role="group" aria-label="Espace de gestion" className={cx("grid gap-1 rounded-xl border border-line bg-panel-2 p-1", espaces.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
         {espaces.map((a) => {
           const actif = a === app;
           return (
@@ -415,10 +415,10 @@ function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: (
               href={APPS[a].home}
               onClick={onNavigate}
               aria-current={actif ? "true" : undefined}
-              className={cx("flex items-center justify-center gap-2 rounded-[9px] px-2 py-1.5 text-[13px] font-semibold transition-all duration-200", actif ? "bg-panel text-ink shadow-[0_1px_3px_rgb(16_36_31/0.12),0_0_0_1px_rgb(16_36_31/0.04)]" : "text-muted hover:text-ink")}
+              className={cx("flex min-w-0 items-center justify-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-[13px] font-semibold transition-all duration-200", actif ? "bg-panel text-ink shadow-[0_1px_3px_rgb(16_36_31/0.12),0_0_0_1px_rgb(16_36_31/0.04)]" : "text-muted hover:text-ink")}
             >
-              <span aria-hidden className={cx("h-2 w-2 rounded-full", actif && "n-pouls")} style={{ background: TEINTE_APP[a], ["--pouls" as string]: `color-mix(in oklab, ${TEINTE_APP[a]} 55%, transparent)` } as CSSProperties} />
-              {moduleOf(a)}
+              <span aria-hidden className={cx("h-2 w-2 flex-none rounded-full", actif && "n-pouls")} style={{ background: TEINTE_APP[a], ["--pouls" as string]: `color-mix(in oklab, ${TEINTE_APP[a]} 55%, transparent)` } as CSSProperties} />
+              <span className="truncate">{moduleOf(a)}</span>
             </Link>
           );
         })}
