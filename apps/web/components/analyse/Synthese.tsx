@@ -18,8 +18,25 @@ export function Synthese() {
     <FournisseurTheme>
       {error && <ErrorBox error={error} />}
       {!contexte && !error && <AttenteSection />}
-      {contexte?.entity === "groupe" && <CockpitGroupe />}
-      {contexte?.entity === "cabinet" && <CockpitCabinet />}
+      {contexte && !contexte.sections.some((x) => x.key === "synthese") ? (
+        // Profil sans le cockpit de cette société (la finance, côté cabinet) : ses écrans ouverts.
+        <Card title="Vos analyses pour cette société">
+          <p className="text-sm text-muted">Votre profil ouvre les écrans suivants :</p>
+          <ul className="mt-3 space-y-2">
+            {contexte.sections.map((x) => (
+              <li key={x.key}>
+                <Link href={x.path} className="font-semibold text-accent hover:underline">{x.label}</Link>
+                {x.question && <span className="text-sm text-muted"> · {x.question}</span>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : (
+        <>
+          {contexte?.entity === "groupe" && <CockpitGroupe />}
+          {contexte?.entity === "cabinet" && <CockpitCabinet />}
+        </>
+      )}
     </FournisseurTheme>
   );
 }
