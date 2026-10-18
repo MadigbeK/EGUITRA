@@ -18,6 +18,7 @@
 import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
+import { enregistrerAnalyse } from "./analyse.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
 const HOST = "127.0.0.1";
@@ -438,13 +439,14 @@ const PROFILE_DEFS = [
   { code: "cabinet", name: "Cabinet AxisPro", description: "Dossiers de projets, évaluations, data room, comités, rapports, facturation des prestations." },
   { code: "porteur", name: "Porteur de projet", description: "Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet." },
 ];
-const APPS = ["finance", "axispro", "portail", "mobile"];
+const APPS = ["finance", "axispro", "portail", "mobile", "analyse"];
 /** Applications ouvertes à chaque profil (eguitra_api.models.res_users.APP_PROFILES). */
 const APP_PROFILES = {
   finance: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"],
   axispro: ["admin", "direction", "cabinet"],
   portail: ["porteur"],
   mobile: ["admin", "exploitation"],
+  analyse: ["admin", "direction", "finance", "cabinet"],
 };
 const INTERNAL = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet"];
 const appsFor = (profiles) => APPS.filter((app) => APP_PROFILES[app].some((p) => profiles.includes(p)));
@@ -5930,6 +5932,10 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
   DB.messages.push(m);
   return messageRow(m);
 });
+
+/* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */
+
+enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES });
 
 /* ════════════════════════════════════════════════════════════════════════════
  * Serveur HTTP
