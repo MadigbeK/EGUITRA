@@ -55,7 +55,7 @@ function Corps() {
         <>
           {deficitaires.length > 0 ? (
             <>
-              <strong className="font-semibold text-danger">{deficitaires.length} route{deficitaires.length > 1 ? "s" : ""} sur {pricing.length} perd{deficitaires.length > 1 ? "ent" : ""} de l&apos;argent</strong> ({deficitaires.map((r) => r.name).join(", ")})
+              <strong className="font-semibold text-danger">{deficitaires.length} route{deficitaires.length > 1 ? "s" : ""} sur {pricing.length} {deficitaires.length > 1 ? "sont facturées" : "est facturée"} sous {deficitaires.length > 1 ? "leur" : "son"} coût complet</strong> (charges de structure comprises : {deficitaires.map((r) => r.name).join(", ")})
             </>
           ) : (
             <>Toutes les routes couvrent leur coût complet</>
