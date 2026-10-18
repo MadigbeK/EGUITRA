@@ -146,7 +146,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Base `eguitra`, huit modules, deux sociétés, vide de données (en attente de la reprise). Version en service : 20261017-2328 (commit 889c5fd), mise en production le 17 octobre à 23 h 28 à la demande du gérant (sauvegarde de base prise juste avant ; modules : finance 19.0.1.5.0, transport 19.0.1.2.0, axispro 19.0.1.2.1, approval 19.0.1.2.0) ; noyau et applications répondent, supervision sans alerte ; `monitor-install.sh` relancé (restauration trimestrielle à un instant donné et rapport mensuel de disponibilité planifiés) ; base et sauvegardes reconstruites avec l'archivage des WAL toutes les 5 minutes. Version précédente : 20261014-1548 ; historique : `infra/release.sh --list`.
+- Base `eguitra`, neuf modules (dont `eguitra_analytics`, NIMOVA · Analyse), deux sociétés, vide de données (en attente de la reprise). Version en service : 20261018-0806 (commit 1cf033b), mise en production le 18 octobre à 8 h 06 à la demande du gérant (sauvegarde de base prise juste avant, module d'analyse installé par `release.sh`) ; noyau et applications répondent, supervision sans alerte. Versions précédentes : 20261017-2328 (finance 19.0.1.5.0, transport 19.0.1.2.0 ; `monitor-install.sh` relancé), 20261014-1548 ; historique : `infra/release.sh --list`.
 - Tâches de nuit actives : quittancement des loyers, dotations aux amortissements, relances des clients, purges (jetons, journaux d'accès, tentatives). La génération du module `contract` est désactivée.
 - Identité des sociétés (adresse, NIF, RCCM, logo) à saisir dans Administration > Sociétés dès réception des informations du client : elles figurent en tête et au pied des factures.
 - Super administrateur `emkouyate` (Madigbè Kouyaté, E-VOLUTION XP), créé le 15 octobre à la demande du gérant : tous les profils internes (administration, direction, finance, exploitation, chantiers, immobilier, cabinet), deux sociétés, mot de passe provisoire choisi par le gérant, à remplacer à la première connexion avec l'activation de la double authentification. Contrôlé le 16 octobre : compte actif, mot de passe définitif choisi, double authentification activée, aucun échec de connexion, noyau et applications de production en service.
@@ -185,9 +185,9 @@ niveau expert, différent selon la société). Spécification et contrat d'API :
   quadrants, éventail de prévision, radar, Benford, puces, petits multiples, matrice de risques), mode
   nuit, impression, simulateur ; maquette d'API alignée sur le noyau. Écrans vérifiés dans le
   navigateur sur les réponses réelles de la recette (deux sociétés, deux périodes).
-- Déployé en recette (module installé, noyau redémarré, application reconstruite). Application `analyse`
+- Déployé en recette puis en production (version 20261018-0806, 18 octobre). Application `analyse`
   inscrite au noyau (`organisation.py`), dans `release.sh` (qui installe désormais un module nouveau)
-  et `init-db.sh`. Production : à la prochaine `release.sh`, après validation du gérant.
+  et `init-db.sh`.
 - Réglages : `eguitra_analytics.cabinet_hourly_rate` (taux horaire de référence du cabinet, sinon déduit
   des factures) et `eguitra_analytics.cabinet_cost_ratio` (taux de revient du temps, 0,40 par défaut).
 - Limites : pas d'export XLSX par section (impression seulement) ; la marge par activité n'est mesurable
