@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 17 octobre 2026 (soir)
+# État du projet EGUITRA, au 18 octobre 2026
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -164,6 +164,34 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**18 octobre : NIMOVA · Analyse** (demande du gérant, carte blanche : module d'analyse de données de
+niveau expert, différent selon la société). Spécification et contrat d'API :
+`docs/projet/analyse/specification.md` ; guide : `docs/guides/guide-analyse.md`.
+- Fait, noyau (`addons/eguitra_analytics` 19.0.1.0.0, lecture seule, Python pur) : moteur statistique
+  (`engine/` : statistiques robustes, régression, Lorenz, Gini, HHI, Holt-Winters et Holt avec
+  validation glissante, Monte-Carlo à graine fixe, CUSUM, loi de Benford selon Nigrini, Kaplan-Meier,
+  kappa de Cohen, constats classés par impact) ; EGUITRA GROUP en huit sections (cockpit et santé sur
+  cinq axes, rentabilité et pont d'EBE volume-prix-mix, trésorerie à 13 semaines par Monte-Carlo sur
+  les délais réels des clients, clients, flotte et routes, dépenses et contrôles, atterrissage et
+  élasticités, fiabilité des données) ; MB AxisPro en sept sections (cockpit et pipeline pondéré,
+  portefeuille et durées dans les gates, diagnostic des faiblesses systémiques, qualité des décisions,
+  financements, activité et honoraires, risques et exécution) ; environ 75 règles de constats ; routes
+  `/api/v1/analyse/...` cloisonnées par société et par profil. 34 tests au vert ; les 30 routes
+  répondent en moins d'une seconde sur la recette.
+- Fait, application web : espace `/analyse` (« NIMOVA · Analyse », tuile de l'accueil, bascule à trois
+  espaces), navigation et contenu selon la société de travail, kit de visualisation en SVG sur les
+  jetons NIMOVA (cascade, carte de chaleur, Lorenz et Pareto, entonnoir, sankey, treemap, bulles à
+  quadrants, éventail de prévision, radar, Benford, puces, petits multiples, matrice de risques), mode
+  nuit, impression, simulateur ; maquette d'API alignée sur le noyau. Écrans vérifiés dans le
+  navigateur sur les réponses réelles de la recette (deux sociétés, deux périodes).
+- Déployé en recette (module installé, noyau redémarré, application reconstruite). Application `analyse`
+  inscrite au noyau (`organisation.py`), dans `release.sh` (qui installe désormais un module nouveau)
+  et `init-db.sh`. Production : à la prochaine `release.sh`, après validation du gérant.
+- Réglages : `eguitra_analytics.cabinet_hourly_rate` (taux horaire de référence du cabinet, sinon déduit
+  des factures) et `eguitra_analytics.cabinet_cost_ratio` (taux de revient du temps, 0,40 par défaut).
+- Limites : pas d'export XLSX par section (impression seulement) ; la marge par activité n'est mesurable
+  que si les achats portent l'activité analytique (sinon « non mesurable »).
 
 **17 octobre : conformité aux prototypes du DGA (M. Diallo) et au courrier du responsable financier
 (M. Kalissa)**, demandée par le gérant (« tout en mieux », carte blanche). Sources : prototypes
