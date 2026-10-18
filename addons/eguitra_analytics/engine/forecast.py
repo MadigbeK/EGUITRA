@@ -7,7 +7,8 @@ Méthode de forecast_series :
   complètes (24 mois pour une saison de 12) : saisonnalité initiale tirée des deux premières saisons,
   corrigée de la tendance ;
 - sinon Holt à tendance amortie (Gardner et McKenzie) dès 4 points ;
-- sinon prévision naïve (dernière valeur).
+- sinon, ou pour une série constante, prévision naïve (dernière valeur) ; une série vide donne des listes
+  vides.
 Les paramètres de lissage sont choisis par recherche sur grille en minimisant la somme des carrés des
 erreurs de prévision à un pas en validation glissante : chaque point n'est prévu qu'avec les points qui
 le précèdent (origine glissante). Les intervalles à 80 % viennent de l'écart quadratique moyen de ces
@@ -116,12 +117,18 @@ def forecast_series(values, horizon, season=12):
     """Prévision de `horizon` périodes après la série.
 
     Renvoie {forecast, low, high, method (holt_winters | holt | naive), mape, params, residuals, sigma, n} :
-    low et high bornent un intervalle de prévision à 80 % ; residuals sont les erreurs de prévision à un
-    pas (pour probability_reach) ; sigma leur écart quadratique moyen."""
-    ys = [float(v or 0.0) for v in (values or ())]
+    low et high bornent un intervalle de prévision à 80 % ; mape est en % (12,5 = 12,5 %) ; residuals sont
+    les erreurs de prévision à un pas (pour probability_reach) ; sigma leur écart quadratique moyen. Ne lève
+    jamais d'exception : série vide -> listes vides ; série courte (moins de 4 points) ou constante -> méthode
+    naive ; valeurs manquantes (None, NaN) comptées pour 0."""
+    ys = []
+    for v in values or ():
+        v = float(v) if v is not None else 0.0
+        ys.append(0.0 if math.isnan(v) or math.isinf(v) else v)
     n = len(ys)
     horizon = max(0, int(horizon or 0))
     nonnegative = all(y >= 0 for y in ys)
+    constant = n > 0 and max(ys) == min(ys)
 
     def result(points, widths, method, residuals, params):
         sigma = _sigma(residuals)
@@ -133,10 +140,10 @@ def forecast_series(values, horizon, season=12):
                 "params": params, "residuals": residuals, "sigma": sigma, "n": n}
 
     if not n:
-        return {"forecast": [0.0] * horizon, "low": [0.0] * horizon, "high": [0.0] * horizon, "method": "naive",
-                "mape": None, "params": {}, "residuals": [], "sigma": 0.0, "n": 0}
+        return {"forecast": [], "low": [], "high": [], "method": "naive", "mape": None, "params": {},
+                "residuals": [], "sigma": 0.0, "n": 0}
 
-    if season and season > 1 and n >= 2 * season:
+    if not constant and season and season > 1 and n >= 2 * season:
         best = None
         for alpha in HW_ALPHAS:
             for beta in HW_BETAS:
@@ -159,7 +166,7 @@ def forecast_series(values, horizon, season=12):
         return result(points, widths, "holt_winters", residuals,
                       {"alpha": alpha, "beta": beta, "gamma": gamma, "phi": phi, "season": season})
 
-    if n >= 4:
+    if not constant and n >= 4:
         best = None
         for alpha in HOLT_ALPHAS:
             for beta in HOLT_BETAS:
@@ -179,7 +186,8 @@ def forecast_series(values, horizon, season=12):
             widths.append(math.sqrt(variance))
         return result(points, widths, "holt", residuals, {"alpha": alpha, "beta": beta, "phi": phi})
 
-    # Naïf : dernière valeur ; erreurs = variations successives (marche aléatoire, σ × √h).
+    # Naïf (série courte ou constante) : dernière valeur ; erreurs = variations successives (marche
+    # aléatoire, σ × √h).
     residuals = [ys[i] - ys[i - 1] for i in range(1, n)]
     points = [ys[-1]] * horizon
     widths = [math.sqrt(h) for h in range(1, horizon + 1)]

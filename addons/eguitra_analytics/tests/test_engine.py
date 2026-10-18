@@ -102,7 +102,14 @@ class TestForecast(BaseCase):
         self.assertEqual(naive["method"], "naive")
         self.assertEqual(naive["forecast"], [7.0, 7.0])
         self.assertAlmostEqual(naive["high"][1] - 7, forecast.Z80 * 2 * math.sqrt(2), msg="σ √h")
-        self.assertEqual(forecast.forecast_series([], 2)["forecast"], [0.0, 0.0])
+        empty = forecast.forecast_series([], 2)
+        self.assertEqual((empty["forecast"], empty["low"], empty["method"], empty["mape"]), ([], [], "naive", None))
+        flat = forecast.forecast_series([40.0] * 30, 3)
+        self.assertEqual(flat["method"], "naive", "Série constante : rien à lisser")
+        self.assertEqual(flat["forecast"], [40.0] * 3)
+        self.assertEqual(flat["mape"], 0)
+        self.assertEqual(forecast.forecast_series([None, float("nan"), 3, 4], 1)["method"], "holt",
+                         "Valeurs manquantes comptées pour 0")
         falling = forecast.forecast_series([100 - 20 * t for t in range(6)], 4)
         self.assertTrue(all(v >= 0 for v in falling["forecast"] + falling["low"]),
                         "Série positive : jamais de prévision négative")
