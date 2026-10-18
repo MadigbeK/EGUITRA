@@ -33,7 +33,7 @@ const M = { haut: 18, droite: 18, bas: 44, gauche: 54 };
  * couleur. Les quadrants donnent la lecture d'un coup d'œil (« Stratégiques », « À surveiller »).
  * Chaque bulle se survole et se parcourt au clavier (Tab) ; la légende masque un groupe.
  */
-export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs }: {
+export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30 }: {
   points: PointBulle[];
   xLabel: string;
   yLabel: string;
@@ -47,6 +47,10 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
   formatSize: (v: number) => string;
   sizeLabel?: string;
   couleurs?: Record<string, string>;
+  /** Rayon de la plus grosse bulle (défaut : selon la largeur). */
+  rayonMax?: number;
+  /** Au-delà de ce nombre de points, seuls les points survolés portent leur nom. */
+  libellesMax?: number;
 }) {
   const [focus, setFocus] = useState<string | null>(null);
   const [masques, setMasques] = useState<string[]>([]);
@@ -69,7 +73,7 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
         enfants={(W) => {
           const x = scaleLinear().domain(xd).range([M.gauche, W - M.droite]).nice();
           const y = scaleLinear().domain(yd).range([hauteur - M.bas, M.haut]).nice();
-          const r = scaleSqrt().domain([0, Math.max(1, ...points.map((p) => p.size))]).range([4, Math.min(34, W / 14)]);
+          const r = scaleSqrt().domain([0, Math.max(1, ...points.map((p) => p.size))]).range([4, rayonMax ?? Math.min(34, W / 14)]);
           const choisi = focus ? visibles.find((p) => p.id === focus) : undefined;
           const x0 = M.gauche;
           const x1 = W - M.droite;
@@ -138,7 +142,7 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
                     </circle>
                   );
                 })}
-                {visibles.filter((p) => r(p.size) > 16 || focus === p.id).map((p) => (
+                {visibles.filter((p) => focus === p.id || (points.length <= libellesMax && r(p.size) > 16)).map((p) => (
                   <text key={`l${p.id}`} x={x(p.x)} y={y(p.y) - r(p.size) - 5} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--ink)" className="pointer-events-none an-fondu" style={{ "--i": 4 } as CSSProperties}>
                     {p.label.length > 18 ? `${p.label.slice(0, 17)}…` : p.label}
                   </text>

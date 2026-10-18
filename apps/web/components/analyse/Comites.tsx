@@ -105,11 +105,11 @@ function BarresEmpilees({ months, series }: { months: string[]; series: CabinetC
     <div>
       <div className="flex h-[190px] items-end gap-[6px]" role="img" aria-label="Décisions par mois et par type">
         {months.map((m, i) => (
-          <div key={m} className="flex min-w-0 flex-1 flex-col-reverse items-stretch gap-[2px]" title={`${moisCourt(m, true)} : ${totaux[i]} décision${(totaux[i] ?? 0) > 1 ? "s" : ""}`}>
+          <div key={m} className="flex h-full min-w-0 flex-1 flex-col-reverse items-stretch gap-[2px]" title={`${moisCourt(m, true)} : ${totaux[i]} décision${(totaux[i] ?? 0) > 1 ? "s" : ""}`}>
             {series.map((s) => {
               const v = s.values[i] ?? 0;
               if (!v) return null;
-              return <span key={s.key} className="an-barre-x block w-full rounded-[3px]" style={{ height: `${(v / max) * 100}%`, background: COULEUR_DECISION[s.key], "--i": i } as CSSProperties} />;
+              return <span key={s.key} className="n-pousser-y block w-full flex-none rounded-[3px]" style={{ height: `${(v / max) * 100}%`, background: COULEUR_DECISION[s.key], "--i": i } as CSSProperties} />;
             })}
           </div>
         ))}

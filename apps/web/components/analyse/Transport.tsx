@@ -83,7 +83,7 @@ function Corps() {
                 rows={[...d.pricing].sort((a, b) => a.gap_pct - b.gap_pct)}
                 rowKey={(r) => r.route}
                 columns={[
-                  { key: "label", label: "Route", render: (r) => <span className="font-medium text-ink">{r.label}</span> },
+                  { key: "label", label: "Route", render: (r) => <span className="whitespace-nowrap font-medium text-ink">{r.label}</span> },
                   { key: "m3", label: "m³", align: "right", render: (r) => fmtInt(r.m3) },
                   { key: "avg_rate", label: "Tarif moyen", align: "right", render: (r) => `${fmtInt(r.avg_rate)} /m³` },
                   { key: "breakeven_rate", label: "Point mort", align: "right", render: (r) => `${fmtInt(r.breakeven_rate)} /m³` },
@@ -105,6 +105,7 @@ function Corps() {
                 formatSize={(v) => `${fmtInt(v)} m³`}
                 sizeLabel="Volume"
                 hauteur={400}
+                rayonMax={11}
               />
             </Card>
           </div>
@@ -117,14 +118,14 @@ function Corps() {
                 rowKey={(t) => t.id}
                 columns={[
                   { key: "rank", label: "Rang", align: "right", render: (t) => <span className="font-semibold tabular text-muted">{t.rank}</span> },
-                  { key: "name", label: "Ensemble", render: (t) => <span className="font-medium text-ink">{t.name}</span> },
+                  { key: "name", label: "Ensemble", render: (t) => <span className="whitespace-nowrap font-medium text-ink">{t.name}</span> },
                   { key: "rotations", label: "Rotations", align: "right", render: (t) => fmtInt(t.rotations) },
                   { key: "km", label: "km", align: "right", render: (t) => fmtInt(t.km) },
                   {
                     key: "utilization_pct",
                     label: "Utilisation",
                     render: (t) => (
-                      <span className="flex items-center gap-2">
+                      <span className="flex items-center gap-2 whitespace-nowrap">
                         <span className="h-1.5 w-16 overflow-hidden rounded-full bg-panel-3">
                           <span className="n-pousser-x block h-full rounded-full" style={{ width: `${t.utilization_pct}%`, background: t.utilization_pct < 50 ? "var(--danger-vif)" : t.utilization_pct < 70 ? "var(--warn-vif)" : "var(--g-jade)" }} />
                         </span>

@@ -78,7 +78,7 @@ function Corps() {
                     key: "frequency",
                     label: "Dossiers",
                     render: (r) => (
-                      <span className="flex items-center gap-2">
+                      <span className="flex items-center gap-2 whitespace-nowrap">
                         <span className="h-1.5 w-20 overflow-hidden rounded-full bg-panel-3">
                           <span className="n-pousser-x block h-full rounded-full bg-corail" style={{ width: `${r.frequency_pct}%` }} />
                         </span>

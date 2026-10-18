@@ -6,7 +6,26 @@ import type { WaterfallStep } from "@/lib/analyse-types";
 import { fmtGNF, fmtShort } from "@/lib/format";
 import { Bulle, COULEUR, Cadre, TableRepli, deplacer, graduations, tronquer } from "./commun";
 
-const MARGE = { haut: 26, droite: 8, bas: 44, gauche: 52 };
+const MARGE = { haut: 26, droite: 8, bas: 46, gauche: 52 };
+
+/** Libellé d'une marche sur deux lignes au plus, coupé aux espaces, la dernière tronquée. */
+function lignes(label: string, largeur: number): string[] {
+  const max = Math.max(4, Math.floor(largeur / (11 * 0.56)));
+  const mots = label.split(/\s+/);
+  const out: string[] = [];
+  let courante = "";
+  for (const mot of mots) {
+    const essai = courante ? `${courante} ${mot}` : mot;
+    if (essai.length <= max || !courante) courante = essai;
+    else {
+      out.push(courante);
+      courante = mot;
+      if (out.length === 2) break;
+    }
+  }
+  if (out.length < 2 && courante) out.push(courante);
+  return out.slice(0, 2).map((l, k, arr) => (k === arr.length - 1 && mots.join(" ").length > arr.join(" ").length ? tronquer(l, largeur, 11) : tronquer(l, largeur, 11)));
+}
 
 /**
  * Cascade (pont) : du premier total au dernier, chaque étape ajoute ou retranche. Les totaux sont
@@ -72,8 +91,12 @@ export function Cascade({ steps, hauteur = 300, label, format, formatAxe }: { st
                     <text x={x0 + bw / 2} y={negatif && m.kind !== "total" ? y(m.bas) + 14 : y(m.haut) - 6} textAnchor="middle" fontSize={11} fontWeight={m.kind === "total" ? 700 : 600} fill={m.kind === "total" ? "var(--ink)" : "var(--ink-2)"} className="tabular an-fondu" style={{ "--i": i + 2 } as CSSProperties}>
                       {m.kind === "total" ? fmtShort(m.arrivee) : `${m.kind === "minus" ? "−" : "+"}${fmtShort(Math.abs(m.value))}`}
                     </text>
-                    <text x={x0 + bw / 2} y={hauteur - MARGE.bas + 16} textAnchor="middle" fontSize={11} fill={focus === i ? "var(--ink)" : "var(--muted)"} fontWeight={m.kind === "total" || focus === i ? 600 : 400}>
-                      {tronquer(m.label, bw + 14, 11)}
+                    <text x={x0 + bw / 2} y={hauteur - MARGE.bas + 15} textAnchor="middle" fontSize={11} fill={focus === i ? "var(--ink)" : "var(--muted)"} fontWeight={m.kind === "total" || focus === i ? 600 : 400}>
+                      {lignes(m.label, bw + 18).map((l, k) => (
+                        <tspan key={k} x={x0 + bw / 2} dy={k ? 12 : 0}>
+                          {l}
+                        </tspan>
+                      ))}
                     </text>
                     <rect x={x0 - 4} y={MARGE.haut} width={bw + 8} height={hauteur - MARGE.haut - MARGE.bas} fill="transparent" />
                   </g>

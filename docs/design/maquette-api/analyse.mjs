@@ -356,9 +356,33 @@ export function enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES 
     ];
   }
 
+  /** Concentration du chiffre d'affaires : Lorenz (du plus grand client au plus petit), Gini, HHI, Pareto. */
+  function concentrationClients() {
+    const totalPart = sum(CLIENTS, (c) => c.part);
+    let cumul = 0;
+    const lorenz = CLIENTS.map((c, i) => {
+      cumul += c.part / totalPart;
+      return { x: r1(((i + 1) / CLIENTS.length) * 100), y: r1(cumul * 100) };
+    });
+    // Aire sous la courbe (trapèzes) ; la courbe étant au-dessus de la diagonale, Gini = 2 × aire − 1.
+    const aire = sum(lorenz, (pt, i) => ((i ? lorenz[i - 1].y : 0) + pt.y) / 2 / 100 / CLIENTS.length);
+    return {
+      lorenz,
+      gini: r2(2 * aire - 1),
+      hhi: round(sum(CLIENTS, (c) => (c.part / totalPart) ** 2 * 10000)),
+      top_share: { top1: r1((CLIENTS[0].part / totalPart) * 100), top5: r1((sum(CLIENTS.slice(0, 5), (c) => c.part) / totalPart) * 100) },
+      pareto_count: lorenz.findIndex((pt) => pt.y >= 80) + 1,
+      clients_count: CLIENTS.length,
+      moitie: lorenz.findIndex((pt) => pt.y >= 50) + 1,
+    };
+  }
+
   function constatsClients() {
+    const c = concentrationClients();
+    const caAnnuel = sum(modele.slice(-12), (l) => l.revenue);
+    const premier = CLIENTS[0];
     return [
-      constat({ id: "clients.concentration", domain: "clients", severity: "high", title: "Quatre clients font 52 % du chiffre d'affaires", narrative: "Pétro-Guinée Distribution pèse 19 % à elle seule ; l'indice HHI atteint 912 et le Gini 0,63. La perte du premier client coûterait 8,4 Mds GNF de chiffre d'affaires et 2,5 Mds de marge.", metric: { label: "Part des 5 premiers", value: 59, unit: "pct", reference: 50, reference_label: "Seuil" }, impact_gnf: 2.5e9, confidence: 0.92, method: "Courbe de Lorenz et Gini sur le chiffre d'affaires par client ; HHI = somme des parts au carré × 10 000 ; Pareto : clients cumulant 80 % du CA.", evidence: { type: "bars", data: { labels: CLIENTS.slice(0, 6).map((c) => c.name.replace(" (démo)", "")), values: CLIENTS.slice(0, 6).map((c) => r1(c.part * 100)), unit: "pct" } }, action: "Signer deux contrats-cadres hors mines (ciment, agro-industrie) pour ramener les cinq premiers sous 50 %.", link: "/analyse/clients" }),
+      constat({ id: "clients.concentration", domain: "clients", severity: c.top_share.top5 > 50 ? "high" : "medium", title: `${c.moitie} clients font ${pctFr(c.lorenz[c.moitie - 1].y)} du chiffre d'affaires`, narrative: `${premier.name.replace(" (démo)", "")} pèse ${pctFr(c.top_share.top1)} à elle seule ; l'indice HHI atteint ${c.hhi.toLocaleString("fr-FR")} et le Gini ${c.gini.toLocaleString("fr-FR")}. La perte du premier client coûterait ${mds(caAnnuel * premier.part / sum(CLIENTS, (x) => x.part))} de chiffre d'affaires et ${mds(caAnnuel * premier.part / sum(CLIENTS, (x) => x.part) * premier.marge)} de marge.`, metric: { label: "Part des 5 premiers", value: c.top_share.top5, unit: "pct", reference: 50, reference_label: "Seuil" }, impact_gnf: round(caAnnuel * premier.part / sum(CLIENTS, (x) => x.part) * premier.marge), confidence: 0.92, method: "Courbe de Lorenz et Gini sur le chiffre d'affaires par client ; HHI = somme des parts au carré × 10 000 ; Pareto : clients cumulant 80 % du CA.", evidence: { type: "bars", data: { labels: CLIENTS.slice(0, 6).map((x) => x.name.replace(" (démo)", "")), values: CLIENTS.slice(0, 6).map((x) => r1((x.part / sum(CLIENTS, (y) => y.part)) * 100)), unit: "pct" } }, action: "Signer deux contrats-cadres hors mines (ciment, agro-industrie) pour ramener les cinq premiers sous 50 %.", link: "/analyse/clients" }),
       constat({ id: "clients.station_horizon", domain: "clients", severity: "critical", title: "Station Horizon se dégrade : 41 jours de retard moyen, 890 M GNF échus", narrative: "Son retard progresse de 3,2 jours par mois depuis janvier ; 890 M GNF sont échus dont 410 M depuis plus de 60 jours. La perte attendue (IFRS 9) monte à 96 M GNF.", metric: { label: "Retard moyen", value: 41, unit: "days", reference: 15, reference_label: "Tolérance" }, impact_gnf: 0.89e9, confidence: 0.9, method: "Régression du retard de paiement par facture dans le temps ; perte attendue = encours × probabilité de défaut par tranche d'ancienneté.", evidence: { type: "series", data: { labels: ["janv.", "mars", "mai", "juil.", "sept.", "oct."], values: [12, 18, 24, 31, 37, 41], unit: "days", reference: 15 } }, action: "Suspendre les livraisons au-delà de 1 Md GNF d'encours et exiger un échéancier signé sous 15 jours.", link: "/analyse/clients?client=104" }),
       constat({ id: "clients.strategiques", domain: "clients", severity: "positive", title: "Six clients stratégiques paient à 9 jours et portent 46 % de la marge", narrative: "Compagnie minière de Sangarédi, Énergies du Fouta, Dépôt Kaloum, Télécom Nimba, Groupe scolaire Lambanyi et Boulangerie du Port sont à la fois rentables et ponctuels.", metric: { label: "Part de la marge", value: 46, unit: "pct", reference: null, reference_label: null }, impact_gnf: null, confidence: 0.9, method: "Segmentation valeur (marge) × comportement de paiement (score 0-100) ; quadrant « Stratégiques » : marge au-dessus de la médiane et score ≥ 70.", evidence: null, action: "Leur proposer un contrat annuel indexé gasoil avec remise de fidélité.", link: "/analyse/clients" }),
       constat({ id: "clients.croissance", domain: "clients", severity: "info", title: "Agro-Kankan SARL double son volume en un an", narrative: "Un client « À développer » : +104 % de chiffre d'affaires, marge 20 %, mais 48 jours de retard moyen.", metric: { label: "Croissance", value: 104, unit: "pct", reference: null, reference_label: null }, impact_gnf: 0.21e9, confidence: 0.8, method: "Variation du chiffre d'affaires sur 12 mois glissants.", evidence: null, action: "Accompagner la croissance d'un plafond d'encours et d'un acompte.", link: "/analyse/clients?client=113" }),
@@ -608,16 +632,7 @@ export function enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES 
     exigerEntite(ctx, "groupe");
     const p = periode(ctx.query);
     const ca = sommeSur(p, (l) => l.revenue);
-    const parts = CLIENTS.map((c) => c.part);
-    const totalPart = sum(parts);
-    let cumul = 0;
-    const lorenz = CLIENTS.map((c, i) => {
-      cumul += c.part / totalPart;
-      return { x: r1(((i + 1) / CLIENTS.length) * 100), y: r1(cumul * 100) };
-    });
-    const gini = r2(1 - 2 * sum(lorenz.map((pt, i) => ((i ? lorenz[i - 1].y : 0) + pt.y) / 2 / 100 / CLIENTS.length)));
-    const hhi = round(sum(CLIENTS, (c) => (c.part / totalPart) ** 2 * 10000));
-    const pareto_count = lorenz.findIndex((pt) => pt.y >= 80) + 1;
+    const { moitie: _moitie, ...concentration } = concentrationClients();
     const medianeMarge = median(CLIENTS.map((c) => c.part * c.marge));
     const segments = CLIENTS.map((c, i) => {
       const r = makeRng(`client-${i}`);
@@ -643,10 +658,7 @@ export function enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES 
       const r = makeRng(`tendance-${i}`);
       return { id: c.id, name: c.name, values: months.map((k, j) => round(parCle.get(k).revenue * c.part * r.noise(0.14) * (i === 12 ? 0.6 + j * 0.07 : 1))) };
     }) };
-    return enveloppe(ctx, "groupe", p, qualiteGroupe, classer(constatsClients()), {
-      concentration: { lorenz, gini, hhi, top_share: { top1: r1((CLIENTS[0].part / totalPart) * 100), top5: r1((sum(CLIENTS.slice(0, 5), (c) => c.part) / totalPart) * 100) }, pareto_count, clients_count: CLIENTS.length },
-      segments, behaviour, trends,
-    });
+    return enveloppe(ctx, "groupe", p, qualiteGroupe, classer(constatsClients()), { concentration, segments, behaviour, trends });
   });
 
   route("GET", "/analyse/groupe/transport", PROFILS_GROUPE, (ctx) => {

@@ -71,7 +71,7 @@ function Corps() {
                     key: "probability",
                     label: "Probabilité",
                     render: (r) => (
-                      <span className="flex items-center gap-2">
+                      <span className="flex items-center gap-2 whitespace-nowrap">
                         <span className="h-1.5 w-16 overflow-hidden rounded-full bg-panel-3">
                           <span className="n-pousser-x block h-full rounded-full" style={{ width: `${r.probability * 100}%`, background: r.knockout ? "var(--danger-vif)" : r.probability >= 0.5 ? "var(--g-jade)" : "var(--warn-vif)" }} />
                         </span>

@@ -66,7 +66,7 @@ function CockpitGroupe() {
     <>
       Le groupe est <strong className="font-semibold text-ink">{verdictSante(d.health.score)}</strong> (score {d.health.score} / 100) : {fmtShort(ca.value)} GNF de chiffre d&apos;affaires
       {ca.delta_pct !== null && ` (${ca.delta_pct >= 0 ? "+" : ""}${fmtPct(ca.delta_pct)} sur un an)`}, {fmtShort(ebe.value)} GNF d&apos;EBE soit {fmtPct(ebePct.value)}, {fmtShort(cash.value)} GNF de trésorerie
-      {cash.target !== null && (cash.value ?? 0) < cash.target ? " sous le seuil de sécurité" : ""}.{alerte && <> Premier point d&apos;attention : {alerte.title.charAt(0).toLowerCase()}{alerte.title.slice(1)}.</>}
+      {cash.target !== null && (cash.value ?? 0) < cash.target ? " sous le seuil de sécurité" : ""}.{alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
   );
 
@@ -198,7 +198,7 @@ function CockpitCabinet() {
   const reponse = d && dossiers && pipeline && besoin && honoraires && (
     <>
       Le cabinet accompagne <strong className="font-semibold text-ink">{fmtInt(dossiers.value)} projets</strong> pour {fmtShort(besoin.value)} GNF de besoin de financement, dont {fmtShort(pipeline.value)} GNF pondérés par leur chance d&apos;être financés ; {bancables} dossier{bancables > 1 ? "s sont" : " est"} mûr{bancables > 1 ? "s" : ""} pour la banque. Honoraires de la période : {fmtShort(honoraires.value)} GNF
-      {honoraires.delta_pct !== null && ` (${honoraires.delta_pct >= 0 ? "+" : ""}${fmtPct(honoraires.delta_pct)})`}.{alerte && <> Premier point d&apos;attention : {alerte.title.charAt(0).toLowerCase()}{alerte.title.slice(1)}.</>}
+      {honoraires.delta_pct !== null && ` (${honoraires.delta_pct >= 0 ? "+" : ""}${fmtPct(honoraires.delta_pct)})`}.{alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
   );
   const points = (d?.maturity ?? []).map((m: MaturityPoint) => ({ id: String(m.id), label: m.name, x: m.readiness, y: m.bankability, size: m.need, group: RECO[m.recommendation]?.label ?? m.recommendation, detail: `${m.reference} · ${m.sector} · ${m.gate}` }));
