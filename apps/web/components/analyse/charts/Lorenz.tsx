@@ -15,7 +15,7 @@ const M = { haut: 16, droite: 16, bas: 36, gauche: 44 };
  */
 export function Lorenz({ points, gini, paretoCount, clientsCount, hauteur = 280, label }: { points: Array<{ x: number; y: number }>; gini: number; paretoCount: number; clientsCount: number; hauteur?: number; label: string }) {
   const [focus, setFocus] = useState<number | null>(null);
-  const pts = [{ x: 0, y: 0 }, ...points].sort((a, b) => a.x - b.x);
+  const pts = [{ x: 0, y: 0 }, ...points.filter((p) => p.x > 0 || p.y > 0)].sort((a, b) => a.x - b.x);
   const pareto = pts.find((p) => p.y >= 80) ?? pts[pts.length - 1]!;
   return (
     <Cadre
