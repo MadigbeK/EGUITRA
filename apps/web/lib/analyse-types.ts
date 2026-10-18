@@ -879,6 +879,9 @@ export interface CabinetDiagnostic extends Envelope {
     domains: Array<{ code: string; label: string }>;
     cells: DomainCell[];
     averages: Array<{ code: string; label: string; mean: number | null; method_mean: number | null; n: number; weak: number; weak_share_pct: number | null; deliverable: string | null }>;
+    /** Grille de la carte (la politique en vigueur) et dossiers suivant une autre version, hors carte. */
+    policy?: { name: string; version: number } | null;
+    other_policy_dossiers?: number;
   };
   top_gaps: TopGap[];
   themes: Array<{ domain: string; label: string; gaps: number; dossiers: number; criteria: string[]; deliverable: string | null }>;

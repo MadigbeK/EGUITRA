@@ -58,7 +58,7 @@ function Corps() {
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
-          <Card title={transposer ? "Score par domaine et par dossier" : "Score par dossier et par domaine"} actions={<span className="text-[12.5px] text-muted">Dernière évaluation · pivot 50 (seuil GO sous conditions)</span>}>
+          <Card title={transposer ? "Score par domaine et par dossier" : "Score par dossier et par domaine"} actions={<span className="text-[12.5px] text-muted">Dernière évaluation · pivot 50 (seuil GO sous conditions){heat?.policy ? ` · ${heat.policy.name}, version ${heat.policy.version}` : ""}{heat?.other_policy_dossiers ? ` · ${pluriel(heat.other_policy_dossiers, "dossier suit", "dossiers suivent")} une autre version de grille (hors carte)` : ""}</span>}>
             {dossiers.length && domaines.length && cellules.length ? (
               <>
                 <CarteChaleur
