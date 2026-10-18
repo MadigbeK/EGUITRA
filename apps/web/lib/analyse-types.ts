@@ -148,8 +148,10 @@ export interface GroupeActivity {
   name: string;
   revenue: number;
   expense: number;
-  margin: number;
+  /** null : aucune charge imputée à l'activité, marge non mesurable. */
+  margin: number | null;
   margin_rate: number | null;
+  costs_imputed?: boolean;
   share_pct: number;
   revenue_previous: number | null;
   growth_pct: number | null;

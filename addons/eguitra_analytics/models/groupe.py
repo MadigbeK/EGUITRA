@@ -903,9 +903,13 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         rows = []
         for account_id, row in current.items():
             before = previous.get(account_id)
+            # Sans aucune charge imputée, la « marge » vaudrait le chiffre d'affaires (100 %) : elle n'est
+            # pas mesurable tant que les achats ne portent pas l'activité.
+            costed = abs(row["expense"]) > 0.5 or abs(row["income"]) <= 0.5
             rows.append({
                 "id": account_id, "name": row["name"], "revenue": row["income"], "expense": row["expense"],
-                "margin": row["margin"], "margin_rate": row["margin_rate"], "share_pct": _pct_of(row["income"], income),
+                "margin": row["margin"] if costed else None, "margin_rate": row["margin_rate"] if costed else None,
+                "costs_imputed": costed, "share_pct": _pct_of(row["income"], income),
                 "revenue_previous": before["income"] if before else 0.0,
                 "growth_pct": stats.pct_change(row["income"], before["income"] if before else None),
             })
@@ -1927,7 +1931,9 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 action="Conditionner les nouvelles livraisons à un échéancier signé, demander une garantie bancaire ou "
                        "un paiement d'avance.", link="/analyse/clients"))
         for row in rows:
-            if row["trend"] == "Se dégrade" and row["segment"] in ("strategiques", "a_securiser") and row["open"] > 0.5:
+            # Seul un client effectivement en retard (retard moyen positif) « paie de plus en plus tard ».
+            if (row["trend"] == "Se dégrade" and row["segment"] in ("strategiques", "a_securiser") and row["open"] > 0.5
+                    and (row["avg_days_late"] or 0) > 0):
                 items.append(insight(
                     f"clients.retard_degradation.{row['id']}", "clients", "medium",
                     f"{row['name']} paie de plus en plus tard",

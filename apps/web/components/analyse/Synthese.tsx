@@ -162,7 +162,11 @@ function CockpitGroupe() {
                       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px] text-muted">
                         <span>{pctOu(a.share_pct, 0)} du chiffre d&apos;affaires</span>
                         <span>
-                          Marge <span className={cx("font-semibold tabular", (a.margin_rate ?? 0) < 15 ? "text-danger" : "text-ink-2")}>{pctOu(a.margin_rate)}</span>
+                          {a.margin_rate === null ? (
+                            <span title="Aucune charge n'est imputée à cette activité : sa marge n'est pas mesurable.">Marge non mesurable (charges non imputées)</span>
+                          ) : (
+                            <>Marge <span className={cx("font-semibold tabular", a.margin_rate < 15 ? "text-danger" : "text-ink-2")}>{pctOu(a.margin_rate)}</span></>
+                          )}
                           {a.growth_pct !== null && (
                             <>
                               {" · "}
