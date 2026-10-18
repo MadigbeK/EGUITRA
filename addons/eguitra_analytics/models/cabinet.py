@@ -971,14 +971,26 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         evidence = {"required": 0, "proven": 0, "no_proof": 0, "expired": 0}
         missing = []
         pending_ko = 0
+        # Carte des domaines sur une seule grille : celle en vigueur si des dossiers la suivent, sinon
+        # celle du plus grand nombre de dossiers ; les dossiers d'une autre version sont comptés à part.
+        heat_policy = b.policy if b.policy and b.policy in live.policy_id else \
+            max(live.policy_id, key=lambda p: len(live.filtered(lambda d, p=p: d.policy_id == p)), default=None)
+        heat_domains = ([{"code": dom.code, "label": dom.name} for dom in heat_policy.domain_ids.sorted("sequence")]
+                        if heat_policy else [])
+        other_policy = 0
         for d in live:
             r, s = b.result(d)
             t = b.timeline(d)
             idx = t["local_index"]
-            heat_rows.append(dict(_brief(d), gate=t["gate"], readiness=_r(s["readiness"])))
+            on_map = not heat_policy or d.policy_id == heat_policy
+            other_policy += not on_map
+            if on_map:
+                heat_rows.append(dict(_brief(d), gate=t["gate"], readiness=_r(s["readiness"])))
             for row in r["domains"]:
-                cells.append({"dossier": d.reference, "dossier_id": d.id, "domain": row["code"], "score": _r(row["score"]),
-                              "priority": PRIORITY_LEVEL.get(row["priority"]), "priority_label": row["priority"]})
+                if on_map:
+                    cells.append({"dossier": d.reference, "dossier_id": d.id, "domain": row["code"],
+                                  "score": _r(row["score"]), "priority": PRIORITY_LEVEL.get(row["priority"]),
+                                  "priority_label": row["priority"]})
                 if row["score"] is not None:
                     method_scores[row["code"]].append(row["score"])
             priorities = {g["id"]: g["priority"] for g in r["gaps"]}
@@ -1108,8 +1120,11 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         candidates = self._diagnostic_insights(b, top_gaps, averages, ko_rows, evidence_block, backlog,
                                                backlog_dossiers, pending_ko, progression)
         return {
-            "domain_heatmap": {"dossiers": heat_rows, "domains": [{"code": x["code"], "label": x["label"]} for x in domains],
-                               "cells": cells, "averages": averages},
+            "domain_heatmap": {"dossiers": heat_rows, "domains": heat_domains or [{"code": x["code"], "label": x["label"]}
+                                                                                   for x in domains],
+                               "cells": cells, "averages": averages,
+                               "policy": {"name": heat_policy.name, "version": heat_policy.version} if heat_policy else None,
+                               "other_policy_dossiers": other_policy},
             "top_gaps": top_gaps[:15], "themes": theme_rows, "knockouts": ko_rows,
             "knockouts_pending": pending_ko, "evaluation_backlog": {"criteria": backlog, "dossiers": len(backlog_dossiers)},
             "evidence": evidence_block, "progression": progression, "_insights": candidates, "_notes": notes,
@@ -1144,7 +1159,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             delta = (s["readiness"] or 0) - (first["readiness"] or 0)
             rows.append(dict(_brief(d), first_date=first["date"], first_readiness=_r(first["readiness"]),
                              readiness=_r(s["readiness"]), delta=_r(delta), days=span,
-                             velocity_per_month=_r(delta / span * 30) if span > 0 else None,
+                             velocity_per_month=_r(delta / span * 30) if span >= 30 else None,
                              points=[dict(p, readiness=_r(p["readiness"]), apd=_r(p["apd"]),
                                           bankability=_r(p["bankability"])) for p in history],
                              link=_dossier_link(d)))

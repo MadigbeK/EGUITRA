@@ -29,6 +29,7 @@ class TestStats(BaseCase):
         self.assertAlmostEqual(fit["intercept"], 1)
         self.assertAlmostEqual(fit["r2"], 1)
         self.assertAlmostEqual(fit["stderr"], 0)
+        self.assertIsNone(fit["t"], "Ajustement exact : t non défini (pas de valeur astronomique)")
         self.assertEqual(fit["n"], 4)
         noisy = stats.linear_regression([1, 2, 3, 4, 5], [2.1, 3.9, 6.2, 7.8, 10.1])
         self.assertAlmostEqual(noisy["slope"], 1.99)

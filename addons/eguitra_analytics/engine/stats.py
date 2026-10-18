@@ -124,7 +124,8 @@ def linear_regression(xs, ys):
     if n > 2:
         se = math.sqrt(max(0.0, ss_res) / (n - 2))
         stderr = se / math.sqrt(sxx)
-        result.update(se_regression=se, stderr=stderr, t=(slope / stderr) if stderr > 0 else None)
+        exact = stderr <= 1e-9 * max(1.0, abs(slope))
+        result.update(se_regression=se, stderr=stderr, t=None if exact else slope / stderr)
     return result
 
 

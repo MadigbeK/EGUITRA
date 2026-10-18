@@ -1768,9 +1768,11 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                     "label": "Historique insuffisant"}
         fit = stats.linear_regression([r["paid_ordinal"] / 30.4375 for r in records], [r["days_late"] for r in records])
         slope, t = fit["slope"], fit["t"]
-        if slope is not None and slope > 1 and (t or 0) > 2:
+        # Ajustement exact (t non défini) : tendance nette si R² est quasi égal à 1.
+        significant = (t is not None and abs(t) > 2) or (t is None and (fit["r2"] or 0) > 0.99)
+        if slope is not None and slope > 1 and significant:
             label = "Se dégrade"
-        elif slope is not None and slope < -1 and (t or 0) < -2:
+        elif slope is not None and slope < -1 and significant:
             label = "S'améliore"
         else:
             label = "Stable"
