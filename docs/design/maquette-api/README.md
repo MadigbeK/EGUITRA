@@ -72,13 +72,17 @@ soldé), dossier AxisPro en NO-GO sur un critère éliminatoire et dossier sans 
 
 Les routes `/analyse/contexte`, `/analyse/groupe/*` (synthèse, rentabilité, trésorerie, clients, transport,
 dépenses, prévisions, fiabilité) et `/analyse/cabinet/*` (synthèse, portefeuille, diagnostic, comités,
-financements, activité, risques) vivent dans `analyse.mjs`, au contrat de
-`docs/projet/analyse/specification.md` (chapitres 3 à 7). Elles acceptent `period` (`ytd`, `12m`, `q`, `m`,
-`custom` avec `date_from`) et `date_to`. Les données viennent d'un modèle mensuel déterministe sur 36 mois
-(graines fixes) : chiffre d'affaires et marges par activité, trésorerie, routes et ensembles, clients et
-fournisseurs, puis un portefeuille de quatorze projets pour le cabinet. Les constats sont calculés depuis ce
-modèle quand ils portent sur lui (point mort, atterrissage, point bas de trésorerie). Une route du groupe
-appelée dans les livres du cabinet (et inversement) répond 403 `wrong_company`, comme le noyau.
+financements, activité, risques) vivent dans `analyse.mjs` (entrée et contexte), `analyse-groupe.mjs`,
+`analyse-cabinet.mjs` et `analyse-commun.mjs` (période, constats, outils). Elles reproduisent les formes
+exactes du noyau `addons/eguitra_analytics` (mêmes clés, mêmes unités, mêmes blocs facultatifs ou nuls),
+telles que `apps/web/lib/analyse-types.ts` les décrit, au contrat de `docs/projet/analyse/specification.md`
+(chapitres 3 à 7). Elles acceptent `period` (`ytd`, `12m`, `q`, `m`, `custom` avec `date_from`) et `date_to`.
+Les données viennent d'un modèle mensuel déterministe sur 36 mois (graines fixes) : chiffre d'affaires et
+marges par activité, trésorerie, routes et ensembles, clients et fournisseurs, puis un portefeuille de
+quatorze projets sur les huit gates de la méthode pour le cabinet. Les constats sont calculés depuis ce
+modèle quand ils portent sur lui (point mort, atterrissage, point bas de trésorerie, goulot du portefeuille).
+Une route du groupe appelée dans les livres du cabinet (et inversement) répond 403 `wrong_company`, comme
+le noyau.
 
 ## Limites
 

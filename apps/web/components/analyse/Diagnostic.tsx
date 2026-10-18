@@ -3,12 +3,12 @@
 import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, ErrorBox } from "@/components/ui";
 import { CarteChaleur, PetitsMultiples } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, fmtDate, fmtPct, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetDiagnostic } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
-/** Faiblesses systémiques des projets : carte dossiers × domaines, critères manquants, knock-outs, preuves, progression. */
+/** Faiblesses systémiques des projets : carte domaines × dossiers, critères manquants, knock-outs, preuves, progression. */
 export function Diagnostic() {
   const { data: contexte } = useContexte();
   return (
@@ -20,23 +20,37 @@ export function Diagnostic() {
   );
 }
 
+const PRIORITE: Record<string, string> = { high: "Priorité haute", medium: "Priorité moyenne", low: "Priorité basse" };
+
 function Corps() {
   const [periode, setPeriode, query] = usePeriode();
   const { data: d, error, mutate } = useApi<CabinetDiagnostic>(`/analyse/cabinet/diagnostic${query}`);
-  const moyennes = d
-    ? d.domain_heatmap.domains.map((dom) => {
-        const vals = d.domain_heatmap.cells.filter((c) => c.domain === dom.code && c.score !== null).map((c) => c.score as number);
-        return { ...dom, moyenne: vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0 };
-      })
-    : [];
-  const faible = [...moyennes].sort((a, b) => a.moyenne - b.moyenne)[0];
-  const premier = d?.top_gaps[0];
-  const knockouts = d?.knockouts.reduce((s, k) => s + k.count, 0) ?? 0;
-  const reponse = d && faible && premier && (
+  const heat = d?.domain_heatmap;
+  const moyennes = (heat?.averages ?? []).filter((a) => a.mean !== null);
+  const faible = [...moyennes].sort((a, b) => (a.mean ?? 0) - (b.mean ?? 0))[0];
+  const premier = d?.top_gaps?.[0];
+  const knockouts = (d?.knockouts ?? []).reduce((s, k) => s + k.count, 0);
+  const ev = d?.evidence;
+  const reponse = d && (
     <>
-      Le domaine le plus faible du portefeuille est <strong className="font-semibold text-ink">{faible.label}</strong> ({fmtInt(faible.moyenne)} / 100 en moyenne) ; le critère le plus souvent manquant est « {premier.label} » ({premier.frequency} dossiers sur {d.domain_heatmap.dossiers.length}). {knockouts} critère{knockouts > 1 ? "s" : ""} éliminatoire{knockouts > 1 ? "s" : ""} reste{knockouts > 1 ? "nt" : ""} actif{knockouts > 1 ? "s" : ""} ; {fmtPct(d.evidence.coverage_pct, 0)} des critères sont couverts par une preuve.
+      {faible ? (
+        <>
+          Le domaine le plus faible du portefeuille est <strong className="font-semibold text-ink">{faible.label}</strong> ({fmtInt(faible.mean ?? 0)} / 100 en moyenne sur {faible.n} dossier{faible.n > 1 ? "s" : ""})
+        </>
+      ) : (
+        <>Aucun domaine n&apos;est encore évalué</>
+      )}
+      {premier && <> ; le critère le plus souvent manquant est « {premier.label} » ({premier.frequency} dossier{premier.frequency > 1 ? "s" : ""} sur {heat?.dossiers.length ?? 0})</>}. {knockouts > 0 ? `${pluriel(knockouts, "critère éliminatoire reste actif", "critères éliminatoires restent actifs")}` : "Aucun critère éliminatoire actif"}
+      {(d.knockouts_pending ?? 0) > 0 && ` (${d.knockouts_pending} encore à évaluer)`}
+      {ev && ev.coverage_pct !== null && <> ; {fmtPct(ev.coverage_pct, 0)} des critères exigeant une preuve en ont une</>}.
+      {(d.evaluation_backlog?.criteria ?? 0) > 0 && <> {pluriel(d.evaluation_backlog.criteria, "critère", "critères")} des gates atteints reste{d.evaluation_backlog.criteria > 1 ? "nt" : ""} à évaluer sur {pluriel(d.evaluation_backlog.dossiers, "dossier")}.</>}
     </>
   );
+  const dossiers = heat?.dossiers ?? [];
+  const domaines = heat?.domains ?? [];
+  const cellules = heat?.cells ?? [];
+  const transposer = dossiers.length <= 8;
+
   return (
     <div>
       <EnTeteSection question="Quelles faiblesses reviennent d'un projet à l'autre ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
@@ -44,105 +58,173 @@ function Corps() {
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
-          <Card title="Score par dossier et par domaine" actions={<span className="text-[12.5px] text-muted">Dernière évaluation · pivot 50 (seuil GO sous conditions)</span>}>
-            <CarteChaleur
-              label="Scores par dossier et par domaine d'évaluation"
-              rows={d.domain_heatmap.dossiers.map((x) => ({ key: x.reference, label: x.name }))}
-              cols={d.domain_heatmap.domains.map((x) => x.code)}
-              formatCol={(code) => d.domain_heatmap.domains.find((x) => x.code === code)?.label ?? code}
-              cells={d.domain_heatmap.cells.map((c) => ({ row: c.dossier, col: c.domain, value: c.score, detail: c.priority === "high" ? "Priorité haute" : c.priority === "medium" ? "Priorité moyenne" : c.priority === "low" ? "Priorité basse" : "Non évalué" }))}
-              format={(v) => String(Math.round(v))}
-              pivot={50}
-              domaine={[0, 100]}
-              largeurLibelles={210}
-              hauteurLigne={30}
-            />
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
-              {moyennes.map((m) => (
-                <span key={m.code}>
-                  {m.label} <span className="font-semibold tabular text-ink-2">{fmtInt(m.moyenne)}</span>
-                </span>
-              ))}
-            </div>
+          <Card title={transposer ? "Score par domaine et par dossier" : "Score par dossier et par domaine"} actions={<span className="text-[12.5px] text-muted">Dernière évaluation · pivot 50 (seuil GO sous conditions)</span>}>
+            {dossiers.length && domaines.length && cellules.length ? (
+              <>
+                <CarteChaleur
+                  label="Scores par dossier et par domaine d'évaluation"
+                  rows={transposer ? domaines.map((x) => ({ key: x.code, label: x.label })) : dossiers.map((x) => ({ key: x.reference, label: x.name }))}
+                  cols={transposer ? dossiers.map((x) => x.reference) : domaines.map((x) => x.code)}
+                  formatCol={(code) => (transposer ? (dossiers.find((x) => x.reference === code)?.name ?? code).replace(/ \(démo(nstration)?\)$/, "") : (domaines.find((x) => x.code === code)?.label ?? code))}
+                  cells={cellules.map((c) => ({ row: transposer ? c.domain : c.dossier, col: transposer ? c.dossier : c.domain, value: c.score, detail: c.priority ? `${PRIORITE[c.priority] ?? c.priority}${c.priority_label ? ` (${c.priority_label.toLowerCase()})` : ""}` : "Non évalué" }))}
+                  format={(v) => String(Math.round(v))}
+                  pivot={50}
+                  domaine={[0, 100]}
+                  largeurLibelles={transposer ? 230 : 210}
+                  hauteurLigne={28}
+                />
+                {moyennes.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
+                    {moyennes.map((m) => (
+                      <span key={m.code} title={m.deliverable ?? undefined}>
+                        {m.label} <span className="font-semibold tabular text-ink-2">{fmtInt(m.mean ?? 0)}</span>
+                        {m.weak > 0 && <span className="text-danger"> · {m.weak} faible{m.weak > 1 ? "s" : ""}</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Vide titre="Aucune évaluation" hint="Les scores par domaine viennent des évaluations de la grille, dossier par dossier." />
+            )}
           </Card>
 
           <div className="grid gap-5 xl:grid-cols-12">
             <Card title="Les critères qui manquent le plus souvent" className="xl:col-span-7" padded={false} actions={<span className="text-[12.5px] text-muted">Thèmes de formation ou de prestation à proposer</span>}>
               <DataTable
                 dense
-                rows={d.top_gaps}
+                rows={d.top_gaps ?? []}
                 rowKey={(r) => r.code}
+                empty="Aucun critère manquant sur les gates atteints."
                 columns={[
-                  { key: "label", label: "Critère", render: (r) => <span className="font-medium text-ink">{r.label}<span className="block text-[11.5px] font-normal text-muted">{r.code} · {r.domain}</span></span> },
+                  { key: "label", label: "Critère", render: (r) => <span className="font-medium text-ink">{r.label}<span className="block text-[11.5px] font-normal text-muted">{r.code} · {r.domain}{r.gate ? ` · ${r.gate}` : ""}{r.knockout ? " · éliminatoire" : r.critical ? " · critique" : ""}</span></span> },
                   {
                     key: "frequency",
                     label: "Dossiers",
                     render: (r) => (
                       <span className="flex items-center gap-2 whitespace-nowrap">
                         <span className="h-1.5 w-20 overflow-hidden rounded-full bg-panel-3">
-                          <span className="n-pousser-x block h-full rounded-full bg-corail" style={{ width: `${r.frequency_pct}%` }} />
+                          <span className="n-pousser-x block h-full rounded-full bg-corail" style={{ width: `${Math.min(100, r.frequency_pct)}%` }} />
                         </span>
                         <span className="tabular text-[12px] text-ink-2">{r.frequency} ({fmtPct(r.frequency_pct, 0)})</span>
                       </span>
                     ),
                   },
-                  { key: "avg_priority", label: "Priorité", align: "right", render: (r) => <Badge tone={r.avg_priority >= 2.5 ? "danger" : r.avg_priority >= 2 ? "warn" : "neutral"}>{r.avg_priority.toLocaleString("fr-FR")} / 3</Badge> },
-                  { key: "theme", label: "Thème à proposer", render: (r) => <span className="text-[12.5px] font-semibold text-accent">{r.theme}</span> },
+                  { key: "avg_priority", label: "Priorité", align: "right", render: (r) => (r.avg_priority === null ? "–" : <Badge tone={r.avg_priority >= 2.5 ? "danger" : r.avg_priority >= 2 ? "warn" : "neutral"}>{r.avg_priority.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} / 3</Badge>) },
+                  { key: "theme", label: "À proposer", render: (r) => <span className="block max-w-[30ch] text-[12.5px] font-semibold leading-snug text-accent">{r.theme ?? "–"}</span> },
+                  { key: "details", label: "Dossiers concernés", render: (r) => <span className="block max-w-[22ch] text-[12px] leading-snug text-muted">{r.details.map((x, i) => (<span key={x.id}>{i > 0 && ", "}<LienFiche href={x.link} className="font-normal text-muted">{x.reference}</LienFiche></span>))}</span> },
                 ]}
               />
+              {(d.themes ?? []).length > 0 && (
+                <div className="border-t border-line px-5 py-3">
+                  <div className="mb-1.5 text-[12.5px] font-semibold text-ink-2">Thèmes par domaine</div>
+                  <ul className="flex flex-wrap gap-2 text-[12px]">
+                    {d.themes.map((t) => (
+                      <li key={t.domain} className="rounded-full border border-line bg-panel-2 px-2.5 py-1 text-ink-2" title={t.deliverable ?? undefined}>
+                        <span className="font-semibold">{t.label}</span> : {t.gaps} écart{t.gaps > 1 ? "s" : ""} sur {pluriel(t.dossiers, "dossier")}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Card>
             <div className="space-y-5 xl:col-span-5">
-              <Card title="Critères éliminatoires actifs">
-                <ul className="space-y-2">
-                  {d.knockouts.map((k) => (
-                    <li key={k.code} className="flex items-start justify-between gap-3 rounded-xl border border-line bg-panel-2/60 px-3 py-2 text-[12.5px]">
-                      <span className="min-w-0">
-                        <span className="block font-medium text-ink">{k.label}</span>
-                        <span className="block text-[11.5px] text-muted">{k.code}{k.dossiers.length ? ` · ${k.dossiers.join(", ")}` : ""}</span>
-                      </span>
-                      <Badge tone={k.count ? "danger" : "ok"}>{k.count ? `${k.count} actif${k.count > 1 ? "s" : ""}` : "Aucun"}</Badge>
-                    </li>
-                  ))}
-                </ul>
+              <Card title="Critères éliminatoires actifs" actions={(d.knockouts_pending ?? 0) > 0 ? <Badge tone="warn">{d.knockouts_pending} à évaluer</Badge> : undefined}>
+                {(d.knockouts ?? []).length === 0 ? (
+                  <Vide compact titre="Aucun critère éliminatoire défini" />
+                ) : (
+                  <ul className="space-y-2">
+                    {d.knockouts.map((k) => (
+                      <li key={k.code} className="flex items-start justify-between gap-3 rounded-xl border border-line bg-panel-2/60 px-3 py-2 text-[12.5px]">
+                        <span className="min-w-0">
+                          <span className="block font-medium text-ink">{k.label}</span>
+                          <span className="block text-[11.5px] text-muted">
+                            {k.code} · {k.domain}
+                            {k.details.length > 0 && (
+                              <>
+                                {" · "}
+                                {k.details.map((x, i) => (
+                                  <span key={x.id}>
+                                    {i > 0 && ", "}
+                                    <LienFiche href={x.link} className="font-normal text-muted">{x.reference}</LienFiche>
+                                  </span>
+                                ))}
+                              </>
+                            )}
+                          </span>
+                        </span>
+                        <Badge tone={k.count ? "danger" : "ok"}>{k.count ? `${k.count} actif${k.count > 1 ? "s" : ""}` : "Aucun"}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Card>
               <Card title="Preuves et pièces">
-                <div className="grid grid-cols-3 gap-2.5">
-                  <Chiffre label="Critères couverts" value={fmtPct(d.evidence.coverage_pct, 0)} tone={d.evidence.coverage_pct < 75 ? "warn" : "ok"} />
-                  <Chiffre label="Preuves périmées" value={String(d.evidence.expired)} tone={d.evidence.expired ? "warn" : undefined} />
-                  <Chiffre label="Pièces dues manquantes" value={String(d.evidence.missing)} tone={d.evidence.missing > 20 ? "danger" : "warn"} />
-                </div>
-                <div className="mt-3">
-                  <div className="mb-1.5 text-[12px] font-semibold text-ink-2">Âge des pièces manquantes</div>
-                  <div className="flex h-3 gap-[2px]">
-                    {d.evidence.missing_by_age.map((a, i) => (
-                      <span key={a.bucket} className="n-pousser-x h-full rounded-[3px]" style={{ width: `${(a.count / Math.max(1, d.evidence.missing)) * 100}%`, background: ["#8fbf2a", "#df8f17", "#e25f35", "#c0302d"][i], "--i": i } as CSSProperties} title={`${a.bucket} : ${a.count}`} />
-                    ))}
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
-                    {d.evidence.missing_by_age.map((a, i) => (
-                      <span key={a.bucket} className="inline-flex items-center gap-1">
-                        <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ background: ["#8fbf2a", "#df8f17", "#e25f35", "#c0302d"][i] }} />
-                        {a.bucket} : {a.count}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                {ev ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <Chiffre label="Critères couverts" value={pctOu(ev.coverage_pct, 0)} tone={(ev.coverage_pct ?? 100) < 75 ? "warn" : "ok"} hint={`${ev.proven} sur ${ev.required} exigeant une preuve`} />
+                      <Chiffre label="Preuves périmées" value={String(ev.expired)} tone={ev.expired ? "warn" : undefined} />
+                      <Chiffre label="Pièces dues manquantes" value={String(ev.missing)} tone={ev.missing > 20 ? "danger" : ev.missing ? "warn" : undefined} hint={ev.missing ? `âge médian ${joursOu(ev.missing_median_age_days)}${ev.missing_over_60 ? ` · ${ev.missing_over_60} de plus de 60 j` : ""}` : undefined} />
+                    </div>
+                    {ev.missing > 0 && (
+                      <div className="mt-3">
+                        <div className="mb-1.5 text-[12px] font-semibold text-ink-2">Âge des pièces manquantes</div>
+                        <div className="flex h-3 gap-[2px]">
+                          {ev.missing_by_age.map((a, i) => (
+                            <span key={a.bucket} className="n-pousser-x h-full rounded-[3px]" style={{ width: `${(a.count / Math.max(1, ev.missing)) * 100}%`, background: ["#8fbf2a", "#df8f17", "#e25f35", "#c0302d"][i % 4], minWidth: a.count ? 3 : 0, "--i": i } as CSSProperties} title={`${a.label} : ${a.count}`} />
+                          ))}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
+                          {ev.missing_by_age.map((a, i) => (
+                            <span key={a.bucket} className="inline-flex items-center gap-1">
+                              <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ background: ["#8fbf2a", "#df8f17", "#e25f35", "#c0302d"][i % 4] }} />
+                              {a.label} : {a.count}
+                            </span>
+                          ))}
+                        </div>
+                        {ev.rows.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-[12px] text-muted">
+                            {ev.rows.slice(0, 6).map((r) => (
+                              <li key={`${r.id}-${r.code}`} className="flex items-center justify-between gap-3">
+                                <span className="truncate">
+                                  <LienFiche href={r.link} className="font-normal text-ink-2">{r.reference}</LienFiche> · {r.label}
+                                </span>
+                                <span className="whitespace-nowrap">{joursOu(r.age_days)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <Vide compact titre="Aucune pièce attendue" />
+                )}
               </Card>
             </div>
           </div>
 
-          <Card title="Progression des scores, revue après revue" actions={<span className="text-[12.5px] text-muted">Score global aux instantanés de comité ; avant la première revue, le premier score connu est reporté</span>}>
-            <PetitsMultiples
-              label="Progression du score global par dossier"
-              labels={d.progression.dates.map((x) => fmtDate(x).slice(0, 5))}
-              items={d.progression.dossiers.map((x) => {
-                const premierConnu = x.scores.find((s) => s !== null) ?? 0;
-                let dernier = premierConnu;
-                return { key: x.reference, label: x.reference, values: x.scores.map((s) => (s === null ? dernier : (dernier = s))), detail: d.domain_heatmap.dossiers.find((y) => y.reference === x.reference)?.name };
-              })}
-              colonnes={4}
-              format={(v) => `${Math.round(v)} / 100`}
-            />
+          <Card title="Progression des scores, revue après revue" actions={<span className="text-[12.5px] text-muted">Score Readiness aux instantanés de comité et à ce jour{d.progression?.median_velocity_per_month !== null && d.progression?.median_velocity_per_month !== undefined ? ` · vitesse médiane ${d.progression.median_velocity_per_month.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} points par mois` : ""}</span>}>
+            {d.progression?.dossiers?.length && d.progression.dates.length >= 2 ? (
+              <>
+                <PetitsMultiples
+                  label="Progression du score Readiness par dossier"
+                  labels={d.progression.dates.map((x) => fmtDate(x).slice(0, 5))}
+                  items={d.progression.dossiers.map((x) => {
+                    const premierConnu = x.scores.find((s) => s !== null) ?? 0;
+                    let dernier = premierConnu;
+                    const ligne = d.progression.rows.find((r) => r.id === x.id);
+                    return { key: x.reference, label: x.reference, values: x.scores.map((s) => (s === null ? dernier : (dernier = s))), detail: ligne ? `${ligne.name}${ligne.delta !== null ? ` · ${ligne.delta >= 0 ? "+" : ""}${fmtInt(ligne.delta)} pt en ${joursOu(ligne.days)}` : ""}` : undefined };
+                  })}
+                  colonnes={4}
+                  format={(v) => `${Math.round(v)} / 100`}
+                />
+                <p className="mt-2 text-[12px] leading-snug text-muted">Avant la première évaluation d&apos;un dossier, le premier score connu est reporté. {d.progression.improving} dossier{d.progression.improving > 1 ? "s" : ""} en progression{d.progression.stagnating.length ? `, ${d.progression.stagnating.length} sans progrès` : ""}.</p>
+              </>
+            ) : (
+              <Vide compact titre="Pas encore deux instantanés" hint="La progression se lit d'une revue de comité à l'autre." />
+            )}
           </Card>
 
           <Constats insights={d.insights} />

@@ -157,6 +157,16 @@ même branche, sans toucher à la logique des écrans :
   constats avec méthode dépliable, simulateur à curseurs, impression. Maquette d'API :
   `docs/design/maquette-api/analyse.mjs`. Vérifié sur la maquette en grand écran, en 1440 px, sur
   téléphone de 375 px et en mode nuit ; `tsc` et `next build` au vert.
+- NIMOVA · Analyse, alignement sur le noyau (18 octobre, après la fusion avec `eguitra_analytics`) :
+  le contrat web (`apps/web/lib/analyse-types.ts`) reprend bloc par bloc les formes réelles du noyau
+  (clés, unités : parts en %, Lorenz, Gini, MAD et probabilités en fractions, cascades signées,
+  sensibilités en GNF pour +1 %), les quinze écrans exploitent les blocs supplémentaires
+  (`transport_effects`, `indicators`, `available`, `forecast.targets`, `maturity_thresholds`,
+  `forced_summary`, `coverage`, `summary`…) et tiennent aux blocs absents, vides ou nuls (état vide,
+  clés React uniques, évidences de constat normalisées quelle que soit leur forme). La maquette
+  d'API est réécrite dans les mêmes formes (`analyse.mjs`, `analyse-groupe.mjs`,
+  `analyse-cabinet.mjs`, `analyse-commun.mjs`). Vérifié dans le navigateur sur les réponses réelles
+  de la recette (deux sociétés, exercice et 12 mois) puis sur la maquette, sans erreur de console.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 

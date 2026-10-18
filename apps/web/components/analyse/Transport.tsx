@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { Badge, Card, DataTable, ErrorBox, Segmented, cx } from "@/components/ui";
 import { Bulles, CarteChaleur, Pareto } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, fmtDate, fmtPct, fmtShort, moisCourt, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTransport, ShortageRow } from "@/lib/analyse-types";
 import { fmtDec, fmtInt } from "@/lib/format";
 
-type Manquant = "by_driver" | "by_route" | "by_product";
+type Manquant = "drivers" | "routes" | "products";
 
 /** Rentabilité de la flotte et des routes : carte de chaleur, tarifs, ensembles, carburant, manquants. */
 export function Transport() {
@@ -23,90 +23,134 @@ export function Transport() {
 }
 
 function pareto(rows: ShortageRow[]) {
-  const total = Math.max(1, rows.reduce((s, r) => s + r.volume, 0));
+  const total = Math.max(1e-9, rows.reduce((s, r) => s + Math.max(0, r.shortage), 0));
   let cumul = 0;
   return [...rows]
-    .sort((a, b) => b.volume - a.volume)
-    .map((r) => {
-      cumul += r.volume / total;
-      return { key: r.key, label: r.label, value: r.volume, cumulative_pct: Math.round(cumul * 1000) / 10 };
+    .sort((a, b) => b.shortage - a.shortage)
+    .map((r, i) => {
+      cumul += Math.max(0, r.shortage) / total;
+      return { key: String(r.id ?? i), label: r.name, value: r.shortage, cumulative_pct: Math.round(cumul * 1000) / 10 };
     });
 }
+
+const unNombre = (v: number | null | undefined, digits = 1) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { maximumFractionDigits: digits }));
 
 function Corps() {
   const [periode, setPeriode, query] = usePeriode();
   const { data: d, error, mutate } = useApi<GroupeTransport>(`/analyse/groupe/transport${query}`);
-  const [manquant, setManquant] = useState<Manquant>("by_driver");
-  const deficitaires = d?.pricing.filter((p) => p.gap_pct < 0) ?? [];
-  const sousCible = d?.pricing.filter((p) => p.gap_pct >= 0 && p.gap_pct < 25) ?? [];
-  const meilleure = d ? [...d.pricing].sort((a, b) => b.gap_pct - a.gap_pct)[0] : undefined;
-  const camionsFaibles = d?.trucks.filter((t) => t.utilization_pct < 50) ?? [];
-  const reponse = d && meilleure && (
+  const [manquant, setManquant] = useState<Manquant>("drivers");
+  const pricing = d?.pricing ?? [];
+  const deficitaires = pricing.filter((p) => (p.gap_pct ?? 0) < 0);
+  const sousCible = pricing.filter((p) => p.gap_pct !== null && p.gap_pct >= 0 && p.target_rate !== null && p.avg_rate !== null && p.avg_rate < p.target_rate);
+  const meilleure = [...pricing].filter((p) => p.gap_pct !== null).sort((a, b) => (b.gap_pct ?? 0) - (a.gap_pct ?? 0))[0];
+  const trucks = d?.trucks ?? [];
+  const camionsFaibles = trucks.filter((t) => (t.utilization_pct ?? 100) < 50);
+  const ind = d?.indicators ?? null;
+  const anomalies = d?.fuel_anomalies ?? [];
+  const reponse = d && (
     <>
-      {deficitaires.length > 0 ? (
-        <>
-          <strong className="font-semibold text-danger">{deficitaires.length} route{deficitaires.length > 1 ? "s" : ""} sur {d.pricing.length} perd{deficitaires.length > 1 ? "ent" : ""} de l&apos;argent</strong> ({deficitaires.map((r) => r.label).join(", ")})
-        </>
+      {!d.available || pricing.length === 0 ? (
+        <>Aucune rotation validée sur la période : rien à analyser pour le transport.</>
       ) : (
-        <>Toutes les routes couvrent leur coût complet</>
+        <>
+          {deficitaires.length > 0 ? (
+            <>
+              <strong className="font-semibold text-danger">{deficitaires.length} route{deficitaires.length > 1 ? "s" : ""} sur {pricing.length} perd{deficitaires.length > 1 ? "ent" : ""} de l&apos;argent</strong> ({deficitaires.map((r) => r.name).join(", ")})
+            </>
+          ) : (
+            <>Toutes les routes couvrent leur coût complet</>
+          )}
+          {sousCible.length > 0 && <>, {sousCible.length} roule{sousCible.length > 1 ? "nt" : ""} sous la marge cible</>}
+          {meilleure && meilleure.gap_pct !== null && <> ; la meilleure est {meilleure.name} ({meilleure.gap_pct >= 0 ? "+" : ""}{fmtPct(meilleure.gap_pct, 0)} par rapport au point mort)</>}. {ind && <>Marge transport {pctOu(ind.margin_rate)} sur {fmtShort(ind.transport_revenue)} GNF, résultat net après structure {fmtShort(ind.net_result)} GNF ; </>}
+          {anomalies.length > 0 ? `${pluriel(anomalies.length, "rotation consomme anormalement", "rotations consomment anormalement")}` : "aucune consommation anormale détectée"}
+          {camionsFaibles.length > 0 && <> et {camionsFaibles.length} ensemble{camionsFaibles.length > 1 ? "s" : ""} roule{camionsFaibles.length > 1 ? "nt" : ""} moins d&apos;un jour sur deux</>}.
+        </>
       )}
-      , {sousCible.length} roule{sousCible.length > 1 ? "nt" : ""} sous la marge cible ; la meilleure est {meilleure.label} ({fmtPct(meilleure.gap_pct, 0)} au-dessus du point mort). {d.fuel_anomalies.length} rotations consomment anormalement et {camionsFaibles.length} ensemble{camionsFaibles.length > 1 ? "s" : ""} roule{camionsFaibles.length > 1 ? "nt" : ""} moins d&apos;un jour sur deux.
     </>
   );
+  const heatmap = d?.heatmap;
+  const cellules = heatmap?.cells ?? [];
+  const manquants = d?.shortages?.[manquant] ?? [];
 
   return (
     <div>
       <EnTeteSection question="Quelles routes et quels camions gagnent de l'argent ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
-      {d && (
+      {d && !d.available && (
+        <Card title="Transport">
+          <Vide titre="Pas de rotation sur la période" hint="Les rotations validées (Rotations ou Finance > Transport) alimentent cette section." />
+        </Card>
+      )}
+      {d && d.available && (
         <div className="space-y-5">
+          {ind && (
+            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
+              <Chiffre label="Chiffre d'affaires transport" value={`${fmtShort(ind.transport_revenue)}`} hint={`${pctOu(ind.revenue_share, 0)} des produits`} />
+              <Chiffre label="Marge directe" value={pctOu(ind.margin_rate)} tone={ind.below_threshold ? "danger" : "ok"} hint={`${fmtShort(ind.margin)} GNF · seuil ${pctOu(ind.margin_threshold, 0)}`} />
+              <Chiffre label="Résultat net après structure" value={`${fmtShort(ind.net_result)}`} tone={ind.net_result < 0 ? "danger" : "ok"} hint={`structure ${fmtShort(ind.structure)} GNF`} />
+              <Chiffre label="Recette et coût au km" value={`${fmtInt(ind.revenue_per_km)} / ${fmtInt(ind.cost_per_km)}`} hint={`${fmtInt(ind.km)} km`} />
+              <Chiffre label="Consommation" value={ind.fuel_per_100km === null ? "–" : `${unNombre(ind.fuel_per_100km)} L/100`} hint={ind.fuel_per_100km === null ? "litres non saisis" : "flotte"} />
+              <Chiffre label="Ensembles déficitaires" value={`${ind.deficit_vehicles} / ${ind.vehicles}`} tone={ind.deficit_vehicles > 0 ? "warn" : "ok"} hint={ind.deficit_loss < 0 ? `${fmtShort(ind.deficit_loss)} GNF` : undefined} />
+            </div>
+          )}
+
           <Card title="Marge par route et par mois" actions={<span className="text-[12.5px] text-muted">Couleur : marge en % (pivot 15 %) · survol : rotations</span>}>
-            <CarteChaleur
-              label="Marge par route et par mois, en pourcentage"
-              rows={d.heatmap.routes}
-              cols={d.heatmap.months}
-              formatCol={(m) => moisCourt(m)}
-              cells={d.heatmap.cells.map((c) => ({ row: c.route, col: c.month, value: c.margin_pct, detail: `${fmtInt(c.rotations)} rotation${c.rotations > 1 ? "s" : ""}` }))}
-              format={(v) => `${fmtDec(Math.round(v))} %`}
-              pivot={15}
-              domaine={[-10, 40]}
-              largeurLibelles={160}
-              hauteurLigne={34}
-            />
+            {heatmap && heatmap.routes.length && heatmap.months.length ? (
+              <CarteChaleur
+                label="Marge par route et par mois, en pourcentage"
+                rows={heatmap.routes.map((r) => ({ key: String(r.id), label: r.name }))}
+                cols={heatmap.months}
+                formatCol={(m) => moisCourt(m)}
+                cells={cellules.map((c) => ({ row: String(c.route_id), col: c.month, value: c.margin_pct, detail: `${pluriel(c.rotations, "rotation")} · ${fmtShort(c.revenue)} GNF de CA, marge ${fmtShort(c.margin)} GNF` }))}
+                format={(v) => `${fmtDec(Math.round(v))} %`}
+                pivot={15}
+                domaine={[-10, 40]}
+                largeurLibelles={170}
+                hauteurLigne={34}
+              />
+            ) : (
+              <Vide titre="Aucune route avec rotations sur 12 mois" />
+            )}
           </Card>
 
           <div className="grid gap-5 xl:grid-cols-12">
             <Card title="Tarifs : point mort et marge cible par route" className="xl:col-span-7" padded={false}>
               <DataTable
                 dense
-                rows={[...d.pricing].sort((a, b) => a.gap_pct - b.gap_pct)}
-                rowKey={(r) => r.route}
+                rows={[...pricing].sort((a, b) => (a.gap_pct ?? 0) - (b.gap_pct ?? 0))}
+                rowKey={(r) => r.id}
+                empty="Aucune route sur la période."
                 columns={[
-                  { key: "label", label: "Route", render: (r) => <span className="whitespace-nowrap font-medium text-ink">{r.label}</span> },
-                  { key: "m3", label: "m³", align: "right", render: (r) => fmtInt(r.m3) },
-                  { key: "avg_rate", label: "Tarif moyen", align: "right", render: (r) => `${fmtInt(r.avg_rate)} /m³` },
-                  { key: "breakeven_rate", label: "Point mort", align: "right", render: (r) => `${fmtInt(r.breakeven_rate)} /m³` },
-                  { key: "target_rate", label: "Marge cible", align: "right", render: (r) => `${fmtInt(r.target_rate)} /m³` },
-                  { key: "gap_pct", label: "Écart au point mort", align: "right", render: (r) => <Badge tone={r.gap_pct < 0 ? "danger" : r.gap_pct < 25 ? "warn" : "ok"}>{r.gap_pct >= 0 ? "+" : ""}{fmtPct(r.gap_pct, 0)}</Badge> },
-                  { key: "recommendation", label: "Recommandation", render: (r) => <span className="block max-w-[32ch] text-[12.5px] leading-snug text-ink-2">{r.recommendation}</span> },
+                  { key: "name", label: "Route", render: (r) => <span className="whitespace-nowrap font-medium text-ink">{r.name}<span className="block text-[11.5px] font-normal text-muted">{pluriel(r.rotations, "rotation")} · {fmtInt(r.volume)} m³</span></span> },
+                  { key: "avg_rate", label: "Tarif moyen", align: "right", render: (r) => (r.avg_rate === null ? "–" : `${fmtInt(r.avg_rate)} /m³`) },
+                  { key: "breakeven_rate", label: "Point mort", align: "right", render: (r) => (r.breakeven_rate === null ? "–" : `${fmtInt(r.breakeven_rate)} /m³`) },
+                  { key: "target_rate", label: `Marge cible`, align: "right", render: (r) => (r.target_rate === null ? "–" : `${fmtInt(r.target_rate)} /m³`) },
+                  { key: "gap_pct", label: "Écart au point mort", align: "right", render: (r) => (r.gap_pct === null ? "–" : <Badge tone={r.gap_pct < 0 ? "danger" : r.target_rate !== null && r.avg_rate !== null && r.avg_rate < r.target_rate ? "warn" : "ok"}>{r.gap_pct >= 0 ? "+" : ""}{fmtPct(r.gap_pct, 0)}</Badge>) },
+                  { key: "net_result", label: "Résultat net", align: "right", render: (r) => <span className={cx("font-semibold", r.net_result < 0 ? "text-danger" : "text-ink")}>{fmtShort(r.net_result)}</span> },
+                  { key: "recommendation", label: "Recommandation", render: (r) => <span className="block max-w-[34ch] text-[12.5px] leading-snug text-ink-2">{r.recommendation}</span> },
                 ]}
               />
+              <p className="px-5 py-3 text-[12.5px] leading-snug text-muted">Point mort = coût complet d&apos;une rotation (coûts déclarés + structure au km) rapporté aux m³ ; tarif cible = point mort / (1 − marge cible).</p>
             </Card>
             <Card title="Les rotations, une à une" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Aire : volume</span>}>
-              <Bulles
-                label="Rotations : kilomètres contre marge, aire selon le volume"
-                points={d.scatter.map((s) => ({ id: s.rotation, label: s.rotation, x: s.km, y: s.margin_pct, size: s.m3, group: s.route.replace("Conakry - ", ""), detail: `${s.truck} · ${s.route}` }))}
-                xLabel="Kilomètres (aller-retour)"
-                yLabel="Marge"
-                quadrants={{ x: 900, y: 15, labels: ["Longues et rentables", "Courtes et rentables", "Longues, marge faible", "Courtes, marge faible"], teintes: ["var(--g-jade)", "var(--g-jade)", "var(--warn-vif)", "var(--danger-vif)"] }}
-                formatX={(v) => fmtInt(v)}
-                formatY={(v) => `${Math.round(v)} %`}
-                formatSize={(v) => `${fmtInt(v)} m³`}
-                sizeLabel="Volume"
-                hauteur={400}
-                rayonMax={11}
-              />
+              {d.scatter?.length ? (
+                <Bulles
+                  label="Rotations : kilomètres contre marge, aire selon le volume"
+                  points={d.scatter.filter((s) => s.margin_rate !== null).map((s) => ({ id: String(s.id), label: s.name, x: s.km, y: s.margin_rate ?? 0, size: Math.max(1, s.volume), group: (s.route ?? "Sans route").replace(/^Conakry - /, "").replace(/ \(démo\)$/, ""), detail: `${s.truck ?? "ensemble inconnu"} · ${fmtDate(s.date)} · ${fmtShort(s.revenue)} GNF` }))}
+                  xLabel="Kilomètres"
+                  yLabel="Marge"
+                  quadrants={{ x: Math.max(1, Math.round(d.scatter.reduce((s, x) => s + x.km, 0) / Math.max(1, d.scatter.length))), y: 15, labels: ["Longues et rentables", "Courtes et rentables", "Longues, marge faible", "Courtes, marge faible"], teintes: ["var(--g-jade)", "var(--g-jade)", "var(--warn-vif)", "var(--danger-vif)"] }}
+                  formatX={(v) => fmtInt(v)}
+                  formatY={(v) => `${Math.round(v)} %`}
+                  formatSize={(v) => `${unNombre(v)} m³`}
+                  sizeLabel="Volume"
+                  hauteur={400}
+                  rayonMax={11}
+                />
+              ) : (
+                <Vide titre="Aucune rotation" />
+              )}
             </Card>
           </div>
 
@@ -114,8 +158,9 @@ function Corps() {
             <Card title="Les ensembles routiers" className="xl:col-span-7" padded={false} actions={<span className="text-[12.5px] text-muted">Résultat après structure imputée au km</span>}>
               <DataTable
                 dense
-                rows={d.trucks}
+                rows={trucks}
                 rowKey={(t) => t.id}
+                empty="Aucun ensemble en rotation sur la période."
                 columns={[
                   { key: "rank", label: "Rang", align: "right", render: (t) => <span className="font-semibold tabular text-muted">{t.rank}</span> },
                   { key: "name", label: "Ensemble", render: (t) => <span className="whitespace-nowrap font-medium text-ink">{t.name}</span> },
@@ -127,34 +172,38 @@ function Corps() {
                     render: (t) => (
                       <span className="flex items-center gap-2 whitespace-nowrap">
                         <span className="h-1.5 w-16 overflow-hidden rounded-full bg-panel-3">
-                          <span className="n-pousser-x block h-full rounded-full" style={{ width: `${t.utilization_pct}%`, background: t.utilization_pct < 50 ? "var(--danger-vif)" : t.utilization_pct < 70 ? "var(--warn-vif)" : "var(--g-jade)" }} />
+                          <span className="n-pousser-x block h-full rounded-full" style={{ width: `${Math.min(100, t.utilization_pct ?? 0)}%`, background: (t.utilization_pct ?? 0) < 50 ? "var(--danger-vif)" : (t.utilization_pct ?? 0) < 70 ? "var(--warn-vif)" : "var(--g-jade)" }} />
                         </span>
-                        <span className="tabular text-[12px] text-muted">{fmtInt(t.utilization_pct)} %</span>
+                        <span className="tabular text-[12px] text-muted">{pctOu(t.utilization_pct, 0)}</span>
                       </span>
                     ),
                   },
-                  { key: "l_per_100km", label: "L/100 km", align: "right", render: (t) => <span className={cx(t.l_per_100km > 43 && "font-semibold text-danger")}>{fmtDec(t.l_per_100km)}</span> },
-                  { key: "margin_pct", label: "Marge", align: "right", render: (t) => fmtPct(t.margin_pct) },
+                  { key: "fuel_per_100km", label: "L/100 km", align: "right", render: (t) => (t.fuel_per_100km === null ? <span className="text-muted">–</span> : <span className={cx(t.fuel_per_100km > 43 && "font-semibold text-danger")}>{unNombre(t.fuel_per_100km)}</span>) },
+                  { key: "margin_rate", label: "Marge", align: "right", render: (t) => pctOu(t.margin_rate) },
                   { key: "net_result", label: "Résultat net", align: "right", render: (t) => <span className={cx("font-semibold", t.net_result < 0 ? "text-danger" : "text-ink")}>{fmtShort(t.net_result)}</span> },
                 ]}
               />
             </Card>
             <Card title="Consommations anormales" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Score robuste &gt; 3,5</span>}>
-              <ul className="space-y-2">
-                {d.fuel_anomalies.map((a) => (
-                  <li key={a.rotation} className="an-carte flex items-center justify-between gap-3 rounded-xl border border-line bg-panel-2/60 px-3 py-2 text-[12.5px]">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-ink">{a.truck} · {a.route}</span>
-                      <span className="block text-[11.5px] text-muted">{a.rotation} · {fmtDate(a.date)}</span>
-                    </span>
-                    <span className="text-right">
-                      <span className="block font-display text-[16px] font-bold tabular text-danger">{fmtDec(a.value)} L</span>
-                      <span className="block text-[11px] text-muted">attendu {fmtDec(a.expected)} · score {fmtDec(a.score)}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-[12.5px] leading-snug text-muted">Score robuste = 0,6745 × (consommation − médiane) / MAD, calculé contre la flotte et contre l&apos;historique de l&apos;ensemble. Au-delà de 3,5, l&apos;écart n&apos;est plus du hasard.</p>
+              {anomalies.length === 0 ? (
+                <Vide compact titre="Aucune consommation anormale" hint={ind?.fuel_per_100km === null ? "Les litres de carburant ne sont pas saisis sur les rotations : le contrôle ne peut pas s'appliquer." : "Toutes les rotations restent dans la norme de leur route et de leur ensemble."} />
+              ) : (
+                <ul className="space-y-2">
+                  {anomalies.map((a) => (
+                    <li key={a.rotation_id} className="an-carte flex items-center justify-between gap-3 rounded-xl border border-line bg-panel-2/60 px-3 py-2 text-[12.5px]">
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-ink">{a.truck ?? "Ensemble inconnu"} · {a.route ?? "sans route"}</span>
+                        <span className="block text-[11.5px] text-muted">{a.rotation} · {fmtDate(a.date)} · référence : {a.basis}</span>
+                      </span>
+                      <span className="text-right">
+                        <span className="block font-display text-[16px] font-bold tabular text-danger">{unNombre(a.value)} L</span>
+                        <span className="block text-[11px] text-muted">attendu {unNombre(a.expected)} · {fmtInt(a.excess_liters)} L en excès{a.excess_cost > 0 ? ` (${fmtShort(a.excess_cost)} GNF)` : ""}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-3 text-[12.5px] leading-snug text-muted">Score robuste = 0,6745 × (consommation − médiane) / MAD, calculé contre les rotations de la même route et contre l&apos;historique de l&apos;ensemble. Au-delà de 3,5, l&apos;écart n&apos;est plus du hasard.</p>
             </Card>
           </div>
 
@@ -166,36 +215,44 @@ function Corps() {
                 value={manquant}
                 onChange={setManquant}
                 options={[
-                  { key: "by_driver", label: "Chauffeurs" },
-                  { key: "by_route", label: "Routes" },
-                  { key: "by_product", label: "Produits" },
+                  { key: "drivers", label: "Chauffeurs" },
+                  { key: "routes", label: "Routes" },
+                  { key: "products", label: "Produits" },
                 ]}
               />
             }
           >
-            <div className="grid gap-5 xl:grid-cols-12">
-              <div className="xl:col-span-7">
-                <Pareto label={`Manquants par ${manquant === "by_driver" ? "chauffeur" : manquant === "by_route" ? "route" : "produit"}, en litres`} items={pareto(d.shortages[manquant])} format={(v) => `${fmtInt(v)} L`} hauteur={260} />
-              </div>
-              <div className="xl:col-span-5">
-                <div className="grid grid-cols-2 gap-2.5">
-                  <Chiffre label="Volume manquant" value={`${fmtInt(d.shortages[manquant].reduce((s, r) => s + r.volume, 0))} L`} />
-                  <Chiffre label="Valeur" value={`${fmtShort(d.shortages[manquant].reduce((s, r) => s + r.value, 0))} GNF`} />
+            {manquants.length === 0 ? (
+              <Vide compact titre="Aucun manquant enregistré" />
+            ) : (
+              <div className="grid gap-5 xl:grid-cols-12">
+                <div className="xl:col-span-7">
+                  {manquants.some((r) => r.shortage > 0) ? (
+                    <Pareto label={`Manquants par ${manquant === "drivers" ? "chauffeur" : manquant === "routes" ? "route" : "produit"}, en m³`} items={pareto(manquants)} format={(v) => `${unNombre(v, 2)} m³`} hauteur={260} />
+                  ) : (
+                    <Vide compact titre="Aucun écart entre chargé et livré" />
+                  )}
                 </div>
-                <ul className="mt-3 divide-y divide-line text-[12.5px]">
-                  {[...d.shortages[manquant]].sort((a, b) => b.out_of_tolerance_pct - a.out_of_tolerance_pct).slice(0, 6).map((r) => (
-                    <li key={r.key} className="flex items-center justify-between gap-3 py-1.5">
-                      <span className="truncate font-medium text-ink-2">{r.label}</span>
-                      <span className="flex items-center gap-2">
-                        <span className="tabular text-muted">{fmtInt(r.volume)} L</span>
-                        <Badge tone={r.out_of_tolerance_pct > 15 ? "danger" : r.out_of_tolerance_pct > 5 ? "warn" : "ok"}>{fmtPct(r.out_of_tolerance_pct, 0)} hors tolérance</Badge>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-3 text-[12px] leading-snug text-muted">Tolérance : {d.shortages.tolerance_pct.toLocaleString("fr-FR")} % du volume chargé. La part hors tolérance compte les rotations dont le manquant dépasse ce seuil.</p>
+                <div className="xl:col-span-5">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <Chiffre label="Volume manquant" value={`${unNombre(manquants.reduce((s, r) => s + r.shortage, 0), 2)} m³`} hint={`sur ${fmtInt(manquants.reduce((s, r) => s + r.loaded, 0))} m³ chargés`} />
+                    <Chiffre label="Hors tolérance" value={`${fmtShort(manquants.reduce((s, r) => s + r.value, 0))} GNF`} hint={`${unNombre(manquants.reduce((s, r) => s + r.excess, 0), 2)} m³ au-delà de la tolérance`} />
+                  </div>
+                  <ul className="mt-3 divide-y divide-line text-[12.5px]">
+                    {[...manquants].sort((a, b) => (b.out_of_tolerance_pct ?? 0) - (a.out_of_tolerance_pct ?? 0)).slice(0, 6).map((r, i) => (
+                      <li key={r.id ?? i} className="flex items-center justify-between gap-3 py-1.5">
+                        <span className="truncate font-medium text-ink-2">{r.name}</span>
+                        <span className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="tabular text-muted">{unNombre(r.rate_pct, 2)} %</span>
+                          <Badge tone={(r.out_of_tolerance_pct ?? 0) > 15 ? "danger" : (r.out_of_tolerance_pct ?? 0) > 5 ? "warn" : "ok"}>{pctOu(r.out_of_tolerance_pct, 0)} hors tolérance</Badge>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-[12px] leading-snug text-muted">Taux = manquant / volume chargé ; la part hors tolérance compte les rotations dont le manquant dépasse la tolérance paramétrée.</p>
+                </div>
               </div>
-            </div>
+            )}
           </Card>
 
           <Constats insights={d.insights} />

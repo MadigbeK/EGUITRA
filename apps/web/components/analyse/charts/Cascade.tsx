@@ -32,7 +32,7 @@ function lignes(label: string, largeur: number): string[] {
  * pleins (violet de l'Analyse), les hausses en jade, les baisses en corail ; des connecteurs
  * relient les marches. Survol et flèches du clavier lisent chaque étape et son cumul.
  */
-export function Cascade({ steps, hauteur = 300, label, format, formatAxe }: { steps: WaterfallStep[]; hauteur?: number; label: string; format?: (v: number) => string; formatAxe?: (v: number) => string }) {
+export function Cascade({ steps, hauteur = 300, label, format, formatAxe }: { steps: Array<WaterfallStep & { court?: string }>; hauteur?: number; label: string; format?: (v: number) => string; formatAxe?: (v: number) => string }) {
   const [focus, setFocus] = useState<number | null>(null);
   const show = format ?? ((v: number) => fmtGNF(v));
   const axe = formatAxe ?? ((v: number) => fmtShort(v));
@@ -92,7 +92,7 @@ export function Cascade({ steps, hauteur = 300, label, format, formatAxe }: { st
                       {m.kind === "total" ? fmtShort(m.arrivee) : `${m.kind === "minus" ? "−" : "+"}${fmtShort(Math.abs(m.value))}`}
                     </text>
                     <text x={x0 + bw / 2} y={hauteur - MARGE.bas + 15} textAnchor="middle" fontSize={11} fill={focus === i ? "var(--ink)" : "var(--muted)"} fontWeight={m.kind === "total" || focus === i ? 600 : 400}>
-                      {lignes(m.label, bw + 18).map((l, k) => (
+                      {lignes(m.court ?? m.label, bw + 18).map((l, k) => (
                         <tspan key={k} x={x0 + bw / 2} dy={k ? 12 : 0}>
                           {l}
                         </tspan>
