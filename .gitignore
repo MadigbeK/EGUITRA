@@ -10,6 +10,8 @@ id_rsa*
 id_ed25519*
 secrets/
 .claude/settings.local.json
+.claude/worktrees/
+.claude/launch.json
 infra/oca-src/
 infra/odoo/odoo.conf
 infra/odoo/production.conf
