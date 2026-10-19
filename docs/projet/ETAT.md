@@ -190,8 +190,11 @@ niveau expert, différent selon la société). Spécification et contrat d'API :
   et `init-db.sh`.
 - Réglages : `eguitra_analytics.cabinet_hourly_rate` (taux horaire de référence du cabinet, sinon déduit
   des factures) et `eguitra_analytics.cabinet_cost_ratio` (taux de revient du temps, 0,40 par défaut).
-- Limites : pas d'export XLSX par section (impression seulement) ; la marge par activité n'est mesurable
-  que si les achats portent l'activité analytique (sinon « non mesurable »).
+- Export Excel de chaque écran (19 octobre) : route `/analyse/<société>/<section>.xlsx`, mêmes période et
+  droits que la route JSON ; onglets Synthèse, Constats, puis un par bloc, intitulés en français
+  (`controllers/libelles.py`) ; bouton « Excel » dans l'en-tête de chaque écran.
+- Limite : la marge par activité n'est mesurable que si les achats portent l'activité analytique (sinon
+  « non mesurable »).
 
 **17 octobre : conformité aux prototypes du DGA (M. Diallo) et au courrier du responsable financier
 (M. Kalissa)**, demandée par le gérant (« tout en mieux », carte blanche). Sources : prototypes

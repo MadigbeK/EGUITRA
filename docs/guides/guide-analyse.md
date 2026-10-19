@@ -25,6 +25,10 @@ détail (tableaux), puis les constats.
   la saisie : corriger les réserves améliore toutes les analyses.
 - **Info-bulles** : survoler un graphique donne la valeur exacte ; les légendes masquent ou montrent une
   série.
+- **Excel** : le bouton « Excel » télécharge toutes les données de l'écran, pour la période choisie, dans un
+  classeur : un onglet de synthèse (société, période, fiabilité, indicateurs), un onglet des constats, puis un
+  onglet par tableau ou graphique de l'écran, avec filtres. Les chiffres y sont des nombres, prêts pour un
+  tableau croisé dynamique.
 - **Imprimer** : chaque écran s'imprime proprement pour un comité ou un conseil.
 
 ## Les constats
