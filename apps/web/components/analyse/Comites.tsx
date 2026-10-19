@@ -49,7 +49,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Le comité décide-t-il comme la méthode le recommande ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/comites.xlsx${query}`} question="Le comité décide-t-il comme la méthode le recommande ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

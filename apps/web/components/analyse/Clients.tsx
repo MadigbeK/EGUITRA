@@ -60,7 +60,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Quels clients font la valeur, et lesquels font le risque ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/clients.xlsx${query}`} question="Quels clients font la valeur, et lesquels font le risque ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && c && (

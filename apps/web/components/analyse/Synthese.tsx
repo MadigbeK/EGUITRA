@@ -102,7 +102,7 @@ function CockpitGroupe() {
 
   return (
     <div>
-      <EnTeteSection question="Où en est EGUITRA GROUP aujourd'hui ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/synthese.xlsx${query}`} question="Où en est EGUITRA GROUP aujourd'hui ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
@@ -274,7 +274,7 @@ function CockpitCabinet() {
 
   return (
     <div>
-      <EnTeteSection question="Où en est le portefeuille de projets du cabinet ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/synthese.xlsx${query}`} question="Où en est le portefeuille de projets du cabinet ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

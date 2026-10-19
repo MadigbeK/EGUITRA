@@ -45,7 +45,7 @@ function Corps() {
   );
   return (
     <div>
-      <EnTeteSection question="Où atterrit l'exercice, et que peut-on encore changer ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/previsions.xlsx${query}`} question="Où atterrit l'exercice, et que peut-on encore changer ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && l && (

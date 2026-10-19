@@ -53,7 +53,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Quelles faiblesses reviennent d'un projet à l'autre ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/diagnostic.xlsx${query}`} question="Quelles faiblesses reviennent d'un projet à l'autre ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

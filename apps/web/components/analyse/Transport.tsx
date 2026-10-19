@@ -74,7 +74,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Quelles routes et quels camions gagnent de l'argent ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/transport.xlsx${query}`} question="Quelles routes et quels camions gagnent de l'argent ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && !d.available && (

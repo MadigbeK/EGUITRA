@@ -512,3 +512,18 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual((status, body.get("entity")), (200, "cabinet"), body)
         status, body = self._get("risques", token, **{"X-Eguitra-Company": str(self.groupe.id)})
         self.assertEqual(status, 422, "Même compte, société du groupe choisie : refus")
+
+    def test_export_excel_et_profils(self):
+        """Classeur Excel d'une section du cabinet ; la finance n'exporte que l'activité et les honoraires."""
+        query = f"?period=12m&date_to={self.today}"
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        response = self.url_open(f"/api/v1/analyse/cabinet/diagnostic.xlsx{query}",
+                                 headers={"Authorization": f"Bearer {token}"}, timeout=120)
+        self.assertEqual(response.status_code, 200, response.text[:300])
+        self.assertTrue(response.content.startswith(b"PK"))
+        finance = {"Authorization": f"Bearer {self.open_session('finance.cabinet', app='analyse')['access_token']}"}
+        response = self.url_open(f"/api/v1/analyse/cabinet/activite.xlsx{query}", headers=finance, timeout=120)
+        self.assertEqual(response.status_code, 200, response.text[:300])
+        response = self.url_open(f"/api/v1/analyse/cabinet/diagnostic.xlsx{query}", headers=finance, timeout=60)
+        self.assertEqual(response.status_code, 403, "La finance n'ouvre pas le diagnostic des projets")
+

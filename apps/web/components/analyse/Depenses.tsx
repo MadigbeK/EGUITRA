@@ -68,7 +68,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Où part l'argent, et quelles factures méritent un second regard ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/depenses.xlsx${query}`} question="Où part l'argent, et quelles factures méritent un second regard ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

@@ -13,7 +13,9 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import api_route
 
+from .classeur import export_section
 from .common import GROUPE_READ, envelope, parse_period
+from .contexte import GROUPE_SECTIONS
 
 
 def _section(name, kw):
@@ -65,3 +67,8 @@ class EguitraAnalyseGroupe(http.Controller):
     def fiabilite(self, **kw):
         """5.8 Fiabilité des données."""
         return _section("fiabilite", kw)
+
+    @api_route("/analyse/groupe/<string:section>.xlsx", profiles=GROUPE_READ)
+    def export(self, section, **kw):
+        """Classeur Excel d'une section, mêmes paramètres de période que sa route JSON."""
+        return export_section("groupe", section, GROUPE_SECTIONS, _section, kw)

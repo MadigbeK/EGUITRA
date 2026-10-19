@@ -11,7 +11,9 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import api_route
 
+from .classeur import export_section
 from .common import CABINET_ACTIVITY, CABINET_READ, envelope, parse_period
+from .contexte import CABINET_SECTIONS
 
 
 def _section(name, kw):
@@ -58,3 +60,8 @@ class EguitraAnalyseCabinet(http.Controller):
     def cabinet_risques(self, **kw):
         """Risques et exécution (6.7)."""
         return _section("risques", kw)
+
+    @api_route("/analyse/cabinet/<string:section>.xlsx", profiles=CABINET_ACTIVITY)
+    def cabinet_export(self, section, **kw):
+        """Classeur Excel d'une section ; le profil de la section s'applique (la finance : « Activité » seule)."""
+        return export_section("cabinet", section, CABINET_SECTIONS, _section, kw)

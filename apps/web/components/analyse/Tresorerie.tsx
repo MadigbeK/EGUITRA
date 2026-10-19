@@ -62,7 +62,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Où va la trésorerie dans les 13 prochaines semaines ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/tresorerie.xlsx${query}`} question="Où va la trésorerie dans les 13 prochaines semaines ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

@@ -56,7 +56,7 @@ function Corps() {
   );
   return (
     <div>
-      <EnTeteSection question="Quels risques menacent l'exécution des projets ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/risques.xlsx${query}`} question="Quels risques menacent l'exécution des projets ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && rm && act && rep && (

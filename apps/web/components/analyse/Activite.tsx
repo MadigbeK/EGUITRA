@@ -52,7 +52,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="Le temps du cabinet se transforme-t-il en honoraires ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/activite.xlsx${query}`} question="Le temps du cabinet se transforme-t-il en honoraires ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && r && (

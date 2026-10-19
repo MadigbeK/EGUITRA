@@ -42,7 +42,7 @@ function Corps() {
   );
   return (
     <div>
-      <EnTeteSection question="Où en sont les projets, et où bloquent-ils ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/portefeuille.xlsx${query}`} question="Où en sont les projets, et où bloquent-ils ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

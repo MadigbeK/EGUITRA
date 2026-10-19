@@ -9,9 +9,9 @@
 
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Info, Moon, Printer, ShieldAlert, Sparkles, Sun, TriangleAlert, type Icon } from "@/components/icons";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sparkles, Sun, TriangleAlert, type Icon } from "@/components/icons";
 import { Badge, Button, Delta, Empty, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
-import { useApi } from "@/lib/api-client";
+import { apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import type { EntiteSociete } from "@/lib/config";
 import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort } from "@/lib/format";
@@ -154,8 +154,20 @@ export function useTheme() {
  * Titre en forme de question, réponse en une phrase, sélecteur de période et date d'arrêté,
  * impression et mode nuit. La réponse arrive avec les données : un squelette la précède.
  */
-export function EnTeteSection({ question, reponse, periode, onPeriode, label, quality, sousTitre }: { question: string; reponse?: ReactNode; periode: Periode; onPeriode: (p: Partial<Periode>) => void; label?: string; quality?: Quality; sousTitre?: ReactNode }) {
+/** En-tête d'une section. exporter : chemin du classeur Excel de la section (même période). */
+export function EnTeteSection({ question, reponse, periode, onPeriode, label, quality, sousTitre, exporter }: { question: string; reponse?: ReactNode; periode: Periode; onPeriode: (p: Partial<Periode>) => void; label?: string; quality?: Quality; sousTitre?: ReactNode; exporter?: string }) {
   const { sombre, basculer } = useTheme();
+  const [exportEnCours, setExportEnCours] = useState(false);
+  async function exporterClasseur() {
+    if (!exporter) return;
+    setExportEnCours(true);
+    try {
+      const nom = (exporter.split("?")[0] ?? exporter).replace(/^\/analyse\//, "analyse_").replaceAll("/", "_");
+      await apiDownload(exporter, nom);
+    } finally {
+      setExportEnCours(false);
+    }
+  }
   return (
     <div className="mb-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
@@ -187,6 +199,11 @@ export function EnTeteSection({ question, reponse, periode, onPeriode, label, qu
             {sombre ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             <span className="sr-only">{sombre ? "Mode clair" : "Mode nuit"}</span>
           </Button>
+          {exporter && (
+            <Button onClick={exporterClasseur} loading={exportEnCours} title="Toutes les données de l'écran dans un classeur Excel">
+              <FileSpreadsheet className="h-4 w-4" /> Excel
+            </Button>
+          )}
           <Button onClick={() => window.print()}>
             <Printer className="h-4 w-4" /> Imprimer
           </Button>

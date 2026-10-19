@@ -87,7 +87,7 @@ function Corps() {
 
   return (
     <div>
-      <EnTeteSection question="D'où vient la marge, et où s'érode-t-elle ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/groupe/rentabilite.xlsx${query}`} question="D'où vient la marge, et où s'érode-t-elle ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (

@@ -419,3 +419,22 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(status, 403)
         status, body = self.call("GET", "/analyse/groupe/clients?period=semaine", token=self.token)
         self.assertEqual((status, body.get("error")), (400, "invalid_parameter"), body)
+
+    def test_export_excel(self):
+        """Classeur Excel de chaque section : mêmes données que la route JSON, onglets en français."""
+        import io
+
+        import openpyxl
+
+        headers = {"Authorization": f"Bearer {self.token}"}
+        for section in ("synthese", "transport", "tresorerie", "depenses", "previsions"):
+            response = self.url_open(f"/api/v1/analyse/groupe/{section}.xlsx{QUERY}", headers=headers, timeout=120)
+            self.assertEqual(response.status_code, 200, (section, response.text[:300]))
+            self.assertTrue(response.content.startswith(b"PK"), section)
+            self.assertIn(f"analyse_groupe_{section}_2026-06-30.xlsx", response.headers.get("Content-Disposition", ""))
+            book = openpyxl.load_workbook(io.BytesIO(response.content))
+            self.assertEqual(book.sheetnames[0], "Synthèse", section)
+        self.assertIn("Atterrissage", book.sheetnames, "Onglets nommés en français (dernière section : prévisions)")
+        response = self.url_open(f"/api/v1/analyse/groupe/inconnue.xlsx{QUERY}", headers=headers, timeout=60)
+        self.assertEqual(response.status_code, 404)
+

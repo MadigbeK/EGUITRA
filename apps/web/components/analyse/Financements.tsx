@@ -47,7 +47,7 @@ function Corps() {
   );
   return (
     <div>
-      <EnTeteSection question="Qui finance quoi, et avec quel succès ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      <EnTeteSection exporter={`/analyse/cabinet/financements.xlsx${query}`} question="Qui finance quoi, et avec quel succès ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
