@@ -28,7 +28,8 @@ export interface EnTeteFinance {
 const PROFILS_FINANCE = ["admin", "direction", "finance"];
 
 export function useEnTeteFinance(app: AppCode, me: Me): EnTeteFinance | undefined {
-  const ouvert = app === "finance" && me.profiles.some((p) => PROFILS_FINANCE.includes(p));
+  // Mot de passe provisoire : l'API refuse tout appel tant qu'il n'est pas remplacé, l'en-tête attend.
+  const ouvert = app === "finance" && !me.password_change_required && me.profiles.some((p) => PROFILS_FINANCE.includes(p));
   const { data } = useApi<EnTeteFinance>(ouvert ? "/finance/shell" : null, { refreshInterval: 300_000, dedupingInterval: 60_000 });
   return data;
 }

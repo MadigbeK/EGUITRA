@@ -13,6 +13,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Page où l'utilisateur au mot de passe provisoire choisit le sien. */
+const PAGE_MOT_DE_PASSE = "/compte/mot-de-passe";
+
 function onUnauthenticated() {
   const here = window.location.pathname + window.location.search;
   const app = window.location.pathname.split("/")[1] || "finance";
@@ -33,7 +36,8 @@ async function parse(res: Response) {
   const text = await res.text();
   const body = text ? (JSON.parse(text) as unknown) : null;
   if (res.status === 403 && (body as ApiErrorBody | null)?.error === "password_change_required") {
-    window.location.href = "/compte/mot-de-passe";
+    // Déjà sur la page de changement : la recharger relancerait les mêmes appels, sans fin.
+    if (!window.location.pathname.startsWith(PAGE_MOT_DE_PASSE)) window.location.href = PAGE_MOT_DE_PASSE;
   }
   if (!res.ok) throw new ApiError(res.status, (body as ApiErrorBody) ?? { error: "error" });
   return body;
