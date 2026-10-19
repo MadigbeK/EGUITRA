@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 18 octobre 2026
+# État du projet EGUITRA, au 19 octobre 2026
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -164,6 +164,21 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**19 octobre : rechargement sans fin de la page de changement du mot de passe** (signalé par le gérant
+après réinitialisation du mot de passe de `test.dg` en recette). Cause : le cadre de la page interroge
+`/finance/shell` (en-tête de Finance, ajouté le 17 octobre) pour les profils administration, direction
+et finance ; le noyau refuse tout appel tant que le mot de passe est provisoire (403
+`password_change_required`) et `apps/web/lib/api-client.ts` renvoyait alors vers la même page.
+Corrigé dans l'application web seule (commit b0c4182) : l'en-tête n'interroge plus l'API pendant un mot
+de passe provisoire, et le client ne redirige plus vers la page quand il s'y trouve déjà. Reproduit puis
+vérifié dans Chromium (maquette d'API et relais imitant le refus du noyau) : 140 chargements en
+8 secondes avant, page stable après, changement mené à son terme.
+- À faire : déployer en recette (`scripts/dev/sync.sh`, puis `docker compose up -d --build web-recette`
+  sur le serveur) ; puis en production par `release.sh` avant de créer les comptes du client, qui
+  recevront tous un mot de passe provisoire (la production a le même défaut depuis la version
+  20261017-2328).
+
 
 **18 octobre : NIMOVA · Analyse** (demande du gérant, carte blanche : module d'analyse de données de
 niveau expert, différent selon la société). Spécification et contrat d'API :
