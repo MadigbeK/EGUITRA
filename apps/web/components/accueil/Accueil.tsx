@@ -8,8 +8,21 @@ import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
 import { rayonsDe, sansAccents, voisine, type Tuile } from "@/components/accueil/tuiles";
 import { cx, useMouvementReduit } from "@/components/ui";
-import { APPS, type AppCode } from "@/lib/config";
+import { APPS, appFromPath, type AppCode } from "@/lib/config";
 import type { Me } from "@/lib/types";
+
+/**
+ * Chaque application mémorise sa société de travail : le module ouvert depuis l'accueil reçoit
+ * d'abord la société affichée sur l'accueil, quand il l'accepte (AxisPro ne sert que le cabinet).
+ */
+async function alignerSociete(me: Me, app: AppCode, href: string) {
+  const cible = appFromPath(href);
+  const company = me.companies.find((c) => c.id === me.company_id);
+  if (!cible || cible === app || !company) return;
+  const servie = APPS[cible].entity;
+  if (servie && servie !== company.entity) return;
+  await fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: company.id, app: cible }) }).catch(() => null);
+}
 
 /** Durée pendant laquelle les icônes jouent leur entrée (la vague des tuiles comprise). */
 const INTRO_MS = 3200;
@@ -106,10 +119,14 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
 
   // Ouverture : la tuile grandit jusqu'à couvrir l'écran, puis le module s'affiche.
   function ouvrir(e: SourisReact<HTMLAnchorElement>, href: string) {
-    if (reduit || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-    const boite = e.currentTarget.querySelector<HTMLElement>(".tuile-boite");
-    if (!boite) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
+    const aligne = alignerSociete(me, app, href);
+    const boite = e.currentTarget.querySelector<HTMLElement>(".tuile-boite");
+    if (reduit || !boite) {
+      void aligne.then(() => router.push(href));
+      return;
+    }
     const r = boite.getBoundingClientRect();
     const v = document.createElement("div");
     v.setAttribute("aria-hidden", "true");
@@ -131,7 +148,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
       { duration: 520, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
     );
     icone?.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(2.6)", opacity: 0 }], { duration: 480, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" });
-    window.setTimeout(() => router.push(href), 180);
+    void Promise.all([aligne, new Promise((fin) => window.setTimeout(fin, 180))]).then(() => router.push(href));
     window.setTimeout(() => v.remove(), 6000);
   }
 
@@ -170,7 +187,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
             onSubmit={(e) => {
               e.preventDefault();
               const premiere = visibles[0];
-              if (premiere) router.push(premiere.href);
+              if (premiere) void alignerSociete(me, app, premiere.href).then(() => router.push(premiere.href));
             }}
             className="flex h-11 items-center gap-2.5 rounded-xl border border-line bg-white/95 px-3.5 shadow-[0_2px_10px_-4px_rgb(16_36_31/0.18)]"
           >

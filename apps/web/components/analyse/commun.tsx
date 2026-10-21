@@ -240,17 +240,58 @@ export function QualiteDonnees({ quality }: { quality: Quality }) {
 
 /* ─── Garde de société ─────────────────────────────────────────────────── */
 
-/** Les sections d'une société ne s'ouvrent que dans ses livres : sinon, on explique et on oriente. */
+/**
+ * Les sections d'une société ne s'ouvrent que dans ses livres. Un compte ouvert à cette société y
+ * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique.
+ */
 export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteSociete; contexte: Contexte | undefined; children: ReactNode }) {
+  const cible = contexte && contexte.entity !== attendu ? contexte.companies?.find((c) => c.entity === attendu) : undefined;
+  const [echec, setEchec] = useState(false);
+  useEffect(() => {
+    if (!cible) return;
+    // Un seul essai par société en quelques secondes : jamais de rechargements en boucle.
+    const essai = `garde-societe-${cible.id}`;
+    try {
+      if (Date.now() - Number(sessionStorage.getItem(essai) ?? 0) < 10_000) return setEchec(true);
+      sessionStorage.setItem(essai, String(Date.now()));
+    } catch {
+      return setEchec(true);
+    }
+    let abandon = false;
+    fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: cible.id, app: "analyse" }) })
+      .then((res) => {
+        if (abandon) return;
+        // Rechargement complet, comme au changement de société : rien de l'autre société ne reste affiché.
+        if (res.ok) window.location.reload();
+        else setEchec(true);
+      })
+      .catch(() => !abandon && setEchec(true));
+    return () => {
+      abandon = true;
+      try {
+        sessionStorage.removeItem(essai);
+      } catch {
+        // stockage indisponible : rien à effacer
+      }
+    };
+  }, [cible]);
   if (!contexte) return <AttenteSection />;
   if (contexte.entity === attendu) return <>{children}</>;
+  if (cible && !echec) {
+    return (
+      <div className="space-y-4">
+        <p role="status" className="text-sm text-muted">Ouverture dans les livres de {cible.name}…</p>
+        <AttenteSection />
+      </div>
+    );
+  }
   const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro";
   return (
     <div className="mx-auto max-w-2xl py-10">
       <Notice tone="accent">
         <p className="font-semibold">Cette analyse concerne {nom}.</p>
         <p className="mt-1">
-          Vous travaillez dans les livres de {contexte.company.name}. {contexte.can_switch ? "Choisissez l'autre société dans la colonne de gauche pour ouvrir cette section, ou " : "Votre compte n'est pas ouvert à cette société ; "}
+          Vous travaillez dans les livres de {contexte.company.name}. {contexte.can_switch ? "Choisissez l'autre société en haut à droite pour ouvrir cette section, ou " : "Votre compte n'est pas ouvert à cette société ; "}
           <Link href="/analyse" className="font-semibold text-accent underline underline-offset-2">
             revenez au cockpit
           </Link>
