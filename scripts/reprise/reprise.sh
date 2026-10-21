@@ -6,7 +6,9 @@
 # Toujours rejouer d'abord en recette. Variables facultatives : REPRISE_DATE_OUVERTURE (AAAA-MM-JJ,
 # défaut 1er janvier de l'année), REPRISE_SOCIETE (groupe ou cabinet, défaut groupe : chaque société
 # a sa propre comptabilité et se reprend séparément), REPRISE_UTILISATEUR (identifiant d'un
-# administrateur), REPRISE_BUDGET_ANNEE, INIT_DB (autre base de l'environnement, pour un essai).
+# administrateur), REPRISE_BUDGET_ANNEE, INIT_DB (autre base de l'environnement, pour un essai),
+# REPRISE_CONVENTION_AMORTISSEMENT (plateforme, fin-de-plan ou prototype, défaut plateforme : convention
+# d'amortissement des biens repris, décision de l'expert-comptable ; voir scripts/reprise/README.md).
 set -euo pipefail
 [ $# -ge 2 ] || { echo "Usage : scripts/reprise/reprise.sh production|recette dossier-des-csv [--appliquer]" >&2; exit 2; }
 DIR=$(cd "$2" && pwd)
@@ -21,9 +23,11 @@ case "$1" in
 esac
 
 echo "Environnement $1, base $DB, société ${REPRISE_SOCIETE:-groupe}, fichiers de $DIR," \
+     "amortissements selon la convention ${REPRISE_CONVENTION_AMORTISSEMENT:-plateforme}," \
      "$([ $APPLY = 1 ] && echo "enregistrement" || echo "contrôle seulement")."
 docker compose run --rm -T -v "$DIR:/reprise:ro" \
   -e REPRISE_APPLIQUER="$APPLY" -e REPRISE_DATE_OUVERTURE="${REPRISE_DATE_OUVERTURE:-}" \
   -e REPRISE_SOCIETE="${REPRISE_SOCIETE:-groupe}" -e REPRISE_UTILISATEUR="${REPRISE_UTILISATEUR:-}" \
   -e REPRISE_BUDGET_ANNEE="${REPRISE_BUDGET_ANNEE:-}" \
+  -e REPRISE_CONVENTION_AMORTISSEMENT="${REPRISE_CONVENTION_AMORTISSEMENT:-plateforme}" \
   "$SERVICE" odoo shell -c /etc/odoo/odoo.conf -d "$DB" --no-http --log-level=warn < ../scripts/reprise/reprise.py

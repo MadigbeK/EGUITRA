@@ -4,9 +4,10 @@ schéma 1) en fichiers de reprise, au format lu par reprise.py (modèles dans mo
     python -I scripts/reprise/dossier_json.py chemin/dossier.json dossier_de_sortie [--taux-implicites]
         [--convention=plateforme|prototype]
 
---convention=prototype (mesure seulement, reprise.py la refuse) : plan des immobilisations selon la
-convention du prototype, en mois entiers (méthode « mois », 12 × durée dotations égales du module)
-à compter du 1er du mois qui suit l'acquisition ; la date d'acquisition reste dans sa colonne.
+--convention=prototype : registre déjà écrit selon la convention du prototype, en mois entiers
+(méthode « mois », 12 × durée dotations égales du module) à compter du 1er du mois qui suit
+l'acquisition, la date d'acquisition dans sa colonne ; à reprendre avec
+REPRISE_CONVENTION_AMORTISSEMENT=prototype (qui produit le même plan depuis le registre ordinaire).
 
 Le dossier est une donnée du client, lue sans rien exécuter ; les fichiers produits ne se versionnent
 pas. Les écritures suivent l'imputation du moteur du prototype (fonction Moteur) :
