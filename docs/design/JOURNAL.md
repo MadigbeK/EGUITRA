@@ -207,6 +207,10 @@ même branche, sans toucher à la logique des écrans :
   en version claire et sur fond sombre, et la planche `propositions.html` (marque seule, icône
   d'application, marque avec le nom, tenue à 48, 32 et 16 pixels). En attente du choix du gérant ;
   le monogramme actuel reste en place d'ici là.
+- Logo, trois finalistes en situation (21 octobre) : `docs/design/logos/mise-en-situation.html`
+  montre le pli (recommandé, avec un sceau réservé aux documents officiels, `sceau-pli.svg`), la
+  source et le leppi dans la barre de l'application, les onglets du navigateur, l'icône du
+  téléphone, l'écran de connexion et le rapport imprimé.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
