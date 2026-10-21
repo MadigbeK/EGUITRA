@@ -83,8 +83,8 @@ séparément. Règles, décrites en un seul endroit, `addons/eguitra_api/organis
   qui n'est pas ouvert à cette société ne peut pas l'ouvrir. Les routes d'AxisPro refusent de
   travailler dans EGUITRA GROUP, quelle que soit l'application qui les appelle.
 - Profils et applications : un profil ouvre une ou plusieurs applications (administration et
-  direction : tout ; finance : Finance ; cabinet : AxisPro ; exploitation : Finance et Rotations ;
-  porteur : portail). Un profil propre à une société exige que le compte y soit ouvert (exploitation,
+  direction : tout ; finance : Finance ; achats : Finance, partie achats seule ; cabinet : AxisPro ;
+  exploitation : Finance et Rotations ; porteur : portail). Un profil propre à une société exige que le compte y soit ouvert (exploitation,
   chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro) : contrôlé à l'enregistrement du
   compte, la société est cochée d'office à l'écran.
 - Nouvelle application ou nouveau module : une ligne dans `organisation.py` (APPS, MODULE_ENTITY,
@@ -146,11 +146,20 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Base `eguitra`, neuf modules (dont `eguitra_analytics`, NIMOVA · Analyse), deux sociétés, vide de données (en attente de la reprise). Version en service : 20261021-1303 (commit c7f7261 : direction visuelle « papier-valeur » de la session design, menus du haut, et correctif du bandeau des dossiers AxisPro), mise en production le 21 octobre à 13 h 03 à la demande du gérant (sauvegarde prise juste avant) ; noyau et applications répondent. Production et recette portent le même code. Versions précédentes : 20261021-1218 (export Excel d'Analyse, correctif de la page de changement du mot de passe ; le même code avait été mis en production six minutes plus tôt par une autre session, 20261021-1212 : à l'avenir une seule session pour la production), 20261018-0806 (NIMOVA · Analyse), 20261017-2328 (finance 19.0.1.5.0, transport 19.0.1.2.0 ; `monitor-install.sh` relancé), 20261014-1548 ; historique : `infra/release.sh --list`.
+- Base `eguitra`, neuf modules (dont `eguitra_analytics`, NIMOVA · Analyse), deux sociétés « EGUITRA GROUP SARLU » et « MB AxisPro », vide de données (en attente de la reprise). Version en service : 20261021-1505 (commit 63bf889 : profil Achats, libellés « MB AxisPro » et « BTP » avec migration d'`eguitra_base` 19.0.1.4.0, conventions d'amortissement des biens repris, `eguitra_finance` 19.0.1.7.0), mise en production le 21 octobre à 15 h 05 après 315 tests au vert sur les neuf modules (sauvegarde prise juste avant) ; noyau et applications répondent. Adresses publiques provisoires en HTTPS, en attendant nimova.gn : https://finance.178-33-206-212.sslip.io, https://axispro.178-33-206-212.sslip.io, https://portail.178-33-206-212.sslip.io (recette : https://recette.178-33-206-212.sslip.io). Versions précédentes : 20261021-1303 (direction visuelle « papier-valeur », menus du haut, bandeau des dossiers AxisPro), 20261021-1218 (export Excel d'Analyse, correctif de la page de changement du mot de passe ; le même code avait été mis en production six minutes plus tôt par une autre session, 20261021-1212 : à l'avenir une seule session pour la production), 20261018-0806 (NIMOVA · Analyse), 20261017-2328 (finance 19.0.1.5.0, transport 19.0.1.2.0 ; `monitor-install.sh` relancé), 20261014-1548 ; historique : `infra/release.sh --list`.
 - Tâches de nuit actives : quittancement des loyers, dotations aux amortissements, relances des clients, purges (jetons, journaux d'accès, tentatives). La génération du module `contract` est désactivée.
 - Identité des sociétés (adresse, NIF, RCCM, logo) à saisir dans Administration > Sociétés dès réception des informations du client : elles figurent en tête et au pied des factures.
 - Super administrateur `emkouyate` (Madigbè Kouyaté, E-VOLUTION XP), créé le 15 octobre à la demande du gérant : tous les profils internes (administration, direction, finance, exploitation, chantiers, immobilier, cabinet), deux sociétés, mot de passe provisoire choisi par le gérant, à remplacer à la première connexion avec l'activation de la double authentification. Contrôlé le 16 octobre : compte actif, mot de passe définitif choisi, double authentification activée, aucun échec de connexion, noyau et applications de production en service.
 - Administrateur `m.kouyate` (Madigbè Kouyaté), ouvert aux deux sociétés. Mot de passe provisoire dans `~/eguitra/infra/secrets/production-admin.txt` sur le serveur (lisible du seul utilisateur `deploy`) : à la première connexion, activer la double authentification puis choisir le mot de passe ; supprimer ensuite ce fichier.
+- Comptes du client (21 octobre, liste reçue par le gérant) : sept comptes, identifiant = adresse
+  électronique professionnelle, créés par `scripts/comptes/comptes.py` (liste dans
+  `infra/secrets/comptes-client.json` du serveur, jamais dans le dépôt) : direction (deux sociétés),
+  finance (deux sociétés), achats (EGUITRA GROUP), exploitation et cabinet (deux sociétés), deux comptes
+  cabinet (MB AxisPro, dont un en attendant le module RH annoncé pour plus tard), exploitation (EGUITRA
+  GROUP). Mots de passe provisoires dans `infra/secrets/comptes-client-production.tsv` (lisible du seul
+  utilisateur `deploy`) ; à la première connexion : nouveau mot de passe et double authentification.
+  Relancer le script avec la liste complète met à jour profils et sociétés sans toucher aux mots de
+  passe existants.
 - Restauration de la base de production vérifiée le 14 octobre (sauvegarde de 13 h 21).
 
 ### Recette
@@ -164,6 +173,20 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**21 octobre fin d'après-midi : mise en production 20261021-1505 et comptes du client.**
+- Décisions du gérant sur la liste des utilisateurs : un vrai profil « Achats » pour la responsable
+  des achats ; module RH plus tard (la personne concernée reçoit en attendant le profil cabinet) ; société
+  nommée « MB AxisPro » ; « Chantiers » renommé « BTP » à l'écran ; on n'attend pas nimova.gn pour
+  ouvrir la production.
+- Fait : profil Achats (engagements, pièces d'achat, fournisseurs sans soldes, demandes, guide
+  `docs/guides/guide-achats.md`) ; 315 tests au vert ; mise en production 20261021-1505 ; production
+  ouverte sur les adresses provisoires `*.178-33-206-212.sslip.io` ; sept comptes du client créés
+  (chapitre 6).
+- À faire : remettre à chacun son identifiant, son mot de passe provisoire et l'adresse (le gérant,
+  depuis le fichier protégé du serveur) ; saisir l'identité des sociétés ; bascule vers nimova.gn dès
+  la finalisation (`infra/domaines.sh`) ; reprise des données en production après le choix de la
+  convention d'amortissement.
 
 **21 octobre après-midi : convention d'amortissement des biens repris, essai outillé, domaines.**
 - Les trois conventions de la décision 1 sont prêtes, au choix de l'expert-comptable, par une seule
