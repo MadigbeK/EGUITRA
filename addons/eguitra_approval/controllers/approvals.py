@@ -6,6 +6,9 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
 INTERNAL = ("admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet")
+# Le profil Achats suit ses demandes (pièces d'achat, engagements de dépense) sans en trancher aucune : ni
+# approbation ni refus, réservés aux profils approbateurs.
+FOLLOWERS = INTERNAL + ("achats",)
 # Profils qui voient toutes les demandes de leurs sociétés ; les autres ne voient que les leurs et
 # celles dont une étape revient à l'un de leurs profils.
 FULL_VIEW = ("admin", "direction", "finance")
@@ -72,7 +75,7 @@ def _row(rec, detail=False):
 
 
 class EguitraApprovals(http.Controller):
-    @api_route("/approvals/inbox", profiles=INTERNAL)
+    @api_route("/approvals/inbox", profiles=FOLLOWERS)
     def inbox(self, **_kw):
         """Demandes que l'utilisateur peut trancher maintenant."""
         user = request.env.user
@@ -83,7 +86,7 @@ class EguitraApprovals(http.Controller):
         ], order="requested_at asc")
         return [_row(r) for r in requests]
 
-    @api_route("/approvals/requests", profiles=INTERNAL)
+    @api_route("/approvals/requests", profiles=FOLLOWERS)
     def requests(self, **kw):
         domain = _visible(request.env.user)
         if kw.get("state"):
@@ -93,7 +96,7 @@ class EguitraApprovals(http.Controller):
         recs = request.env["eguitra.approval.request"].sudo().search(domain, limit=int_arg(kw, "limit", 100, 1, 500))
         return [_row(r) for r in recs]
 
-    @api_route("/approvals/<int:request_id>", profiles=INTERNAL)
+    @api_route("/approvals/<int:request_id>", profiles=FOLLOWERS)
     def get(self, request_id, **_kw):
         return _row(_req(request_id), detail=True)
 

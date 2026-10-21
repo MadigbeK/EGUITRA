@@ -6,7 +6,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
-from .common import FIN_READ, FIN_WRITE, as_float, move_summary, today
+from .common import ACHATS, FIN_READ, FIN_WRITE, PURCHASE_TYPES, as_float, move_summary, today
 
 FIELDS = ("name", "vat", "phone", "email", "street", "city", "comment", "ref")
 # Champs de l'application -> champs du noyau (fiche enrichie du prototype de la direction).
@@ -14,6 +14,8 @@ EXTRA_FIELDS = {"sector": "eguitra_sector", "contact": "eguitra_contact", "rccm"
 # Les métiers et le cabinet choisissent ou créent un tiers (maître d'ouvrage, locataire, client d'une
 # rotation, promoteur) sans voir ses soldes, réservés à la finance et à la direction.
 PICKERS = ("exploitation", "chantiers", "immobilier", "cabinet")
+# Le profil Achats tient les fiches des fournisseurs (identité, coordonnées), sans soldes ni encours ; la
+# limite de crédit, la TVA et les conditions de paiement restent à la finance.
 DELAYS = {False: "days_after", True: "days_after_end_of_month"}
 
 
@@ -99,7 +101,7 @@ def _row(p, balances=True):
 
 
 class EguitraFinancePartners(http.Controller):
-    @api_route("/finance/partners", profiles=FIN_READ + PICKERS)
+    @api_route("/finance/partners", profiles=FIN_READ + PICKERS + ACHATS)
     def list_partners(self, **kw):
         domain = [("parent_id", "=", False), ("active", "=", True)]
         if kw.get("kind") == "customer":
@@ -115,19 +117,29 @@ class EguitraFinancePartners(http.Controller):
         balances = _balances_visible()
         return {"items": [_row(p, balances) for p in partners], "total_count": Partner.search_count(domain)}
 
-    @api_route("/finance/partners/<int:partner_id>", profiles=FIN_READ)
+    @api_route("/finance/partners/<int:partner_id>", profiles=FIN_READ + ACHATS)
     def get_partner(self, partner_id, **_kw):
         partner = _partner(partner_id)
-        data = _row(partner)
+        balances = _balances_visible()
+        data = _row(partner, balances)
         data.update({
             "street": partner.street or None,
             "comment": partner.comment or None,
             "rccm": partner.company_registry or None,
-            "use_credit_limit": partner.use_partner_credit_limit,
+            "use_credit_limit": partner.use_partner_credit_limit if balances else False,
             # Conditions de paiement de la société de travail (champs propres à chaque société).
-            "payment_term": _term_spec(partner.property_payment_term_id),
+            "payment_term": _term_spec(partner.property_payment_term_id) if balances else None,
             "supplier_payment_term": _term_spec(partner.property_supplier_payment_term_id),
         })
+        if not balances:
+            # Profil Achats : la fiche et les pièces d'achat du fournisseur, jamais ses soldes, son
+            # ancienneté ni les créances et factures de vente du tiers.
+            moves = request.env["account.move"].search([
+                ("partner_id", "=", partner.id), ("move_type", "in", PURCHASE_TYPES),
+                ("company_id", "=", request.env.company.id),
+            ], limit=20, order="date desc, id desc")
+            data.update({"aging": None, "open_items": [], "recent_moves": [move_summary(m) for m in moves]})
+            return data
         day = today()
         lines = request.env["account.move.line"].search([
             ("partner_id", "=", partner.id), ("parent_state", "=", "posted"), ("reconciled", "=", False),
@@ -185,20 +197,34 @@ class EguitraFinancePartners(http.Controller):
             values["property_supplier_payment_term_id"] = _payment_term(data["supplier_payment_term"]).id or False
         return values
 
-    @api_route("/finance/partners", methods=("POST",), profiles=FIN_WRITE + PICKERS)
+    @api_route("/finance/partners", methods=("POST",), profiles=FIN_WRITE + PICKERS + ACHATS)
     def create_partner(self, **_kw):
         data = read_json()
         require(data, "name")
-        finance = bool(set(request.env.user._eguitra_profiles()) & set(FIN_WRITE))
+        profiles = set(request.env.user._eguitra_profiles())
+        finance = bool(profiles & set(FIN_WRITE))
         values = self._values(data, finance)
+        if not finance and not profiles & set(PICKERS):
+            # Profil Achats seul : la fiche créée est celle d'un fournisseur.
+            values.pop("customer_rank", None)
+            values["supplier_rank"] = 1
         values.setdefault("is_company", True)
         # Création réservée dans le noyau au gestionnaire des contacts : la route borne les profils et
         # les champs (FIELDS), l'auteur reste l'utilisateur.
         partner = request.env["res.partner"].sudo().create(values)
         return _row(partner.sudo(False), _balances_visible())
 
-    @api_route("/finance/partners/<int:partner_id>", methods=("PATCH",), profiles=FIN_WRITE)
+    @api_route("/finance/partners/<int:partner_id>", methods=("PATCH",), profiles=FIN_WRITE + ACHATS)
     def update_partner(self, partner_id, **_kw):
         partner = _partner(partner_id)
-        partner.write(self._values(read_json()))
-        return _row(partner)
+        if set(request.env.user._eguitra_profiles()) & set(FIN_WRITE):
+            partner.write(self._values(read_json()))
+            return _row(partner)
+        # Profil Achats : fiche d'un fournisseur seulement, identité et coordonnées (FIELDS, EXTRA_FIELDS) ;
+        # modification réservée dans le noyau au gestionnaire des contacts, l'auteur reste l'utilisateur.
+        if partner.commercial_partner_id.supplier_rank <= 0 and partner.supplier_rank <= 0:
+            raise ApiError(403, "forbidden", "Profil Achats : seules les fiches des fournisseurs se modifient.")
+        values = self._values(read_json(), finance=False)
+        values.pop("customer_rank", None)
+        partner.sudo().write(values)
+        return _row(partner, balances=False)

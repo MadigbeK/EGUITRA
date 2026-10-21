@@ -7,10 +7,14 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
+from odoo.addons.eguitra_finance.controllers.common import achats_only
+from odoo.addons.eguitra_finance.controllers.moves import category_of
 
 from ..models.commitment import STATES
 
-INTERNAL = ("admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet")
+TRADES = ("admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet")
+# Le profil Achats prépare et soumet les engagements, le devis joint ; la catégorie de dépense en fixe le compte.
+INTERNAL = TRADES + ("achats",)
 MAX_QUOTE = 20 * 1024 * 1024
 
 
@@ -69,8 +73,17 @@ class EguitraCommitments(http.Controller):
         values = {k: data[k] or False for k in ("object", "note") if k in data}
         if "partner_id" in data:
             values["partner_id"] = int(data["partner_id"])
-        if "account_id" in data:
-            values["account_id"] = int(data["account_id"]) if data["account_id"] else False
+        if data.get("category_id"):
+            # Catégorie de dépense active de la société de travail (contrôlée) : l'engagement prend son compte,
+            # lu avec les droits du noyau (les métiers ne lisent pas le référentiel des catégories).
+            values["account_id"] = category_of(data["category_id"], request.env.company).sudo().account_id.id
+        elif "account_id" in data:
+            account_id = int(data["account_id"]) if data["account_id"] else False
+            if account_id and achats_only(TRADES) and not request.env["eguitra.expense.category"].search_count([
+                    ("company_id", "=", request.env.company.id), ("account_id", "=", account_id)]):
+                raise ApiError(403, "forbidden", "Profil Achats : choisissez la catégorie de dépense, dont "
+                                                 "l'engagement prend le compte.")
+            values["account_id"] = account_id
         if "amount" in data:
             try:
                 values["amount"] = float(data["amount"])

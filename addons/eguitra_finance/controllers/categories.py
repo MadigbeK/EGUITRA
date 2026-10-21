@@ -6,7 +6,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
 from ..models.expense_category import NATURES
-from .common import FIN_READ, FIN_WRITE, account_ref, ref
+from .common import ACHATS, FIN_READ, FIN_WRITE, account_ref, achats_only, ref
 from .moves import chosen_account
 
 
@@ -64,8 +64,14 @@ def _values(data, company, current=None):
 
 
 class EguitraFinanceExpenseCategories(http.Controller):
-    @api_route("/finance/expense-categories", profiles=FIN_READ)
+    @api_route("/finance/expense-categories", profiles=FIN_READ + ACHATS)
     def categories(self, **kw):
+        if achats_only(FIN_READ):
+            # Profil Achats : catégories actives des pièces d'achat ; celles qui font de la dépense une
+            # opération diverse (salaires, cotisations, impôts) relèvent de la finance.
+            Category = request.env["eguitra.expense.category"]
+            return [category_row(c) for c in Category.search([("company_id", "=", request.env.company.id)])
+                    if not c.is_entry()]
         Category = request.env["eguitra.expense.category"].with_context(active_test=kw.get("all") != "1")
         return [category_row(c) for c in Category.search([("company_id", "=", request.env.company.id)])]
 

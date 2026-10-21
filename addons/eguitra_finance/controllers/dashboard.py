@@ -20,8 +20,8 @@ from ..models.analytic import ACTIVITY_PLAN, MANAGED_AXES, PLANS, axes_for, plan
 from .common import FIN_READ, FIN_WRITE, account_ref, companies, parse_date, ref, today
 from .statements_export import income_with_month
 
-# Profils qui choisissent un compte analytique à la saisie (chantiers, immobilier, parc).
-ANALYTIC_PICKERS = FIN_READ + ("exploitation", "chantiers", "immobilier")
+# Profils qui choisissent un compte analytique à la saisie (chantiers, immobilier, parc, achats).
+ANALYTIC_PICKERS = FIN_READ + ("exploitation", "chantiers", "immobilier", "achats")
 
 
 def _analytic_row(account, company):
