@@ -225,6 +225,11 @@ même branche, sans toucher à la logique des écrans :
   C: plein ce jour-là), construit sur le serveur sans erreur. En recette le 21 octobre (df60a8c,
   fusionné dans `claude/bold-shannon-gpg2hv` en 76732c4, cache de Rotations en `rotations-v3`).
   En production le 21 octobre à la demande du gérant (version 20261021-1536, 8cf57ee).
+- Page de connexion (21 octobre, demande du gérant) : les cartes flottantes de la scène sont
+  retirées ; le fond vert devient une photo d'équipe en salle de réunion (Pexels 9301288, licence
+  Pexels gratuite, sans attribution obligatoire), assombrie pour la lecture, le grand N du pli
+  toujours tracé par-dessus. Fichiers `public/scenes/` : WebP de 23 à 100 Ko selon l'écran
+  (recadrage carré pour le grand écran, panoramique pour le téléphone), JPEG de secours de 112 Ko.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 

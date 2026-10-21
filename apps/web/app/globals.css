@@ -1237,6 +1237,17 @@ input[type="radio"] {
   break-inside: avoid;
 }
 
+/* Photo de la page de connexion : elle apparaît en se posant (léger recul), une seule fois. */
+@keyframes scene-photo {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+.scene-photo {
+  animation: scene-photo 1800ms var(--ease-sortie) backwards;
+}
+
 /* ─── Barre des rubriques (menus du haut) ─────────────────────────────── */
 
 /* Pastille blanche qui suit le curseur d'une rubrique à l'autre. */
