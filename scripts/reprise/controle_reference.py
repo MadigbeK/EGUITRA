@@ -3,7 +3,11 @@ recalculées à partir des fichiers de reprise (et non de la base), avec les for
 prototype, sur les écritures telles que la plateforme les comptabilisera.
 
     python -I scripts/reprise/controle_reference.py dossier_des_csv reference.json
-        [--rapport fichier.txt] [--relatif] [--ecart-reprise premiere|derniere]
+        [--rapport=fichier.txt] [--relatif] [--convention=plateforme|fin-de-plan|prototype]
+
+--convention reproduit REPRISE_CONVENTION_AMORTISSEMENT de reprise.py : plateforme (écart de reprise
+sur la première dotation), fin-de-plan (sur la dernière), prototype (mois entiers, méthode « nombre
+de dotations », à compter du 1er du mois qui suit l'acquisition).
 
 Entrées : parametres.json, soldes_ouverture.csv, ecritures.csv, immobilisations.csv, rotations.csv
 (produits par dossier_json.py) et reference.json (extraire_reference.py). Sortie : un tableau
@@ -260,8 +264,9 @@ def prototype_accumulated(base, years, acquired, ref):
 # ─── Recalcul ─────────────────────────────────────────────────────────────
 
 class Control:
-    def __init__(self, folder, rule="premiere"):
+    def __init__(self, folder, rule="premiere", convention="plateforme"):
         self.folder = folder
+        self.convention = convention
         params = json.loads((folder / "parametres.json").read_text(encoding="utf-8"))
         self.opening = day(params["date_debut"])
         self.closing = day(params["date_arrete"])
@@ -292,7 +297,14 @@ class Control:
         if not years or (r.get("non_amortissable") or "").lower() in YES:
             return
         base, start, cumul = num(r["valeur_brute"]), day(r["date_mise_en_service"]), num(r.get("cumul"))
-        by_months = (r.get("methode") or "").lower() == "mois"
+        acquired = day(r.get("date_acquisition")) or start
+        by_months = self.convention == "prototype"
+        if (r.get("methode") or "").lower() == "mois" and not by_months:
+            sys.exit(f"Immobilisation {r['code']} : plan en mois entiers, --convention=prototype attendu (comme "
+                     "REPRISE_CONVENTION_AMORTISSEMENT pour reprise.py).")
+        if by_months:
+            # Comme reprise.py : mois entiers à compter du 1er du mois qui suit l'acquisition.
+            start = date(acquired.year + acquired.month // 12, acquired.month % 12 + 1, 1)
         board = platform_board(base, years, start, self.opening, cumul, self.rule, by_months)
         posted = [(d, a) for d, a in board["lines"] if self.opening <= d <= self.closing]
         for d, a in posted:
@@ -300,7 +312,6 @@ class Control:
             self._line(d, "AMORT", f"Dotation {r['code']}", r["compte_amortissement"], 0.0, a)
         last_month = end_of_month(self.closing) if self.closing == end_of_month(self.closing) else \
             date(self.closing.year, self.closing.month, 1) - timedelta(days=1)
-        acquired = day(r.get("date_acquisition")) or start
         prototype = prototype_accumulated(base, years, acquired, last_month) - (cumul if start < self.opening else 0)
         self.asset_detail.append({"code": r["code"], "platform": sum(a for _d, a in posted), "prototype": prototype,
                                   "gap": board["gap"], "start": start})
@@ -397,17 +408,23 @@ def main(argv):
     options = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "1") for a in argv if a.startswith("--"))
     if len(args) != 2:
         sys.exit("Usage : python -I scripts/reprise/controle_reference.py dossier_des_csv reference.json "
-                 "[--rapport=fichier.txt] [--relatif] [--ecart-reprise=premiere|derniere]")
-    rule = options.get("ecart-reprise", "premiere")
+                 "[--rapport=fichier.txt] [--relatif] [--convention=plateforme|fin-de-plan|prototype]")
+    # Convention d'amortissement, comme REPRISE_CONVENTION_AMORTISSEMENT de reprise.py ; --ecart-reprise
+    # (premiere ou derniere) reste accepté pour la règle seule.
+    convention = options.get("convention", "plateforme")
+    if convention not in ("plateforme", "fin-de-plan", "prototype"):
+        sys.exit("--convention : plateforme (défaut), fin-de-plan ou prototype.")
+    rule = options.get("ecart-reprise", "derniere" if convention == "fin-de-plan" else "premiere")
     if rule not in ("premiere", "derniere"):
         sys.exit("--ecart-reprise : premiere (règle actuelle de la plateforme) ou derniere (variante).")
-    control = Control(Path(args[0]), rule)
+    control = Control(Path(args[0]), rule, convention)
     reference = json.loads(Path(args[1]).read_text(encoding="utf-8"))
     tolerance = float(reference.get("tolerance", 10))
     values = control.compute()
     relative = "relatif" in options
     out = [f"Contrôle de la reprise face au prototype, du {control.opening:%d/%m/%Y} au {control.closing:%d/%m/%Y} "
-           f"(tolérance {tolerance:g} GNF ; écart de reprise des immobilisations : {rule} dotation)", ""]
+           f"(tolérance {tolerance:g} GNF ; convention d'amortissement {convention}, écart de reprise sur la "
+           f"{rule} dotation)", ""]
     width = max(len(i["libelle"]) for i in reference["indicateurs"])
     header = f"{'Indicateur':<{width}}  " + ("Écart relatif" if relative else
                                              f"{'Attendu':>18}  {'Recalculé':>18}  {'Écart':>16}") + "  Statut"
