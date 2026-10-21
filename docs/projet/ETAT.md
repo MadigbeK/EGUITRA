@@ -165,6 +165,33 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**21 octobre après-midi : convention d'amortissement des biens repris, essai outillé, domaines.**
+- Les trois conventions de la décision 1 sont prêtes, au choix de l'expert-comptable, par une seule
+  variable `REPRISE_CONVENTION_AMORTISSEMENT` (reprise.sh) et l'option `--convention` du contrôle :
+  `plateforme` (défaut, rattrapage de l'écart de reprise en janvier, dotations de l'exercice
+  d'environ +10 %), `fin-de-plan` (écart reporté sur la dernière dotation du plan, environ +0,8 %),
+  `prototype` (mois entiers à compter du mois qui suit l'acquisition, arrondis seulement). Détail :
+  `scripts/reprise/README.md`. `eguitra_finance` 19.0.1.6.0 avec migration ; paramètre système
+  `eguitra_finance.takeover_gap` (`first` ou `last`) pour les reprises faites ensuite à l'écran.
+  Note de réponse aux attentes (décision 1) mise à jour et régénérée.
+- Tests : 304 au vert sur les neuf modules avant la fusion ; `eguitra_finance` seul ensuite,
+  120 au vert (dont les 6 de `TestTakeoverConventions`). Le test de la piste d'audit exigeait les
+  modèles d'`eguitra_approval` même quand ce module n'est pas installé (test d'`eguitra_finance` seul) :
+  corrigé. Recette mise à jour (`-u eguitra_finance`, noyau redémarré). La production recevra
+  19.0.1.6.0 à la prochaine mise en production, menée par la session « AXISPRO SUITE » avec le profil
+  Achats (qui prendra 19.0.1.7.0 s'il modifie `eguitra_finance`).
+- Essai de reprise outillé : `scripts/reprise/essai.sh dossier` (base jetable `eguitra_reprise_essai`,
+  copie de la base modèle des tests, reprise enregistrée, dotations jusqu'à la date d'arrêté et
+  résultat « n/26 » par `validation.py`, sans montant) remplace `~/essai_complet.sh` et
+  `~/validation_essai.py`. Essai du 21 octobre sur le dossier réel (convention `plateforme`) :
+  18/26, comme le contrôle hors ligne.
+- Domaines : `infra/domaines.sh verifier|appliquer nimova.gn` contrôle les enregistrements A (finance,
+  axispro, portail, recette, noyau), inscrit les noms dans `infra/.env` (copie de l'ancien fichier),
+  recrée le proxy et contrôle le HTTPS. nimova.gn commandé chez Afribone, en attente de finalisation ;
+  d'ici là la production est servie sur des adresses provisoires `*.178-33-206-212.sslip.io` (session
+  « AXISPRO SUITE », ancien `.env` copié dans `infra/secrets/env.avant-domaines-provisoires`). Après
+  la bascule : rétablir la double authentification de la recette si les tests sont finis.
+
 **21 octobre : analyse du logiciel de transport actuel** (vidéo de présentation reçue par le gérant,
 43 minutes). Le logiciel est Datakö Fleet Manager (service en ligne, formule Business) : 5 citernes,
 8 conducteurs, 13 routes, environ 45 rotations en 2026, historique de mai à octobre. Synthèse,
