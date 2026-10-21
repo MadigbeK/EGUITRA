@@ -195,6 +195,11 @@ même branche, sans toucher à la logique des écrans :
   `/finance/shell`, avec des valeurs vraisemblables. Vérifié sur la maquette en 1440 px et sur
   téléphone (tableau de bord, ventes, trésorerie, Analyse, AxisPro, menus au clavier) ; `tsc` et
   `next build` au vert.
+- Pistes de logo (21 octobre), à la demande du gérant : six pistes dessinées en SVG dans
+  `docs/design/logos/` (le pli, le grand livre, le sceau, le burin, le leppi, la source), chacune
+  en version claire et sur fond sombre, et la planche `propositions.html` (marque seule, icône
+  d'application, marque avec le nom, tenue à 48, 32 et 16 pixels). En attente du choix du gérant ;
+  le monogramme actuel reste en place d'ici là.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
@@ -226,6 +231,8 @@ même branche, sans toucher à la logique des écrans :
 
 - Validation de l'ensemble par le gérant, sur la recette (http://localhost:3200 avec le tunnel)
   ou sur la planche ; ajustements éventuels dans cette branche.
+- Logo NIMOVA : choix d'une piste par le gérant (`docs/design/logos/propositions.html`), puis
+  déclinaison (monogramme de l'application, icônes d'onglet et d'installation, écran de connexion).
 - Logos repris des sites des deux sociétés : à faire confirmer par le client (fichiers vectoriels
   officiels si disponibles) ; l'icône d'onglet du portail (`public/icons/portail.svg`) reste
   typographique.
