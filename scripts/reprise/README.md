@@ -79,6 +79,18 @@ REPRISE_DATE_OUVERTURE=2026-01-01 REPRISE_BUDGET_ANNEE=2026 REPRISE_CONVENTION_A
 #    dotations jusqu'à la date d'arrêté ; résultat « n/26 » et annexe du procès-verbal de bascule.
 ```
 
+Essai complet avant la reprise de la recette (étapes 4 et 5 d'un seul tenant, sur une base jetable de
+la recette, jamais la production) : le dossier sur le serveur contient les fichiers de reprise et
+`reference.json`. `essai.sh` crée la base (copie de la base modèle des tests, à créer d'abord par
+`infra/test.sh`), enregistre la reprise, comptabilise les dotations jusqu'à la date d'arrêté
+(`validation.py`) et affiche « n/26 » et l'écart relatif de chaque indicateur, sans montant. La base
+`eguitra_reprise_essai` reste disponible pour examen et est remplacée à l'essai suivant ; les bases de
+production et de recette sont refusées.
+
+```bash
+REPRISE_CONVENTION_AMORTISSEMENT=fin-de-plan scripts/reprise/essai.sh ~/reprise
+```
+
 `parametres.json` porte aussi l'activité des ventes du transport (posée dans Transport > Paramètres)
 et les seuils d'alerte de la direction (trésorerie minimale, marge transport, dépassement budgétaire,
 délai de recouvrement, DSCR), appliqués par `reprise.py`. Un compte de l'ancien classeur dont la racine
