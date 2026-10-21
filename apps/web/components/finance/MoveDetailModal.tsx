@@ -154,7 +154,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               <dd className="text-right font-mono">{fmtGNF(move.amount_tax)}</dd>
               <dt className="font-semibold">Total TTC</dt>
               <dd className="text-right font-mono font-semibold">{fmtGNF(move.amount_total)}</dd>
-              {move.state === "posted" && (
+              {move.state === "posted" && move.amount_residual !== null && (
                 <>
                   <dt className="text-muted">Reste dû</dt>
                   <dd className="text-right font-mono text-warn">{fmtGNF(move.amount_residual)}</dd>
@@ -172,7 +172,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 <Select value={modeId} onChange={(e) => setModeId(e.target.value)} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
               </Field>
               <Field label="Montant" hint={`Reste : ${fmtGNF(move.amount_residual)}`}>
-                <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual))} />
+                <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual ?? 0))} />
               </Field>
               <Field label="Date">
                 <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />

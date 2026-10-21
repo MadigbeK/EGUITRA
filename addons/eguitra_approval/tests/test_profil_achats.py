@@ -111,6 +111,7 @@ class TestProfilAchats(FinanceDataMixin, ApiCase):
         status, detail = self._get(f"/finance/moves/{move['id']}")
         self.assertEqual(status, 200, detail)
         self.assertEqual([a["id"] for a in detail["attachments"]], [attachment["id"]])
+        self.assertEqual((detail["amount_residual"], detail["payments"]), (None, None), "Ni reste dû ni règlements")
         response = self.url_open(f"/api/v1/finance/attachments/{attachment['id']}",
                                  headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
         self.assertEqual(response.status_code, 200, "Justificatif téléchargé")
@@ -143,6 +144,7 @@ class TestProfilAchats(FinanceDataMixin, ApiCase):
         self.assertIn(move["id"], [m["id"] for m in listing["items"]])
         self.assertTrue(all(m["move_type"] in ("in_invoice", "in_refund") for m in listing["items"]),
                         "Liste bornée d'office aux pièces d'achat")
+        self.assertIsNone(listing["totals"]["amount_residual"], "Pas d'encours fournisseurs")
         response = self.url_open(f"/api/v1/finance/moves/{move['id']}/pdf",
                                  headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
         self.assertEqual(response.status_code, 200, "PDF de sa pièce d'achat")
@@ -250,6 +252,8 @@ class TestProfilAchats(FinanceDataMixin, ApiCase):
             "/finance/alerts",
             "/finance/closing",
             "/finance/accounts",
+            "/finance/analytic-accounts",
+            "/finance/payment-modes",
             "/approvals/rules",
         ):
             status, body = self._get(path)

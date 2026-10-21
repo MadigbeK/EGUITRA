@@ -34,6 +34,15 @@ def require_purchase(move_type, full=FIN_WRITE):
         raise ApiError(403, "forbidden", PURCHASES_ONLY)
 
 
+def without_settlement(data):
+    """Profil Achats seul : la pièce sans son reste dû ni ses règlements, qui relèvent de la trésorerie ;
+    son état de paiement (payée, partielle, non payée) reste lisible."""
+    data["amount_residual"] = None
+    if "payments" in data:
+        data["payments"] = None
+    return data
+
+
 def free_accounts():
     """L'utilisateur a-t-il le droit « Saisie libre des comptes » (models/res_users.py) ? Le droit ne vaut
     qu'avec un profil de la finance (finance, direction, administration) : le profil Achats ne choisit

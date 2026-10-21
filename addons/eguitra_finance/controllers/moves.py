@@ -32,6 +32,7 @@ from .common import (
     require_purchase,
     today,
     with_rules,
+    without_settlement,
 )
 from .withholding import invoice_partner, line_withholdings, with_withholdings
 
@@ -57,6 +58,12 @@ def _move(move_id, full=None):
     if full:
         require_purchase(move.move_type, full)
     return move
+
+
+def _detail(move):
+    """Fiche de la pièce ; au profil Achats seul, sans reste dû ni règlements (common.without_settlement)."""
+    data = move_detail(move)
+    return without_settlement(data) if achats_only(FIN_READ) else data
 
 
 def _purchase_taxes(value, company):
@@ -358,17 +365,22 @@ class EguitraFinanceMoves(http.Controller):
         offset = int_arg(kw, "offset", 0, 0)
         moves = Move.search(domain, limit=limit, offset=offset, order="date desc, id desc")
         [(total, residual)] = Move._read_group(domain, aggregates=["amount_total_signed:sum", "amount_residual_signed:sum"])
+        items = [move_summary(m) for m in moves]
+        totals = {"amount_total": abs(total or 0.0), "amount_residual": abs(residual or 0.0)}
+        if achats_only(FIN_READ):
+            items = [without_settlement(item) for item in items]
+            totals["amount_residual"] = None
         return {
-            "items": [move_summary(m) for m in moves],
+            "items": items,
             "total_count": Move.search_count(domain),
-            "totals": {"amount_total": abs(total or 0.0), "amount_residual": abs(residual or 0.0)},
+            "totals": totals,
             "limit": limit,
             "offset": offset,
         }
 
     @api_route("/finance/moves/<int:move_id>", profiles=PURCHASE_READ)
     def get_move(self, move_id, **_kw):
-        return move_detail(_move(move_id, FIN_READ))
+        return _detail(_move(move_id, FIN_READ))
 
     # ─── Saisie ───────────────────────────────────────────────────────────
 
@@ -432,7 +444,7 @@ class EguitraFinanceMoves(http.Controller):
         if data.get("post"):
             check_mandatory_analytic(move.line_ids)
             move._eguitra_post_or_submit()
-        return move_detail(move)
+        return _detail(move)
 
     @api_route("/finance/moves/<int:move_id>", methods=("PATCH",), profiles=PURCHASE_WRITE)
     def update_move(self, move_id, **_kw):
@@ -466,7 +478,7 @@ class EguitraFinanceMoves(http.Controller):
                 values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(
                     dict(data, journal_id=move.journal_id.id), move.move_type, partner)
         move.write(values)
-        return move_detail(move)
+        return _detail(move)
 
     @api_route("/finance/moves/<int:move_id>", methods=("DELETE",), profiles=PURCHASE_WRITE)
     def delete_move(self, move_id, **_kw):
@@ -487,7 +499,7 @@ class EguitraFinanceMoves(http.Controller):
             raise ApiError(422, "business_rule", "La pièce n'est pas en brouillon.")
         check_mandatory_analytic(move.line_ids)
         move._eguitra_post_or_submit()
-        return move_detail(move)
+        return _detail(move)
 
     @api_route("/finance/moves/<int:move_id>/dispute", methods=("POST",), profiles=FIN_WRITE)
     def dispute(self, move_id, **_kw):

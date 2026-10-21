@@ -269,7 +269,8 @@ export interface MoveSummary {
   amount_untaxed: number;
   amount_tax: number;
   amount_total: number;
-  amount_residual: number;
+  /** Reste dû ; null pour le profil Achats seul (la trésorerie ne lui est pas ouverte). */
+  amount_residual: number | null;
   payment_state: string;
   company: Ref;
   approval?: { request_id?: number; state: string; level: number | null; pending_with: string | null } | null;

@@ -6,7 +6,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
-from .common import ACHATS, FIN_READ, FIN_WRITE, PURCHASE_TYPES, as_float, move_summary, today
+from .common import ACHATS, FIN_READ, FIN_WRITE, PURCHASE_TYPES, as_float, move_summary, today, without_settlement
 
 FIELDS = ("name", "vat", "phone", "email", "street", "city", "comment", "ref")
 # Champs de l'application -> champs du noyau (fiche enrichie du prototype de la direction).
@@ -138,7 +138,8 @@ class EguitraFinancePartners(http.Controller):
                 ("partner_id", "=", partner.id), ("move_type", "in", PURCHASE_TYPES),
                 ("company_id", "=", request.env.company.id),
             ], limit=20, order="date desc, id desc")
-            data.update({"aging": None, "open_items": [], "recent_moves": [move_summary(m) for m in moves]})
+            data.update({"aging": None, "open_items": [],
+                         "recent_moves": [without_settlement(move_summary(m)) for m in moves]})
             return data
         day = today()
         lines = request.env["account.move.line"].search([
