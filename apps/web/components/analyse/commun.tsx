@@ -639,10 +639,10 @@ export function KpiContrat({ kpi, icon, teinte }: { kpi: Kpi; icon?: Icon; teint
   const tendance = nombres(kpi.trend);
   const statut = STATUT[kpi.status] ?? "neutral";
   return (
-    <div title={kpi.definition} className="min-w-0">
+    <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && "kpi-avec-tendance overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]")}>
       <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} icon={icon} teinte={teinte} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
-        <div className="-mt-[3px] rounded-b-2xl border-x border-b border-line bg-panel px-4 pb-2 pt-1">
+        <div className="px-5 pb-3">
           <Sparkline values={tendance} color={statut === "danger" ? COULEUR.mauvais : statut === "warn" ? COULEUR.alerte : COULEUR.accent} height={32} />
         </div>
       )}

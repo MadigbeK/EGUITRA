@@ -147,6 +147,8 @@
   --ombre-carte: 0 1px 2px rgb(16 36 31 / 0.04), 0 4px 14px -6px rgb(16 36 31 / 0.06);
   --ombre-levee: 0 2px 4px rgb(16 36 31 / 0.04), 0 18px 36px -16px rgb(16 36 31 / 0.22);
   --ombre-flottante: 0 28px 70px -24px rgb(16 36 31 / 0.38), 0 4px 12px rgb(16 36 31 / 0.06);
+  /* Feuille : liseré à peine visible et ombre portée basse, sans bordure dessinée. */
+  --ombre-feuille: 0 0 0 1px rgb(16 36 31 / 0.05), 0 1px 2px rgb(16 36 31 / 0.04), 0 16px 32px -22px rgb(16 36 31 / 0.26);
 
   color-scheme: light;
 }
@@ -207,6 +209,7 @@
   --ombre-carte: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 14px -6px rgb(0 0 0 / 0.4);
   --ombre-levee: 0 2px 4px rgb(0 0 0 / 0.3), 0 18px 36px -16px rgb(0 0 0 / 0.6);
   --ombre-flottante: 0 28px 70px -24px rgb(0 0 0 / 0.75), 0 4px 12px rgb(0 0 0 / 0.3);
+  --ombre-feuille: 0 0 0 1px rgb(255 255 255 / 0.05), 0 16px 32px -22px rgb(0 0 0 / 0.7);
   color-scheme: dark;
   background: var(--bg);
   color: var(--ink);
@@ -766,6 +769,61 @@ input[type="radio"] {
   animation: n-tiroir 340ms var(--ease-sortie) both;
 }
 
+/* ─── Guillochis (gravures des billets) ───────────────────────────────── */
+
+/* Chaque trait se grave à son tour au premier affichage. */
+.guilloche-trait {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: n-tracer 1800ms var(--ease-sortie) backwards;
+  animation-delay: calc(var(--i, 0) * 60ms + 120ms);
+}
+
+/* Faisceau d'un chiffre clé : discret au repos, il s'avive et glisse sous le curseur. */
+.kpi-ondes {
+  opacity: 0.28;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%);
+  mask-image: linear-gradient(90deg, transparent, #000 60%);
+  transition:
+    opacity 400ms ease,
+    transform 1100ms var(--ease-sortie);
+}
+.kpi:hover .kpi-ondes {
+  opacity: 0.75;
+  transform: translateX(-14px);
+}
+
+/* Chiffre clé suivi de sa courbe (Analyse) : une seule feuille ; la vraie courbe remplace la gravure. */
+.kpi-avec-tendance > .kpi {
+  border-radius: 0;
+  box-shadow: none;
+}
+.kpi-avec-tendance .kpi-ondes {
+  display: none;
+}
+
+/* Registre : une rangée faite seulement de chiffres clés devient une seule feuille réglée, comme
+   une page de livre de comptes. Les filets séparent les cases ; chaque case garde sa gravure. */
+:where(.grid):has(> .kpi):not(:has(> :not(.kpi))) {
+  gap: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--ombre-feuille);
+}
+:where(.grid):has(> .kpi):not(:has(> :not(.kpi))) > .kpi {
+  margin: -1px 0 0 -1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow:
+    inset 1px 0 0 var(--line),
+    inset 0 1px 0 var(--line);
+  transition: background-color 300ms ease;
+}
+:where(.grid):has(> .kpi):not(:has(> :not(.kpi))) > .kpi:hover {
+  background: color-mix(in oklab, var(--accent-doux) 38%, transparent);
+}
+
 /* ─── Accueil : tuiles et icônes vivantes ──────────────────────────────── */
 
 /* Entrée des tuiles : une vague, avec un léger rebond. */
@@ -1156,6 +1214,75 @@ input[type="radio"] {
 }
 .accueil-ruban-2 {
   animation: ruban-derive 24s ease-in-out infinite alternate-reverse;
+}
+
+/* Billet de trésorerie (tableau de bord) : chiffres clairs sur fond forêt, vagues de menthe. */
+.billet .compteur-unite {
+  color: rgb(255 255 255 / 0.6);
+}
+.billet-ondes {
+  opacity: 0.22;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 70%);
+  mask-image: linear-gradient(180deg, transparent, #000 70%);
+}
+.billet {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ─── Barre des rubriques (menus du haut) ─────────────────────────────── */
+
+/* Pastille blanche qui suit le curseur d'une rubrique à l'autre. */
+.menus-survol {
+  transition:
+    transform 380ms var(--ease-sortie),
+    width 380ms var(--ease-sortie),
+    opacity 200ms ease;
+}
+
+/* Fil d'or sous la rubrique de l'écran ouvert : il glisse en ressort quand on change de rubrique. */
+.menus-fil {
+  transition:
+    transform 560ms var(--ease-ressort),
+    width 560ms var(--ease-ressort);
+  animation: menus-fil 700ms var(--ease-sortie) backwards 200ms;
+}
+@keyframes menus-fil {
+  from {
+    opacity: 0;
+    clip-path: inset(0 50% 0 50%);
+  }
+}
+
+/* Panneau d'une rubrique : il descend de sa rubrique, ses écrans arrivent en vague. */
+.menus-panneau {
+  transform-origin: 40px -10px;
+  animation: menus-panneau 380ms var(--ease-sortie) backwards;
+}
+@keyframes menus-panneau {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+    clip-path: inset(0 0 60% 0 round 22px);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 22px);
+  }
+}
+.menus-item {
+  animation: lanceur-item 420ms var(--ease-ressort) backwards;
+  animation-delay: calc(50ms + var(--i, 0) * 24ms);
+}
+
+/* Filigrane de chaque écran : une rosace guillochée, à peine visible, gravée en haut à droite. */
+.filigrane {
+  opacity: 0.11;
+  -webkit-mask-image: radial-gradient(closest-side, #000 35%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 35%, transparent 100%);
+}
+.filigrane .guilloche-trait {
+  animation-duration: 2400ms;
+  animation-delay: calc(var(--i, 0) * 90ms + 200ms);
 }
 
 /* ─── Lanceur d'applications (bouton à neuf points de la coque) ───────────── */

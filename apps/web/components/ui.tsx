@@ -19,6 +19,7 @@ import {
 } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
 import { cx } from "@/lib/cx";
+import { Ondes } from "@/components/guilloche";
 import { fmtPct, fmtShort } from "@/lib/format";
 
 export { cx };
@@ -155,12 +156,16 @@ const TUILE: Record<Teinte, { fond: string; trait: string }> = {
   danger: { fond: "var(--danger-doux)", trait: "var(--danger)" },
 };
 
-/** Pastille d'icône : un carré doux de la teinte, l'icône dans sa nuance foncée. */
+/** Sceau d'icône : un rond doux de la teinte cerclé d'un filet gravé, l'icône dans sa nuance foncée. */
 export function IconTile({ icon: I, teinte = "accent", className }: { icon: Icon; teinte?: Teinte; className?: string }) {
   const t = TUILE[teinte];
   return (
-    <span aria-hidden className={cx("grid h-10 w-10 flex-none place-items-center rounded-xl", className)} style={{ background: t.fond, color: t.trait }}>
-      <I className="h-[19px] w-[19px]" />
+    <span
+      aria-hidden
+      className={cx("grid h-10 w-10 flex-none place-items-center rounded-full", className)}
+      style={{ background: t.fond, color: t.trait, boxShadow: `0 0 0 3px var(--panel), 0 0 0 4px color-mix(in oklab, ${t.trait} 28%, transparent)` }}
+    >
+      <I className="h-[18px] w-[18px]" />
     </span>
   );
 }
@@ -171,8 +176,10 @@ export function Delta({ value, inverse, digits = 1 }: { value: number | null; in
   const hausse = value >= 0;
   const bon = inverse ? !hausse : hausse;
   return (
-    <span className={cx("inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold", bon ? "bg-ok-doux text-ok-texte" : "bg-danger-doux text-danger")}>
-      {hausse ? <Hausse className="h-3 w-3" /> : <Baisse className="h-3 w-3" />}
+    <span className={cx("inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-semibold tabular", bon ? "text-ok-texte" : "text-danger")}>
+      <svg viewBox="0 0 10 10" aria-hidden className={cx("h-2 w-2", !hausse && "rotate-180")}>
+        <path d="M5 1 9.5 9h-9Z" fill="currentColor" />
+      </svg>
       {fmtPct(Math.abs(value), digits)}
       <span className="sr-only">{hausse ? " en hausse" : " en baisse"}</span>
     </span>
@@ -185,7 +192,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <h1 className="text-[27px] font-[680] leading-[1.12] text-ink sm:text-[30px]">{title}</h1>
+        <h1 className="font-display text-[30px] font-[650] leading-[1.05] tracking-[-0.025em] text-ink sm:text-[38px]">{title}</h1>
         {subtitle && <p className="mt-2 max-w-[80ch] text-sm leading-relaxed text-muted">{subtitle}</p>}
       </div>
       {actions && <div className="no-print flex flex-wrap items-center gap-2">{actions}</div>}
@@ -193,47 +200,63 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-/** Panneau blanc posé sur le fond, filet fin et ombre légère. */
+/** Feuille blanche posée sur le fond : un liseré à peine visible et une ombre portée basse. */
 export function Card({ title, actions, children, className, padded = true }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; padded?: boolean }) {
   const head = Boolean(title || actions);
   return (
-    <section className={cx("min-w-0 rounded-2xl border border-line bg-panel shadow-[var(--ombre-carte)]", className)}>
+    <section className={cx("min-w-0 rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]", className)}>
       {head && (
-        <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pb-1 pt-4">
-          {title && <h2 className="text-[16.5px] font-semibold leading-snug text-ink">{title}</h2>}
+        <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-6 pb-1 pt-5">
+          {title && <h2 className="font-display text-[17px] font-[620] leading-snug tracking-[-0.01em] text-ink">{title}</h2>}
           {actions}
         </div>
       )}
-      <div className={padded ? (head ? "px-5 pb-5 pt-2" : "p-5") : head ? "pb-2" : undefined}>{children}</div>
+      <div className={padded ? (head ? "px-6 pb-6 pt-2" : "p-6") : head ? "pb-2" : undefined}>{children}</div>
     </section>
   );
 }
 
-/**
- * Chiffre clé : une carte, son libellé, la valeur qui défile, une précision. Un filet de couleur
- * au pied dit l'état ; le libellé ou la précision le disent aussi en toutes lettres.
- */
-export function Kpi({ label, value, hint, tone = "neutral", icon, teinte, delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; icon?: Icon; teinte?: Teinte; delta?: number | null; inverse?: boolean }) {
+/** Encre de la gravure d'un chiffre clé, selon son état. */
+const ENCRE: Record<Tone, string> = {
+  neutral: "text-accent-vif",
+  ok: "text-jade",
+  warn: "text-warn-vif",
+  danger: "text-danger-vif",
+  accent: "text-or",
+};
+
+/** Sceau d'état : un petit cachet gravé (anneau et point), dans la couleur de l'état. */
+function Sceau({ tone }: { tone: Tone }) {
   return (
-    <div className="n-kpi relative min-w-0 overflow-hidden rounded-2xl border border-line bg-panel px-4 pb-4 pt-3.5 shadow-[var(--ombre-carte)]">
+    <svg viewBox="0 0 16 16" aria-hidden className={cx("mt-0.5 h-4 w-4 flex-none", ENCRE[tone])}>
+      <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="1.2 1.4" />
+      <circle cx="8" cy="8" r="3.4" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * Chiffre clé, gravé comme un coupon : le libellé, la valeur en grand qui défile, une précision.
+ * Un faisceau guilloché propre à chaque libellé court au pied, dans l'encre de l'état ; le sceau
+ * dit l'état, le libellé ou la précision le disent aussi en toutes lettres.
+ */
+export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; icon?: Icon; teinte?: Teinte; delta?: number | null; inverse?: boolean }) {
+  return (
+    <div className="n-kpi kpi relative isolate min-w-0 overflow-hidden rounded-[20px] bg-panel px-5 pb-4 pt-4 shadow-[var(--ombre-feuille)]">
+      <Ondes graine={label} className={cx("kpi-ondes pointer-events-none absolute -bottom-2 right-0 -z-10 h-[74px] w-[78%] max-w-[300px]", ENCRE[tone])} />
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 pt-0.5 text-[13px] font-medium leading-snug text-ink-2">{label}</div>
-        {icon ? (
-          <IconTile icon={icon} teinte={teinte ?? (tone === "danger" ? "danger" : tone === "warn" ? "ambre" : tone === "ok" ? "jade" : tone === "accent" ? "or" : "accent")} className="-mr-0.5 h-9 w-9 rounded-[10px]" />
-        ) : (
-          <span aria-hidden className="mt-1 h-2.5 w-2.5 flex-none rounded-full" style={{ background: VIF[tone], boxShadow: `0 0 0 4px color-mix(in oklab, ${VIF[tone]} 18%, transparent)` }} />
-        )}
+        <div className="min-w-0 text-[13px] font-medium leading-snug text-ink-2">{label}</div>
+        {tone !== "neutral" && <Sceau tone={tone} />}
       </div>
-      <div className={cx("mt-2.5 font-display text-[26px] font-[680] leading-none tracking-[-0.02em]", tone === "danger" ? "text-danger" : "text-ink")}>
+      <div className={cx("mt-3 font-display text-[30px] font-[650] leading-none tracking-[-0.03em]", tone === "danger" ? "text-danger" : "text-ink")}>
         <Valeur value={value} />
       </div>
       {(hint || delta !== undefined) && (
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] leading-snug text-muted">
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] leading-snug text-muted">
           {delta !== undefined && <Delta value={delta} inverse={inverse} />}
           {hint && <span className="min-w-0">{hint}</span>}
         </div>
       )}
-      <span aria-hidden className="n-pousser-x absolute inset-x-0 bottom-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${VIF[tone]}, color-mix(in oklab, ${VIF[tone]} 35%, transparent))` }} />
     </div>
   );
 }

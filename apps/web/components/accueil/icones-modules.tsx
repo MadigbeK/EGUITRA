@@ -298,6 +298,92 @@ const DESSINS: Record<string, ReactNode> = {
       <circle cx="24" cy="24" r="5.5" fill={G} />
     </g>
   ),
+  engagements: (
+    <>
+      <rect x="8" y="7" width="32" height="37" rx="5.5" fill={T} />
+      <rect className="a-pop" style={k(0)} x="17" y="3.5" width="14" height="8" rx="3" fill={F} />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M14 23.5l3.2 3.2 5.3-6" stroke={B} strokeWidth="3.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect className="a-pousse-x" style={k(2)} x="25.5" y="21.5" width="9.5" height="3.6" rx="1.8" fill={B} opacity=".92" />
+      <path className="a-trace" style={k(3)} pathLength={1} d="M14 34.5l3.2 3.2 5.3-6" stroke={B} strokeWidth="3.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect className="a-pousse-x" style={k(4)} x="25.5" y="32.5" width="9.5" height="3.6" rx="1.8" fill={B} opacity=".92" />
+    </>
+  ),
+  guide: (
+    <>
+      <path d="M8 9a5 5 0 0 1 5-5h25v33H13a5 5 0 0 0-5 5Z" fill={J} />
+      <path d="M8 42a5 5 0 0 1 5-5h25v7H13a5 5 0 0 1-5-2Z" fill={M} />
+      <g className="a-saute" style={k(1)}>
+        <circle cx="23" cy="20" r="9.5" fill={G} />
+        <rect x="21.3" y="18.5" width="3.4" height="7.5" rx="1.7" fill={F} />
+        <circle cx="23" cy="14.8" r="2" fill={F} />
+      </g>
+    </>
+  ),
+  plan: (
+    <>
+      <rect x="5" y="5" width="38" height="38" rx="7.5" fill={A} />
+      <rect className="a-pop" style={k(0)} x="11" y="12" width="7" height="6" rx="1.6" fill={GC} />
+      <rect className="a-pousse-x" style={k(1)} x="21" y="13" width="16" height="4" rx="2" fill={B} opacity=".92" />
+      <rect className="a-pop" style={k(2)} x="11" y="21" width="7" height="6" rx="1.6" fill={S} />
+      <rect className="a-pousse-x" style={k(3)} x="21" y="22" width="12" height="4" rx="2" fill={B} opacity=".92" />
+      <rect className="a-pop" style={k(4)} x="11" y="30" width="7" height="6" rx="1.6" fill={GC} />
+      <rect className="a-pousse-x" style={k(5)} x="21" y="31" width="14" height="4" rx="2" fill={B} opacity=".92" />
+    </>
+  ),
+  utilisateurs: (
+    <>
+      <g className="a-saute" style={k(0)}>
+        <circle cx="19" cy="15" r="8" fill={A} />
+        <path d="M4 41a15 15 0 0 1 30 0v2.5H4Z" fill={A} />
+      </g>
+      <g className="a-engrenage" style={pivot(36, 34, 2)}>
+        <circle cx="36" cy="34" r="8" fill="none" stroke={F} strokeWidth="4" strokeDasharray="3.2 3.08" />
+        <circle cx="36" cy="34" r="6.4" fill={G} />
+        <circle cx="36" cy="34" r="2.4" fill={F} />
+      </g>
+    </>
+  ),
+  societes: (
+    <>
+      <rect className="a-pousse" style={k(0)} x="4.5" y="16" width="19" height="28" rx="3.5" fill={F} />
+      <rect className="a-pousse" style={k(1)} x="24.5" y="5" width="19" height="39" rx="3.5" fill={J} />
+      <rect className="a-allume" style={k(2)} x="9" y="22" width="4" height="4" rx="1" fill={B} />
+      <rect className="a-allume" style={k(3)} x="15" y="30" width="4" height="4" rx="1" fill={B} />
+      <rect className="a-allume" style={k(3)} x="29" y="12" width="4" height="4" rx="1" fill={B} />
+      <rect className="a-allume" style={k(4)} x="35" y="20" width="4" height="4" rx="1" fill={B} />
+      <rect className="a-allume" style={k(5)} x="29" y="28" width="4" height="4" rx="1" fill={B} />
+    </>
+  ),
+  axes: (
+    <>
+      <path className="a-tombe" style={k(2)} d="M5 32.5 24 42l19-9.5-6.5-3.3L24 35.5l-12.5-6.3Z" fill={P} />
+      <path className="a-tombe" style={k(1)} d="M5 24.5 24 34l19-9.5-6.5-3.3L24 27.5l-12.5-6.3Z" fill={C} />
+      <path className="a-tombe" style={k(0)} d="M24 6 43 15.5 24 25 5 15.5Z" fill={G} />
+    </>
+  ),
+  imputations: (
+    <>
+      <circle className="a-pop" style={k(0)} cx="9.5" cy="24" r="6" fill={G} />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M15 24h5c4.5 0 6.5-12 12.5-12H35" stroke={T} strokeWidth="3.6" fill="none" strokeLinecap="round" />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M15 24h20" stroke={T} strokeWidth="3.6" fill="none" strokeLinecap="round" />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M15 24h5c4.5 0 6.5 12 12.5 12H35" stroke={T} strokeWidth="3.6" fill="none" strokeLinecap="round" />
+      <rect className="a-pop" style={k(2)} x="34.5" y="6.5" width="9.5" height="10.5" rx="2.6" fill={P} />
+      <rect className="a-pop" style={k(3)} x="34.5" y="18.75" width="9.5" height="10.5" rx="2.6" fill={A} />
+      <rect className="a-pop" style={k(4)} x="34.5" y="31" width="9.5" height="10.5" rx="2.6" fill={J} />
+    </>
+  ),
+  audit: (
+    <>
+      <rect x="6" y="4" width="28" height="37" rx="5" fill={S} />
+      <rect className="a-pousse-x" style={k(0)} x="11" y="11" width="17" height="3.4" rx="1.7" fill={B} opacity=".92" />
+      <rect className="a-pousse-x" style={k(1)} x="11" y="17.5" width="12" height="3.4" rx="1.7" fill={B} opacity=".92" />
+      <rect className="a-pousse-x" style={k(2)} x="11" y="24" width="14" height="3.4" rx="1.7" fill={B} opacity=".92" />
+      <g className="a-saute" style={k(3)}>
+        <circle cx="32" cy="31" r="8.5" fill={B} fillOpacity=".55" stroke={F} strokeWidth="4" />
+        <path d="M38.2 37.2 43.5 42.5" stroke={F} strokeWidth="4.6" strokeLinecap="round" />
+      </g>
+    </>
+  ),
   rotations: (
     <>
       <rect x="11.5" y="2.5" width="25" height="43" rx="6.5" fill={F} />
@@ -478,6 +564,17 @@ const PAR_ADRESSE: Record<string, string> = {
   "/axispro/grille": "grille",
   "/axispro/pieces": "pieces",
   reglages: "parametres",
+  "/finance/engagements": "engagements",
+  "/finance/guide": "guide",
+  "/finance/plan-comptable": "plan",
+  "/finance/admin/utilisateurs": "utilisateurs",
+  "/finance/admin/societes": "societes",
+  "/finance/admin/axes": "axes",
+  "/finance/admin/imputations": "imputations",
+  "/finance/admin/parametres": "parametres",
+  "/finance/admin/audit": "audit",
+  "/axispro/admin/utilisateurs": "utilisateurs",
+  "/axispro/admin/societes": "societes",
   "/mobile": "rotations",
   "/analyse": "analyse",
   "/analyse/rentabilite": "rentabilite",

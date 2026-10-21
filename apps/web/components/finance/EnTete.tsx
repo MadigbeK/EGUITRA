@@ -52,14 +52,13 @@ export function EquilibreExercice({ data }: { data: EnTeteFinance | undefined })
   return (
     <span
       title={titre}
-      className={cx(
-        "hidden items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium md:flex",
-        data.balanced ? "border-line bg-panel text-ink-2" : "border-danger/30 bg-danger-doux text-danger",
-      )}
+      className={cx("hidden h-10 items-center gap-2 rounded-full p-0.5 text-[13px] font-medium md:flex 2xl:pr-3.5", data.balanced ? "text-ink-2" : "bg-danger-doux text-danger")}
     >
-      {data.balanced ? <Check className="h-4 w-4 text-ok" /> : <TriangleAlert className="h-4 w-4" />}
-      <span className="whitespace-nowrap">
-        Exercice {data.fiscal_year.start.slice(0, 4)} · {data.balanced ? "débit = crédit" : `écart ${fmtGNF(data.difference)}`}
+      <span className={cx("grid h-9 w-9 flex-none place-items-center rounded-full", data.balanced ? "bg-ok-doux text-ok shadow-[0_0_0_3px_var(--bg),0_0_0_4px_rgb(12_122_82/0.25)]" : "bg-danger text-white")}>
+        {data.balanced ? <Check className="h-4 w-4" strokeWidth={2.4} /> : <TriangleAlert className="h-4 w-4" />}
+      </span>
+      <span className={cx("whitespace-nowrap", data.balanced ? "hidden 2xl:inline" : "hidden xl:inline")}>
+        Exercice {data.fiscal_year.start.slice(0, 4)} : {data.balanced ? "débit = crédit" : `écart ${fmtGNF(data.difference)}`}
       </span>
       <span className="sr-only">{titre}</span>
     </span>
