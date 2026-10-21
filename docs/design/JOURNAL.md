@@ -221,8 +221,10 @@ même branche, sans toucher à la logique des écrans :
   accueil, connexion (le grand N de la scène reprend le pli au trait), page d'erreur, Rotations.
   Icône d'onglet `public/icons/nimova.svg` et icônes d'installation de Rotations refaites au pli.
   Sceau (`SceauNimova`, `CachetDocument`) au pied du rapport mensuel et du rapport de dossier
-  AxisPro, imprimé en couleur. Vérifié : `tsc` au vert ; `next build` non lancé en local, le disque
-  C: étant plein (moins de 100 Mo libres) : la construction se fait sur le serveur.
+  AxisPro, imprimé en couleur. Vérifié : `tsc` au vert ; `next build` non lancé en local (disque
+  C: plein ce jour-là), construit sur le serveur sans erreur. En recette le 21 octobre (df60a8c,
+  fusionné dans `claude/bold-shannon-gpg2hv` en 76732c4, cache de Rotations en `rotations-v3`) ;
+  la production attend la décision du gérant.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
