@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import { ChevronLeft, Lock, MapPin, RotateCcw, Send } from "@/components/icons";
 import Link from "next/link";
+import { Rosace } from "@/components/guilloche";
 import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, Tabs, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { RECO, type DossierDetail, type Message } from "@/lib/axispro-types";
@@ -44,12 +45,7 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
         <ChevronLeft className="h-4 w-4" /> Tous les dossiers
       </Link>
       <section className="n-degrade relative mb-4 overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_50px_-28px_var(--accent-lueur)] sm:p-7">
-        <svg aria-hidden viewBox="0 0 200 200" className="pointer-events-none absolute -right-10 -top-16 h-64 w-64 opacity-[0.14]" focusable="false">
-          {[0, 1, 2, 3].map((k) => (
-            <rect key={k} x={20 + k * 34} y={150 - k * 34} width="90" height="12" rx="4" fill="#fff" />
-          ))}
-          <circle cx="160" cy="34" r="12" fill="#fff" />
-        </svg>
+        <Rosace epaisseur={0.8} className="pointer-events-none absolute -right-36 top-1/2 h-[460px] w-[460px] -translate-y-1/2 text-white opacity-[0.22]" />
         <div className="relative flex flex-wrap items-center gap-6">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

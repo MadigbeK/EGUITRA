@@ -195,6 +195,13 @@ même branche, sans toucher à la logique des écrans :
   `/finance/shell`, avec des valeurs vraisemblables. Vérifié sur la maquette en 1440 px et sur
   téléphone (tableau de bord, ventes, trésorerie, Analyse, AxisPro, menus au clavier) ; `tsc` et
   `next build` au vert.
+  En recette le 21 octobre (commit 863f064, fusionné dans `claude/bold-shannon-gpg2hv` en
+  4d6881a) ; la production reste sur la version précédente jusqu'à validation du gérant.
+- Maquette d'API d'AxisPro remise à niveau (21 octobre) : notation de la méthode (préparation,
+  APD, bancabilité, complétude, data room, classement, porte suivante), synthèse des dossiers
+  (risques, actions, devise) et fiche (données de décision, revue scellée). Les notes ne
+  s'affichent plus « NaN / 100 » et la fiche d'un dossier s'ouvre. Le bandeau de la fiche porte une
+  rosace guillochée à la place de l'escalier décoratif, qui chevauchait les notes.
 - Pistes de logo (21 octobre), à la demande du gérant : six pistes dessinées en SVG dans
   `docs/design/logos/` (le pli, le grand livre, le sceau, le burin, le leppi, la source), chacune
   en version claire et sur fond sombre, et la planche `propositions.html` (marque seule, icône
@@ -240,9 +247,6 @@ même branche, sans toucher à la logique des écrans :
 ## Pour la session fonctionnelle
 
 - Voir `demandes-fonctionnelles.md` : domaine nimovagroup.com (le cache de Rotations est réglé).
-- Maquette d'API en retard sur le noyau pour AxisPro : les notes des dossiers s'affichent
-  « NaN / 100 » sur la maquette (champs de notation renommés côté noyau) ; la recette n'est pas
-  concernée.
 - À la fusion : les écrans ont été retouchés pour leur seule présentation (imports d'icônes,
   libellés, classes) ; en cas de conflit avec une évolution fonctionnelle, garder la logique de
   la session fonctionnelle et réappliquer la présentation.
