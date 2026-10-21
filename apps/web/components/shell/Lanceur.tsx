@@ -183,7 +183,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
           <div className="min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-2 pt-3">
             {rayons.map((r, ri) => (
               <section key={r.cle} aria-label={r.titre} className={cx(ri > 0 && "mt-1.5 border-t border-line pt-3")}>
-                <h2 className="lanceur-titre px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted" style={{ "--i": rang.get(r.tuiles[0]!.cle) ?? 0 } as CSSProperties}>
+                <h2 className="lanceur-titre px-2.5 pb-1.5 text-[12.5px] font-semibold text-muted" style={{ "--i": rang.get(r.tuiles[0]!.cle) ?? 0 } as CSSProperties}>
                   {r.titre}
                 </h2>
                 <ul className="grid grid-cols-3 gap-0.5">

@@ -168,6 +168,33 @@ même branche, sans toucher à la logique des écrans :
   d'API est réécrite dans les mêmes formes (`analyse.mjs`, `analyse-groupe.mjs`,
   `analyse-cabinet.mjs`, `analyse-commun.mjs`). Vérifié dans le navigateur sur les réponses réelles
   de la recette (deux sociétés, exercice et 12 mois) puis sur la maquette, sans erreur de console.
+- Troisième direction, « papier-valeur » (21 octobre), après la critique du gérant sur le
+  tableau de bord (« identifiable IA à des kilomètres » : cartes à liseré coloré, colonne latérale,
+  icônes, couleurs). La finesse des billets de banque et des titres (guillochis, sceaux, numéros de
+  série) mariée à la simplicité d'Odoo :
+  - plus de colonne latérale : une barre du haut à la manière d'Odoo, marque et espace (menu des
+    espaces et accès à l'accueil), rubriques en menus illustrés (icône de l'accueil et une ligne
+    qui dit ce qu'on y trouve pour chaque écran, pastilles des alertes et validations), fil d'or
+    sous la rubrique de l'écran ouvert, pastille qui suit le curseur ; recherche, lanceur,
+    équilibre de l'exercice (sceau), société et compte à droite ; sur téléphone, un tiroir des
+    rubriques illustrées (`components/shell/Menus.tsx`, `AppShell.tsx`) ;
+  - guillochis calculés (`components/guilloche.tsx`) : rosace d'anneaux ondulés et faisceaux de
+    vagues qui se gravent au premier affichage ; un filigrane de rosace en haut de chaque écran ;
+  - chiffres clés en coupons gravés : plus de liseré coloré ni de pastille d'icône, un sceau
+    d'état, la valeur en grand, une gravure de vagues propre à chaque libellé dans l'encre de
+    l'état ; une rangée faite seulement de chiffres clés devient un registre, une seule feuille
+    réglée de filets comme une page de livre de comptes (règle CSS, sans toucher aux écrans) ;
+  - feuilles sans bordure dessinée (liseré à peine visible, ombre basse), titres en Funnel
+    Display, variations en texte avec un triangle ;
+  - tableau de bord : la trésorerie nette devient un billet, fond forêt, rosace d'or, vagues de
+    menthe, numéro de série à la date d'arrêté, barres des comptes en couleurs claires ;
+  - huit icônes illustrées ajoutées pour les écrans qui n'en avaient pas (engagements, guide,
+    plan comptable, utilisateurs, sociétés, axes, imputations, audit).
+  Maquette d'API : le tableau de bord reçoit les champs ajoutés au noyau depuis (seuils, BFR,
+  trésorerie mensuelle et prévue, décisions, questions du dirigeant, équilibre) et la route
+  `/finance/shell`, avec des valeurs vraisemblables. Vérifié sur la maquette en 1440 px et sur
+  téléphone (tableau de bord, ventes, trésorerie, Analyse, AxisPro, menus au clavier) ; `tsc` et
+  `next build` au vert.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
@@ -189,8 +216,10 @@ même branche, sans toucher à la logique des écrans :
 - Caractères : Funnel Display et Funnel Sans (licence OFL), choix du gérant pour la seconde
   version (la première utilisait Barlow).
 - Logo : le N du DG redessiné, carré et verts conservés, diagonale dorée.
-- Couleurs : une par application (jade Finance, azur AxisPro et portail, corail Rotations) ; la
-  société de travail se reconnaît à son logo dans la colonne de navigation.
+- Couleurs : une par application (jade Finance, azur AxisPro et portail, violet Analyse, corail
+  Rotations) ; la société de travail se reconnaît à son logo dans la barre du haut.
+- Signature : les guillochis (gravures des billets), une seule pièce maîtresse par écran (le
+  billet de trésorerie au tableau de bord), tout le reste calme.
 - Les valeurs absentes s'affichent « – » (tiret demi-cadratin) au lieu du tiret cadratin.
 
 ## Reste à faire
@@ -204,6 +233,9 @@ même branche, sans toucher à la logique des écrans :
 ## Pour la session fonctionnelle
 
 - Voir `demandes-fonctionnelles.md` : domaine nimovagroup.com (le cache de Rotations est réglé).
+- Maquette d'API en retard sur le noyau pour AxisPro : les notes des dossiers s'affichent
+  « NaN / 100 » sur la maquette (champs de notation renommés côté noyau) ; la recette n'est pas
+  concernée.
 - À la fusion : les écrans ont été retouchés pour leur seule présentation (imports d'icônes,
   libellés, classes) ; en cas de conflit avec une évolution fonctionnelle, garder la logique de
   la session fonctionnelle et réappliquer la présentation.

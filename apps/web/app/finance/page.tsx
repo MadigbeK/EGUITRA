@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useState, type CSSProperties } from "react";
-import { ArrowUpRight, Calculator, Coins, HandCoins, Landmark, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
-import { AreaChart, Button, Card, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, IconTile, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { ArrowUpRight, Calculator, Coins, HandCoins, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
+import { Ondes, Rosace } from "@/components/guilloche";
+import { AreaChart, Button, Card, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
 import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
@@ -18,6 +19,9 @@ const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = 
   ["61_90", "Échu de 61 à 90 jours", "#d9503a"],
   ["plus_90", "Échu depuis plus de 90 jours", "#9c2b25"],
 ];
+
+/** Barres des comptes sur le billet : menthe, or, ciel, en clair sur le fond forêt. */
+const BILLET = ["#7fdcb4", "#e6c47e", "#8fd0f5", "#c9b9ff", "#ffb48f"];
 
 const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -95,39 +99,43 @@ function DashboardBody({ d }: { d: Dashboard }) {
 
   return (
     <div className="space-y-5">
-      {/* Le chiffre de l'écran : la trésorerie nette, au compteur, et sa répartition par compte. */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <section className="relative min-w-0 overflow-hidden rounded-2xl border border-line bg-panel p-6 shadow-[var(--ombre-carte)] xl:col-span-5">
-          <div className="relative flex items-start justify-between gap-4">
+        {/* Le billet : la trésorerie nette gravée sur fond forêt, rosace et vagues guillochées. */}
+        <section className="billet relative isolate min-w-0 overflow-hidden rounded-[28px] bg-foret p-6 text-white shadow-[0_34px_60px_-32px_rgb(20_47_41/0.7)] sm:p-7 xl:col-span-5">
+          <Rosace epaisseur={0.9} className="pointer-events-none absolute -right-40 top-1/2 -z-10 h-[540px] w-[540px] -translate-y-1/2 text-or opacity-[0.42]" />
+          <Ondes graine="tresorerie-nette" lignes={9} className="billet-ondes pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-28 w-full text-menthe" />
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-[16.5px] font-semibold text-ink">Trésorerie nette</h2>
-              <p className="mt-0.5 text-[12.5px] text-muted">
+              <h2 className="text-[15px] font-semibold text-white">Trésorerie nette</h2>
+              <p className="mt-1 text-[12.5px] leading-snug text-white/65">
                 {d.cash_by_journal.length} compte{d.cash_by_journal.length > 1 ? "s" : ""} de banque et caisse, au {fmtDate(d.as_of)}
                 {th.cash_min ? `, seuil de sécurité ${fmtShort(th.cash_min)}` : ""}
               </p>
             </div>
-            <IconTile icon={Landmark} teinte={th.cash_min && d.cash < th.cash_min ? "danger" : "jade"} />
+            <span aria-hidden className="billet-serie mt-0.5 whitespace-nowrap font-display text-[12px] font-semibold tabular tracking-[0.18em] text-or">
+              Nº {d.as_of.split("-").reverse().join("")}
+            </span>
           </div>
-          <Compteur value={d.cash} className={cx("relative mt-5 text-[30px] sm:text-[44px] xl:text-[34px] 2xl:text-[46px]", d.cash < 0 || (th.cash_min && d.cash < th.cash_min) ? "text-danger" : "text-ink")} />
+          <Compteur value={d.cash} className={cx("relative mt-7 text-[34px] sm:text-[50px] xl:text-[38px] 2xl:text-[52px]", d.cash < 0 || (th.cash_min && d.cash < th.cash_min) ? "text-[#ffb4a8]" : "text-white")} />
           {d.cash_by_journal.length === 0 ? (
-            <p className="mt-6 text-sm text-muted">Aucun compte de trésorerie.</p>
+            <p className="mt-6 text-sm text-white/65">Aucun compte de trésorerie.</p>
           ) : (
-            <ul className="relative mt-6 space-y-3">
+            <ul className="relative mt-7 space-y-3.5">
               {d.cash_by_journal.map((c, i) => (
                 <li key={c.journal_id}>
                   <div className="flex items-baseline justify-between gap-4 text-[13px]">
-                    <span className="min-w-0 truncate font-medium text-ink-2">
+                    <span className="min-w-0 truncate font-medium text-white/90">
                       {c.name}
-                      <span className="ml-2 text-[12px] font-normal text-muted">{c.type === "cash" ? "Caisse" : "Banque"}</span>
+                      <span className="ml-2 text-[12px] font-normal text-white/55">{c.type === "cash" ? "Caisse" : "Banque"}</span>
                     </span>
-                    <span className={cx("whitespace-nowrap font-semibold tabular", c.balance < 0 ? "text-danger" : "text-ink")}>
+                    <span className={cx("whitespace-nowrap font-semibold tabular", c.balance < 0 ? "text-[#ffb4a8]" : "text-white")}>
                       {c.currency !== "GNF" ? `${fmtDec(c.balance_currency)} ${c.currency}` : fmtGNF(c.balance)}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-panel-3">
+                  <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-white/10">
                     <div
                       className="n-pousser-x h-full rounded-full"
-                      style={{ width: `${Math.max(2, (Math.abs(c.balance) / maxCompte) * 100)}%`, background: c.balance < 0 ? "var(--danger-vif)" : GAMME[i % GAMME.length], "--i": i } as CSSProperties}
+                      style={{ width: `${Math.max(2, (Math.abs(c.balance) / maxCompte) * 100)}%`, background: c.balance < 0 ? "#ff8a7a" : BILLET[i % BILLET.length], "--i": i } as CSSProperties}
                     />
                   </div>
                 </li>

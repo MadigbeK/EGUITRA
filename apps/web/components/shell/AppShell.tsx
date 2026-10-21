@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
-import { AlertTriangle, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronRight, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
+import { AlertTriangle, Check, ChevronDown, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
+import { IconeModule } from "@/components/accueil/icones-modules";
+import { Rosace } from "@/components/guilloche";
+import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
 import { APPS, ESPACES, type AppCode } from "@/lib/config";
-import { navFor, type NavBadge, type NavItem, type NavSection } from "@/lib/nav";
+import { navFor, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
-
-type Pastilles = Partial<Record<NavBadge, { count: number; severe: boolean }>>;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -27,24 +28,17 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
 
-/** Entrée de navigation active pour le chemin courant (l'accueil ne s'active que sur lui-même). */
-function estActif(item: NavItem, pathname: string, home: string) {
-  return item.href === home ? pathname === home : pathname === item.href || pathname.startsWith(item.href + "/");
-}
-
 const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#7c5ce6" };
 
-const CLE_REPLI = "nimova.menu.replie";
-
 /**
- * Coque des applications : colonne de navigation blanche (marque, société, menu à icônes, compte),
- * barre du haut (fil d'Ariane, recherche d'écran, applications), contenu. Le repère de la page
- * ouverte glisse d'une entrée à l'autre ; la colonne se replie en icônes.
+ * Coque des applications, sans colonne latérale : une barre du haut à la manière d'Odoo (marque et
+ * espace, rubriques en menus illustrés, recherche, applications, société, compte) et le contenu sur
+ * toute la largeur. Un filigrane guilloché se grave en haut de chaque écran, comme sur un billet.
  */
 export function AppShell({ app, me, children }: { app: AppCode; me: Me; children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [replie, setReplie] = useState(false);
+  const [defile, setDefile] = useState(false);
   const [recherche, setRecherche] = useState(false);
   const company = me.companies.find((c) => c.id === me.company_id);
   // Les modules d'une société (transport, chantiers, immobilier) n'apparaissent que dans ses livres.
@@ -55,24 +49,13 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   const enTete = useEnTeteFinance(app, me);
   const badges = useMemo(() => pastilles(enTete), [enTete]);
 
+  // La barre du haut se détache du contenu (liseré, flou) dès que la page défile.
   useEffect(() => {
-    try {
-      setReplie(window.localStorage.getItem(CLE_REPLI) === "1");
-    } catch {
-      /* stockage indisponible : colonne dépliée */
-    }
+    const onScroll = () => setDefile(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  function basculer() {
-    setReplie((r) => {
-      try {
-        window.localStorage.setItem(CLE_REPLI, r ? "0" : "1");
-      } catch {
-        /* rien à garder */
-      }
-      return !r;
-    });
-  }
 
   // Ctrl+K (ou Cmd+K) ouvre la recherche d'écran (absente du portail).
   useEffect(() => {
@@ -152,82 +135,63 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
     );
   }
 
-  const fil = filAriane(sections, pathname, home);
-
   return (
-    <div data-app={app} data-societe={entity} className="min-h-screen bg-bg text-ink lg:flex">
-      {/* Colonne de navigation (écran large) */}
-      <aside
-        className={cx("no-print sticky top-0 hidden h-screen flex-none border-r border-line bg-panel transition-[width] duration-300 ease-[var(--ease-sortie)] lg:block", replie ? "w-[84px]" : "w-[272px]")}
-        aria-label="Colonne de navigation"
-      >
-        <Navigation app={app} me={me} sections={sections} pathname={pathname} replie={replie} badges={badges} onBasculer={basculer} onCompany={switchCompany} onLogout={logout} />
-      </aside>
-
-      {/* Tiroir (téléphone, tablette) */}
+    <div data-app={app} data-societe={entity} className="min-h-screen bg-bg text-ink">
+      {/* Menu du téléphone et de la tablette */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="n-apparaitre absolute inset-0 bg-foret/45" onClick={() => setOpen(false)} />
-          <div className="n-tiroir absolute inset-y-0 left-0 flex w-[min(88vw,304px)] flex-col bg-panel shadow-[var(--ombre-flottante)]">
-            <button ref={closeButton} type="button" onClick={() => setOpen(false)} className="absolute right-3 top-4 z-10 grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-panel-3" aria-label="Fermer le menu">
-              <X className="h-5 w-5" />
-            </button>
-            <Navigation app={app} me={me} sections={sections} pathname={pathname} replie={false} badges={badges} onNavigate={() => setOpen(false)} onCompany={switchCompany} onLogout={logout} />
+          <div className="n-tiroir absolute inset-y-0 left-0 flex w-[min(90vw,340px)] flex-col bg-panel shadow-[var(--ombre-flottante)]">
+            <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-4">
+              <Link href={home} onClick={() => setOpen(false)} className="flex min-w-0 items-center gap-2.5 rounded-xl">
+                <Monogramme className="h-9 w-9 flex-none" />
+                <span className="min-w-0 leading-none">
+                  <span className="block font-display text-[15px] font-bold tracking-[0.06em]">NIMOVA</span>
+                  <span className="mt-1 block truncate text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
+                </span>
+              </Link>
+              <button ref={closeButton} type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-panel-3" aria-label="Fermer le menu">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <Bascule app={app} me={me} onNavigate={() => setOpen(false)} />
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6 pt-1">
+              <ListeMenus sections={sections} pathname={pathname} home={home} badges={badges} onNavigate={() => setOpen(false)} />
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-30 border-b border-line bg-bg/95">
-          <div className="flex h-16 items-center gap-3 px-3 sm:px-6 lg:px-8 xl:px-10">
-            <button ref={menuButton} type="button" onClick={() => setOpen(true)} className="grid h-10 w-10 flex-none place-items-center rounded-xl text-ink-2 hover:bg-panel-3 lg:hidden" aria-label="Ouvrir le menu" aria-expanded={open}>
-              <Menu className="h-5 w-5" />
+      <header className={cx("no-print sticky top-0 z-30 transition-[background-color,box-shadow] duration-300", defile ? "bg-bg/85 shadow-[0_1px_0_var(--line),0_12px_24px_-20px_rgb(16_36_31/0.35)] backdrop-blur-md" : "bg-bg")}>
+        <div className="flex h-[68px] items-center gap-2 px-3 sm:px-6 lg:px-8 xl:px-10">
+          <button ref={menuButton} type="button" onClick={() => setOpen(true)} className="grid h-10 w-10 flex-none place-items-center rounded-xl text-ink-2 hover:bg-panel-3 lg:hidden" aria-label="Ouvrir le menu" aria-expanded={open}>
+            <Menu className="h-5 w-5" />
+          </button>
+          <EspaceMenu app={app} me={me} />
+          <BarreMenus sections={sections} pathname={pathname} home={home} badges={badges} className="ml-2 hidden lg:flex xl:ml-5" />
+
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setRecherche(true)}
+              className="flex h-10 items-center gap-2.5 whitespace-nowrap rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-white/80 hover:text-ink xl:w-60 xl:border xl:border-line xl:bg-panel xl:px-3"
+              aria-label="Rechercher un écran"
+            >
+              <Search className="h-[18px] w-[18px] flex-none" />
+              <span className="hidden flex-1 text-left xl:inline">Rechercher un écran</span>
+              <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted xl:inline">Ctrl K</kbd>
             </button>
-            <Link href={home} className="flex min-w-0 items-center gap-2.5 rounded-lg lg:hidden">
-              <Monogramme className="h-9 w-9 flex-none" />
-              <span className="min-w-0 leading-tight">
-                <span className="block font-display text-[15px] font-bold tracking-[0.06em]">NIMOVA</span>
-                <span className="block truncate text-[12px] font-semibold text-accent">{moduleOf(app)}</span>
-              </span>
-            </Link>
-
-            <nav aria-label="Fil d'Ariane" className="hidden min-w-0 items-center gap-1.5 text-[13px] lg:flex">
-              <Link href={home} className="rounded font-medium text-muted transition-colors hover:text-ink">
-                {APPS[app].name}
-              </Link>
-              {fil.map((f, i) => (
-                <span key={i} className="flex min-w-0 items-center gap-1.5">
-                  <ChevronRight className="h-3.5 w-3.5 flex-none text-line-strong" />
-                  <span className={cx("truncate", i === fil.length - 1 ? "font-semibold text-ink" : "font-medium text-muted")}>{f}</span>
-                </span>
-              ))}
-            </nav>
-
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setRecherche(true)}
-                className="group flex h-10 items-center gap-2.5 rounded-xl border border-line bg-panel px-3 text-[13px] text-muted shadow-[0_1px_2px_rgb(16_36_31/0.04)] transition-colors hover:border-line-strong hover:text-ink sm:w-64"
-                aria-label="Rechercher un écran"
-              >
-                <Search className="h-4 w-4 flex-none" />
-                <span className="hidden flex-1 text-left sm:inline">Rechercher un écran</span>
-                <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted sm:inline">Ctrl K</kbd>
-              </button>
-              {ESPACES.some((a) => me.apps.includes(a)) && <Lanceur me={me} app={app} />}
-              <EquilibreExercice data={enTete} />
-              <span className="hidden items-center gap-2 rounded-xl border border-line bg-panel px-3 py-2 text-[13px] font-medium capitalize text-ink-2 xl:flex">
-                <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-accent-vif" />
-                <Aujourdhui />
-              </span>
-              <div className="lg:hidden">
-                <CompteMenu app={app} me={me} onLogout={logout} placement="bas" />
-              </div>
-            </div>
+            {ESPACES.some((a) => me.apps.includes(a)) && <Lanceur me={me} app={app} />}
+            <EquilibreExercice data={enTete} />
+            <SocieteEnTete app={app} me={me} onCompany={switchCompany} />
+            <CompteMenu app={app} me={me} onLogout={logout} />
           </div>
-        </header>
-        {passwordBanner}
-        <main key={pathname} className="n-page min-w-0 flex-1 px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
+        </div>
+      </header>
+      {passwordBanner}
+      <div className="relative overflow-x-clip">
+        <Rosace key={`filigrane-${pathname}`} className="filigrane no-print pointer-events-none absolute -right-40 -top-48 h-[560px] w-[560px] text-accent-vif" />
+        <main key={pathname} className="n-page relative min-w-0 px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
           {children}
         </main>
       </div>
@@ -237,162 +201,75 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   );
 }
 
-/** Libellés du fil d'Ariane : la rubrique puis l'écran ouvert. */
-function filAriane(sections: NavSection[], pathname: string, home: string): string[] {
-  for (const s of sections) {
-    const item = s.items.find((i) => estActif(i, pathname, home));
-    if (item) return item.href === home ? [item.label] : [s.label, item.label];
+/** Marque et espace de travail ; si le compte en a plusieurs, on en change ici (et l'on rejoint l'accueil). */
+function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+  const espaces = ESPACES.filter((a) => me.apps.includes(a));
+  const plusieurs = espaces.length > 1;
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onClick);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onClick);
+    };
+  }, [open]);
+
+  const marque = (
+    <>
+      <Monogramme className="h-9 w-9 flex-none drop-shadow-[0_6px_10px_rgb(20_47_41/0.22)]" />
+      <span className="min-w-0 text-left leading-none">
+        <span className="block font-display text-[15px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
+        <span className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-accent">
+          <span className="truncate">{moduleOf(app)}</span>
+          {plusieurs && <ChevronDown className={cx("h-3.5 w-3.5 flex-none transition-transform duration-300 ease-[var(--ease-ressort)]", open && "rotate-180")} />}
+        </span>
+      </span>
+    </>
+  );
+
+  if (!plusieurs) {
+    return (
+      <Link href={APPS[app].home} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2">
+        {marque}
+      </Link>
+    );
   }
-  if (pathname.startsWith("/compte")) return ["Mon compte"];
-  return [];
-}
-
-function Aujourdhui() {
-  const [texte, setTexte] = useState("");
-  useEffect(() => {
-    setTexte(new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Conakry" }).format(new Date()));
-  }, []);
-  return <span>{texte || " "}</span>;
-}
-
-/** Colonne de navigation : marque, société de travail, rubriques à icônes, compte. */
-function Navigation({
-  app,
-  me,
-  sections,
-  pathname,
-  replie,
-  badges,
-  onBasculer,
-  onNavigate,
-  onCompany,
-  onLogout,
-}: {
-  app: AppCode;
-  me: Me;
-  sections: NavSection[];
-  pathname: string;
-  replie: boolean;
-  badges?: Pastilles;
-  onBasculer?: () => void;
-  onNavigate?: () => void;
-  onCompany: (id: number) => void;
-  onLogout: () => void;
-}) {
-  const home = APPS[app].home;
-  const liste = useRef<HTMLDivElement>(null);
-  const [repere, setRepere] = useState<{ y: number; h: number } | null>(null);
-
-  // Le repère glisse vers l'entrée de la page ouverte (mesurée par rapport à la liste).
-  const mesurer = useCallback(() => {
-    const boite = liste.current;
-    const el = boite?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!boite || !el) return setRepere(null);
-    const a = boite.getBoundingClientRect();
-    const b = el.getBoundingClientRect();
-    setRepere({ y: b.top - a.top, h: b.height });
-  }, []);
-  useLayoutEffect(() => {
-    mesurer();
-  }, [mesurer, pathname, replie, sections]);
-  useEffect(() => {
-    const boite = liste.current;
-    if (!boite || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(mesurer);
-    ro.observe(boite);
-    void document.fonts?.ready.then(mesurer);
-    return () => ro.disconnect();
-  }, [mesurer]);
-
   return (
-    <div className="flex h-full flex-col">
-      <div className={cx("flex items-center pb-4 pt-5", replie ? "flex-col gap-3 px-3" : "justify-between gap-2 pl-5 pr-3")}>
-        <Link href={home} onClick={onNavigate} className="flex min-w-0 items-center gap-3 rounded-xl" title={APPS[app].name}>
-          <Monogramme className="h-10 w-10 flex-none drop-shadow-[0_6px_10px_rgb(20_47_41/0.25)]" />
-          {!replie && (
-            <span className="min-w-0 leading-none">
-              <span className="block font-display text-[19px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
-              <span className="mt-1 block truncate text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
-            </span>
-          )}
-        </Link>
-        {onBasculer && (
-          <button
-            type="button"
-            onClick={onBasculer}
-            className="grid h-8 w-8 flex-none place-items-center rounded-lg border border-line text-muted transition-colors hover:border-line-strong hover:text-ink"
-            aria-label={replie ? "Déplier le menu" : "Replier le menu"}
-            title={replie ? "Déplier le menu" : "Replier le menu"}
-          >
-            {replie ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-          </button>
-        )}
-      </div>
-
-      {!replie && <Bascule app={app} me={me} onNavigate={onNavigate} />}
-
-      <div className={cx("pb-3", replie ? "px-3" : "px-4")}>
-        <Societe app={app} me={me} replie={replie} onCompany={onCompany} />
-      </div>
-
-      <nav aria-label="Navigation" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4">
-        <div ref={liste} className={cx("relative", replie ? "px-3" : "px-4")}>
-          {repere && (
-            <span aria-hidden className="n-repere pointer-events-none absolute left-0 right-0 top-0" style={{ transform: `translateY(${repere.y}px)`, height: repere.h }}>
-              <span className={cx("n-degrade absolute inset-y-0 rounded-xl shadow-[0_10px_22px_-12px_var(--accent-lueur)]", replie ? "inset-x-3" : "inset-x-4")} />
-              <span className="absolute -left-0 inset-y-1.5 w-1 rounded-r-full bg-accent-vif" />
-            </span>
-          )}
-          {sections.map((section, s) => (
-            <div key={section.label} className={s > 0 ? "mt-4" : "mt-1"}>
-              {replie ? (
-                s > 0 && <div aria-hidden className="mx-auto mb-3 h-px w-8 bg-line" />
-              ) : (
-                <div className="px-3 pb-1.5 text-[12px] font-semibold text-muted">{section.label}</div>
-              )}
-              <ul className="space-y-0.5">
-                {section.items.map((item) => {
-                  const active = estActif(item, pathname, home);
-                  const I: Icon = ICONES[item.icon] ?? ICONES.LayoutDashboard!;
-                  const pastille = item.badge ? badges?.[item.badge] : undefined;
-                  const nombre = pastille && pastille.count > 0 ? pastille : undefined;
-                  return (
-                    <li key={item.href} className="group/entree relative">
-                      <Link
-                        href={item.href}
-                        onClick={onNavigate}
-                        aria-current={active ? "page" : undefined}
-                        title={replie ? (nombre ? `${item.label} (${nombre.count})` : item.label) : undefined}
-                        className={cx(
-                          "relative z-[1] flex items-center gap-3 rounded-xl text-[14px] leading-tight transition-colors duration-200",
-                          replie ? "justify-center px-0 py-2.5" : "px-3 py-[9px]",
-                          active ? cx("font-semibold text-accent-ink", !repere && "n-degrade") : "font-medium text-ink-2 hover:bg-panel-2 hover:text-ink",
-                        )}
-                      >
-                        <I className={cx("h-[19px] w-[19px] flex-none transition-transform duration-200", !active && "text-muted group-hover/entree:translate-x-0.5 group-hover/entree:text-accent")} />
-                        <span className={replie ? "sr-only" : "min-w-0 flex-1 truncate"}>{item.label}</span>
-                        {nombre &&
-                          (replie ? (
-                            <span aria-hidden className={cx("absolute right-3 top-1.5 h-2 w-2 rounded-full ring-2 ring-panel", nombre.severe ? "bg-danger-vif" : "bg-warn-vif")} />
-                          ) : (
-                            <span className={cx("flex-none rounded-full px-1.5 py-px text-[11.5px] font-bold tabular", nombre.severe ? "bg-danger text-white" : active ? "bg-white/25 text-current" : "bg-warn-doux text-warn")}>
-                              {nombre.count}
-                              <span className="sr-only">{item.badge === "approvals" ? " en attente" : item.badge === "controls" ? " contrôle(s) en anomalie" : " alerte(s)"}</span>
-                            </span>
-                          ))}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+    <div ref={box} className="relative min-w-0">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls={panelId} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 transition-colors hover:bg-white/80">
+        {marque}
+        <span className="sr-only">Changer d&apos;espace</span>
+      </button>
+      {open && (
+        <div id={panelId} className="n-surgir absolute left-0 top-full z-50 mt-2 w-[310px] rounded-[22px] border border-line bg-white p-2 shadow-[var(--ombre-flottante)]">
+          {espaces.map((a) => (
+            <Link
+              key={a}
+              href={APPS[a].home}
+              onClick={() => setOpen(false)}
+              aria-current={a === app ? "true" : undefined}
+              className={cx("tuile group flex items-center gap-3 rounded-2xl p-2.5 transition-colors", a === app ? "bg-accent-doux" : "hover:bg-[#f2f6f3]")}
+            >
+              <IconeModule cle={APPS[a].home} className="h-9 w-9 flex-none" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-semibold text-ink">{moduleOf(a)}</span>
+                <span className="block truncate text-[12.5px] text-muted">{APPS[a].tagline}</span>
+              </span>
+              {a === app && <Check className="h-4 w-4 flex-none text-accent" strokeWidth={2.2} />}
+            </Link>
           ))}
+          <Link href="/accueil" onClick={() => setOpen(false)} className="mt-1 flex items-center gap-3 border-t border-line px-2.5 pb-1.5 pt-3 text-[13.5px] font-semibold text-ink-2 hover:text-ink">
+            <Grid className="h-4 w-4 text-muted" /> Accueil NIMOVA
+          </Link>
         </div>
-      </nav>
-
-      <div className={cx("border-t border-line py-3", replie ? "px-3" : "px-4")}>
-        <CompteMenu app={app} me={me} onLogout={onLogout} placement="haut" replie={replie} />
-      </div>
+      )}
     </div>
   );
 }
@@ -427,14 +304,13 @@ function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: (
   );
 }
 
-/** Société de travail : logo et nom ; si le compte est ouvert aux deux sociétés, on en change ici. */
-function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie: boolean; onCompany: (id: number) => void }) {
+/** Société de travail, en pastille dans la barre du haut ; si le compte est ouvert aux deux, on en change ici. */
+function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const company = me.companies.find((c) => c.id === me.company_id);
   const entite = entityOf(company, app);
-  // AxisPro Suite et le portail ne relèvent que du cabinet : pas de choix de société.
   // Une application qui ne sert qu'une société n'en propose pas d'autre (AxisPro, portail, Rotations).
   const servie = APPS[app].entity;
   const ouvertes = servie ? me.companies.filter((c) => c.entity === servie) : me.companies;
@@ -452,45 +328,33 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
     };
   }, [open]);
 
-  const carte = (
+  const pastille = (
     <>
-      <span className="grid h-10 w-10 flex-none place-items-center rounded-xl border border-line bg-panel">
-        <LogoSociete entite={entite} decoratif className="h-6" />
+      <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white shadow-[0_0_0_1px_rgb(16_36_31/0.08),0_4px_10px_-6px_rgb(16_36_31/0.3)]">
+        <LogoSociete entite={entite} decoratif className="h-[18px]" />
       </span>
-      {!replie && (
-        <span className="min-w-0 flex-1 text-left leading-tight">
-          <span className="block text-[11.5px] font-medium text-muted">Société</span>
-          <span className="block truncate text-[13.5px] font-semibold text-ink">{company?.name ?? "–"}</span>
-        </span>
-      )}
-      {!replie && plusieurs && <ChevronDown className={cx("h-4 w-4 flex-none text-muted transition-transform duration-200", open && "rotate-180")} />}
+      <span className="hidden max-w-[190px] truncate text-[13px] font-semibold text-ink-2 2xl:inline">{company?.name ?? "–"}</span>
     </>
   );
 
   if (!plusieurs) {
     return (
-      <div className={cx("flex items-center gap-3 rounded-2xl bg-panel-2 p-2", replie && "justify-center")} title={replie ? company?.name : undefined}>
-        {carte}
-      </div>
+      <span className="hidden items-center gap-2 sm:flex" title={company?.name}>
+        {pastille}
+        <span className="sr-only">Société : {company?.name}</span>
+      </span>
     );
   }
-
   return (
     <div ref={box} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        title={replie ? `Société : ${company?.name ?? ""}` : undefined}
-        className={cx("flex w-full items-center gap-3 rounded-2xl border border-transparent bg-panel-2 p-2 transition-colors hover:border-line-strong", replie && "justify-center")}
-      >
-        {carte}
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls={panelId} title={`Société : ${company?.name ?? ""}`} className="flex items-center gap-2 rounded-full p-0.5 pr-0.5 transition-colors hover:bg-white/80 2xl:pr-3">
+        {pastille}
+        <ChevronDown className={cx("hidden h-3.5 w-3.5 text-muted transition-transform duration-200 2xl:block", open && "rotate-180")} />
         <span className="sr-only">Changer de société</span>
       </button>
       {open && (
-        <div id={panelId} role="group" aria-label="Société" className={cx("n-surgir absolute z-50 mt-2 w-[264px] rounded-2xl border border-line bg-panel p-1.5 shadow-[var(--ombre-flottante)]", replie ? "left-full top-0 ml-3 mt-0" : "left-0 top-full")}>
-          <div className="px-3 pb-1.5 pt-2 text-[12px] font-semibold text-muted">Livres ouverts</div>
+        <div id={panelId} role="group" aria-label="Société" className="n-surgir absolute right-0 top-full z-50 mt-2 w-[284px] rounded-[22px] border border-line bg-white p-2 shadow-[var(--ombre-flottante)]">
+          <div className="px-3 pb-1.5 pt-1.5 text-[12.5px] font-semibold text-muted">Livres ouverts</div>
           {ouvertes.map((c) => {
             const actif = c.id === me.company_id;
             return (
@@ -502,10 +366,10 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
                   setOpen(false);
                   onCompany(c.id);
                 }}
-                className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors", actif ? "bg-accent-doux" : "hover:bg-panel-2")}
+                className={cx("flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors", actif ? "bg-accent-doux" : "hover:bg-[#f2f6f3]")}
               >
-                <span className="grid h-9 w-9 flex-none place-items-center rounded-lg border border-line bg-panel">
-                  <LogoSociete entite={entityOf(c, app)} decoratif className="h-5" />
+                <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white shadow-[0_0_0_1px_rgb(16_36_31/0.08)]">
+                  <LogoSociete entite={entityOf(c, app)} decoratif className="h-[18px]" />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">{c.name}</span>
                 {actif && <Check className="h-4 w-4 flex-none text-accent" strokeWidth={2.2} />}
@@ -519,7 +383,7 @@ function Societe({ app, me, replie, onCompany }: { app: AppCode; me: Me; replie:
 }
 
 /** Menu du compte : mot de passe, autres applications, déconnexion. */
-function CompteMenu({ app, me, onLogout, placement, replie }: { app: AppCode; me: Me; onLogout: () => void; placement: "haut" | "bas"; replie?: boolean }) {
+function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: AppCode; me: Me; onLogout: () => void; placement?: "haut" | "bas"; replie?: boolean }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const panelId = useId();
