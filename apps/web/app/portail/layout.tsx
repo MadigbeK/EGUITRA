@@ -5,8 +5,8 @@ import { requireUser } from "@/lib/server-api";
 
 // Le portail est celui du cabinet : ni le nom ni le monogramme de la marque interne NIMOVA.
 export const metadata: Metadata = {
-  title: { absolute: "Portail des porteurs de projets · MB AxisPro Consulting", template: "%s · MB AxisPro Consulting" },
-  description: "Portail des porteurs de projets de MB AxisPro Consulting : dossier, pièces et échanges avec le cabinet.",
+  title: { absolute: "Portail des porteurs de projets · MB AxisPro", template: "%s · MB AxisPro" },
+  description: "Portail des porteurs de projets de MB AxisPro : dossier, pièces et échanges avec le cabinet.",
   icons: { icon: "/icons/portail.svg" },
 };
 

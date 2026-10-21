@@ -4,7 +4,7 @@
  * docs/projet/analyse/specification.md, chapitres 3 à 7) : mêmes clés, mêmes unités, mêmes
  * variantes (blocs nuls quand la donnée n'existe pas). Données fictives et déterministes (graines
  * fixes) : un modèle mensuel cohérent pour EGUITRA GROUP (analyse-groupe.mjs) et un portefeuille de
- * projets pour MB AxisPro Consulting (analyse-cabinet.mjs). Rien ici n'est une donnée réelle.
+ * projets pour MB AxisPro (analyse-cabinet.mjs). Rien ici n'est une donnée réelle.
  *
  * `enregistrerAnalyse` reçoit les outils du serveur (route, erreurs, générateur, date de référence,
  * sociétés) et inscrit les routes.
@@ -43,7 +43,7 @@ const PERIODES = [["ytd", "Exercice en cours"], ["12m", "12 derniers mois"], ["q
 export function enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES }) {
   const badParam = (m) => new ApiError(400, "invalid_parameter", m);
   const wrongCompany = (entity) =>
-    new ApiError(403, "wrong_company", `Ce module ne concerne que ${entity === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro Consulting"} : choisissez cette société dans la colonne de gauche, ou ouvrez l'application qui la sert.`);
+    new ApiError(403, "wrong_company", `Ce module ne concerne que ${entity === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro"} : choisissez cette société dans la colonne de gauche, ou ouvrez l'application qui la sert.`);
   const periode = creerPeriode(TODAY, badParam);
 
   function enveloppe(ctx, entity, p, quality, insights, corps) {

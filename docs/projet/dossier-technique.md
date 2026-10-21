@@ -30,7 +30,7 @@ dossier de conception (`docs/projet/Dossier_de_conception.docx`).
 4. Route d'API : `@api_route("/<module>/...", profiles=(...))` dans `controllers/`. Le premier segment
    de la route fixe la société servie (`addons/eguitra_api/organisation.py`, `MODULE_ENTITY`) : une
    route de transport, de chantier ou d'immobilier ne répond que dans EGUITRA GROUP, une route
-   AxisPro ou du portail que dans MB AxisPro Consulting. Une erreur métier se signale par
+   AxisPro ou du portail que dans MB AxisPro. Une erreur métier se signale par
    `UserError` (réponse 422) ou `ApiError`.
 5. Écran : page dans `apps/web/app/<surface>/...`, composants dans `apps/web/components/`,
    types dans `apps/web/lib/*-types.ts`, entrée de menu dans `apps/web/lib/nav.ts` (profils et société

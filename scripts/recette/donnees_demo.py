@@ -134,7 +134,7 @@ if not Lease.search([("name", "=", "BAIL-DEMO-01")]):
     lease.action_activate()
     print("Bail de démonstration activé ; loyers facturés à la prochaine nuit.")
 
-# ─── AxisPro Suite (MB AxisPro Consulting) ────────────────────────────────
+# ─── AxisPro Suite (MB AxisPro) ────────────────────────────────
 cenv = env(context=dict(env.context, allowed_company_ids=cabinet.ids))
 Policy = cenv["axispro.policy"]
 if not Policy.search([("company_id", "=", cabinet.id)]):

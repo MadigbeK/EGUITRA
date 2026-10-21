@@ -48,7 +48,7 @@ export default function ChantiersPage() {
   return (
     <div>
       <PageHeader
-        title="Chantiers"
+        title="BTP"
         subtitle="Situations d'avancement, facturation à l'avancement, retenues de garantie suivies jusqu'à leur libération."
         actions={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau chantier</Button>}
       />

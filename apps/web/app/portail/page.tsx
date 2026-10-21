@@ -99,7 +99,7 @@ function Dossier({ d }: { d: PortalDossier }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Kpi label="Étape en cours" value={d.current_gate?.name ?? "–"} icon={Flag} teinte="azur" hint={d.state === "closed" ? "Dossier clos" : d.state === "on_hold" ? "Dossier suspendu" : "Dossier en cours d'évaluation"} />
         <Kpi label="Pièces transmises" value={`${d.documents_progress.received} sur ${d.documents_progress.due}`} icon={FileText} teinte="lagon" tone={pct >= 100 ? "ok" : "neutral"} hint={`${Math.round(pct)} % des pièces attendues à ce stade`} />
-        <Kpi label="Votre consultant" value={d.consultant ?? "À désigner"} icon={Users} teinte="or" tone="accent" hint="MB AxisPro Consulting" />
+        <Kpi label="Votre consultant" value={d.consultant ?? "À désigner"} icon={Users} teinte="or" tone="accent" hint="MB AxisPro" />
       </div>
       <Card title="Avancement du dossier">
         <Etapes steps={d.gates.map((g) => ({ key: g.code, label: g.name, state: g.code === d.current_gate?.code ? "current" : g.reached ? "done" : "todo" }))} />

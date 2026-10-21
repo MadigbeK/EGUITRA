@@ -22,7 +22,7 @@ function initials(name: string) {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
-/** Société d'une fiche : le groupe (EGUITRA GROUP) ou le cabinet (MB AxisPro Consulting). */
+/** Société d'une fiche : le groupe (EGUITRA GROUP) ou le cabinet (MB AxisPro). */
 function entityOf(company: Company | undefined, app: AppCode): Entite {
   if (company?.entity) return company.entity;
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";

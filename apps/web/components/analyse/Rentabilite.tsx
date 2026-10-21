@@ -99,7 +99,7 @@ function Corps() {
               { key: "pont", label: "Pont d'EBE" },
               { key: "structure", label: "Structure de coûts" },
               { key: "budget", label: "Budget et écarts", count: lignesBudget.filter((b) => (b.risk_probability_pct ?? 0) >= 50).length || undefined },
-              { key: "metiers", label: "Chantiers et immobilier" },
+              { key: "metiers", label: "BTP et immobilier" },
             ]}
           />
           {onglet === "pont" && (
@@ -208,7 +208,7 @@ function Corps() {
           )}
           {onglet === "metiers" && (
             <div className="grid gap-5 xl:grid-cols-12">
-              <Card title="Chantiers : avancement et performance des coûts" className="xl:col-span-7" padded={false}>
+              <Card title="BTP : avancement et performance des coûts par chantier" className="xl:col-span-7" padded={false}>
                 {chantiers.length === 0 ? (
                   <Vide titre="Aucun chantier sur la période" />
                 ) : (

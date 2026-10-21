@@ -1,7 +1,7 @@
 {
     "name": "EGUITRA - Socle",
     "summary": "Sociétés du groupe, profils, axes analytiques, piste d'audit et double authentification",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.3.0",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

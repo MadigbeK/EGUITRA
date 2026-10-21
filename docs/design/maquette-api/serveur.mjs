@@ -460,7 +460,7 @@ const COMPANIES = {
     company_registry: "GN.TCC.2012.B.00101 (démo)", currency: "GNF", country: "Guinée", logo: null,
   },
   2: {
-    id: 2, name: "MB AxisPro Consulting", entity: "cabinet", street: "Immeuble Kaloum Centre, 5e étage",
+    id: 2, name: "MB AxisPro", entity: "cabinet", street: "Immeuble Kaloum Centre, 5e étage",
     street2: "Avenue de la République, Kaloum", zip: "BP 4411", city: "Conakry", phone: "+224 620 00 20 20",
     email: "contact@axispro.example", website: "www.axispro.example", vat: "999000202B",
     company_registry: "GN.TCC.2019.B.00202 (démo)", currency: "GNF", country: "Guinée", logo: null,

@@ -50,9 +50,9 @@ d'un changement).
 | Identifiant | Ce que l'on voit |
 |---|---|
 | n'importe lequel, par exemple `demo` | Profil complet (administration, direction, finance, exploitation, chantiers, immobilier, cabinet), applications Finance, AxisPro et mobile, les deux sociétés. |
-| `porteur` | Porteur de projet : portail seul, société MB AxisPro Consulting, deux dossiers. |
+| `porteur` | Porteur de projet : portail seul, société MB AxisPro, deux dossiers. |
 | `parc` | Exploitation : application mobile Rotations et Finance, société EGUITRA seule. |
-| `cabinet` | Consultant du cabinet : AxisPro seul, société MB AxisPro Consulting. |
+| `cabinet` | Consultant du cabinet : AxisPro seul, société MB AxisPro. |
 | `provisoire` | Profil complet avec mot de passe provisoire : le changement de mot de passe est imposé. |
 | `mfa` | Étape du code à six chiffres. `000000` est refusé, tout autre code est accepté. |
 | `activation` | Première activation de la double authentification (QR code et clé), même règle pour le code. |
@@ -60,7 +60,7 @@ d'un changement).
 ## Sociétés et cas particuliers
 
 Le sélecteur de société change les chiffres : EGUITRA GROUP SARLU (transport, BTP, immobilier) et
-MB AxisPro Consulting (cabinet, environ vingt fois plus petit). La vue « groupe » consolide les deux.
+MB AxisPro (cabinet, environ vingt fois plus petit). La vue « groupe » consolide les deux.
 AxisPro et le portail s'ouvrent sur la société du cabinet.
 
 Les données contiennent volontairement les cas utiles au design : listes vides, noms très longs,

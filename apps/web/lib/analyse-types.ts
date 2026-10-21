@@ -709,7 +709,7 @@ export interface GroupeFiabilite extends Envelope {
   checks: Check[];
 }
 
-/* ─── MB AxisPro Consulting (chapitre 6) ─────────────────────────────────── */
+/* ─── MB AxisPro (chapitre 6) ─────────────────────────────────── */
 
 export interface FunnelStage {
   gate: string;

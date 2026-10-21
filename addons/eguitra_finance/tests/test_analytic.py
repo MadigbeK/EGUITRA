@@ -39,7 +39,7 @@ class TestAnalyticAxes(FinanceDataMixin, ApiCase):
                                  headers={"X-Eguitra-Company": str(self.cabinet.id)})
         self.assertEqual(status, 200, axes)
         self.assertEqual([a["key"] for a in axes], ["activite", "centre_cout", "dossier"],
-                         "MB AxisPro Consulting : axes communs et dossiers du cabinet")
+                         "MB AxisPro : axes communs et dossiers du cabinet")
 
     def test_activite_et_centre_de_cout(self):
         status, activity = self._create({"plan": "activite", "name": "Négoce de produits pétroliers",

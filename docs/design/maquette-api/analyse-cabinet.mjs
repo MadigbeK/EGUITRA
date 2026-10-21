@@ -1,5 +1,5 @@
 /**
- * NIMOVA · Analyse, MB AxisPro Consulting (chapitre 6 de la spécification) : un portefeuille de
+ * NIMOVA · Analyse, MB AxisPro (chapitre 6 de la spécification) : un portefeuille de
  * quatorze projets sur les huit gates de la méthode, leurs évaluations, comités, financements,
  * temps et risques, puis les sept routes /analyse/cabinet/* dans les formes exactes du noyau.
  * Données fictives et déterministes.

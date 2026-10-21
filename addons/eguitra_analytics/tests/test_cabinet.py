@@ -1,4 +1,4 @@
-"""NIMOVA · Analyse de MB AxisPro Consulting (spécification, chapitre 6).
+"""NIMOVA · Analyse de MB AxisPro (spécification, chapitre 6).
 
 Jeu d'essai fictif : grille au format MB AxisPro (huit gates, trois domaines, sept critères, trois
 pièces), cinq dossiers en cours à des gates différents et un dossier clos, passages de gate datés au

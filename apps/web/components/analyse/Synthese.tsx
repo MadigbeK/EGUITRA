@@ -221,7 +221,7 @@ function CockpitGroupe() {
   );
 }
 
-/* ─── MB AxisPro Consulting ────────────────────────────────────────────── */
+/* ─── MB AxisPro ────────────────────────────────────────────── */
 
 const ICONES_CABINET: Record<string, [Icon, Teinte]> = {
   active_dossiers: [FolderKanban, "azur"],

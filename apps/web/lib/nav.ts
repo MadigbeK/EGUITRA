@@ -57,7 +57,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       label: "Métiers",
       items: [
         { href: "/finance/transport", label: "Transport", icon: "Truck", profiles: ["admin", "direction", "finance", "exploitation"], entity: "groupe" },
-        { href: "/finance/chantiers", label: "Chantiers", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"], entity: "groupe" },
+        { href: "/finance/chantiers", label: "BTP", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"], entity: "groupe" },
         { href: "/finance/immobilier", label: "Immobilier", icon: "Building2", profiles: ["admin", "direction", "finance", "immobilier"], entity: "groupe" },
       ],
     },
@@ -121,7 +121,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       ],
     },
     {
-      label: "MB AxisPro Consulting",
+      label: "MB AxisPro",
       items: [
         { href: "/analyse/portefeuille", label: "Projets et pipeline", icon: "FolderKanban", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
         { href: "/analyse/diagnostic", label: "Diagnostic des projets", icon: "Layers", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },

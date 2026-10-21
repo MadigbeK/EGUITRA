@@ -44,9 +44,9 @@
     </record>
 
     <record id="group_profile_chantiers" model="res.groups">
-        <field name="name">Chantiers</field>
+        <field name="name">BTP</field>
         <field name="privilege_id" ref="privilege_eguitra_profiles"/>
-        <field name="comment">Chantiers, situations d'avancement, retenues de garantie.</field>
+        <field name="comment">BTP : chantiers, situations d'avancement, retenues de garantie.</field>
         <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
 

@@ -72,7 +72,7 @@ class EguitraSetup(models.AbstractModel):
 
     @api.model
     def ensure_cabinet_company(self):
-        """Crée MB AxisPro Consulting avec le plan SYSCOHADA Guinée, si elle n'existe pas."""
+        """Crée MB AxisPro avec le plan SYSCOHADA Guinée, si elle n'existe pas."""
         Company = self.env["res.company"].sudo()
         cabinet = Company.search([("eguitra_entity", "=", "cabinet")], limit=1)
         if cabinet:
@@ -82,7 +82,7 @@ class EguitraSetup(models.AbstractModel):
             gnf.active = True
         cabinet = Company.create(
             {
-                "name": "MB AxisPro Consulting",
+                "name": "MB AxisPro",
                 "country_id": self.env.ref("base.gn").id,
                 "currency_id": gnf.id,
                 "eguitra_entity": "cabinet",

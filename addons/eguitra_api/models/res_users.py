@@ -15,7 +15,7 @@ class ResUsers(models.Model):
 
     def _eguitra_apps(self):
         """Applications du compte : un de ses profils l'ouvre, et le compte est ouvert à la société
-        qu'elle sert (AxisPro Suite sans MB AxisPro Consulting n'aurait rien à montrer)."""
+        qu'elle sert (AxisPro Suite sans MB AxisPro n'aurait rien à montrer)."""
         self.ensure_one()
         profiles = set(self._eguitra_profiles())
         entities = set(self.sudo().company_ids.mapped("eguitra_entity"))

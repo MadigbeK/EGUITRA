@@ -1,4 +1,4 @@
-"""Analyses de MB AxisPro Consulting (spécification, chapitre 6).
+"""Analyses de MB AxisPro (spécification, chapitre 6).
 
 Une méthode publique par section (synthese, portefeuille, diagnostic, comites, financements,
 activite, risques), de signature (company, period, ctx=None) -> dict : blocs de la section, constats

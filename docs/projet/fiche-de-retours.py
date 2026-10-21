@@ -49,7 +49,7 @@ guide = book.active
 guide.title = "Mode d'emploi"
 lignes = [
     ("Fiche de retours des testeurs : plateforme NIMOVA (recette)", Font(bold=True, size=16, color=FOREST)),
-    ("EGUITRA GROUP SARLU et MB AxisPro Consulting · E-VOLUTION XP", Font(italic=True, color="666666")),
+    ("EGUITRA GROUP SARLU et MB AxisPro · E-VOLUTION XP", Font(italic=True, color="666666")),
     ("", None),
     ("Comment remplir", Font(bold=True, color=GREEN)),
     ("Une ligne par remarque, dans l'onglet Retours. Choisissez le compte, l'application, le type et la gravité "

@@ -7,9 +7,9 @@ Un guide par profil, à remettre lors de la formation et à garder à portée de
 | Direction générale | [guide-direction.md](guide-direction.md) |
 | Finance et comptabilité | [guide-finance.md](guide-finance.md) |
 | Exploitation transport (bureau et parc) | [guide-exploitation.md](guide-exploitation.md) |
-| Chantiers | [guide-chantiers.md](guide-chantiers.md) |
+| BTP | [guide-chantiers.md](guide-chantiers.md) |
 | Gestion immobilière | [guide-immobilier.md](guide-immobilier.md) |
-| Cabinet MB AxisPro Consulting | [guide-cabinet.md](guide-cabinet.md) |
+| Cabinet MB AxisPro | [guide-cabinet.md](guide-cabinet.md) |
 | Porteurs de projets | [guide-porteur.md](guide-porteur.md) |
 | Administration de la plateforme | [guide-administration.md](guide-administration.md) |
 
@@ -23,8 +23,7 @@ Un guide par profil, à remettre lors de la formation et à garder à portée de
    provisoire par un mot de passe personnel d'au moins 10 caractères.
 4. Connexions suivantes : identifiant, mot de passe, puis le code à 6 chiffres du téléphone.
 
-Deux sociétés, un seul compte : si votre compte est ouvert à EGUITRA GROUP SARLU et à MB AxisPro
-Consulting, choisissez la société de travail avec le sélecteur en haut de l'écran ; l'écran se
+Deux sociétés, un seul compte : si votre compte est ouvert à EGUITRA GROUP SARLU et à MB AxisPro, choisissez la société de travail avec le sélecteur en haut de l'écran ; l'écran se
 recharge sur les données de cette société. Les comptabilités restent séparées. La direction et la
 finance disposent aussi de la vue « Groupe consolidé » qui réunit les deux.
 

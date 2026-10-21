@@ -9,7 +9,7 @@ BLOCS = {
     "health": "Santé", "waterfall": "Cascade du résultat", "monthly": "Évolution mensuelle",
     "activities": "Activités", "by_activity": "Par activité", "bridge": "Pont d'EBE",
     "transport_effects": "Effets volume-prix-mix", "cost_structure": "Structure des coûts",
-    "budget_variance": "Budget", "metiers": "Chantiers et biens", "position": "Position de trésorerie",
+    "budget_variance": "Budget", "metiers": "BTP et immobilier", "position": "Position de trésorerie",
     "forecast": "Prévision", "runway": "Autonomie de trésorerie", "cycle": "Cycle de conversion",
     "collections": "Encaissements attendus", "concentration": "Concentration", "segments": "Segments clients",
     "behaviour": "Comportement de paiement", "trends": "Tendances clients", "available": "Données disponibles",

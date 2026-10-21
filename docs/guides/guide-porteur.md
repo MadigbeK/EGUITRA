@@ -1,6 +1,6 @@
 # Guide du porteur de projet : le portail AxisPro
 
-Le cabinet MB AxisPro Consulting vous ouvre un accès au portail pour suivre votre dossier.
+Le cabinet MB AxisPro vous ouvre un accès au portail pour suivre votre dossier.
 
 ## Première connexion
 

@@ -244,7 +244,7 @@ export function QualiteDonnees({ quality }: { quality: Quality }) {
 export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteSociete; contexte: Contexte | undefined; children: ReactNode }) {
   if (!contexte) return <AttenteSection />;
   if (contexte.entity === attendu) return <>{children}</>;
-  const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro Consulting";
+  const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro";
   return (
     <div className="mx-auto max-w-2xl py-10">
       <Notice tone="accent">

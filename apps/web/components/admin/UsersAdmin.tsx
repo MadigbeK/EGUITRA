@@ -193,7 +193,7 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
         )}
         {manquantes.length > 0 && (
           <Notice tone="warn">
-            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro Consulting" : "EGUITRA GROUP SARLU")}.`).join(" ")}
+            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro" : "EGUITRA GROUP SARLU")}.`).join(" ")}
           </Notice>
         )}
         {user && (

@@ -23,15 +23,15 @@ taperez à chaque connexion le code à 6 chiffres de l'application.
 
 ## 2. Deux sociétés, plusieurs applications
 
-EGUITRA GROUP SARLU et MB AxisPro Consulting sont deux entreprises distinctes : chacune a sa
+EGUITRA GROUP SARLU et MB AxisPro sont deux entreprises distinctes : chacune a sa
 comptabilité, ses clients, ses factures. La plateforme les sert par applications :
 
 | Application | Adresse (à la suite de celle de la recette) | Pour qui | Société |
 |---|---|---|---|
 | NIMOVA · Finance | /finance | Direction, finance, métiers d'EGUITRA | Les deux, séparément : la société de travail se choisit dans la colonne de gauche |
-| NIMOVA · AxisPro | /axispro | Direction, consultants du cabinet | MB AxisPro Consulting seulement |
+| NIMOVA · AxisPro | /axispro | Direction, consultants du cabinet | MB AxisPro seulement |
 | Rotations | /mobile | Exploitation, agents de parc | EGUITRA GROUP seulement |
-| Portail des porteurs de projets | /portail | Clients du cabinet | MB AxisPro Consulting seulement |
+| Portail des porteurs de projets | /portail | Clients du cabinet | MB AxisPro seulement |
 
 Les comptes ouverts à Finance et à AxisPro passent de l'une à l'autre par la bascule « Finance |
 AxisPro », en haut de la colonne de gauche. Les modules métier d'EGUITRA (transport, chantiers,
@@ -48,9 +48,9 @@ immobilier) n'apparaissent que lorsque la société de travail est EGUITRA GROUP
 | test.parc | Agent de parc | Rotations, Finance (transport) | EGUITRA GROUP |
 | test.chantiers | Conducteur de travaux | Finance (chantiers) | EGUITRA GROUP |
 | test.immobilier | Gestionnaire immobilier | Finance (immobilier) | EGUITRA GROUP |
-| test.consultant | Consultant du cabinet | AxisPro | MB AxisPro Consulting |
+| test.consultant | Consultant du cabinet | AxisPro | MB AxisPro |
 | test.admin | Administrateur | Toutes | Les deux |
-| test.porteur | Porteur de projet (client du cabinet) | Portail | MB AxisPro Consulting |
+| test.porteur | Porteur de projet (client du cabinet) | Portail | MB AxisPro |
 
 Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend, même un détail.
 
@@ -74,7 +74,7 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
 - Relances clients, immobilisations, dette et financement, fiscalité (TVA), balance et états
   (bilan, compte de résultat au format SYSCOHADA, exports Excel), clôtures et contrôles.
 - Changer de société (colonne de gauche) : vérifiez que les chiffres, les factures et les journaux
-  d'EGUITRA GROUP et de MB AxisPro Consulting restent bien séparés.
+  d'EGUITRA GROUP et de MB AxisPro restent bien séparés.
 
 ### Exploitation transport (test.exploitation) et agent de parc (test.parc)
 

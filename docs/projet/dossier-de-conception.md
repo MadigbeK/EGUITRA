@@ -9,7 +9,7 @@ de l'offre ne changent pas.
 
 ## 1. Ce qui est construit
 
-Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro Consulting :
+Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro :
 
 - **EGUITRA Finance** : pilotage du dirigeant, comptabilité SYSCOHADA, trésorerie, approbations,
   clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers transport,
@@ -66,7 +66,7 @@ modifiée, aucun contournement possible hors du moteur.
 
 ## 4. Organisation des données
 
-- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro Consulting (cabinet)
+- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro (cabinet)
   vivent dans la même base, avec des **comptabilités entièrement séparées** : chacune son plan de
   comptes SYSCOHADA, ses journaux, ses taxes, sa numérotation des pièces, ses exercices et ses
   clôtures. Les données sont cloisonnées par société : un utilisateur ne voit que les sociétés qui
@@ -188,7 +188,7 @@ recalculées par la plateforme et leur conformité (« n/26 ») est annexée au 
 
 ## 11. Validation
 
-| Pour EGUITRA GROUP SARLU et MB AxisPro Consulting | Pour E-VOLUTION XP |
+| Pour EGUITRA GROUP SARLU et MB AxisPro | Pour E-VOLUTION XP |
 |---|---|
 | M. Mohamed Nimaga, Directeur Général | Madigbè Kouyaté, gérant |
 | Date et signature : | Date et signature : |

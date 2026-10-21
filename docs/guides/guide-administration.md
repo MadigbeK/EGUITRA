@@ -7,7 +7,7 @@
   authentification à la première connexion.
 - Profils : direction, finance, exploitation, chantiers, immobilier, cabinet, administration,
   porteur (ce dernier réservé au portail, ouvert depuis la fiche d'un dossier AxisPro).
-- Sociétés accessibles : cocher EGUITRA GROUP SARLU, MB AxisPro Consulting ou les deux, et choisir
+- Sociétés accessibles : cocher EGUITRA GROUP SARLU, MB AxisPro ou les deux, et choisir
   la société à l'ouverture. Un compte ouvert aux deux passe de l'une à l'autre sans se reconnecter ;
   chaque comptabilité reste séparée.
 - Départ d'un collaborateur : désactiver le compte (ses sessions sont fermées, l'historique reste).
