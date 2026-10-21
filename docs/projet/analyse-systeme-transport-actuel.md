@@ -90,7 +90,9 @@ montré ; l'export prévoit une colonne « Confirmation destinataire », vide.
 
 - Tarif en **GNF par litre**, par couple dépôt et destination : un barème national préchargé par
   l'éditeur (« tarifs de péréquation ») et, au besoin, un tarif contractuel, éventuellement propre à
-  un client. Tous les tarifs contractuels vus sont égaux au barème national.
+  un client. Tous les tarifs contractuels vus sont égaux au barème national. Le barème vaut environ
+  **1,05 GNF par litre et par km** de distance (de 1,047 à 1,051 sur les quatorze destinations au départ
+  de Kamsar) : le chiffre d'affaires d'une rotation est proportionnel à la distance.
 - **Chiffre d'affaires = volume livré × tarif**. Pour une rotation en cours : volume chargé × tarif
   (provisoire).
 - **Manquant = volume chargé − volume livré**, sans tolérance. Sa seule conséquence est le fret perdu
@@ -102,9 +104,13 @@ montré ; l'export prévoit une colonne « Confirmation destinataire », vide.
 - **Coûts variables d'une livraison** = carburant + prime chauffeur + péages, tous tirés des
   paramètres de la route (frais de chargement prévus, toujours à zéro).
 - **Carburant** = consommation forfaitaire de la route (en litres) × prix à la pompe publié chaque
-  mois (structure des prix des produits pétroliers), appliqué automatiquement. Le carburant d'une
-  rotation passée est donc recalculé à chaque changement de prix. Les consommations par route sont
-  saisies à la main et hétérogènes (de 0,26 à 2,1 litre par km ; distances manquantes sur 5 routes).
+  mois (structure des prix des produits pétroliers), appliqué automatiquement. En octobre, Datakö
+  appliquait encore le prix publié en août, à toutes les rotations, passées comprises : le carburant
+  d'une rotation passée est recalculé à chaque changement de prix. Les consommations par route sont
+  saisies à la main et hétérogènes (de 0,26 à 2,08 litres par km ; distances manquantes sur 4 routes,
+  deux distances à 12 décimales recalculées depuis le barème). Une route non configurée reçoit une
+  consommation estimée d'environ 1 litre par km. Les routes longues (Siguiri, Kiniéro) sont à environ
+  1,27 litre par km de route, ce qui correspond à l'aller-retour d'un porteur chargé à l'aller.
 - **Charges fixes** : un écran mensuel de charges « mutualisées », réparties à parts égales sur les
   camions en exploitation (vide en octobre) ; et, par véhicule, des charges mensuelles (entretien
   forfaitaire, géolocalisation, caméra, assurance, vignettes, visite technique), souvent un coût
@@ -129,8 +135,11 @@ C'est le cœur du logiciel et ce qui le distingue.
 - **Bilan propriétaire** : relevé PDF de deux pages par camion géré et par période (activité, revenus,
   charges variables et fixes, compte d'exploitation, répartition propriétaire et exploitant,
   historique des rotations), ou export Excel ; envoi par courriel au propriétaire prévu.
-- **Cash réel d'EGUITRA** = marge de ses camions propres − commissions qu'elle verse (− crédit-bail
-  en cours). Les pertes des camions gérés ne le réduisent pas.
+- **Cash réel d'EGUITRA** (« cash net réel ») = résultat de ses camions propres après les commissions
+  qu'elle verse + commissions perçues sur les camions gérés, vérifié au franc sur trois états de
+  l'écran. Le crédit-bail n'y est pas déduit, contrairement au guide intégré. Les pertes des camions
+  gérés ne le réduisent pas. La marge de l'écran Flotte est calculée avant commissions, le profit par
+  camion après.
 - **Crédit-bail** : contrat (banque, mensualité, durée, début), progression du remboursement, alerte
   sur le gain de trésorerie à la fin des mensualités. Le seul contrat saisi (36 mois) est terminé.
 
@@ -139,7 +148,9 @@ C'est le cœur du logiciel et ce qui le distingue.
 - **Simulation transport** : tarif au litre, volume par livraison, livraisons par mois, charges fixes
   et variables, investissement, mensualité de crédit-bail, commissions ; il calcule le résultat net du
   propriétaire, le retour sur investissement en mois et le **point mort en nombre de livraisons**, avec
-  la courbe du résultat selon le nombre de livraisons. Rien n'est enregistré.
+  la courbe du résultat selon le nombre de livraisons. Rien n'est enregistré. Ses charges variables
+  par livraison sont à zéro par défaut : le projet simulé dans la vidéo, présenté « rentable », devient
+  déficitaire dès qu'on y ajoute le carburant et la prime de route de Datakö elle-même.
 - Tableaux : vue d'ensemble (chiffre d'affaires, marge, flotte active, livraisons, crédit-bail, cash
   net réel), gains par rotation (jour, mois, moyenne, gain perdu sur les manquants), profit par camion,
   cashflow (commissions, coûts, résultat des propriétaires, décomposition carburant, charges fixes,
@@ -283,20 +294,21 @@ manquants identiques ; rotations sans client (deux sur quatre en octobre) trait�
 
 ## 8. Questions au client
 
-Regroupées et dédoublonnées ; elles complètent celles de `cadrage-transport.md`.
+Regroupées et dédoublonnées ; elles complètent celles de `cadrage-transport.md`. Les réponses que les chiffres de la vidéo permettent de déduire sont indiquées entre parenthèses.
 
 **Manquants et facturation**
 
 1. Le client déduit-il seulement le fret du volume non livré (comme le calcule Datakö), ou aussi la
    valeur du produit au-delà d'une tolérance ? Une retenue est-elle faite au chauffeur ?
-2. Quelle date fait foi pour le mois : chargement ou livraison ? (Datakö dit chargement mais montre
-   en octobre des rotations chargées en septembre.)
+2. Quelle date fait foi pour le mois : chargement ou livraison ? (Le formulaire de Datakö dit
+   chargement, mais ses écrans rattachent la rotation au mois de sa livraison.)
 3. Où et comment les factures sont-elles émises aujourd'hui (logiciel, Excel, comptabilité) : une
    facture par rotation, ou un relevé par client et par mois ? Le n° de tournée et les bons de
    commande sont-ils exigés pour facturer ?
 4. Un règlement du client couvre-t-il plusieurs rotations ? Y a-t-il des paiements partiels ?
-5. Le barème national (« tarifs de péréquation ») : source, date d'effet, mise à jour ? Existe-t-il de
-   vrais tarifs négociés par client ? Les deux décimales du tarif au litre sont-elles contractuelles ?
+5. Le barème national (« tarifs de péréquation », environ 1,05 GNF par litre et par km) : source,
+   date d'effet, mise à jour ? Existe-t-il de vrais tarifs négociés par client ? Les deux décimales du
+   tarif au litre sont-elles contractuelles ?
 6. Quelles pièces rendent un dossier de livraison « complet » ? Le n° de BL est-il celui du dépôt ou
    du client ?
 
@@ -315,9 +327,10 @@ Regroupées et dédoublonnées ; elles complètent celles de `cadrage-transport.
 
 **Coûts et flotte**
 
-12. Les forfaits de route (consommation, prime chauffeur, péages) : base aller simple ou aller-retour ?
-    Qui les a fixés ? Les dépenses réelles de carburant, de primes et de péages sont-elles suivies
-    ailleurs ?
+12. Les forfaits de route (consommation, prime chauffeur, péages) : qui les a fixés ? Les routes
+    longues correspondent à un aller-retour, d'autres sont trois à cinq fois trop basses (Koundara,
+    Kounsitel, Gaoual, Dubreka). Les dépenses réelles de carburant, de primes et de péages sont-elles
+    suivies ailleurs (bons de carburant, caisse) ?
 13. EGUITRA achète-t-il le carburant au prix officiel ou à un prix négocié ?
 14. Les charges fixes par véhicule (assurance, vignettes, géolocalisation, caméra, visite technique,
     entretien forfaitaire) sont-elles des budgets ou des dépenses réelles ? L'entretien réel est-il
@@ -340,8 +353,39 @@ Regroupées et dédoublonnées ; elles complètent celles de `cadrage-transport.
     utilisé ?
 23. Deux rotations d'octobre n'ont pas de client rattaché : erreur de saisie à corriger avant reprise ?
 24. Autres produits transportés que le gasoil (essence, mazout, jet) ?
+25. Le simulateur de Datakö décrit-il un projet réel (achat d'un camion en crédit-bail avec un
+    partenaire) ? Si oui, le refaire avec le carburant, une cadence réaliste et les coûts réels de la
+    flotte avant de décider.
+26. Les propriétaires des camions gérés savent-ils que leur camion a peu roulé et que leur relevé est
+    négatif ? Pourquoi ces camions sont-ils peu employés (disponibilité, état, conformité) ?
 
-## 9. Glossaire
+## 9. Analyse chiffrée
+
+Les valeurs affichées dans la vidéo (référentiels, livraisons d'octobre, rentabilité par camion de
+septembre et d'octobre, répartition, crédit-bail, simulateur) ont été relevées, recalculées et
+analysées dans un classeur confidentiel remis au gérant, hors du dépôt. Conclusions qui ne
+dépendent pas des montants :
+
+- Les calculs de Datakö se vérifient au franc près, avec le même arrondi que NIMOVA (demi vers le
+  haut) : ses chiffres sont une base fiable pour la reprise.
+- Sa marge n'est pas un résultat : elle ne compte ni salaires, ni entretien réel, ni pneus, ni
+  amortissement ou crédit-bail, ni structure. La rentabilité réelle ne se lira que dans NIMOVA, avec
+  les coûts comptabilisés par ensemble routier.
+- La mensualité du crédit-bail des camions représentait plus des deux tiers du chiffre d'affaires de
+  septembre ; le contrat est arrivé à son terme : à reprendre dans Finance (Dette) avec son échéancier.
+- L'utilisation de la flotte est faible et concentrée sur deux camions ; les camions gérés ont peu
+  roulé, et leurs propriétaires supportent seuls leurs charges fixes.
+- Les manquants sont faibles (environ 0,2 % du volume chargé) ; valorisés au prix du gasoil plutôt qu'au
+  tarif de transport, ils vaudraient une vingtaine de fois plus : la règle du client (question 1)
+  change donc fortement leur coût.
+- Les forfaits de carburant hétérogènes surestiment la marge des routes courtes en consommation : avec
+  un ratio homogène, la marge de certaines routes baisse de plus d'un quart.
+
+Le convertisseur `scripts/reprise/datako.py` reprend l'export des livraisons dans les fichiers de
+reprise ; testé sur les livraisons d'octobre de la vidéo, il retrouve le chiffre d'affaires de Datakö
+au franc près quand les tarifs à deux décimales lui sont fournis.
+
+## 10. Glossaire
 
 | Datakö | NIMOVA |
 |---|---|

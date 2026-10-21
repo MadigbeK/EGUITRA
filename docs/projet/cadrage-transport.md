@@ -19,7 +19,7 @@ décision contraire du gérant).
 ## Logiciel utilisé aujourd'hui (vidéo du 13 octobre, analysée le 21 octobre)
 
 EGUITRA pilote son transport d'hydrocarbures avec Datakö Fleet Manager, un service en ligne. Analyse
-complète, comparaison avec `eguitra_transport`, reprise des données et 24 questions au client :
+complète, comparaison avec `eguitra_transport`, reprise des données, analyse chiffrée et 26 questions au client :
 `docs/projet/analyse-systeme-transport-actuel.md`. Écarts principaux : camions gérés pour le compte de
 propriétaires tiers (partage du résultat, relevé au propriétaire), commissions de partenaires,
 coûts standard par route et gain estimé à la saisie, dossier de livraison (n° de tournée, bons de

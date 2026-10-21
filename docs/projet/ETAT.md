@@ -246,6 +246,15 @@ détaillées restent hors du dépôt (données du client ; `.gitignore` exclut l
 - Reprise : demander à Datakö un export complet (l'export Excel des livraisons arrondit le tarif et omet
   conducteurs, coûts et encaissements) ; expliquer l'écart entre 383 rotations (classeur cité par
   l'offre) et environ 45 dans Datakö.
+- Analyse chiffrée (même jour) : valeurs de la vidéo relevées et recalculées au franc près ; classeur
+  confidentiel remis au gérant, hors dépôt (scratchpad de la session). Conclusions sans montants au
+  chapitre 9 du document : marge de Datakö sans salaires, entretien réel, amortissement ni crédit-bail ;
+  flotte peu employée ; camions gérés à l'arrêt ; forfaits de carburant incohérents ; simulateur sans
+  charges variables. Deux questions ajoutées (26 au total).
+- Convertisseur `scripts/reprise/datako.py` (export « Livraisons » de Datakö vers `routes.csv`,
+  `ensembles.csv`, `rotations.csv`, avec tarifs à deux décimales, forfaits de route et prix mensuel du
+  carburant en compléments) ; testé sur les livraisons d'octobre relevées : chiffre d'affaires
+  retrouvé au franc. Documenté dans `scripts/reprise/README.md`.
 
 **19 octobre : rechargement sans fin de la page de changement du mot de passe** (signalé par le gérant
 après réinitialisation du mot de passe de `test.dg` en recette). Cause : le cadre de la page interroge

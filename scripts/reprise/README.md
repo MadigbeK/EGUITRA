@@ -114,6 +114,30 @@ Le prototype amortit en mois entiers à compter du mois qui suit l'acquisition ;
 dotations par bien montre l'écart de chaque convention, qui se retrouve dans les dotations, les
 résultats, les capitaux propres et les totaux de la balance et du bilan.
 
+## Exports de Datakö Fleet (transport, depuis mai 2026)
+
+EGUITRA suit ses rotations dans Datakö Fleet depuis mai 2026 (analyse :
+`docs/projet/analyse-systeme-transport-actuel.md`). `datako.py` convertit l'export « Livraisons » de
+Datakö (bouton « Exporter », une période par fichier) en `routes.csv`, `ensembles.csv` et
+`rotations.csv`. L'export arrondit le tarif au franc et ne donne ni conducteur ni coûts : trois fichiers
+recopiés des écrans de configuration de Datakö le complètent (tarifs à deux décimales et destination
+des routes, forfaits des routes, prix mensuel du carburant). Les exports sont des données du client :
+lus avec `python -I`, hors du dépôt.
+
+```bash
+python -I scripts/reprise/datako.py mai.xlsx juin.xlsx … octobre.xlsx sortie   --tarifs=tarifs.csv --routes=routes_datako.csv --carburant=carburant.csv   --depuis=2026-05-01 --facturees-jusqu-au=2026-10-31
+```
+
+- `tarifs.csv` : `depot;destination;ville;tarif_l` ; `routes_datako.csv` :
+  `depot;destination;distance_km;conso_l;prime;peage;frais_chargement` ; `carburant.csv` : `mois;prix_l`
+  (AAAA-MM).
+- Seules les livraisons « Livré » sont reprises ; « En cours » et « Annulé » sont listées dans
+  `rapport_conversion.txt`, avec les totaux par mois (rotations, m³, chiffre d'affaires de l'export et
+  recalculé) et les clients à déclarer dans `tiers.csv` sous le même nom.
+- `--depuis` écarte une période déjà reprise d'une autre source (classeur 2026, dossier du prototype) :
+  une rotation ne doit venir que d'une source. `--facturees-jusqu-au` laisse les rotations livrées après
+  cette date à facturer par NIMOVA ; sans lui, toutes sont marquées facturées dans l'ancien système.
+
 ## Convention d'amortissement des biens repris (décision de l'expert-comptable)
 
 Une seule variable, `REPRISE_CONVENTION_AMORTISSEMENT` (reprise.sh), et la même option
