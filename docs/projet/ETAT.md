@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 19 octobre 2026
+# État du projet EGUITRA, au 21 octobre 2026
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -164,6 +164,24 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**21 octobre : analyse du logiciel de transport actuel** (vidéo de présentation reçue par le gérant,
+43 minutes). Le logiciel est Datakö Fleet Manager (service en ligne, formule Business) : 5 citernes,
+8 conducteurs, 13 routes, environ 45 rotations en 2026, historique de mai à octobre. Synthèse,
+comparaison avec `eguitra_transport`, correspondance des données et questions au client :
+`docs/projet/analyse-systeme-transport-actuel.md`. La vidéo, les images, la transcription et les notes
+détaillées restent hors du dépôt (données du client ; `.gitignore` exclut les vidéos).
+- Constats : outil de pilotage aux coûts forfaitaires (carburant au prix officiel du mois, recalculé
+  rétroactivement), sans facture ni comptabilité, encaissement coché par livraison ; chiffre d'affaires
+  sur le livré, manquant sans tolérance (fret perdu seulement). NIMOVA réglé sur « constat seulement »
+  reproduit ce calcul.
+- Écarts à combler, proposés au gérant : camions gérés pour des propriétaires tiers avec règles de
+  répartition et relevé mensuel (5.1), coûts standard par route et gain estimé figé à la saisie (5.2),
+  dossier de livraison (5.3), documents et conformité des véhicules (5.4), simulation d'investissement
+  (5.5). Décision du gérant attendue sur le périmètre (offre ou évolution).
+- Reprise : demander à Datakö un export complet (l'export Excel des livraisons arrondit le tarif et omet
+  conducteurs, coûts et encaissements) ; expliquer l'écart entre 383 rotations (classeur cité par
+  l'offre) et environ 45 dans Datakö.
 
 **19 octobre : rechargement sans fin de la page de changement du mot de passe** (signalé par le gérant
 après réinitialisation du mot de passe de `test.dg` en recette). Cause : le cadre de la page interroge
