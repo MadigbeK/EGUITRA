@@ -218,6 +218,16 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
   d'ici là la production est servie sur des adresses provisoires `*.178-33-206-212.sslip.io` (session
   « AXISPRO SUITE », ancien `.env` copié dans `infra/secrets/env.avant-domaines-provisoires`). Après
   la bascule : rétablir la double authentification de la recette si les tests sont finis.
+- Logo NIMOVA « le pli » (session design, validé par le gérant) fusionné et en recette (application
+  web reconstruite, commit 76732c4) ; cache hors ligne de Rotations passé en `rotations-v3` pour
+  livrer les nouvelles icônes. Production : à la prochaine mise en production.
+- Engagement de confidentialité court du prestataire, à signer avant la remise des données réelles
+  (`docs/projet/Engagement_de_confidentialite.docx`, générateur `engagement-de-confidentialite.js`),
+  en complément de l'accord réciproque. Engagements à tenir : réglage de confidentialité de
+  l'assistant d'IA (pas d'entraînement), disque du poste chiffré, base d'essai `eguitra_reprise_essai`
+  (données réelles, grappe de recette) à effacer dès la convention d'amortissement décidée.
+- Poste de travail : disque C: saturé le 21 octobre (0 octet libre, fusion git impossible) ; place
+  libérée par le gérant. Surveiller l'espace libre avant les constructions et les analyses de vidéo.
 
 **21 octobre : analyse du logiciel de transport actuel** (vidéo de présentation reçue par le gérant,
 43 minutes). Le logiciel est Datakö Fleet Manager (service en ligne, formule Business) : 5 citernes,
