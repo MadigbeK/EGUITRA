@@ -22,6 +22,7 @@ access_budget_line_direction,lignes budgétaires lecture,model_eguitra_budget_li
 access_budget_line_finance,lignes budgétaires finance,model_eguitra_budget_line,eguitra_base.group_profile_finance,1,1,1,1
 access_expense_category_direction,catégories de dépense lecture,model_eguitra_expense_category,eguitra_base.group_profile_direction,1,0,0,0
 access_expense_category_finance,catégories de dépense finance,model_eguitra_expense_category,eguitra_base.group_profile_finance,1,1,1,0
+access_expense_category_achats,catégories de dépense achats,model_eguitra_expense_category,eguitra_base.group_profile_achats,1,0,0,0
 access_operation_type_direction,types d'opération lecture,model_eguitra_treasury_operation_type,eguitra_base.group_profile_direction,1,0,0,0
 access_operation_type_finance,types d'opération finance,model_eguitra_treasury_operation_type,eguitra_base.group_profile_finance,1,1,1,0
 access_reprise_reference_direction,références de reprise lecture,model_eguitra_reprise_reference,eguitra_base.group_profile_direction,1,0,0,0

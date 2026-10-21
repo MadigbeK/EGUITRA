@@ -11,12 +11,19 @@ interface UserRow extends Me {
   active: boolean;
   last_login: string | null;
 }
-/** entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro). */
+/**
+ * Profil de la plateforme, tel que le noyau le décrit (libellé et description du groupe : Achats compris).
+ * entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur :
+ * MB AxisPro) ; null pour un profil commun aux deux sociétés (direction, finance, achats).
+ */
 interface ProfileDef { code: string; name: string; description: string | null; entity: "groupe" | "cabinet" | null }
 /** Droit complémentaire aux profils (free_accounts : saisie libre des comptes). */
 interface RightDef { code: string; name: string; description: string | null }
 type Rights = Record<string, boolean | undefined>;
-/** Profils de saisie comptable : la saisie libre des comptes les concerne, accordée d'office à leur ouverture. */
+/**
+ * Profils de saisie comptable : la saisie libre des comptes les concerne, accordée d'office à leur ouverture.
+ * Le profil Achats n'en fait pas partie : la catégorie de dépense fixe toujours son compte.
+ */
 const PROFILS_COMPTABLES = ["admin", "direction", "finance"];
 
 /** Utilisateurs : profils, droits complémentaires, sociétés, mot de passe provisoire, double authentification. */

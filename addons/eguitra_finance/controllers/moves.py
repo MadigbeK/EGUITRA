@@ -14,8 +14,12 @@ from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 from ..models.analytic import ACTIVITY_PLAN
 from .common import (
+    ACHATS,
     FIN_READ,
     FIN_WRITE,
+    PURCHASE_TYPES,
+    PURCHASES_ONLY,
+    achats_only,
     activity_income_account,
     as_float,
     check_mandatory_analytic,
@@ -25,8 +29,10 @@ from .common import (
     move_summary,
     parse_date,
     require_free_accounts,
+    require_purchase,
     today,
     with_rules,
+    without_settlement,
 )
 from .withholding import invoice_partner, line_withholdings, with_withholdings
 
@@ -38,13 +44,38 @@ MOVE_TYPES = {
     "entry": "Opération diverse",
 }
 MAX_ATTACHMENT = 15 * 1024 * 1024
+# Routes ouvertes au profil Achats, bornées aux pièces d'achat et aux avoirs fournisseurs (common.achats_only).
+PURCHASE_READ = FIN_READ + ACHATS
+PURCHASE_WRITE = FIN_WRITE + ACHATS
 
 
-def _move(move_id):
+def _move(move_id, full=None):
+    """Pièce de la société de l'utilisateur. full : profils qui ouvrent la route en entier ; à défaut
+    d'en porter un, le profil Achats n'atteint que les pièces d'achat et les avoirs fournisseurs (403)."""
     move = request.env["account.move"].browse(move_id).exists()
     if not move or move.company_id not in request.env.user.company_ids:
         raise ApiError(404, "not_found", "Pièce introuvable.")
+    if full:
+        require_purchase(move.move_type, full)
     return move
+
+
+def _detail(move):
+    """Fiche de la pièce ; au profil Achats seul, sans reste dû ni règlements (common.without_settlement)."""
+    data = move_detail(move)
+    return without_settlement(data) if achats_only(FIN_READ) else data
+
+
+def _purchase_taxes(value, company):
+    """Taxes d'une ligne saisie par le profil Achats : taxes d'achat de la société seulement."""
+    try:
+        ids = {int(t) for t in value or []}
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", "Taxe invalide.") from e
+    taxes = request.env["account.tax"].browse(list(ids)).exists()
+    if len(taxes) != len(ids) or any(t.company_id != company or t.type_tax_use != "purchase" for t in taxes):
+        raise ApiError(422, "business_rule", "Taxe inconnue, d'une autre société ou qui n'est pas une taxe d'achat.")
+    return taxes
 
 
 def _partner(value):
@@ -113,6 +144,8 @@ def _default_journal(data, sale, company):
         journal = request.env["account.journal"].browse(int(data["journal_id"])).exists()
         if not journal or journal.company_id != company:
             raise ApiError(422, "business_rule", "Journal inconnu dans la société.")
+        if not sale and journal.type != "purchase" and achats_only(FIN_WRITE):
+            raise ApiError(422, "business_rule", "Choisissez un journal d'achat.")
         return journal
     return request.env["account.journal"].search(
         [("company_id", "=", company.id), ("type", "=", "sale" if sale else "purchase")], limit=1)
@@ -124,12 +157,14 @@ def _invoice_lines(data, move_type, partner=None):
     produit de l'activité (ventes), sinon le compte par défaut du journal ; sans ce droit, une ligne
     d'achat se saisit par catégorie (ou produit). TVA : celle saisie, sinon celle de la catégorie, sinon
     la taxe par défaut. Analytique : la répartition saisie, complétée par les imputations automatiques
-    pour les axes laissés vides."""
+    pour les axes laissés vides. Profil Achats : taxes d'achat de la société seulement, compte jamais
+    choisi (free_accounts)."""
     lines = data.get("lines") or []
     if not isinstance(lines, list) or not lines:
         raise ApiError(400, "missing_fields", "Au moins une ligne est requise.", fields=["lines"])
     company = request.env.company
     sale = move_type.startswith("out_")
+    purchases_only = achats_only(FIN_WRITE)
     default_tax = company.account_sale_tax_id if sale else company.account_purchase_tax_id
     journal = _default_journal(data, sale, company)
     partner = partner or invoice_partner(data)
@@ -162,7 +197,10 @@ def _invoice_lines(data, move_type, partner=None):
         if account:
             values["account_id"] = account.id
         if "tax_ids" in line:
-            values["tax_ids"] = [Command.set([int(t) for t in line["tax_ids"] or []])]
+            if purchases_only:
+                values["tax_ids"] = [Command.set(_purchase_taxes(line["tax_ids"], company).ids)]
+            else:
+                values["tax_ids"] = [Command.set([int(t) for t in line["tax_ids"] or []])]
         elif category:
             values["tax_ids"] = [Command.set(category.taxes(default_tax).ids)]
         elif data.get("apply_default_tax", True) and default_tax:
@@ -291,9 +329,15 @@ def _entry_lines(data):
 class EguitraFinanceMoves(http.Controller):
     # ─── Liste et détail ──────────────────────────────────────────────────
 
-    @api_route("/finance/moves", profiles=FIN_READ)
+    @api_route("/finance/moves", profiles=PURCHASE_READ)
     def list_moves(self, **kw):
         types = [t for t in (kw.get("type") or "out_invoice,out_refund").split(",") if t in MOVE_TYPES]
+        if achats_only(FIN_READ):
+            # Profil Achats : liste bornée d'office aux pièces d'achat et aux avoirs fournisseurs ; une liste
+            # qui ne demande que d'autres pièces (ventes, opérations diverses) est refusée.
+            types = [t for t in types if t in PURCHASE_TYPES] if kw.get("type") else list(PURCHASE_TYPES)
+            if not types:
+                raise ApiError(403, "forbidden", PURCHASES_ONLY)
         domain = [("move_type", "in", types), ("company_id", "=", request.env.company.id)]
         if kw.get("state") in ("draft", "posted", "cancel"):
             domain.append(("state", "=", kw["state"]))
@@ -321,26 +365,35 @@ class EguitraFinanceMoves(http.Controller):
         offset = int_arg(kw, "offset", 0, 0)
         moves = Move.search(domain, limit=limit, offset=offset, order="date desc, id desc")
         [(total, residual)] = Move._read_group(domain, aggregates=["amount_total_signed:sum", "amount_residual_signed:sum"])
+        items = [move_summary(m) for m in moves]
+        totals = {"amount_total": abs(total or 0.0), "amount_residual": abs(residual or 0.0)}
+        if achats_only(FIN_READ):
+            items = [without_settlement(item) for item in items]
+            totals["amount_residual"] = None
         return {
-            "items": [move_summary(m) for m in moves],
+            "items": items,
             "total_count": Move.search_count(domain),
-            "totals": {"amount_total": abs(total or 0.0), "amount_residual": abs(residual or 0.0)},
+            "totals": totals,
             "limit": limit,
             "offset": offset,
         }
 
-    @api_route("/finance/moves/<int:move_id>", profiles=FIN_READ)
+    @api_route("/finance/moves/<int:move_id>", profiles=PURCHASE_READ)
     def get_move(self, move_id, **_kw):
-        return move_detail(_move(move_id))
+        return _detail(_move(move_id, FIN_READ))
 
     # ─── Saisie ───────────────────────────────────────────────────────────
 
-    @api_route("/finance/moves", methods=("POST",), profiles=FIN_WRITE)
+    @api_route("/finance/moves", methods=("POST",), profiles=PURCHASE_WRITE)
     def create_move(self, **_kw):
         data = read_json()
         move_type = data.get("move_type")
         if move_type not in MOVE_TYPES:
             raise ApiError(400, "invalid_parameter", "Type de pièce inconnu.")
+        require_purchase(move_type, FIN_WRITE)
+        purchases_only = achats_only(FIN_WRITE)
+        if purchases_only and data.get("dispute"):
+            raise ApiError(403, "forbidden", "Profil Achats : le litige sur une pièce se déclare par la finance.")
         values = {"move_type": move_type, "company_id": request.env.company.id}
         if data.get("journal_id"):
             values["journal_id"] = int(data["journal_id"])
@@ -361,6 +414,10 @@ class EguitraFinanceMoves(http.Controller):
             (partner_id,) = require(data, "partner_id")
             partner = _partner(partner_id)
             partner_account = _entry_categories(data, move_type, request.env.company)
+            if partner_account and purchases_only:
+                # L'opération diverse produite (salaires, cotisations, impôts) sortirait du périmètre du profil.
+                raise ApiError(403, "forbidden", "Profil Achats : les dépenses de personnel, de charges sociales et "
+                                                 "d'impôts (opérations diverses) se saisissent par la finance.")
             if partner_account:
                 move = _purchase_as_entry(data, move_type, partner, partner_account, request.env.company)
                 if data.get("post"):
@@ -387,11 +444,11 @@ class EguitraFinanceMoves(http.Controller):
         if data.get("post"):
             check_mandatory_analytic(move.line_ids)
             move._eguitra_post_or_submit()
-        return move_detail(move)
+        return _detail(move)
 
-    @api_route("/finance/moves/<int:move_id>", methods=("PATCH",), profiles=FIN_WRITE)
+    @api_route("/finance/moves/<int:move_id>", methods=("PATCH",), profiles=PURCHASE_WRITE)
     def update_move(self, move_id, **_kw):
-        move = _move(move_id)
+        move = _move(move_id, FIN_WRITE)
         if move.state != "draft":
             raise ApiError(422, "business_rule", "Seule une pièce en brouillon peut être modifiée.")
         data = read_json()
@@ -421,11 +478,11 @@ class EguitraFinanceMoves(http.Controller):
                 values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(
                     dict(data, journal_id=move.journal_id.id), move.move_type, partner)
         move.write(values)
-        return move_detail(move)
+        return _detail(move)
 
-    @api_route("/finance/moves/<int:move_id>", methods=("DELETE",), profiles=FIN_WRITE)
+    @api_route("/finance/moves/<int:move_id>", methods=("DELETE",), profiles=PURCHASE_WRITE)
     def delete_move(self, move_id, **_kw):
-        move = _move(move_id)
+        move = _move(move_id, FIN_WRITE)
         if move.state != "draft" or move.posted_before:
             raise ApiError(422, "business_rule", "Seul un brouillon jamais validé peut être supprimé ; sinon, annulez-le.")
         move.unlink()
@@ -433,14 +490,16 @@ class EguitraFinanceMoves(http.Controller):
 
     # ─── Cycle de vie ─────────────────────────────────────────────────────
 
-    @api_route("/finance/moves/<int:move_id>/post", methods=("POST",), profiles=FIN_WRITE)
+    @api_route("/finance/moves/<int:move_id>/post", methods=("POST",), profiles=PURCHASE_WRITE)
     def post_move(self, move_id, **_kw):
-        move = _move(move_id)
+        """Validation, ou soumission au circuit d'approbation quand une règle s'applique (eguitra_approval) :
+        le profil Achats soumet ainsi ses pièces, le circuit décide de leur comptabilisation."""
+        move = _move(move_id, FIN_WRITE)
         if move.state != "draft":
             raise ApiError(422, "business_rule", "La pièce n'est pas en brouillon.")
         check_mandatory_analytic(move.line_ids)
         move._eguitra_post_or_submit()
-        return move_detail(move)
+        return _detail(move)
 
     @api_route("/finance/moves/<int:move_id>/dispute", methods=("POST",), profiles=FIN_WRITE)
     def dispute(self, move_id, **_kw):
@@ -506,9 +565,9 @@ class EguitraFinanceMoves(http.Controller):
             payments.write({"eguitra_payment_mode_id": mode.id})
         return move_detail(move)
 
-    @api_route("/finance/moves/<int:move_id>/pdf", profiles=FIN_READ)
+    @api_route("/finance/moves/<int:move_id>/pdf", profiles=PURCHASE_READ)
     def move_pdf(self, move_id, **_kw):
-        move = _move(move_id)
+        move = _move(move_id, FIN_READ)
         if not move.is_invoice(include_receipts=True):
             raise ApiError(422, "business_rule", "Pas d'impression pour ce type de pièce.")
         pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf("account.account_invoices", move.ids)
@@ -520,16 +579,16 @@ class EguitraFinanceMoves(http.Controller):
 
     # ─── Pièces jointes ───────────────────────────────────────────────────
 
-    @api_route("/finance/moves/<int:move_id>/attachments", methods=("POST",), profiles=FIN_WRITE)
+    @api_route("/finance/moves/<int:move_id>/attachments", methods=("POST",), profiles=PURCHASE_WRITE)
     def add_attachment(self, move_id, **_kw):
-        return store_attachment(_move(move_id), request.httprequest.files.get("file"))
+        return store_attachment(_move(move_id, FIN_WRITE), request.httprequest.files.get("file"))
 
-    @api_route("/finance/attachments/<int:attachment_id>", profiles=FIN_READ)
+    @api_route("/finance/attachments/<int:attachment_id>", profiles=PURCHASE_READ)
     def download_attachment(self, attachment_id, **_kw):
         attachment = request.env["ir.attachment"].browse(attachment_id).exists()
         if not attachment or attachment.res_model != "account.move":
             raise ApiError(404, "not_found", "Pièce jointe introuvable.")
-        _move(attachment.res_id)
+        _move(attachment.res_id, FIN_READ)
         return request.make_response(attachment.raw or b"", headers=[
             ("Content-Type", attachment.mimetype or "application/octet-stream"),
             ("Content-Disposition", content_disposition(attachment.name or "piece-jointe")),
@@ -603,11 +662,17 @@ class EguitraFinanceMoves(http.Controller):
                  "active": a.active, "analytic_required": bool(a.code) and a.code.startswith(mandatory)}
                 for a in accounts]
 
-    @api_route("/finance/journals", profiles=FIN_READ)
+    @api_route("/finance/journals", profiles=PURCHASE_READ)
     def journals(self, **kw):
         domain = [("company_id", "=", request.env.company.id)]
-        if kw.get("type"):
-            domain.append(("type", "in", kw["type"].split(",")))
+        types = kw["type"].split(",") if kw.get("type") else None
+        if achats_only(FIN_READ):
+            # Profil Achats : journaux d'achat seuls (ni banque, ni caisse, ni ventes, ni opérations diverses).
+            if types and "purchase" not in types:
+                raise ApiError(403, "forbidden", "Profil Achats : journaux d'achat seulement.")
+            types = ["purchase"]
+        if types:
+            domain.append(("type", "in", types))
         return [
             {"id": j.id, "name": j.name, "code": j.code, "type": j.type,
              "currency": (j.currency_id or j.company_id.currency_id).name,
@@ -615,11 +680,17 @@ class EguitraFinanceMoves(http.Controller):
             for j in request.env["account.journal"].search(domain, order="sequence, id")
         ]
 
-    @api_route("/finance/taxes", profiles=FIN_READ)
+    @api_route("/finance/taxes", profiles=PURCHASE_READ)
     def taxes(self, **kw):
         domain = [("company_id", "=", request.env.company.id)]
-        if kw.get("use") in ("sale", "purchase"):
-            domain.append(("type_tax_use", "=", kw["use"]))
+        use = kw.get("use")
+        if achats_only(FIN_READ):
+            # Profil Achats : taxes d'achat seules (TVA déductible et retenues sur achats).
+            if use and use != "purchase":
+                raise ApiError(403, "forbidden", "Profil Achats : taxes d'achat seulement.")
+            use = "purchase"
+        if use in ("sale", "purchase"):
+            domain.append(("type_tax_use", "=", use))
         # Nature fiscale (TVA ou retenue) ; avec partner_id, les retenues par défaut du tiers sont signalées.
         partner = invoice_partner(kw)
         defaults = set(partner.eguitra_withholding_tax_ids.ids) if partner else set()
@@ -628,7 +699,7 @@ class EguitraFinanceMoves(http.Controller):
                  "partner_default": t.id in defaults}
                 for t in request.env["account.tax"].search(domain, order="sequence, id")]
 
-    @api_route("/finance/currencies", profiles=FIN_READ)
+    @api_route("/finance/currencies", profiles=PURCHASE_READ)
     def currencies(self, **_kw):
         currencies = request.env["res.currency"].search([("active", "=", True)])
         return [{"id": c.id, "name": c.name, "symbol": c.symbol, "rate": c.rate, "inverse_rate": c.inverse_rate,

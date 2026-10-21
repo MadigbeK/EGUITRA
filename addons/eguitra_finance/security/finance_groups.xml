@@ -6,6 +6,6 @@
 <odoo>
     <record id="group_free_accounts" model="res.groups">
         <field name="name">Saisie libre des comptes</field>
-        <field name="comment">Choisir le compte général d'une ligne (pièces de vente et d'achat, opérations de trésorerie, imputation au rapprochement), passer des opérations diverses et fixer les comptes des catégories de dépense, des types d'opération et des financements. Sans ce droit, la ligne prend le compte de sa catégorie de dépense, du type d'opération, de l'activité ou du produit. Accordé d'office aux profils finance, direction et administration.</field>
+        <field name="comment">Choisir le compte général d'une ligne (pièces de vente et d'achat, opérations de trésorerie, imputation au rapprochement), passer des opérations diverses et fixer les comptes des catégories de dépense, des types d'opération et des financements. Sans ce droit, la ligne prend le compte de sa catégorie de dépense, du type d'opération, de l'activité ou du produit. Accordé d'office aux profils finance, direction et administration ; sans effet pour le profil Achats, dont la catégorie de dépense fixe toujours le compte.</field>
     </record>
 </odoo>

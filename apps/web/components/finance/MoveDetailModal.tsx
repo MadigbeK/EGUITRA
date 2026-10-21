@@ -1,18 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Paperclip, RotateCcw, Send, Wallet, XCircle } from "@/components/icons";
+import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
-import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { MoveForm } from "./MoveForm";
+import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
 
-/** Fiche d'une pièce : lignes, statut, règlement, impression, pièces jointes, avoir. */
+/**
+ * Fiche d'une pièce : lignes, statut, règlement, impression, pièces jointes, avoir ; un brouillon d'achat se
+ * modifie ou se supprime. Le profil Achats seul y joint ses justificatifs, imprime, modifie, supprime ou
+ * soumet ses brouillons ; règlement, avoir, litige et annulation relèvent de la finance.
+ */
 export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number | null; onClose: () => void; onChanged: () => void }) {
   const { data: move, error, mutate } = useApi<MoveDetail>(moveId ? `/finance/moves/${moveId}` : null);
-  const { data: journals } = useApi<Journal[]>(moveId ? "/finance/journals?type=bank,cash" : null);
+  const { achats } = useAchatsSeul(moveId !== null);
   const [paying, setPaying] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const { data: journals } = useApi<Journal[]>(paying ? "/finance/journals?type=bank,cash" : null);
   const [journalId, setJournalId] = useState("");
   const [amount, setAmount] = useState("");
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
@@ -37,7 +44,39 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
     }
   }
 
+  /** Suppression d'un brouillon jamais validé (sinon le noyau refuse : l'annuler). */
+  async function remove(id: number) {
+    setBusy("delete");
+    setMessage(null);
+    try {
+      await apiSend("DELETE", `/finance/moves/${id}`);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Suppression impossible." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const title = move ? `${move.name ?? "Brouillon"}, ${move.partner?.name ?? ""}` : "Pièce";
+  const achat = move ? move.move_type === "in_invoice" || move.move_type === "in_refund" : false;
+
+  if (move && editing && (move.move_type === "in_invoice" || move.move_type === "in_refund")) {
+    return (
+      <MoveForm
+        open
+        move={move}
+        moveType={move.move_type}
+        onClose={() => setEditing(false)}
+        onCreated={() => {
+          setEditing(false);
+          void mutate();
+          onChanged();
+        }}
+      />
+    );
+  }
   return (
     <Modal open={moveId !== null} onClose={onClose} title={title} wide>
       {error && <ErrorBox error={error} />}
@@ -115,7 +154,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               <dd className="text-right font-mono">{fmtGNF(move.amount_tax)}</dd>
               <dt className="font-semibold">Total TTC</dt>
               <dd className="text-right font-mono font-semibold">{fmtGNF(move.amount_total)}</dd>
-              {move.state === "posted" && (
+              {move.state === "posted" && move.amount_residual !== null && (
                 <>
                   <dt className="text-muted">Reste dû</dt>
                   <dd className="text-right font-mono text-warn">{fmtGNF(move.amount_residual)}</dd>
@@ -133,7 +172,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 <Select value={modeId} onChange={(e) => setModeId(e.target.value)} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
               </Field>
               <Field label="Montant" hint={`Reste : ${fmtGNF(move.amount_residual)}`}>
-                <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual))} />
+                <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual ?? 0))} />
               </Field>
               <Field label="Date">
                 <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
@@ -164,10 +203,26 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
             {move.can_post && (
               <Button variant="primary" loading={busy === "post"} onClick={() => act("post", () => apiSend("POST", `/finance/moves/${move.id}/post`))}>
-                <Send className="h-4 w-4" /> {move.move_type.startsWith("in_") ? "Soumettre / valider" : "Valider"}
+                <Send className="h-4 w-4" /> {achats ? "Soumettre au circuit" : move.move_type.startsWith("in_") ? "Soumettre / valider" : "Valider"}
               </Button>
             )}
-            {move.can_pay && !paying && (
+            {achat && move.state === "draft" && (
+              <Button onClick={() => setEditing(true)}>
+                <Pencil className="h-4 w-4" /> Modifier
+              </Button>
+            )}
+            {achat && move.state === "draft" && (
+              <Button
+                variant="danger"
+                loading={busy === "delete"}
+                onClick={() => {
+                  if (window.confirm("Supprimer ce brouillon ?")) void remove(move.id);
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Supprimer le brouillon
+              </Button>
+            )}
+            {!achats && move.can_pay && !paying && (
               <Button onClick={() => setPaying(true)}>
                 <Wallet className="h-4 w-4" /> {move.move_type.startsWith("out_") ? "Encaisser" : "Régler"}
               </Button>
@@ -177,12 +232,12 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 <Download className="h-4 w-4" /> PDF
               </Button>
             )}
-            {move.state === "posted" && (
+            {!achats && move.state === "posted" && (
               <Button loading={busy === "reverse"} onClick={() => act("reverse", () => apiSend("POST", `/finance/moves/${move.id}/reverse`, { reason: `Avoir sur ${move.name}` }))}>
                 <RotateCcw className="h-4 w-4" /> Avoir / extourne
               </Button>
             )}
-            {move.move_type !== "entry" && move.state !== "cancel" && (
+            {!achats && move.move_type !== "entry" && move.state !== "cancel" && (
               move.dispute ? (
                 <Button loading={busy === "dispute"} onClick={() => act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: false }))}>
                   Lever le litige
@@ -198,7 +253,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 <Button onClick={() => setDisputing(true)}>Déclarer un litige</Button>
               )
             )}
-            {move.state !== "cancel" && (
+            {!achats && move.state !== "cancel" && (
               <Button variant="danger" loading={busy === "cancel"} onClick={() => act("cancel", () => apiSend("POST", `/finance/moves/${move.id}/cancel`))}>
                 <XCircle className="h-4 w-4" /> Annuler
               </Button>

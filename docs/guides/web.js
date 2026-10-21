@@ -1,11 +1,11 @@
 // Recopie les guides affichés dans l'application (page /finance/guide) depuis leur source Markdown.
 //   node docs/guides/web.js
-// À relancer après toute modification de guide-finance.md : l'image de l'application web ne contient
+// À relancer après toute modification de guide-finance.md ou de guide-achats.md : l'image de l'application web ne contient
 // que apps/web, le guide y est donc embarqué sous forme de module (apps/web/lib/guides.ts).
 const fs = require('fs');
 const path = require('path');
 
-const GUIDES = { finance: 'guide-finance.md' };
+const GUIDES = { finance: 'guide-finance.md', achats: 'guide-achats.md' };
 const OUT = path.join(__dirname, '..', '..', 'apps', 'web', 'lib', 'guides.ts');
 
 const lines = [

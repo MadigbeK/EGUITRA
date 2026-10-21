@@ -6,6 +6,7 @@ Un guide par profil, à remettre lors de la formation et à garder à portée de
 |---|---|
 | Direction générale | [guide-direction.md](guide-direction.md) |
 | Finance et comptabilité | [guide-finance.md](guide-finance.md) |
+| Achats et contrats | [guide-achats.md](guide-achats.md) |
 | Exploitation transport (bureau et parc) | [guide-exploitation.md](guide-exploitation.md) |
 | BTP | [guide-chantiers.md](guide-chantiers.md) |
 | Gestion immobilière | [guide-immobilier.md](guide-immobilier.md) |

@@ -9,7 +9,7 @@ import { IconeModule } from "@/components/accueil/icones-modules";
 import { Rosace } from "@/components/guilloche";
 import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
 import { APPS, ESPACES, type AppCode } from "@/lib/config";
-import { navFor, type NavSection } from "@/lib/nav";
+import { accueilFinance, navFor, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
@@ -43,7 +43,8 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   const company = me.companies.find((c) => c.id === me.company_id);
   // Les modules d'une société (transport, chantiers, immobilier) n'apparaissent que dans ses livres.
   const sections = useMemo(() => navFor(app, me.profiles, company?.entity), [app, me.profiles, company?.entity]);
-  const home = APPS[app].home;
+  // Finance s'ouvre sur l'écran Achats pour le profil Achats seul (le tableau de bord lui est fermé).
+  const home = app === "finance" ? accueilFinance(me.profiles) : APPS[app].home;
   const entity = entityOf(company, app);
   // Finance : équilibre de l'exercice dans la barre du haut, pastilles dans la navigation.
   const enTete = useEnTeteFinance(app, me);

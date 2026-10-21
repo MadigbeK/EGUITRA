@@ -9,15 +9,46 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 
 from ..models.analytic import ACTIVITY_PLAN, account_shares, distribution_ids, plan_key
-from ..models.res_users import FREE_ACCOUNTS
+from ..models.res_users import FREE_ACCOUNTS, FREE_ACCOUNTS_PROFILES
 
 FIN_READ = ("admin", "direction", "finance")
 FIN_WRITE = ("admin", "finance")
+# Profil Achats (responsable des achats et des contrats) : pièces d'achat et avoirs fournisseurs saisis par
+# catégorie de dépense, justificatifs, soumission au circuit, fiches des fournisseurs ; jamais les ventes,
+# la trésorerie, les états, les clôtures, la fiscalité, le pilotage ni le choix du compte.
+ACHATS = ("achats",)
+PURCHASE_TYPES = ("in_invoice", "in_refund")
+PURCHASES_ONLY = "Profil Achats : pièces d'achat et avoirs fournisseurs seulement."
+
+
+def achats_only(full=FIN_WRITE):
+    """Le compte n'atteint-il la route que par le profil Achats, sans aucun des profils `full` qui l'ouvrent
+    en entier ? La route se borne alors aux pièces d'achat et aux avoirs fournisseurs."""
+    profiles = set(request.env.user._eguitra_profiles())
+    return "achats" in profiles and not profiles & set(full)
+
+
+def require_purchase(move_type, full=FIN_WRITE):
+    """Refus (403) d'une pièce autre qu'une pièce d'achat ou un avoir fournisseur au profil Achats."""
+    if move_type not in PURCHASE_TYPES and achats_only(full):
+        raise ApiError(403, "forbidden", PURCHASES_ONLY)
+
+
+def without_settlement(data):
+    """Profil Achats seul : la pièce sans son reste dû ni ses règlements, qui relèvent de la trésorerie ;
+    son état de paiement (payée, partielle, non payée) reste lisible."""
+    data["amount_residual"] = None
+    if "payments" in data:
+        data["payments"] = None
+    return data
 
 
 def free_accounts():
-    """L'utilisateur a-t-il le droit « Saisie libre des comptes » (models/res_users.py) ?"""
-    return request.env.user.has_group(FREE_ACCOUNTS)
+    """L'utilisateur a-t-il le droit « Saisie libre des comptes » (models/res_users.py) ? Le droit ne vaut
+    qu'avec un profil de la finance (finance, direction, administration) : le profil Achats ne choisit
+    jamais un compte, la catégorie de dépense le fixe, même si le droit lui avait été accordé."""
+    user = request.env.user
+    return user.has_group(FREE_ACCOUNTS) and bool(FREE_ACCOUNTS_PROFILES & set(user._eguitra_profiles()))
 
 
 def require_free_accounts(what, detail=None):

@@ -22,7 +22,18 @@ class TestAdmin(ApiCase):
 
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual(status, 200)
-        self.assertIn("exploitation", [p["code"] for p in profils])
+        self.assertEqual([p["code"] for p in profils], ["admin", "direction", "finance", "achats", "exploitation",
+                                                        "chantiers", "immobilier", "cabinet", "porteur"])
+        achats = next(p for p in profils if p["code"] == "achats")
+        self.assertEqual((achats["name"], achats["entity"]), ("Achats", None), "Profil commun aux deux sociétés")
+        self.assertIn("pièces d'achat", achats["description"])
+
+        status, acheteuse = self.call("POST", "/admin/users", {
+            "name": "Mariama Achats", "login": "mariama.achats", "password": "Provisoire-2026", "profiles": ["achats"],
+        }, token=token)
+        self.assertEqual(status, 200, acheteuse)
+        self.assertEqual((acheteuse["profiles"], acheteuse["apps"]), (["achats"], ["finance"]))
+        self.assertEqual(acheteuse["rights"], {"free_accounts": False}, "Saisie libre des comptes non accordée")
 
         status, user = self.call("POST", "/admin/users", {
             "name": "Ibrahima Exploitation", "login": "Ibrahima", "password": "Provisoire-2026",

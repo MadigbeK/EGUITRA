@@ -38,6 +38,15 @@ class TestSocle(TransactionCase):
         self.assertEqual(finance._eguitra_profiles(), ["finance"])
         self.assertTrue(finance.has_group("account.group_account_manager"))
 
+        achats = Users.create({
+            "name": "Acheteuse Test",
+            "login": "achats.socle",
+            "group_ids": [(4, self.env.ref("eguitra_base.group_profile_achats").id)],
+        })
+        self.assertEqual(achats._eguitra_profiles(), ["achats"])
+        self.assertTrue(achats.has_group("account.group_account_invoice"), "Facturation : pièces d'achat en brouillon")
+        self.assertFalse(achats.has_group("account.group_account_user"))
+
         admin = Users.create({
             "name": "Admin Test",
             "login": "admin.test",

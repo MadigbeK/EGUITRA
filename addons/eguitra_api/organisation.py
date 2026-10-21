@@ -24,7 +24,9 @@ ENTITY_NAMES = {"groupe": "EGUITRA GROUP SARLU", "cabinet": "MB AxisPro"}
 
 # Application -> profils qui l'ouvrent et société servie (None : les deux sociétés).
 APPS = {
-    "finance": {"profiles": {"admin", "direction", "finance", "exploitation", "chantiers", "immobilier"}, "entity": None},
+    # Achats : pièces d'achat, engagements de dépense et fournisseurs, dans l'une ou l'autre société.
+    "finance": {"profiles": {"admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"},
+                "entity": None},
     "axispro": {"profiles": {"admin", "direction", "cabinet"}, "entity": "cabinet"},
     "portail": {"profiles": {"porteur"}, "entity": "cabinet"},
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
