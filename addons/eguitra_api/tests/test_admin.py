@@ -33,7 +33,8 @@ class TestAdmin(ApiCase):
         }, token=token)
         self.assertEqual(status, 200, acheteuse)
         self.assertEqual((acheteuse["profiles"], acheteuse["apps"]), (["achats"], ["finance"]))
-        self.assertEqual(acheteuse["rights"], {"free_accounts": False}, "Saisie libre des comptes non accordée")
+        # Droit déclaré par eguitra_finance : absent quand ce module n'est pas installé.
+        self.assertFalse(acheteuse["rights"].get("free_accounts"), "Saisie libre des comptes non accordée")
 
         status, user = self.call("POST", "/admin/users", {
             "name": "Ibrahima Exploitation", "login": "Ibrahima", "password": "Provisoire-2026",
