@@ -32,6 +32,15 @@ def _activity(asset):
     return {"id": account.id, "name": account.name} if account else None
 
 
+def _years(asset):
+    """Durée en années : celle du bien, ou ses dotations ramenées en années (méthode « nombre de
+    dotations » d'un bien repris selon la convention de l'ancien système)."""
+    if asset.method_time == "year":
+        return asset.method_number
+    years = asset.eguitra_months_total / 12
+    return int(years) if years == int(years) else round(years, 2)
+
+
 def _row(asset, board=False):
     data = {
         "id": asset.id,
@@ -45,7 +54,8 @@ def _row(asset, board=False):
         "residual": asset.value_residual,
         "date_start": asset.date_start,
         "method": asset.method,
-        "method_number": asset.method_number,
+        "method_number": _years(asset),
+        "method_time": asset.method_time,
         "method_period": asset.method_period,
         "prorata": asset.prorata,
         "non_depreciable": asset.eguitra_non_depreciable,
@@ -58,6 +68,7 @@ def _row(asset, board=False):
         "custodian": asset.eguitra_custodian or None,
         "takeover_date": asset.eguitra_takeover_date or None,
         "takeover_amount": asset.eguitra_takeover_amount if asset.eguitra_takeover_date else None,
+        "takeover_gap": asset.eguitra_takeover_gap or None,
     }
     if board:
         data["board"] = [
@@ -278,7 +289,7 @@ class EguitraFinanceAssets(http.Controller):
             rows.append([
                 asset.code or "", asset.name, asset.profile_id.name, asset.profile_id.account_asset_id.code or "",
                 asset.date_start or None, asset.purchase_value,
-                0 if asset.eguitra_non_depreciable else asset.method_number,
+                0 if asset.eguitra_non_depreciable else _years(asset),
                 "non amortissable" if asset.eguitra_non_depreciable else PERIOD_LABELS.get(asset.method_period, ""),
                 asset.eguitra_months_depreciated, asset.eguitra_months_total, asset.value_depreciated, asset.value_residual,
                 STATES.get(asset.state, asset.state), activity["name"] if activity else "", asset.eguitra_location or "",

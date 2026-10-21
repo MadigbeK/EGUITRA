@@ -7,11 +7,22 @@ Mécanismes du module d'immobilisations (account_asset_management, 19.0) sur les
   amorti dans l'ancien système ;
 - au recalcul du plan, les lignes comptabilisées ou de reprise sont conservées et l'écart entre le
   cumul réel et le plan théorique est porté sur la première dotation restant à comptabiliser ;
+  un bien repris avec la règle « last » le reporte, à chaque recalcul, sur la fin du plan ;
 - la dotation porte la répartition analytique de l'immobilisation (activité, ensemble routier…).
+
+Écart de reprise (cumul de l'ancien système face au plan théorique du module) : porté sur la première
+dotation de l'exercice (« first », règle du module, par défaut) ou sur la dernière dotation du plan
+(« last », le plan théorique est suivi mois après mois) ; paramètre système TAKEOVER_GAP_PARAM, ou
+argument de eguitra_takeover.
 """
+
+from dateutil.relativedelta import relativedelta
 
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
+
+TAKEOVER_GAP_PARAM = "eguitra_finance.takeover_gap"
+TAKEOVER_GAPS = [("first", "Première dotation de l'exercice"), ("last", "Dernière dotation du plan")]
 
 # Comptes de cession selon la nature de l'immobilisation (préfixes du compte d'actif) :
 # valeur comptable des cessions (81x), produit des cessions (82x), créance sur cession (485x).
@@ -52,6 +63,11 @@ class AccountAsset(models.Model):
         "Cumul repris", readonly=True, copy=False, currency_field="currency_id",
         help="Amortissements cumulés dans l'ancien système à la veille de la date de reprise.",
     )
+    eguitra_takeover_gap = fields.Selection(
+        TAKEOVER_GAPS, "Écart de reprise porté sur", readonly=True, copy=False,
+        help="Différence entre le cumul repris et le plan théorique : rattrapée sur la première dotation de "
+             "l'exercice, ou reportée sur la dernière dotation du plan.",
+    )
     eguitra_months_depreciated = fields.Integer("Mois amortis", compute="_compute_eguitra_months")
     eguitra_months_total = fields.Integer("Durée en mois", compute="_compute_eguitra_months")
 
@@ -81,7 +97,43 @@ class AccountAsset(models.Model):
             asset.depreciation_line_ids.filtered(
                 lambda line: line.type == "depreciate" and not line.move_id and not line.init_entry
             ).unlink()
-        return super(AccountAsset, self - flat).compute_depreciation_board()
+        result = super(AccountAsset, self - flat).compute_depreciation_board()
+        (self - flat).filtered(lambda a: a.eguitra_takeover_gap == "last")._eguitra_gap_to_last()
+        return result
+
+    def _eguitra_gap_to_last(self):
+        """Règle « last » : la première dotation à venir reprend le montant du plan théorique ; la
+        différence que le module y avait portée (écart de reprise) passe sur les dernières dotations du
+        plan, sans qu'aucune devienne négative."""
+        for asset in self:
+            currency = asset.currency_id
+            upcoming = asset.depreciation_line_ids.filtered(
+                lambda line: line.type == "depreciate" and not line.init_entry and not line.move_check
+            ).sorted("line_date")
+            if len(upcoming) < 2:
+                continue
+            planned = {line["date"]: line["amount"] for entry in asset._compute_depreciation_table()
+                       for line in entry["lines"]}
+            first = upcoming[0]
+            if first.line_date not in planned:
+                continue
+            shift = currency.round(first.amount - planned[first.line_date])
+            if currency.is_zero(shift):
+                continue
+            first.amount = currency.round(first.amount - shift)
+            if shift > 0:
+                upcoming[-1].amount = currency.round(upcoming[-1].amount + shift)
+                continue
+            remaining = -shift
+            for line in reversed(upcoming[1:]):
+                cut = min(line.amount, remaining)
+                line.amount = currency.round(line.amount - cut)
+                remaining = currency.round(remaining - cut)
+                if currency.is_zero(remaining):
+                    break
+            if not currency.is_zero(remaining):
+                raise UserError(f"{asset.name} : le cumul repris dépasse le plan de {remaining:,.0f} GNF de plus que les "
+                                "dotations à venir ; vérifiez la durée ou la date de mise en service.".replace(",", " "))
 
     @api.model
     def _eguitra_cron_depreciate(self):
@@ -103,17 +155,35 @@ class AccountAsset(models.Model):
 
     # ─── Reprise d'un bien déjà en service ────────────────────────────────
 
-    def eguitra_takeover(self, opening_date, accumulated):
+    @api.model
+    def eguitra_whole_months_plan(self, acquired, years):
+        """Plan de l'ancien système (permanence des méthodes) : 12 × durée dotations mensuelles égales,
+        méthode « nombre de dotations » du module, à compter du 1er du mois qui suit l'acquisition.
+        Valeurs à poser sur le bien (la catégorie garde sa durée en années pour les acquisitions
+        nouvelles)."""
+        start = acquired.replace(day=1) + relativedelta(months=1)
+        months = int(years) * 12
+        return {
+            "date_start": start, "method_time": "number", "method_number": months, "method_period": "month",
+            "note": f"Acquis le {acquired:%d/%m/%Y} ; plan en {months} dotations mensuelles à compter du "
+                    f"{start:%d/%m/%Y} (convention de l'ancien système).",
+        }
+
+    def eguitra_takeover(self, opening_date, accumulated, gap=None):
         """Reprise d'une immobilisation mise en service avant opening_date (1er janvier de la reprise),
         avec le cumul des amortissements de l'ancien système à la veille.
 
         Les dotations du plan antérieures à opening_date deviennent des lignes de reprise (sans
         écriture : l'ancien système les a comptabilisées, le solde d'ouverture du 28x les porte),
         ajustées pour que leur total égale le cumul repris. Le plan restant est recalculé ; un écart
-        avec le plan théorique est porté sur la première dotation à comptabiliser (règle du module
-        d'immobilisations), qui ne peut pas devenir négative.
+        avec le plan théorique est porté sur la première dotation à comptabiliser (gap « first », règle
+        du module d'immobilisations), qui ne peut pas devenir négative, ou sur la dernière dotation du
+        plan (gap « last »). Sans gap, le paramètre système eguitra_finance.takeover_gap (défaut first).
         """
         self.ensure_one()
+        gap = gap or self.env["ir.config_parameter"].sudo().get_param(TAKEOVER_GAP_PARAM) or "first"
+        if gap not in dict(TAKEOVER_GAPS):
+            raise UserError(f"Écart de reprise : « {gap} » inconnu (first ou last).")
         currency = self.currency_id
         accumulated = currency.round(accumulated or 0.0)
         if self.profile_id.eguitra_non_depreciable:
@@ -143,11 +213,11 @@ class AccountAsset(models.Model):
                 raise UserError(f"{self.name} : aucune dotation du plan avant le {opening_date:%d/%m/%Y} ; "
                                 "vérifiez la date de mise en service.")
             return {"theoretical": 0.0, "accumulated": 0.0, "difference": 0.0, "first_depreciation": None}
-        gap = currency.round(accumulated - theoretical)
-        if gap > 0:
-            before[-1].amount = currency.round(before[-1].amount + gap)
-        elif gap < 0:
-            remaining = -gap
+        difference = currency.round(accumulated - theoretical)
+        if difference > 0:
+            before[-1].amount = currency.round(before[-1].amount + difference)
+        elif difference < 0:
+            remaining = -difference
             for line in reversed(before):
                 cut = min(line.amount, remaining)
                 line.amount = currency.round(line.amount - cut)
@@ -155,25 +225,28 @@ class AccountAsset(models.Model):
                 if currency.is_zero(remaining):
                     break
         before.write({"init_entry": True})
-        self.write({"eguitra_takeover_date": opening_date, "eguitra_takeover_amount": accumulated})
+        self.write({"eguitra_takeover_date": opening_date, "eguitra_takeover_amount": accumulated,
+                    "eguitra_takeover_gap": gap})
+        first = last = None
         if currency.is_zero(self.value_residual):
             # Totalement amorti à la reprise : plus aucune dotation à venir.
             self.depreciation_line_ids.filtered(
                 lambda line: line.type == "depreciate" and not line.init_entry and not line.move_id
             ).unlink()
-            first = None
         else:
             self.compute_depreciation_board()
             upcoming = self.depreciation_line_ids.filtered(
                 lambda line: line.type == "depreciate" and not line.init_entry and not line.move_check
             ).sorted("line_date")
             first = upcoming[:1].amount if upcoming else None
+            last = upcoming[-1:].amount if upcoming else None
             if first is not None and first < 0:
                 raise UserError(
                     f"{self.name} : le cumul repris dépasse le plan théorique de "
-                    f"{gap:,.0f} GNF, plus qu'une dotation ; vérifiez la durée ou la date de mise en "
+                    f"{difference:,.0f} GNF, plus qu'une dotation ; vérifiez la durée ou la date de mise en "
                     "service.".replace(",", " "))
-        return {"theoretical": theoretical, "accumulated": accumulated, "difference": gap, "first_depreciation": first}
+        return {"theoretical": theoretical, "accumulated": accumulated, "difference": difference,
+                "first_depreciation": first, "last_depreciation": last, "gap_rule": gap}
 
     @api.model
     def _eguitra_opening_balances(self, company, opening_date, account_ids):
