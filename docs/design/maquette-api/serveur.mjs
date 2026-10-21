@@ -1982,6 +1982,126 @@ function activeAlerts(cids, day) {
   return cids.flatMap((cid) => companyAlerts(cid, day)).sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
 }
 
+/*
+ * Champs du tableau de bord ajoutés au noyau après la maquette (seuils, BFR, trésorerie mensuelle et
+ * prévue, décisions, questions du dirigeant, équilibre du grand livre) : des valeurs vraisemblables
+ * tirées des mêmes données, pour que la session design voie l'écran complet.
+ */
+const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+function seuilsTableau(cids) {
+  const th = Object.fromEntries(DB.thresholds.filter((t) => cids.includes(t.company_id) && t.active).map((t) => [t.code, t.value]));
+  return {
+    cash_min: th.cash_min || null,
+    dscr_min: th.dscr_min || 1.2,
+    dso_target_days: th.dso_target_days || 60,
+    receivable_overdue_share_pct: 30,
+    client_concentration_pct: 40,
+    transport_margin_min: th.transport_margin_min || null,
+    budget_overrun_pct: th.budget_overrun_pct || 10,
+  };
+}
+
+function complementTableau(cids, day, base) {
+  const fyStart = base.fiscal_year.start;
+  const debut12 = addDays(addMonths(day, -12), 1);
+  const rec = base.receivables;
+  const pay = base.payables;
+  const ventes = revenue(cids, debut12, day);
+  const achats = purchasesBetween(cids, debut12, day);
+  const journalier = ventes ? (ventes * 1.18) / 365 : null;
+  const dso = journalier ? rec.total / journalier : null;
+  const dpo = achats ? pay.total / ((achats * 1.18) / 365) : null;
+  const vide = { non_echu: 0, "1_30": 0, "31_60": 0, "61_90": 0, plus_90: 0 };
+  const working_capital = {
+    date_from: debut12, date_to: day, days: 365,
+    receivables: rec.total, receivables_overdue: rec.overdue, overdue_share_pct: rec.total ? (rec.overdue / rec.total) * 100 : null, receivables_doubtful: 0,
+    payables: pay.total, payables_overdue: pay.overdue, stocks: 0,
+    sales_ttc: round(ventes * 1.18), purchases_ttc: round(achats * 1.18), daily_sales_ttc: journalier,
+    dso, dso_12m: dso, dpo, dio: null, cycle: dso !== null && dpo !== null ? dso - dpo : null,
+    bfr: round(rec.total - pay.total), bfr_syscohada: round(rec.total - pay.total), balance_sheet_difference: 0, revenue: round(ventes),
+    concentration: { partner: null, amount: 0, pct: null },
+    receivables_aging: rec.aging, receivables_aging_count: vide, payables_aging: pay.aging, payables_aging_count: vide,
+  };
+  const th = seuilsTableau(cids);
+
+  // Trésorerie de fin de mois sur l'exercice : constatée jusqu'au mois en cours, à venir ensuite.
+  const mois = [];
+  let precedent = cashAt(cids, addDays(fyStart, -1));
+  for (let m = 0; m < 12; m++) {
+    const debut = addMonths(fyStart, m);
+    const fin = monthEnd(debut);
+    const passe = debut <= day;
+    const fin_ = passe ? cashAt(cids, fin < day ? fin : day) : null;
+    const encaisse = passe ? round(revenue(cids, debut, fin < day ? fin : day) * 1.05) : 0;
+    const net = passe ? round(fin_ - precedent) : 0;
+    mois.push({
+      month: debut.slice(0, 7), label: MOIS_FR[m], revenue: passe ? round(revenue(cids, debut, fin)) : 0,
+      receipts: encaisse, payments: passe ? round(encaisse - net) : 0, net, end: fin_,
+      status: !passe ? "a_venir" : th.cash_min && fin_ < th.cash_min ? "sous_seuil" : net < 0 ? "cash_net_negatif" : "conforme",
+      current: debut.slice(0, 7) === day.slice(0, 7), active: passe,
+    });
+    if (passe) precedent = fin_;
+  }
+  const actifs = mois.filter((m) => m.active);
+  const bas = actifs.reduce((b, m) => (b === null || m.end < b.end ? m : b), null);
+  const cash_monthly = {
+    fiscal_year: base.fiscal_year, opening: cashAt(cids, addDays(fyStart, -1)), threshold: th.cash_min,
+    months: mois,
+    summary: {
+      receipts: actifs.reduce((s, m) => s + m.receipts, 0), payments: actifs.reduce((s, m) => s + m.payments, 0), net: actifs.reduce((s, m) => s + m.net, 0), end: base.cash,
+      low_point: bas ? { month: bas.month, label: bas.label, end: bas.end } : null,
+      negative_months: actifs.filter((m) => m.net < 0).length, active_months: actifs.length,
+      below_threshold_months: actifs.filter((m) => m.status === "sous_seuil").length,
+      average_payments: actifs.length ? round(actifs.reduce((s, m) => s + m.payments, 0) / actifs.length) : 0,
+    },
+  };
+
+  // Prévision : encaissements attendus des clients, décaissements fournisseurs et échéances d'emprunt.
+  const etape = (n, depart) => {
+    const d = monthEnd(addMonths(day, n));
+    const encaissements = round(rec.total * (n === 0 ? 0.35 : 0.2));
+    const decaissements = round(pay.total * (n === 0 ? 0.45 : 0.25));
+    const emprunts = round(base.debt.next_due_amount || 0);
+    const net = encaissements - decaissements - emprunts;
+    return { label: `${MOIS_FR[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`, month: d.slice(0, 7), date: d, start: depart, receivables: encaissements, payables: decaissements, loans: emprunts, net, end: depart + net };
+  };
+  const etapes = [];
+  let depart = base.cash;
+  for (let n = 0; n < 3; n++) {
+    const e = etape(n, depart);
+    etapes.push(e);
+    depart = e.end;
+  }
+  const cash_forecast = { as_of: day, start: base.cash, threshold: th.cash_min, month_end: { ...etapes[0], doubtful_excluded: 0 }, months: etapes.slice(1) };
+
+  const revenu = base.revenue_fy;
+  const pertes = round(rec.aging.plus_90 * 0.5 + rec.aging["61_90"] * 0.2 + rec.aging["31_60"] * 0.05);
+  const decisions = base.alerts.map((a, i) => ({
+    key: `${a.code}.${i}`, code: a.code, status: "alert", severity: a.severity === "blocking" ? "critical" : a.severity === "warning" ? "warning" : "info",
+    domain: a.link?.split("/")[2] ?? "finance", title: a.title, message: a.message, value: a.value, threshold: a.threshold ?? 0,
+    unit: a.value === null ? "none" : "gnf", threshold_unit: "gnf", action: null, link: a.link, company: a.company,
+  }));
+  const verdict = (bon, moyen) => (bon ? "green" : moyen ? "orange" : "red");
+  const questions = [
+    { key: "cash", question: "Ai-je assez de trésorerie pour finir le mois ?", answer: `${Math.round(cash_forecast.month_end.end / 1e6)} M GNF prévus en fin de mois`, verdict: verdict(cash_forecast.month_end.end > (th.cash_min || 0) * 1.5, cash_forecast.month_end.end > (th.cash_min || 0)), reading: "Trésorerie de départ, plus les encaissements clients attendus, moins les fournisseurs et les emprunts." },
+    { key: "dso", question: "Mes clients paient-ils à temps ?", answer: dso === null ? "Pas de ventes sur 12 mois" : `${Math.round(dso)} jours de crédit client en moyenne`, verdict: dso === null ? "grey" : verdict(dso <= th.dso_target_days, dso <= th.dso_target_days * 1.3), reading: `Cible fixée à ${th.dso_target_days} jours.` },
+    { key: "marge", question: "Mon activité est-elle rentable ?", answer: `Marge nette de ${revenu ? Math.round((base.net_result_fy / revenu) * 100) : 0} % sur l'exercice`, verdict: verdict(base.net_result_fy > revenu * 0.08, base.net_result_fy > 0), reading: "Résultat net rapporté au chiffre d'affaires de l'exercice." },
+    { key: "dette", question: "Ma dette est-elle soutenable ?", answer: base.dscr === null ? "Aucun service de dette sur 12 mois" : `L'EBE couvre ${base.dscr.toFixed(2).replace(".", ",")} fois le service de la dette`, verdict: base.dscr === null ? "grey" : verdict(base.dscr >= th.dscr_min * 1.25, base.dscr >= th.dscr_min), reading: `Minimum fixé : ${String(th.dscr_min).replace(".", ",")}.` },
+  ];
+  const debit = round(Math.abs(revenu) * 2.4);
+  return {
+    thresholds: th,
+    margins: { revenue: revenu, ebe_pct: revenu ? (base.ebe_fy / revenu) * 100 : null, net_pct: revenu ? (base.net_result_fy / revenu) * 100 : null },
+    working_capital, cash_monthly, cash_forecast, budget: null, transport: null,
+    ledger: { date_from: fyStart, date_to: day, debit, credit: debit, difference: 0, balanced: true },
+    expected_credit_loss: { total: pertes, rate_pct: rec.total ? (pertes / rec.total) * 100 : null, by_bucket: {}, rates: {} },
+    lock_date: null, decisions, questions,
+    debt: { ...base.debt, accounting_outstanding: base.debt.outstanding, schedule_gap: 0, net_debt: round(base.debt.outstanding - base.cash), gearing: null },
+    alerts: decisions,
+  };
+}
+
 function dashboard(cids, day) {
   const fyStart = `${day.slice(0, 4)}-01-01`;
   const mStart = monthStart(day);
@@ -1991,7 +2111,7 @@ function dashboard(cids, day) {
   const debt = debtSummary(cids, day);
   const ebe12 = incomeStatement(cids, addDays(addMonths(day, -12), 1), day).totals.XD;
   const service = debt.service_last_12m || debt.service_next_12m;
-  return {
+  const base = {
     companies: cids.map(companyRef),
     as_of: day,
     fiscal_year: { start: fyStart, end: `${day.slice(0, 4)}-12-31` },
@@ -2012,6 +2132,7 @@ function dashboard(cids, day) {
     dscr: service ? ebe12 / service : null,
     alerts: activeAlerts(cids, day),
   };
+  return { ...base, ...complementTableau(cids, day, base) };
 }
 
 function managementReport(cids, day) {
@@ -3584,6 +3705,18 @@ route("PATCH", "/admin/companies/:id", ADMIN, (ctx) => {
 /* ─── Tableau de bord, alertes, états, pilotage ─────────────────────────── */
 
 route("GET", "/finance/dashboard", FIN_READ, (ctx) => dashboard(scopeCompanies(ctx), minDate(dateArg(ctx.query, "date", TODAY), TODAY)));
+// En-tête de Finance : équilibre de l'exercice et pastilles de la navigation.
+route("GET", "/finance/shell", FIN_READ, (ctx) => {
+  const d = dashboard([ctx.company], TODAY);
+  const alertes = d.decisions;
+  return {
+    company: COMPANIES[ctx.company].name, fiscal_year: d.fiscal_year, debit: d.ledger.debit, credit: d.ledger.credit, difference: 0, balanced: true,
+    badges: {
+      alerts: alertes.length, alerts_severe: alertes.filter((a) => a.severity === "critical").length,
+      approvals: DB.approvals.filter((a) => a.company_id === ctx.company && a.state === "pending").length, controls: 1, controls_blocking: 0,
+    },
+  };
+});
 route("GET", "/finance/alerts", FIN_READ, (ctx) => activeAlerts(scopeCompanies(ctx), TODAY));
 route("GET", "/finance/statements/income", FIN_READ, (ctx) => {
   const end = dateArg(ctx.query, "date_to", TODAY);
