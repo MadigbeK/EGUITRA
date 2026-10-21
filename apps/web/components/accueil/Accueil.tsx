@@ -155,7 +155,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
 
       <header className="relative z-20 flex h-14 items-center justify-between gap-3 px-4 sm:px-6">
         <span className="n-entree inline-flex items-center gap-2.5" style={{ "--i": 0 } as CSSProperties}>
-          <Monogramme className="h-8 w-8" />
+          <Monogramme tuile={false} className="h-8 w-8" />
           <span className="font-display text-[15px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
         </span>
         <div className="n-entree flex items-center gap-1.5" style={{ "--i": 1 } as CSSProperties}>

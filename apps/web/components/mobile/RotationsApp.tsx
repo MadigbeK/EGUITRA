@@ -295,7 +295,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       <header className="sur-dos sticky top-0 z-10 bg-[linear-gradient(135deg,#c4471d_0%,#983210_60%,#142f29_140%)] text-white shadow-[0_10px_30px_-18px_rgb(152_50_16/0.8)]">
         <div className="flex items-center gap-3 px-4 pb-3 pt-3.5">
           <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white/15">
-            <Monogramme tuile={false} className="h-7 w-7" />
+            <Monogramme tuile={false} clair className="h-6 w-6" />
           </span>
           <div className="min-w-0 flex-1 leading-tight">
             <div className="font-display text-[19px] font-bold">Rotations</div>

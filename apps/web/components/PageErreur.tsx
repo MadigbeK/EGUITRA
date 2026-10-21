@@ -16,7 +16,7 @@ export function PageErreur({ code, titre, texte, actions }: { code: string; titr
   return (
     <div data-app={app} className="flex min-h-[70vh] items-center justify-center px-5 py-16">
       <div className="w-full max-w-[520px] text-center">
-        <Monogramme className="n-entree mx-auto h-14 w-14 drop-shadow-[0_10px_18px_rgb(20_47_41/0.3)]" />
+        <Monogramme tuile={false} className="n-entree mx-auto h-14 w-14" />
         <svg viewBox="0 0 320 70" className="mx-auto mt-8 w-full max-w-[320px]" aria-hidden focusable="false">
           <path d="M10 52 C70 52 90 18 160 22 S240 44 250 40" fill="none" stroke="var(--line-strong)" strokeWidth="4" strokeDasharray="2 10" strokeLinecap="round" pathLength={1} className="n-tracer" style={{ "--retard": "200ms" } as CSSProperties} />
           <circle cx="10" cy="52" r="7" fill="var(--panel)" stroke="var(--accent-vif)" strokeWidth="3" />

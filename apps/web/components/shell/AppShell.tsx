@@ -144,7 +144,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
           <div className="n-tiroir absolute inset-y-0 left-0 flex w-[min(90vw,340px)] flex-col bg-panel shadow-[var(--ombre-flottante)]">
             <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-4">
               <Link href={home} onClick={() => setOpen(false)} className="flex min-w-0 items-center gap-2.5 rounded-xl">
-                <Monogramme className="h-9 w-9 flex-none" />
+                <Monogramme tuile={false} className="h-9 w-9 flex-none" />
                 <span className="min-w-0 leading-none">
                   <span className="block font-display text-[15px] font-bold tracking-[0.06em]">NIMOVA</span>
                   <span className="mt-1 block truncate text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
@@ -223,7 +223,7 @@ function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
 
   const marque = (
     <>
-      <Monogramme className="h-9 w-9 flex-none drop-shadow-[0_6px_10px_rgb(20_47_41/0.22)]" />
+      <Monogramme tuile={false} className="h-9 w-9 flex-none" />
       <span className="min-w-0 text-left leading-none">
         <span className="block font-display text-[15px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
         <span className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-accent">

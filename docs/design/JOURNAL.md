@@ -215,8 +215,14 @@ même branche, sans toucher à la logique des écrans :
   `docs/design/logos/nimova/`, en SVG (nom vectorisé en Funnel Display 700, sans dépendance à la
   police) et en PNG transparents haute définition : logo horizontal (clair et inversé, 4000 px),
   logo vertical, marque seule (clair et inversé, 2048 px), icône d'application (1024, 512 et
-  192 px), sceau des documents (2048 px). Remis au gérant ; l'intégration dans l'application
-  attend sa validation.
+  192 px), sceau des documents (2048 px). Remis au gérant.
+- Logo intégré dans l'application (21 octobre, validé par le gérant) : `Monogramme` dessine le pli
+  (seul sur fond clair, `clair` sur fond sombre, `tuile` sur son carré forêt) ; barre du haut,
+  accueil, connexion (le grand N de la scène reprend le pli au trait), page d'erreur, Rotations.
+  Icône d'onglet `public/icons/nimova.svg` et icônes d'installation de Rotations refaites au pli.
+  Sceau (`SceauNimova`, `CachetDocument`) au pied du rapport mensuel et du rapport de dossier
+  AxisPro, imprimé en couleur. Vérifié : `tsc` au vert ; `next build` non lancé en local, le disque
+  C: étant plein (moins de 100 Mo libres) : la construction se fait sur le serveur.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
