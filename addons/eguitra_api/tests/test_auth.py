@@ -150,6 +150,16 @@ class TestAuth(ApiCase):
         status, _b = self.call("GET", "/auth/me", token=token)
         self.assertEqual(status, 401, "Les sessions sont fermées après le changement")
 
+    def test_mot_de_passe_commun_de_la_recette(self):
+        self.env["ir.config_parameter"].sudo().set_param("eguitra_api.shared_password", "1")
+        token = self.open_session("fatou")["access_token"]
+        status, body = self.call(
+            "POST", "/auth/password", {"old_password": PASSWORD, "new_password": "Nouveau-mot-2026"}, token=token
+        )
+        self.assertEqual((status, body["error"]), (403, "password_locked"), "Le mot de passe commun ne se modifie pas")
+        status, _b = self.call("GET", "/auth/me", token=token)
+        self.assertEqual(status, 200, "La session reste ouverte")
+
     def test_journal_des_acces(self):
         self.call("GET", "/auth/me", token="jeton-invente")
         log = self.env["eguitra.api.access.log"].search([("path", "=", "/api/v1/auth/me")], limit=1)

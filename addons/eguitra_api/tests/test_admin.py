@@ -69,6 +69,20 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 200)
         self.assertFalse(desactive["active"])
 
+    def test_mot_de_passe_commun_de_la_recette(self):
+        self.env["ir.config_parameter"].sudo().set_param("eguitra_api.shared_password", "1")
+        token = self.open_session("aissatou")["access_token"]
+        status, user = self.call("POST", "/admin/users", {
+            "name": "Testeur Recette", "login": "testeur.recette", "password": "Commun-recette-2026",
+            "profiles": ["finance"],
+        }, token=token)
+        self.assertEqual(status, 200, user)
+        self.assertFalse(user["password_change_required"], "Pas de changement imposé : il serait refusé")
+        status, body = self.call(
+            "POST", f"/admin/users/{user['id']}/password", {"password": "Autre-mot-2026"}, token=token
+        )
+        self.assertEqual((status, body["error"]), (403, "password_locked"))
+
     def test_profils_coherents_avec_les_societes(self):
         """Un profil propre à une société exige que le compte y soit ouvert."""
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
