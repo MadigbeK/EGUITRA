@@ -20,6 +20,15 @@ s'ils sont présents, dans cet ordre (modèles dans scripts/reprise/modeles/) :
   rotations.csv        rotations 2026 (facturées dans l'ancien système ou à facturer)
 
 Sans REPRISE_APPLIQUER=1, rien n'est enregistré : le script contrôle tout et affiche ce qu'il ferait.
+
+Convention d'amortissement des biens repris (REPRISE_CONVENTION_AMORTISSEMENT, décision de
+l'expert-comptable) :
+  plateforme   prorata au jour de la mise en service, écart entre le cumul repris et le plan
+               théorique rattrapé sur la première dotation de l'exercice (défaut) ;
+  fin-de-plan  prorata au jour de la mise en service, écart reporté sur la dernière dotation du plan ;
+  prototype    permanence des méthodes de l'ancien système : 12 × durée dotations mensuelles égales
+               (méthode « nombre de dotations », posée bien par bien) à compter du 1er du mois qui suit
+               l'acquisition, la date d'acquisition notée sur la fiche.
 """
 
 import csv
@@ -44,8 +53,14 @@ FOLDER = Path("/reprise")
 APPLY = os.environ.get("REPRISE_APPLIQUER") == "1"
 OPENING = os.environ.get("REPRISE_DATE_OUVERTURE") or f"{date.today().year}-01-01"
 ENTITY = os.environ.get("REPRISE_SOCIETE") or "groupe"
+CONVENTION = (os.environ.get("REPRISE_CONVENTION_AMORTISSEMENT") or "plateforme").strip().lower()
+# Convention -> règle de l'écart de reprise (eguitra_takeover) et plan en mois entiers.
+CONVENTIONS = {"plateforme": ("first", False), "fin-de-plan": ("last", False), "prototype": ("first", True)}
+assert CONVENTION in CONVENTIONS, (f"REPRISE_CONVENTION_AMORTISSEMENT « {CONVENTION} » inconnue "
+                                   f"({', '.join(CONVENTIONS)}).")
+TAKEOVER_GAP, WHOLE_MONTHS = CONVENTIONS[CONVENTION]
 
-company = env["res.company"].search([("eguitra_entity", "=", ENTITY)], limit=1)
+company =env["res.company"].search([("eguitra_entity", "=", ENTITY)], limit=1)
 assert company, f"Société « {ENTITY} » introuvable."
 # Les données reprises portent le nom d'un administrateur de la plateforme (journal d'audit lisible),
 # avec les droits du noyau pour passer les circuits d'approbation.
@@ -475,16 +490,20 @@ if data is not None:
 
     created = skipped = 0
     takeover_gaps = []
+    where_gap = f"la première dotation de {opening.year}" if TAKEOVER_GAP == "first" else "la dernière dotation du plan"
     for line, r in data:
         where = f"immobilisations.csv ligne {line}"
         if not r.get("libelle") or not r.get("profil"):
             errors.append(f"{where} : libellé et catégorie (profil) obligatoires.")
             continue
-        if r.get("methode"):
-            # Variante de mesure (dossier_json.py --convention=prototype) : plan en mois entiers, que la
-            # reprise n'applique pas tant que la convention n'est pas décidée.
-            errors.append(f"{where} : méthode « {r['methode']} » non appliquée par la reprise ; convertir sans "
-                          "--convention=prototype.")
+        method = (r.get("methode") or "").strip().lower()
+        if method not in ("", "mois"):
+            errors.append(f"{where} : méthode « {r['methode']} » inconnue (vide ou « mois »).")
+            continue
+        if method == "mois" and not WHOLE_MONTHS:
+            # Fichier converti selon la convention de l'ancien système (dossier_json.py --convention=prototype).
+            errors.append(f"{where} : plan en mois entiers : REPRISE_CONVENTION_AMORTISSEMENT=prototype attendu "
+                          f"(convention choisie : {CONVENTION}).")
             continue
         profile = profiles.get(r["profil"].lower())
         if not profile and r.get("compte_immobilisation") and r.get("compte_amortissement"):
@@ -503,6 +522,13 @@ if data is not None:
         gross, cumul = number(r.get("valeur_brute"), where), number(r.get("cumul"), where)
         if not start:
             continue
+        acquired = day(r["date_acquisition"], where) if r.get("date_acquisition") else start
+        if not acquired:
+            continue
+        whole_months = WHOLE_MONTHS and not profile.eguitra_non_depreciable
+        if whole_months:
+            # Convention de l'ancien système : mois entiers à compter du 1er du mois qui suit l'acquisition.
+            start = Asset.eguitra_whole_months_plan(acquired, 1)["date_start"]
         if gross <= 0 or not 0 <= cumul <= gross:
             errors.append(f"{where} : valeur brute positive et cumul compris entre 0 et la valeur brute attendus.")
             continue
@@ -512,12 +538,17 @@ if data is not None:
         values = {"name": r["libelle"], "code": r.get("code") or False, "profile_id": profile.id, "purchase_value": gross,
                   "date_start": start, "company_id": company.id,
                   "eguitra_location": r.get("localisation") or False, "eguitra_custodian": r.get("responsable") or False}
+        years = profile.method_number
         if r.get("duree"):
             years = number(r["duree"], where)
             if years < 1 or years != int(years):
                 errors.append(f"{where} : durée en années entières attendue (« {r['duree']} »).")
                 continue
             values["method_number"] = int(years)
+        if whole_months:
+            # Méthode « nombre de dotations » du module, posée sur le bien (la catégorie garde sa durée en
+            # années pour les acquisitions nouvelles) : 12 × durée dotations mensuelles égales.
+            values.update(Asset.eguitra_whole_months_plan(acquired, years))
         if r.get("activite"):
             # Activité désignée par son nom ou son code (axes.csv), créée au besoin.
             activity = analytic_account("activite", r["activite"], where)
@@ -528,22 +559,23 @@ if data is not None:
             with env.cr.savepoint():
                 asset = Asset.create(values)
                 asset.compute_depreciation_board()
-                result = asset.eguitra_takeover(opening, cumul) if start < opening else None
+                result = asset.eguitra_takeover(opening, cumul, TAKEOVER_GAP) if start < opening else None
                 asset.validate()
             created += 1
             if result and abs(result["difference"]) >= 1:
                 takeover_gaps.append(result["difference"])
                 notes.append(f"{where} : cumul repris différent du plan théorique de {gnf(result['difference'])} GNF, "
-                             f"écart porté sur la première dotation de {opening.year}.")
+                             f"écart porté sur {where_gap}.")
         except (UserError, ValidationError) as e:
             errors.append(f"{where} : {e.args[0]}")
-    notes.append(f"Immobilisations : {created} reprise(s), {skipped} déjà présente(s) (même code).")
+    notes.append(f"Immobilisations : {created} reprise(s), {skipped} déjà présente(s) (même code) ; convention "
+                 f"d'amortissement « {CONVENTION} ».")
     if takeover_gaps:
-        # Le plan de la plateforme court au jour de la mise en service ; un ancien système qui amortit à
-        # compter du mois suivant laisse un cumul plus faible : la première dotation le rattrape.
+        # Le plan au jour de la mise en service face à un ancien système qui amortit à compter du mois
+        # suivant (ou de simples arrondis en mois entiers) : l'écart passe sur la dotation retenue.
         notes.append(f"Immobilisations : {len(takeover_gaps)} bien(s) dont le cumul repris s'écarte du plan de la "
-                     f"plateforme ; la première dotation de {opening.year} porte au total {gnf(-sum(takeover_gaps))} GNF "
-                     "de rattrapage (à valider avec l'expert-comptable).")
+                     f"plateforme ; {gnf(-sum(takeover_gaps))} GNF au total portés sur {where_gap} "
+                     "(convention à valider avec l'expert-comptable).")
     # Contrôle : cumul du registre = solde d'ouverture des 28x, valeur brute = solde d'ouverture des 2x.
     control = Asset.eguitra_takeover_control(company, opening)
     if not control["has_opening_entry"]:
