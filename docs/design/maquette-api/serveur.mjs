@@ -3160,12 +3160,32 @@ function scoring(dossier, gate = null) {
   else if (globalScore >= policy.go_threshold && !critical.length) recommendation = "go";
   else if (globalScore >= policy.conditional_threshold) recommendation = "conditional";
   else recommendation = "no_go";
+  const borne = (v) => Math.max(0, Math.min(100, v));
+  const readiness = borne(globalScore ?? 0);
+  const apd = borne(readiness - 4 * critical.length);
+  const bankability = borne(readiness - 12 * knockouts.length - 3 * critical.length);
+  const assessed = evals.filter((x) => x.e.status !== "not_assessed").length;
+  const docs = documentsStatus(dossier).filter((x) => x.required);
+  const recus = docs.filter((x) => ["received", "validated"].includes(x.state)).length;
+  const classification = bankability >= 80 ? "Projet bancable" : apd >= 70 ? "Prêt pour l'APD" : readiness >= 50 ? "Projet prometteur" : "Projet à structurer";
+  const suivante = policy.gates.find((g) => g.sequence > (reached?.sequence ?? 0));
+  const decisionPorte = { go: "go", conditional: "conditional", no_go: "no_go" }[recommendation] ?? "hold";
+  const nextGate = suivante ? { gate_id: suivante.id, code: suivante.code, name: suivante.name, index: suivante.sequence, rule: "", decision: decisionPorte, motifs: [], criteria: 0, available: 0, knockouts: knockouts.length, entry_requirements: null, deliverables: null, exit_criteria: null } : null;
   return {
-    global_score: globalScore, domains,
-    knockouts: knockouts.map((x) => ({ code: x.c.code, name: x.c.name })),
-    critical_open: critical.map((x) => ({ code: x.c.code, name: x.c.name })),
-    assessed: evals.filter((x) => x.e.status !== "not_assessed").length, criteria: evals.length, recommendation,
-    thresholds: { go: policy.go_threshold, conditional: policy.conditional_threshold },
+    global_score: globalScore, readiness, apd, bankability,
+    completeness: evals.length ? (assessed / evals.length) * 100 : 0,
+    dataroom_completeness: docs.length ? (recus / docs.length) * 100 : 0,
+    classification, recommendation_detail: "", method_recommendation: recommendation,
+    domains: domains.map((d) => ({ ...d, priority: d.score === null ? null : d.score < 40 ? "URGENTE" : d.score < 60 ? "ÉLEVÉE" : d.score < 80 ? "MOYENNE" : "FAIBLE", gaps: 0, knockouts: 0 })),
+    knockouts: knockouts.map((x) => ({ code: x.c.code, name: x.c.name, domain: null, gate: null })),
+    knockouts_pending: 0,
+    critical_open: critical.map((x) => ({ code: x.c.code, name: x.c.name, domain: null, gate: null })),
+    critical_missing_excl_ko: critical.length, requalified: [], gates: nextGate ? [nextGate] : [], next_gate: nextGate, anomalies: [],
+    proofs: 0, gaps_open: evals.filter((x) => ["not_met", "partial", "not_assessed"].includes(x.e.status)).length,
+    documents_missing: docs.length - recus, pending_in_scope: inScope.filter((x) => x.e.status === "not_assessed").length,
+    assessed, criteria: evals.length, recommendation,
+    policy: { weighting: "domain", ko_partial_blocks: false, evidence_check: false, exclude_na: true, expiry_check: false },
+    thresholds: { bankable: 80, go: policy.go_threshold, conditional: policy.conditional_threshold, hold: 40, dscr: 1.2 },
   };
 }
 function gaps(dossier, limit = 5) {
@@ -5640,9 +5660,16 @@ function dossierSummary(d) {
     id: d.id, reference: d.reference, name: d.name, state: d.state, promoter: partnerRef(d.promoter_id), consultant: d.consultant_id ? userName(d.consultant_id) : null,
     sector: d.sector, location: d.location, investment: d.investment, financing_need: d.financing_need,
     current_gate: gate ? { id: gate.id, code: gate.code, name: gate.name } : null, gates: policy.gates.map(({ id, code, name, sequence }) => ({ id, code, name, sequence })),
-    score: score.global_score, recommendation: score.recommendation, knockouts: score.knockouts.length, decision: d.decision,
+    score: score.global_score, readiness: score.readiness, apd: score.apd, bankability: score.bankability, completeness: score.completeness,
+    dataroom_completeness: score.dataroom_completeness, classification: score.classification,
+    next_gate: score.next_gate ? { code: score.next_gate.code, name: score.next_gate.name, decision: score.next_gate.decision } : null,
+    currency: { id: 1, name: "GNF", symbol: "GNF" },
+    recommendation: score.recommendation, knockouts: score.knockouts.length, decision: d.decision,
     progress: { assessed: score.assessed, criteria: score.criteria },
-    documents: { due: due.length, received: due.filter((x) => ["received", "validated"].includes(x.state)).length }, policy_version: policy.version,
+    documents: { due: due.length, received: due.filter((x) => ["received", "validated"].includes(x.state)).length, available: due.filter((x) => x.state !== "missing").length, total: due.length },
+    policy_version: policy.version, revision: 0, locked: false, financial: null,
+    risks: { open: 0, levels: { critical: 0, high: 0, moderate: 0, low: 0 }, top: 0 },
+    actions: { open: 0, overdue: 0, submitted: 0, done: 0 },
   };
 }
 function reviewRow(r) {
@@ -5656,7 +5683,9 @@ function reviewRow(r) {
 const dossierReviews = (d) => DB.reviews.filter((r) => r.dossier_id === d.id).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 function dossierDetail(d) {
   return {
-    ...dossierSummary(d), capacity: d.capacity, date_start: d.date_start, description: d.description, hypotheses: d.hypotheses, scoring: scoring(d), gaps: gaps(d, 5),
+    ...dossierSummary(d), capacity: d.capacity, date_start: d.date_start, date_evaluation: null, description: d.description, hypotheses: d.hypotheses,
+    decision_inputs: { dscr_manual: null, irr_manual: null, dd_red_flag: null, dataroom_open: null, lenders_agreement: null, cp_lifted: null, financing_signed: null },
+    locked_review: null, scoring: scoring(d), gaps: gaps(d, 5),
     portal_users: d.portal_user_ids.map((id) => userById(id)).filter(Boolean).map((u) => ({ id: u.id, name: u.name, login: u.login })),
     reviews: dossierReviews(d).map(reviewRow),
   };
