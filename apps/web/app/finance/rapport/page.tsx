@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { CachetDocument } from "@/components/brand";
 import { Printer } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, PageHeader, cx } from "@/components/ui";
 import { AlerteLigne, CourbeTresorerie, FluxMensuels } from "@/components/finance/Pilotage";
@@ -272,6 +273,8 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
           </ul>
         )}
       </Card>
+
+      <CachetDocument emetteur={r.companies.map((c) => c.name).join(" et ")} date={fmtDate(new Date().toISOString().slice(0, 10))} />
     </div>
   );
 }

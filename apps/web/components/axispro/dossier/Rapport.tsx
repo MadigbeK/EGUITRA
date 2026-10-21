@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Printer, ScrollText } from "@/components/icons";
+import { CachetDocument } from "@/components/brand";
 import { Badge, Button, Card, DataTable, Loading, Segmented } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import { ACTION_STATE, FUNDING_STATE, GATE_DECISION, INSTRUMENTS, RECO, RISK_LEVEL, STATUS_LABELS, type ActionState, type DossierDetail, type FundingState, type Indicators, type JournalEntry, type RiskLevel, type StandardDoc } from "@/lib/axispro-types";
@@ -132,6 +133,7 @@ export function Rapport({ d }: { d: DossierDetail }) {
           <div className="border-t border-line pt-3 text-xs text-muted">
             Politique appliquée : {data.policy.name}, version {data.policy.version}{data.policy.date_active ? ` en vigueur depuis le ${fmtDate(data.policy.date_active)}` : ""}. Seuils : BANKABLE {data.policy.thresholds.bankable}, APD READY {data.policy.thresholds.go}, CONDITIONAL GO {data.policy.thresholds.conditional}, HOLD {data.policy.thresholds.hold} ; DSCR {data.policy.thresholds.dscr}. {data.policy.notes ?? ""} Édité le {fmtDateTime(data.generated_at)}.
           </div>
+          <CachetDocument emetteur="MB AxisPro Consulting" date={fmtDate(data.generated_at.slice(0, 10))} />
         </div>
       </Card>
     </div>

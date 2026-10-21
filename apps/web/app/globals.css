@@ -1230,6 +1230,13 @@ input[type="radio"] {
   print-color-adjust: exact;
 }
 
+/* Cachet des documents officiels : le sceau s'imprime en couleur et ne se coupe pas. */
+.cachet {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  break-inside: avoid;
+}
+
 /* ─── Barre des rubriques (menus du haut) ─────────────────────────────── */
 
 /* Pastille blanche qui suit le curseur d'une rubrique à l'autre. */

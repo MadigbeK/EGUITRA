@@ -207,6 +207,22 @@ même branche, sans toucher à la logique des écrans :
   en version claire et sur fond sombre, et la planche `propositions.html` (marque seule, icône
   d'application, marque avec le nom, tenue à 48, 32 et 16 pixels). En attente du choix du gérant ;
   le monogramme actuel reste en place d'ici là.
+- Logo, trois finalistes en situation (21 octobre) : `docs/design/logos/mise-en-situation.html`
+  montre le pli (recommandé, avec un sceau réservé aux documents officiels, `sceau-pli.svg`), la
+  source et le leppi dans la barre de l'application, les onglets du navigateur, l'icône du
+  téléphone, l'écran de connexion et le rapport imprimé.
+- Logo NIMOVA, fichiers définitifs de la piste recommandée, le pli (21 octobre) :
+  `docs/design/logos/nimova/`, en SVG (nom vectorisé en Funnel Display 700, sans dépendance à la
+  police) et en PNG transparents haute définition : logo horizontal (clair et inversé, 4000 px),
+  logo vertical, marque seule (clair et inversé, 2048 px), icône d'application (1024, 512 et
+  192 px), sceau des documents (2048 px). Remis au gérant.
+- Logo intégré dans l'application (21 octobre, validé par le gérant) : `Monogramme` dessine le pli
+  (seul sur fond clair, `clair` sur fond sombre, `tuile` sur son carré forêt) ; barre du haut,
+  accueil, connexion (le grand N de la scène reprend le pli au trait), page d'erreur, Rotations.
+  Icône d'onglet `public/icons/nimova.svg` et icônes d'installation de Rotations refaites au pli.
+  Sceau (`SceauNimova`, `CachetDocument`) au pied du rapport mensuel et du rapport de dossier
+  AxisPro, imprimé en couleur. Vérifié : `tsc` au vert ; `next build` non lancé en local, le disque
+  C: étant plein (moins de 100 Mo libres) : la construction se fait sur le serveur.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 

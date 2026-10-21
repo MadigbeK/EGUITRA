@@ -58,7 +58,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <MarqueCabinet className="h-10" />
           ) : (
             <span className="inline-flex items-center gap-3">
-              <Monogramme className="h-11 w-11 drop-shadow-[0_8px_14px_rgb(20_47_41/0.3)]" />
+              <Monogramme tuile={false} className="h-11 w-11" />
               <span className="leading-none">
                 <span className="block font-display text-[21px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
                 <span className="mt-1 block text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
@@ -98,8 +98,10 @@ function SceneNimova() {
     <aside className="sur-dos relative order-first overflow-hidden bg-[linear-gradient(150deg,#1d4a3b_0%,#142f29_46%,#0d221d_100%)] text-white lg:order-2 lg:min-h-screen">
       {/* Le N du monogramme, en grand, tracé au chargement */}
       <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-24 -top-10 hidden h-[118%] lg:block" focusable="false">
-        <path d="M120 80h70l290 440h-70Z" fill="none" stroke="#d3aa5b" strokeOpacity="0.35" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "300ms" } as CSSProperties} />
-        <path d="M120 80h70v440h-70ZM410 80h70v440h-70Z" fill="none" stroke="#a5e6c2" strokeOpacity="0.28" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "100ms" } as CSSProperties} />
+        {/* Le pli de la marque, tracé au trait : montants, diagonale d'or, et les deux plis du ruban. */}
+        <path d="M100 80h120v440H100ZM420 80h120v440H420Z" fill="none" stroke="#a5e6c2" strokeOpacity="0.28" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "100ms" } as CSSProperties} />
+        <path d="M100 80h120l320 440H420Z" fill="none" stroke="#d3aa5b" strokeOpacity="0.4" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "300ms" } as CSSProperties} />
+        <path d="M220 80v165M420 355v165" fill="none" stroke="#d3aa5b" strokeOpacity="0.3" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "700ms" } as CSSProperties} />
       </svg>
       <div aria-hidden className="pointer-events-none absolute inset-y-0 right-[16%] hidden w-[72px] bg-[#22634c]/45 lg:block" />
 
