@@ -80,8 +80,9 @@ def csv_text(value):
     return "'" + text if text.startswith(FORMULA_START) else text
 
 
-def workbook_rows(content, max_rows=MAX_ROWS):
-    """Lignes de la première feuille d'un classeur XLSX, après contrôle de sa taille décompressée."""
+def workbook_rows(content, max_rows=MAX_ROWS, sheets=()):
+    """Lignes d'une feuille d'un classeur XLSX (la première dont le nom figure dans `sheets`, casse et
+    accents ignorés, sinon la première du classeur), après contrôle de sa taille décompressée."""
     try:
         infos = zipfile.ZipFile(io.BytesIO(content)).infolist()
     except ZIP_ERRORS as exc:
@@ -93,7 +94,10 @@ def workbook_rows(content, max_rows=MAX_ROWS):
     import openpyxl
 
     try:
-        sheet = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True).worksheets[0]
+        book = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        wanted = [_sheet_key(name) for name in sheets]
+        named = {_sheet_key(ws.title): ws for ws in book.worksheets}
+        sheet = next((named[key] for key in wanted if key in named), book.worksheets[0])
         rows = []
         for row in sheet.iter_rows(values_only=True):
             if len(rows) >= max_rows:
@@ -104,3 +108,9 @@ def workbook_rows(content, max_rows=MAX_ROWS):
     except Exception as exc:  # classeur corrompu ou d'un autre format
         raise UserError("Classeur illisible : enregistrez-le au format XLSX ou CSV.") from exc
     return rows
+
+
+def _sheet_key(name):
+    import unicodedata
+
+    return unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode().lower().replace("_", " ").strip()

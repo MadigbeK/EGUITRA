@@ -1,6 +1,9 @@
 import type { AppCode, EntiteSociete } from "./config";
 import type { Profile } from "./types";
 
+/** Pastille de l'entrée : nombre d'alertes actives, de validations en attente, de contrôles en anomalie. */
+export type NavBadge = "alerts" | "approvals" | "controls";
+
 export interface NavItem {
   href: string;
   label: string;
@@ -8,6 +11,7 @@ export interface NavItem {
   profiles?: Profile[];
   /** Module réservé à une société : masqué quand la société de travail est l'autre. */
   entity?: EntiteSociete;
+  badge?: NavBadge;
 }
 
 export interface NavSection {
@@ -26,8 +30,10 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance", label: "Tableau de bord", icon: "LayoutDashboard", profiles: FIN },
         { href: "/finance/pilotage", label: "Activités et budget", icon: "TrendingUp", profiles: FIN },
         { href: "/finance/rapport", label: "Rapport mensuel", icon: "FileText", profiles: FIN },
-        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck" },
-        { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN },
+        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", badge: "approvals" },
+        { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"] },
+        { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
+        { href: "/finance/guide", label: "Guide de la finance", icon: "Info", profiles: FIN },
       ],
     },
     {
@@ -41,9 +47,10 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/immobilisations", label: "Immobilisations", icon: "Boxes", profiles: FIN },
         { href: "/finance/dette", label: "Dette et financement", icon: "HandCoins", profiles: FIN },
         { href: "/finance/ecritures", label: "Journaux et OD", icon: "BookOpen", profiles: FIN },
+        { href: "/finance/plan-comptable", label: "Plan comptable", icon: "ListChecks", profiles: ["admin", "finance"] },
         { href: "/finance/etats", label: "Balance et états", icon: "FileSpreadsheet", profiles: FIN },
         { href: "/finance/fiscalite", label: "Fiscalité", icon: "Scale", profiles: FIN },
-        { href: "/finance/clotures", label: "Clôtures et contrôles", icon: "Lock", profiles: FIN },
+        { href: "/finance/clotures", label: "Clôtures et contrôles", icon: "Lock", profiles: FIN, badge: "controls" },
       ],
     },
     {
@@ -59,6 +66,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/finance/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
         { href: "/finance/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
+        { href: "/finance/admin/axes", label: "Axes analytiques", icon: "Layers", profiles: ["admin", "finance"] },
+        { href: "/finance/admin/imputations", label: "Imputations automatiques", icon: "Target", profiles: ["admin", "finance"] },
         { href: "/finance/admin/parametres", label: "Seuils et taux", icon: "SlidersHorizontal", profiles: ["admin"] },
         { href: "/finance/admin/audit", label: "Journal d'audit", icon: "ScrollText", profiles: ["admin"] },
       ],
@@ -92,6 +101,37 @@ export const NAV: Record<AppCode, NavSection[]> = {
   ],
   portail: [{ label: "Mon projet", items: [{ href: "/portail", label: "Mon dossier", icon: "FolderOpen" }] }],
   mobile: [{ label: "Rotations", items: [{ href: "/mobile", label: "Rotations", icon: "Truck" }] }],
+  // Analyse : la synthèse sert les deux sociétés ; les sections changent avec la société de travail
+  // (spécification docs/projet/analyse/specification.md, chapitres 5 et 6).
+  analyse: [
+    {
+      label: "Synthèse",
+      items: [{ href: "/analyse", label: "Cockpit", icon: "Radar", profiles: ["admin", "direction", "finance", "cabinet"] }],
+    },
+    {
+      label: "EGUITRA GROUP",
+      items: [
+        { href: "/analyse/rentabilite", label: "Rentabilité", icon: "TrendingUp", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/tresorerie", label: "Trésorerie et prévision", icon: "Landmark", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/clients", label: "Portefeuille clients", icon: "Users", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/transport", label: "Flotte et routes", icon: "Truck", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/depenses", label: "Dépenses et contrôles", icon: "ShoppingCart", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/previsions", label: "Atterrissage et simulateur", icon: "Target", profiles: FIN, entity: "groupe" },
+        { href: "/analyse/fiabilite", label: "Fiabilité des données", icon: "ShieldCheck", profiles: FIN, entity: "groupe" },
+      ],
+    },
+    {
+      label: "MB AxisPro Consulting",
+      items: [
+        { href: "/analyse/portefeuille", label: "Projets et pipeline", icon: "FolderKanban", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/diagnostic", label: "Diagnostic des projets", icon: "Layers", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/comites", label: "Qualité des décisions", icon: "Gavel", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/financements", label: "Financements", icon: "HandCoins", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/activite", label: "Activité et honoraires", icon: "Clock", profiles: ["admin", "direction", "finance", "cabinet"], entity: "cabinet" },
+        { href: "/analyse/risques", label: "Risques et exécution", icon: "ShieldAlert", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
+      ],
+    },
+  ],
 };
 
 export function navFor(app: AppCode, profiles: Profile[], entity?: EntiteSociete | null): NavSection[] {

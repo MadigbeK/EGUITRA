@@ -6,8 +6,9 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
 from .common import FIN_READ, FIN_WRITE, as_float, companies, parse_date, today
+from .moves import chosen_account
 
-FIELDS = ("name", "kind", "periodicity", "method")
+FIELDS = ("name", "purpose", "kind", "periodicity", "method")
 
 
 def _loan(loan_id):
@@ -23,6 +24,7 @@ def _row(loan, lines=False):
         "name": loan.name,
         "kind": loan.kind,
         "lender": {"id": loan.partner_id.id, "name": loan.partner_id.name},
+        "purpose": loan.purpose or None,
         "principal": loan.principal,
         "annual_rate": loan.annual_rate,
         "start_date": loan.start_date,
@@ -40,7 +42,7 @@ def _row(loan, lines=False):
         data["schedule"] = [
             {"id": l.id, "sequence": l.sequence, "due_date": l.due_date, "principal": l.principal,
              "interest": l.interest, "total": l.total, "remaining": l.remaining, "paid": l.paid,
-             "move_id": l.move_id.id or None}
+             "move_id": l.move_id.id or None, "statement_line_id": l.statement_line_id.id or None}
             for l in loan.line_ids
         ]
     return data
@@ -50,7 +52,8 @@ class EguitraFinanceLoans(http.Controller):
     @api_route("/finance/loans", profiles=FIN_READ)
     def list_loans(self, **kw):
         loans = request.env["eguitra.loan"].search([("company_id", "in", companies(kw).ids)])
-        summary = request.env["eguitra.loan"].sudo().debt_summary(companies(kw), today())
+        # Échéanciers et comptabilité : encours comptable, écart, dette nette, gearing, dette / EBE.
+        summary = request.env["eguitra.finance.metrics"].sudo().debt_position(companies(kw), today())
         return {"items": [_row(l) for l in loans], "summary": summary}
 
     @api_route("/finance/loans/<int:loan_id>", profiles=FIN_READ)
@@ -75,13 +78,28 @@ class EguitraFinanceLoans(http.Controller):
         })
         if data.get("first_due_date"):
             values["first_due_date"] = parse_date(data, "first_due_date")
-        for key in ("principal_account_id", "interest_account_id", "journal_id"):
+        # Comptes du financement : contrepartie de ses échéances et de ses opérations de trésorerie,
+        # fixés avec le droit « Saisie libre des comptes ».
+        for key, label in (("principal_account_id", "Compte de dette"), ("interest_account_id", "Compte de charges financières")):
             if data.get(key):
-                values[key] = int(data[key])
+                values[key] = chosen_account(data[key], request.env.company, label).id
+        if data.get("journal_id"):
+            values["journal_id"] = int(data["journal_id"])
         loan = request.env["eguitra.loan"].create(values)
         loan.compute_schedule()
         if data.get("activate"):
             loan.action_activate()
+        return _row(loan, lines=True)
+
+    @api_route("/finance/loans/<int:loan_id>", methods=("PATCH",), profiles=FIN_WRITE)
+    def update_loan(self, loan_id, **_kw):
+        """Référence et objet d'un financement (l'échéancier ne se modifie qu'en brouillon)."""
+        loan = _loan(loan_id)
+        data = read_json()
+        values = {k: (data[k] or False) for k in ("name", "purpose") if k in data}
+        if "name" in values and not values["name"]:
+            raise ApiError(400, "missing_fields", "La référence est obligatoire.", fields=["name"])
+        loan.write(values)
         return _row(loan, lines=True)
 
     @api_route("/finance/loans/<int:loan_id>/activate", methods=("POST",), profiles=FIN_WRITE)

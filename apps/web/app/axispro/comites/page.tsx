@@ -5,6 +5,7 @@ import { Gavel, Lock } from "@/components/icons";
 import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, Loading, PageHeader, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { RECO, type DossierSummary, type Review } from "@/lib/axispro-types";
+import { couleurScore, note } from "@/components/axispro/dossier/commun";
 import { fmtDate, fmtShort } from "@/lib/format";
 
 type ReviewRow = Review & { dossier: { id: number; reference: string; name: string; promoter: string } };
@@ -27,7 +28,7 @@ export default function ComitesPage() {
             <div className="n-cascade grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               {agenda.map((d) => (
                 <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className="n-levable flex items-center gap-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
-                  <Anneau value={d.score} taille={72} epaisseur={10} couleur={d.score === null ? undefined : d.score >= 70 ? "var(--g-jade)" : d.score >= 50 ? "var(--warn-vif)" : "var(--danger-vif)"} />
+                  <Anneau value={d.progress.assessed ? note(d.readiness) : null} taille={72} epaisseur={10} couleur={couleurScore(d.readiness)} sous="Readiness" />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
@@ -52,10 +53,11 @@ export default function ComitesPage() {
               { key: "dossier", label: "Dossier", render: (r) => <Link className="block min-w-[200px] hover:text-accent" href={`/axispro/dossiers/${r.dossier.id}`}><span className="font-semibold text-ink">{r.dossier.name}</span><span className="block text-[12px] font-semibold text-accent">{r.dossier.reference}</span></Link> },
               { key: "promoter", label: "Promoteur", render: (r) => r.dossier.promoter },
               { key: "gate", label: "Gate", render: (r) => r.gate ?? "–" },
-              { key: "score", label: "Score", align: "right", render: (r) => (r.score === null ? "–" : <span className={cx("inline-block min-w-10 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", r.score >= 70 ? "bg-ok-doux text-ok-texte" : r.score >= 50 ? "bg-warn-doux text-warn" : "bg-danger-doux text-danger")}>{Math.round(r.score)}</span>) },
+              { key: "score", label: "Readiness", align: "right", render: (r) => (r.score === null ? "–" : <span className={cx("inline-block min-w-10 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", r.score >= 65 ? "bg-ok-doux text-ok-texte" : r.score >= 50 ? "bg-warn-doux text-warn" : r.score >= 30 ? "bg-orange-100 text-orange-700" : "bg-danger-doux text-danger")}>{Math.round(r.score)}</span>) },
+              { key: "apd", label: "APD / Bank.", align: "right", render: (r) => (r.apd === null ? "–" : `${Math.round(r.apd)} / ${Math.round(r.bankability ?? 0)}`) },
               { key: "recommendation", label: "Calculée", render: (r) => <Badge tone={RECO[r.recommendation]?.tone ?? "neutral"}>{RECO[r.recommendation]?.label ?? "–"}</Badge> },
               { key: "decision", label: "Décision", render: (r) => <Badge tone={RECO[r.decision]?.tone ?? "neutral"}>{RECO[r.decision]?.label ?? r.decision}</Badge> },
-              { key: "state", label: "", render: (r) => (r.state === "locked" ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ok-doux px-2 py-0.5 text-[12px] font-semibold text-ok-texte"><Lock className="h-3 w-3" /> {r.locked_by}</span> : <Badge tone="warn" vivant>Brouillon</Badge>) },
+              { key: "state", label: "", render: (r) => (r.state === "locked" ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ok-doux px-2 py-0.5 text-[12px] font-semibold text-ok-texte" title={r.fingerprint ? `Empreinte ${r.fingerprint}` : undefined}><Lock className="h-3 w-3" /> Scellée, {r.locked_by}</span> : <Badge tone="warn" vivant>Brouillon</Badge>) },
             ]} />
           )}
         </Card>

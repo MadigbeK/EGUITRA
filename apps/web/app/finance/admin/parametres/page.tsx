@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { Button, Card, DataTable, Field, Input, Loading, Notice, PageHeader, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { GRAVITES } from "@/components/finance/Pilotage";
+import type { AlertUnit, Severity } from "@/lib/finance-types";
 import { fmtDate, fmtDec } from "@/lib/format";
 
-interface Threshold { id: number; code: string; label: string; value: number; severity: "info" | "warning" | "blocking"; active: boolean }
+interface Threshold { id: number; code: string; label: string; value: number; severity: Severity; active: boolean; domain: string | null; unit: AlertUnit | null; zero_disables: boolean; applicable: boolean }
+
+const UNITE: Record<AlertUnit, string> = { gnf: "GNF", pct: "%", days: "jours", ratio: "ratio", count: "nombre", none: "" };
 interface Currency { id: number; name: string; symbol: string; rate: number; inverse_rate: number; date: string | null }
 
 export default function SettingsPage() {
@@ -23,23 +27,45 @@ export default function SettingsPage() {
   }
   return (
     <div className="space-y-6">
-      <PageHeader title="Seuils et taux" subtitle="Seuils d'alerte de la société de travail, taux de change, comptes de banque et de caisse." />
+      <PageHeader title="Seuils et taux" subtitle="Seuils d'alerte de la société de travail (une valeur à 0 éteint les règles de montant, de durée ou de taux ; ailleurs, 0 vaut aucune tolérance), taux de change, comptes de banque et de caisse." />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card title="Seuils d'alerte" padded={false}>
         {!thresholds ? (
           <Loading />
         ) : (
           <DataTable
-            rows={thresholds}
+            rows={thresholds.filter((t) => t.applicable)}
             rowKey={(t) => t.id}
             columns={[
-              { key: "label", label: "Seuil" },
-              { key: "value", label: "Valeur", render: (t) => <Input className="w-40 text-right font-mono" defaultValue={String(t.value)} onBlur={(e) => Number(e.target.value) !== t.value && save(t, { value: Number(e.target.value) })} /> },
+              { key: "domain", label: "Domaine", render: (t) => t.domain ?? "–" },
+              {
+                key: "label",
+                label: "Seuil",
+                render: (t) => (
+                  <span>
+                    {t.label}
+                    {t.zero_disables && !t.value && t.active && <span className="ml-2 text-[12px] font-semibold text-warn">règle éteinte (0)</span>}
+                  </span>
+                ),
+              },
+              {
+                key: "value",
+                label: "Valeur",
+                render: (t) =>
+                  t.unit === "none" ? (
+                    <span className="text-[12.5px] text-muted">Règle sans valeur</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      <Input className="w-40 text-right font-mono" defaultValue={String(t.value)} onBlur={(e) => Number(e.target.value.replace(",", ".")) !== t.value && save(t, { value: Number(e.target.value.replace(",", ".")) })} />
+                      <span className="text-[12px] text-muted">{t.unit ? UNITE[t.unit] : ""}</span>
+                    </span>
+                  ),
+              },
               {
                 key: "severity",
                 label: "Gravité",
                 render: (t) => (
-                  <Select value={t.severity} onChange={(e) => save(t, { severity: e.target.value as Threshold["severity"] })} options={[{ value: "info", label: "Information" }, { value: "warning", label: "Attention" }, { value: "blocking", label: "Bloquante" }]} />
+                  <Select value={t.severity} onChange={(e) => save(t, { severity: e.target.value as Threshold["severity"] })} options={GRAVITES} />
                 ),
               },
               { key: "active", label: "Actif", render: (t) => <input type="checkbox" checked={t.active} onChange={(e) => save(t, { active: e.target.checked })} /> },

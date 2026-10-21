@@ -11,8 +11,10 @@ from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
 DOCUMENTS = [
+    ("commitment", "Engagements de dépense"),
     ("in_invoice", "Pièces d'achat et avoirs fournisseurs"),
     ("payment_out", "Règlements fournisseurs"),
+    ("cash_out", "Décaissements de trésorerie"),
     ("entry", "Opérations diverses"),
 ]
 APPROVER_PROFILES = [
@@ -22,7 +24,19 @@ APPROVER_PROFILES = [
 ]
 # Circuit par défaut, à ajuster en atelier de cadrage : la finance valide toute pièce d'achat,
 # la direction au-delà de 50 millions ; la direction valide les règlements au-delà de 100 millions.
-DEFAULT_RULES = [
+COMMITMENT_RULES = [
+    {"document": "commitment", "sequence": 1, "min_amount": 0, "approver_profile": "finance",
+     "name": "Engagements de dépense : contrôle de la finance"},
+    {"document": "commitment", "sequence": 2, "min_amount": 50_000_000, "approver_profile": "direction",
+     "name": "Engagements de plus de 50 M GNF : accord de la direction"},
+]
+# Décaissements saisis hors règlement fournisseur (caisse, banque, imputation directe d'une ligne de
+# relevé, échéance d'emprunt, virement interne) : même seuil que les règlements.
+CASH_OUT_RULES = [
+    {"document": "cash_out", "sequence": 1, "min_amount": 100_000_000, "approver_profile": "direction",
+     "name": "Décaissements de plus de 100 M GNF : accord de la direction"},
+]
+DEFAULT_RULES = COMMITMENT_RULES + CASH_OUT_RULES + [
     {"document": "in_invoice", "sequence": 1, "min_amount": 0, "approver_profile": "finance",
      "name": "Pièces d'achat : contrôle de la finance"},
     {"document": "in_invoice", "sequence": 2, "min_amount": 50_000_000, "approver_profile": "direction",
@@ -154,6 +168,8 @@ class EguitraApprovalRequest(models.Model):
             return self.amount
         if self.res_model == "account.move":
             return record._eguitra_approval_amount()
+        if self.res_model == "eguitra.commitment":
+            return record.amount
         return abs(record.amount_company_currency_signed or record.amount)
 
     def _matches(self, record=None):
@@ -190,6 +206,9 @@ class EguitraApprovalRequest(models.Model):
         })
         self.step_ids.filtered(lambda s: s.state == "pending").sudo().write({"state": "skipped"})
         self.sudo().state = "rejected"
+        record = self._record()
+        if record and self.res_model == "eguitra.commitment":
+            record._eguitra_on_rejected()
         return True
 
     def _on_approved(self):
@@ -197,9 +216,16 @@ class EguitraApprovalRequest(models.Model):
         record = self._record()
         if not record:
             return
+        if self.res_model == "eguitra.commitment":
+            record._eguitra_on_approved()
+            return
         bypass = record.with_context(eguitra_approval_granted=True).sudo()
         if self.res_model == "account.move" and record.state == "draft":
             bypass.action_post()
+            # Virement interne : l'entrée sur le compte destinataire suit la sortie approuvée.
+            paired = record.eguitra_paired_move_id
+            if paired and paired.state == "draft":
+                paired.with_context(eguitra_approval_granted=True).sudo().action_post()
         elif self.res_model == "account.payment" and (not record.move_id or record.move_id.state == "draft"):
             bypass._eguitra_post_approved()
 

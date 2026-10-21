@@ -20,7 +20,7 @@ def _row(r):
     return {
         "id": r.id, "partner": ref(r.partner_id), "email": r.partner_id.email or None, "date": r.date,
         "level": r.level, "level_label": dict(r._fields["level"].selection)[r.level], "days_overdue": r.days_overdue,
-        "amount_due": r.amount_due, "invoices": len(r.invoice_ids), "state": r.state, "channel": r.channel or None,
+        "amount_due": r.amount_due, "invoices": len(r.invoice_ids) + len(r.line_ids), "state": r.state, "channel": r.channel or None,
         "sent_at": r.sent_at, "sent_by": r.sent_by.name or None,
     }
 

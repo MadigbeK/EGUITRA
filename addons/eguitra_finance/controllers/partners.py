@@ -1,16 +1,62 @@
-"""Tiers : clients, fournisseurs, soldes, ancienneté des créances, limites de crédit."""
+"""Tiers : clients, fournisseurs, soldes, ancienneté des créances, limites de crédit, conditions de
+paiement, assujettissement à la TVA."""
 
-from odoo import http
+from odoo import Command, http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
 from .common import FIN_READ, FIN_WRITE, as_float, move_summary, today
 
-FIELDS = ("name", "vat", "phone", "email", "street", "city", "comment")
+FIELDS = ("name", "vat", "phone", "email", "street", "city", "comment", "ref")
+# Champs de l'application -> champs du noyau (fiche enrichie du prototype de la direction).
+EXTRA_FIELDS = {"sector": "eguitra_sector", "contact": "eguitra_contact", "rccm": "company_registry"}
 # Les métiers et le cabinet choisissent ou créent un tiers (maître d'ouvrage, locataire, client d'une
 # rotation, promoteur) sans voir ses soldes, réservés à la finance et à la direction.
 PICKERS = ("exploitation", "chantiers", "immobilier", "cabinet")
+DELAYS = {False: "days_after", True: "days_after_end_of_month"}
+
+
+def _term_spec(term):
+    """Délai et fin de mois d'une condition de paiement à une seule échéance (sinon son seul nom)."""
+    if not term:
+        return None
+    lines = term.line_ids
+    spec = {"id": term.id, "name": term.name, "days": None, "end_of_month": None}
+    if len(lines) == 1 and lines.value == "percent" and abs(lines.value_amount - 100) < 0.01:
+        if lines.delay_type in DELAYS.values():
+            spec.update(days=lines.nb_days, end_of_month=lines.delay_type == DELAYS[True])
+    return spec
+
+
+def _payment_term(spec):
+    """Condition de paiement {days, end_of_month} : une condition existante à une seule échéance de
+    100 %, sinon créée (commune aux deux sociétés). Vide : condition retirée."""
+    Term = request.env["account.payment.term"]
+    if not spec:
+        return Term
+    if not isinstance(spec, dict):
+        raise ApiError(400, "invalid_parameter", "Condition de paiement : {days, end_of_month}.")
+    try:
+        days = int(spec.get("days") or 0)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", "Délai de paiement invalide.") from e
+    if not 0 <= days <= 365:
+        raise ApiError(422, "business_rule", "Le délai de paiement est compris entre 0 et 365 jours.")
+    end_of_month = bool(spec.get("end_of_month"))
+    delay = DELAYS[end_of_month]
+    for term in Term.search([("company_id", "in", [False, request.env.company.id])]):
+        lines = term.line_ids
+        if (len(lines) == 1 and lines.value == "percent" and abs(lines.value_amount - 100) < 0.01
+                and lines.nb_days == days and lines.delay_type == delay and not term.early_discount):
+            return term
+    if end_of_month:
+        name = f"Fin de mois + {days} jours" if days else "Fin de mois"
+    else:
+        name = f"{days} jours" if days else "Comptant"
+    return Term.create({"name": name, "company_id": False, "line_ids": [
+        Command.create({"value": "percent", "value_amount": 100, "nb_days": days, "delay_type": delay}),
+    ]})
 
 
 def _balances_visible():
@@ -35,6 +81,10 @@ def _row(p, balances=True):
         "city": p.city or None,
         "customer": p.customer_rank > 0,
         "supplier": p.supplier_rank > 0,
+        "ref": p.ref or None,
+        "sector": p.eguitra_sector or None,
+        "contact": p.eguitra_contact or None,
+        "vat_exempt": p.commercial_partner_id.eguitra_vat_exempt,
         "receivable": None,
         "payable": None,
         "credit_limit": None,
@@ -58,7 +108,7 @@ class EguitraFinancePartners(http.Controller):
             domain.append(("supplier_rank", ">", 0))
         if kw.get("search"):
             s = kw["search"]
-            domain += ["|", "|", ("name", "ilike", s), ("vat", "ilike", s), ("phone", "ilike", s)]
+            domain += ["|", "|", "|", ("name", "ilike", s), ("vat", "ilike", s), ("phone", "ilike", s), ("ref", "ilike", s)]
         Partner = request.env["res.partner"]
         partners = Partner.search(domain, limit=int_arg(kw, "limit", 100, 1, 1000), offset=int_arg(kw, "offset", 0, 0),
                                   order="name")
@@ -72,7 +122,11 @@ class EguitraFinancePartners(http.Controller):
         data.update({
             "street": partner.street or None,
             "comment": partner.comment or None,
+            "rccm": partner.company_registry or None,
             "use_credit_limit": partner.use_partner_credit_limit,
+            # Conditions de paiement de la société de travail (champs propres à chaque société).
+            "payment_term": _term_spec(partner.property_payment_term_id),
+            "supplier_payment_term": _term_spec(partner.property_supplier_payment_term_id),
         })
         day = today()
         lines = request.env["account.move.line"].search([
@@ -105,30 +159,39 @@ class EguitraFinancePartners(http.Controller):
             data["credit_used_pct"] = partner.credit / partner.credit_limit * 100
         return data
 
-    def _values(self, data):
+    def _values(self, data, finance=True):
+        """Champs de la fiche. La limite de crédit, l'assujettissement à la TVA et les conditions de
+        paiement relèvent de la seule finance."""
         values = {k: (data[k] or False) for k in FIELDS if k in data}
+        values.update({field: (str(data[key]).strip() or False) if data[key] else False
+                       for key, field in EXTRA_FIELDS.items() if key in data})
         if "is_company" in data:
             values["is_company"] = bool(data["is_company"])
         if data.get("customer"):
             values["customer_rank"] = 1
         if data.get("supplier"):
             values["supplier_rank"] = 1
+        if not finance:
+            return values
         if "credit_limit" in data:
             limit = data["credit_limit"]
             values["use_partner_credit_limit"] = bool(limit)
             values["credit_limit"] = as_float(limit, "credit_limit") if limit else 0.0
+        if "vat_exempt" in data:
+            values["eguitra_vat_exempt"] = bool(data["vat_exempt"])
+        if "payment_term" in data:
+            values["property_payment_term_id"] = _payment_term(data["payment_term"]).id or False
+        if "supplier_payment_term" in data:
+            values["property_supplier_payment_term_id"] = _payment_term(data["supplier_payment_term"]).id or False
         return values
 
     @api_route("/finance/partners", methods=("POST",), profiles=FIN_WRITE + PICKERS)
     def create_partner(self, **_kw):
         data = read_json()
         require(data, "name")
-        values = self._values(data)
-        values.setdefault("is_company", True)
         finance = bool(set(request.env.user._eguitra_profiles()) & set(FIN_WRITE))
-        if not finance:  # la limite de crédit relève de la finance
-            values.pop("credit_limit", None)
-            values.pop("use_partner_credit_limit", None)
+        values = self._values(data, finance)
+        values.setdefault("is_company", True)
         # Création réservée dans le noyau au gestionnaire des contacts : la route borne les profils et
         # les champs (FIELDS), l'auteur reste l'utilisateur.
         partner = request.env["res.partner"].sudo().create(values)

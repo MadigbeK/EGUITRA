@@ -21,9 +21,44 @@
         <field name="model_id" ref="model_eguitra_reminder"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_payment_mode_company" model="ir.rule">
+        <field name="name">Modes de paiement : communs ou de la société</field>
+        <field name="model_id" ref="model_eguitra_payment_mode"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_budget_line_company" model="ir.rule">
+        <field name="name">Lignes budgétaires : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_budget_line"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_expense_category_company" model="ir.rule">
+        <field name="name">Catégories de dépense : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_expense_category"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_operation_type_company" model="ir.rule">
+        <field name="name">Types d'opération de trésorerie : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_treasury_operation_type"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_period_close_company" model="ir.rule">
         <field name="name">Clôtures : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_period_close"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_ifrs_policy_company" model="ir.rule">
+        <field name="name">Politique IFRS : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_ifrs_policy"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_tax_return_company" model="ir.rule">
+        <field name="name">Déclarations fiscales : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_tax_return"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_reprise_reference_company" model="ir.rule">
+        <field name="name">Références de reprise : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_reprise_reference"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 </odoo>

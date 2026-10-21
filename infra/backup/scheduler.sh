@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Planificateur des sauvegardes (boucle à la minute, sans cron) :
+#  - toutes les 5 minutes : copie hors site des WAL archivés ;
 #  - toutes les 15 minutes : miroir du filestore puis copie hors site des WAL et pièces jointes ;
 #  - chaque nuit à BACKUP_HOUR h 30 : sauvegarde de base, instantané du filestore, copie hors site
 #    complète et purges ;
@@ -24,6 +25,8 @@ while true; do
   if (( 10#$minute % 15 == 0 )); then
     /usr/local/bin/files-backup.sh || log "ÉCHEC de la copie du filestore."
     /usr/local/bin/offsite.sh quick || log "ÉCHEC de la copie hors site."
+  elif (( 10#$minute % 5 == 0 )); then
+    /usr/local/bin/offsite.sh wal || log "ÉCHEC de la copie hors site des WAL."
   fi
   if [[ "$(date +%H)" == "$BACKUP_HOUR" && "$minute" == "30" && "$last_night" != "$(date +%F)" ]]; then
     last_night=$(date +%F)

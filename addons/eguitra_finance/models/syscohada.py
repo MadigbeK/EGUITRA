@@ -185,8 +185,9 @@ class EguitraSyscohada(models.AbstractModel):
     _description = "États financiers SYSCOHADA"
 
     @api.model
-    def income_statement(self, companies, date_from, date_to):
-        balances = self.env["eguitra.finance.metrics"].account_balances(companies, date_to, date_from)
+    def income_statement(self, companies, date_from, date_to, exclude_partner_ids=None):
+        balances = self.env["eguitra.finance.metrics"].account_balances(companies, date_to, date_from,
+                                                                        exclude_partner_ids=exclude_partner_ids)
         values, used = _compute(balances, CR_LINES, lambda code: -1 if code.startswith("T") else 1)
         values = _totals(values, CR_TOTALS)
         unmapped = {a: b for a, b in balances.items() if a[:1] in "678" and a not in used and abs(b) > 0.005}
@@ -199,9 +200,9 @@ class EguitraSyscohada(models.AbstractModel):
         }
 
     @api.model
-    def balance_sheet(self, companies, date_to):
+    def balance_sheet(self, companies, date_to, exclude_partner_ids=None):
         metrics = self.env["eguitra.finance.metrics"]
-        balances = metrics.account_balances(companies, date_to)
+        balances = metrics.account_balances(companies, date_to, exclude_partner_ids=exclude_partner_ids)
         # Le résultat non encore affecté (classes 6 à 8) rejoint la rubrique CJ.
         result = -sum(b for a, b in balances.items() if a[:1] in "678")
         actif, used_a = _compute(balances, BILAN_ACTIF, 1)
@@ -312,6 +313,48 @@ class EguitraSyscohada(models.AbstractModel):
             "treasury_end": treasury_end,
             "difference": round(treasury_end - v["ZH"], 2),
         }
+
+    # ─── Consolidation ────────────────────────────────────────────────────
+
+    @api.model
+    def group_partner_ids(self, companies):
+        """Tiers représentant les sociétés du groupe (fiche de la société et ses contacts) : leurs
+        opérations entre sociétés du groupe s'éliminent en consolidation."""
+        partners = companies.partner_id.commercial_partner_id
+        children = self.env["res.partner"].sudo().with_context(active_test=False).search(
+            [("commercial_partner_id", "in", partners.ids)])
+        return (partners | children).ids
+
+    @api.model
+    def consolidated(self, companies, date_from, date_to):
+        """Compte de résultat et bilan par société, éliminations des opérations entre sociétés du
+        groupe (ventes et achats réciproques, créances et dettes, comptes courants) et groupe.
+        Les frais communs refacturés relèvent des mêmes éliminations dès qu'ils sont facturés entre
+        sociétés ; leur clé de répartition reste à arrêter avec le client."""
+        excluded = self.group_partner_ids(companies)
+
+        def column(kind, scope, exclude=None):
+            if kind == "income":
+                data = self.income_statement(scope, date_from, date_to, exclude_partner_ids=exclude)
+                return {r["code"]: r["amount"] for r in data["lines"]}, data["lines"]
+            data = self.balance_sheet(scope, date_to, exclude_partner_ids=exclude)
+            rows = data["actif"] + data["passif"]
+            return {r["code"]: r["amount"] for r in rows}, rows
+
+        result = {"date_from": date_from, "date_to": date_to,
+                  "companies": [{"id": c.id, "name": c.name} for c in companies], "intra_group_partners": len(excluded)}
+        for kind in ("income", "balance"):
+            per_company = [column(kind, c)[0] for c in companies]
+            group, lines = column(kind, companies, excluded)
+            rows = []
+            for line in lines:
+                code = line["code"]
+                amounts = [values.get(code, 0.0) for values in per_company]
+                total = group.get(code, 0.0)
+                rows.append({"code": code, "label": line["label"], "total": line.get("total", False),
+                             "companies": amounts, "eliminations": total - sum(amounts), "group": total})
+            result[kind] = rows
+        return result
 
 
 def _credit_side(balances, prefix):

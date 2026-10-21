@@ -499,8 +499,42 @@ export const Coins = dessin("Coins", (
   </>
 ));
 
+/* Analyse */
+export const Radar = dessin("Radar", (
+  <>
+    <path d="M12 3.5 19.8 8.3v7.4L12 20.5 4.2 15.7V8.3Z" />
+    <path d="M12 7.6 16 10v4l-4 2.4-4-2.4v-4Z" strokeOpacity="0.55" />
+    <path d="M12 3.5v4.1M19.8 8.3 16 10M19.8 15.7 16 14M12 20.5v-4.1M4.2 15.7 8 14M4.2 8.3 8 10" strokeOpacity="0.55" />
+    <circle cx="12" cy="12" r="1.4" {...POINT} />
+  </>
+));
+export const Sparkles = dessin("Sparkles", (
+  <>
+    <path d="M12 4.5 13.9 9.6 19 11.5l-5.1 1.9L12 18.5l-1.9-5.1L5 11.5l5.1-1.9Z" />
+    <path d="M18.5 3.5v3M17 5h3M5 17.5v3M3.5 19h3" />
+  </>
+));
+export const Waterfall = dessin("Waterfall", (
+  <>
+    <path d="M4 20.5h16" />
+    <rect x="4.5" y="6" width="3.2" height="14.5" rx="0.8" />
+    <rect x="10.4" y="9.5" width="3.2" height="5" rx="0.8" />
+    <rect x="16.3" y="12" width="3.2" height="8.5" rx="0.8" />
+  </>
+));
+export const Moon = dessin("Moon", <path d="M19.5 14.2A8 8 0 0 1 9.8 4.5a8 8 0 1 0 9.7 9.7Z" />);
+export const Sun = dessin("Sun", (
+  <>
+    <circle cx="12" cy="12" r="3.8" />
+    <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M6 18l1.4-1.4M16.6 7.4 18 6" />
+  </>
+));
+
 /** Icônes de la navigation, par le nom inscrit dans `lib/nav.ts`. */
 export const ICONES: Record<string, Icon> = {
+  Radar,
+  ShieldCheck,
+  ShieldAlert,
   LayoutDashboard,
   TrendingUp,
   FileText,
@@ -529,4 +563,7 @@ export const ICONES: Record<string, Icon> = {
   ListChecks,
   FileStack,
   FolderOpen,
+  Info,
+  Layers,
+  Target,
 };

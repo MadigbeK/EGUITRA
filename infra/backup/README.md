@@ -14,18 +14,22 @@ après suppression de la base abîmée.
 | Quoi | Comment | Fréquence | Où |
 |---|---|---|---|
 | Base PostgreSQL de production (grappe `db`) | sauvegarde de base `pg_basebackup` | chaque nuit à 01 h 30 | `/srv/eguitra/backup/base/AAAAMMJJTHHMM/` |
-| Modifications de la base | archivage continu des WAL (`archive-wal.sh`, `archive_timeout = 900`) | au fil de l'eau, au plus 15 minutes | `/srv/eguitra/backup/wal/` |
+| Modifications de la base | archivage continu des WAL (`archive-wal.sh`, `archive_timeout = 300`) | au fil de l'eau, au plus 5 minutes | `/srv/eguitra/backup/wal/` |
 | Pièces jointes (filestore) | miroir `rsync` + instantané quotidien en liens physiques | 15 minutes, instantané chaque nuit | `/srv/eguitra/backup/filestore/` |
-| Copie hors site | `rclone` vers un distant chiffré (`crypt`) | 15 minutes (WAL, pièces), chaque nuit (bases) | stockage objet, voir `backup.env.example` |
+| Copie hors site | `rclone` vers un distant chiffré (`crypt`) | 5 minutes (WAL), 15 minutes (pièces), chaque nuit (bases) | stockage objet, voir `backup.env.example` |
 
-Perte de données maximale : 15 minutes. Rétention locale : 14 jours (`BACKUP_RETENTION_DAYS`).
+Perte de données maximale : 15 minutes, y compris en cas de perte du serveur (un segment WAL au
+plus toutes les 5 minutes, copié hors site dans les 5 minutes suivantes). Rétention locale : 14 jours (`BACKUP_RETENTION_DAYS`).
 Hors site, conformément à l'offre : 30 sauvegardes quotidiennes, 12 sauvegardes mensuelles (la
 première de chaque mois, dossier `monthly/`) et 14 jours de journaux de transactions, soit une
 restauration possible à n'importe quel instant des 14 derniers jours.
 
 Le conteneur `backup` fait le travail (`scheduler.sh`) ; son état de santé (`check.sh`) passe à
-`unhealthy` si l'archivage des WAL échoue, si la dernière sauvegarde de base a plus de 26 heures
-ou si la copie hors site est en retard :
+`unhealthy` si l'archivage des WAL échoue ou n'a rien produit depuis 15 minutes, si la dernière
+sauvegarde de base a plus de 26 heures, si la copie hors site des WAL a plus de 15 minutes de
+retard (une heure pour les pièces jointes), ou si la copie hors site est exigée
+(`OFFSITE_REQUIRED=1` dans `backup.env`, à poser avant la mise en service) sans être configurée.
+La supervision (`monitor.sh`) relaie ces alertes :
 
 ```bash
 docker compose ps backup
@@ -40,21 +44,28 @@ docker compose exec backup check.sh
 3. Conserver les deux mots de passe du chiffrement hors du serveur : sans eux, les copies sont illisibles.
 4. `docker compose up -d backup`, puis vérifier `docker compose logs backup` au quart d'heure suivant.
 
-## Test de restauration (mensuel, et avant chaque mise en production)
+## Tests de restauration (mensuel, trimestriel à un instant donné, avant chaque mise en production)
 
-Lancé seul le 1er de chaque mois à 4 h 17 (crontab installée par `infra/monitor-install.sh`, compte
-rendu dans `~/eguitra/logs/restore-test.log`) ; la supervision alerte si aucun test n'a réussi depuis
-40 jours. L'offre demande un test trimestriel : le rythme mensuel le dépasse. À la demande :
+- Chaque mois, le 1er à 4 h 17 : restauration de l'état le plus récent (journal
+  `~/eguitra/logs/restore-test.log`) ; la supervision alerte si aucun test n'a réussi depuis 40 jours.
+- Chaque trimestre, le 2 janvier, avril, juillet et octobre à 5 h 17 : restauration de l'état de
+  l'avant-veille à la même heure (instant donné, test exigé par l'offre), avec un compte rendu à
+  remettre au client dans `~/eguitra/logs/restore-reports/restauration-AAAAMMJJ-HHMM.md`
+  (sauvegarde utilisée, instant visé, durée, contrôles, résultat) ; la supervision alerte au-delà de
+  100 jours sans réussite. Conversion en Word : `node docs/outils/md-docx.js <compte rendu>`.
+
+Les deux tâches sont installées par `infra/monitor-install.sh`. À la demande :
 
 ```bash
 cd ~/eguitra/infra
-backup/restore-test.sh                                  # état le plus récent
-backup/restore-test.sh --target "2026-10-14 10:00:00"   # état à un instant donné
+backup/restore-test.sh                                            # état le plus récent
+backup/restore-test.sh --target "2026-10-14 10:00:00"             # état à un instant donné
+backup/restore-test.sh --target "2026-10-14 10:00:00" --report    # avec compte rendu
 ```
 
 Le script restaure dans un PostgreSQL jetable (port local 5433, archives en lecture seule),
 rejoue les WAL, affiche des contrôles (sociétés, utilisateurs, pièces comptables, dernière
-écriture), puis supprime l'instance. Consigner le résultat dans le cahier d'exploitation.
+écriture, dossiers AxisPro, dernière transaction rejouée), puis supprime l'instance. Consigner le résultat dans le cahier d'exploitation.
 
 ## Restauration réelle (incident)
 

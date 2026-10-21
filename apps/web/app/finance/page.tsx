@@ -1,19 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, ChevronRight, Coins, HandCoins, Info, Landmark, PieChart, Receipt, ShieldAlert, ShoppingCart, TrendingUp, type Icon } from "@/components/icons";
-import { AreaChart, Card, Compteur, DataTable, Donut, ErrorBox, GAMME, Gauge, IconTile, Kpi, PageHeader, RankBars, Squelette, Valeur, cx, type Teinte } from "@/components/ui";
+import { useState, type CSSProperties } from "react";
+import { ArrowUpRight, Calculator, Coins, HandCoins, Landmark, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
+import { AreaChart, Button, Card, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, IconTile, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import type { Dashboard } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort } from "@/lib/format";
-
-const SEVERITY: Record<string, { teinte: Teinte; icon: Icon; label: string; texte: string }> = {
-  blocking: { teinte: "danger", icon: ShieldAlert, label: "Bloquante", texte: "text-danger" },
-  warning: { teinte: "ambre", icon: AlertTriangle, label: "Attention", texte: "text-warn" },
-  info: { teinte: "azur", icon: Info, label: "Information", texte: "text-info" },
-};
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
 const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = [
@@ -24,20 +19,34 @@ const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = 
   ["plus_90", "Échu depuis plus de 90 jours", "#9c2b25"],
 ];
 
+const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
 export default function DirectorDashboard() {
   const [scope, setScope] = useState<"company" | "group">("company");
-  const { data: d, error, isLoading, mutate } = useApi<Dashboard>(`/finance/dashboard?scope=${scope}`);
+  // Arrêté au : vide = aujourd'hui (le noyau calcule à la date du jour de Conakry).
+  const [asOf, setAsOf] = useState("");
+  const { data: d, error, isLoading, mutate } = useApi<Dashboard>(`/finance/dashboard?scope=${scope}${asOf ? `&date=${asOf}` : ""}`);
 
   return (
     <div>
       <PageHeader
         title="Tableau de bord du dirigeant"
-        subtitle={d ? `Exercice ${d.fiscal_year.start.slice(0, 4)}, écritures validées au ${fmtDate(d.as_of)}, montants hors taxes en GNF.` : "Indicateurs calculés à chaque saisie."}
-        actions={<ScopeToggle value={scope} onChange={setScope} />}
+        subtitle={d ? `Exercice ${d.fiscal_year.start.slice(0, 4)}, écritures validées arrêtées au ${fmtDate(d.as_of)}, montants hors taxes en GNF${d.companies.length > 1 ? `, ${d.companies.map((c) => c.name).join(" et ")}` : ""}.` : "Indicateurs calculés à chaque saisie."}
+        actions={
+          <>
+            <Field label="Arrêté au">
+              <Input type="date" value={asOf} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setAsOf(e.target.value)} className="w-40" />
+            </Field>
+            <ScopeToggle value={scope} onChange={setScope} />
+            <Button onClick={() => window.print()}>
+              <Printer className="h-4 w-4" /> Imprimer
+            </Button>
+          </>
+        }
       />
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {isLoading && !d && <Attente />}
-      {d && <DashboardBody key={scope} d={d} />}
+      {d && <DashboardBody key={`${scope}-${asOf}`} d={d} />}
     </div>
   );
 }
@@ -56,8 +65,8 @@ function Attente() {
         </div>
       </div>
       <div className="grid gap-5 xl:grid-cols-12">
-        <Squelette className="h-[330px] xl:col-span-8" />
-        <Squelette className="h-[330px] xl:col-span-4" />
+        <Squelette className="h-[330px] xl:col-span-6" />
+        <Squelette className="h-[330px] xl:col-span-6" />
       </div>
     </div>
   );
@@ -70,7 +79,19 @@ function DashboardBody({ d }: { d: Dashboard }) {
   const mois = d.revenue_by_month.map((m) => m.month);
   const maxCompte = Math.max(1, ...d.cash_by_journal.map((c) => Math.abs(c.balance)));
   const activites = [...d.by_activity].sort((a, b) => b.margin - a.margin).slice(0, 6);
-  const maxDscr = Math.max(2, Math.ceil(((d.dscr ?? 0) * 1.25) / 0.5) * 0.5);
+  const parts = [...d.by_activity].filter((a) => a.income > 0).sort((a, b) => b.income - a.income);
+  const th = d.thresholds;
+  // Minimum de la règle d'alerte ; null : seuil à 0 (règle éteinte), le DSCR n'est pas jugé.
+  const dscrMin = th.dscr_min;
+  const maxDscr = Math.max(2, Math.ceil(((d.dscr ?? 0) * 1.25) / 0.5) * 0.5, (dscrMin ?? 1) + 0.5);
+  const wc = d.working_capital;
+  const ecl = d.expected_credit_loss.total;
+  const budget = d.budget;
+  const budgetCa = budget && budget.revenue.budget ? budget.revenue : null;
+  const fin = d.cash_forecast.month_end;
+  const groupe = d.companies.length > 1;
+  const transport = d.transport && d.transport.vehicles.count > 0 ? d.transport : null;
+  const alertes = d.alerts.filter((a) => a.status === "alert");
 
   return (
     <div className="space-y-5">
@@ -82,11 +103,12 @@ function DashboardBody({ d }: { d: Dashboard }) {
               <h2 className="text-[16.5px] font-semibold text-ink">Trésorerie nette</h2>
               <p className="mt-0.5 text-[12.5px] text-muted">
                 {d.cash_by_journal.length} compte{d.cash_by_journal.length > 1 ? "s" : ""} de banque et caisse, au {fmtDate(d.as_of)}
+                {th.cash_min ? `, seuil de sécurité ${fmtShort(th.cash_min)}` : ""}
               </p>
             </div>
-            <IconTile icon={Landmark} teinte="jade" />
+            <IconTile icon={Landmark} teinte={th.cash_min && d.cash < th.cash_min ? "danger" : "jade"} />
           </div>
-          <Compteur value={d.cash} className={cx("relative mt-5 text-[30px] sm:text-[44px] xl:text-[34px] 2xl:text-[46px]", d.cash < 0 ? "text-danger" : "text-ink")} />
+          <Compteur value={d.cash} className={cx("relative mt-5 text-[30px] sm:text-[44px] xl:text-[34px] 2xl:text-[46px]", d.cash < 0 || (th.cash_min && d.cash < th.cash_min) ? "text-danger" : "text-ink")} />
           {d.cash_by_journal.length === 0 ? (
             <p className="mt-6 text-sm text-muted">Aucun compte de trésorerie.</p>
           ) : (
@@ -115,38 +137,72 @@ function DashboardBody({ d }: { d: Dashboard }) {
         </section>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
+          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(d.revenue_month)} icon={TrendingUp} teinte="azur" delta={variation} hint={variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent"} />
           <Kpi
-            label="Chiffre d'affaires du mois"
-            value={fmtShort(d.revenue_month)}
-            icon={TrendingUp}
-            teinte="azur"
-            delta={variation}
-            hint={variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent"}
+            label="Chiffre d'affaires de l'exercice"
+            value={fmtShort(d.margins.revenue)}
+            icon={Target}
+            teinte="jade"
+            tone={budgetCa && (budgetCa.gap_pct ?? 0) < -(budget?.threshold_pct ?? 10) ? "warn" : "neutral"}
+            hint={budgetCa ? `Budget ${fmtShort(budgetCa.budget)} · écart ${fmtPct(budgetCa.gap_pct)}` : "Aucun budget de produits"}
           />
-          <Kpi label="Résultat de l'exercice" value={fmtShort(d.net_result_fy)} icon={PieChart} teinte={d.net_result_fy < 0 ? "danger" : "ambre"} tone={d.net_result_fy < 0 ? "danger" : "accent"} hint={`EBE : ${fmtShort(d.ebe_fy)}`} />
+          <Kpi label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} icon={PieChart} teinte="or" tone={d.ebe_fy < 0 ? "danger" : "neutral"} hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`} />
+          <Kpi label="Résultat net de l'exercice" value={fmtShort(d.net_result_fy)} icon={Calculator} teinte={d.net_result_fy < 0 ? "danger" : "ambre"} tone={d.net_result_fy < 0 ? "danger" : "accent"} hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après IFRS 9 : ${fmtShort(d.net_result_fy - ecl)}`} />
           <Kpi
-            label="Encours clients"
-            value={fmtShort(d.receivables.total)}
+            label="Délai de recouvrement (DSO)"
+            value={wc.dso === null ? "–" : `${fmtDec(Math.round(wc.dso))} j`}
             icon={Receipt}
             teinte="rose"
-            tone={d.receivables.overdue > 0 ? "warn" : "neutral"}
-            hint={`${d.receivables.documents} pièce${d.receivables.documents > 1 ? "s" : ""}, dont ${fmtShort(d.receivables.overdue)} échu`}
+            tone={wc.dso !== null && th.dso_target_days ? (wc.dso > th.dso_target_days ? "danger" : "ok") : "neutral"}
+            hint={th.dso_target_days ? `Cible ${th.dso_target_days} jours · créances échues ${fmtPct(wc.overdue_share_pct)}` : "Cible de recouvrement non fixée"}
           />
           <Kpi
-            label="Dette financière"
-            value={fmtShort(d.debt.outstanding)}
+            label="Couverture de la dette (DSCR)"
+            value={ratio(d.dscr)}
             icon={HandCoins}
             teinte="lagon"
-            tone={d.debt.overdue > 0 ? "danger" : "neutral"}
-            hint={d.debt.next_due_date ? `Prochaine échéance le ${fmtDate(d.debt.next_due_date)} : ${fmtShort(d.debt.next_due_amount)}` : "Aucune échéance à venir"}
+            tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
+            hint={dscrMin ? `Minimum fixé : ${ratio(dscrMin)}` : "Minimum : seuil non fixé"}
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi
+          label={`Trésorerie prévue fin ${fin.label}`}
+          value={fmtShort(fin.end)}
+          icon={Coins}
+          teinte="azur"
+          tone={fin.end < 0 || (th.cash_min && fin.end < th.cash_min) ? "danger" : "ok"}
+          hint={`+ ${fmtShort(fin.receivables)} clients, - ${fmtShort(fin.payables)} fournisseurs, - ${fmtShort(fin.loans)} emprunts`}
+        />
+        {budget ? (
+          <Kpi
+            label="Réalisé contre budget cumulé"
+            value={fmtPct(budget.expenses.budget ? (budget.expenses.actual / budget.expenses.budget) * 100 : null)}
+            icon={Target}
+            teinte="or"
+            tone={budget.overruns.length ? "warn" : "ok"}
+            hint={`Charges ${fmtShort(budget.expenses.actual)} / ${fmtShort(budget.expenses.budget)} à fin ${fmtMonth(budget.through.slice(0, 7))}, ${budget.overruns.length} ligne(s) hors tolérance`}
+          />
+        ) : (
+          <Kpi label="Réalisé contre budget cumulé" value="–" icon={Target} teinte="or" hint="Aucun budget pour l'exercice (Activités et budget)" />
+        )}
+        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} icon={Coins} teinte="lagon" hint={`Cycle ${wc.cycle === null ? "–" : `${fmtDec(Math.round(wc.cycle))} j`} · DPO ${wc.dpo === null ? "–" : `${fmtDec(Math.round(wc.dpo))} j`}`} />
+        <Kpi
+          label="Dette financière"
+          value={fmtShort(d.debt.accounting_outstanding ?? d.debt.outstanding)}
+          icon={HandCoins}
+          teinte="corail"
+          tone={d.debt.overdue > 0 ? "danger" : Math.abs(d.debt.schedule_gap ?? 0) >= 1 ? "warn" : "neutral"}
+          hint={`Dette nette ${fmtShort(d.debt.net_debt)} · gearing ${ratio(d.debt.gearing)}${Math.abs(d.debt.schedule_gap ?? 0) >= 1 ? ` · écart échéancier ${fmtShort(d.debt.schedule_gap)}` : ""}`}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <Card
           title="Chiffre d'affaires et résultat par mois"
-          className="xl:col-span-8"
+          className="xl:col-span-6"
           actions={
             <span className="text-[12.5px] text-muted">
               Exercice : <span className="font-semibold tabular text-ink">{fmtShort(d.revenue_fy)}</span> facturés
@@ -163,141 +219,138 @@ function DashboardBody({ d }: { d: Dashboard }) {
                 { key: "ca", label: "Chiffre d'affaires", color: "#12956a", values: d.revenue_by_month.map((m) => m.amount) },
                 { key: "resultat", label: "Résultat", color: "#2d82dc", values: mois.map((m) => resultats.get(m) ?? 0) },
               ]}
-              height={230}
+              height={210}
               format={(v) => fmtGNF(v)}
             />
           )}
         </Card>
+        <Card
+          title="Trésorerie en fin de mois"
+          className="xl:col-span-6"
+          actions={
+            <Link href="/finance/pilotage?onglet=tresorerie" className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
+              Flux mensuels <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        >
+          <CourbeTresorerie data={d.cash_monthly} forecast={d.cash_forecast} />
+        </Card>
+      </div>
 
-        <Card title={`Alertes actives (${d.alerts.length})`} className="xl:col-span-4" padded={false}>
-          {d.alerts.length === 0 ? (
-            <p className="px-5 pb-6 pt-2 text-sm text-muted">Aucune alerte : les seuils fixés sont respectés.</p>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <Card
+          title={`Ce qui demande une décision${alertes.length ? ` (${Math.min(6, alertes.length)} sur ${alertes.length})` : ""}`}
+          className="xl:col-span-7"
+          padded={false}
+          actions={
+            <Link href="/finance/alertes" className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
+              Toutes les alertes <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        >
+          <div className="px-3 pb-3">
+            <Decisions alerts={d.decisions} groupe={groupe} />
+          </div>
+        </Card>
+        <Card title="Répartition du chiffre d'affaires par activité" className="xl:col-span-5">
+          {parts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted">Imputez les factures sur l&apos;axe Activité pour voir cette répartition.</p>
           ) : (
-            <ul className="max-h-[330px] space-y-1 overflow-y-auto px-3 pb-3">
-              {d.alerts.map((a, i) => {
-                const s = SEVERITY[a.severity] ?? SEVERITY.info!;
-                const corps = (
-                  <div className="flex items-start gap-3 rounded-xl px-2 py-2.5 transition-colors group-hover:bg-panel-2">
-                    <IconTile icon={s.icon} teinte={s.teinte} className="h-9 w-9 rounded-[10px]" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[13.5px] font-semibold text-ink">{a.title}</span>
-                        <span className={cx("flex-none text-[11.5px] font-semibold", s.texte)}>{s.label}</span>
-                      </div>
-                      <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-muted">
-                        {a.company}, {a.message}
-                        {a.value !== null && ` (${fmtGNF(a.value)})`}
-                      </div>
-                    </div>
-                    {a.link && <ChevronRight className="mt-2 h-4 w-4 flex-none text-line-strong transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />}
-                  </div>
-                );
-                return (
-                  <li key={i} className="group">
-                    {a.link ? (
-                      <Link href={a.link} className="block rounded-xl">
-                        {corps}
-                      </Link>
-                    ) : (
-                      corps
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <Donut parts={parts.slice(0, 6).map((a, i) => ({ key: String(a.analytic_account_id), label: a.name, value: a.income, color: GAMME[i % GAMME.length]! }))} format={(v) => fmtShort(v)} centre={{ titre: "Produits", valeur: fmtShort(parts.reduce((s, a) => s + a.income, 0)) }} />
           )}
         </Card>
       </div>
 
+      <Card title="Besoin en fonds de roulement et délais" actions={<span className="text-[12.5px] text-muted">Du {fmtDate(wc.date_from)} au {fmtDate(wc.date_to)} ({wc.days} jours)</span>}>
+        <CarteBfr wc={wc} thresholds={th} />
+      </Card>
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-12">
         <Card title="Ancienneté des créances clients" className="xl:col-span-5">
-          <Donut
-            parts={AGING.map(([key, label, color]) => ({ key, label, value: aging[key], color }))}
-            format={(v) => fmtShort(v)}
-            centre={{ titre: "Encours clients", valeur: fmtShort(d.receivables.total) }}
-          />
+          <Donut parts={AGING.map(([key, label, color]) => ({ key, label, value: aging[key], color }))} format={(v) => fmtShort(v)} centre={{ titre: "Encours clients", valeur: fmtShort(d.receivables.total) }} />
+          <p className="mt-3 text-[12.5px] leading-snug text-muted">
+            {fmtShort(aging.plus_90)} GNF dorment depuis plus de 90 jours ({d.receivables.aging_count?.plus_90 ?? 0} pièce(s)). Perte attendue IFRS 9 : {fmtShort(ecl)} GNF{d.expected_credit_loss.rate_pct !== null ? `, soit ${fmtPct(d.expected_credit_loss.rate_pct)} de l'encours` : ""}.
+          </p>
         </Card>
         <Card title="Couverture de la dette" className="xl:col-span-3">
           <Gauge
             value={d.dscr === null ? null : Math.round(d.dscr * 100) / 100}
             max={maxDscr}
             format={(v) => fmtDec(v)}
-            zones={[
-              { jusqua: 1, couleur: "#ec4f49", label: "Insuffisante" },
-              { jusqua: 1.2, couleur: "#df8f17", label: "Limite" },
-              { jusqua: maxDscr, couleur: "#12956a", label: "Confortable" },
-            ]}
-            sousTitre="DSCR sur 12 mois : EBE divisé par le service de la dette, 1,2 au moins attendu"
+            zones={
+              dscrMin
+                ? [
+                    { jusqua: 1, couleur: "#ec4f49", label: "Insuffisante" },
+                    { jusqua: dscrMin, couleur: "#df8f17", label: "Sous le minimum" },
+                    { jusqua: maxDscr, couleur: "#12956a", label: "Confortable" },
+                  ]
+                : [{ jusqua: maxDscr, couleur: "#9aa3b5", label: "Seuil non fixé" }]
+            }
+            sousTitre={`DSCR sur 12 mois : EBE divisé par le service de la dette, ${dscrMin ? `${ratio(dscrMin)} au moins (seuil fixé)` : "minimum non fixé (Administration > Seuils et taux)"}`}
             vide="Aucun service de dette sur 12 mois"
           />
         </Card>
-        <Card title="Indicateurs de l'exercice" className="lg:col-span-2 xl:col-span-4" padded={false}>
-          <ul className="px-5 pb-4">
-            <Ligne icon={TrendingUp} teinte="jade" label="Chiffre d'affaires" value={fmtShort(d.revenue_fy)} hint={fmtGNF(d.revenue_fy)} />
-            <Ligne icon={ShoppingCart} teinte="corail" label="Achats" value={fmtShort(d.purchases_fy)} hint={fmtGNF(d.purchases_fy)} />
-            <Ligne icon={Coins} teinte="azur" label="Encours fournisseurs" value={fmtShort(d.payables.total)} hint={`${d.payables.documents} pièce${d.payables.documents > 1 ? "s" : ""}, dont ${fmtShort(d.payables.overdue)} échu`} />
-            <Ligne icon={PieChart} teinte="or" label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} hint={`Résultat : ${fmtShort(d.net_result_fy)}`} />
-          </ul>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <Card title="Marge par activité" className="xl:col-span-5">
-          {activites.length === 0 ? (
+        <Card title={transport ? `Résultat par ensemble routier${transport.vehicles.basis === "net" ? " après structure" : ""}` : "Marge par activité"} className="lg:col-span-2 xl:col-span-4">
+          {transport ? (
+            <>
+              <RankBars items={transport.vehicles.items.slice(0, 8).map((v) => ({ key: String(v.key ?? v.label), label: v.label, value: v.result, detail: v.km !== null ? `${fmtShort(v.km)} km` : `CA ${fmtShort(v.revenue)}` }))} />
+              <p className="mt-3 text-[12.5px] leading-snug text-muted">
+                {transport.vehicles.basis === "net"
+                  ? `${transport.vehicles.deficit.length} camion(s) sur ${transport.vehicles.count} déficitaire(s) une fois les charges de structure absorbées.`
+                  : "Marge directe des rotations : le résultat après charges de structure s'affichera dès que le module transport le calcule."}
+              </p>
+            </>
+          ) : activites.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted">Imputez les pièces sur l&apos;axe Activité pour voir ce classement.</p>
           ) : (
             <RankBars items={activites.map((a) => ({ key: a.analytic_account_id, label: a.name, value: a.margin, detail: `Taux de marge ${fmtPct(a.margin_rate)}` }))} />
           )}
         </Card>
-        <Card
-          title="Résultat par activité"
-          className="xl:col-span-7"
-          padded={false}
-          actions={
-            <Link href="/finance/pilotage" className="inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
-              Activités et budget <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
-          }
-        >
-          <DataTable
-            rows={d.by_activity}
-            rowKey={(r) => r.analytic_account_id}
-            empty="Imputez les pièces sur l'axe Activité pour voir ce tableau."
-            columns={[
-              { key: "name", label: "Activité", render: (r) => <span className="font-medium text-ink">{r.name}</span> },
-              { key: "income", label: "Produits", align: "right", render: (r) => fmtShort(r.income) },
-              { key: "expense", label: "Charges", align: "right", render: (r) => fmtShort(r.expense) },
-              { key: "margin", label: "Marge", align: "right", render: (r) => <span className={cx("font-semibold", r.margin < 0 ? "text-danger" : "text-ink")}>{fmtShort(r.margin)}</span> },
-              {
-                key: "margin_rate",
-                label: "Taux de marge",
-                align: "right",
-                render: (r) => (
-                  <span className={cx("inline-block min-w-14 rounded-full px-2 py-0.5 text-center text-[12px] font-semibold", r.margin_rate === null ? "text-muted" : r.margin_rate < 0 ? "bg-danger-doux text-danger" : r.margin_rate < 15 ? "bg-warn-doux text-warn" : "bg-ok-doux text-ok-texte")}>
-                    {fmtPct(r.margin_rate)}
-                  </span>
-                ),
-              },
-            ]}
-          />
-        </Card>
+      </div>
+
+      <Card title="Les questions du dirigeant" padded={false}>
+        <QuestionsDirigeant questions={d.questions} />
+      </Card>
+
+      <Card
+        title="Résultat par activité"
+        padded={false}
+        actions={
+          <Link href="/finance/pilotage" className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
+            Activités et budget <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        }
+      >
+        <DataTable
+          rows={d.by_activity}
+          rowKey={(r) => r.analytic_account_id}
+          empty="Imputez les pièces sur l'axe Activité pour voir ce tableau."
+          columns={[
+            { key: "name", label: "Activité", render: (r) => <span className="font-medium text-ink">{r.name}</span> },
+            { key: "income", label: "Produits", align: "right", render: (r) => fmtShort(r.income) },
+            { key: "expense", label: "Charges", align: "right", render: (r) => fmtShort(r.expense) },
+            { key: "margin", label: "Marge", align: "right", render: (r) => <span className={cx("font-semibold", r.margin < 0 ? "text-danger" : "text-ink")}>{fmtShort(r.margin)}</span> },
+            {
+              key: "margin_rate",
+              label: "Taux de marge",
+              align: "right",
+              render: (r) => (
+                <span className={cx("inline-block min-w-14 rounded-full px-2 py-0.5 text-center text-[12px] font-semibold", r.margin_rate === null ? "text-muted" : r.margin_rate < 0 ? "bg-danger-doux text-danger" : r.margin_rate < 15 ? "bg-warn-doux text-warn" : "bg-ok-doux text-ok-texte")}>
+                  {fmtPct(r.margin_rate)}
+                </span>
+              ),
+            },
+          ]}
+        />
+      </Card>
+
+      <div className="no-print flex flex-wrap gap-2">
+        <Link href="/finance/alertes" className="inline-flex min-h-9 items-center rounded-[10px] border border-line bg-panel px-3.5 text-sm font-semibold text-ink hover:bg-panel-2">Toutes les alertes</Link>
+        <Link href="/finance/rapport" className="inline-flex min-h-9 items-center rounded-[10px] border border-line bg-panel px-3.5 text-sm font-semibold text-ink hover:bg-panel-2">Rapport mensuel</Link>
+        <Button variant="primary" onClick={() => window.print()}>
+          <Printer className="h-4 w-4" /> Imprimer ce tableau de bord
+        </Button>
       </div>
     </div>
-  );
-}
-
-/** Ligne d'indicateur : pastille d'icône, libellé et précision, valeur qui défile. */
-function Ligne({ icon, teinte, label, value, hint }: { icon: Icon; teinte: Teinte; label: string; value: string; hint?: ReactNode }) {
-  return (
-    <li className="flex items-center gap-3 border-b border-line py-3 last:border-0">
-      <IconTile icon={icon} teinte={teinte} className="h-9 w-9 rounded-[10px]" />
-      <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] font-medium text-ink-2">{label}</div>
-        {hint && <div className="truncate text-[12px] text-muted">{hint}</div>}
-      </div>
-      <div className="whitespace-nowrap font-display text-[20px] font-bold tracking-[-0.01em] text-ink">
-        <Valeur value={value} />
-      </div>
-    </li>
   );
 }

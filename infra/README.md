@@ -94,12 +94,25 @@ le script teste la connexion. Sans serveur, les relances s'impriment.
 
 ## Supervision
 
-`infra/monitor-install.sh` (une fois) planifie `monitor.sh` toutes les 5 minutes : conteneurs des
-deux environnements et leur santé, noyaux, applications web, disque (alerte à 85 %), sauvegardes,
-test de restauration réussi depuis moins de 40 jours. Il planifie aussi ce test, le 1er de chaque mois.
+`infra/monitor-install.sh` (une fois, à relancer après une mise à jour de ce script) planifie
+`monitor.sh` toutes les 5 minutes : conteneurs des deux environnements et leur santé, noyaux,
+applications web, disque (alerte à 85 %), sauvegardes (archivage et copie hors site des WAL de
+moins de 15 minutes), test de restauration réussi depuis moins de 40 jours, restauration à un
+instant donné réussie depuis moins de 100 jours, double authentification exigée en production
+(`eguitra_api.mfa_required` différent de 0). Il planifie aussi ces tests (le 1er de chaque mois ;
+chaque trimestre avec compte rendu, voir `backup/README.md`) et le rapport de disponibilité.
 Les alertes partent au changement d'état et toutes les 6 heures pendant une panne, vers
-`ALERT_WEBHOOK_URL` et/ou `ALERT_NTFY_URL` (`.env`) ; journal dans `logs/monitor.log`. Une fois les
-domaines publiés, ajouter une surveillance externe de disponibilité (sonde HTTPS).
+`ALERT_WEBHOOK_URL` et/ou `ALERT_NTFY_URL` (`.env`) ; journal dans `logs/monitor.log`, gardé 13 mois.
+
+Sonde externe : `HEARTBEAT_URL` (`.env`, par exemple un contrôle healthchecks.io attendu toutes les
+5 minutes) est appelée à chaque contrôle réussi ; le service externe alerte quand le signal cesse
+(serveur arrêté, réseau coupé), ce que le serveur ne peut pas signaler lui-même.
+
+Disponibilité (engagement de 99,5 % par mois) : `infra/availability-report.py [AAAA-MM]`, lancé
+seul le 1er de chaque mois pour le mois précédent, calcule la disponibilité de la production sur le
+journal de supervision (un créneau de 5 minutes sans contrôle compte comme indisponible) hors
+maintenances déclarées dans `logs/maintenances.txt` ; `release.sh` y inscrit chaque mise en
+production. Compte rendu : `logs/availability/AAAA-MM.md`.
 
 ## Accès techniques
 

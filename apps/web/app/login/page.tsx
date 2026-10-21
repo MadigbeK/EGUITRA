@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import type { CSSProperties } from "react";
-import { LogoSociete, MarqueCabinet, Monogramme, SIGNATURE } from "@/components/brand";
+import { LogoSociete, MarqueCabinet, Monogramme, SIGNATURE, moduleOf } from "@/components/brand";
 import { Check, FileText, FolderOpen, Landmark, Mail, Truck } from "@/components/icons";
-import { APPS, appFromHost, isAppCode, type AppCode } from "@/lib/config";
+import { APPS, appFromHost, isAppCode, isEspaceCode, type AppCode } from "@/lib/config";
 import { LoginForm } from "./LoginForm";
 
 const MESSAGES: Record<string, string> = {
@@ -45,8 +45,8 @@ export async function generateViewport({ searchParams }: { searchParams: Promise
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const app = await appOf(params);
-  // Finance et AxisPro s'ouvrent sur l'accueil NIMOVA, comme l'accueil d'Odoo.
-  const next = safeNext(params.next) ?? (app === "finance" || app === "axispro" ? "/accueil" : APPS[app].home);
+  // Finance, AxisPro et Analyse s'ouvrent sur l'accueil NIMOVA, comme l'accueil d'Odoo.
+  const next = safeNext(params.next) ?? (isEspaceCode(app) ? "/accueil" : APPS[app].home);
   const message = (params.error && MESSAGES[params.error]) || (params.message && MESSAGES[params.message]) || null;
   const portail = app === "portail";
 
@@ -61,7 +61,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <Monogramme className="h-11 w-11 drop-shadow-[0_8px_14px_rgb(20_47_41/0.3)]" />
               <span className="leading-none">
                 <span className="block font-display text-[21px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
-                <span className="mt-1 block text-[12.5px] font-semibold text-accent">{app === "mobile" ? "Rotations" : app === "axispro" ? "AxisPro" : "Finance"}</span>
+                <span className="mt-1 block text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
               </span>
             </span>
           )}

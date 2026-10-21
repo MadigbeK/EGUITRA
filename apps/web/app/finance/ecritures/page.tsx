@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Field, Input, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { MOVE_STATES, type Account, type Journal, type MoveSummary, type Paged } from "@/lib/finance-types";
+import type { Me } from "@/lib/types";
 import { fmtDate, fmtGNF } from "@/lib/format";
 
-interface Line { account_id: string; name: string; debit: string; credit: string }
-const emptyLine = (): Line => ({ account_id: "", name: "", debit: "", credit: "" });
+interface Line { account_id: string; name: string; debit: string; credit: string; axes: AxisChoice }
+const emptyLine = (): Line => ({ account_id: "", name: "", debit: "", credit: "", axes: {} });
+/** Les axes se proposent sur les comptes de gestion et d'immobilisation (classes 2, 6, 7 et 8). */
+const ANALYTIC_CLASSES = /^[2678]/;
 const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
 
 /** Modèles d'OD guidées : comptes proposés selon la nature de l'opération. */
@@ -23,6 +27,9 @@ const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; 
 
 export default function EntriesPage() {
   const { data, mutate } = useApi<Paged<MoveSummary>>("/finance/moves?type=entry&limit=100");
+  const { data: me } = useApi<Me>("/auth/me");
+  // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes ».
+  const libre = me?.rights?.free_accounts === true;
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   return (
@@ -31,11 +38,18 @@ export default function EntriesPage() {
         title="Journaux et opérations diverses"
         subtitle="Écritures d'OD guidées, toujours équilibrées. Les virements internes se saisissent dans Trésorerie."
         actions={
-          <Button variant="primary" onClick={() => setCreating(true)}>
+          <Button variant="primary" onClick={() => setCreating(true)} disabled={!libre}>
             <Plus className="h-4 w-4" /> Nouvelle OD
           </Button>
         }
       />
+      {me && !libre && (
+        <div className="mb-4">
+          <Notice tone="accent">
+            La saisie des opérations diverses demande le droit « Saisie libre des comptes » (Administration &gt; Utilisateurs) : vos pièces prennent le compte de leur catégorie de dépense, du type d&apos;opération ou de l&apos;activité.
+          </Notice>
+        </div>
+      )}
       <Card padded={false}>
         {!data ? (
           <Loading />
@@ -76,6 +90,9 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
   const credit = lines.reduce((a, l) => a + num(l.credit), 0);
   const balanced = Math.abs(debit - credit) < 0.5 && debit > 0;
   const accountOptions = (accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }));
+  const { data: axes } = useAxes();
+  const codeOf = (id: string) => accounts?.find((a) => String(a.id) === id)?.code ?? "";
+  const analytic = (l: Line) => Boolean(l.account_id) && ANALYTIC_CLASSES.test(codeOf(l.account_id));
 
   function applyTemplate(key: string) {
     setTemplate(key);
@@ -87,6 +104,7 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
         name: l.name,
         debit: "",
         credit: "",
+        axes: {},
       })),
     );
   }
@@ -101,7 +119,15 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
         date,
         ref,
         post,
-        lines: lines.filter((l) => l.account_id && (num(l.debit) || num(l.credit))).map((l) => ({ account_id: Number(l.account_id), name: l.name || ref, debit: num(l.debit), credit: num(l.credit) })),
+        lines: lines
+          .filter((l) => l.account_id && (num(l.debit) || num(l.credit)))
+          .map((l) => ({
+            account_id: Number(l.account_id),
+            name: l.name || ref,
+            debit: num(l.debit),
+            credit: num(l.credit),
+            analytic_distribution: analytic(l) ? toDistribution(l.axes) : undefined,
+          })),
       });
       onDone();
     } catch (e) {
@@ -156,7 +182,8 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           </thead>
           <tbody>
             {lines.map((l, i) => (
-              <tr key={i}>
+              <Fragment key={i}>
+              <tr>
                 <td className="px-2 py-1">
                   <Select value={l.account_id} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, account_id: e.target.value } : x)))} placeholder="Compte…" options={accountOptions} />
                 </td>
@@ -177,6 +204,14 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
                   )}
                 </td>
               </tr>
+              {analytic(l) && (
+                <tr>
+                  <td colSpan={5} className="px-2 pb-2">
+                    <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => setLines(lines.map((x, j) => (j === i ? { ...x, axes: next } : x)))} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
           <tfoot className="tabular font-semibold">

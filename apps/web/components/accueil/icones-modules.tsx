@@ -19,6 +19,9 @@ const A = "#2f86e6"; // azur
 const S = "#62c6f5"; // ciel
 const P = "#b7428f"; // prune
 const T = "#17c3b2"; // lagon
+const V = "#7c5ce6"; // violet (Analyse)
+const VC = "#c9b9ff"; // violet clair
+const VF = "#4a2f9c"; // violet foncé
 const B = "#ffffff";
 
 /** Rang dans la chorégraphie, et point fixe (en unités de la grille) pour les rotations. */
@@ -306,6 +309,144 @@ const DESSINS: Record<string, ReactNode> = {
       <rect x="20" y="40" width="8" height="2.4" rx="1.2" fill={M} />
     </>
   ),
+
+  /* Analyse : le radar de santé et ses constats. */
+  analyse: (
+    <>
+      <path className="a-pop" style={k(0)} d="M24 3.5 42 14v20L24 44.5 6 34V14Z" fill={V} />
+      <path className="a-pop" style={k(1)} d="M24 12.5 33.5 18v11L24 34.5 14.5 29V18Z" fill={VC} opacity=".55" />
+      <path className="a-trace" style={k(2)} pathLength={1} d="M24 11 35 20.5 30 33 17 31 13 19.5Z" fill="none" stroke={B} strokeWidth="2.6" strokeLinejoin="round" />
+      <circle className="a-pop" style={k(3)} cx="24" cy="24" r="3.4" fill={G} stroke={B} strokeWidth="2" />
+      <circle className="a-pop" style={k(4)} cx="35" cy="20.5" r="2.6" fill={B} />
+      <circle className="a-pop" style={k(5)} cx="13" cy="19.5" r="2.6" fill={B} />
+    </>
+  ),
+  rentabilite: (
+    <>
+      <rect className="a-pousse" style={k(0)} x="4" y="8" width="9" height="33" rx="2.5" fill={J} />
+      <rect className="a-pousse-x" style={k(1)} x="13" y="8" width="7" height="2.4" fill={F} opacity=".3" />
+      <rect className="a-pousse" style={k(2)} x="18" y="8" width="9" height="11" rx="2.5" fill={C} />
+      <rect className="a-pousse" style={k(3)} x="31" y="19" width="9" height="7" rx="2.5" fill={G} />
+      <rect className="a-pousse" style={k(4)} x="36.5" y="12" width="9" height="29" rx="2.5" fill={V} />
+      <rect x="2" y="41" width="44" height="3" rx="1.5" fill={F} opacity=".35" />
+    </>
+  ),
+  "an-tresorerie": (
+    <>
+      <path className="a-pop" style={k(1)} d="M24 26 C30 22 36 14 45 6v36H24Z" fill={VC} opacity=".5" />
+      <path className="a-pop" style={k(2)} d="M24 26 C30 27 36 30 45 38v4H24Z" fill={VC} opacity=".5" />
+      <path className="a-trace" style={k(0)} pathLength={1} d="M3 36 C9 34 14 24 24 26" fill="none" stroke={J} strokeWidth="4.5" strokeLinecap="round" />
+      <path className="a-trace" style={k(3)} pathLength={1} d="M24 26 C30 24 36 22 45 20" fill="none" stroke={V} strokeWidth="4.5" strokeDasharray="6 5" strokeLinecap="round" />
+      <circle className="a-pop" style={k(2)} cx="24" cy="26" r="4.2" fill={G} stroke={B} strokeWidth="2.2" />
+    </>
+  ),
+  "an-clients": (
+    <>
+      <path d="M6 42 42 6" stroke={F} strokeWidth="2.6" strokeDasharray="4 4" strokeLinecap="round" opacity=".45" />
+      <path className="a-pop" style={k(0)} d="M6 42 C12 41 22 39 30 32 S40 14 42 6V42Z" fill={VC} opacity=".55" />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M6 42 C12 41 22 39 30 32 S40 14 42 6" fill="none" stroke={V} strokeWidth="4.5" strokeLinecap="round" />
+      <circle className="a-pop" style={k(3)} cx="30" cy="32" r="4.2" fill={C} stroke={B} strokeWidth="2.2" />
+      <rect x="4" y="42" width="40" height="3" rx="1.5" fill={F} opacity=".35" />
+    </>
+  ),
+  "an-transport": (
+    <>
+      {[0, 1, 2].flatMap((l) =>
+        [0, 1, 2].map((c) => {
+          const couleurs = [J, M, G, C, J, VC, G, J, M];
+          return <rect key={`${l}${c}`} className="a-pop" style={k(l * 3 + c)} x={5 + c * 13} y={5 + l * 13} width="12" height="12" rx="3" fill={couleurs[l * 3 + c]} />;
+        }),
+      )}
+    </>
+  ),
+  "an-depenses": (
+    <>
+      <rect className="a-pop" style={k(0)} x="4" y="4" width="24" height="26" rx="4" fill={V} />
+      <rect className="a-pop" style={k(1)} x="30" y="4" width="14" height="15" rx="4" fill={C} />
+      <rect className="a-pop" style={k(2)} x="30" y="21" width="14" height="9" rx="3" fill={G} />
+      <rect className="a-pop" style={k(3)} x="4" y="32" width="15" height="12" rx="3.5" fill={T} />
+      <rect className="a-pop" style={k(4)} x="21" y="32" width="23" height="12" rx="3.5" fill={VC} />
+    </>
+  ),
+  "an-previsions": (
+    <>
+      <rect x="5" y="36" width="38" height="4" rx="2" fill={F} opacity=".3" />
+      <rect className="a-pousse-x" style={k(0)} x="5" y="36" width="24" height="4" rx="2" fill={V} />
+      <circle className="a-glisse" style={k(1)} cx="29" cy="38" r="6" fill={B} stroke={V} strokeWidth="3" />
+      <path className="a-trace" style={k(2)} pathLength={1} d="M6 27 C14 26 18 16 25 15 S36 10 42 6" fill="none" stroke={J} strokeWidth="4.5" strokeLinecap="round" />
+      <path className="a-pop" style={k(4)} d="M34 4h9v9Z" fill={G} />
+    </>
+  ),
+  "an-fiabilite": (
+    <>
+      <path className="a-pop" style={k(0)} d="M24 3 41 9.5v12c0 10-7 18.5-17 22-10-3.5-17-12-17-22v-12Z" fill={V} />
+      <path className="a-pop" style={k(1)} d="M24 9 36 13.5v8c0 7-5 13-12 15.5-7-2.5-12-8.5-12-15.5v-8Z" fill={VC} opacity=".5" />
+      <path className="a-trace" style={k(2)} pathLength={1} d="M16 24.5l5.5 5.5L33 18" fill="none" stroke={B} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  "an-portefeuille": (
+    <>
+      <path className="a-pousse-x" style={k(0)} d="M4 5h40l-6 11H10Z" fill={V} />
+      <path className="a-pousse-x" style={k(1)} d="M11 18h26l-4.5 10h-17Z" fill={VC} />
+      <path className="a-pousse-x" style={k(2)} d="M17 30h14l-3 9h-8Z" fill={G} />
+      <circle className="a-pop" style={k(4)} cx="24" cy="43" r="3" fill={J} />
+    </>
+  ),
+  "an-diagnostic": (
+    <>
+      {[0, 1, 2, 3].flatMap((l) =>
+        [0, 1, 2, 3].map((c) => {
+          const chaud = (l + c) % 5;
+          const couleur = chaud === 0 ? C : chaud === 1 ? G : chaud === 2 ? VC : chaud === 3 ? J : M;
+          return <rect key={`${l}${c}`} className="a-pop" style={k((l * 4 + c) % 8)} x={4 + c * 10.3} y={4 + l * 10.3} width="9.3" height="9.3" rx="2.2" fill={couleur} />;
+        }),
+      )}
+    </>
+  ),
+  "an-comites": (
+    <>
+      <rect x="4" y="4" width="40" height="40" rx="6" fill={VC} opacity=".4" />
+      <rect className="a-pop" style={k(0)} x="6" y="6" width="17" height="17" rx="3.5" fill={J} />
+      <rect className="a-pop" style={k(1)} x="25" y="6" width="17" height="17" rx="3.5" fill={B} />
+      <rect className="a-pop" style={k(2)} x="6" y="25" width="17" height="17" rx="3.5" fill={B} />
+      <rect className="a-pop" style={k(3)} x="25" y="25" width="17" height="17" rx="3.5" fill={J} />
+      <path className="a-trace" style={k(4)} pathLength={1} d="M10.5 14.5l3 3 5.5-6M29.5 33.5l3 3 5.5-6" fill="none" stroke={B} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle className="a-pop" style={k(5)} cx="33.5" cy="14.5" r="3" fill={C} />
+    </>
+  ),
+  "an-financements": (
+    <>
+      <path className="a-trace" style={k(0)} pathLength={1} d="M6 24 C18 24 24 9 42 9" fill="none" stroke={V} strokeWidth="7" strokeLinecap="round" />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M6 24 C18 24 24 24 42 24" fill="none" stroke={G} strokeWidth="7" strokeLinecap="round" />
+      <path className="a-trace" style={k(2)} pathLength={1} d="M6 24 C18 24 24 39 42 39" fill="none" stroke={J} strokeWidth="7" strokeLinecap="round" />
+      <rect className="a-pop" style={k(3)} x="2" y="14" width="7" height="20" rx="2.5" fill={F} />
+    </>
+  ),
+  "an-activite": (
+    <>
+      <rect className="a-pousse" style={k(0)} x="4" y="28" width="8" height="16" rx="2.5" fill={VC} />
+      <rect className="a-pousse" style={k(1)} x="15" y="20" width="8" height="24" rx="2.5" fill={V} />
+      <rect className="a-pousse" style={k(2)} x="26" y="33" width="8" height="11" rx="2.5" fill={VC} />
+      <rect className="a-pousse" style={k(3)} x="37" y="24" width="8" height="20" rx="2.5" fill={V} />
+      <circle className="a-pop" style={k(4)} cx="33" cy="13" r="10" fill={G} />
+      <path className="a-aiguille" style={pivot(33, 13, 5)} d="M33 13l4-4.5" stroke={F} strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M33 13V7" stroke={F} strokeWidth="2.6" strokeLinecap="round" opacity=".5" />
+    </>
+  ),
+  "an-risques": (
+    <>
+      <rect className="a-pop" style={k(0)} x="4" y="30" width="12" height="14" rx="3" fill={J} />
+      <rect className="a-pop" style={k(1)} x="18" y="30" width="12" height="14" rx="3" fill={M} />
+      <rect className="a-pop" style={k(2)} x="32" y="30" width="12" height="14" rx="3" fill={G} />
+      <rect className="a-pop" style={k(1)} x="4" y="17" width="12" height="11" rx="3" fill={M} />
+      <rect className="a-pop" style={k(2)} x="18" y="17" width="12" height="11" rx="3" fill={G} />
+      <rect className="a-pop" style={k(3)} x="32" y="17" width="12" height="11" rx="3" fill={C} />
+      <rect className="a-pop" style={k(2)} x="4" y="4" width="12" height="11" rx="3" fill={G} />
+      <rect className="a-pop" style={k(3)} x="18" y="4" width="12" height="11" rx="3" fill={C} />
+      <rect className="a-pop" style={k(4)} x="32" y="4" width="12" height="11" rx="3" fill={VF} />
+      <circle className="a-pop" style={k(6)} cx="38" cy="9.5" r="3.2" fill={B} />
+    </>
+  ),
 };
 
 /** Icône d'un module par son adresse (et deux cas propres à l'accueil : réglages, Rotations). */
@@ -338,6 +479,20 @@ const PAR_ADRESSE: Record<string, string> = {
   "/axispro/pieces": "pieces",
   reglages: "parametres",
   "/mobile": "rotations",
+  "/analyse": "analyse",
+  "/analyse/rentabilite": "rentabilite",
+  "/analyse/tresorerie": "an-tresorerie",
+  "/analyse/clients": "an-clients",
+  "/analyse/transport": "an-transport",
+  "/analyse/depenses": "an-depenses",
+  "/analyse/previsions": "an-previsions",
+  "/analyse/fiabilite": "an-fiabilite",
+  "/analyse/portefeuille": "an-portefeuille",
+  "/analyse/diagnostic": "an-diagnostic",
+  "/analyse/comites": "an-comites",
+  "/analyse/financements": "an-financements",
+  "/analyse/activite": "an-activite",
+  "/analyse/risques": "an-risques",
 };
 
 export function IconeModule({ cle, className }: { cle: string; className?: string }) {

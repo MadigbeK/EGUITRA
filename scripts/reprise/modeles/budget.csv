@@ -1,5 +1,7 @@
-compte;mois;montant
-706100;1;60 000 000
-706100;2;60 000 000
-604200;1;12 000 000
-604200;2;12 000 000
+compte;mois;montant;activite;centre_cout;ligne
+706100;1;60 000 000;Transport pétrolier;;Prestations de transport
+706100;2;60 000 000;Transport pétrolier;;Prestations de transport
+604200;1;12 000 000;Transport pétrolier;Parc de Matoto;Carburant
+604200;2;12 000 000;Transport pétrolier;Parc de Matoto;Carburant
+6611, 664;1;30 000 000;;;Salaires et charges sociales
+résiduel;1;5 000 000;;;Autres charges d'exploitation

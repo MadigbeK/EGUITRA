@@ -45,14 +45,21 @@ class EguitraFinanceMetrics(models.AbstractModel):
         )
         return float(self.env.cr.fetchone()[0])
 
-    def account_balances(self, companies, date_to, date_from=None):
-        """Solde par code de compte (toutes sociétés confondues), à une date ou sur une période."""
+    def account_balances(self, companies, date_to, date_from=None, exclude_partner_ids=None):
+        """Solde par code de compte (toutes sociétés confondues), à une date ou sur une période ;
+        exclude_partner_ids écarte les lignes de ces tiers (éliminations intra-groupe)."""
         self.env.flush_all()  # les requêtes SQL doivent voir les écritures en attente
         where = ["aml.parent_state = 'posted'", "aml.company_id = ANY(%(companies)s)", "aml.date <= %(date_to)s"]
         params = {"companies": list(companies.ids), "date_to": date_to}
         if date_from:
             where.append("aml.date >= %(date_from)s")
             params["date_from"] = date_from
+        if exclude_partner_ids:
+            # Les comptes de trésorerie restent : un règlement entre sociétés du groupe déplace la
+            # trésorerie de l'une à l'autre, le total du groupe n'en change pas.
+            where.append("(aml.partner_id IS NULL OR aml.partner_id <> ALL(%(excluded)s) "
+                         "OR aa.account_type = 'asset_cash')")
+            params["excluded"] = list(exclude_partner_ids)
         self.env.cr.execute(
             f"""SELECT {ACC_CODE} AS code, SUM(aml.balance)
                   FROM account_move_line aml
@@ -121,36 +128,43 @@ class EguitraFinanceMetrics(models.AbstractModel):
         return rows
 
     def open_items(self, companies, account_type, today):
-        """Encours non lettrés (clients ou fournisseurs), échu et ancienneté par tranche."""
+        """Encours non lettrés (clients ou fournisseurs) des pièces datées au plus tard ce jour :
+        échu, ancienneté par tranche, nombre de pièces par tranche. Les restes à payer sont ceux du
+        jour du calcul (un règlement postérieur à la date d'arrêté est déjà déduit)."""
         self.env.flush_all()  # les requêtes SQL doivent voir les écritures en attente
+        buckets = {
+            "non_echu": "aml.date_maturity >= %(today)s OR aml.date_maturity IS NULL",
+            "1_30": "%(today)s - aml.date_maturity BETWEEN 1 AND 30",
+            "31_60": "%(today)s - aml.date_maturity BETWEEN 31 AND 60",
+            "61_90": "%(today)s - aml.date_maturity BETWEEN 61 AND 90",
+            "plus_90": "%(today)s - aml.date_maturity > 90",
+        }
+        amounts = ", ".join(f"COALESCE(SUM(CASE WHEN {cond} THEN aml.amount_residual END), 0)" for cond in buckets.values())
+        counts = ", ".join(f"COUNT(DISTINCT CASE WHEN {cond} THEN aml.move_id END)" for cond in buckets.values())
         self.env.cr.execute(
-            """SELECT COALESCE(SUM(aml.amount_residual), 0),
-                      COALESCE(SUM(CASE WHEN aml.date_maturity < %(today)s THEN aml.amount_residual END), 0),
-                      COUNT(DISTINCT aml.move_id),
-                      COALESCE(SUM(CASE WHEN aml.date_maturity >= %(today)s OR aml.date_maturity IS NULL THEN aml.amount_residual END), 0),
-                      COALESCE(SUM(CASE WHEN %(today)s - aml.date_maturity BETWEEN 1 AND 30 THEN aml.amount_residual END), 0),
-                      COALESCE(SUM(CASE WHEN %(today)s - aml.date_maturity BETWEEN 31 AND 60 THEN aml.amount_residual END), 0),
-                      COALESCE(SUM(CASE WHEN %(today)s - aml.date_maturity BETWEEN 61 AND 90 THEN aml.amount_residual END), 0),
-                      COALESCE(SUM(CASE WHEN %(today)s - aml.date_maturity > 90 THEN aml.amount_residual END), 0)
-                 FROM account_move_line aml
-                 JOIN account_account aa ON aa.id = aml.account_id
-                WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
-                  AND aa.account_type = %(account_type)s AND NOT aml.reconciled""",
+            f"""SELECT COALESCE(SUM(aml.amount_residual), 0),
+                       COALESCE(SUM(CASE WHEN aml.date_maturity < %(today)s THEN aml.amount_residual END), 0),
+                       COUNT(DISTINCT aml.move_id),
+                       COUNT(DISTINCT CASE WHEN aml.date_maturity < %(today)s THEN aml.move_id END),
+                       {amounts}, {counts}
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                 WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
+                   AND aa.account_type = %(account_type)s AND NOT aml.reconciled AND aml.date <= %(today)s""",
             {"today": today, "companies": list(companies.ids), "account_type": account_type},
         )
-        total, overdue, count, current, b30, b60, b90, older = (float(v) for v in self.env.cr.fetchone())
+        row = self.env.cr.fetchone()
+        total, overdue, count, overdue_count = float(row[0]), float(row[1]), int(row[2]), int(row[3])
+        values = [float(v) for v in row[4:4 + len(buckets)]]
+        numbers = [int(v) for v in row[4 + len(buckets):]]
         sign = -1 if account_type == "liability_payable" else 1
         return {
             "total": sign * total,
             "overdue": sign * overdue,
-            "documents": int(count),
-            "aging": {
-                "non_echu": sign * current,
-                "1_30": sign * b30,
-                "31_60": sign * b60,
-                "61_90": sign * b90,
-                "plus_90": sign * older,
-            },
+            "documents": count,
+            "overdue_documents": overdue_count,
+            "aging": {key: sign * value for key, value in zip(buckets, values)},
+            "aging_count": dict(zip(buckets, numbers)),
         }
 
     def monthly_series(self, companies, months, today, prefixes, sign=-1):
@@ -234,6 +248,7 @@ class EguitraFinanceMetrics(models.AbstractModel):
             "revenue_prev_month": self.revenue(companies, pm_start, pm_end),
             "net_result_fy": statement["totals"].get("XI", 0.0),
             "ebe_fy": statement["totals"].get("XD", 0.0),
+            "income_totals": statement["totals"],
             "purchases_fy": self.purchases(companies, fy_start, today),
             "cash": self.cash(companies, today),
             "cash_by_journal": self.cash_by_journal(companies, today),

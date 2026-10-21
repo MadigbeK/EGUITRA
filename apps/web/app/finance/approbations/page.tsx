@@ -34,7 +34,7 @@ export default function ApprovalsPage() {
   const rows = tab === "inbox" ? inbox : list;
   return (
     <div>
-      <PageHeader title="À valider" subtitle="Corbeille de validation : pièces d'achat et règlements soumis au circuit d'approbation, par seuil et par niveau." />
+      <PageHeader title="À valider" subtitle="Corbeille de validation : engagements de dépense, pièces d'achat, règlements et décaissements soumis au circuit d'approbation, par seuil et par niveau." />
       <Tabs
         tabs={[
           { key: "inbox", label: "Ma corbeille", count: inbox?.length },
@@ -205,7 +205,7 @@ function Rules() {
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Investissements : accord de la direction" />
           </Field>
           <Field label="Nature">
-            <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "entry", label: "Opérations diverses" }]} />
+            <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
           </Field>
           <Field label="Approbateur">
             <Select value={form.approver_profile} onChange={(e) => setForm({ ...form, approver_profile: e.target.value })} options={[{ value: "finance", label: "Finance" }, { value: "direction", label: "Direction générale" }, { value: "admin", label: "Administration" }]} />

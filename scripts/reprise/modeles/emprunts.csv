@@ -1,0 +1,2 @@
+reference;preteur;nature;objet;montant;date_deblocage;premiere_echeance;duree_mois;compte_dette;compte_interets;journal;taux;periodicite
+EMP-901;Exemple Banque SA;emprunt;Acquisition d'un ensemble routier;600 000 000;01/03/2025;05/04/2025;36;162100;671200;BNK1;12;mensuelle

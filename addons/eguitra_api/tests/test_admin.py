@@ -69,12 +69,12 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 422, body)
         self.assertIn("MB AxisPro Consulting", body["message"])
         status, user = self.call("POST", "/admin/users", dict(compte, company_ids=[cabinet.id]), token=token)
-        self.assertEqual((status, user["apps"]), (200, ["axispro"]), user)
+        self.assertEqual((status, sorted(user["apps"])), (200, ["analyse", "axispro"]), user)
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "chantiers"]}, token=token)
         self.assertEqual(status, 422, "Le profil chantiers exige EGUITRA GROUP")
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "finance"]}, token=token)
-        self.assertEqual((status, sorted(body["apps"])), (200, ["axispro", "finance"]),
-                         "Un comptable du cabinet ouvre Finance et AxisPro Suite, dans le seul cabinet")
+        self.assertEqual((status, sorted(body["apps"])), (200, ["analyse", "axispro", "finance"]),
+                         "Un comptable du cabinet ouvre Finance, AxisPro Suite et Analyse, dans le seul cabinet")
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual({p["code"]: p["entity"] for p in profils}["cabinet"], "cabinet")
 

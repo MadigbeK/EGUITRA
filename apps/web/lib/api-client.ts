@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { type SWRConfiguration } from "swr";
-import type { ApiErrorBody } from "./types";
+import type { ApiErrorBody, Me } from "./types";
 
 /** Erreur d'appel à l'API, avec le message destiné à l'utilisateur. */
 export class ApiError extends Error {
@@ -13,6 +13,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Page où l'utilisateur au mot de passe provisoire choisit le sien. */
+const PAGE_MOT_DE_PASSE = "/compte/mot-de-passe";
+
 function onUnauthenticated() {
   const here = window.location.pathname + window.location.search;
   const app = window.location.pathname.split("/")[1] || "finance";
@@ -22,7 +25,7 @@ function onUnauthenticated() {
 /** Application de la page courante (premier segment du chemin), transmise à la passerelle. */
 function appHeader(): Record<string, string> {
   const app = window.location.pathname.split("/")[1] ?? "";
-  return ["finance", "axispro", "portail", "mobile"].includes(app) ? { "X-Eguitra-App": app } : {};
+  return ["finance", "axispro", "portail", "mobile", "analyse"].includes(app) ? { "X-Eguitra-App": app } : {};
 }
 
 async function parse(res: Response) {
@@ -33,7 +36,8 @@ async function parse(res: Response) {
   const text = await res.text();
   const body = text ? (JSON.parse(text) as unknown) : null;
   if (res.status === 403 && (body as ApiErrorBody | null)?.error === "password_change_required") {
-    window.location.href = "/compte/mot-de-passe";
+    // Déjà sur la page de changement : la recharger relancerait les mêmes appels, sans fin.
+    if (!window.location.pathname.startsWith(PAGE_MOT_DE_PASSE)) window.location.href = PAGE_MOT_DE_PASSE;
   }
   if (!res.ok) throw new ApiError(res.status, (body as ApiErrorBody) ?? { error: "error" });
   return body;
@@ -86,4 +90,14 @@ export function useApi<T>(path: string | null, config?: SWRConfiguration<T, ApiE
     shouldRetryOnError: false,
     ...config,
   });
+}
+
+/**
+ * Droit « Saisie libre des comptes » de l'utilisateur (session) : sans lui, la ligne prend le compte de
+ * sa catégorie, du type d'opération ou de l'activité, et les opérations diverses sont refusées. Faux
+ * tant que la session n'est pas lue : le choix du compte n'apparaît qu'une fois le droit confirmé.
+ */
+export function useSaisieLibre(enabled = true): boolean {
+  const { data } = useApi<Me>(enabled ? "/auth/me" : null);
+  return data?.rights?.free_accounts === true;
 }

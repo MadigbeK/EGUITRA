@@ -1,7 +1,9 @@
 """Relances des clients : niveaux selon le retard, file d'envoi, lettres, envoi par courriel.
 
 Chaque nuit, les factures clients échues et non soldées sont regroupées par client ; une relance
-est créée quand le retard atteint un nouveau niveau (rappel, relance ferme, mise en demeure).
+est créée quand le retard atteint un nouveau niveau (rappel, relance ferme, mise en demeure). Les
+créances reprises de l'ancien système (à-nouveaux et écritures de la reprise, éclatés par facture
+avec leur échéance) sont relancées comme les factures.
 Les deux premiers niveaux partent seuls par courriel si le client a une adresse et si un serveur
 d'envoi est paramétré ; la mise en demeure attend toujours la décision de la finance.
 """
@@ -24,6 +26,15 @@ def _gnf(amount):
     return f"{amount:,.0f}".replace(",", " ") + " GNF"
 
 
+def _taken_name(line):
+    """Référence d'une créance reprise : libellé de la ligne d'à-nouveau (« Facture … du … »), sinon
+    numéro de la pièce de l'ancien système (référence « Reprise … » de l'écriture)."""
+    ref = line.move_id.ref or ""
+    if line.move_id.journal_id.code != "AN" and ref.startswith("Reprise "):
+        return ref[len("Reprise "):]
+    return line.name or ref or line.move_id.name
+
+
 class EguitraReminder(models.Model):
     _name = "eguitra.reminder"
     _description = "Relance client"
@@ -37,6 +48,9 @@ class EguitraReminder(models.Model):
     days_overdue = fields.Integer("Retard (jours)")
     amount_due = fields.Monetary("Montant échu")
     invoice_ids = fields.Many2many("account.move", string="Factures relancées")
+    line_ids = fields.Many2many("account.move.line", "eguitra_reminder_move_line_rel", "reminder_id", "line_id",
+                                string="Créances reprises relancées",
+                                help="Factures de l'ancien système reprises en écritures (à-nouveaux, reprise).")
     state = fields.Selection([("to_send", "À envoyer"), ("sent", "Envoyée"), ("cancelled", "Annulée")],
                              default="to_send", required=True, index=True)
     channel = fields.Selection([("email", "Courriel"), ("letter", "Courrier remis ou posté")], "Envoi")
@@ -59,17 +73,29 @@ class EguitraReminder(models.Model):
         thresholds = self._thresholds()
         created = self.browse()
         for company in companies or self.env["res.company"].search([]):
+            # Une facture en litige n'est pas relancée tant que le litige dure.
             invoices = self.env["account.move"].search([
                 ("company_id", "=", company.id), ("move_type", "=", "out_invoice"), ("state", "=", "posted"),
                 ("payment_state", "in", ("not_paid", "partial")), ("invoice_date_due", "<", today),
+                ("eguitra_dispute", "=", False),
             ])
-            for partner in invoices.partner_id.commercial_partner_id:
+            # Créances reprises : lignes client ouvertes et échues des écritures (pas des factures).
+            lines = self.env["account.move.line"].search([
+                ("company_id", "=", company.id), ("account_id.account_type", "=", "asset_receivable"),
+                ("parent_state", "=", "posted"), ("move_id.move_type", "=", "entry"), ("reconciled", "=", False),
+                ("amount_residual", ">", 0), ("date_maturity", "<", today), ("partner_id", "!=", False),
+                ("move_id.eguitra_dispute", "=", False),
+            ])
+            partners = invoices.partner_id.commercial_partner_id | lines.partner_id.commercial_partner_id
+            for partner in partners:
                 mine = invoices.filtered(lambda m, p=partner: m.partner_id.commercial_partner_id == p)
-                overdue = max((today - m.invoice_date_due).days for m in mine)
+                taken = lines.filtered(lambda line, p=partner: line.partner_id.commercial_partner_id == p)
+                dues = mine.mapped("invoice_date_due") + taken.mapped("date_maturity")
+                overdue = max((today - due).days for due in dues)
                 level = max((lvl for lvl, days in thresholds.items() if overdue >= days), default=None)
                 if not level:
                     continue
-                oldest_due = min(mine.mapped("invoice_date_due"))
+                oldest_due = min(dues)
                 already = self.search_count([
                     ("company_id", "=", company.id), ("partner_id", "=", partner.id), ("state", "!=", "cancelled"),
                     ("level", ">=", level), ("date", ">=", oldest_due),
@@ -78,8 +104,9 @@ class EguitraReminder(models.Model):
                     continue
                 reminder = self.create({
                     "company_id": company.id, "partner_id": partner.id, "date": today, "level": level,
-                    "days_overdue": overdue, "amount_due": sum(mine.mapped("amount_residual")),
-                    "invoice_ids": [(6, 0, mine.ids)],
+                    "days_overdue": overdue,
+                    "amount_due": sum(mine.mapped("amount_residual")) + sum(taken.mapped("amount_residual")),
+                    "invoice_ids": [(6, 0, mine.ids)], "line_ids": [(6, 0, taken.ids)],
                 })
                 created |= reminder
         return created
@@ -112,11 +139,16 @@ class EguitraReminder(models.Model):
             "level": self.level,
             "level_label": dict(LEVELS)[self.level],
             "intro": intro,
-            "invoices": [
+            "invoices": sorted([
                 {"name": m.name, "date": m.invoice_date, "due": m.invoice_date_due, "total": m.amount_total,
                  "residual": m.amount_residual}
-                for m in self.invoice_ids.sorted("invoice_date_due")
-            ],
+                for m in self.invoice_ids
+            ] + [
+                # Facture de l'ancien système : libellé de l'à-nouveau, sinon numéro de la pièce reprise.
+                {"name": _taken_name(line), "date": line.date, "due": line.date_maturity,
+                 "total": line.balance, "residual": line.amount_residual}
+                for line in self.line_ids
+            ], key=lambda i: (i["due"] or fields.Date.today(), i["name"] or "")),
             "amount_due": self.amount_due,
             "closing": "Si votre règlement a croisé ce courrier, nous vous prions de ne pas en tenir compte.",
         }

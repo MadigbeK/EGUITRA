@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Produits transportés livrés avec le module, communs aux sociétés (codes repris de l'ancienne
+    liste figée : l'application Rotations et les fichiers de reprise les échangent). La finance
+    les complète ou en ajoute dans Finance > Transport > Paramètres. Masses volumiques à 15 °C :
+    valeurs usuelles des produits (kg/m³), remplacées sur chaque rotation par celle du bon de
+    chargement ; prix de valorisation des manquants à saisir.
+-->
+<odoo noupdate="1">
+    <record id="product_gasoil" model="eguitra.transport.product">
+        <field name="name">Gasoil</field>
+        <field name="code">gasoil</field>
+        <field name="density_15">840</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="product_essence" model="eguitra.transport.product">
+        <field name="name">Essence</field>
+        <field name="code">essence</field>
+        <field name="density_15">745</field>
+        <field name="sequence">2</field>
+    </record>
+    <record id="product_jet" model="eguitra.transport.product">
+        <field name="name">Jet A1</field>
+        <field name="code">jet</field>
+        <field name="density_15">800</field>
+        <field name="sequence">3</field>
+    </record>
+    <record id="product_petrole" model="eguitra.transport.product">
+        <field name="name">Pétrole lampant</field>
+        <field name="code">petrole</field>
+        <field name="density_15">800</field>
+        <field name="sequence">4</field>
+    </record>
+    <record id="product_fuel" model="eguitra.transport.product">
+        <field name="name">Fuel</field>
+        <field name="code">fuel</field>
+        <field name="density_15">960</field>
+        <field name="sequence">5</field>
+    </record>
+    <record id="product_autre" model="eguitra.transport.product">
+        <field name="name">Autre produit</field>
+        <field name="code">autre</field>
+        <field name="sequence">9</field>
+    </record>
+</odoo>
