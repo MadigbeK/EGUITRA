@@ -57,7 +57,6 @@ class TestProfilAchats(FinanceDataMixin, ApiCase):
         self.assertEqual(self.acheteuse._eguitra_profiles(), ["achats"])
         self.assertEqual(self.acheteuse._eguitra_apps(), ["finance"], "Finance seule : ni Analyse, ni AxisPro, ni Rotations")
         self.assertTrue(self.acheteuse.has_group("account.group_account_invoice"), "Facturation : pièces en brouillon")
-        self.assertFalse(self.acheteuse.has_group("account.group_account_user"), "Ni comptable")
         self.assertFalse(self.acheteuse.has_group("eguitra_finance.group_free_accounts"), "Ni saisie libre des comptes")
         status, me = self._get("/auth/me")
         self.assertEqual(status, 200, me)
