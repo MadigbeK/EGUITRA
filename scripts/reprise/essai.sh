@@ -5,7 +5,8 @@
 #   scripts/reprise/essai.sh dossier-des-fichiers [base]
 # Le dossier contient les fichiers de reprise et reference.json (scripts/reprise/README.md). Base jetable
 # par défaut : eguitra_reprise_essai (remplacée à chaque essai). Variables transmises à reprise.sh :
-# REPRISE_DATE_OUVERTURE (défaut AAAA-01-01 de l'année en cours), REPRISE_BUDGET_ANNEE, REPRISE_SOCIETE.
+# REPRISE_DATE_OUVERTURE (défaut AAAA-01-01 de l'année en cours), REPRISE_BUDGET_ANNEE, REPRISE_SOCIETE,
+# REPRISE_CONVENTION_AMORTISSEMENT (README, « Convention d'amortissement des biens repris »).
 set -euo pipefail
 [ $# -ge 1 ] || { echo "Usage : scripts/reprise/essai.sh dossier-des-fichiers [base]" >&2; exit 2; }
 DIR=$(cd "$1" && pwd)
