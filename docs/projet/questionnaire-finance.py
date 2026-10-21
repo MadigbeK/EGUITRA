@@ -11,8 +11,7 @@ Source unique des questions : la liste THEMES ci-dessous.
 
 from pathlib import Path
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from questionnaire_commun import write_markdown, write_xlsx
 
 HERE = Path(__file__).parent
 XLSX = HERE / "Questionnaire_parametrage_finance.xlsx"
@@ -120,105 +119,15 @@ THEMES = [
     ]),
 ]
 
-FOREST, SAGE, LINE = "1F3A33", "EEF3F0", "D9E1DC"
-THIN = Side(style="thin", color=LINE)
-BOTTOM = Border(bottom=THIN)
 
-
-def numbered():
-    n = 0
-    for theme, questions in THEMES:
-        items = []
-        for question, qui, piece in questions:
-            n += 1
-            items.append((n, question, qui, piece))
-        yield theme, items
-
-
-def xlsx():
-    book = Workbook()
-    sheet = book.active
-    sheet.title = "Questions"
-    sheet.sheet_view.showGridLines = False
-    widths = {"A": 5, "B": 78, "C": 12, "D": 26, "E": 58}
-    for col, width in widths.items():
-        sheet.column_dimensions[col].width = width
-    sheet["A1"] = "Questionnaire de paramétrage : finance et comptabilité"
-    sheet["A1"].font = Font(bold=True, size=15, color=FOREST)
-    sheet["A2"] = "EGUITRA GROUP SARLU et MB AxisPro · plateforme NIMOVA"
-    sheet["A2"].font = Font(color="7A8A83")
-    sheet["A3"] = "Répondez dans la colonne Réponse ; une phrase suffit. Les premiers thèmes conditionnent la reprise des données 2026."
-    sheet["A3"].font = Font(italic=True, color="7A8A83")
-    row = 5
-    for c, title in enumerate(["N°", "Question", "À qui", "Pièce à fournir", "Réponse"], start=1):
-        cell = sheet.cell(row=row, column=c, value=title)
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor=FOREST)
-        cell.alignment = Alignment(vertical="center")
-    sheet.row_dimensions[row].height = 22
-    sheet.freeze_panes = "A6"
-    total = 0
-    for theme, items in numbered():
-        row += 1
-        cell = sheet.cell(row=row, column=1, value=theme)
-        cell.font = Font(bold=True, color=FOREST, size=12)
-        for c in range(1, 6):
-            sheet.cell(row=row, column=c).fill = PatternFill("solid", fgColor=SAGE)
-        sheet.row_dimensions[row].height = 22
-        for n, question, qui, piece in items:
-            row += 1
-            total += 1
-            for c, value in enumerate([n, question, qui, piece, ""], start=1):
-                cell = sheet.cell(row=row, column=c, value=value)
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
-                cell.border = BOTTOM
-                if c in (1, 3, 4):
-                    cell.font = Font(color="5C6B65")
-    pieces = book.create_sheet("Pièces à fournir")
-    pieces.sheet_view.showGridLines = False
-    for col, width in {"A": 44, "B": 12, "C": 14, "D": 16}.items():
-        pieces.column_dimensions[col].width = width
-    pieces["A1"] = "Pièces à fournir"
-    pieces["A1"].font = Font(bold=True, size=15, color=FOREST)
-    for c, title in enumerate(["Pièce", "Question", "Remise le", "Par"], start=1):
-        cell = pieces.cell(row=3, column=c, value=title)
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor=FOREST)
-    r = 3
-    for _theme, items in numbered():
-        for n, _q, _qui, piece in items:
-            if piece:
-                r += 1
-                for c, value in enumerate([piece, n, "", ""], start=1):
-                    cell = pieces.cell(row=r, column=c, value=value)
-                    cell.border = BOTTOM
-                pieces.cell(row=r, column=3).number_format = "DD/MM/YYYY"
-    for ws in (sheet, pieces):
-        ws.page_setup.orientation = "landscape"
-        ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-    sheet.print_title_rows = "5:5"
-    book.save(XLSX)
-    return total
-
-
-def markdown():
-    out = ["# Questionnaire de paramétrage", "",
-           "Finance et comptabilité d'EGUITRA GROUP SARLU et de MB AxisPro. Les réponses fixent le "
-           "réglage de la plateforme NIMOVA et la reprise du classeur 2026 ; les premiers thèmes sont les plus urgents. "
-           "Une phrase par réponse suffit, de préférence dans le classeur « Questionnaire_parametrage_finance.xlsx ».", ""]
-    pieces = []
-    for theme, items in numbered():
-        out += [f"## {theme}", ""]
-        for n, question, qui, piece in items:
-            out += [f"{n}. {question} ({qui})", ""]
-            if piece:
-                pieces.append(f"{piece} (question {n})")
-    out += ["## Pièces à fournir", ""] + [f"- {p}" for p in pieces] + [""]
-    MD.write_text("\n".join(out), encoding="utf-8", newline="\n")
-
+TITLE = "Questionnaire de paramétrage : finance et comptabilité"
+SUBTITLE = "EGUITRA GROUP SARLU et MB AxisPro · plateforme NIMOVA"
+NOTE = "Répondez dans la colonne Réponse ; une phrase suffit. Les premiers thèmes conditionnent la reprise des données 2026."
+INTRO = ("Finance et comptabilité d'EGUITRA GROUP SARLU et de MB AxisPro. Les réponses fixent le réglage de la "
+         "plateforme NIMOVA et la reprise du classeur 2026 ; les premiers thèmes sont les plus urgents. Une phrase par "
+         "réponse suffit, de préférence dans le classeur « Questionnaire_parametrage_finance.xlsx ».")
 
 if __name__ == "__main__":
-    total = xlsx()
-    markdown()
+    total = write_xlsx(XLSX, THEMES, TITLE, SUBTITLE, NOTE)
+    write_markdown(MD, THEMES, "Questionnaire de paramétrage", INTRO)
     print(f"{total} questions : {XLSX.name}, {MD.name}")
