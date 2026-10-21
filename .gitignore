@@ -20,3 +20,8 @@ infra/releases/
 infra/backup.env
 __pycache__/
 *.pyc
+
+# Vidéos du client (données confidentielles, jamais dans le dépôt)
+*.mp4
+*.mov
+*.mkv
