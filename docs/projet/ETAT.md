@@ -183,8 +183,12 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Essai de reprise outillé : `scripts/reprise/essai.sh dossier` (base jetable `eguitra_reprise_essai`,
   copie de la base modèle des tests, reprise enregistrée, dotations jusqu'à la date d'arrêté et
   résultat « n/26 » par `validation.py`, sans montant) remplace `~/essai_complet.sh` et
-  `~/validation_essai.py`. Essai du 21 octobre sur le dossier réel (convention `plateforme`) :
-  18/26, comme le contrôle hors ligne.
+  `~/validation_essai.py`. Essais du 21 octobre sur le dossier réel, 18/26 dans les deux cas, comme
+  le contrôle hors ligne : convention `plateforme`, dotations +10,0 % et résultat net -50,8 % ;
+  convention `fin-de-plan`, dotations +0,77 %, résultat net -3,9 %, capitaux propres -0,14 %, totaux
+  du bilan -0,05 % (20 biens sur 24 portent un écart de reprise sur leur dernière dotation). La
+  convention `prototype` reste à essayer dans la plateforme (dossier converti par `dossier_json.py
+  --convention=prototype`).
 - Domaines : `infra/domaines.sh verifier|appliquer nimova.gn` contrôle les enregistrements A (finance,
   axispro, portail, recette, noyau), inscrit les noms dans `infra/.env` (copie de l'ancien fichier),
   recrée le proxy et contrôle le HTTPS. nimova.gn commandé chez Afribone, en attente de finalisation ;
