@@ -5,8 +5,10 @@
 - « Nouvel utilisateur » : nom, identifiant, mot de passe provisoire (à remettre en main propre),
   un ou plusieurs profils. L'utilisateur choisit son mot de passe et active sa double
   authentification à la première connexion.
-- Profils : direction, finance, exploitation, chantiers, immobilier, cabinet, administration,
-  porteur (ce dernier réservé au portail, ouvert depuis la fiche d'un dossier AxisPro).
+- Profils : direction, finance, achats, exploitation, BTP, immobilier, cabinet, administration,
+  porteur (ce dernier réservé au portail, ouvert depuis la fiche d'un dossier AxisPro). Le profil
+  achats ouvre les engagements de dépense, les pièces d'achat par catégorie, les fournisseurs et le
+  suivi de ses demandes, rien d'autre de la comptabilité.
 - Sociétés accessibles : cocher EGUITRA GROUP SARLU, MB AxisPro ou les deux, et choisir
   la société à l'ouverture. Un compte ouvert aux deux passe de l'une à l'autre sans se reconnecter ;
   chaque comptabilité reste séparée.
