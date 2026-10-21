@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import type { CSSProperties } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, SIGNATURE, moduleOf } from "@/components/brand";
-import { Check, FileText, FolderOpen, Landmark, Mail, Truck } from "@/components/icons";
+import { FileText, FolderOpen, Mail } from "@/components/icons";
 import { APPS, appFromHost, isAppCode, isEspaceCode, type AppCode } from "@/lib/config";
 import { LoginForm } from "./LoginForm";
 
@@ -88,20 +88,28 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 }
 
 /**
- * Scène de la marque NIMOVA : le grand N du monogramme se trace en fond, le nom et la signature
- * entrent, trois fragments des vrais écrans (trésorerie, rotations, évaluation des dossiers)
- * surgissent puis flottent doucement. Aucun chiffre : ce ne sont pas des données.
+ * Scène de la marque NIMOVA : une équipe en salle de réunion (photo Pexels 9301288, licence
+ * gratuite), assombrie pour la lecture ; le grand N du pli se trace par-dessus, le nom et la
+ * signature entrent. La photo est servie en WebP à la taille de l'écran, `public/scenes/`.
  */
 function SceneNimova() {
   const today = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeZone: "Africa/Conakry" }).format(new Date());
   return (
-    <aside className="sur-dos relative order-first overflow-hidden bg-[linear-gradient(150deg,#1d4a3b_0%,#142f29_46%,#0d221d_100%)] text-white lg:order-2 lg:min-h-screen">
-      {/* Le N du monogramme, en grand, tracé au chargement */}
+    <aside className="sur-dos relative order-first overflow-hidden bg-foret text-white lg:order-2 lg:min-h-screen">
+      <picture aria-hidden className="pointer-events-none absolute inset-0">
+        <source type="image/webp" media="(min-width: 1024px)" srcSet="/scenes/connexion-1400.webp 1400w, /scenes/connexion-2200.webp 2200w" sizes="58vw" />
+        <source type="image/webp" srcSet="/scenes/connexion-mobile-900.webp 900w, /scenes/connexion-mobile-1600.webp 1600w" sizes="100vw" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- image décorative déjà optimisée, servie telle quelle */}
+        <img src="/scenes/connexion-1400.jpg" alt="" fetchPriority="high" decoding="async" className="scene-photo h-full w-full object-cover object-[50%_40%]" />
+      </picture>
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(13_34_29/0.82)_0%,rgb(13_34_29/0.35)_42%,rgb(13_34_29/0.55)_70%,rgb(13_34_29/0.9)_100%)]" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(13_34_29/0.75)_0%,rgb(13_34_29/0.2)_60%,transparent_100%)]" />
+      {/* Le N du pli, en grand, tracé au chargement */}
       <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-24 -top-10 hidden h-[118%] lg:block" focusable="false">
         {/* Le pli de la marque, tracé au trait : montants, diagonale d'or, et les deux plis du ruban. */}
-        <path d="M100 80h120v440H100ZM420 80h120v440H420Z" fill="none" stroke="#a5e6c2" strokeOpacity="0.28" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "100ms" } as CSSProperties} />
-        <path d="M100 80h120l320 440H420Z" fill="none" stroke="#d3aa5b" strokeOpacity="0.4" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "300ms" } as CSSProperties} />
-        <path d="M220 80v165M420 355v165" fill="none" stroke="#d3aa5b" strokeOpacity="0.3" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "700ms" } as CSSProperties} />
+        <path d="M100 80h120v440H100ZM420 80h120v440H420Z" fill="none" stroke="#a5e6c2" strokeOpacity="0.5" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "100ms" } as CSSProperties} />
+        <path d="M100 80h120l320 440H420Z" fill="none" stroke="#d3aa5b" strokeOpacity="0.7" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "300ms" } as CSSProperties} />
+        <path d="M220 80v165M420 355v165" fill="none" stroke="#d3aa5b" strokeOpacity="0.5" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "700ms" } as CSSProperties} />
       </svg>
       <div aria-hidden className="pointer-events-none absolute inset-y-0 right-[16%] hidden w-[72px] bg-[#22634c]/45 lg:block" />
 
@@ -117,71 +125,6 @@ function SceneNimova() {
             <div aria-hidden className="n-pousser-x mt-6 h-[3px] w-16 rounded-full bg-or" style={{ "--i": 6 } as CSSProperties} />
             <p className="mt-6 max-w-[26ch] text-[18px] leading-snug text-white/85 lg:text-[21px]">{SIGNATURE}</p>
           </div>
-
-          {/* Fragments des écrans */}
-          <div aria-hidden className="pointer-events-none relative mt-12 hidden h-[300px] xl:block">
-            <Fragment className="left-0 top-0 w-[268px]" i={4} flotte="0s">
-              <EnteteFragment titre="Trésorerie" icone={<Landmark className="h-4 w-4" />} couleur="#12956a" fond="#e2f5ea" />
-              <svg viewBox="0 0 240 70" className="mt-3 h-[70px] w-full" focusable="false">
-                <defs>
-                  <linearGradient id="fragment-aire" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#12956a" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#12956a" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d="M0 52 C30 48 40 30 70 34 S120 54 150 36 S200 12 240 16 V70 H0 Z" fill="url(#fragment-aire)" className="n-apparaitre" style={{ animationDelay: "900ms", animationDuration: "900ms" }} />
-                <path d="M0 52 C30 48 40 30 70 34 S120 54 150 36 S200 12 240 16" fill="none" stroke="#12956a" strokeWidth="2.5" strokeLinecap="round" pathLength={1} className="n-tracer" style={{ "--retard": "700ms" } as CSSProperties} />
-                <circle cx="236" cy="17" r="4.5" fill="#12956a" stroke="#fff" strokeWidth="2" className="n-apparaitre" style={{ animationDelay: "1900ms" }} />
-              </svg>
-              <div className="mt-2 flex gap-1.5">
-                {[62, 84, 48, 72].map((w, k) => (
-                  <span key={k} className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#e9efeb]">
-                    <span className="n-pousser-x block h-full rounded-full" style={{ width: `${w}%`, background: ["#12956a", "#2d82dc", "#df8f17", "#c4417a"][k], "--i": k + 8 } as CSSProperties} />
-                  </span>
-                ))}
-              </div>
-            </Fragment>
-
-            <Fragment className="left-[236px] top-[118px] w-[252px]" i={5} flotte="-2s">
-              <EnteteFragment titre="Rotations" icone={<Truck className="h-4 w-4" />} couleur="#b83e16" fond="#fdebe4" />
-              <div className="relative mt-3 h-[74px]">
-                <svg viewBox="0 0 220 74" className="absolute inset-0 h-full w-full" focusable="false">
-                  <path d="M14 58 C60 58 70 18 120 22 S190 40 206 16" fill="none" stroke="#e1e8e3" strokeWidth="6" strokeLinecap="round" />
-                  <path d="M14 58 C60 58 70 18 120 22 S190 40 206 16" fill="none" stroke="#e25f35" strokeWidth="2" strokeDasharray="5 6" strokeLinecap="round" />
-                  <circle cx="14" cy="58" r="6" fill="#fff" stroke="#e25f35" strokeWidth="3" />
-                  <circle cx="206" cy="16" r="6" fill="#e25f35" />
-                </svg>
-                <span className="n-route absolute left-0 top-0 grid h-7 w-7 place-items-center rounded-full bg-[#e25f35] text-white shadow-[0_6px_14px_-4px_rgb(226_95_53/0.7)]" style={{ offsetPath: "path('M14 58 C60 58 70 18 120 22 S190 40 206 16')", animation: "n-route 5.5s cubic-bezier(0.45,0,0.55,1) infinite alternate" }}>
-                  <Truck className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="mt-1 flex justify-between text-[11.5px] font-semibold text-[#5c6e66]">
-                <span>Dépôt</span>
-                <span>Client</span>
-              </div>
-            </Fragment>
-
-            <Fragment className="left-[30px] top-[196px] w-[214px]" i={6} flotte="-4s">
-              <EnteteFragment titre="Dossiers AxisPro" icone={<FolderOpen className="h-4 w-4" />} couleur="#1a64bd" fond="#e6f0fc" />
-              <div className="mt-3.5 flex items-center">
-                {[0, 1, 2, 3].map((k) => (
-                  <span key={k} className="flex flex-1 items-center last:flex-none">
-                    <span
-                      className={k < 2 ? "grid h-6 w-6 place-items-center rounded-full bg-[linear-gradient(135deg,#1f73d6,#134f97)] text-white" : k === 2 ? "n-pouls h-6 w-6 rounded-full bg-[#d3aa5b]" : "h-6 w-6 rounded-full border-2 border-[#c4cfc8] bg-white"}
-                      style={k === 2 ? ({ "--pouls": "rgb(211 170 91 / 0.6)" } as CSSProperties) : undefined}
-                    >
-                      {k < 2 && <Check className="h-3.5 w-3.5" strokeWidth={2.6} />}
-                    </span>
-                    {k < 3 && (
-                      <span className="mx-1 h-[3px] flex-1 overflow-hidden rounded-full bg-[#e1e8e3]">
-                        {k < 2 && <span className="n-pousser-x block h-full w-full rounded-full bg-[#2d82dc]" style={{ "--i": k + 10 } as CSSProperties} />}
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            </Fragment>
-          </div>
         </div>
 
         <div className="n-entree hidden items-center gap-6 lg:flex" style={{ "--i": 4 } as CSSProperties}>
@@ -191,30 +134,6 @@ function SceneNimova() {
         </div>
       </div>
     </aside>
-  );
-}
-
-/** Fragment d'écran : une carte blanche qui surgit puis flotte. */
-function Fragment({ className, i, flotte, children }: { className: string; i: number; flotte: string; children: React.ReactNode }) {
-  return (
-    <div className={`absolute ${className}`}>
-      <div className="n-entree" style={{ "--i": i } as CSSProperties}>
-        <div className="n-flotter rounded-2xl bg-white p-4 text-[#10241f] shadow-[0_30px_60px_-24px_rgb(0_0_0/0.55),0_2px_8px_rgb(0_0_0/0.12)]" style={{ animationDelay: flotte }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EnteteFragment({ titre, icone, couleur, fond }: { titre: string; icone: React.ReactNode; couleur: string; fond: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[13px] font-semibold">{titre}</span>
-      <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: fond, color: couleur }}>
-        {icone}
-      </span>
-    </div>
   );
 }
 
