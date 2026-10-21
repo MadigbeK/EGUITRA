@@ -67,8 +67,11 @@ choisir (décision 1 ci-dessous).
 
 1. **Convention d'amortissement** des biens repris, avec l'expert-comptable : continuer la méthode
    historique du classeur (permanence des méthodes : il ne reste alors que des écarts d'arrondi de
-   quelques dizaines de francs), ou adopter le calcul au jour près de la plateforme (l'écart de
-   reprise est alors rattrapé sur une dotation, à placer en janvier 2026 ou en fin de plan).
+   quelques dizaines de francs), ou adopter le calcul au jour près de la plateforme, l'écart de
+   reprise étant rattrapé sur une dotation : en janvier 2026 (les dotations de l'exercice dépassent
+   alors d'environ 10 % celles du classeur) ou en fin de plan (il ne reste que le prorata du mois
+   d'acquisition des biens acquis en 2026, moins de 1 %). Les trois options sont prêtes et essayées
+   sur votre dossier ; il suffit de nous indiquer laquelle retenir.
 2. **Emprunts** : taux d'intérêt de chaque emprunt (absents du classeur) ; l'à-nouveau du compte
    162 semble compter deux fois le déblocage de mars 2026, à confirmer.
 3. **Seuils** d'approbation et d'alerte : ceux du prototype sont repris (trésorerie minimale, marge
