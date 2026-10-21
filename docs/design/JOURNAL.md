@@ -223,8 +223,8 @@ même branche, sans toucher à la logique des écrans :
   Sceau (`SceauNimova`, `CachetDocument`) au pied du rapport mensuel et du rapport de dossier
   AxisPro, imprimé en couleur. Vérifié : `tsc` au vert ; `next build` non lancé en local (disque
   C: plein ce jour-là), construit sur le serveur sans erreur. En recette le 21 octobre (df60a8c,
-  fusionné dans `claude/bold-shannon-gpg2hv` en 76732c4, cache de Rotations en `rotations-v3`) ;
-  la production attend la décision du gérant.
+  fusionné dans `claude/bold-shannon-gpg2hv` en 76732c4, cache de Rotations en `rotations-v3`).
+  En production le 21 octobre à la demande du gérant (version 20261021-1536, 8cf57ee).
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
