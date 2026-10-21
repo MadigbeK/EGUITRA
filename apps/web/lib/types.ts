@@ -4,6 +4,7 @@ export type Profile =
   | "admin"
   | "direction"
   | "finance"
+  | "achats"
   | "exploitation"
   | "chantiers"
   | "immobilier"

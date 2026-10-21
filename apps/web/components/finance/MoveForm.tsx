@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
-import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
-import { apiSend, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
+import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
+import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 
@@ -20,37 +20,66 @@ interface LineDraft {
   axes: AxisChoice;
   /** "" : retenues par défaut du tiers ; "none" : aucune ; sinon identifiant de la retenue. */
   withholding: string;
+  /** Répartition analytique de la ligne relue d'un brouillon, renvoyée telle quelle tant que ses axes ne changent pas. */
+  original?: Record<string, number>;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
+
+/** Lignes d'un brouillon relu pour modification (TVA et retenue : taxes positive et négative de la ligne). */
+function linesOf(move: MoveDetail): LineDraft[] {
+  return move.lines
+    .filter((l) => !l.display_type || l.display_type === "product")
+    .map((l) => {
+      const vat = l.taxes.find((t) => t.amount >= 0);
+      const withholding = l.taxes.find((t) => t.amount < 0);
+      return {
+        name: l.name,
+        quantity: String(l.quantity),
+        price_unit: String(l.price_unit),
+        account_id: l.account ? String(l.account.id) : "",
+        tax_id: vat ? String(vat.id) : "none",
+        category_id: l.category ? String(l.category.id) : "",
+        axes: {},
+        withholding: withholding ? String(withholding.id) : "none",
+        original: l.analytic_distribution && Object.keys(l.analytic_distribution).length ? l.analytic_distribution : undefined,
+      };
+    });
+}
 
 /**
  * Saisie d'une facture de vente ou d'une pièce d'achat ; contreparties, TVA et échéance sont déduites.
  * Une pièce d'achat se saisit par catégorie de dépense (compte, TVA et compte de tiers en découlent).
  * Le choix du compte d'une ligne n'apparaît qu'avec le droit « Saisie libre des comptes ».
  * Chaque ligne s'impute sur les axes de la société de travail (activité, centre de coût et axes des
- * métiers) ; les axes laissés vides suivent les imputations automatiques.
+ * métiers) ; les axes laissés vides suivent les imputations automatiques. Avec `move`, le brouillon est
+ * relu puis modifié (et soumis à nouveau, après un refus par exemple).
  */
 export function MoveForm({
   open,
   onClose,
   onCreated,
   moveType,
+  move,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (move: MoveDetail) => void;
   moveType: "out_invoice" | "out_refund" | "in_invoice" | "in_refund";
+  /** Brouillon à modifier. */
+  move?: MoveDetail;
 }) {
   const sale = moveType.startsWith("out_");
   // Sans le droit « Saisie libre des comptes », le compte n'est pas choisi : il découle de la catégorie
-  // (achats), de l'activité ou du compte par défaut (ventes).
+  // (achats), de l'activité ou du compte par défaut (ventes). Le plan de comptes n'est lu que s'il sert :
+  // choix du compte, ou compte de l'activité d'une vente (le profil Achats ne le lit jamais).
   const libre = useSaisieLibre(open);
-  const { data: accounts } = useApi<Account[]>(open ? `/finance/accounts?prefix=${sale ? "7" : "6"}&limit=2000` : null);
+  const { achats } = useAchatsSeul(open);
+  const { data: accounts } = useApi<Account[]>(open && (sale || libre) ? `/finance/accounts?prefix=${sale ? "7" : "6"}&limit=2000` : null);
   const { data: categories } = useApi<ExpenseCategory[]>(open && !sale ? "/finance/expense-categories" : null);
   const { data: axes } = useAxes(open);
-  const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
+  const [partner, setPartner] = useState<{ id: number; name: string } | null>(move?.partner ?? null);
   const { data: allTaxes } = useApi<Tax[]>(open ? `/finance/taxes?use=${sale ? "sale" : "purchase"}${partner ? `&partner_id=${partner.id}` : ""}` : null);
   // TVA d'un côté, retenues à la source de l'autre (taxes à taux négatif, hors TVA).
   const taxes = useMemo(() => (allTaxes ?? []).filter((t) => t.kind !== "withholding"), [allTaxes]);
@@ -58,22 +87,30 @@ export function MoveForm({
   const partnerDefaults = withholdings.filter((t) => t.partner_default);
   const lineWithholdings = (l: LineDraft) =>
     l.withholding === "none" ? [] : l.withholding ? withholdings.filter((t) => String(t.id) === l.withholding) : partnerDefaults;
-  const [invoiceDate, setInvoiceDate] = useState(today());
-  const [dueDate, setDueDate] = useState("");
-  const [reference, setReference] = useState("");
-  const [narration, setNarration] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(move?.invoice_date ?? today());
+  const [dueDate, setDueDate] = useState(move?.invoice_date_due ?? "");
+  const [reference, setReference] = useState(move?.ref ?? "");
+  const [narration, setNarration] = useState(move?.narration ?? "");
   const [currencyId, setCurrencyId] = useState("");
-  const [contractRef, setContractRef] = useState("");
-  const [commitmentId, setCommitmentId] = useState("");
+  const [contractRef, setContractRef] = useState(move?.contract_ref ?? "");
+  const [commitmentId, setCommitmentId] = useState(move?.commitment ? String(move.commitment.id) : "");
   const { data: commitments } = useApi<Array<{ id: number; name: string; object: string; remaining: number }>>(
     open && moveType === "in_invoice" && partner ? `/finance/commitments/for-bill?partner_id=${partner.id}` : null);
   const [dispute, setDispute] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
-  const { data: currencies } = useApi<Array<{ id: number; name: string; inverse_rate: number; date: string | null }>>(open ? "/finance/currencies" : null);
+  const { data: currencies } = useApi<Array<{ id: number; name: string; inverse_rate: number; date: string | null }>>(open && !move ? "/finance/currencies" : null);
   const currency = currencies?.find((c) => String(c.id) === currencyId);
-  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
+  const [lines, setLines] = useState<LineDraft[]>(() => (move ? linesOf(move) : [emptyLine()]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Brouillon relu : les axes de chaque ligne s'affichent une fois ceux de la société chargés.
+  const [axesRelus, setAxesRelus] = useState(!move);
+  useEffect(() => {
+    if (axesRelus || !axes) return;
+    setLines((ls) => ls.map((l) => (l.original ? { ...l, axes: fromDistribution(axes, l.original) } : l)));
+    setAxesRelus(true);
+  }, [axes, axesRelus]);
 
   const defaultTax = taxes?.find((t) => t.amount === 18) ?? taxes?.[0];
   const activities = axes?.find((a) => a.key === "activite")?.accounts ?? [];
@@ -124,6 +161,39 @@ export function MoveForm({
     return "Compte par défaut";
   }
 
+  /** Lignes envoyées au noyau (création comme modification). */
+  const payloadLines = () =>
+    lines.map((l) => {
+      const tax = effectiveTax(l);
+      return {
+        name: l.name,
+        quantity: Number(l.quantity) || 1,
+        price_unit: Number(l.price_unit.replace(/\s/g, "")),
+        account_id: libre && l.account_id ? Number(l.account_id) : undefined,
+        category_id: l.category_id ? Number(l.category_id) : undefined,
+        tax_ids: tax === "none" ? [] : [Number(tax)],
+        withholding_tax_ids: l.withholding === "" ? undefined : l.withholding === "none" ? [] : [Number(l.withholding)],
+        analytic_distribution: l.original ?? toDistribution(l.axes),
+      };
+    });
+
+  /** Modification du brouillon, puis soumission (ou validation) si demandée. */
+  async function save(post: boolean, draft: MoveDetail, tiers: { id: number }) {
+    let saved = await apiSend<MoveDetail>("PATCH", `/finance/moves/${draft.id}`, {
+      partner_id: tiers.id,
+      invoice_date: invoiceDate,
+      // L'échéance n'est renvoyée que changée : sinon le noyau garde celle des conditions du tiers.
+      ...(dueDate && dueDate !== (draft.invoice_date_due ?? "") ? { invoice_date_due: dueDate } : {}),
+      ref: reference || null,
+      narration: narration || null,
+      contract_ref: contractRef.trim() || null,
+      ...(moveType === "in_invoice" ? { commitment_id: commitmentId ? Number(commitmentId) : null } : {}),
+      lines: payloadLines(),
+    });
+    if (post) saved = await apiSend<MoveDetail>("POST", `/finance/moves/${draft.id}/post`);
+    return saved;
+  }
+
   async function submit(post: boolean) {
     setError(null);
     if (!partner) return setError(sale ? "Choisissez le client." : "Choisissez le fournisseur.");
@@ -135,7 +205,11 @@ export function MoveForm({
     if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
     setBusy(true);
     try {
-      const move = await apiSend<MoveDetail>("POST", "/finance/moves", {
+      if (move) {
+        onCreated(await save(post, move, partner));
+        return;
+      }
+      const created = await apiSend<MoveDetail>("POST", "/finance/moves", {
         move_type: moveType,
         partner_id: partner.id,
         invoice_date: invoiceDate,
@@ -148,21 +222,9 @@ export function MoveForm({
         dispute: dispute || undefined,
         dispute_reason: dispute ? disputeReason.trim() : undefined,
         post,
-        lines: lines.map((l) => {
-          const tax = effectiveTax(l);
-          return {
-            name: l.name,
-            quantity: Number(l.quantity) || 1,
-            price_unit: Number(l.price_unit.replace(/\s/g, "")),
-            account_id: libre && l.account_id ? Number(l.account_id) : undefined,
-            category_id: l.category_id ? Number(l.category_id) : undefined,
-            tax_ids: tax === "none" ? [] : [Number(tax)],
-            withholding_tax_ids: l.withholding === "" ? undefined : l.withholding === "none" ? [] : [Number(l.withholding)],
-            analytic_distribution: toDistribution(l.axes),
-          };
-        }),
+        lines: payloadLines(),
       });
-      onCreated(move);
+      onCreated(created);
       setPartner(null);
       setLines([emptyLine()]);
       setReference("");
@@ -177,7 +239,9 @@ export function MoveForm({
     }
   }
 
-  const title = { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
+  const title = move
+    ? `Modifier ${move.move_type === "in_refund" ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
+    : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
   const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))];
   const columns = (sale ? 6 : 7) + (withholdings.length > 0 ? 1 : 0);
 
@@ -193,7 +257,7 @@ export function MoveForm({
             Annuler
           </Button>
           <Button onClick={() => submit(false)} loading={busy}>
-            Enregistrer en brouillon
+            {move ? "Enregistrer" : "Enregistrer en brouillon"}
           </Button>
           <Button variant="primary" onClick={() => submit(true)} loading={busy}>
             {sale ? "Enregistrer et valider" : "Enregistrer et soumettre"}
@@ -226,15 +290,21 @@ export function MoveForm({
               <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtDec(c.remaining)})` }))} />
             </Field>
           )}
-          <Field label="Devise" hint={currency && currency.name !== "GNF" ? `1 ${currency.name} = ${fmtDec(currency.inverse_rate)} GNF${currency.date ? ` au ${fmtDate(currency.date)}` : ""}` : undefined}>
-            <Select value={currencyId} onChange={(e) => setCurrencyId(e.target.value)} placeholder="Devise de la société" options={(currencies ?? []).map((c) => ({ value: c.id, label: c.name }))} />
-          </Field>
-          <div className="space-y-1.5 md:col-span-2">
-            <label className="flex items-center gap-2 pt-6 text-sm">
-              <input type="checkbox" checked={dispute} onChange={(e) => setDispute(e.target.checked)} /> Pièce en litige (exclue des relances)
-            </label>
-            {dispute && <Input value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Motif du litige" />}
-          </div>
+          {/* Devise : fixée à la création du brouillon. */}
+          {!move && (
+            <Field label="Devise" hint={currency && currency.name !== "GNF" ? `1 ${currency.name} = ${fmtDec(currency.inverse_rate)} GNF${currency.date ? ` au ${fmtDate(currency.date)}` : ""}` : undefined}>
+              <Select value={currencyId} onChange={(e) => setCurrencyId(e.target.value)} placeholder="Devise de la société" options={(currencies ?? []).map((c) => ({ value: c.id, label: c.name }))} />
+            </Field>
+          )}
+          {/* Le litige relève de la finance : le profil Achats lui signale l'écart. */}
+          {!move && !achats && (
+            <div className="space-y-1.5 md:col-span-2">
+              <label className="flex items-center gap-2 pt-6 text-sm">
+                <input type="checkbox" checked={dispute} onChange={(e) => setDispute(e.target.checked)} /> Pièce en litige (exclue des relances)
+              </label>
+              {dispute && <Input value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Motif du litige" />}
+            </div>
+          )}
         </div>
         {exempt && <Notice tone="accent">Client non assujetti à la TVA : la facture est émise en exonération.</Notice>}
         {entryCategories.length > 0 && !mixed && (
@@ -310,7 +380,7 @@ export function MoveForm({
                   </tr>
                   <tr>
                     <td colSpan={columns} className="px-2 pb-2 pt-1.5">
-                      <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next })} />
+                      <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next, original: undefined })} />
                     </td>
                   </tr>
                 </Fragment>

@@ -20,6 +20,10 @@ export interface NavSection {
 }
 
 const FIN: Profile[] = ["admin", "direction", "finance"];
+/** Profil Achats : engagements, pièces d'achat, fournisseurs, ses demandes et son guide, rien d'autre. */
+const ACHATS: Profile[] = ["achats"];
+/** Profils qui tranchent ou suivent les validations depuis « À valider » (le profil Achats suit les siennes). */
+const VALIDATION: Profile[] = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"];
 
 /** Navigation par application ; chaque entrée n'apparaît qu'aux profils listés (offre, chapitre 3.4). */
 export const NAV: Record<AppCode, NavSection[]> = {
@@ -30,17 +34,20 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance", label: "Tableau de bord", icon: "LayoutDashboard", profiles: FIN },
         { href: "/finance/pilotage", label: "Activités et budget", icon: "TrendingUp", profiles: FIN },
         { href: "/finance/rapport", label: "Rapport mensuel", icon: "FileText", profiles: FIN },
-        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", badge: "approvals" },
-        { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"] },
+        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", profiles: VALIDATION, badge: "approvals" },
+        { href: "/finance/demandes", label: "Mes demandes", icon: "BadgeCheck", profiles: ACHATS },
+        { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"] },
         { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
         { href: "/finance/guide", label: "Guide de la finance", icon: "Info", profiles: FIN },
+        { href: "/finance/guide-achats", label: "Guide des achats", icon: "Info", profiles: ACHATS },
       ],
     },
     {
       label: "Comptabilité",
       items: [
         { href: "/finance/ventes", label: "Ventes", icon: "Receipt", profiles: FIN },
-        { href: "/finance/achats", label: "Achats et dépenses", icon: "ShoppingCart", profiles: FIN },
+        { href: "/finance/achats", label: "Achats et dépenses", icon: "ShoppingCart", profiles: [...FIN, "achats"] },
+        { href: "/finance/fournisseurs", label: "Fournisseurs", icon: "Users", profiles: ACHATS },
         { href: "/finance/tresorerie", label: "Trésorerie", icon: "Landmark", profiles: FIN },
         { href: "/finance/relances", label: "Relances clients", icon: "Mail", profiles: FIN },
         { href: "/finance/tiers", label: "Tiers", icon: "Users", profiles: FIN },
@@ -133,6 +140,15 @@ export const NAV: Record<AppCode, NavSection[]> = {
     },
   ],
 };
+
+/**
+ * Accueil d'EGUITRA Finance selon les profils : le tableau de bord du dirigeant pour la finance et la
+ * direction ; pour le profil Achats seul, l'écran Achats et dépenses (le tableau de bord lui est fermé).
+ */
+export function accueilFinance(profiles: readonly Profile[]): string {
+  if (profiles.some((p) => FIN.includes(p))) return "/finance";
+  return profiles.includes("achats") ? "/finance/achats" : "/finance";
+}
 
 export function navFor(app: AppCode, profiles: Profile[], entity?: EntiteSociete | null): NavSection[] {
   return NAV[app]

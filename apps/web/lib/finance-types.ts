@@ -272,8 +272,10 @@ export interface MoveSummary {
   amount_residual: number;
   payment_state: string;
   company: Ref;
-  approval?: { state: string; level: number | null; pending_with: string | null } | null;
+  approval?: { request_id?: number; state: string; level: number | null; pending_with: string | null } | null;
   contract_ref?: string | null;
+  /** Engagement de dépense consommé par la pièce d'achat. */
+  commitment?: { id: number; name: string; object: string } | null;
   /** Facture contestée : statut « Litige » prioritaire, hors relances. */
   dispute?: boolean;
   dispute_reason?: string | null;

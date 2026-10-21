@@ -92,12 +92,31 @@ export function useApi<T>(path: string | null, config?: SWRConfiguration<T, ApiE
   });
 }
 
+/** Profils de la finance : ils ouvrent EGUITRA Finance en entier et seuls portent la saisie libre des comptes. */
+export const PROFILS_FINANCE = ["admin", "direction", "finance"] as const;
+
 /**
  * Droit « Saisie libre des comptes » de l'utilisateur (session) : sans lui, la ligne prend le compte de
  * sa catégorie, du type d'opération ou de l'activité, et les opérations diverses sont refusées. Faux
- * tant que la session n'est pas lue : le choix du compte n'apparaît qu'une fois le droit confirmé.
+ * tant que la session n'est pas lue : le choix du compte n'apparaît qu'une fois le droit confirmé. Le
+ * noyau ne l'applique qu'avec un profil de la finance (jamais au profil Achats seul).
  */
 export function useSaisieLibre(enabled = true): boolean {
   const { data } = useApi<Me>(enabled ? "/auth/me" : null);
-  return data?.rights?.free_accounts === true;
+  return data?.rights?.free_accounts === true && data.profiles.some((p) => (PROFILS_FINANCE as readonly string[]).includes(p));
+}
+
+/** Le compte n'ouvre-t-il Finance que par le profil Achats (aucun profil de la finance) ? */
+export function achatsSeul(profiles: readonly string[]): boolean {
+  return profiles.includes("achats") && !profiles.some((p) => (PROFILS_FINANCE as readonly string[]).includes(p));
+}
+
+/**
+ * Profil Achats seul (session) : les écrans se bornent alors aux pièces d'achat, aux engagements, aux
+ * fournisseurs et aux demandes de l'utilisateur, sans appeler de route de la finance. pret : session lue ;
+ * avant, un écran n'appelle que les routes ouvertes aux deux.
+ */
+export function useAchatsSeul(enabled = true): { achats: boolean; pret: boolean } {
+  const { data } = useApi<Me>(enabled ? "/auth/me" : null);
+  return { achats: data ? achatsSeul(data.profiles) : false, pret: Boolean(data) };
 }
