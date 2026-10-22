@@ -6,6 +6,7 @@ jusqu'à l'ouverture d'une nouvelle révision. Il calcule une empreinte HMAC-SHA
 serveur, d'un contenu canonique : fiche, hypothèses, version de la grille, réglages, évaluations
 (statuts, observations, preuves et leurs sommes de contrôle), pièces de la data room, scores et
 décision. L'empreinte se vérifie à tout moment (contenu scellé intact, dossier modifié depuis ou non).
+Quatre yeux : un compte qui a évalué un critère du dossier ne verrouille pas sa décision.
 """
 
 import hashlib
@@ -64,6 +65,8 @@ class AxisproReview(models.Model):
             if dossier.locked_review_id:
                 raise UserError(f"Une décision est déjà verrouillée pour la révision {dossier.revision} : ouvrez une "
                                 "nouvelle révision avant d'en verrouiller une autre.")
+            # Quatre yeux : la décision se scelle par un autre compte que les auteurs de l'évaluation.
+            dossier._check_four_eyes("verrouiller la décision de son comité")
             result = dossier.evaluate()
             snapshot = dossier.scoring(result)
             snapshot["financial"] = {k: (result.get("financial") or {}).get(k) for k in SNAPSHOT_FINANCIAL} \

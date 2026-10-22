@@ -222,6 +222,8 @@ class TestMethodeDansLaPlateforme(ApiCase):
         cls.policy.action_activate()
         cls.promoter = cls.env["res.partner"].create({"name": "SPV Soleil"})
         cls._create_user("analyste", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        # Second consultant : verrouille, force ou rouvre à la place de l'auteur (quatre yeux).
+        cls._create_user("relecteur", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
 
     def setUp(self):
         super().setUp()
@@ -237,6 +239,9 @@ class TestMethodeDansLaPlateforme(ApiCase):
                                                                 "application/pdf")},
                              data=data or {}, headers={"Authorization": f"Bearer {self.token}"}, method="POST",
                              timeout=60)
+
+    def _relecteur(self):
+        return self.open_session("relecteur", app="axispro")["access_token"]
 
     def test_grille_etendue(self):
         p = self.policy
@@ -377,7 +382,8 @@ class TestMethodeDansLaPlateforme(ApiCase):
         record.invalidate_recordset(["sealed_content"])
         self.assertFalse(record.verify()["intact"], "Contenu scellé modifié : empreinte invalide")
 
-        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self.token)
+        # Quatre yeux : la révision qui défait le verrou s'ouvre par un autre compte que celui qui a verrouillé.
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self._relecteur())
         self.assertEqual((status, body["revision"], body["locked"]), (200, 2, False), body)
         status, body = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}", {"investment": 5_000_000},
                                  token=self.token)
@@ -528,9 +534,10 @@ class TestMethodeDansLaPlateforme(ApiCase):
     def test_sceau_couvre_les_colonnes_affichees(self):
         self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf",
                      {"validity_date": "2030-12-31"})
+        # La preuve déposée fait de l'analyste un auteur de l'évaluation : un second consultant verrouille.
         status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
                                    {"decision": "hold", "lock": True, "motive": "Titre foncier à produire"},
-                                   token=self.token)
+                                   token=self._relecteur())
         self.assertEqual(status, 200, review)
         record = self.env["axispro.review"].browse(review["id"])
         self.assertTrue(record.verify()["intact"])
@@ -544,7 +551,7 @@ class TestMethodeDansLaPlateforme(ApiCase):
         before = response.json()["document"]["id"]
         status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
                                    {"decision": "hold", "lock": True, "motive": "Titre foncier à actualiser"},
-                                   token=self.token)
+                                   token=self._relecteur())
         self.assertEqual(status, 200, review)
         status, body = self.call("PATCH", f"/axispro/documents/{before}", {"validity_date": "2031-01-31"},
                                  token=self.token)
@@ -573,3 +580,46 @@ class TestMethodeDansLaPlateforme(ApiCase):
                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
                                data={"dry_run": "1"}, headers=headers, method="POST", timeout=60).json()
         self.assertEqual((result["changes"], result["errors"]), ([], []), result)
+
+    # ─── Quatre yeux (décision du gérant, audit des rôles I2) ─────────────
+
+    def test_quatre_yeux_sur_le_verrou_du_comite(self):
+        for code in ("C001", "C003", "C005"):
+            status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals[code].id}", {"status": "met"},
+                                     token=self.token)
+            self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        self.assertEqual(self.evals["C001"].evaluated_by.login, "analyste", "Auteur de l'évaluation retenu")
+        path = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        status, body = self.call("POST", path, {"decision": "go", "lock": True}, token=self.token)
+        self.assertEqual(status, 403, "L'auteur de l'évaluation ne crée pas une décision verrouillée")
+        self.assertIn("quatre yeux", body["message"])
+        self.assertIn("Analyste", body["message"], "Les auteurs de l'évaluation sont nommés")
+        self.env.invalidate_all()
+        self.assertFalse(self.dossier.review_ids, "Refus sans revue créée")
+        status, review = self.call("POST", path, {"decision": "go"}, token=self.token)
+        self.assertEqual((status, review["state"]), (200, "draft"), "Une revue non verrouillée se crée librement")
+        status, body = self.call("POST", f"/axispro/reviews/{review['id']}/lock", token=self.token)
+        self.assertEqual(status, 403, body)
+        relecteur = self._relecteur()
+        status, locked = self.call("POST", f"/axispro/reviews/{review['id']}/lock", token=relecteur)
+        self.assertEqual((status, locked["state"], locked["locked_by"]), (200, "locked", "Relecteur"), locked)
+
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=relecteur)
+        self.assertEqual(status, 403, "Celui qui a verrouillé ne défait pas son propre verrou")
+        self.assertIn("nouvelle révision", body["message"])
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self.token)
+        self.assertEqual((status, body["revision"], body["locked"]), (200, 2, False), body)
+
+    def test_quatre_yeux_sur_le_passage_force(self):
+        self.dossier.action_advance_gate()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}", {"status": "not_met"},
+                                 token=self.token)
+        self.assertEqual(status, 200, body)
+        path = f"/axispro/dossiers/{self.dossier.id}/advance-gate"
+        reason = {"force_reason": "Titre foncier attendu du ministère, décision du comité du 12/10"}
+        status, body = self.call("POST", path, reason, token=self.token)
+        self.assertEqual(status, 403, "L'auteur de l'évaluation ne force pas le gate")
+        self.assertIn("forcer le passage du gate G1", body["message"])
+        status, body = self.call("POST", path, reason, token=self._relecteur())
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), body)

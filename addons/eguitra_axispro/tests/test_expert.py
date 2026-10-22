@@ -96,6 +96,9 @@ class TestAxisproExpert(ApiCase):
         cls.promoter = cls.env["res.partner"].create({"name": "Briqueterie du Fouta"})
         cls.bank = cls.env["res.partner"].create({"name": "Banque de démonstration", "is_company": True})
         cls._create_user("expert", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        # Second consultant : rouvre la décision que l'expert a verrouillée (quatre yeux).
+        cls._create_user("expert.relecteur", "cabinet", company_id=cls.cabinet.id,
+                         company_ids=[(6, 0, cls.cabinet.ids)])
 
     def setUp(self):
         super().setUp()
@@ -170,7 +173,8 @@ class TestAxisproExpert(ApiCase):
         status, _b = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30},
                                token=self.token)
         self.assertEqual(status, 422, "Modèle financier figé par la décision verrouillée")
-        status, _b = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self.token)
+        relecteur = self.open_session("expert.relecteur", app="axispro")["access_token"]
+        status, _b = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=relecteur)
         self.assertEqual(status, 200, _b)
         status, _b = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30},
                                token=self.token)

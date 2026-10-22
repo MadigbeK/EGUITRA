@@ -1,7 +1,7 @@
 {
     "name": "EGUITRA - AxisPro Suite",
     "summary": "Évaluation de la bancabilité des projets selon la méthode MB AxisPro : grille, stage gates, scores Readiness, APD et Bankability, modèle financier, risques, plan d'actions, financements, data room, comités, portail",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.4.0",
     "category": "Services",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

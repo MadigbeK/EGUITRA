@@ -7,10 +7,14 @@ disponible. Trois scores (Project Readiness, APD Readiness, Bankability), score 
 knock-outs, classification en cinq classes, règles de passage des huit gates et recommandation :
 voir scoring.py. Un dossier dont la décision de comité est verrouillée est figé jusqu'à l'ouverture
 d'une nouvelle révision.
+
+Quatre yeux (décision du gérant) : un compte qui a évalué un critère du dossier ne verrouille pas
+la décision du comité et ne force pas un gate ; celui qui a verrouillé la décision n'ouvre pas la
+révision qui la défait.
 """
 
-from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo import SUPERUSER_ID, api, fields, models
+from odoo.exceptions import AccessError, UserError
 
 from .. import scoring as method
 
@@ -41,6 +45,16 @@ FROZEN_FIELDS = {
     "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed", "consultant_id",
 }
 HYPOTHESES = ("dd_red_flag", "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed")
+# Évaluation d'un critère : tout ce qui entre dans le score ou dans le contenu scellé par le comité.
+# Leur auteur est retenu (evaluated_by).
+EVALUATION_FIELDS = {"status", "comment", "deliverable", "responsible", "due_date", "document_ids"}
+
+
+def _system(env):
+    """Compte système (installation, migrations, scripts, jeux d'essai) : hors des contrôles de
+    personne (quatre yeux), qui portent sur les comptes du cabinet. Un appel de l'API s'exécute
+    toujours sous l'identité de l'utilisateur, même en sudo()."""
+    return env.uid == SUPERUSER_ID
 
 
 class AxisproDossier(models.Model):
@@ -126,6 +140,31 @@ class AxisproDossier(models.Model):
             if dossier.locked_review_id:
                 raise UserError(f"Dossier {dossier.reference} verrouillé par la décision du comité (révision "
                                 f"{dossier.revision}) : ouvrez une nouvelle révision pour le modifier.")
+
+    def evaluators(self):
+        """Comptes auteurs de l'évaluation en vigueur : pour chaque critère, le dernier compte qui a
+        écrit son évaluation (evaluated_by) et le dernier qui a fixé son statut (assessed_by, seul
+        renseigné avant la version 19.0.1.4.0). Un critère repris d'une révision précédente sans
+        changement garde ses auteurs : leur évaluation entre dans la décision. Compte système exclu."""
+        self.ensure_one()
+        evaluations = self.sudo().evaluation_ids
+        authors = evaluations.evaluated_by | evaluations.assessed_by
+        return authors.filtered(lambda u: u.id != SUPERUSER_ID).with_env(self.env)
+
+    def _check_four_eyes(self, action):
+        """Quatre yeux : `action` (verrouiller la décision du comité, forcer un gate) est refusée au
+        compte qui a évalué un critère du dossier."""
+        for dossier in self:
+            if _system(dossier.env):
+                continue
+            authors = dossier.evaluators()
+            if dossier.env.user in authors:
+                names = ", ".join(sorted(authors.sudo().mapped("name")))
+                raise AccessError(
+                    f"Principe des quatre yeux : vous avez évalué le dossier {dossier.reference} (révision "
+                    f"{dossier.revision}), vous ne pouvez donc pas {action}. Évaluation faite par : {names}. "
+                    "Un autre consultant du cabinet doit s'en charger."
+                )
 
     def log(self, kind, note=None, criterion=None, before=None, after=None):
         """Inscription au journal du dossier (auteur authentifié, horodatage du serveur)."""
@@ -354,7 +393,8 @@ class AxisproDossier(models.Model):
 
     def action_advance_gate(self, force_reason=None):
         """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant ; sinon refus motivé,
-        sauf passage forcé par le cabinet avec un motif inscrit au journal."""
+        sauf passage forcé par le cabinet avec un motif inscrit au journal, par un autre compte que
+        les auteurs de l'évaluation (quatre yeux)."""
         self.ensure_one()
         self._check_unlocked()
         gates = self.policy_id.gate_ids.sorted("sequence")
@@ -366,6 +406,7 @@ class AxisproDossier(models.Model):
         if decision and decision["decision"] not in ("go", "conditional"):
             if not force_reason:
                 raise UserError(f"Gate {gate.code} : {method.DECISIONS[decision['decision']]}. " + " ".join(decision["motifs"]))
+            self._check_four_eyes(f"forcer le passage du gate {gate.code}")
             self.log("gate", note=f"Passage forcé de {gate.code} à {following.code} ({method.DECISIONS[decision['decision']]}) : "
                                   f"{force_reason}")
         else:
@@ -374,11 +415,18 @@ class AxisproDossier(models.Model):
         return True
 
     def action_new_revision(self):
-        """Nouvelle révision après une décision verrouillée : le dossier redevient modifiable."""
+        """Nouvelle révision après une décision verrouillée : le dossier redevient modifiable. Elle
+        défait le verrou : un autre compte que celui qui a verrouillé l'ouvre (quatre yeux)."""
         self.ensure_one()
         if not self.locked_review_id:
             raise UserError("Aucune décision verrouillée : le dossier est déjà modifiable.")
         previous = self.locked_review_id
+        if not _system(self.env) and previous.locked_by == self.env.user:
+            raise AccessError(
+                f"Principe des quatre yeux : vous avez verrouillé la décision en vigueur du dossier {self.reference} "
+                f"(révision {self.revision}), vous ne pouvez donc pas ouvrir la nouvelle révision qui la défait. "
+                "Un autre consultant du cabinet doit l'ouvrir."
+            )
         self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False})
         self.log("revision", note=f"Révision {self.revision} ouverte après la décision du {previous.date:%d/%m/%Y} "
                                   f"({method.DECISIONS.get(previous.decision, previous.decision)}).")
@@ -401,12 +449,17 @@ class AxisproEvaluation(models.Model):
     due_date = fields.Date("Échéance")
     assessed_by = fields.Many2one("res.users", readonly=True)
     assessed_at = fields.Datetime(readonly=True)
+    evaluated_by = fields.Many2one("res.users", "Dernier auteur de l'évaluation", readonly=True,
+                                   help="Dernier compte qui a écrit le statut, l'observation, le livrable, le "
+                                        "responsable, l'échéance ou les preuves du critère (quatre yeux).")
 
     _unique = models.Constraint("unique(dossier_id, criterion_id)", "Un critère n'est évalué qu'une fois par dossier.")
 
     def write(self, vals):
         if not self.env.context.get("axispro_unlocked"):
             self.dossier_id._check_unlocked()
+        if EVALUATION_FIELDS & set(vals):
+            vals = dict(vals, evaluated_by=self.env.user.id)
         if "status" in vals:
             labels = dict(STATUSES)
             changed = self.filtered(lambda e: e.status != vals["status"])

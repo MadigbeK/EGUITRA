@@ -478,7 +478,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/advance-gate", methods=("POST",), profiles=WRITE)
     def advance(self, dossier_id, **_kw):
-        """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal."""
+        """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal, et
+        un autre compte que les auteurs de l'évaluation (quatre yeux, refus 403)."""
         dossier = _dossier(dossier_id)
         reason = (read_json().get("force_reason") or "").strip()
         if reason and len(reason) < MIN_FORCE_REASON:
@@ -502,6 +503,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/new-revision", methods=("POST",), profiles=WRITE)
     def new_revision(self, dossier_id, **_kw):
+        """Nouvelle révision : défait le verrou, donc ouverte par un autre compte que celui qui a
+        verrouillé la décision (quatre yeux, refus 403)."""
         dossier = _dossier(dossier_id)
         dossier.action_new_revision()
         return dossier_detail(dossier)
@@ -552,7 +555,9 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/reviews", methods=("POST",), profiles=WRITE)
     def create_review(self, dossier_id, **_kw):
-        """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier."""
+        """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier.
+        La création d'une revue non verrouillée est libre ; le verrou (lock) est refusé aux auteurs de
+        l'évaluation (quatre yeux, refus 403, rien n'est créé)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (decision,) = require(data, "decision")
@@ -604,6 +609,7 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=WRITE)
     def lock_review(self, review_id, **_kw):
+        """Verrouillage d'une revue : refusé aux auteurs de l'évaluation du dossier (quatre yeux, 403)."""
         review = _record("axispro.review", review_id, "Revue")
         if review.decision in ("hold", "no_go") and not (review.motive or "").strip():
             raise ApiError(400, "missing_fields", "Motivez une décision HOLD ou NO-GO avant de la verrouiller.",
