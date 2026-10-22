@@ -362,6 +362,15 @@ Non vérifié à l'écran : le portail des porteurs, car la maquette ne sert pas
 (réécrit depuis) ; la coque y affiche désormais l'erreur au lieu de « Préparation de votre
 espace » sans fin.
 
+## Portail sur photo (22 octobre 2026)
+
+À la demande du gérant, le fond bleu nuit de la page de connexion du portail devient une photo :
+une entrepreneure à son bureau (Pexels 20209020, licence gratuite, choisie par le gérant parmi
+douze). Logo du cabinet, titre, liste, cercle et marches restent en place. La photo est voilée de
+bleu nuit pour la lecture. Comme pour NIMOVA, elle est servie en WebP de 22 à 96 Ko, avec un aperçu
+flou inscrit dans la page et un cache d'un an (`public/scenes/portail-20209020-*`). Les deux scènes
+partagent désormais le composant `PhotoScene` de `app/login/page.tsx`.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,

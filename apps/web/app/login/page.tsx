@@ -88,26 +88,39 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 }
 
 /**
- * Scène de la marque NIMOVA : une équipe en salle de réunion (photo Pexels 9301288, licence
- * gratuite), assombrie pour la lecture ; le grand N du pli se trace par-dessus, le nom et la
- * signature entrent. La photo est servie en WebP à la taille de l'écran (`public/scenes/`, cache
- * d'un an : une autre photo change de nom) ; son aperçu flou, inscrit dans la page, s'affiche dès
- * le premier rendu, avant toute requête.
+ * Photo de fond d'une scène, servie en WebP à la taille de l'écran (`public/scenes/`, cache d'un
+ * an : une autre photo change de nom). Son aperçu flou, inscrit dans la page, s'affiche dès le
+ * premier rendu, avant toute requête. Deux voiles dans la teinte de la scène (`voile`, triplet RGB)
+ * gardent les textes lisibles sur toute la photo.
  */
-const APERCU_SCENE = "data:image/webp;base64,UklGRpAAAABXRUJQVlA4IIQAAACQBACdASoYABAAPt1apkyopSOiMAgBEBuJZQC7ACIQf94L37CJJ+ZPDyzIrIAA/tQso9AGPnhC1gQ4MIbZHCt5nCj3nRxv76TTsY0iTWfGalIDgDw+i82eC6mIzPPwr3CjfrFur1XOUc6ebeUQ+qn+VUw8x3Kyt4pr0ZL3j1FkV48AAAA=";
+function PhotoScene({ photo, apercu, voile }: { photo: string; apercu: string; voile: string }) {
+  return (
+    <>
+      <picture aria-hidden className="scene-photo pointer-events-none absolute inset-0 bg-cover bg-[50%_40%]" style={{ backgroundImage: `url(${apercu})` }}>
+        <source type="image/webp" media="(min-width: 1024px)" srcSet={`/scenes/${photo}-1000.webp 1000w, /scenes/${photo}-1400.webp 1400w, /scenes/${photo}-2200.webp 2200w`} sizes="58vw" />
+        <source type="image/webp" srcSet={`/scenes/${photo}-mobile-900.webp 900w, /scenes/${photo}-mobile-1600.webp 1600w`} sizes="100vw" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- image décorative déjà optimisée, servie telle quelle */}
+        <img src={`/scenes/${photo}-1400.jpg`} alt="" fetchPriority="high" className="h-full w-full object-cover object-[50%_40%]" />
+      </picture>
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(var(--voile)/0.82)_0%,rgb(var(--voile)/0.5)_42%,rgb(var(--voile)/0.6)_70%,rgb(var(--voile)/0.9)_100%)]" style={{ "--voile": voile } as CSSProperties} />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(var(--voile)/0.78)_0%,rgb(var(--voile)/0.5)_60%,transparent_100%)] max-lg:bg-[rgb(var(--voile)/0.35)]" style={{ "--voile": voile } as CSSProperties} />
+    </>
+  );
+}
+
+/** Photo de la scène NIMOVA : une équipe en salle de réunion (Pexels 9301288, licence gratuite). */
+const APERCU_NIMOVA = "data:image/webp;base64,UklGRpAAAABXRUJQVlA4IIQAAACQBACdASoYABAAPt1apkyopSOiMAgBEBuJZQC7ACIQf94L37CJJ+ZPDyzIrIAA/tQso9AGPnhC1gQ4MIbZHCt5nCj3nRxv76TTsY0iTWfGalIDgDw+i82eC6mIzPPwr3CjfrFur1XOUc6ebeUQ+qn+VUw8x3Kyt4pr0ZL3j1FkV48AAAA=";
+
+/**
+ * Scène de la marque NIMOVA : la photo, le grand N du pli tracé par-dessus, le nom et la signature
+ * qui entrent.
+ */
 
 function SceneNimova() {
   const today = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeZone: "Africa/Conakry" }).format(new Date());
   return (
     <aside className="sur-dos relative order-first overflow-hidden bg-foret text-white lg:order-2 lg:min-h-screen">
-      <picture aria-hidden className="scene-photo pointer-events-none absolute inset-0 bg-cover bg-[50%_40%]" style={{ backgroundImage: `url(${APERCU_SCENE})` }}>
-        <source type="image/webp" media="(min-width: 1024px)" srcSet="/scenes/connexion-9301288-1000.webp 1000w, /scenes/connexion-9301288-1400.webp 1400w, /scenes/connexion-9301288-2200.webp 2200w" sizes="58vw" />
-        <source type="image/webp" srcSet="/scenes/connexion-9301288-mobile-900.webp 900w, /scenes/connexion-9301288-mobile-1600.webp 1600w" sizes="100vw" />
-        {/* eslint-disable-next-line @next/next/no-img-element -- image décorative déjà optimisée, servie telle quelle */}
-        <img src="/scenes/connexion-9301288-1400.jpg" alt="" fetchPriority="high" className="h-full w-full object-cover object-[50%_40%]" />
-      </picture>
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(13_34_29/0.82)_0%,rgb(13_34_29/0.5)_42%,rgb(13_34_29/0.6)_70%,rgb(13_34_29/0.9)_100%)]" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(13_34_29/0.78)_0%,rgb(13_34_29/0.5)_60%,transparent_100%)] max-lg:bg-[rgb(13_34_29/0.35)]" />
+      <PhotoScene photo="connexion-9301288" apercu={APERCU_NIMOVA} voile="13 34 29" />
       {/* Le N du pli, en grand, tracé au chargement */}
       <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-24 -top-10 hidden h-[118%] lg:block" focusable="false">
         {/* Le pli de la marque, tracé au trait : montants, diagonale d'or, et les deux plis du ruban. */}
@@ -141,13 +154,17 @@ function SceneNimova() {
   );
 }
 
+/** Photo du portail : une entrepreneure à son bureau (Pexels 20209020, licence gratuite). */
+const APERCU_PORTAIL = "data:image/webp;base64,UklGRoYAAABXRUJQVlA4IHoAAABQBACdASoYABAAPt1cpkyopSOiMAgBEBuJZQC7ACG6aUIqdoVNzreqfGSAAP7vynQ+0p+wQbL4bgZlOZZ3OI+rNJ/VhFXzxGE5RgY1JAl+Z9387eOdYihBXntIXD5jh24avx0w2jtJxzZYQYU1rq2WiTv3AD/RgDAAAA==";
+
 /**
  * Scène du portail : la marque du cabinet, son escalier qui monte marche après marche (le projet
  * qui progresse), et ce que le porteur trouve dans son espace.
  */
 function ScenePortail() {
   return (
-    <aside className="sur-dos relative order-first overflow-hidden bg-[linear-gradient(150deg,#1b3047_0%,#0e1a24_55%,#081118_100%)] text-white lg:order-2 lg:min-h-screen">
+    <aside className="sur-dos relative order-first overflow-hidden bg-[#0e1a24] text-white lg:order-2 lg:min-h-screen">
+      <PhotoScene photo="portail-20209020" apercu={APERCU_PORTAIL} voile="14 26 36" />
       <svg aria-hidden viewBox="0 0 400 400" className="pointer-events-none absolute -bottom-10 -right-10 hidden h-[78%] lg:block" focusable="false">
         <circle cx="210" cy="190" r="170" fill="none" stroke="#2d82dc" strokeOpacity="0.35" strokeWidth="2" pathLength={1} className="n-tracer" style={{ "--retard": "200ms" } as CSSProperties} />
         {[0, 1, 2, 3].map((k) => (
@@ -164,7 +181,7 @@ function ScenePortail() {
         <div className="n-entree max-w-[460px]" style={{ "--i": 2 } as CSSProperties}>
           <p className="font-display text-[34px] font-bold leading-[1.08] sm:text-[44px] lg:text-[52px]">Portail des porteurs de projets</p>
           <div aria-hidden className="n-pousser-x mt-6 h-[3px] w-16 rounded-full bg-[#2d82dc]" style={{ "--i": 6 } as CSSProperties} />
-          <ul className="mt-7 space-y-3 text-[16px] text-white/85">
+          <ul className="mt-7 space-y-3 text-[16px] text-white/90">
             {[
               [FolderOpen, "Votre dossier et l'avancement de son évaluation"],
               [FileText, "Les pièces à déposer et celles déjà reçues"],
