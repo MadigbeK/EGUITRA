@@ -175,6 +175,45 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**22 octobre : module RH (NIMOVA · RH)**, à la demande du gérant (« une gestion complète, simple et
+intelligente des ressources humaines », carte blanche). La paie était hors du périmètre de l'offre
+(chapitre 3) : évolution demandée par le gérant. Spécification : `docs/projet/rh/specification.md` ;
+guide : `docs/guides/guide-rh.md` (et `word/Guide_rh.docx`).
+- Fait, socle : profil « Ressources humaines » (`rh`, eguitra_base 19.0.1.5.0), application `rh`
+  (administration, direction, RH ; les deux sociétés). Un compte lié à un dossier salarié en cours
+  ouvre aussi l'espace, réduit à « Mon espace ».
+- Fait, noyau (`addons/eguitra_rh`, 16 tests) : salariés (matricule EG-/AX- par société, fiche tiers
+  pour le 422, éléments fixes, documents à échéance, historique du salaire avec motif), départements,
+  absences en jours ouvrables (lundi au samedi, jours fériés de la Guinée 2026-2027, fêtes musulmanes
+  2027 estimées), soldes de congés calculés (2,5 jours par mois, solde de reprise), décision par la
+  RH, la direction ou le responsable hiérarchique, avances et prêts retenus sur la paie ; paie du mois
+  (prorata, absences non rémunérées, heures majorées, prime par rotation des chauffeurs si
+  paramétrée, CNSS 5 % et 18 % plafonnée à 2 500 000, RTS au barème du CGI art. 63 vérifié dans le
+  texte officiel, exonération des indemnités forfaitaires dans la limite de 25 % du brut, VF 6 %,
+  taxe d'apprentissage 2 %), contrôles avant validation, bulletin (net en lettres, cumuls), écriture
+  de paie en brouillon dans le journal « Salaires » (SAL, créé au besoin ; 661/663/664/641, 431, 4472,
+  4478, 4211, 422 au nom de chaque salarié, axe d'activité), export Excel (livre de paie, virements,
+  CNSS, impôts), simulateur (du net au salaire de base), échéancier (fins d'essai et de CDD,
+  documents, soldes élevés, paie non validée, fiches incomplètes, anniversaires). Revue de sécurité :
+  références écrites dans un dossier contrôlées contre la société de travail (signalé par la session
+  Transport).
+- Fait, web : espace `/rh` (thème prune), 14 écrans (tableau de bord, salariés et fiche, absences et
+  planning, avances, paie, bulletin imprimable, simulateur, Mon espace, paramètres, guide).
+- Recette (22 octobre) : `eguitra_rh` installé, `eguitra_base` mis à jour, noyau redémarré,
+  application web reconstruite ; données fictives chargées (`scripts/recette/donnees_demo_rh.py` :
+  12 salariés des deux sociétés, documents à échéance, absences, une avance, paie de septembre
+  validée) ; `recette.admin` reçoit le profil RH ; test.dg, test.exploitation, test.parc et
+  test.consultant sont liés à des dossiers pour essayer « Mon espace ». Vérifié dans le navigateur :
+  tableau de bord, paie de septembre, bulletin imprimable (montants recalculés à la main) ; et par
+  l'API : libre-service de test.parc (son dossier, son solde, son bulletin ; liste du personnel 403,
+  `/rh` renvoyé vers `/rh/moi`). Soldes de congés des dossiers fictifs élevés faute de solde de
+  reprise : à la reprise réelle, saisir le solde et sa date pour chaque salarié.
+- **À faire valider par l'expert-comptable et la CNSS avant la première paie réelle** : taux et
+  plafond CNSS, SMIG, traitement des indemnités, taxe d'apprentissage ou contribution de 1,5 % à la
+  formation professionnelle selon l'effectif, comptes de paie (CNSS par défaut sur la racine 431).
+- Production : non demandée. Pour l'y mettre, ajouter `eguitra_rh` à `MODULES` d'`infra/release.sh`
+  (et à `infra/init-db.sh`), puis `release.sh` (le module s'installe par `-i`).
+
 **22 octobre : ensembles gérés pour des propriétaires et coûts standard** (écarts 5.1 et 5.2 de
 l'analyse du logiciel actuel, sur l'accord du gérant : « poursuis »). `eguitra_transport` 19.0.1.3.0.
 - Fait, noyau : propriété de l'ensemble (propre, géré pour un propriétaire) et charges mensuelles
