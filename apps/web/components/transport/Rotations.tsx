@@ -3,9 +3,17 @@
 import { useState } from "react";
 import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select } from "@/components/ui";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import type { Profile } from "@/lib/types";
 import { parseNumber, type Ref, type Referentials } from "./types";
+
+// Profils des routes du noyau (addons/eguitra_transport/controllers/transport.py) : saisie et validation
+// des rotations (WRITE), facturation (administration et finance). La direction lit seulement. Les
+// indicateurs de /transport/settings ne suffisent pas pour la saisie : « sees_accounts && !can_edit »
+// vaut aussi bien pour la direction seule que pour un compte direction et exploitation, qui saisit.
+const SAISIE: Profile[] = ["admin", "finance", "exploitation"];
+const FACTURATION: Profile[] = ["admin", "finance"];
 
 interface Rotation {
   id: number;
@@ -46,6 +54,10 @@ export function Rotations() {
   const [selected, setSelected] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  const saisie = useAutorise(SAISIE);
+  const facturation = useAutorise(FACTURATION);
+  // Sans commande à appliquer (direction), la sélection n'a pas d'objet : ni case ni clic sur la ligne.
+  const selection = saisie || facturation;
   const rows = data?.items ?? [];
   const chosen = rows.filter((r) => selected.includes(r.id));
 
@@ -75,17 +87,25 @@ export function Rotations() {
         <Field label="Statut">
           <Select value={state} onChange={(e) => setState(e.target.value)} options={[{ value: "draft,done", label: "À traiter (saisies et validées)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "Validées, à facturer" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
         </Field>
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("validate")}>
-            <CheckCheck className="h-4 w-4" /> Valider la sélection
-          </Button>
-          <Button disabled={!chosen.some((r) => r.state === "done")} onClick={() => run("invoice")}>
-            <FileText className="h-4 w-4" /> Facturer la sélection
-          </Button>
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" /> Nouvelle rotation
-          </Button>
-        </div>
+        {selection && (
+          <div className="flex flex-wrap gap-2">
+            {saisie && (
+              <Button disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("validate")}>
+                <CheckCheck className="h-4 w-4" /> Valider la sélection
+              </Button>
+            )}
+            {facturation && (
+              <Button disabled={!chosen.some((r) => r.state === "done")} onClick={() => run("invoice")}>
+                <FileText className="h-4 w-4" /> Facturer la sélection
+              </Button>
+            )}
+            {saisie && (
+              <Button variant="primary" onClick={() => setCreating(true)}>
+                <Plus className="h-4 w-4" /> Nouvelle rotation
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       <Card padded={false}>
         {!data ? (
@@ -94,10 +114,10 @@ export function Rotations() {
           <DataTable
             rows={rows}
             rowKey={(r) => r.id}
-            onRowClick={(r) => setSelected((s) => (s.includes(r.id) ? s.filter((x) => x !== r.id) : [...s, r.id]))}
+            onRowClick={selection ? (r) => setSelected((s) => (s.includes(r.id) ? s.filter((x) => x !== r.id) : [...s, r.id])) : undefined}
             empty="Aucune rotation pour ce filtre."
             columns={[
-              { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={selected.includes(r.id)} aria-label={`Sélectionner la rotation ${r.name ?? r.id}`} /> },
+              ...(selection ? [{ key: "sel", label: "", render: (r: Rotation) => <input type="checkbox" readOnly checked={selected.includes(r.id)} aria-label={`Sélectionner la rotation ${r.name ?? r.id}`} /> }] : []),
               { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name ?? "–"}{r.source === "mobile" && <Smartphone className="ml-1 inline h-3 w-3 text-accent" />}</span> },
               { key: "date_loading", label: "Chargement", render: (r) => fmtDate(r.date_loading) },
               { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name, sortValue: (r) => r.vehicle.name },
@@ -114,7 +134,7 @@ export function Rotations() {
             footer={
               data.items.length > 0 ? (
                 <tr>
-                  <td className="px-3 py-2" colSpan={6}>Total ({data.total_count})</td>
+                  <td className="px-3 py-2" colSpan={selection ? 6 : 5}>Total ({data.total_count})</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtDec(data.totals.volume)}</td>
                   <td />
                   <td className="px-3 py-2 text-right font-mono">{fmtGNF(data.totals.revenue)}</td>
