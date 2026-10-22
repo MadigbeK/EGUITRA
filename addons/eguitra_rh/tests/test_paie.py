@@ -83,10 +83,16 @@ class TestRh(FinanceDataMixin, TransactionCase):
             "bank_account": "GN01", "activity_account_id": cls.transport.id, "id_number": "CNI-1",
             "line_ids": [(0, 0, {"rubric_id": cls.env.ref("eguitra_rh.rubric_transport").id, "amount": 500_000})],
         })
-        # Quatre yeux : les paies préparées ici (superutilisateur) sont validées par un autre compte RH.
-        cls.valideur = cls.env["res.users"].with_context(no_reset_password=True).create(
-            {"name": "Valideur Paie", "login": "valideur.paie"})
-        cls.valideur._eguitra_set_profiles(["rh"])
+        # Quatre yeux : la RH prépare la paie, la direction la valide.
+        cls.gestionnaire = cls._user("gestion.paie", "rh")
+        cls.valideur = cls._user("valideur.paie", "direction")
+        cls.administrateur = cls._user("admin.paie", "admin")
+
+    @classmethod
+    def _user(cls, login, profile):
+        user = cls.env["res.users"].with_context(no_reset_password=True).create({"name": login.title(), "login": login})
+        user._eguitra_set_profiles([profile])
+        return user
 
     def _leave(self, emp, code, d1, d2, approve=True):
         leave = self.env["eguitra.rh.leave"].create({
@@ -165,8 +171,8 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.assertEqual(round(manual.amount), round(10 * 3_000_000 / 173.33 * 1.3), "Heures au taux horaire majoré")
         self.assertIn(manual, a.input_ids, "Les éléments saisis survivent au recalcul")
 
-        with self.assertRaisesRegex(AccessError, "autre personne"):
-            payroll.action_validate()  # compte qui a préparé et recalculé la paie
+        with self.assertRaisesRegex(AccessError, "validée par la direction"):
+            payroll.with_user(self.gestionnaire).action_validate()
         payroll.with_user(self.valideur).action_validate()
         self.assertEqual(payroll.validated_by, self.valideur)
         self.assertEqual(advance._remaining(), 300_000)
@@ -197,6 +203,15 @@ class TestRh(FinanceDataMixin, TransactionCase):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
         with self.assertRaisesRegex(UserError, "Net à payer négatif"):
             payroll.with_user(self.valideur).action_validate()
+
+    def test_administration_qui_recalcule_ne_valide_pas(self):
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        payroll.with_user(self.administrateur).action_compute()
+        self.assertIn(self.administrateur, payroll.prepared_by_ids)
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            payroll.with_user(self.administrateur).action_validate()
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual((payroll.state, payroll.validated_by), ("validated", self.valideur))
 
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)

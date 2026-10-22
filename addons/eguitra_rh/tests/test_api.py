@@ -204,39 +204,32 @@ class TestApiRh(ApiCase):
                                                                        "salary_reason": "Revalorisation"}, token=other)
         self.assertEqual((status, body.get("base_salary")), (200, 3_200_000), body)
 
-    def test_validation_de_la_paie_par_une_autre_personne(self):
-        """Ni le compte qui a préparé la paie, ni celui qui l'a recalculée ou complétée d'éléments variables
-        ne la valide ; un autre compte RH ou la direction la valide."""
+    def test_validation_de_la_paie_par_la_direction(self):
+        """La RH prépare la paie, la direction la valide. La RH ne valide jamais ; un compte de « Préparée
+        par » (création, recalcul, éléments variables) non plus, administration comprise."""
+        self._create_user("admin.rh", "admin")
         rh = self.open_session("aminata.rh", app="rh")["access_token"]
         other = self.open_session("binta.rh", app="rh")["access_token"]
         dg = self.open_session("dg.rh", app="rh")["access_token"]
+        admin = self.open_session("admin.rh", app="rh")["access_token"]
         status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
         self.assertEqual(status, 200, payroll)
         self.assertEqual((payroll["prepared_by"], payroll["can_validate"]), (["Aminata.Rh"], False))
         validate = f"/rh/payrolls/{payroll['id']}/validate"
-        status, body = self.call("POST", validate, {}, token=rh)
-        self.assertEqual(status, 403, body)
-        self.assertIn("autre personne", body["message"])
-        status, done = self.call("POST", validate, {}, token=other)
-        self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Binta.Rh"), done)
-
-        # Rouverte puis complétée d'un élément variable : le compte qui l'a saisi ne la valide plus.
-        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}, token=rh)
-        self.assertEqual(status, 200, body)
-        status, meta = self.call("GET", "/rh/meta", token=other)
-        bonus = next(r["id"] for r in meta["rubrics"] if r["code"] == "RDT")
-        slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == self.worker.id)
-        status, body = self.call("POST", f"/rh/payslips/{slip}/inputs", {"rubric_id": bonus, "amount": 250_000},
-                                 token=other)
-        self.assertEqual(status, 200, body)
-        status, body = self.call("POST", validate, {}, token=other)
-        self.assertEqual(status, 403, body)
+        for token in (rh, other):
+            status, body = self.call("POST", validate, {}, token=token)
+            self.assertEqual((status, body.get("message")), (403, "La paie est validée par la direction."), body)
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=other)
+        self.assertFalse(detail["can_validate"], "La RH ne valide pas, même la paie qu'elle n'a pas préparée")
 
         # La direction valide la paie, sans gagner d'autre droit d'écriture sur la RH.
         status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=dg)
         self.assertEqual((status, detail["can_validate"], detail["can_write"]), (200, True, False), detail)
         status, done = self.call("POST", validate, {}, token=dg)
         self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
+        status, meta = self.call("GET", "/rh/meta", token=rh)
+        bonus = next(r["id"] for r in meta["rubrics"] if r["code"] == "RDT")
+        slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == self.worker.id)
         for method, path, payload in [
             ("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}),
             ("POST", f"/rh/payrolls/{payroll['id']}/account", {}),
@@ -248,15 +241,24 @@ class TestApiRh(ApiCase):
             status, body = self.call(method, path, payload, token=dg)
             self.assertEqual(status, 403, (path, body))
 
-        # Recalculée par un autre compte que celui qui l'a créée : aucun des deux ne la valide.
-        status, october = self.call("POST", "/rh/payrolls", {"month": "2026-10-01"}, token=rh)
-        self.assertEqual(status, 200, october)
-        status, body = self.call("POST", f"/rh/payrolls/{october['id']}/compute", {}, token=other)
+        # L'administration, qui écrit aussi en RH, ne valide pas une paie qu'elle a complétée ou créée.
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}, token=rh)
         self.assertEqual(status, 200, body)
-        self.assertEqual(sorted(body["prepared_by"]), ["Aminata.Rh", "Binta.Rh"])
-        for token in (rh, other):
-            status, body = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=token)
-            self.assertEqual(status, 403, body)
+        status, body = self.call("POST", f"/rh/payslips/{slip}/inputs", {"rubric_id": bonus, "amount": 250_000},
+                                 token=admin)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", validate, {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", validate, {}, token=dg)
+        self.assertEqual((status, done.get("state")), (200, "validated"), done)
+        status, october = self.call("POST", "/rh/payrolls", {"month": "2026-10-01"}, token=admin)
+        self.assertEqual(status, 200, october)
+        status, body = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=dg)
+        self.assertEqual((status, done.get("state")), (200, "validated"), done)
 
     def test_personne_n_approuve_sa_propre_absence(self):
         """Ni la RH, ni la direction n'approuvent ou ne refusent leur propre absence, à la saisie comme en

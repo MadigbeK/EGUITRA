@@ -5,8 +5,9 @@ figés, imprimables, avances décomptées) -> comptabilisée (pièce en brouillo
 salaires, que la finance relit et comptabilise). Une paie se rouvre tant que la pièce n'est pas
 comptabilisée par la finance.
 
-Quatre yeux : la paie est validée par une autre personne que celles qui l'ont préparée (création,
-recalcul, saisie ou suppression d'éléments variables), retenues dans « Préparée par ».
+Quatre yeux : la RH prépare la paie, la direction (ou l'administration, qui l'implique) la valide,
+jamais un compte qui l'a préparée (création, recalcul, saisie ou suppression d'éléments variables),
+retenu dans « Préparée par ».
 """
 
 from collections import defaultdict
@@ -20,6 +21,8 @@ from .employee import CATEGORIES, CONTRACTS, month_bounds
 MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
           "novembre", "décembre"]
 STATES = [("draft", "En préparation"), ("validated", "Validée"), ("accounted", "Comptabilisée")]
+# Profils qui valident la paie (l'administration implique la direction) ; jamais la RH.
+VALIDATORS = ("admin", "direction")
 VARIATION_ALERT = 20.0
 
 
@@ -94,10 +97,20 @@ class EguitraRhPayroll(models.Model):
             # Salarié sans aucun jour ouvrable dans le mois (entrée le dernier dimanche, par exemple).
             payroll.payslip_ids.filtered(lambda s: not s.presence_days).unlink()
 
+    def _can_validate(self, user):
+        self.ensure_one()
+        return bool(set(VALIDATORS) & set(user._eguitra_profiles())) and not self.sudo()._prepared_by(user)
+
     def action_validate(self):
+        """Validation par la direction (ou l'administration), jamais par un compte qui a préparé la paie.
+        La direction n'a que la lecture sur la paie : après ces contrôles, les écritures se font en sudo,
+        sous l'identité du compte (validated_by)."""
         self._check_draft()
+        user = self.env.user
         for payroll in self:
-            if payroll.sudo()._prepared_by(self.env.user):
+            if not set(VALIDATORS) & set(user._eguitra_profiles()):
+                raise AccessError("La paie est validée par la direction.")
+            if payroll.sudo()._prepared_by(user):
                 raise AccessError("La paie doit être validée par une autre personne que celle qui l'a préparée "
                                   "(création, calcul ou éléments variables).")
             if not payroll.payslip_ids:
@@ -106,9 +119,8 @@ class EguitraRhPayroll(models.Model):
                         for a in s._anomalies() if a["severity"] == "danger"]
             if blocking:
                 raise UserError("Paie non validée : " + " ; ".join(blocking))
-            payroll.write({"state": "validated", "validated_by": self.env.user.id,
-                           "validated_at": fields.Datetime.now()})
-            payroll._advances()._update_state()
+            payroll.sudo().write({"state": "validated", "validated_by": user.id, "validated_at": fields.Datetime.now()})
+            payroll.sudo()._advances()._update_state()
 
     def action_reopen(self):
         for payroll in self:
