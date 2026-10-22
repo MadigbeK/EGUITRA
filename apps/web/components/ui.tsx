@@ -225,13 +225,34 @@ const ENCRE: Record<Tone, string> = {
   accent: "text-or",
 };
 
+/** Couleur du sceau : plus soutenue que l'encre des ondes, il porte l'état (3:1 au moins). */
+const SCEAU: Record<Tone, string> = {
+  neutral: "text-accent",
+  ok: "text-ok",
+  warn: "text-warn",
+  danger: "text-danger",
+  accent: "text-[#a87d2e]",
+};
+
+/** L'état du sceau en toutes lettres, pour qui ne voit pas sa couleur. */
+const ETAT: Record<Tone, string> = {
+  neutral: "",
+  ok: "Conforme",
+  warn: "À surveiller",
+  danger: "Alerte",
+  accent: "À noter",
+};
+
 /** Sceau d'état : un petit cachet gravé (anneau et point), dans la couleur de l'état. */
 function Sceau({ tone }: { tone: Tone }) {
   return (
-    <svg viewBox="0 0 16 16" aria-hidden className={cx("mt-0.5 h-4 w-4 flex-none", ENCRE[tone])}>
-      <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="1.2 1.4" />
-      <circle cx="8" cy="8" r="3.4" fill="currentColor" />
-    </svg>
+    <>
+      <svg viewBox="0 0 16 16" aria-hidden className={cx("mt-0.5 h-4 w-4 flex-none", SCEAU[tone])}>
+        <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="1.2 1.4" />
+        <circle cx="8" cy="8" r="3.4" fill="currentColor" />
+      </svg>
+      <span className="sr-only">{ETAT[tone]}</span>
+    </>
   );
 }
 
@@ -330,7 +351,7 @@ export function Button({ variant = "secondary", loading, className, children, di
 }
 
 const FIELD =
-  "w-full rounded-[10px] border border-line-strong/80 bg-panel px-3 py-2 text-sm text-ink placeholder:text-muted/70 outline-none transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent-vif focus:ring-4 focus:ring-accent-vif/15 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-muted";
+  "w-full rounded-[10px] border border-line-champ bg-panel px-3 py-2 text-sm text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow] duration-200 hover:border-ink-2 focus:border-accent focus:ring-4 focus:ring-accent/15 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-muted";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={ajuste(cx(FIELD, "min-h-9"), props.className)} />;
@@ -475,7 +496,7 @@ const NOTICE_ICON: Record<Tone, string> = {
 export function Notice({ tone = "accent", children }: { tone?: Tone; children: ReactNode }) {
   const I = tone === "warn" || tone === "danger" ? AlertTriangle : tone === "ok" ? CheckCircle2 : Info;
   return (
-    <div role={tone === "danger" ? "alert" : undefined} className={cx("n-surgir flex items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed", NOTICE[tone])}>
+    <div role={tone === "danger" ? "alert" : "status"} className={cx("n-surgir flex items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed", NOTICE[tone])}>
       <I className={cx("mt-[3px] h-4 w-4 flex-none", NOTICE_ICON[tone])} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -538,7 +559,7 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
                     className={cx("group inline-flex items-center gap-1 rounded text-[12.5px] font-semibold transition-colors hover:text-ink", c.align === "right" && "flex-row-reverse", active ? "text-accent" : "text-muted")}
                   >
                     {c.label}
-                    <span aria-hidden className={cx("inline-flex transition-opacity", !active && "opacity-0 group-hover:opacity-60")}>
+                    <span aria-hidden className={cx("inline-flex transition-opacity", !active && "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60")}>
                       {active && sort.dir === -1 ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
                     </span>
                   </button>
@@ -662,18 +683,42 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
 }
 
 export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+  const fenetre = useRef<HTMLDivElement>(null);
+  const titreId = useId();
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && onClose();
+    const avant = document.activeElement as HTMLElement | null;
+    const boite = fenetre.current;
+    // Le premier champ prend le focus ; à défaut, la fenêtre elle-même.
+    const premier = boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
+    (premier ?? boite)?.focus();
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key !== "Tab" || !boite) return;
+      const cibles = [...boite.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+      const debut = cibles[0];
+      const fin = cibles[cibles.length - 1];
+      if (!debut || !fin) return;
+      if (e.shiftKey && (document.activeElement === debut || document.activeElement === boite)) {
+        e.preventDefault();
+        fin.focus();
+      } else if (!e.shiftKey && document.activeElement === fin) {
+        e.preventDefault();
+        debut.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (avant?.isConnected) avant.focus();
+    };
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10" role="dialog" aria-modal="true" aria-label={title}>
-      <div className={cx("n-surgir w-full rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)]", wide ? "max-w-4xl" : "max-w-lg")}>
+    <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
+      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx("n-surgir w-full rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)] outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
-          <h2 className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>
+          <h2 id={titreId} className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="-mr-1 grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-panel-3 hover:text-ink" aria-label="Fermer">
             <X className="h-4 w-4" />
           </button>
@@ -1037,11 +1082,11 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
 }
 
 const METER: Record<Tone, [string, string]> = {
-  neutral: ["var(--panel-3)", "var(--accent-vif)"],
-  ok: ["var(--ok-doux)", "var(--g-jade)"],
-  warn: ["var(--warn-doux)", "var(--warn-vif)"],
-  danger: ["var(--danger-doux)", "var(--danger-vif)"],
-  accent: ["var(--accent-doux)", "var(--accent-vif)"],
+  neutral: ["var(--panel-3)", "var(--accent)"],
+  ok: ["var(--ok-doux)", "var(--ok)"],
+  warn: ["var(--warn-doux)", "var(--warn)"],
+  danger: ["var(--danger-doux)", "var(--danger)"],
+  accent: ["var(--accent-doux)", "var(--accent)"],
 };
 
 /** Jauge linéaire : le remplissage porte l'état et se remplit à l'affichage. */
@@ -1049,7 +1094,7 @@ export function ProgressBar({ value, tone = "accent", rayures, epaisseur = 8 }: 
   const pct = Math.max(0, Math.min(100, value));
   const [track, fill] = METER[tone];
   return (
-    <div className="w-full overflow-hidden rounded-full" style={{ background: track, height: epaisseur }}>
+    <div role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} className="w-full overflow-hidden rounded-full" style={{ background: track, height: epaisseur }}>
       <div className={cx("n-pousser-x h-full rounded-full", rayures && "n-rayures-fixes")} style={{ width: `${pct}%`, backgroundColor: fill, boxShadow: `0 0 12px -2px ${fill}` }} />
     </div>
   );

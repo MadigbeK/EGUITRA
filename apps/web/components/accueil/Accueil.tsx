@@ -56,7 +56,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const cible = e.target as HTMLElement | null;
-      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.isContentEditable)) return;
+      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.tagName === "SELECT" || cible.isContentEditable)) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         champ.current?.focus();
@@ -165,6 +165,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
       </header>
 
       <main className="relative z-10 mx-auto max-w-[800px] px-4 pb-16 pt-[6vh] sm:px-6">
+        <h1 className="sr-only">Applications NIMOVA</h1>
         {/* Recherche toujours visible : au toucher, aucune frappe au clavier ne pourrait la faire apparaître. */}
         <div className="n-entree mx-auto mb-8 max-w-md" style={{ "--i": 1 } as CSSProperties}>
           <form
@@ -252,8 +253,8 @@ function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: T
       <span
         ref={boite}
         className={cx(
-          "tuile-boite relative grid h-[66px] w-[66px] place-items-center rounded-[15px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_4px_10px_-3px_rgb(16_36_31/0.12)] group-hover:shadow-[0_2px_4px_rgb(16_36_31/0.08),0_14px_24px_-8px_rgb(16_36_31/0.26)] group-focus-visible:ring-2 group-focus-visible:ring-accent-vif group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#f3f6f1]",
-          premiere && "ring-2 ring-accent-vif ring-offset-2 ring-offset-[#f3f6f1]",
+          "tuile-boite relative grid h-[66px] w-[66px] place-items-center rounded-[15px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_4px_10px_-3px_rgb(16_36_31/0.12)] group-hover:shadow-[0_2px_4px_rgb(16_36_31/0.08),0_14px_24px_-8px_rgb(16_36_31/0.26)] group-focus-visible:ring-2 group-focus-visible:ring-accent group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#f3f6f1]",
+          premiere && "ring-2 ring-accent ring-offset-2 ring-offset-[#f3f6f1]",
         )}
       >
         <span aria-hidden className="tuile-reflet pointer-events-none absolute inset-0 rounded-[15px]" />

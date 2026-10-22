@@ -291,14 +291,14 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   ];
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-xl flex-col">
+    <div className="rotations-app mx-auto flex min-h-screen max-w-xl flex-col">
       <header className="sur-dos sticky top-0 z-10 bg-[linear-gradient(135deg,#c4471d_0%,#983210_60%,#142f29_140%)] text-white shadow-[0_10px_30px_-18px_rgb(152_50_16/0.8)]">
         <div className="flex items-center gap-3 px-4 pb-3 pt-3.5">
           <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white/15">
             <Monogramme tuile={false} clair className="h-6 w-6" />
           </span>
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="font-display text-[19px] font-bold">Rotations</div>
+            <h1 className="font-display text-[19px] font-bold">Rotations</h1>
             <div className="truncate text-[12.5px] text-white/95">{me.name}</div>
           </div>
           <span
@@ -306,6 +306,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold",
               online ? "bg-white/15 text-white" : "bg-or text-foret",
             )}
+            role="status"
           >
             {online ? <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-menthe" style={{ ["--pouls" as string]: "rgb(165 230 194 / 0.7)" } as import("react").CSSProperties} /> : <CloudOff className="h-3.5 w-3.5" />}
             {online && <Wifi className="h-3.5 w-3.5" />} {online ? "En ligne" : "Hors réseau"}

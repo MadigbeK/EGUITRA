@@ -221,7 +221,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
             </>
           );
           const classe = cx(
-            "relative z-[1] flex h-10 items-center gap-1.5 rounded-[11px] px-3 text-[14px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent-vif",
+            "relative z-[1] flex h-10 items-center gap-1.5 rounded-[11px] px-3 text-[14px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent",
             dedans ? "font-semibold text-ink" : "font-medium text-ink-2 hover:text-ink",
           );
           if (s.items.length === 1) {
@@ -275,7 +275,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
                     href={item.href}
                     aria-current={actif ? "page" : undefined}
                     onClick={() => setOuvert(null)}
-                    className={cx("tuile group flex items-start gap-3 rounded-2xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent-vif", actif ? "bg-accent-doux" : "hover:bg-[#f2f6f3] focus-visible:bg-[#f2f6f3]", joue && "joue")}
+                    className={cx("tuile group flex items-start gap-3 rounded-2xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux" : "hover:bg-[#f2f6f3] focus-visible:bg-[#f2f6f3]", joue && "joue")}
                     style={{ "--d-intro": `${90 + n * 30}ms` } as CSSProperties}
                   >
                     <IconeModule cle={item.href} className="h-10 w-10 flex-none transition-transform duration-300 ease-[var(--ease-ressort)] group-hover:scale-110" />
@@ -314,7 +314,7 @@ export function ListeMenus({ sections, pathname, home, badges, onNavigate }: { s
                     href={item.href}
                     onClick={onNavigate}
                     aria-current={actif ? "page" : undefined}
-                    className={cx("tuile group flex items-center gap-3 rounded-2xl px-3 py-2 text-[15px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent-vif", actif ? "bg-accent-doux font-semibold text-ink" : "font-medium text-ink-2 hover:bg-panel-2 hover:text-ink")}
+                    className={cx("tuile group flex items-center gap-3 rounded-2xl px-3 py-2 text-[15px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux font-semibold text-ink" : "font-medium text-ink-2 hover:bg-panel-2 hover:text-ink")}
                   >
                     <IconeModule cle={item.href} className="h-8 w-8 flex-none" />
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>

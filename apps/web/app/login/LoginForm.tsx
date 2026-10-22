@@ -155,7 +155,6 @@ function CodeInput({ value, onChange }: { value: string; onChange: (v: string) =
         autoFocus
         inputMode="numeric"
         autoComplete="one-time-code"
-        maxLength={6}
         pattern="[0-9]{6}"
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}

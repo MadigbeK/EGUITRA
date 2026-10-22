@@ -106,8 +106,8 @@ function SceneNimova() {
         {/* eslint-disable-next-line @next/next/no-img-element -- image décorative déjà optimisée, servie telle quelle */}
         <img src="/scenes/connexion-9301288-1400.jpg" alt="" fetchPriority="high" className="h-full w-full object-cover object-[50%_40%]" />
       </picture>
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(13_34_29/0.82)_0%,rgb(13_34_29/0.35)_42%,rgb(13_34_29/0.55)_70%,rgb(13_34_29/0.9)_100%)]" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(13_34_29/0.75)_0%,rgb(13_34_29/0.2)_60%,transparent_100%)]" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(13_34_29/0.82)_0%,rgb(13_34_29/0.5)_42%,rgb(13_34_29/0.6)_70%,rgb(13_34_29/0.9)_100%)]" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(13_34_29/0.78)_0%,rgb(13_34_29/0.5)_60%,transparent_100%)] max-lg:bg-[rgb(13_34_29/0.35)]" />
       {/* Le N du pli, en grand, tracé au chargement */}
       <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-24 -top-10 hidden h-[118%] lg:block" focusable="false">
         {/* Le pli de la marque, tracé au trait : montants, diagonale d'or, et les deux plis du ruban. */}
@@ -127,7 +127,7 @@ function SceneNimova() {
             <p className="font-display text-[48px] font-bold leading-none tracking-[0.04em] sm:text-[64px] lg:text-[84px]">NIMOVA</p>
             <p className="mt-3 text-[17px] font-semibold text-menthe lg:text-[20px]">Système intégré de gestion</p>
             <div aria-hidden className="n-pousser-x mt-6 h-[3px] w-16 rounded-full bg-or" style={{ "--i": 6 } as CSSProperties} />
-            <p className="mt-6 max-w-[26ch] text-[18px] leading-snug text-white/85 lg:text-[21px]">{SIGNATURE}</p>
+            <p className="mt-6 max-w-[26ch] text-[18px] leading-snug text-white lg:text-[21px]">{SIGNATURE}</p>
           </div>
         </div>
 
