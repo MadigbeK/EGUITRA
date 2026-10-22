@@ -16,6 +16,13 @@ const TON_ANOMALIE: Record<Anomaly["severity"], Tone> = { danger: "danger", warn
  * Liste des paies par mois et par société (chaque société reste l'employeur légal : une paie, une
  * déclaration et une écriture chacune), et préparation du mois pour toutes les sociétés d'un coup.
  */
+
+/** « de septembre 2026 », « d'octobre 2026 » : élision devant avril, août, octobre. */
+function deMois(mois: string): string {
+  const libelle = moisLong(mois);
+  return /^[aeiouéèâ]/i.test(libelle) ? `d'${libelle}` : `de ${libelle}`;
+}
+
 export function ListePaies() {
   const router = useRouter();
   const { data: meta } = useMeta();
@@ -36,7 +43,7 @@ export function ListePaies() {
         actions={
           meta?.can_write && (
             <Button variant="primary" onClick={() => setCreation(true)}>
-              <Plus className="h-4 w-4" /> {dejaCourant ? "Préparer une paie" : `Préparer la paie de ${moisLong(courant)}`}
+              <Plus className="h-4 w-4" /> {dejaCourant ? "Préparer une paie" : `Préparer la paie ${deMois(courant)}`}
             </Button>
           )
         }
@@ -85,7 +92,7 @@ export function ListePaies() {
             const crees = p.created ?? [p.id];
             // Une seule société préparée : on ouvre sa paie ; plusieurs : la liste les montre.
             if (crees.length <= 1) router.push(`/rh/paie/${p.id}`);
-            else setMessage(`Paie de ${moisLong(p.month)} préparée pour ${crees.length} sociétés : ouvrez chacune pour la contrôler et la valider.`);
+            else setMessage(`Paie ${deMois(p.month)} préparée pour ${crees.length} sociétés : ouvrez chacune pour la contrôler et la valider.`);
           }}
         />
       )}
@@ -171,7 +178,7 @@ export function DetailPaie({ id }: { id: string }) {
         <ChevronLeft className="h-4 w-4" /> Paies
       </Link>
       <PageHeader
-        title={`Paie de ${moisLong(p.month)}, ${p.company.name}`}
+        title={`Paie ${deMois(p.month)}, ${p.company.name}`}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <PastilleSociete company={p.company} />

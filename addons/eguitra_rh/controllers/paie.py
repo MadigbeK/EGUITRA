@@ -10,7 +10,7 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 
 from ..engine import Item, base_for_net, compute
 from ..models.employee import CONTRACTS, PAYMENT_METHODS, month_bounds
-from ..models.payroll import month_label
+from ..models.payroll import month_label, of_month
 from .common import (
     READ,
     WRITE,
@@ -109,7 +109,7 @@ class EguitraRhPaie(http.Controller):
             if not exists and staff:
                 created |= Payroll.prepare(company, month)
         if not created:
-            raise ApiError(422, "business_rule", f"La paie de {month_label(month)} est déjà préparée pour chaque "
+            raise ApiError(422, "business_rule", f"La paie {of_month(month)} est déjà préparée pour chaque "
                                                  "société qui a du personnel ce mois-là.")
         return dict(payroll_detail(created[0]), created=created.ids)
 

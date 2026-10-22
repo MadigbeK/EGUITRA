@@ -8,6 +8,7 @@ from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
 
 from ..engine import Item, Params, amount_in_words, base_for_net, compute, rts_amount
 from ..models.leave import InsufficientBalance
+from ..models.payroll import of_month
 
 SEPT = date(2026, 9, 1)
 
@@ -61,6 +62,11 @@ class TestMoteur(TransactionCase):
         base = base_for_net(params, 2_000_000, build)
         self.assertGreaterEqual(compute(params, *build(base))["net"], 2_000_000)
         self.assertLess(compute(params, *build(base - 1))["net"], 2_000_000, "Le plus petit salaire qui donne ce net")
+
+    def test_nom_du_mois(self):
+        self.assertEqual(of_month(date(2026, 10, 1)), "d'octobre 2026")
+        self.assertEqual(of_month(date(2026, 8, 1)), "d'août 2026")
+        self.assertEqual(of_month(date(2026, 9, 1)), "de septembre 2026")
 
     def test_montant_en_lettres(self):
         self.assertEqual(amount_in_words(3_281_250),

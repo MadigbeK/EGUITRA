@@ -50,6 +50,12 @@ def month_label(month):
     return f"{MONTHS[month.month - 1]} {month.year}"
 
 
+def of_month(month):
+    """« de septembre 2026 », « d'octobre 2026 » (élision devant avril, août, octobre)."""
+    label = month_label(month)
+    return f"d'{label}" if label[0] in "aeiouéèâ" else f"de {label}"
+
+
 class EguitraRhPayroll(models.Model):
     _name = "eguitra.rh.payroll"
     _description = "Paie du mois"
@@ -73,7 +79,7 @@ class EguitraRhPayroll(models.Model):
     @api.depends("month")
     def _compute_name(self):
         for payroll in self:
-            payroll.name = f"Paie de {month_label(payroll.month)}" if payroll.month else "Paie"
+            payroll.name = f"Paie {of_month(payroll.month)}" if payroll.month else "Paie"
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -92,7 +98,7 @@ class EguitraRhPayroll(models.Model):
     def prepare(self, company, month):
         month = month.replace(day=1)
         if self.search_count([("company_id", "=", company.id), ("month", "=", month)]):
-            raise UserError(f"La paie de {month_label(month)} existe déjà.")
+            raise UserError(f"La paie {of_month(month)} existe déjà.")
         payroll = self.create({"company_id": company.id, "month": month})
         payroll.action_compute()
         return payroll
@@ -240,7 +246,7 @@ class EguitraRhPayroll(models.Model):
             return cache[code]
 
         amounts = defaultdict(float)  # (compte, axe, tiers, libellé) -> débit (positif) ou crédit (négatif)
-        label = f"Paie de {month_label(self.month)}"
+        label = f"Paie {of_month(self.month)}"
         for slip in self.payslip_ids:
             axis = slip.activity_id.id or 0
             partner = slip.employee_id.partner_id.id or 0

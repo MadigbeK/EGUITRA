@@ -15,7 +15,7 @@ from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASONS, MARITAL, PAYMENT_METHODS
 from ..models.leave import InsufficientBalance
-from ..models.payroll import month_label
+from ..models.payroll import of_month
 from .common import (
     OWN_LEAVE,
     READ,
@@ -226,7 +226,7 @@ class EguitraRh(http.Controller):
         for company in companies:
             last = Payroll.search([("company_id", "=", company.id), ("month", "=", previous)], limit=1)
             if current.filtered(lambda e, c=company: e.company_id == c) and (not last or last.state == "draft"):
-                add("payroll", "warn", None, None, f"La paie de {month_label(previous)} de {company.name} n'est pas "
+                add("payroll", "warn", None, None, f"La paie {of_month(previous)} de {company.name} n'est pas "
                     "validée.", f"/rh/paie/{last.id}" if last else "/rh/paie")
         order = {"danger": 0, "warn": 1, "info": 2}
         alerts.sort(key=lambda a: (order[a["severity"]], str(a["date"] or "9999")))
