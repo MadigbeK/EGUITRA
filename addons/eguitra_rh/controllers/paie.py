@@ -11,10 +11,28 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from ..engine import Item, base_for_net, compute
 from ..models.employee import CONTRACTS, PAYMENT_METHODS, month_bounds
 from ..models.payroll import month_label
-from .common import READ, WRITE, can_write, date_value, get, int_or_false, number, payslip_row, scope, text
+from .common import (
+    READ,
+    WRITE,
+    can_write,
+    date_value,
+    get,
+    int_or_false,
+    number,
+    payslip_row,
+    refuse_own,
+    scope,
+    text,
+)
 from .rh import _payroll_row
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def can_validate(payroll):
+    """Quatre yeux : la direction (ou l'administration) valide une paie en préparation qu'elle n'a ni
+    créée, ni recalculée, ni complétée ; la RH ne valide jamais."""
+    return payroll.state == "draft" and payroll._can_validate(request.env.user)
 
 
 def payroll_detail(payroll):
@@ -25,7 +43,8 @@ def payroll_detail(payroll):
                      for g in payroll._by("activity")],
         by_department=payroll._by("department"),
         validated_by=payroll.validated_by.name or None, validated_at=payroll.validated_at or None,
-        can_write=can_write(),
+        prepared_by=payroll.sudo().prepared_by_ids.mapped("name"),
+        can_write=can_write(), can_validate=can_validate(payroll),
     )
 
 
@@ -107,9 +126,15 @@ class EguitraRhPaie(http.Controller):
     def compute_payroll(self, payroll_id, **_kw):
         return self._action(payroll_id, "action_compute")
 
-    @api_route("/rh/payrolls/<int:payroll_id>/validate", methods=("POST",), profiles=WRITE)
+    @api_route("/rh/payrolls/<int:payroll_id>/validate", methods=("POST",), profiles=READ)
     def validate_payroll(self, payroll_id, **_kw):
-        return self._action(payroll_id, "action_validate")
+        """Seules la direction et l'administration valident, et jamais un compte qui a préparé la paie
+        (contrôles du modèle). La route reste ouverte à la RH pour qu'elle reçoive le refus explicite
+        (« La paie est validée par la direction. ») plutôt que le refus générique du profil. Valider est
+        le seul droit d'écriture de la direction sur la RH."""
+        payroll = get("eguitra.rh.payroll", payroll_id, "Paie")
+        payroll.action_validate()
+        return payroll_detail(payroll)
 
     @api_route("/rh/payrolls/<int:payroll_id>/reopen", methods=("POST",), profiles=WRITE)
     def reopen_payroll(self, payroll_id, **_kw):
@@ -126,6 +151,7 @@ class EguitraRhPaie(http.Controller):
     @api_route("/rh/payslips/<int:payslip_id>/inputs", methods=("POST",), profiles=WRITE)
     def add_input(self, payslip_id, **_kw):
         slip = get("eguitra.rh.payslip", payslip_id, "Bulletin")
+        refuse_own(slip.employee_id)
         slip.payroll_id._check_draft()
         data = read_json()
         require(data, "rubric_id")
@@ -147,6 +173,7 @@ class EguitraRhPaie(http.Controller):
     @api_route("/rh/payslips/<int:payslip_id>/inputs/<int:input_id>", methods=("DELETE",), profiles=WRITE)
     def delete_input(self, payslip_id, input_id, **_kw):
         slip = get("eguitra.rh.payslip", payslip_id, "Bulletin")
+        refuse_own(slip.employee_id)
         slip.payroll_id._check_draft()
         record = slip.input_ids.filtered(lambda i: i.id == input_id)
         if not record:

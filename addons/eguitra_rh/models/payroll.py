@@ -4,12 +4,17 @@ Cycle : en préparation (bulletins recalculables, éléments variables saisis) -
 figés, imprimables, avances décomptées) -> comptabilisée (pièce en brouillon dans le journal des
 salaires, que la finance relit et comptabilise). Une paie se rouvre tant que la pièce n'est pas
 comptabilisée par la finance.
+
+Quatre yeux : la RH prépare la paie, la direction (ou l'administration, qui l'implique) la valide,
+jamais un compte qui l'a préparée, retenu dans « Préparée par » : création, recalcul, bulletins,
+lignes et éléments variables, mais aussi, tant qu'elle est en préparation, les données qui y entrent
+(dossier du salarié, éléments fixes, avances et prêts : models/employee.py et advance.py).
 """
 
 from collections import defaultdict
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 from ..engine import Item, amount_in_words, compute
 from .employee import CATEGORIES, CONTRACTS, month_bounds
@@ -18,6 +23,27 @@ MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "ao�
           "novembre", "décembre"]
 STATES = [("draft", "En préparation"), ("validated", "Validée"), ("accounted", "Comptabilisée")]
 VARIATION_ALERT = 20.0
+# Profils qui valident la paie (l'administration implique la direction) ; jamais la RH.
+VALIDATORS = ("admin", "direction")
+# Statut, validation et préparateurs : écrits par les seules actions de la paie (calcul, validation,
+# réouverture, comptabilisation), jamais directement, même en sudo.
+WORKFLOW_FIELDS = frozenset({"state", "validated_by", "validated_at", "prepared_by_ids"})
+WORKFLOW_MESSAGE = ("Le statut, la validation et les préparateurs d'une paie ne changent que par ses actions : "
+                    "calcul, validation, réouverture, comptabilisation.")
+WORKFLOW_KEY = "eguitra_rh_payroll_workflow"
+# Drapeau de contexte de confiance : un objet Python, qu'aucun appel distant (contexte en JSON) ne peut
+# reproduire. Posé par trusted() dans les seules actions de la paie, le suivi du solde des avances et la
+# migration 19.0.1.0.1.
+_TRUSTED = object()
+
+
+def trusted(records):
+    """Les mêmes enregistrements, pour une écriture qui vient des actions de la paie."""
+    return records.with_context(**{WORKFLOW_KEY: _TRUSTED})
+
+
+def is_trusted(env):
+    return env.context.get(WORKFLOW_KEY) is _TRUSTED
 
 
 def month_label(month):
@@ -37,6 +63,10 @@ class EguitraRhPayroll(models.Model):
     move_id = fields.Many2one("account.move", "Écriture de paie", readonly=True, copy=False)
     validated_by = fields.Many2one("res.users", "Validée par", readonly=True)
     validated_at = fields.Datetime("Validée le", readonly=True)
+    prepared_by_ids = fields.Many2many(
+        "res.users", "eguitra_rh_payroll_preparer_rel", "payroll_id", "user_id", "Préparée par", readonly=True,
+        copy=False, help="Comptes qui ont créé ou recalculé la paie, saisi ses éléments variables, ou modifié "
+                         "pendant sa préparation des données qui y entrent : aucun d'eux ne la valide.")
 
     _month_unique = models.Constraint("unique(company_id, month)", "La paie de ce mois existe déjà.")
 
@@ -44,6 +74,19 @@ class EguitraRhPayroll(models.Model):
     def _compute_name(self):
         for payroll in self:
             payroll.name = f"Paie de {month_label(payroll.month)}" if payroll.month else "Paie"
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not is_trusted(self.env):
+            for vals in vals_list:
+                if WORKFLOW_FIELDS & set(vals) - {"state"} or vals.get("state", "draft") != "draft":
+                    raise AccessError(WORKFLOW_MESSAGE)
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if WORKFLOW_FIELDS & set(vals) and not is_trusted(self.env):
+            raise AccessError(WORKFLOW_MESSAGE)
+        return super().write(vals)
 
     @api.model
     def prepare(self, company, month):
@@ -59,9 +102,28 @@ class EguitraRhPayroll(models.Model):
             if payroll.state != "draft":
                 raise UserError(f"{payroll.name} est validée : rouvrez-la pour la modifier.")
 
+    def _mark_prepared(self):
+        """Retient le compte qui prépare la paie (création, recalcul, éléments variables). Sous sudo,
+        env.user reste le compte connecté."""
+        user = self.env.user
+        todo = self.sudo().filtered(lambda p: user not in p.prepared_by_ids)
+        if todo:
+            trusted(todo).write({"prepared_by_ids": [fields.Command.link(user.id)]})
+
+    def _on_preparation_change(self):
+        """Bulletin, ligne ou élément variable créé, modifié ou supprimé, y compris directement dans l'ORM :
+        paie en préparation seulement, et le compte est retenu dans « Préparée par »."""
+        self._check_draft()
+        self._mark_prepared()
+
+    def _prepared_by(self, user):
+        self.ensure_one()
+        return user == self.create_uid or user in self.prepared_by_ids
+
     def action_compute(self):
         """Ajoute les salariés présents dans le mois, retire ceux qui n'y sont plus, recalcule tout."""
         self._check_draft()
+        self._mark_prepared()
         Payslip = self.env["eguitra.rh.payslip"]
         for payroll in self:
             start, end = month_bounds(payroll.month)
@@ -74,18 +136,31 @@ class EguitraRhPayroll(models.Model):
             # Salarié sans aucun jour ouvrable dans le mois (entrée le dernier dimanche, par exemple).
             payroll.payslip_ids.filtered(lambda s: not s.presence_days).unlink()
 
+    def _can_validate(self, user):
+        self.ensure_one()
+        return bool(set(VALIDATORS) & set(user._eguitra_profiles())) and not self.sudo()._prepared_by(user)
+
     def action_validate(self):
+        """Validation par la direction (ou l'administration), jamais par un compte qui a préparé la paie.
+        La direction n'a que la lecture sur la paie : après ces contrôles, les écritures se font en sudo,
+        sous l'identité du compte (validated_by)."""
         self._check_draft()
+        user = self.env.user
         for payroll in self:
+            if not set(VALIDATORS) & set(user._eguitra_profiles()):
+                raise AccessError("La paie est validée par la direction.")
+            if payroll.sudo()._prepared_by(user):
+                raise AccessError("La paie doit être validée par une autre personne que celle qui l'a préparée "
+                                  "(création, calcul ou éléments variables).")
             if not payroll.payslip_ids:
                 raise UserError("Aucun bulletin : aucun salarié n'est sous contrat ce mois-là.")
             blocking = [f"{s.employee_id.name} : {a['message']}" for s in payroll.payslip_ids
                         for a in s._anomalies() if a["severity"] == "danger"]
             if blocking:
                 raise UserError("Paie non validée : " + " ; ".join(blocking))
-            payroll.write({"state": "validated", "validated_by": self.env.user.id,
-                           "validated_at": fields.Datetime.now()})
-            payroll._advances()._update_state()
+            trusted(payroll.sudo()).write({"state": "validated", "validated_by": user.id,
+                                           "validated_at": fields.Datetime.now()})
+            payroll.sudo()._advances()._update_state()
 
     def action_reopen(self):
         for payroll in self:
@@ -97,7 +172,7 @@ class EguitraRhPayroll(models.Model):
                                 "brouillon ou l'annuler.")
             if move.exists():
                 move.unlink()
-            payroll.write({"state": "draft", "move_id": False, "validated_by": False, "validated_at": False})
+            trusted(payroll).write({"state": "draft", "move_id": False, "validated_by": False, "validated_at": False})
             payroll._advances()._update_state()
 
     def _advances(self):
@@ -131,8 +206,8 @@ class EguitraRhPayroll(models.Model):
         for payroll in self:
             if payroll.state != "validated":
                 raise UserError("Seule une paie validée et non comptabilisée peut être comptabilisée.")
-            payroll.move_id = payroll._create_move()
-            payroll.state = "accounted"
+            move = payroll._create_move()
+            trusted(payroll).write({"move_id": move.id, "state": "accounted"})
 
     def _create_move(self):
         """Pièce en brouillon : charges par activité, organismes, retenues et nets au nom des salariés."""
@@ -243,7 +318,17 @@ class EguitraRhPayslip(models.Model):
         for vals in vals_list:
             if not vals.get("month") and vals.get("payroll_id"):
                 vals["month"] = Payroll.browse(vals["payroll_id"]).month
-        return super().create(vals_list)
+        records = super().create(vals_list)
+        records.payroll_id._on_preparation_change()
+        return records
+
+    def write(self, vals):
+        self.payroll_id._on_preparation_change()
+        return super().write(vals)
+
+    def unlink(self):
+        self.payroll_id._on_preparation_change()
+        return super().unlink()
 
     def _rubric(self, xmlid):
         return self.env.ref(f"eguitra_rh.{xmlid}")
@@ -428,6 +513,20 @@ class EguitraRhPayslipLine(models.Model):
     amount = fields.Float()
     account_code = fields.Char()
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records.payslip_id.payroll_id._on_preparation_change()
+        return records
+
+    def write(self, vals):
+        self.payslip_id.payroll_id._on_preparation_change()
+        return super().write(vals)
+
+    def unlink(self):
+        self.payslip_id.payroll_id._on_preparation_change()
+        return super().unlink()
+
 
 class EguitraRhPayslipInput(models.Model):
     _name = "eguitra.rh.payslip.input"
@@ -442,3 +541,17 @@ class EguitraRhPayslipInput(models.Model):
     source = fields.Selection([("manual", "Saisie"), ("fixed", "Élément fixe"), ("leave", "Absence"),
                                ("advance", "Avance ou prêt"), ("rotation", "Rotations")], default="manual", required=True)
     advance_id = fields.Many2one("eguitra.rh.advance", "Avance", ondelete="set null", index=True)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records.payslip_id.payroll_id._on_preparation_change()
+        return records
+
+    def write(self, vals):
+        self.payslip_id.payroll_id._on_preparation_change()
+        return super().write(vals)
+
+    def unlink(self):
+        self.payslip_id.payroll_id._on_preparation_change()
+        return super().unlink()

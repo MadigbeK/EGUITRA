@@ -4,7 +4,9 @@ Une règle s'applique à une nature de document (pièce d'achat, règlement four
 diverse), dans une société, à partir d'un montant et éventuellement jusqu'à un plafond, et
 éventuellement aux seules pièces mouvementant un compte (investissements : préfixe 2).
 Les règles applicables, ordonnées par niveau, forment les étapes de la demande. Chaque étape
-est tranchée par un utilisateur du profil désigné, qui ne peut pas être le demandeur.
+est tranchée par un utilisateur du profil désigné, qui ne peut pas être le demandeur ni avoir
+déjà tranché une autre étape de la même demande (quatre yeux : l'administration porte aussi les
+profils finance et direction).
 """
 
 from odoo import api, fields, models
@@ -146,6 +148,11 @@ class EguitraApprovalRequest(models.Model):
             ],
         })
 
+    def _decided_by(self, user):
+        """Le compte a-t-il déjà tranché une étape de cette demande ?"""
+        self.ensure_one()
+        return user in self.sudo().step_ids.decided_by
+
     def _can_decide(self, user=None):
         self.ensure_one()
         user = user or self.env.user
@@ -154,12 +161,18 @@ class EguitraApprovalRequest(models.Model):
             return False
         if user == self.requested_by:
             return False
+        # Quatre yeux : chaque étape d'une même demande est tranchée par une personne différente.
+        if self._decided_by(user):
+            return False
         return step.profile in user._eguitra_profiles()
 
     def _check_can_decide(self):
         if not self._can_decide():
             if self.env.user == self.requested_by:
                 raise AccessError("Vous ne pouvez pas approuver votre propre demande.")
+            if self._decided_by(self.env.user):
+                raise AccessError("Vous avez déjà tranché une étape de cette demande : l'étape suivante doit être "
+                                  "tranchée par une autre personne.")
             raise AccessError("Cette étape relève d'un autre profil.")
 
     def _current_amount(self):

@@ -1,6 +1,7 @@
 """Libre-service (« Mon espace ») : chaque salarié lié à un compte NIMOVA voit son dossier, son solde,
 ses absences et ses bulletins validés, demande une absence, et tranche celles de ses collaborateurs
-directs. Lecture en sudo, strictement bornée au dossier du compte connecté."""
+directs. Lecture en sudo, strictement bornée au dossier du compte connecté. Comptes internes seulement :
+un compte du portail (porteur de projet) est refusé."""
 
 from datetime import timedelta
 
@@ -9,7 +10,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
-from .common import MANAGERS, date_value, int_or_false, leave_row, leave_type_row, ref, today
+from .common import MANAGERS, date_value, int_or_false, internal_only, leave_row, leave_type_row, ref, today
 from .paie import payslip_detail
 
 
@@ -25,6 +26,7 @@ def my_employee(required=True):
 class EguitraRhMe(http.Controller):
     @api_route("/rh/me", profiles=None)
     def me(self, **_kw):
+        internal_only()
         env = request.env
         user = env.user
         emp = my_employee(required=False)
@@ -59,6 +61,7 @@ class EguitraRhMe(http.Controller):
 
     @api_route("/rh/me/leaves", methods=("POST",), profiles=None)
     def request_leave(self, **_kw):
+        internal_only()
         emp = my_employee()
         data = read_json()
         require(data, "type_id", "date_from", "date_to")
@@ -80,6 +83,7 @@ class EguitraRhMe(http.Controller):
 
     @api_route("/rh/me/leaves/<int:leave_id>/cancel", methods=("POST",), profiles=None)
     def cancel_my_leave(self, leave_id, **_kw):
+        internal_only()
         emp = my_employee()
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
         if not leave or leave.employee_id != emp:
@@ -91,6 +95,7 @@ class EguitraRhMe(http.Controller):
 
     @api_route("/rh/me/payslips/<int:payslip_id>", profiles=None)
     def my_payslip(self, payslip_id, **_kw):
+        internal_only()
         employees = request.env.user._eguitra_employees()
         slip = request.env["eguitra.rh.payslip"].sudo().browse(payslip_id).exists()
         if not slip or slip.employee_id not in employees or slip.payroll_id.state == "draft":

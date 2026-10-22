@@ -1,6 +1,7 @@
 from datetime import date
 
-from odoo.exceptions import UserError
+from odoo import Command, fields
+from odoo.exceptions import AccessError, UserError
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
@@ -83,6 +84,16 @@ class TestRh(FinanceDataMixin, TransactionCase):
             "bank_account": "GN01", "activity_account_id": cls.transport.id, "id_number": "CNI-1",
             "line_ids": [(0, 0, {"rubric_id": cls.env.ref("eguitra_rh.rubric_transport").id, "amount": 500_000})],
         })
+        # Quatre yeux : la RH prépare la paie, la direction la valide.
+        cls.gestionnaire = cls._user("gestion.paie", "rh")
+        cls.valideur = cls._user("valideur.paie", "direction")
+        cls.administrateur = cls._user("admin.paie", "admin")
+
+    @classmethod
+    def _user(cls, login, profile):
+        user = cls.env["res.users"].with_context(no_reset_password=True).create({"name": login.title(), "login": login})
+        user._eguitra_set_profiles([profile])
+        return user
 
     def _leave(self, emp, code, d1, d2, approve=True):
         leave = self.env["eguitra.rh.leave"].create({
@@ -161,7 +172,10 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.assertEqual(round(manual.amount), round(10 * 3_000_000 / 173.33 * 1.3), "Heures au taux horaire majoré")
         self.assertIn(manual, a.input_ids, "Les éléments saisis survivent au recalcul")
 
-        payroll.action_validate()
+        with self.assertRaisesRegex(AccessError, "validée par la direction"):
+            payroll.with_user(self.gestionnaire).action_validate()
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual(payroll.validated_by, self.valideur)
         self.assertEqual(advance._remaining(), 300_000)
         with self.assertRaises(UserError):
             payroll.action_compute()
@@ -188,12 +202,98 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.env["eguitra.rh.advance"].create({"employee_id": emp.id, "amount": 1_000_000, "installment": 1_000_000,
                                                "first_month": SEPT})
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
-        with self.assertRaises(UserError):
-            payroll.action_validate()
+        with self.assertRaisesRegex(UserError, "Net à payer négatif"):
+            payroll.with_user(self.valideur).action_validate()
+
+    def test_administration_qui_recalcule_ne_valide_pas(self):
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        payroll.with_user(self.administrateur).action_compute()
+        self.assertIn(self.administrateur, payroll.prepared_by_ids)
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            payroll.with_user(self.administrateur).action_validate()
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual((payroll.state, payroll.validated_by), ("validated", self.valideur))
+
+    def test_champs_de_la_paie_proteges(self):
+        """Statut, validation et préparateurs ne s'écrivent que par les actions de la paie : ni par un compte
+        RH dans l'ORM, ni en sudo, ni avec le drapeau de contexte reçu d'un appel distant."""
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        rh = payroll.with_user(self.gestionnaire)
+        for vals in ({"state": "validated"}, {"prepared_by_ids": [Command.clear()]},
+                     {"validated_by": self.gestionnaire.id}, {"validated_at": fields.Datetime.now()}):
+            for target in (rh, rh.sudo(), rh.with_context(eguitra_rh_payroll_workflow=True)):
+                with self.assertRaisesRegex(AccessError, "ne changent que par ses actions"):
+                    target.write(vals)
+        with self.assertRaisesRegex(AccessError, "ne changent que par ses actions"):
+            self.env["eguitra.rh.payroll"].with_user(self.gestionnaire).create(
+                {"company_id": self.company.id, "month": date(2026, 10, 1), "state": "validated"})
+        self.assertEqual((payroll.state, payroll.prepared_by_ids), ("draft", self.env.user))
+
+        # Écritures directes dans l'ORM : le compte est retenu parmi les préparateurs.
+        slip = payroll.payslip_ids.filtered(lambda s: s.employee_id == self.alpha)
+        self.env["eguitra.rh.payslip.input"].with_user(self.gestionnaire).create({
+            "payslip_id": slip.id, "rubric_id": self.env.ref("eguitra_rh.rubric_rendement").id, "amount": 100_000})
+        slip.line_ids[:1].with_user(self.administrateur).write({"amount": 1})
+        self.assertEqual(payroll.prepared_by_ids, self.env.user | self.gestionnaire | self.administrateur)
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            payroll.with_user(self.administrateur).action_validate()
+
+        # Paie validée : ses bulletins, leurs lignes et éléments variables ne se modifient plus.
+        payroll.with_user(self.valideur).action_validate()
+        for record, vals in ((slip, {"net": 1}), (slip.line_ids[:1], {"amount": 2}), (slip.input_ids[:1], {"amount": 2})):
+            with self.assertRaisesRegex(UserError, "rouvrez-la"):
+                record.with_user(self.gestionnaire).write(vals)
+
+    def test_donnees_de_paie_modifiees_pendant_la_preparation(self):
+        """Élément fixe, coordonnées bancaires ou avance modifiés dans l'ORM pendant que des paies sont en
+        préparation : l'auteur rejoint les préparateurs des paies concernées. Le suivi du solde des avances
+        par la validation n'inscrit personne."""
+        Payroll = self.env["eguitra.rh.payroll"]
+        advance = self.env["eguitra.rh.advance"].create({"employee_id": self.alpha.id, "amount": 400_000,
+                                                         "installment": 200_000, "first_month": SEPT})
+        september = Payroll.prepare(self.company, SEPT)
+        october = Payroll.prepare(self.company, date(2026, 10, 1))
+        autre = self._user("autre.paie", "rh")
+        self.alpha.line_ids[:1].with_user(self.gestionnaire).write({"amount": 900_000})
+        self.alpha.with_user(self.administrateur).write({"bank_account": "GN99"})
+        self.env["eguitra.rh.advance"].with_user(autre).create({"employee_id": self.alpha.id, "amount": 100_000,
+                                                                "installment": 100_000, "first_month": date(2026, 10, 1)})
+        for payroll in (september, october):
+            self.assertIn(self.gestionnaire, payroll.prepared_by_ids)
+            self.assertIn(self.administrateur, payroll.prepared_by_ids)
+        self.assertIn(autre, october.prepared_by_ids)
+        self.assertNotIn(autre, september.prepared_by_ids, "Avance retenue à partir d'octobre seulement")
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            september.with_user(self.administrateur).action_validate()
+        september.with_user(self.valideur).action_validate()
+        self.assertEqual(advance.state, "open")
+        self.assertNotIn(self.valideur, october.prepared_by_ids, "Le suivi du solde n'inscrit pas la direction")
+        october.with_user(self.valideur).action_validate()
+        self.assertEqual(october.state, "validated")
+
+    def test_absence_non_remuneree_pendant_la_preparation(self):
+        """Créer une absence non rémunérée déjà approuvée, ou en approuver une, pendant la préparation inscrit
+        son auteur parmi les préparateurs ; approuver une absence payée, non."""
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        Leave = self.env["eguitra.rh.leave"]
+        unpaid = self.env["eguitra.rh.leave.type"].search([("code", "=", "SS")])
+        paid = self.env["eguitra.rh.leave.type"].search([("code", "=", "CP")])
+        autre = self._user("autre.conge", "rh")
+        Leave.with_user(self.gestionnaire).create({"employee_id": self.alpha.id, "type_id": unpaid.id, "state": "approved",
+                                                   "date_from": date(2026, 9, 7), "date_to": date(2026, 9, 7)})
+        Leave.create({"employee_id": self.alpha.id, "type_id": unpaid.id, "date_from": date(2026, 9, 14),
+                      "date_to": date(2026, 9, 14)}).with_user(autre).action_approve()
+        Leave.create({"employee_id": self.alpha.id, "type_id": paid.id, "date_from": date(2026, 9, 21),
+                      "date_to": date(2026, 9, 21)}).with_user(self.valideur).sudo().action_approve(force=True)
+        self.assertIn(self.gestionnaire, payroll.prepared_by_ids)
+        self.assertIn(autre, payroll.prepared_by_ids)
+        self.assertNotIn(self.valideur, payroll.prepared_by_ids, "Une absence payée ne change pas la paie")
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual(payroll.state, "validated")
 
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
-        payroll.action_validate()
+        payroll.with_user(self.valideur).action_validate()
         leave = self._leave(self.alpha, "SS", date(2026, 9, 21), date(2026, 9, 21), approve=False)
         with self.assertRaises(UserError, msg="Une absence non payée ne s'approuve plus sur une paie validée"):
             leave.action_approve()

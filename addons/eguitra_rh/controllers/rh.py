@@ -17,6 +17,7 @@ from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASON
 from ..models.leave import InsufficientBalance
 from ..models.payroll import month_label
 from .common import (
+    OWN_LEAVE,
     READ,
     WRITE,
     advance_row,
@@ -31,10 +32,13 @@ from .common import (
     employee_row,
     get,
     int_or_false,
+    internal_only,
     leave_row,
     leave_type_row,
     number,
+    own_leave,
     ref,
+    refuse_own,
     rubric_row,
     scope,
     text,
@@ -309,6 +313,10 @@ class EguitraRh(http.Controller):
                 values[field] = int_or_false(data, key)
                 if values[field]:
                     _check_reference(key, values[field], company)
+        if values.get("user_id") == request.env.uid:
+            # Quatre yeux : un dossier lié à son propre compte serait un dossier qu'on se gère soi-même.
+            raise ApiError(403, "forbidden", "Vous ne pouvez pas lier un dossier salarié à votre propre compte : un "
+                                             "autre membre du service RH s'en charge.")
         if "fixed_lines" in data:
             lines = []
             for line in data.get("fixed_lines") or []:
@@ -337,6 +345,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/employees/<int:employee_id>", methods=("PATCH",), profiles=WRITE)
     def update_employee(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
+        refuse_own(emp)
         data = read_json()
         emp.with_context(salary_reason=text(data, "salary_reason")).write(self._employee_values(data, emp.company_id))
         return employee_detail(emp)
@@ -344,6 +353,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/employees/<int:employee_id>/exit", methods=("POST",), profiles=WRITE)
     def exit_employee(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
+        refuse_own(emp)
         data = read_json()
         require(data, "exit_date")
         reason = data.get("exit_reason") or "autre"
@@ -355,6 +365,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/employees/<int:employee_id>/documents", methods=("POST",), profiles=WRITE)
     def add_document(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
+        refuse_own(emp)
         form = request.httprequest.form
         kind = form.get("kind") or "autre"
         if kind not in dict(DOCUMENT_KINDS):
@@ -390,6 +401,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/documents/<int:document_id>", methods=("DELETE",), profiles=WRITE)
     def delete_document(self, document_id, **_kw):
         doc = get("eguitra.rh.document", document_id, "Document")
+        refuse_own(doc.employee_id)
         attachment = doc.attachment_id.sudo()
         doc.unlink()
         attachment.unlink()
@@ -552,6 +564,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/holidays", profiles=None)
     def holidays(self, **kw):
+        internal_only()
         year = int_arg(kw, "year", today().year, 2000, 2100)
         holidays = request.env["eguitra.rh.holiday"].sudo().search([
             ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"),
@@ -577,6 +590,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/leaves/days", profiles=None)
     def leave_days(self, **kw):
+        internal_only()
         date_from = date_value(kw, "date_from")
         date_to = date_value(kw, "date_to")
         if not date_from or not date_to:
@@ -609,11 +623,19 @@ class EguitraRh(http.Controller):
             "note": (data.get("note") or "").strip() or False,
         })
         if data.get("approve"):
+            # Même contrôle que les décisions : personne n'approuve sa propre absence (l'erreur annule la
+            # création de la demande).
+            if not can_decide(leave):
+                raise ApiError(403, "forbidden", OWN_LEAVE if own_leave(leave)
+                               else "Cette absence relève d'un autre responsable.")
             approve(leave, force=bool(data.get("force")))
         return leave_row(leave)
 
     def _decidable(self, leave_id):
+        internal_only()
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
+        if leave and own_leave(leave):
+            raise ApiError(403, "forbidden", OWN_LEAVE)
         if not leave or not can_decide(leave):
             raise ApiError(404, "not_found", "Demande introuvable ou hors de votre périmètre.")
         return leave
@@ -634,9 +656,11 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/leaves/<int:leave_id>/cancel", methods=("POST",), profiles=None)
     def cancel_leave(self, leave_id, **_kw):
+        internal_only()
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
-        own = leave and leave.employee_id.user_id == request.env.user
-        manager = leave and can_write() and leave.company_id in request.env.user.company_ids
+        own = leave and own_leave(leave)
+        # Sur sa propre absence, la RH suit la règle du salarié (quatre yeux).
+        manager = leave and not own and can_write() and leave.company_id in request.env.user.company_ids
         if not leave or not (own or manager):
             raise ApiError(404, "not_found", "Absence introuvable.")
         if own and not manager and leave.state == "approved" and leave.date_from <= today():
@@ -668,6 +692,7 @@ class EguitraRh(http.Controller):
         data = read_json()
         require(data, "employee_id", "amount", "installment", "first_month")
         emp = get("eguitra.rh.employee", int_or_false(data, "employee_id"), "Salarié")
+        refuse_own(emp)
         kind = data.get("kind") or "avance"
         if kind not in ("avance", "pret"):
             raise ApiError(400, "invalid_parameter", "Nature inconnue.")
@@ -682,6 +707,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/advances/<int:advance_id>/cancel", methods=("POST",), profiles=WRITE)
     def cancel_advance(self, advance_id, **_kw):
         advance = get("eguitra.rh.advance", advance_id, "Avance")
+        refuse_own(advance.employee_id)
         advance.action_cancel()
         return advance_row(advance)
 

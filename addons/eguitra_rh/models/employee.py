@@ -23,6 +23,11 @@ DOCUMENT_KINDS = [("cni", "Carte d'identité"), ("passeport", "Passeport"), ("co
                   ("avenant", "Avenant"), ("diplome", "Diplôme"), ("visite_medicale", "Visite médicale"),
                   ("permis", "Permis de conduire"), ("titre_sejour", "Titre de séjour"), ("autre", "Autre document")]
 STATES = [("a_venir", "À venir"), ("essai", "Période d'essai"), ("actif", "Actif"), ("sorti", "Sorti")]
+# Données du dossier qui entrent dans la paie. Les modifier (comme créer un salarié ou toucher à ses
+# éléments fixes) inscrit le compte parmi les préparateurs des paies en préparation concernées : il ne
+# pourra pas les valider (quatre yeux).
+PAYROLL_FIELDS = frozenset({"base_salary", "line_ids", "payment_method", "bank_name", "bank_account", "mobile_money",
+                            "user_id", "hire_date", "exit_date", "company_id", "contract_type", "driver_id"})
 
 
 def full_months(start, end):
@@ -153,6 +158,7 @@ class EguitraRhEmployee(models.Model):
                     "employee_id": emp.id, "date": emp.hire_date, "old_salary": 0, "new_salary": emp.base_salary,
                     "reason": "Embauche",
                 })
+        records._draft_payrolls()._mark_prepared()
         return records
 
     def write(self, vals):
@@ -162,7 +168,11 @@ class EguitraRhEmployee(models.Model):
             for emp in self:
                 if emp.base_salary != vals["base_salary"]:
                     changes.append((emp, emp.base_salary))
+        # Paies concernées avant et après la modification (dates du contrat, société).
+        payrolls = self._draft_payrolls() if PAYROLL_FIELDS & set(vals) else None
         result = super().write(vals)
+        if payrolls is not None:
+            (payrolls | self._draft_payrolls())._mark_prepared()
         for emp, old in changes:
             self.env["eguitra.rh.salary.change"].sudo().create({
                 "employee_id": emp.id, "date": fields.Date.context_today(self), "old_salary": old,
@@ -171,6 +181,19 @@ class EguitraRhEmployee(models.Model):
         sync = {k: vals[k] for k in ("name", "phone", "email") if k in vals}
         if sync:
             self.partner_id.sudo().write({k: v or False for k, v in sync.items()})
+        return result
+
+    def _draft_payrolls(self):
+        """Paies en préparation de la société du salarié dont le mois recoupe son contrat."""
+        Payroll = self.env["eguitra.rh.payroll"].sudo()
+        result = Payroll
+        for company in self.sudo().company_id:
+            payrolls = Payroll.search([("company_id", "=", company.id), ("state", "=", "draft")])
+            for emp in self.sudo().filtered(lambda e, c=company: e.company_id == c):
+                for payroll in payrolls:
+                    start, end = month_bounds(payroll.month)
+                    if emp.hire_date <= end and (not emp.exit_date or emp.exit_date >= start):
+                        result |= payroll
         return result
 
     def _next_matricule(self):
@@ -287,6 +310,23 @@ class EguitraRhEmployeeLine(models.Model):
     rubric_id = fields.Many2one("eguitra.rh.rubric", "Rubrique", required=True, domain=[("system", "=", False)])
     amount = fields.Float("Montant mensuel")
     quantity = fields.Float("Heures par mois")
+
+    # Élément fixe créé, modifié ou supprimé : son auteur prépare les paies en préparation concernées.
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records.employee_id._draft_payrolls()._mark_prepared()
+        return records
+
+    def write(self, vals):
+        payrolls = self.employee_id._draft_payrolls()
+        result = super().write(vals)
+        (payrolls | self.employee_id._draft_payrolls())._mark_prepared()
+        return result
+
+    def unlink(self):
+        self.employee_id._draft_payrolls()._mark_prepared()
+        return super().unlink()
 
     def _amount(self, base_salary, params):
         self.ensure_one()

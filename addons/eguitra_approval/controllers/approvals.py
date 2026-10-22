@@ -84,7 +84,8 @@ class EguitraApprovals(http.Controller):
             ("state", "=", "pending"), ("company_id", "in", user.company_ids.ids),
             ("pending_profile", "in", profiles), ("requested_by", "!=", user.id),
         ], order="requested_at asc")
-        return [_row(r) for r in requests]
+        # Sans les demandes dont il a déjà tranché une étape : la suivante revient à une autre personne.
+        return [_row(r) for r in requests if r._can_decide(user)]
 
     @api_route("/approvals/requests", profiles=FOLLOWERS)
     def requests(self, **kw):
