@@ -43,7 +43,7 @@ def payroll_detail(payroll):
                      for g in payroll._by("activity")],
         by_department=payroll._by("department"),
         validated_by=payroll.validated_by.name or None, validated_at=payroll.validated_at or None,
-        prepared_by=payroll.sudo().prepared_by_ids.mapped("name"),
+        prepared_by=payroll._preparers().mapped("name"),
         can_write=can_write(), can_validate=can_validate(payroll),
     )
 

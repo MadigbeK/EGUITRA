@@ -106,7 +106,7 @@ class EguitraRhPayroll(models.Model):
         """Retient le compte qui prépare la paie (création, recalcul, éléments variables). Sous sudo,
         env.user reste le compte connecté."""
         user = self.env.user
-        todo = self.sudo().filtered(lambda p: user not in p.prepared_by_ids)
+        todo = self.sudo().filtered(lambda p: user not in p._preparers())
         if todo:
             trusted(todo).write({"prepared_by_ids": [fields.Command.link(user.id)]})
 
@@ -116,9 +116,15 @@ class EguitraRhPayroll(models.Model):
         self._check_draft()
         self._mark_prepared()
 
+    def _preparers(self):
+        """« Préparée par » au complet. Lu sans le filtre des comptes actifs : l'ORM masque sinon les comptes
+        archivés, dont le compte système, alors qu'ils sont bien enregistrés."""
+        self.ensure_one()
+        return self.sudo().with_context(active_test=False).prepared_by_ids
+
     def _prepared_by(self, user):
         self.ensure_one()
-        return user == self.create_uid or user in self.prepared_by_ids
+        return user == self.create_uid or user in self._preparers()
 
     def action_compute(self):
         """Ajoute les salariés présents dans le mois, retire ceux qui n'y sont plus, recalcule tout."""
