@@ -128,6 +128,7 @@ séparément. Règles, décrites en un seul endroit, `addons/eguitra_api/organis
 | `addons/eguitra_chantier` | Chantiers, situations d'avancement, facturation, retenues de garantie (4117) et leur libération. |
 | `addons/eguitra_immobilier` | Biens, baux, loyers récurrents (module OCA `contract`) facturés et validés chaque nuit, impayés, quittances. |
 | `addons/eguitra_axispro` | Politique d'évaluation versionnée (grille importée), dossiers, évaluation par gate, score, éliminatoires, recommandation, écarts, data room, comités verrouillés et comparés, rapports, temps et honoraires, portail des porteurs. |
+| `addons/eguitra_portail` | Portail des porteurs (22 octobre) : communications ciblées du cabinet avec accusé de lecture, centre de ressources (rubriques, articles, guides, questions fréquentes, modèles à télécharger, recommandés selon l'étape du dossier), événements et formations (inscriptions, liste d'attente, présence), rendez-vous (demande sur créneaux, confirmation, compte rendu partagé), notifications (créées par les événements du dossier AxisPro, rappels du matin), messages lus, avis des porteurs (note et recommandation), pièces jointes aux messages ; API du porteur `/portail/...` et outils du cabinet `/axispro/portail/...`. |
 | `apps/web` | Les quatre surfaces web (33 écrans), la passerelle sécurisée, l'application Rotations hors ligne. |
 | `scripts/dev/sync.sh` | Envoi du code sur le serveur de recette. |
 | `scripts/recette/donnees_demo.py` | Données fictives « Démo » pour la recette (transport, achats, chantier, biens, AxisPro). |
@@ -174,6 +175,32 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
+portail, complet, carte blanche »). Fait :
+- Module `eguitra_portail` 19.0.1.0.0 (dépend d'`eguitra_axispro` sans modifier ses fichiers), 8 tests au
+  vert. Le porteur ne lit que ses dossiers et les publications dont il fait partie du public ; jamais le
+  scoring, les notes internes ni les critères. Indicateur « préparation du dossier » propre au portail
+  (pièces 50 %, actions 30 %, étapes 20 %), distinct du score du cabinet. La fiche de l'entreprise ne
+  change pas depuis le portail : la demande part au consultant (revue de sécurité).
+- Écrans du porteur (`apps/web/app/portail/`, coquille `components/portail/PortailShell.tsx`) : accueil
+  (prochaines étapes, à venir, fil du projet, actualités, conseils de l'étape), mon projet (équipe,
+  financements, fil complet), pièces et data room, plan d'actions, messagerie avec pièces jointes,
+  rendez-vous (ajout à l'agenda .ics), actualités, conseils et ressources, événements et formations,
+  agenda, simulateurs (prêt, DSCR, seuil de rentabilité, BFR), notifications, profil, avis.
+- Outils du cabinet (`apps/web/app/axispro/portail/`, menu Cabinet > « Portail des porteurs ») :
+  synthèse, messagerie de tous les dossiers (notes internes), communications, ressources, événements et
+  inscriptions, rendez-vous, porteurs et avis.
+- Neuf contenus de conseil proposés à l'installation, **en brouillon, à relire et publier par le
+  cabinet** (rien n'est publié en production sans lui). Recette : publiés, avec communications,
+  événements, rendez-vous et échanges de démonstration (`scripts/recette/portail_demo.py`). Comptes de
+  test : `test.porteur` et `porteur.demo` (portail), `test.consultant` (cabinet).
+- `infra/test.sh` installe désormais un module nouveau (première commande en `-i` et `-u`) ; le module
+  est dans `release.sh`, `init-db.sh` et `scripts/reprise/essai.sh`. Protocole entre sessions : on se
+  prévient avant chaque `test.sh` (base `eguitra_ci` partagée).
+- Reste : courriels de notification quand le serveur d'envoi sera fourni (aujourd'hui, notifications
+  dans le portail seulement) ; pagination des notifications et des rendez-vous anciens ; mise en
+  production sur décision du gérant.
 
 **22 octobre, nuit : outil de scoring du cabinet, version 3 (AxisPro)**, demandé par le gérant (« intègre
 tout, carte blanche »). Reçu : deux versions du classeur « MB AxisPro Outil Scoring Maturité Projet »
