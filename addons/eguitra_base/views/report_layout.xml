@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Mise en page des documents (factures, lettres de relance, relevés) : le logo de la société à
+         20 mm de haut avec 5 mm de vide avant l'adresse, comme l'exige la charte d'EGUITRA GROUP
+         (espace libre autour du logo) ; le filet sous l'en-tête des tableaux à la couleur principale
+         de la société quand elle en a une. -->
+    <template id="external_layout_standard_eguitra" inherit_id="web.external_layout_standard">
+        <xpath expr="//img[hasclass('o_company_logo_small')]" position="attributes">
+            <attribute name="style">height: 20mm; max-height: 20mm; width: auto; max-width: none;</attribute>
+        </xpath>
+        <xpath expr="//img[hasclass('o_company_logo_small')]/.." position="attributes">
+            <attribute name="style">margin-bottom: 5mm !important;</attribute>
+        </xpath>
+        <xpath expr="//div[hasclass('article')]" position="inside">
+            <style t-if="company.primary_color">
+                <t t-out="'.o_company_%s_layout table thead th { border-bottom: 1.5pt solid %s !important; }' % (company.id, company.primary_color)"/>
+            </style>
+        </xpath>
+    </template>
+</odoo>
