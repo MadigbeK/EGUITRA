@@ -106,9 +106,16 @@ class EguitraRhPayroll(models.Model):
         """Retient le compte qui prépare la paie (création, recalcul, éléments variables). Sous sudo,
         env.user reste le compte connecté."""
         user = self.env.user
-        todo = self.sudo().filtered(lambda p: user not in p._preparers())
-        if todo:
-            trusted(todo).write({"prepared_by_ids": [fields.Command.link(user.id)]})
+        self.sudo().filtered(lambda p: user not in p._preparers())._add_preparers(user)
+
+    def _add_preparers(self, users):
+        """Seule écriture de « Préparée par » : ajoute des comptes (commande de liaison), sans jamais réécrire
+        la liste. Écrite sans le filtre des comptes actifs : sinon l'ORM part de la liste lue avec ce filtre,
+        qui masque les comptes archivés (dont le compte système), et les efface du cache de l'enregistrement,
+        donc du contrôle des quatre yeux dans la même transaction."""
+        if self and users:
+            trusted(self.sudo()).with_context(active_test=False).write(
+                {"prepared_by_ids": [fields.Command.link(user.id) for user in users]})
 
     def _on_preparation_change(self):
         """Bulletin, ligne ou élément variable créé, modifié ou supprimé, y compris directement dans l'ORM :

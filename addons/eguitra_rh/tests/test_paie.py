@@ -294,6 +294,23 @@ class TestRh(FinanceDataMixin, TransactionCase):
         payroll.with_user(self.valideur).action_validate()
         self.assertEqual(payroll.state, "validated")
 
+    def test_preparateur_archive_reste_retenu(self):
+        """Un compte RH archivé après avoir préparé la paie reste dans « Préparée par » quand d'autres comptes
+        s'y ajoutent ensuite, en cache comme en base : l'inscription ajoute sans jamais réécrire la liste."""
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        ancien = self._user("ancien.paie", "rh")
+        slip = payroll.payslip_ids.filtered(lambda s: s.employee_id == self.alpha)
+        self.env["eguitra.rh.payslip.input"].with_user(ancien).create({
+            "payslip_id": slip.id, "rubric_id": self.env.ref("eguitra_rh.rubric_rendement").id, "amount": 50_000})
+        ancien.active = False
+        slip.line_ids[:1].with_user(self.gestionnaire).write({"amount": 1})
+        self.alpha.with_user(self.administrateur).write({"bank_account": "GN77"})
+        expected = self.env.user | ancien | self.gestionnaire | self.administrateur
+        self.assertEqual(payroll._preparers(), expected)
+        payroll.invalidate_recordset(["prepared_by_ids"])
+        self.assertEqual(payroll._preparers(), expected, "Enregistré en base, pas seulement en cache")
+        self.assertTrue(payroll._prepared_by(ancien))
+
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
         payroll.with_user(self.valideur).action_validate()
