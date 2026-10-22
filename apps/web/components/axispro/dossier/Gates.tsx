@@ -6,7 +6,7 @@ import { Badge, Button, Card, FEUILLE, Field, Modal, Notice, Textarea, cx } from
 import { ApiError, apiSend } from "@/lib/api-client";
 import { pluriel } from "@/lib/format";
 import { GATE_DECISION, HYPOTHESES, YES_NO, type DossierDetail } from "@/lib/axispro-types";
-import { RULE_LABELS, arrondi, useRetour } from "./commun";
+import { RULE_LABELS, arrondi, useCabinet, useRetour } from "./commun";
 
 /**
  * Stage gates : règle de passage, décision calculée et motifs, exigences d'entrée, livrables et
@@ -15,6 +15,8 @@ import { RULE_LABELS, arrondi, useRetour } from "./commun";
  */
 export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const { agir, bandeau, setRetour } = useRetour();
+  // Passage de gate, forcé ou non : profil cabinet seul (POST /axispro/dossiers/<id>/advance-gate).
+  const { cabinet } = useCabinet();
   const [force, setForce] = useState<string | null>(null);
   const [motif, setMotif] = useState("");
   const gates = d.scoring.gates;
@@ -42,7 +44,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
       <Card
         title="Parcours du dossier"
         actions={
-          !dernier && (
+          !dernier && cabinet && (
             <Button variant="primary" disabled={d.locked} onClick={() => passer()}>
               Passer au gate suivant <ArrowRight className="h-4 w-4" />
             </Button>

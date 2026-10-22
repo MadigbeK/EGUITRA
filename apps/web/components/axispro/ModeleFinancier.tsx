@@ -7,6 +7,7 @@ import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { LineKind, ModelRow, PlanLine, PlanPayload, Stress } from "@/lib/axispro-types";
 import { fmtPct, fmtShort } from "@/lib/format";
 import { CelluleChoix, CelluleNombre, CelluleTexte, annees, millions, ratio } from "./cellules";
+import { LectureSeuleCabinet, useCabinet } from "./dossier/commun";
 
 type Vue = "statements" | "flows" | "debt" | "working_capital";
 
@@ -105,6 +106,10 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
   const { data: stress, error: erreurStress, mutate: recalculer } = useApi<Stress | null>(data?.lines.length ? `${chemin}/stress` : null);
   const [message, setMessage] = useState<string | null>(null);
   const [vue, setVue] = useState<Vue>("statements");
+  // Hypothèses et paramètres : écriture réservée au profil cabinet (PATCH /axispro/dossiers/<id>/plan,
+  // POST /axispro/dossiers/<id>/plan/lines, PATCH et DELETE /axispro/plan-lines/<id>) ; la direction et
+  // l'administration lisent le modèle, ses sensibilités et son export.
+  const { cabinet } = useCabinet();
 
   async function envoyer(method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) {
     setMessage(null);
@@ -130,9 +135,12 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
   return (
     <div className="space-y-6">
       {message && <Notice tone="danger">{message}</Notice>}
+      <LectureSeuleCabinet>Lecture seule : votre profil consulte le modèle financier. Seul le profil cabinet en saisit les hypothèses et les paramètres.</LectureSeuleCabinet>
       {vide ? (
         <Notice tone="accent">
-          Le modèle est vide. Saisissez les investissements, les produits, les charges et le plan de financement ci-dessous : les comptes prévisionnels, la rentabilité et la couverture de la dette se calculent à chaque modification.
+          {cabinet
+            ? "Le modèle est vide. Saisissez les investissements, les produits, les charges et le plan de financement ci-dessous : les comptes prévisionnels, la rentabilité et la couverture de la dette se calculent à chaque modification."
+            : "Le modèle est vide : aucune hypothèse n'a encore été saisie."}
           {data.dossier.investment > 0 && ` Investissement annoncé à l'ouverture du dossier : ${fmtShort(data.dossier.investment)} GNF.`}
         </Notice>
       ) : (
@@ -215,31 +223,33 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
       >
         <div className="space-y-7">
           {SECTIONS.map((sec) => (
-            <Section key={sec.kind} section={sec} lignes={data.lines.filter((l) => l.kind === sec.kind)} options={data.options} chemin={chemin} envoyer={envoyer} />
+            <Section key={sec.kind} section={sec} lignes={data.lines.filter((l) => l.kind === sec.kind)} options={data.options} chemin={chemin} envoyer={envoyer} ecriture={cabinet} />
           ))}
         </div>
       </Card>
 
       <Card title="Paramètres du calcul">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {PARAMETRES.map((par) => (
-            <Field key={par.champ} label={par.titre} hint={par.aide}>
-              <CelluleNombre
-                label={par.titre}
-                className="w-full"
-                value={Number((p as unknown as Record<string, number | null>)[par.champ] ?? 0)}
-                onSave={(v) => envoyer("PATCH", chemin, { [par.champ]: v })}
-              />
-            </Field>
-          ))}
-          <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-2">
-            <input type="checkbox" checked={p.residual_value} onChange={(e) => envoyer("PATCH", chemin, { residual_value: e.target.checked })} />
-            Valeur résiduelle en fin d&apos;horizon
-          </label>
-        </div>
-        <Field label="Hypothèses et sources" className="mt-4">
-          <Textarea defaultValue={p.notes ?? ""} placeholder="Origine des prix, des volumes, des devis d'équipement, conditions des banques…" onBlur={(e) => e.target.value !== (p.notes ?? "") && envoyer("PATCH", chemin, { notes: e.target.value })} />
-        </Field>
+        <fieldset disabled={!cabinet} className="min-w-0">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {PARAMETRES.map((par) => (
+              <Field key={par.champ} label={par.titre} hint={par.aide}>
+                <CelluleNombre
+                  label={par.titre}
+                  className="w-full"
+                  value={Number((p as unknown as Record<string, number | null>)[par.champ] ?? 0)}
+                  onSave={(v) => envoyer("PATCH", chemin, { [par.champ]: v })}
+                />
+              </Field>
+            ))}
+            <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-2">
+              <input type="checkbox" checked={p.residual_value} onChange={(e) => envoyer("PATCH", chemin, { residual_value: e.target.checked })} />
+              Valeur résiduelle en fin d&apos;horizon
+            </label>
+          </div>
+          <Field label="Hypothèses et sources" className="mt-4">
+            <Textarea defaultValue={p.notes ?? ""} placeholder="Origine des prix, des volumes, des devis d'équipement, conditions des banques…" onBlur={(e) => e.target.value !== (p.notes ?? "") && envoyer("PATCH", chemin, { notes: e.target.value })} />
+          </Field>
+        </fieldset>
         <p className="mt-4 text-[12px] leading-relaxed text-muted">
           Calcul annuel. Amortissement linéaire dès la mise en service ; subvention reprise au résultat sur sa durée ; impôt avec report des déficits, exonération et impôt minimum ; BFR en jours. CFADS = EBE - impôt - variation du BFR ; DSCR = CFADS / service de la dette. Flux du projet après impôt normatif sur le résultat d&apos;exploitation, valeur résiduelle (valeur nette comptable et BFR récupéré) en dernière année ; flux des fonds propres après dette, dette restante déduite.
         </p>
@@ -254,12 +264,15 @@ function Section({
   options,
   chemin,
   envoyer,
+  ecriture,
 }: {
   section: (typeof SECTIONS)[number];
   lignes: PlanLine[];
   options: PlanPayload["options"];
   chemin: string;
   envoyer: (method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) => Promise<void>;
+  /** Profil cabinet : ajout, modification sur place et suppression des lignes. */
+  ecriture: boolean;
 }) {
   const choix = (c: Colonne) => (c.champ === "category" ? options.categories : c.champ === "funding_type" ? options.funding_types : options.repayments);
   function enregistrer(l: PlanLine, champ: keyof PlanLine, valeur: unknown) {
@@ -275,51 +288,57 @@ function Section({
           <h3 className="text-[15px] font-semibold text-ink">{section.titre}</h3>
           <p className="text-[12.5px] text-muted">{section.aide}</p>
         </div>
-        <Button size="sm" onClick={() => envoyer("POST", `${chemin}/lines`, { kind: section.kind, ...section.nouveau })}>
-          <Plus className="h-4 w-4" /> Ajouter
-        </Button>
+        {ecriture && (
+          <Button size="sm" onClick={() => envoyer("POST", `${chemin}/lines`, { kind: section.kind, ...section.nouveau })}>
+            <Plus className="h-4 w-4" /> Ajouter
+          </Button>
+        )}
       </div>
       {lignes.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line-strong/70 px-3 py-3 text-[13px] text-muted">Aucune ligne.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full text-[13px]">
-            <thead className="bg-panel-2 text-left text-[12px] text-muted">
-              <tr>
-                {section.colonnes.map((c) => (
-                  <th key={c.champ} className={cx("whitespace-nowrap px-2 py-2 font-semibold", c.type === "nombre" && "text-right")}>
-                    {c.titre}
-                  </th>
-                ))}
-                <th className="w-10" />
-              </tr>
-            </thead>
-            <tbody>
-              {lignes.map((l) => (
-                <tr key={l.id} className="border-t border-line">
+        <fieldset disabled={!ecriture} className="min-w-0">
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full text-[13px]">
+              <thead className="bg-panel-2 text-left text-[12px] text-muted">
+                <tr>
                   {section.colonnes.map((c) => (
-                    <td key={c.champ} className="px-2 py-1.5">
-                      {c.visible && !c.visible(l) ? (
-                        <span className="block text-center text-muted">–</span>
-                      ) : c.type === "nombre" ? (
-                        <CelluleNombre label={`${c.titre}, ${l.name}`} className={c.largeur} value={Number(l[c.champ] ?? 0)} onSave={(v) => enregistrer(l, c.champ, v)} />
-                      ) : c.type === "choix" ? (
-                        <CelluleChoix label={`${c.titre}, ${l.name}`} className={c.largeur} value={String(l[c.champ] || "")} options={choix(c)} onSave={(v) => enregistrer(l, c.champ, v)} />
-                      ) : (
-                        <CelluleTexte label={`${c.titre}, ${l.name}`} className={c.largeur} value={String(l[c.champ] || "")} placeholder={c.champ === "ramp" ? "60;80;100" : undefined} onSave={(v) => enregistrer(l, c.champ, v)} />
-                      )}
-                    </td>
+                    <th key={c.champ} className={cx("whitespace-nowrap px-2 py-2 font-semibold", c.type === "nombre" && "text-right")}>
+                      {c.titre}
+                    </th>
                   ))}
-                  <td className="px-1 text-right">
-                    <button type="button" aria-label={`Supprimer ${l.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer « ${l.name} » ?`, { action: "Supprimer", danger: true })) && envoyer("DELETE", `/axispro/plan-lines/${l.id}`)}>
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
+                  {ecriture && <th className="w-10" />}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {lignes.map((l) => (
+                  <tr key={l.id} className="border-t border-line">
+                    {section.colonnes.map((c) => (
+                      <td key={c.champ} className="px-2 py-1.5">
+                        {c.visible && !c.visible(l) ? (
+                          <span className="block text-center text-muted">–</span>
+                        ) : c.type === "nombre" ? (
+                          <CelluleNombre label={`${c.titre}, ${l.name}`} className={c.largeur} value={Number(l[c.champ] ?? 0)} onSave={(v) => enregistrer(l, c.champ, v)} />
+                        ) : c.type === "choix" ? (
+                          <CelluleChoix label={`${c.titre}, ${l.name}`} className={c.largeur} value={String(l[c.champ] || "")} options={choix(c)} onSave={(v) => enregistrer(l, c.champ, v)} />
+                        ) : (
+                          <CelluleTexte label={`${c.titre}, ${l.name}`} className={c.largeur} value={String(l[c.champ] || "")} placeholder={c.champ === "ramp" ? "60;80;100" : undefined} onSave={(v) => enregistrer(l, c.champ, v)} />
+                        )}
+                      </td>
+                    ))}
+                    {ecriture && (
+                      <td className="px-1 text-right">
+                        <button type="button" aria-label={`Supprimer ${l.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer « ${l.name} » ?`, { action: "Supprimer", danger: true })) && envoyer("DELETE", `/axispro/plan-lines/${l.id}`)}>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </fieldset>
       )}
     </section>
   );

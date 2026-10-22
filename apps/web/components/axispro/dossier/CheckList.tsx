@@ -7,7 +7,7 @@ import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, useCabinet, useRetour } from "./commun";
+import { LectureSeuleCabinet, PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, useCabinet, useRetour } from "./commun";
 
 /** Couleur de la puce d'état choisie. */
 const ETAT: Record<Status, string> = {
@@ -42,7 +42,7 @@ const FOCUS: Array<{ value: Focus; label: string }> = [
 export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const compartiments = d.scoring.compartments ?? [];
   const [miens, setMiens] = useState(false);
-  const { moi } = useCabinet();
+  const { moi, cabinet } = useCabinet();
   const { data: criteria, error, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria${miens ? "?mine=1" : ""}`, { keepPreviousData: true });
   const { data: room, mutate: mutateRoom } = useApi<{ files: DocFile[] }>(`/axispro/dossiers/${d.id}/documents`);
   const [mode, setMode] = useState<"guidee" | "complete">(d.progress.assessed < d.progress.criteria ? "guidee" : "complete");
@@ -55,7 +55,10 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const [ouvert, setOuvert] = useState<number | null>(null);
   const [apercu, setApercu] = useState<{ file: File; result: ImportResult } | null>(null);
   const { agir, bandeau } = useRetour();
-  const verrou = d.locked;
+  // Évaluation figée : décision verrouillée, ou profil sans écriture (PATCH /axispro/evaluations/<id>,
+  // preuves, import de fiche et validité des pièces : profil cabinet seul ; la direction et
+  // l'administration lisent).
+  const verrou = d.locked || !cabinet;
   const gateIndex = new Map(d.gates.map((g, i) => [g.code, i]));
   const courant = d.current_gate ? (gateIndex.get(d.current_gate.code) ?? 0) : 0;
 
@@ -133,7 +136,8 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   return (
     <div className="space-y-4">
       {bandeau}
-      {verrou && <Notice tone="warn">Décision du comité verrouillée : l&apos;évaluation est figée. Ouvrez une nouvelle révision pour la reprendre.</Notice>}
+      <LectureSeuleCabinet>Lecture seule : votre profil consulte l&apos;évaluation. Seul le profil cabinet évalue les critères et joint les preuves.</LectureSeuleCabinet>
+      {d.locked && <Notice tone="warn">Décision du comité verrouillée : l&apos;évaluation est figée. Ouvrez une nouvelle révision pour la reprendre.</Notice>}
       <Card>
         <div className="flex flex-wrap items-center gap-3">
           <Segmented
@@ -353,7 +357,7 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
                     valable jusqu&apos;au
                     <Input type="date" disabled={verrou} className="w-[150px] py-0.5 text-[12px]" defaultValue={doc.validity_date ?? ""} onBlur={(e) => e.target.value !== (doc.validity_date ?? "") && onValidite(doc.id, e.target.value)} />
                   </span>
-                  <button type="button" disabled={verrou} aria-label="Télécharger la preuve" className="text-muted hover:text-accent" onClick={() => apiDownload(`/axispro/documents/${doc.id}/download`, doc.name)}>
+                  <button type="button" aria-label="Télécharger la preuve" className="text-muted hover:text-accent" onClick={() => apiDownload(`/axispro/documents/${doc.id}/download`, doc.name)}>
                     <Download className="h-3.5 w-3.5" />
                   </button>
                   {!verrou && (

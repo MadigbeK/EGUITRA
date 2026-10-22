@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button, Card, DataTable, Etat, Field, Input, Kpi, Notice, PageHeader, RankBars, Select, Tabs, Badge } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { DossierSummary } from "@/lib/axispro-types";
+import { useCabinet } from "@/components/axispro/dossier/commun";
 import { fmtDate, fmtDec } from "@/lib/format";
 
 interface Sheet {
@@ -21,7 +22,8 @@ interface Sheet {
 export default function TempsPage() {
   const [filter, setFilter] = useState<"unbilled" | "all">("unbilled");
   const { data, error, mutate } = useApi<Sheet[]>(`/axispro/timesheets${filter === "unbilled" ? "?unbilled=1" : ""}`);
-  const { data: dossiers } = useApi<DossierSummary[]>("/axispro/dossiers?state=open,on_hold");
+  const { cabinet } = useCabinet();
+  const { data: dossiers } = useApi<DossierSummary[]>(cabinet ? "/axispro/dossiers?state=open,on_hold" : null);
   const [f, setF] = useState({ dossier_id: "", date: new Date().toISOString().slice(0, 10), hours: "", description: "", billable: true });
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const rows = data ?? [];
@@ -53,18 +55,21 @@ export default function TempsPage() {
         <Kpi label="Dossiers concernés" value={String(byDossier.length)} />
       </div>
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
-      <Card title="Saisir du temps" className="mb-6">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-          <Field label="Dossier" className="md:col-span-2"><Select value={f.dossier_id} onChange={(e) => setF({ ...f, dossier_id: e.target.value })} placeholder="Choisir" options={(dossiers ?? []).map((d) => ({ value: d.id, label: `${d.reference}, ${d.name}` }))} /></Field>
-          <Field label="Date"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
-          <Field label="Heures"><Input inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} /></Field>
-          <Field label="Travaux" className="md:col-span-2"><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
-        </div>
-        <div className="mt-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={f.billable} onChange={(e) => setF({ ...f, billable: e.target.checked })} /> Facturable</label>
-          <Button variant="primary" disabled={!f.dossier_id || !f.hours || !f.description} onClick={submit}>Enregistrer</Button>
-        </div>
-      </Card>
+      {/* Saisie des temps réservée au profil cabinet (POST /axispro/timesheets) ; la direction et l'administration lisent. */}
+      {cabinet && (
+        <Card title="Saisir du temps" className="mb-6">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+            <Field label="Dossier" className="md:col-span-2"><Select value={f.dossier_id} onChange={(e) => setF({ ...f, dossier_id: e.target.value })} placeholder="Choisir" options={(dossiers ?? []).map((d) => ({ value: d.id, label: `${d.reference}, ${d.name}` }))} /></Field>
+            <Field label="Date"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+            <Field label="Heures"><Input inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} /></Field>
+            <Field label="Travaux" className="md:col-span-2"><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={f.billable} onChange={(e) => setF({ ...f, billable: e.target.checked })} /> Facturable</label>
+            <Button variant="primary" disabled={!f.dossier_id || !f.hours || !f.description} onClick={submit}>Enregistrer</Button>
+          </div>
+        </Card>
+      )}
       <Tabs tabs={[{ key: "unbilled", label: "À facturer" }, { key: "all", label: "Tous les temps" }]} value={filter} onChange={setFilter} />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card title="Heures par dossier">

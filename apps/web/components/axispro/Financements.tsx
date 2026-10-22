@@ -9,6 +9,7 @@ import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { FUNDING_STATE, INSTRUMENTS, type Funding, type FundingState } from "@/lib/axispro-types";
 import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { CelluleNombre, CelluleTexte } from "./cellules";
+import { LectureSeuleCabinet, useCabinet } from "./dossier/commun";
 
 const EN_COURS: FundingState[] = ["identified", "submitted", "review", "agreed"];
 const OBTENUS: FundingState[] = ["signed", "disbursed"];
@@ -17,6 +18,9 @@ const OBTENUS: FundingState[] = ["signed", "disbursed"];
 export function Financements({ dossierId, besoin }: { dossierId?: number; besoin?: number }) {
   const { data, error, mutate } = useApi<Funding[]>(dossierId ? `/axispro/fundings?dossier_id=${dossierId}` : "/axispro/fundings");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  // Démarches de financement : écriture réservée au profil cabinet (POST /axispro/dossiers/<id>/fundings,
+  // PATCH et DELETE /axispro/fundings/<id>) ; la direction et l'administration lisent.
+  const { cabinet } = useCabinet();
 
   async function agir(fn: () => Promise<unknown>, ok?: string) {
     setMessage(null);
@@ -40,6 +44,7 @@ export function Financements({ dossierId, besoin }: { dossierId?: number; besoin
   return (
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      <LectureSeuleCabinet>Lecture seule : votre profil consulte les démarches de financement. Seul le profil cabinet les tient à jour.</LectureSeuleCabinet>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {besoin !== undefined ? (
           <Kpi label="Besoin de financement" value={fmtShort(besoin)} hint="Annoncé à l'ouverture du dossier" />
@@ -89,13 +94,13 @@ export function Financements({ dossierId, besoin }: { dossierId?: number; besoin
         ) : (
           <ul className="divide-y divide-line">
             {data.map((f) => (
-              <LigneFinancement key={f.id} f={f} global={!dossierId} agir={agir} />
+              <LigneFinancement key={f.id} f={f} global={!dossierId} agir={agir} ecriture={cabinet} />
             ))}
           </ul>
         )}
       </Card>
 
-      {dossierId && <NouveauFinancement onCreate={(v) => agir(() => apiSend("POST", `/axispro/dossiers/${dossierId}/fundings`, v), "Démarche enregistrée.")} />}
+      {dossierId && cabinet && <NouveauFinancement onCreate={(v) => agir(() => apiSend("POST", `/axispro/dossiers/${dossierId}/fundings`, v), "Démarche enregistrée.")} />}
     </div>
   );
 }
@@ -136,7 +141,8 @@ function Pipeline({ data }: { data: Funding[] }) {
   );
 }
 
-function LigneFinancement({ f, global, agir }: { f: Funding; global: boolean; agir: (fn: () => Promise<unknown>, ok?: string) => Promise<void> }) {
+/** Démarche auprès d'un financeur : modifiable sur place par le cabinet, figée pour les autres profils. */
+function LigneFinancement({ f, global, agir, ecriture }: { f: Funding; global: boolean; agir: (fn: () => Promise<unknown>, ok?: string) => Promise<void>; ecriture: boolean }) {
   const patch = (v: Record<string, unknown>) => agir(() => apiSend("PATCH", `/axispro/fundings/${f.id}`, v));
   return (
     <li className="px-5 py-3.5">
@@ -161,21 +167,23 @@ function LigneFinancement({ f, global, agir }: { f: Funding; global: boolean; ag
             {f.state_date ? `, étape atteinte le ${fmtDate(f.state_date)}` : ""}
           </div>
         </div>
-        <Select aria-label={`Étape, ${f.funder.name}`} className="min-h-8 w-48 py-1 text-[13px]" value={f.state} onChange={(e) => patch({ state: e.target.value })} options={(Object.keys(FUNDING_STATE) as FundingState[]).map((k) => ({ value: k, label: FUNDING_STATE[k].label }))} />
-        {!global && (
+        {ecriture && <Select aria-label={`Étape, ${f.funder.name}`} className="min-h-8 w-48 py-1 text-[13px]" value={f.state} onChange={(e) => patch({ state: e.target.value })} options={(Object.keys(FUNDING_STATE) as FundingState[]).map((k) => ({ value: k, label: FUNDING_STATE[k].label }))} />}
+        {ecriture && !global && (
           <button type="button" aria-label={`Supprimer la démarche ${f.funder.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer la démarche auprès de ${f.funder.name} ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/fundings/${f.id}`), "Démarche supprimée.")}>
             <Trash2 className="h-4 w-4" />
           </button>
         )}
       </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] text-muted md:grid-cols-3 xl:grid-cols-6">
-        <label className="block">Sollicité<CelluleNombre label="Montant sollicité" className="mt-0.5 w-full" value={f.amount_requested} onSave={(v) => patch({ amount_requested: v })} /></label>
-        <label className="block">Accordé<CelluleNombre label="Montant accordé" className="mt-0.5 w-full" value={f.amount_granted} onSave={(v) => patch({ amount_granted: v })} /></label>
-        <label className="block">Taux (%)<CelluleNombre label="Taux" className="mt-0.5 w-full" value={f.rate ?? 0} onSave={(v) => patch({ rate: v })} /></label>
-        <label className="block">Durée (mois)<CelluleNombre label="Durée en mois" className="mt-0.5 w-full" value={f.duration_months ?? 0} onSave={(v) => patch({ duration_months: Math.round(v) })} /></label>
-        <label className="block">Prochaine étape<CelluleTexte label="Prochaine étape" className="mt-0.5 w-full" value={f.next_step ?? ""} onSave={(v) => patch({ next_step: v })} /></label>
-        <label className="block">Relance le<Input aria-label="Date de relance" type="date" className="mt-0.5 min-h-8 w-full py-1 text-[13px]" defaultValue={f.next_date ?? ""} onBlur={(e) => e.target.value !== (f.next_date ?? "") && patch({ next_date: e.target.value || null })} /></label>
-      </div>
+      <fieldset disabled={!ecriture} className="mt-2.5 min-w-0">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] text-muted md:grid-cols-3 xl:grid-cols-6">
+          <label className="block">Sollicité<CelluleNombre label="Montant sollicité" className="mt-0.5 w-full" value={f.amount_requested} onSave={(v) => patch({ amount_requested: v })} /></label>
+          <label className="block">Accordé<CelluleNombre label="Montant accordé" className="mt-0.5 w-full" value={f.amount_granted} onSave={(v) => patch({ amount_granted: v })} /></label>
+          <label className="block">Taux (%)<CelluleNombre label="Taux" className="mt-0.5 w-full" value={f.rate ?? 0} onSave={(v) => patch({ rate: v })} /></label>
+          <label className="block">Durée (mois)<CelluleNombre label="Durée en mois" className="mt-0.5 w-full" value={f.duration_months ?? 0} onSave={(v) => patch({ duration_months: Math.round(v) })} /></label>
+          <label className="block">Prochaine étape<CelluleTexte label="Prochaine étape" className="mt-0.5 w-full" value={f.next_step ?? ""} onSave={(v) => patch({ next_step: v })} /></label>
+          <label className="block">Relance le<Input aria-label="Date de relance" type="date" className="mt-0.5 min-h-8 w-full py-1 text-[13px]" defaultValue={f.next_date ?? ""} onBlur={(e) => e.target.value !== (f.next_date ?? "") && patch({ next_date: e.target.value || null })} /></label>
+        </div>
+      </fieldset>
       {f.conditions && <p className="mt-2 text-[13px] text-ink-2"><b>Conditions et garanties :</b> {f.conditions}</p>}
     </li>
   );

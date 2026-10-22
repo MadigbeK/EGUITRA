@@ -7,7 +7,7 @@ import { apiGet, apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Decision, type DossierDetail, type GateDecision, type Recommendation } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { valeurIndicateur } from "./CheckList";
-import { arrondi, useRetour } from "./commun";
+import { arrondi, useCabinet, useRetour } from "./commun";
 
 const DECISIONS: Array<{ value: Decision; label: string }> = [
   { value: "go", label: "GO" },
@@ -55,6 +55,9 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
   const [compare, setCompare] = useState<number[]>([]);
   const { data: diff } = useApi<Diff>(compare.length === 2 ? `/axispro/reviews/compare?a=${compare[0]}&b=${compare[1]}` : null);
   const { agir, bandeau, setRetour } = useRetour();
+  // Revue et verrouillage : profil cabinet seul (POST /axispro/dossiers/<id>/reviews, /axispro/reviews/<id>/lock) ;
+  // la direction et l'administration consultent, comparent et vérifient les empreintes.
+  const { cabinet } = useCabinet();
   const motifRequis = f.decision === "hold" || f.decision === "no_go";
 
   async function create(lock: boolean) {
@@ -78,23 +81,25 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
           Décision {RECO[d.locked_review.decision]?.label ?? d.locked_review.decision} du {fmtDate(d.locked_review.date)} verrouillée (révision {d.revision}) : ouvrez une nouvelle révision pour une nouvelle décision.
         </Notice>
       )}
-      <Card title="Nouvelle revue de comité">
-        <p className="mb-3 text-[12.5px] text-muted">
-          Recommandation calculée : <b>{RECO[d.scoring.recommendation].label}</b> ({d.scoring.classification}), Readiness {arrondi(d.scoring.readiness)}, APD {arrondi(d.scoring.apd)}, Bankability {arrondi(d.scoring.bankability)}. L&apos;instantané de l&apos;évaluation est conservé avec la décision.
-        </p>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="Décision"><Select value={f.decision} onChange={(e) => setF({ ...f, decision: e.target.value as Decision })} options={DECISIONS} /></Field>
-          <Field label="Instance"><Input value={f.instance} onChange={(e) => setF({ ...f, instance: e.target.value })} /></Field>
-          <Field label="Membres du comité"><Input value={f.members} onChange={(e) => setF({ ...f, members: e.target.value })} /></Field>
-          <Field label={motifRequis ? "Motif de la décision (obligatoire pour HOLD et NO-GO)" : "Motif de la décision"} className="md:col-span-3"><Textarea value={f.motive} onChange={(e) => setF({ ...f, motive: e.target.value })} /></Field>
-          <Field label="Conditions (une par ligne : chacune devient une action du porteur)" className="md:col-span-3"><Textarea value={f.conditions} onChange={(e) => setF({ ...f, conditions: e.target.value })} /></Field>
-          <Field label="Compte rendu" className="md:col-span-3"><Textarea value={f.minutes} onChange={(e) => setF({ ...f, minutes: e.target.value })} /></Field>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button onClick={() => create(false)}>Enregistrer en brouillon</Button>
-          <Button variant="primary" disabled={Boolean(d.locked_review) || (motifRequis && !f.motive.trim())} onClick={() => create(true)}><Lock className="h-4 w-4" /> Enregistrer, sceller et verrouiller</Button>
-        </div>
-      </Card>
+      {cabinet && (
+        <Card title="Nouvelle revue de comité">
+          <p className="mb-3 text-[12.5px] text-muted">
+            Recommandation calculée : <b>{RECO[d.scoring.recommendation].label}</b> ({d.scoring.classification}), Readiness {arrondi(d.scoring.readiness)}, APD {arrondi(d.scoring.apd)}, Bankability {arrondi(d.scoring.bankability)}. L&apos;instantané de l&apos;évaluation est conservé avec la décision.
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Field label="Décision"><Select value={f.decision} onChange={(e) => setF({ ...f, decision: e.target.value as Decision })} options={DECISIONS} /></Field>
+            <Field label="Instance"><Input value={f.instance} onChange={(e) => setF({ ...f, instance: e.target.value })} /></Field>
+            <Field label="Membres du comité"><Input value={f.members} onChange={(e) => setF({ ...f, members: e.target.value })} /></Field>
+            <Field label={motifRequis ? "Motif de la décision (obligatoire pour HOLD et NO-GO)" : "Motif de la décision"} className="md:col-span-3"><Textarea value={f.motive} onChange={(e) => setF({ ...f, motive: e.target.value })} /></Field>
+            <Field label="Conditions (une par ligne : chacune devient une action du porteur)" className="md:col-span-3"><Textarea value={f.conditions} onChange={(e) => setF({ ...f, conditions: e.target.value })} /></Field>
+            <Field label="Compte rendu" className="md:col-span-3"><Textarea value={f.minutes} onChange={(e) => setF({ ...f, minutes: e.target.value })} /></Field>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={() => create(false)}>Enregistrer en brouillon</Button>
+            <Button variant="primary" disabled={Boolean(d.locked_review) || (motifRequis && !f.motive.trim())} onClick={() => create(true)}><Lock className="h-4 w-4" /> Enregistrer, sceller et verrouiller</Button>
+          </div>
+        </Card>
+      )}
       <Card title="Historique (cochez deux revues pour les comparer)" padded={false}>
         <DataTable rows={d.reviews} rowKey={(r) => r.id} empty="Aucune revue." onRowClick={(r) => setCompare((c) => (c.includes(r.id) ? c.filter((x) => x !== r.id) : [...c, r.id].slice(-2)))} columns={[
           { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={compare.includes(r.id)} aria-label="Comparer cette revue" /> },
@@ -108,10 +113,12 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
               <Badge tone="ok"><Lock className="mr-1 h-3 w-3" />Scellée</Badge>
               {r.fingerprint && <Button size="sm" title={`Empreinte ${r.fingerprint}`} onClick={() => verifier(r.id)}><ShieldCheck className="h-3.5 w-3.5" /> Vérifier</Button>}
             </div>
-          ) : (
+          ) : cabinet ? (
             <div onClick={(e) => e.stopPropagation()}>
               <Button size="sm" disabled={Boolean(d.locked_review)} onClick={() => agir(() => apiSend("POST", `/axispro/reviews/${r.id}/lock`), "Décision scellée et verrouillée.").then((x) => x !== undefined && onChanged())}>Verrouiller</Button>
             </div>
+          ) : (
+            <Badge>Brouillon</Badge>
           )) },
         ]} />
         {d.reviews.some((r) => r.state === "locked" && r.locked_at) && (

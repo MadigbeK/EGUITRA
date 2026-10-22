@@ -6,6 +6,7 @@ import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Sele
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { OWNER, RISK_LEVEL, RISK_STATE, type Risk, type RiskLevel, type RiskSummary } from "@/lib/axispro-types";
 import { CelluleChoix } from "./cellules";
+import { LectureSeuleCabinet, useCabinet } from "./dossier/commun";
 
 const ECHELLE = [1, 2, 3, 4, 5];
 const PROBABILITE = ["", "Rare", "Peu probable", "Possible", "Probable", "Quasi certain"];
@@ -27,6 +28,10 @@ export function Risques({ dossierId }: { dossierId: number }) {
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const [vue, setVue] = useState<"inherent" | "residual">("inherent");
   const [ouvert, setOuvert] = useState<number | null>(null);
+  // Registre des risques : écriture réservée au profil cabinet (POST /axispro/dossiers/<id>/risks,
+  // PATCH et DELETE /axispro/risks/<id>, POST /axispro/risks/<id>/action) ; la direction et
+  // l'administration lisent.
+  const { cabinet } = useCabinet();
 
   async function agir(fn: () => Promise<unknown>, ok?: string) {
     setMessage(null);
@@ -48,6 +53,7 @@ export function Risques({ dossierId }: { dossierId: number }) {
   return (
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      <LectureSeuleCabinet>Lecture seule : votre profil consulte le registre des risques. Seul le profil cabinet le tient à jour.</LectureSeuleCabinet>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Risques ouverts" value={String(data.summary.open)} />
         <Kpi label="Critiques" value={String(data.summary.levels.critical)} tone={data.summary.levels.critical ? "danger" : "ok"} hint="Criticité de 15 à 25" />
@@ -102,7 +108,7 @@ export function Risques({ dossierId }: { dossierId: number }) {
             ))}
           </div>
         </Card>
-        <NouveauRisque categories={data.categories} onCreate={(v) => agir(() => apiSend("POST", chemin, v), "Risque enregistré.")} />
+        {cabinet && <NouveauRisque categories={data.categories} onCreate={(v) => agir(() => apiSend("POST", chemin, v), "Risque enregistré.")} />}
       </div>
 
       <Card title="Registre des risques" padded={false}>
@@ -126,9 +132,13 @@ export function Risques({ dossierId }: { dossierId: number }) {
                     </div>
                   </div>
                   <Badge tone={RISK_LEVEL[r.level].tone}>{RISK_LEVEL[r.level].label}</Badge>
-                  <CelluleChoix label={`État du risque ${r.name}`} className="w-40" value={r.state} options={RISK_STATE} onSave={(v) => agir(() => apiSend("PATCH", `/axispro/risks/${r.id}`, { state: v }))} />
+                  {cabinet ? (
+                    <CelluleChoix label={`État du risque ${r.name}`} className="w-40" value={r.state} options={RISK_STATE} onSave={(v) => agir(() => apiSend("PATCH", `/axispro/risks/${r.id}`, { state: v }))} />
+                  ) : (
+                    <Badge>{RISK_STATE[r.state]}</Badge>
+                  )}
                 </div>
-                {ouvert === r.id && <EditionRisque r={r} categories={data.categories} agir={agir} />}
+                {ouvert === r.id && <EditionRisque r={r} categories={data.categories} agir={agir} ecriture={cabinet} />}
               </li>
             ))}
           </ul>
@@ -175,7 +185,8 @@ function NouveauRisque({ categories, onCreate }: { categories: Record<string, st
   );
 }
 
-function EditionRisque({ r, categories, agir }: { r: Risk; categories: Record<string, string>; agir: (fn: () => Promise<unknown>, ok?: string) => Promise<void> }) {
+/** Fiche d'un risque : modifiable par le cabinet, figée (champs lisibles, sans commande) pour les autres profils. */
+function EditionRisque({ r, categories, agir, ecriture }: { r: Risk; categories: Record<string, string>; agir: (fn: () => Promise<unknown>, ok?: string) => Promise<void>; ecriture: boolean }) {
   const [f, setF] = useState({
     description: r.description ?? "",
     mitigation: r.mitigation ?? "",
@@ -189,42 +200,46 @@ function EditionRisque({ r, categories, agir }: { r: Risk; categories: Record<st
   const choix = (vide: boolean, libelles: string[]) => [...(vide ? [{ value: "", label: "Non évalué" }] : []), ...ECHELLE.map((n) => ({ value: String(n), label: `${n}, ${libelles[n]}` }))];
   return (
     <div className="mt-3 rounded-xl bg-panel-2 p-3.5">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Field label="Catégorie"><Select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} options={Object.entries(categories).map(([value, label]) => ({ value, label }))} /></Field>
-        <Field label="Responsable"><Select value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value as Risk["owner"] })} options={Object.entries(OWNER).map(([value, label]) => ({ value, label }))} /></Field>
-        <Field label="Probabilité"><Select value={f.probability} onChange={(e) => setF({ ...f, probability: e.target.value })} options={choix(false, PROBABILITE)} /></Field>
-        <Field label="Impact"><Select value={f.impact} onChange={(e) => setF({ ...f, impact: e.target.value })} options={choix(false, IMPACT)} /></Field>
-        <Field label="Description et causes" className="md:col-span-2"><Textarea className="min-h-[60px]" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
-        <Field label="Mesures d'atténuation" className="md:col-span-2"><Textarea className="min-h-[60px]" value={f.mitigation} onChange={(e) => setF({ ...f, mitigation: e.target.value })} /></Field>
-        <Field label="Probabilité après traitement"><Select value={f.residual_probability} onChange={(e) => setF({ ...f, residual_probability: e.target.value })} options={choix(true, PROBABILITE)} /></Field>
-        <Field label="Impact après traitement"><Select value={f.residual_impact} onChange={(e) => setF({ ...f, residual_impact: e.target.value })} options={choix(true, IMPACT)} /></Field>
-      </div>
-      <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <Button variant="danger" onClick={async () => (await demanderConfirmation(`Supprimer le risque « ${r.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/risks/${r.id}`), "Risque supprimé.")}>
-          <Trash2 className="h-4 w-4" /> Supprimer
-        </Button>
-        <Button onClick={() => agir(() => apiSend("POST", `/axispro/risks/${r.id}/action`), "Action de traitement ajoutée au plan d'actions.")} disabled={!r.mitigation}>
-          <ListChecks className="h-4 w-4" /> Créer l&apos;action de traitement
-        </Button>
-        <Button
-          variant="primary"
-          onClick={() =>
-            agir(
-              () =>
-                apiSend("PATCH", `/axispro/risks/${r.id}`, {
-                  ...f,
-                  probability: Number(f.probability),
-                  impact: Number(f.impact),
-                  residual_probability: f.residual_probability ? Number(f.residual_probability) : 0,
-                  residual_impact: f.residual_impact ? Number(f.residual_impact) : 0,
-                }),
-              "Risque mis à jour.",
-            )
-          }
-        >
-          Enregistrer
-        </Button>
-      </div>
+      <fieldset disabled={!ecriture} className="min-w-0">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <Field label="Catégorie"><Select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} options={Object.entries(categories).map(([value, label]) => ({ value, label }))} /></Field>
+          <Field label="Responsable"><Select value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value as Risk["owner"] })} options={Object.entries(OWNER).map(([value, label]) => ({ value, label }))} /></Field>
+          <Field label="Probabilité"><Select value={f.probability} onChange={(e) => setF({ ...f, probability: e.target.value })} options={choix(false, PROBABILITE)} /></Field>
+          <Field label="Impact"><Select value={f.impact} onChange={(e) => setF({ ...f, impact: e.target.value })} options={choix(false, IMPACT)} /></Field>
+          <Field label="Description et causes" className="md:col-span-2"><Textarea className="min-h-[60px]" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          <Field label="Mesures d'atténuation" className="md:col-span-2"><Textarea className="min-h-[60px]" value={f.mitigation} onChange={(e) => setF({ ...f, mitigation: e.target.value })} /></Field>
+          <Field label="Probabilité après traitement"><Select value={f.residual_probability} onChange={(e) => setF({ ...f, residual_probability: e.target.value })} options={choix(true, PROBABILITE)} /></Field>
+          <Field label="Impact après traitement"><Select value={f.residual_impact} onChange={(e) => setF({ ...f, residual_impact: e.target.value })} options={choix(true, IMPACT)} /></Field>
+        </div>
+      </fieldset>
+      {ecriture && (
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <Button variant="danger" onClick={async () => (await demanderConfirmation(`Supprimer le risque « ${r.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/risks/${r.id}`), "Risque supprimé.")}>
+            <Trash2 className="h-4 w-4" /> Supprimer
+          </Button>
+          <Button onClick={() => agir(() => apiSend("POST", `/axispro/risks/${r.id}/action`), "Action de traitement ajoutée au plan d'actions.")} disabled={!r.mitigation}>
+            <ListChecks className="h-4 w-4" /> Créer l&apos;action de traitement
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() =>
+              agir(
+                () =>
+                  apiSend("PATCH", `/axispro/risks/${r.id}`, {
+                    ...f,
+                    probability: Number(f.probability),
+                    impact: Number(f.impact),
+                    residual_probability: f.residual_probability ? Number(f.residual_probability) : 0,
+                    residual_impact: f.residual_impact ? Number(f.residual_impact) : 0,
+                  }),
+                "Risque mis à jour.",
+              )
+            }
+          >
+            Enregistrer
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSum
 import { fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
 import { ratio } from "@/components/axispro/cellules";
-import { note } from "@/components/axispro/dossier/commun";
+import { note, useCabinet } from "@/components/axispro/dossier/commun";
 
 type Vue = "tableau" | "liste";
 
@@ -33,6 +33,7 @@ export default function DossiersPage() {
   const { data, error, mutate } = useApi<DossierSummary[]>(`/axispro/dossiers?state=${state}`);
   const { data: policy } = useApi<{ version: number; name: string } | null>("/axispro/policy");
   const [creating, setCreating] = useState(false);
+  const { cabinet } = useCabinet();
   const rows = data ?? [];
 
   useEffect(() => {
@@ -73,9 +74,12 @@ export default function DossiersPage() {
                 { key: "liste", label: "Liste" },
               ]}
             />
-            <Button variant="primary" disabled={!policy} onClick={() => setCreating(true)}>
-              <Plus className="h-4 w-4" /> Nouveau dossier
-            </Button>
+            {/* Création réservée au profil cabinet (POST /axispro/dossiers) ; la direction et l'administration lisent. */}
+            {cabinet && (
+              <Button variant="primary" disabled={!policy} onClick={() => setCreating(true)}>
+                <Plus className="h-4 w-4" /> Nouveau dossier
+              </Button>
+            )}
           </>
         }
       />

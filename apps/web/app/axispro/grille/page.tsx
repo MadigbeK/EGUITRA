@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Copy, Download, FileUp } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
-import { PuceCompartiment } from "@/components/axispro/dossier/commun";
+import { PuceCompartiment, useCabinet } from "@/components/axispro/dossier/commun";
 import type { Compartment, IndicatorInfo } from "@/lib/axispro-types";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
@@ -102,6 +102,10 @@ export default function GrillePage() {
   const { data: policies, error, mutate } = useApi<PolicyRow[]>("/axispro/policies");
   const [selected, setSelected] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
+  // Import, versions, mise en vigueur et réglages de la grille : profil cabinet seul (routes
+  // /axispro/policies, /gates, /domains, /compartments et /criteria en écriture) ; la direction et
+  // l'administration consultent.
+  const { cabinet } = useCabinet();
   const current = selected ?? policies?.find((p) => p.state === "active")?.id ?? policies?.[0]?.id ?? null;
   return (
     <div>
@@ -111,7 +115,7 @@ export default function GrillePage() {
         actions={
           <>
             <Button onClick={() => apiDownload("/axispro/policies/template", "grille_axispro_modele.xlsx")}><Download className="h-4 w-4" /> Classeur modèle</Button>
-            <Button variant="primary" onClick={() => setImporting(true)}><FileUp className="h-4 w-4" /> Importer une grille</Button>
+            {cabinet && <Button variant="primary" onClick={() => setImporting(true)}><FileUp className="h-4 w-4" /> Importer une grille</Button>}
           </>
         }
       />
@@ -150,8 +154,10 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
   const { data: p, error, mutate } = useApi<Policy>(`/axispro/policies/${id}`);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const [vue, setVue] = useState<"criteres" | "compartiments" | "gates" | "pieces">("criteres");
+  const { cabinet } = useCabinet();
   if (!p) return <Etat error={error} onRetry={() => mutate()} />;
-  const editable = p.state === "draft";
+  // Une version en brouillon se règle, par le seul profil cabinet.
+  const editable = p.state === "draft" && cabinet;
   const gateCode = Object.fromEntries(p.gates.map((g) => [g.id, g.code]));
   const domainCode = Object.fromEntries(p.domains.map((d) => [d.id, d.code]));
   const compartiments = p.compartments ?? [];
@@ -195,9 +201,11 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
                 <CheckCircle2 className="h-4 w-4" /> Mettre en vigueur
               </Button>
             )}
-            <Button onClick={() => act(async () => onSelect((await apiSend<Policy>("POST", `/axispro/policies/${p.id}/new-version`)).id), "Nouvelle version créée en brouillon : ajustez-la puis mettez-la en vigueur.")}>
-              <Copy className="h-4 w-4" /> Nouvelle version
-            </Button>
+            {cabinet && (
+              <Button onClick={() => act(async () => onSelect((await apiSend<Policy>("POST", `/axispro/policies/${p.id}/new-version`)).id), "Nouvelle version créée en brouillon : ajustez-la puis mettez-la en vigueur.")}>
+                <Copy className="h-4 w-4" /> Nouvelle version
+              </Button>
+            )}
           </div>
         }
       >
@@ -246,7 +254,13 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
           ))}
         </ul>
         {p.notes && <div className="mt-4"><div className="text-xs text-muted">Principes rappelés dans chaque rapport</div><p className="whitespace-pre-wrap text-sm">{p.notes}</p></div>}
-        {!editable && <p className="mt-4 text-xs text-muted">Cette version n&apos;est plus modifiable. Pour ajuster un réglage, un gate ou un critère, créez une nouvelle version.</p>}
+        {!editable && (
+          <p className="mt-4 text-xs text-muted">
+            {cabinet
+              ? "Cette version n'est plus modifiable. Pour ajuster un réglage, un gate ou un critère, créez une nouvelle version."
+              : "Lecture seule : votre profil consulte la grille. Seul le profil cabinet l'importe, la règle et la met en vigueur."}
+          </p>
+        )}
       </Card>
 
       <Segmented

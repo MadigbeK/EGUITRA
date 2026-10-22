@@ -16,6 +16,8 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
   const s = d.scoring;
   const { agir, bandeau } = useRetour();
   const [portal, setPortal] = useState({ login: "", name: "", password: "" });
+  // Ouvrir l'accès du porteur : profil cabinet seul (POST /axispro/dossiers/<id>/portal-access).
+  const { cabinet } = useCabinet();
   const t = s.thresholds;
   const scores = [
     { titre: "Project Readiness", valeur: s.readiness, aide: "Toute la grille" },
@@ -166,13 +168,15 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
       </Card>
 
       <Card title="Accès du porteur au portail">
-        <p className="mb-3 text-sm text-muted">{d.portal_users.length ? `Accès ouvert : ${d.portal_users.map((u) => `${u.name} (${u.login})`).join(", ")}.` : "Aucun accès ouvert."}</p>
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-          <Input placeholder="Identifiant" value={portal.login} onChange={(e) => setPortal({ ...portal, login: e.target.value })} />
-          <Input placeholder="Nom du porteur" value={portal.name} onChange={(e) => setPortal({ ...portal, name: e.target.value })} />
-          <PasswordInput autoComplete="new-password" placeholder="Mot de passe provisoire (10+)" value={portal.password} onChange={(e) => setPortal({ ...portal, password: e.target.value })} />
-          <Button variant="primary" disabled={!portal.login || !portal.name || portal.password.length < 10} onClick={() => agir(() => apiSend("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), "Accès au portail ouvert.").then((r) => { if (r !== undefined) { setPortal({ login: "", name: "", password: "" }); onChanged(); } })}>Ouvrir l&apos;accès</Button>
-        </div>
+        <p className={cx("text-sm text-muted", cabinet && "mb-3")}>{d.portal_users.length ? `Accès ouvert : ${d.portal_users.map((u) => `${u.name} (${u.login})`).join(", ")}.` : "Aucun accès ouvert."}</p>
+        {cabinet && (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            <Input placeholder="Identifiant" value={portal.login} onChange={(e) => setPortal({ ...portal, login: e.target.value })} />
+            <Input placeholder="Nom du porteur" value={portal.name} onChange={(e) => setPortal({ ...portal, name: e.target.value })} />
+            <PasswordInput autoComplete="new-password" placeholder="Mot de passe provisoire (10+)" value={portal.password} onChange={(e) => setPortal({ ...portal, password: e.target.value })} />
+            <Button variant="primary" disabled={!portal.login || !portal.name || portal.password.length < 10} onClick={() => agir(() => apiSend("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), "Accès au portail ouvert.").then((r) => { if (r !== undefined) { setPortal({ login: "", name: "", password: "" }); onChanged(); } })}>Ouvrir l&apos;accès</Button>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -303,6 +307,8 @@ const OUI_NON = [
 /** Fiche projet et hypothèses de décision (gates 4 à 7), modifiables tant que le dossier n'est pas figé. */
 function Fiche({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const [edit, setEdit] = useState(false);
+  // Modifier la fiche : profil cabinet seul (PATCH /axispro/dossiers/<id>).
+  const { cabinet } = useCabinet();
   const { data: currencies } = useApi<Currency[]>(edit ? "/axispro/currencies" : null);
   const { agir, bandeau } = useRetour();
   const init = () => ({
@@ -331,7 +337,7 @@ function Fiche({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   return (
     <Card
       title="Fiche projet et hypothèses de décision"
-      actions={!edit ? <Button disabled={d.locked} onClick={() => { setF(init()); setEdit(true); }}><Pencil className="h-4 w-4" /> Modifier</Button> : undefined}
+      actions={!edit && cabinet ? <Button disabled={d.locked} onClick={() => { setF(init()); setEdit(true); }}><Pencil className="h-4 w-4" /> Modifier</Button> : undefined}
     >
       {bandeau}
       {!edit ? (

@@ -7,7 +7,7 @@ import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segm
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { ACTION_SOURCE, ACTION_STATE, type Action, type ActionState } from "@/lib/axispro-types";
 import { fmtDate, pluriel } from "@/lib/format";
-import { PuceCompartiment } from "@/components/axispro/dossier/commun";
+import { PuceCompartiment, useCabinet } from "@/components/axispro/dossier/commun";
 
 type Filtre = "open" | "overdue" | "submitted" | "all";
 
@@ -27,6 +27,9 @@ export function PlanActions({ dossierId }: { dossierId?: number }) {
   const { data, error, mutate } = useApi<Action[]>(`/axispro/actions?${params.toString()}`);
   const { data: toutes, mutate: recompter } = useApi<Action[]>(dossierId ? `/axispro/actions?dossier_id=${dossierId}` : "/axispro/actions?state=open");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  // Plan d'actions : écriture réservée au profil cabinet (POST /axispro/dossiers/<id>/actions et
+  // /actions/from-gaps, PATCH et DELETE /axispro/actions/<id>) ; la direction et l'administration lisent.
+  const { cabinet } = useCabinet();
 
   async function agir(fn: () => Promise<unknown>, ok?: string) {
     setMessage(null);
@@ -57,7 +60,7 @@ export function PlanActions({ dossierId }: { dossierId?: number }) {
           <Segmented label="Actions affichées" value={filtre} onChange={setFiltre} options={[{ key: "open", label: "Ouvertes" }, { key: "overdue", label: "En retard" }, { key: "submitted", label: "À valider" }, { key: "all", label: "Toutes" }]} />
           <Select aria-label="Confiées à" className="min-h-9 w-44" value={assignee} onChange={(e) => setAssignee(e.target.value as typeof assignee)} options={[{ value: "", label: "Porteur et cabinet" }, { value: "porteur", label: "Porteur" }, { value: "cabinet", label: "Cabinet" }]} />
         </div>
-        {dossierId && (
+        {dossierId && cabinet && (
           <Button onClick={() => agir(() => apiSend("POST", `/axispro/dossiers/${dossierId}/actions/from-gaps`, { limit: 5 }), "ok")}>
             <ListChecks className="h-4 w-4" /> Créer depuis les écarts prioritaires
           </Button>
@@ -72,18 +75,19 @@ export function PlanActions({ dossierId }: { dossierId?: number }) {
         ) : (
           <ul className="divide-y divide-line">
             {data.map((a) => (
-              <LigneAction key={a.id} a={a} global={!dossierId} agir={agir} />
+              <LigneAction key={a.id} a={a} global={!dossierId} agir={agir} ecriture={cabinet} />
             ))}
           </ul>
         )}
       </Card>
 
-      {dossierId && <NouvelleAction onCreate={(v) => agir(() => apiSend("POST", `/axispro/dossiers/${dossierId}/actions`, v), "Action ajoutée.")} />}
+      {dossierId && cabinet && <NouvelleAction onCreate={(v) => agir(() => apiSend("POST", `/axispro/dossiers/${dossierId}/actions`, v), "Action ajoutée.")} />}
     </div>
   );
 }
 
-function LigneAction({ a, global, agir }: { a: Action; global: boolean; agir: (fn: () => Promise<unknown>, ok?: string) => Promise<void> }) {
+/** Action du plan : échéance, état et validation modifiables par le cabinet ; lues seulement par les autres profils. */
+function LigneAction({ a, global, agir, ecriture }: { a: Action; global: boolean; agir: (fn: () => Promise<unknown>, ok?: string) => Promise<void>; ecriture: boolean }) {
   const patch = (v: Record<string, unknown>, ok?: string) => agir(() => apiSend("PATCH", `/axispro/actions/${a.id}`, v), ok);
   return (
     <li className={cx("px-5 py-3.5", (a.state === "done" || a.state === "cancelled") && "opacity-60")}>
@@ -117,20 +121,24 @@ function LigneAction({ a, global, agir }: { a: Action; global: boolean; agir: (f
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input aria-label={`Échéance de ${a.name}`} type="date" className="min-h-8 w-40 py-1 text-[13px]" defaultValue={a.due_date ?? ""} onBlur={(e) => e.target.value !== (a.due_date ?? "") && patch({ due_date: e.target.value || null })} />
-          <Select aria-label={`État de ${a.name}`} className="min-h-8 w-44 py-1 text-[13px]" value={a.state} onChange={(e) => patch({ state: e.target.value as ActionState })} options={(Object.keys(ACTION_STATE) as ActionState[]).map((k) => ({ value: k, label: ACTION_STATE[k].label }))} />
-          {a.state === "submitted" && (
-            <Button variant="primary" size="sm" onClick={() => patch({ state: "done" }, "Action validée.")}>
-              Valider
-            </Button>
-          )}
-          {!global && (
-            <button type="button" aria-label={`Supprimer ${a.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer l'action « ${a.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/actions/${a.id}`), "Action supprimée.")}>
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        {!ecriture ? (
+          a.due_date && <span className="text-[12.5px] text-muted">Échéance {fmtDate(a.due_date)}</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input aria-label={`Échéance de ${a.name}`} type="date" className="min-h-8 w-40 py-1 text-[13px]" defaultValue={a.due_date ?? ""} onBlur={(e) => e.target.value !== (a.due_date ?? "") && patch({ due_date: e.target.value || null })} />
+            <Select aria-label={`État de ${a.name}`} className="min-h-8 w-44 py-1 text-[13px]" value={a.state} onChange={(e) => patch({ state: e.target.value as ActionState })} options={(Object.keys(ACTION_STATE) as ActionState[]).map((k) => ({ value: k, label: ACTION_STATE[k].label }))} />
+            {a.state === "submitted" && (
+              <Button variant="primary" size="sm" onClick={() => patch({ state: "done" }, "Action validée.")}>
+                Valider
+              </Button>
+            )}
+            {!global && (
+              <button type="button" aria-label={`Supprimer ${a.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer l'action « ${a.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/actions/${a.id}`), "Action supprimée.")}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );

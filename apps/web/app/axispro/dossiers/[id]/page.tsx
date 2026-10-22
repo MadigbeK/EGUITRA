@@ -5,9 +5,10 @@ import { ChevronLeft, Lock, MapPin, RotateCcw, Send } from "@/components/icons";
 import Link from "next/link";
 import { Rosace } from "@/components/guilloche";
 import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, Tabs, Textarea, cx } from "@/components/ui";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { RECO, type DossierDetail, type Message } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtGNF, pluriel } from "@/lib/format";
+import type { Profile } from "@/lib/types";
 import { Financements } from "@/components/axispro/Financements";
 import { ModeleFinancier } from "@/components/axispro/ModeleFinancier";
 import { PlanActions } from "@/components/axispro/PlanActions";
@@ -18,7 +19,10 @@ import { DataRoom } from "@/components/axispro/dossier/DataRoom";
 import { Gates } from "@/components/axispro/dossier/Gates";
 import { Journal, Rapport } from "@/components/axispro/dossier/Rapport";
 import { Synthese } from "@/components/axispro/dossier/Synthese";
-import { montant, note } from "@/components/axispro/dossier/commun";
+import { montant, note, useCabinet } from "@/components/axispro/dossier/commun";
+
+/** Profils de la route de facture d'honoraires (addons/eguitra_axispro/controllers/axispro.py). */
+const FACTURE_HONORAIRES: Profile[] = ["cabinet", "admin"];
 
 type Tab = "synthese" | "evaluation" | "gates" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "comites" | "journal" | "echanges" | "rapport" | "temps";
 
@@ -27,6 +31,7 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
   const { data: d, error, mutate } = useApi<DossierDetail>(`/axispro/dossiers/${id}`);
   const [tab, setTab] = useState<Tab>("synthese");
   const [revision, setRevision] = useState<string | null>(null);
+  const { cabinet } = useCabinet();
   if (error) return <ErrorBox error={error} />;
   if (!d) return <Loading />;
   const s = d.scoring;
@@ -98,7 +103,8 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
                 Décision <b>{RECO[d.locked_review.decision]?.label ?? d.locked_review.decision}</b> du {fmtDate(d.locked_review.date)} scellée par {d.locked_review.locked_by ?? "le cabinet"} (révision {d.revision}) : évaluation, fiche, hypothèses et modèle financier sont figés.
                 {d.locked_review.fingerprint && <span className="ml-1 font-mono text-[11.5px]">Empreinte {d.locked_review.fingerprint.slice(0, 16)}…</span>}
               </span>
-              <Button className="ml-auto" onClick={nouvelleRevision}><RotateCcw className="h-4 w-4" /> Ouvrir une nouvelle révision</Button>
+              {/* Nouvelle révision : profil cabinet seul (POST /axispro/dossiers/<id>/new-revision). */}
+              {cabinet && <Button className="ml-auto" onClick={nouvelleRevision}><RotateCcw className="h-4 w-4" /> Ouvrir une nouvelle révision</Button>}
             </span>
           </Notice>
           {revision && <div className="mt-2"><Notice tone="danger">{revision}</Notice></div>}
@@ -144,6 +150,8 @@ function Messages({ d }: { d: DossierDetail }) {
   const { data, mutate } = useApi<Message[]>(`/axispro/dossiers/${d.id}/messages`);
   const [body, setBody] = useState("");
   const [internal, setInternal] = useState(false);
+  // Écrire au porteur ou une note interne : profil cabinet seul (POST /axispro/dossiers/<id>/messages).
+  const { cabinet } = useCabinet();
   return (
     <Card>
       <div className="max-h-[480px] space-y-2 overflow-y-auto">
@@ -155,13 +163,15 @@ function Messages({ d }: { d: DossierDetail }) {
         ))}
         {data && data.length === 0 && <p className="text-sm text-muted">Aucun échange.</p>}
       </div>
-      <div className="mt-3 space-y-2 border-t border-line pt-3">
-        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={internal ? "Note interne, invisible du porteur" : "Message au porteur"} aria-label={internal ? "Note interne au cabinet" : "Message au porteur"} />
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} /> Note interne au cabinet</label>
-          <Button variant="primary" disabled={!body.trim()} onClick={() => apiSend("POST", `/axispro/dossiers/${d.id}/messages`, { body, internal }).then(() => { setBody(""); void mutate(); })}><Send className="h-4 w-4" /> Envoyer</Button>
+      {cabinet && (
+        <div className="mt-3 space-y-2 border-t border-line pt-3">
+          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={internal ? "Note interne, invisible du porteur" : "Message au porteur"} aria-label={internal ? "Note interne au cabinet" : "Message au porteur"} />
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} /> Note interne au cabinet</label>
+            <Button variant="primary" disabled={!body.trim()} onClick={() => apiSend("POST", `/axispro/dossiers/${d.id}/messages`, { body, internal }).then(() => { setBody(""); void mutate(); })}><Send className="h-4 w-4" /> Envoyer</Button>
+          </div>
         </div>
-      </div>
+      )}
     </Card>
   );
 }
@@ -172,17 +182,23 @@ function Time({ d }: { d: DossierDetail }) {
   const [rate, setRate] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const unbilled = (data ?? []).filter((t) => t.billable && !t.invoice).reduce((a, t) => a + t.hours, 0);
+  // Saisie des temps : profil cabinet seul (POST /axispro/timesheets). Facture d'honoraires : la route
+  // accepte aussi l'administration (POST /axispro/dossiers/<id>/invoice) ; la direction lit seulement.
+  const { cabinet } = useCabinet();
+  const facture = useAutorise(FACTURE_HONORAIRES);
   return (
     <div className="space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <Card title="Saisir du temps">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-          <Input type="date" aria-label="Date des travaux" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
-          <Input placeholder="Heures" aria-label="Heures" inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} />
-          <Input placeholder="Travaux réalisés" aria-label="Travaux réalisés" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-          <Button variant="primary" disabled={!f.hours || !f.description} onClick={() => apiSend("POST", "/axispro/timesheets", { ...f, dossier_id: d.id, hours: Number(f.hours.replace(",", ".")) }).then(() => { setF({ ...f, hours: "", description: "" }); void mutate(); })}>Enregistrer</Button>
-        </div>
-      </Card>
+      {cabinet && (
+        <Card title="Saisir du temps">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            <Input type="date" aria-label="Date des travaux" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+            <Input placeholder="Heures" aria-label="Heures" inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} />
+            <Input placeholder="Travaux réalisés" aria-label="Travaux réalisés" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+            <Button variant="primary" disabled={!f.hours || !f.description} onClick={() => apiSend("POST", "/axispro/timesheets", { ...f, dossier_id: d.id, hours: Number(f.hours.replace(",", ".")) }).then(() => { setF({ ...f, hours: "", description: "" }); void mutate(); })}>Enregistrer</Button>
+          </div>
+        </Card>
+      )}
       <Card padded={false}>
         <DataTable rows={data ?? []} rowKey={(t) => t.id} empty="Aucun temps saisi." columns={[
           { key: "date", label: "Date", render: (t) => fmtDate(t.date) },
@@ -192,12 +208,14 @@ function Time({ d }: { d: DossierDetail }) {
           { key: "invoice", label: "Facture", render: (t) => t.invoice ?? (t.billable ? <Badge tone="warn">À facturer</Badge> : "Non facturable") },
         ]} />
       </Card>
-      <Card title={`Facturer les honoraires (${unbilled} h non facturées)`}>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label="Taux horaire HT (GNF)"><Input inputMode="numeric" className="font-mono" value={rate} onChange={(e) => setRate(e.target.value)} /></Field>
-          <Button variant="primary" disabled={!rate || !unbilled} onClick={() => apiSend<{ name: string | null; amount_total: number }>("POST", `/axispro/dossiers/${d.id}/invoice`, { hourly_rate: Number(rate.replace(/\s/g, "")) }).then((inv) => { setMessage({ tone: "ok", text: `Facture d'honoraires créée en brouillon (${fmtGNF(inv.amount_total)} TTC).` }); void mutate(); }).catch((e) => setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" }))}>Créer la facture</Button>
-        </div>
-      </Card>
+      {(cabinet || facture) && (
+        <Card title={`Facturer les honoraires (${unbilled} h non facturées)`}>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Taux horaire HT (GNF)"><Input inputMode="numeric" className="font-mono" value={rate} onChange={(e) => setRate(e.target.value)} /></Field>
+            <Button variant="primary" disabled={!rate || !unbilled} onClick={() => apiSend<{ name: string | null; amount_total: number }>("POST", `/axispro/dossiers/${d.id}/invoice`, { hourly_rate: Number(rate.replace(/\s/g, "")) }).then((inv) => { setMessage({ tone: "ok", text: `Facture d'honoraires créée en brouillon (${fmtGNF(inv.amount_total)} TTC).` }); void mutate(); }).catch((e) => setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" }))}>Créer la facture</Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

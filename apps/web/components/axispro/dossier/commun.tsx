@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Notice, cx } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { useMoi, type MoiAxispro } from "@/components/axispro/moi";
@@ -56,6 +56,15 @@ export function arrondi(v: number | null | undefined, digits = 0) {
 export function useCabinet(): { moi: MoiAxispro | null; cabinet: boolean } {
   const moi = useMoi();
   return { moi, cabinet: moi?.cabinet ?? false };
+}
+
+/**
+ * Bandeau d'un écran laissé en lecture seule à la direction et à l'administration : leurs champs
+ * restent visibles mais figés, il dit pourquoi. Rien pour le profil cabinet.
+ */
+export function LectureSeuleCabinet({ children }: { children: ReactNode }) {
+  const { cabinet } = useCabinet();
+  return cabinet ? null : <Notice tone="neutral">{children}</Notice>;
 }
 
 /** Code d'un compartiment d'expertise (C0, C1…), son intitulé en infobulle. */
