@@ -144,25 +144,36 @@ class EguitraReminder(models.Model):
                  "régler la somme due sous huit jours à compter de la réception de la présente ; à défaut, nous "
                  "engagerons les démarches de recouvrement.",
         }[self.level]
+        # Seules les factures encore dues à la date d'impression : un règlement reçu depuis la création
+        # de la relance la retire de la lettre et du total.
+        invoices = [i for i in [
+            {"name": m.name, "date": m.invoice_date, "due": m.invoice_date_due, "total": m.amount_total,
+             "residual": m.amount_residual}
+            for m in self.invoice_ids
+        ] + [
+            # Facture de l'ancien système : libellé de l'à-nouveau, sinon numéro de la pièce reprise.
+            {"name": _taken_name(line), "date": line.date, "due": line.date_maturity,
+             "total": line.balance, "residual": line.amount_residual}
+            for line in self.line_ids
+        ] if i["residual"] > 0.5]
+        objet = {"1": "Rappel de factures impayées", "2": "Relance de factures impayées",
+                 "3": "Mise en demeure de payer"}[self.level]
+        partner = self.partner_id
         return {
-            "subject": f"{dict(LEVELS)[self.level]} : factures impayées, {company.name}",
+            "subject": f"{objet}, {company.name}",
+            "object": objet,
             "company": company.name,
-            "partner": self.partner_id.name,
+            "partner": partner.name,
+            # Adresse sous le nom, pour l'enveloppe à fenêtre.
+            "partner_address": [x for x in (partner.street, partner.street2,
+                                            " ".join(filter(None, (partner.zip, partner.city))),
+                                            partner.country_id.name if partner.country_id != company.country_id else None) if x],
             "date": self.date,
             "level": self.level,
             "level_label": dict(LEVELS)[self.level],
             "intro": intro,
-            "invoices": sorted([
-                {"name": m.name, "date": m.invoice_date, "due": m.invoice_date_due, "total": m.amount_total,
-                 "residual": m.amount_residual}
-                for m in self.invoice_ids
-            ] + [
-                # Facture de l'ancien système : libellé de l'à-nouveau, sinon numéro de la pièce reprise.
-                {"name": _taken_name(line), "date": line.date, "due": line.date_maturity,
-                 "total": line.balance, "residual": line.amount_residual}
-                for line in self.line_ids
-            ], key=lambda i: (i["due"] or fields.Date.today(), i["name"] or "")),
-            "amount_due": self.amount_due,
+            "invoices": sorted(invoices, key=lambda i: (i["due"] or fields.Date.today(), i["name"] or "")),
+            "amount_due": sum(i["residual"] for i in invoices),
             "closing": "Si votre règlement a croisé ce courrier, nous vous prions de ne pas en tenir compte.",
         }
 

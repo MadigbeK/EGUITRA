@@ -23,8 +23,10 @@ interface Reminder {
 }
 interface Letter {
   subject: string;
+  object: string;
   company: string;
   partner: string;
+  partner_address: string[];
   date: string;
   level_label: string;
   intro: string;
@@ -122,8 +124,11 @@ function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailS
             <div className="font-semibold">{l.company}</div>
             <div>Conakry, le {fmtDate(l.date)}</div>
           </div>
-          <div className="text-right font-medium">{l.partner}</div>
-          <div className="font-semibold">Objet : {l.subject}</div>
+          <div className="text-right">
+            <div className="font-medium">{l.partner}</div>
+            {l.partner_address.map((ligne) => <div key={ligne}>{ligne}</div>)}
+          </div>
+          <div className="font-semibold">Objet : {l.object.charAt(0).toLowerCase() + l.object.slice(1)}</div>
           <p>Madame, Monsieur,</p>
           <p>{l.intro}</p>
           <table className="w-full border-collapse text-sm">

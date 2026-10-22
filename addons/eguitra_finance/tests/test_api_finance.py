@@ -266,6 +266,9 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, body = self.call("GET", f"/finance/reminders/{mine.id}", token=token)
         self.assertEqual(status, 200, body)
         self.assertIn("mettons en demeure", body["letter"]["intro"])
+        self.assertEqual(body["letter"]["object"], "Mise en demeure de payer")
+        self.assertEqual(body["letter"]["amount_due"], sum(i["residual"] for i in body["letter"]["invoices"]),
+                         "Total échu : somme des restes dus de la lettre")
         # En test, Odoo rend le rapport en HTML au lieu du PDF : on vérifie l'envoi et le contenu de la lettre.
         response = self.url_open(f"/api/v1/finance/reminders/{mine.id}/pdf",
                                  headers={"Authorization": f"Bearer {token}", "X-Eguitra-App": "test"}, timeout=60)
