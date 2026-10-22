@@ -342,6 +342,9 @@ class TestOutilDuCabinet(ApiCase):
         c1, c3 = (self.policy.compartment_ids.filtered(lambda k, code=code: k.code == code) for code in ("C1", "C3"))
         path = f"/axispro/dossiers/{dossier.id}/assignments"
         autre = self.open_session("consultant3", app="axispro")["access_token"]
+        status, summary = self.call("GET", f"/axispro/dossiers/{dossier.id}", token=autre)
+        self.assertEqual((status, summary["consultant_id"], summary["can_assign"]), (200, self.responsable.id, False),
+                         "Le résumé nomme le responsable ; un simple consultant ne confie pas les compartiments")
         status, body = self.call("POST", path, {"compartment_id": c1.id, "user_id": self.analyste.id}, token=autre)
         self.assertEqual(status, 403, "Un simple consultant ne confie pas un compartiment à un tiers")
         self.assertIn("responsable du dossier (Responsable3)", body["message"])
@@ -360,6 +363,8 @@ class TestOutilDuCabinet(ApiCase):
         self.assertIn("Consultant3", body["message"], "Le consultant affecté est nommé")
 
         responsable = self.open_session("responsable3", app="axispro")["access_token"]
+        status, listing = self.call("GET", "/axispro/dossiers", token=responsable)
+        self.assertTrue(next(d for d in listing if d["id"] == dossier.id)["can_assign"], "Le responsable confie")
         for compartment, user in ((c3, self.analyste), (c1, self.analyste)):
             status, body = self.call("POST", path, {"compartment_id": compartment.id, "user_id": user.id},
                                      token=responsable)

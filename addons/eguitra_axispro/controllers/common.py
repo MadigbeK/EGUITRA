@@ -19,7 +19,9 @@ MAX_DOSSIER_BYTES = 1024 * 1024 * 1024
 
 def dossier_summary(d, result=None):
     """Synthèse d'un dossier ; `result` : évaluation déjà calculée (dossier.evaluate()), pour ne la
-    calculer qu'une fois par requête."""
+    calculer qu'une fois par requête. consultant_id : responsable du dossier ; can_assign :
+    l'utilisateur confie les compartiments à un autre consultant (sinon il ne peut que s'attribuer
+    un compartiment libre)."""
     r = result or d.evaluate()
     score = d.scoring(r)
     docs = d.documents_status(r)
@@ -28,7 +30,8 @@ def dossier_summary(d, result=None):
     return {
         "id": d.id, "reference": d.reference, "name": d.name, "state": d.state,
         "promoter": {"id": d.promoter_id.id, "name": d.promoter_id.name},
-        "consultant": d.consultant_id.name or None, "sector": d.sector or None, "location": d.location or None,
+        "consultant": d.consultant_id.name or None, "consultant_id": d.consultant_id.id or None,
+        "can_assign": d.can_assign(), "sector": d.sector or None, "location": d.location or None,
         "investment": d.investment, "financing_need": d.financing_need,
         "currency": {"id": d.currency_id.id, "name": d.currency_id.name, "symbol": d.currency_id.symbol},
         "current_gate": {"id": d.current_gate_id.id, "code": d.current_gate_id.code, "name": d.current_gate_id.name}

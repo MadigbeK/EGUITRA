@@ -434,6 +434,13 @@ class AxisproDossier(models.Model):
             })
         return out
 
+    def can_assign(self):
+        """Le compte confie, reprend ou retire les compartiments du dossier : responsable du dossier
+        (consultant_id) ou compte système. Un autre consultant ne fait que s'attribuer un
+        compartiment libre."""
+        self.ensure_one()
+        return _system(self.env) or self.env.user == self.consultant_id
+
     def assign(self, compartment, user):
         """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation).
         L'évaluation étant réservée au consultant affecté, seuls le responsable du dossier
@@ -446,7 +453,7 @@ class AxisproDossier(models.Model):
         current = self.assignment_ids.filtered(lambda a: a.compartment_id == compartment)
         me = self.env.user
         self_take = False
-        if current.user_id != user and not _system(self.env) and me != self.consultant_id:
+        if current.user_id != user and not self.can_assign():
             label = f"Compartiment {compartment.code} {compartment.name}"
             if current:
                 raise AccessError(f"{label} confié à {current.user_id.sudo().name} : seul {_lead_label(self)} "
