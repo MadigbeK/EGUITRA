@@ -218,6 +218,18 @@ un module comme AxisPro Suite et Finance »).
 - Maquette d'API : application transport, relevés, règles, prix du carburant, contrôles. Vérifié
   dans le navigateur sur la maquette (connexion, accueil, tableau de bord, relevés, pièces, flotte,
   charges, routes, gain estimé).
+- Tests : 86 tests d'eguitra_api et d'eguitra_transport sur une base jetable séparée
+  (`eguitra_ci_transport`, les sessions parallèles se gênant sur `eguitra_ci`), tous au vert pour le
+  transport ; seul `test_admin` échoue, sur la version non committée de la session RH (profil « rh »
+  attendu). Idée pour `infra/test.sh` (en cours de modification par une autre session) : un nom de
+  base jetable paramétrable, pour que deux sessions testent en même temps.
+- Recette : noyau à jour (redémarré par la session AxisPro). Application web à reconstruire : la
+  construction échoue sur l'état intermédiaire des fichiers RH envoyés au serveur (`lib/nav.ts` abîmé,
+  registre « rh » sans la coque correspondante) ; la session RH est prévenue. Ensuite `/transport`
+  apparaîtra sur la recette ; l'écran Finance > Transport de la version en service porte déjà les
+  relevés des propriétaires et les coûts standard.
+- Production : après validation du gérant, par `infra/release.sh` (`eguitra_transport` à mettre à
+  jour, application web à reconstruire).
 - Constat à traiter à part : la passerelle web refuse toute route `/auth/*`, si bien que
   `useSaisieLibre()` et `useAchatsSeul()` (lecture de `/auth/me` dans le navigateur, `lib/api-client.ts`)
   reçoivent toujours 404 ; l'écran Transport lit donc ses droits dans `/transport/settings`
