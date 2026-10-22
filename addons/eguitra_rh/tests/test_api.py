@@ -281,6 +281,30 @@ class TestApiRh(ApiCase):
         status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
         self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
 
+    def test_annuler_une_absence_non_remuneree_interdit_de_valider_la_paie(self):
+        """Un compte administration qui annule l'absence non rémunérée d'un salarié pendant que la paie du
+        mois est en préparation ne valide pas cette paie ; la direction la valide."""
+        self._create_user("admin.rh", "admin")
+        unpaid = self.env["eguitra.rh.leave.type"].search([("code", "=", "SS")])
+        leave = self.env["eguitra.rh.leave"].create({"employee_id": self.worker.id, "type_id": unpaid.id,
+                                                     "date_from": date(2026, 9, 7), "date_to": date(2026, 9, 8)})
+        leave.action_approve()
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        admin = self.open_session("admin.rh", app="rh")["access_token"]
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
+        self.assertEqual(status, 200, payroll)
+        status, body = self.call("POST", f"/rh/leaves/{leave.id}/cancel", {}, token=admin)
+        self.assertEqual((status, body.get("state")), (200, "cancelled"), body)
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=admin)
+        self.assertEqual((status, "Admin.Rh" in detail["prepared_by"], detail["can_validate"]), (200, True, False),
+                         detail)
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual((status, done.get("state")), (200, "validated"), done)
+
     def test_personne_n_approuve_sa_propre_absence(self):
         """Ni la RH, ni la direction n'approuvent ou ne refusent leur propre absence, à la saisie comme en
         décision ; chacune tranche celle de l'autre."""

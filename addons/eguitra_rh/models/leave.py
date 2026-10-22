@@ -1,6 +1,10 @@
 """Absences et congés : demande (du salarié ou de la RH), décision (RH, direction ou responsable
 hiérarchique), décompte en jours ouvrables, solde de congés payés. Une absence non rémunérée approuvée
-est retenue sur la paie du mois, au prorata des jours ouvrables."""
+est retenue sur la paie du mois, au prorata des jours ouvrables.
+
+Quatre yeux : toute écriture qui fait entrer une absence dans la paie ou l'en fait sortir (créer une
+absence non rémunérée déjà approuvée, l'approuver, l'annuler, en changer les dates ou le type) inscrit
+son auteur parmi les préparateurs des paies en préparation dont le mois la recoupe."""
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
@@ -70,6 +74,37 @@ class EguitraRhLeave(models.Model):
                 ])
                 if overlap:
                     raise UserError(f"{employee.name} a déjà une absence demandée ou approuvée sur ces dates.")
+
+    # ─── Paies concernées (quatre yeux) ──────────────────────────────────
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records._in_payroll()._draft_payrolls()._mark_prepared()
+        return records
+
+    def write(self, vals):
+        before = self._in_payroll()._draft_payrolls()
+        result = super().write(vals)
+        (before | self._in_payroll()._draft_payrolls())._mark_prepared()
+        return result
+
+    def unlink(self):
+        self._in_payroll()._draft_payrolls()._mark_prepared()
+        return super().unlink()
+
+    def _in_payroll(self):
+        """Absences retenues sur la paie : approuvées, d'un type non rémunéré."""
+        return self.sudo().filtered(lambda leave: leave.state == "approved" and not leave.type_id.paid)
+
+    def _draft_payrolls(self):
+        """Paies en préparation de la société dont le mois recoupe l'absence."""
+        Payroll = self.env["eguitra.rh.payroll"].sudo()
+        result = Payroll
+        for leave in self.sudo():
+            result |= Payroll.search([("company_id", "=", leave.company_id.id), ("state", "=", "draft"),
+                                      ("month", "<=", leave.date_to), ("month", ">=", leave.date_from.replace(day=1))])
+        return result
 
     def _locked_month(self):
         """Paie validée d'un mois touché par l'absence (une absence non rémunérée y a été retenue)."""

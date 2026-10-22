@@ -271,6 +271,26 @@ class TestRh(FinanceDataMixin, TransactionCase):
         october.with_user(self.valideur).action_validate()
         self.assertEqual(october.state, "validated")
 
+    def test_absence_non_remuneree_pendant_la_preparation(self):
+        """Créer une absence non rémunérée déjà approuvée, ou en approuver une, pendant la préparation inscrit
+        son auteur parmi les préparateurs ; approuver une absence payée, non."""
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        Leave = self.env["eguitra.rh.leave"]
+        unpaid = self.env["eguitra.rh.leave.type"].search([("code", "=", "SS")])
+        paid = self.env["eguitra.rh.leave.type"].search([("code", "=", "CP")])
+        autre = self._user("autre.conge", "rh")
+        Leave.with_user(self.gestionnaire).create({"employee_id": self.alpha.id, "type_id": unpaid.id, "state": "approved",
+                                                   "date_from": date(2026, 9, 7), "date_to": date(2026, 9, 7)})
+        Leave.create({"employee_id": self.alpha.id, "type_id": unpaid.id, "date_from": date(2026, 9, 14),
+                      "date_to": date(2026, 9, 14)}).with_user(autre).action_approve()
+        Leave.create({"employee_id": self.alpha.id, "type_id": paid.id, "date_from": date(2026, 9, 21),
+                      "date_to": date(2026, 9, 21)}).with_user(self.valideur).sudo().action_approve(force=True)
+        self.assertIn(self.gestionnaire, payroll.prepared_by_ids)
+        self.assertIn(autre, payroll.prepared_by_ids)
+        self.assertNotIn(self.valideur, payroll.prepared_by_ids, "Une absence payée ne change pas la paie")
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual(payroll.state, "validated")
+
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
         payroll.with_user(self.valideur).action_validate()
