@@ -85,6 +85,49 @@ class TestApproval(FinanceDataMixin, ApiCase):
         request.with_user(self.dg).action_approve("Accord")
         self.assertEqual(bill.state, "posted")
 
+    def test_quatre_yeux_entre_les_etapes(self):
+        """Un compte porteur des profils finance et direction (comme l'administration) ne tranche qu'une
+        étape d'une même demande : la suivante revient à une autre personne."""
+        cumul = self._create_user("daf.dg", "finance", "direction")
+        bill = self._bill(100_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        request = self._request(bill)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"])
+        request.with_user(cumul).action_approve("Contrôlé")
+        self.assertEqual(request.pending_profile, "direction")
+        self.assertFalse(request._can_decide(cumul))
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            request.with_user(cumul).action_approve("Accord")
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            request.with_user(cumul).action_reject("Refus")
+        self.assertEqual((request.state, bill.state), ("pending", "draft"))
+        request.with_user(self.dg).action_approve("Accord")
+        self.assertEqual(bill.state, "posted")
+
+    def test_quatre_yeux_par_api(self):
+        self._create_user("daf.dg", "finance", "direction")
+        bill = self._bill(100_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        req = self._request(bill)
+        token = self.open_session("daf.dg")["access_token"]
+        status, inbox = self.call("GET", "/approvals/inbox", token=token)
+        self.assertEqual((status, [r["id"] for r in inbox]), (200, [req.id]), inbox)
+        status, done = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Contrôlé"}, token=token)
+        self.assertEqual(status, 200, done)
+        self.assertEqual(done["pending_with"], "Direction générale")
+        self.assertFalse(done["can_decide"], "L'étape de la direction revient à une autre personne")
+        status, inbox = self.call("GET", "/approvals/inbox", token=token)
+        self.assertEqual((status, inbox), (200, []), "Plus rien à trancher pour ce compte")
+        status, body = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Accord"}, token=token)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, body = self.call("POST", f"/approvals/{req.id}/reject", {"comment": "Refus"}, token=token)
+        self.assertEqual(status, 403, body)
+        self.assertEqual(bill.state, "draft")
+        token_dg = self.open_session("dg")["access_token"]
+        status, done = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Accord"}, token=token_dg)
+        self.assertEqual((status, done["state"]), (200, "approved"), done)
+
     def test_refus_puis_nouvelle_soumission(self):
         bill = self._bill(10_000_000)
         bill.with_user(self.comptable)._eguitra_post_or_submit()
