@@ -99,10 +99,14 @@ def review_row(r):
 
 def document_row(doc, portal=False):
     """Pièce déposée ; pour le portail, sans les critères de la grille qu'elle justifie."""
+    # La pièce se lit sous les droits de l'utilisateur ; seuls le type et la taille de son fichier se
+    # lisent ensuite en sudo, comme au téléchargement : une pièce jointe non rattachée au dossier
+    # (lisible de son seul créateur) ne fait pas échouer toute la data room.
+    attachment = doc.attachment_id.sudo()
     row = {
         "id": doc.id, "name": doc.name, "version": doc.version, "state": doc.state, "comment": doc.comment or None,
         "document_type_id": doc.document_type_id.id or None, "uploaded_by": doc.uploaded_by.name,
-        "uploaded_at": doc.uploaded_at, "mimetype": doc.attachment_id.mimetype, "size": doc.attachment_id.file_size,
+        "uploaded_at": doc.uploaded_at, "mimetype": attachment.mimetype, "size": attachment.file_size,
         "portal_visible": doc.portal_visible, "validity_date": doc.validity_date, "after_lock": doc.after_lock,
         "criteria": [{"id": e.criterion_id.id, "code": e.criterion_id.code} for e in doc.evaluation_ids],
     }
