@@ -514,6 +514,9 @@ export interface Action {
   description: string | null;
   source: "gap" | "committee" | "risk" | "manual";
   criterion: string | null;
+  /** Compartiment du critère d'origine (outil du cabinet, version 3). */
+  compartment?: string | null;
+  compartment_name?: string | null;
   review_id: number | null;
   risk_id: number | null;
   assignee: "porteur" | "cabinet";

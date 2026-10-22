@@ -7,6 +7,7 @@ import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segm
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { ACTION_SOURCE, ACTION_STATE, type Action, type ActionState } from "@/lib/axispro-types";
 import { fmtDate } from "@/lib/format";
+import { PuceCompartiment } from "@/components/axispro/dossier/commun";
 
 type Filtre = "open" | "overdue" | "submitted" | "all";
 
@@ -103,6 +104,7 @@ function LigneAction({ a, global, agir }: { a: Action; global: boolean; agir: (f
                 {a.dossier.name},{" "}
               </>
             )}
+            {a.compartment && <PuceCompartiment code={a.compartment} nom={a.compartment_name} className="mr-1.5 align-[1px]" />}
             {ACTION_SOURCE[a.source]}
             {a.criterion ? ` ${a.criterion}` : ""}, confiée au {a.assignee === "porteur" ? "porteur" : "cabinet"}
             {a.user ? `, suivie par ${a.user}` : ""}
