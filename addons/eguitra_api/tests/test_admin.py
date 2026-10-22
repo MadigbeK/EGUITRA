@@ -11,6 +11,11 @@ class TestAdmin(ApiCase):
         cls._create_user("aissatou", "admin")
         cls._create_user("fatou", "finance")
 
+    def test_application_rh_selon_son_module(self):
+        admin = self.env["res.users"].search([("login", "=", "aissatou")])
+        self.assertEqual("rh" in admin._eguitra_apps(), "eguitra.rh.employee" in self.env,
+                         "L'espace RH n'existe que là où son module est installé")
+
     def test_profil_requis(self):
         session = self.open_session("fatou")
         status, body = self.call("GET", "/admin/users", token=session["access_token"])
