@@ -3,9 +3,9 @@
  * porteurs de projets, ouvert aux clients du cabinet, porte la marque MB AxisPro Consulting.
  *
  * La marque NIMOVA est le pli (choix du gérant, 21 octobre 2026) : un ruban de papier-valeur plié
- * en N, le vert forêt et l'or du DG ; son sceau signe les documents officiels. Les logos des deux sociétés
- * sont ceux de leurs sites (eguitragroup.com, mbaxisproconsulting.com), recadrés dans
- * `public/brand/`.
+ * en N, le vert forêt et l'or du DG ; son sceau signe les documents officiels. Le logo d'EGUITRA
+ * GROUP vient de sa charte graphique (Black Baobab, 2025), celui de MB AxisPro Consulting de son
+ * site (mbaxisproconsulting.com) ; tous deux recadrés dans `public/brand/`.
  */
 import { APPS, type AppCode } from "@/lib/config";
 import { cx } from "@/lib/cx";
@@ -129,7 +129,7 @@ export function MarqueNimova({ app, clair, className }: { app?: AppCode; clair?:
 export type Entite = "groupe" | "cabinet";
 
 const LOGOS: Record<Entite, { complet: [string, string, number, number]; embleme: [string, string, number, number]; nom: string }> = {
-  groupe: { complet: ["/brand/eguitra-group.png", "/brand/eguitra-group-blanc.png", 370, 176], embleme: ["/brand/eguitra-embleme.png", "/brand/eguitra-embleme-blanc.png", 188, 128], nom: "EGUITRA GROUP" },
+  groupe: { complet: ["/brand/eguitra-group.png", "/brand/eguitra-group-blanc.png", 716, 338], embleme: ["/brand/eguitra-embleme.png", "/brand/eguitra-embleme-blanc.png", 376, 255], nom: "EGUITRA GROUP" },
   cabinet: { complet: ["/brand/mb-axispro.png", "/brand/mb-axispro-blanc.png", 634, 152], embleme: ["/brand/mb-axispro-embleme.png", "/brand/mb-axispro-embleme-blanc.png", 134, 128], nom: "MB AxisPro Consulting" },
 };
 

@@ -370,6 +370,23 @@ douze). Logo du cabinet, titre, liste, cercle et marches restent en place. La ph
 bleu nuit pour la lecture. Comme pour NIMOVA, elle est servie en WebP de 22 à 96 Ko, avec un aperçu
 flou inscrit dans la page et un cache d'un an (`public/scenes/portail-20209020-*`). Les deux scènes
 partagent désormais le composant `PhotoScene` de `app/login/page.tsx`.
+En production le 22 octobre à 12 h 14 (version 20261022-1213, 9b95835), avec l'harmonisation des
+composants, l'Analyse en or bronze et les aplats.
+
+## Charte d'EGUITRA GROUP (22 octobre 2026)
+
+Le gérant a transmis la charte graphique d'EGUITRA GROUP (Black Baobab, 2025, 10 pages).
+- Logo : le même dessin que celui repris du site, trois lignes ascendantes et une flèche, « EGUI »
+  en gris et « TRA » en vert. Les fichiers de `public/brand/eguitra-*` sont remplacés par ceux de
+  la charte, deux fois plus définis et sur fond transparent (716 × 338, emblème 376 × 255, en
+  couleur et en blanc). La charte demande un espace libre autour du logo : l'application le
+  respecte, le logo n'y est jamais collé à un autre élément.
+- Couleurs de la société : vert empire #006C1B (principale), vert profond #003013 et gris #373737
+  (secondaires).
+- Caractères : Garet (principale) et Inter (secondaire).
+- Photographies : logistique, conteneurs, professionnels en situation.
+L'interface reste celle de NIMOVA, la marque interne voulue par le DG : palette forêt, pin et or,
+polices Funnel. La charte d'EGUITRA s'applique aux documents émis au nom de la société.
 
 ## Reste à faire
 
@@ -381,8 +398,10 @@ partagent désormais le composant `PhotoScene` de `app/login/page.tsx`.
   types d'événements du portail, encore en hexadécimal, et les listes « Chargement des listes » et
   « Chargement des rotations » de Rotations mobile (hors `useApi`), qui attendent sans fin hors
   réseau sans cache. Maquette d'API : ajouter les routes du portail réécrit (`/portail/espace`).
-- Charte d'EGUITRA GROUP (PDF confié le 21 octobre, disque E:) : à confronter aux choix faits,
-  dont les logos des deux sociétés repris de leurs sites, à faire confirmer par le client.
+- Documents émis au nom d'EGUITRA GROUP (factures, devis, relances, produits par le noyau) : logo
+  officiel de la charte et vert empire #006C1B dans la mise en page des documents. C'est un réglage
+  du noyau, à faire par la session fonctionnelle si le gérant le demande.
+- Logo de MB AxisPro Consulting : toujours celui du site ; à remplacer si le cabinet fournit sa charte.
 
 ## Pour la session fonctionnelle
 
