@@ -570,6 +570,11 @@ class EguitraAxisproRapports(http.Controller):
                 if due != evaluation.due_date:
                     values["due_date"] = due
             if values:
+                # Compartiment confié à un autre consultant : signalé dès l'aperçu, rien n'est appliqué.
+                refusal = dossier._evaluation_refusal(evaluation.criterion_id.domain_id.compartment_id)
+                if refusal:
+                    errors.append(f"Ligne {n} ({code}) : {refusal}")
+                    continue
                 changes.append((evaluation, values))
         preview = [{"code": e.criterion_id.code, "name": e.criterion_id.name,
                     "before": statuses[e.status], "after": statuses[v["status"]] if "status" in v else statuses[e.status],

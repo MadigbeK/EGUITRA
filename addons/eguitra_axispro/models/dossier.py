@@ -10,7 +10,9 @@ d'une nouvelle révision.
 
 Quatre yeux (décision du gérant) : un compte qui a évalué un critère du dossier ne verrouille pas
 la décision du comité et ne force pas un gate ; celui qui a verrouillé la décision n'ouvre pas la
-révision qui la défait.
+révision qui la défait. Un consultant n'écrit l'évaluation que des compartiments qui lui sont
+confiés ; un compartiment sans consultant reste ouvert à tout le cabinet et le responsable du
+dossier évalue tous les compartiments. La lecture reste ouverte à toute l'équipe.
 """
 
 from odoo import SUPERUSER_ID, api, fields, models
@@ -46,15 +48,22 @@ FROZEN_FIELDS = {
 }
 HYPOTHESES = ("dd_red_flag", "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed")
 # Évaluation d'un critère : tout ce qui entre dans le score ou dans le contenu scellé par le comité.
-# Leur auteur est retenu (evaluated_by).
+# Leur auteur est retenu (evaluated_by) et seuls les consultants admis sur le compartiment les écrivent.
 EVALUATION_FIELDS = {"status", "comment", "deliverable", "responsible", "due_date", "document_ids"}
 
 
 def _system(env):
     """Compte système (installation, migrations, scripts, jeux d'essai) : hors des contrôles de
-    personne (quatre yeux), qui portent sur les comptes du cabinet. Un appel de l'API s'exécute
-    toujours sous l'identité de l'utilisateur, même en sudo()."""
+    personne (quatre yeux, compartiments), qui portent sur les comptes du cabinet. Un appel de
+    l'API s'exécute toujours sous l'identité de l'utilisateur, même en sudo()."""
     return env.uid == SUPERUSER_ID
+
+
+def _and_lead(dossier):
+    """« et le responsable du dossier (Nom) » pour un message de refus ; sans nom si le dossier n'a
+    pas de responsable désigné (dossier créé par le compte système)."""
+    lead = dossier.sudo().consultant_id.filtered(lambda u: u.id != SUPERUSER_ID)
+    return f" et le responsable du dossier ({lead.name})" if lead else " et le responsable du dossier"
 
 
 class AxisproDossier(models.Model):
@@ -165,6 +174,23 @@ class AxisproDossier(models.Model):
                     f"{dossier.revision}), vous ne pouvez donc pas {action}. Évaluation faite par : {names}. "
                     "Un autre consultant du cabinet doit s'en charger."
                 )
+
+    def _evaluation_refusal(self, compartment, user=None):
+        """Motif du refus d'écrire l'évaluation d'un critère de `compartment` pour `user` (par défaut
+        l'utilisateur), ou None si le compte peut l'écrire. Un consultant n'évalue que les compartiments
+        qui lui sont confiés ; un compartiment sans consultant, ou un critère hors compartiment, reste
+        ouvert à tout le cabinet ; le responsable du dossier (consultant_id) évalue tous les
+        compartiments. La lecture n'est pas concernée."""
+        self.ensure_one()
+        user = user or self.env.user
+        if not compartment or user.id == SUPERUSER_ID:
+            return None
+        dossier = self.sudo()
+        owner = dossier.assignment_ids.filtered(lambda a: a.compartment_id == compartment).user_id
+        if not owner or user in (owner | dossier.consultant_id):
+            return None
+        return (f"compartiment {compartment.code} {compartment.name} confié à {owner.name} ; seuls ce consultant"
+                f"{_and_lead(dossier)} en écrivent l'évaluation.")
 
     def log(self, kind, note=None, criterion=None, before=None, after=None):
         """Inscription au journal du dossier (auteur authentifié, horodatage du serveur)."""
@@ -373,11 +399,19 @@ class AxisproDossier(models.Model):
         return out
 
     def assign(self, compartment, user):
-        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation)."""
+        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation). Un
+        compartiment déjà confié ne change de consultant que par ce consultant ou le responsable du
+        dossier : l'évaluation lui étant réservée, un autre ne peut pas se l'attribuer."""
         self.ensure_one()
         if compartment.policy_id != self.policy_id:
             raise UserError("Ce compartiment n'appartient pas à la grille du dossier.")
         current = self.assignment_ids.filtered(lambda a: a.compartment_id == compartment)
+        if current and current.user_id != user and not _system(self.env) \
+                and self.env.user not in (current.user_id | self.consultant_id):
+            raise AccessError(
+                f"Compartiment {compartment.code} {compartment.name} confié à {current.user_id.sudo().name} ; seuls ce "
+                f"consultant{_and_lead(self)} changent son affectation."
+            )
         before = current.user_id.name or None
         if not user:
             current.unlink()
@@ -455,10 +489,18 @@ class AxisproEvaluation(models.Model):
 
     _unique = models.Constraint("unique(dossier_id, criterion_id)", "Un critère n'est évalué qu'une fois par dossier.")
 
+    def _check_evaluator(self):
+        """Refus (403) d'écrire l'évaluation d'un critère hors des compartiments ouverts au compte."""
+        for e in self:
+            refusal = e.dossier_id._evaluation_refusal(e.criterion_id.domain_id.compartment_id)
+            if refusal:
+                raise AccessError(f"Critère {e.criterion_id.code} : {refusal}")
+
     def write(self, vals):
         if not self.env.context.get("axispro_unlocked"):
             self.dossier_id._check_unlocked()
         if EVALUATION_FIELDS & set(vals):
+            self._check_evaluator()
             vals = dict(vals, evaluated_by=self.env.user.id)
         if "status" in vals:
             labels = dict(STATUSES)

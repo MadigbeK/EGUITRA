@@ -343,7 +343,8 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/assignments", methods=("POST",), profiles=WRITE)
     def assign(self, dossier_id, **_kw):
         """Confie un compartiment du dossier à un consultant : {compartment_id, user_id} (user_id vide :
-        retire l'affectation)."""
+        retire l'affectation). Un compartiment déjà confié ne change de consultant que par ce
+        consultant ou le responsable du dossier (refus 403)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (compartment_id,) = require(data, "compartment_id")
@@ -387,7 +388,10 @@ class EguitraAxispro(http.Controller):
     def criteria(self, dossier_id, **kw):
         """Critères du dossier : statut saisi et statut retenu par la méthode (requalification),
         alertes, priorité de l'écart, preuves et leur validité, livrable, responsable, échéance.
-        Filtres : gate_id, compartment_id, mine=1 (compartiments confiés à l'utilisateur)."""
+        owner : consultant à qui le compartiment est confié ; editable_by_me : l'utilisateur peut
+        écrire l'évaluation du critère au regard des compartiments (le verrou du comité, lui, se lit
+        dans `locked` du dossier). Filtres : gate_id, compartment_id, mine=1 (compartiments confiés
+        à l'utilisateur)."""
         dossier = _dossier(dossier_id)
         result = dossier.evaluate()
         lines = {x["id"]: x for x in result["lines"]}
@@ -408,9 +412,13 @@ class EguitraAxispro(http.Controller):
             mine = {k for k, u in owners.items() if u == request.env.user}
             evaluations = evaluations.filtered(lambda e: e.criterion_id.domain_id.compartment_id.id in mine)
         rows = []
+        editable = {}
         for e in evaluations.sorted(lambda e: (e.criterion_id.sequence, e.criterion_id.id)):
             c = e.criterion_id
             line = lines.get(c.id, {})
+            compartment = c.domain_id.compartment_id
+            if compartment.id not in editable:
+                editable[compartment.id] = not dossier._evaluation_refusal(compartment)
             rows.append({
                 "id": e.id, "criterion_id": c.id, "code": c.code, "name": c.name, "domain": c.domain_id.name,
                 "domain_id": c.domain_id.id, "domain_code": c.domain_id.code, "gate_id": c.gate_id.id,
@@ -418,6 +426,7 @@ class EguitraAxispro(http.Controller):
                 "compartment": c.domain_id.compartment_id.code or None,
                 "compartment_name": c.domain_id.compartment_id.name or None,
                 "owner": owners[c.domain_id.compartment_id.id].name if c.domain_id.compartment_id.id in owners else None,
+                "editable_by_me": editable[compartment.id],
                 "gate": c.gate_id.code, "weight": c.weight, "critical": c.critical, "knockout": c.knockout,
                 "evidence_required": c.evidence_required, "requirement": c.requirement_type,
                 "bankability": c.bankability, "guidance": c.guidance or None,
@@ -439,6 +448,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/evaluations/<int:evaluation_id>", methods=("PATCH",), profiles=WRITE)
     def evaluate(self, evaluation_id, **_kw):
+        """Évaluation d'un critère ; refus 403 hors des compartiments ouverts à l'utilisateur
+        (compartiment confié à un autre consultant, nommé dans le message)."""
         evaluation = self._evaluation(evaluation_id)
         data = read_json()
         values = {}
@@ -466,6 +477,7 @@ class EguitraAxispro(http.Controller):
         evaluation = self._evaluation(evaluation_id)
         dossier = evaluation.dossier_id
         dossier._check_unlocked()
+        evaluation._check_evaluator()
         form = request.httprequest.form
         type_id = form.get("document_type_id")
         if not type_id:

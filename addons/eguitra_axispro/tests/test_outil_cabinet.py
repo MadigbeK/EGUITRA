@@ -160,6 +160,11 @@ class TestOutilDuCabinet(ApiCase):
                                         company_ids=[(6, 0, cls.cabinet.ids)])
         cls.directeur = cls._create_user("directeur3", "direction", company_id=cls.cabinet.id,
                                          company_ids=[(6, 0, cls.cabinet.ids)])
+        # Un autre consultant, et le responsable du dossier (consultant du dossier).
+        cls.autre = cls._create_user("consultant3", "cabinet", company_id=cls.cabinet.id,
+                                     company_ids=[(6, 0, cls.cabinet.ids)])
+        cls.responsable = cls._create_user("responsable3", "cabinet", company_id=cls.cabinet.id,
+                                           company_ids=[(6, 0, cls.cabinet.ids)])
 
     def test_grille_tiree_de_l_outil(self):
         p = self.policy
@@ -266,3 +271,58 @@ class TestOutilDuCabinet(ApiCase):
         response = self.url_open(f"/api/v1/axispro/dossiers/{dossier.id}/report.xlsx",
                                  headers={"Authorization": f"Bearer {token}"}, timeout=60)
         self.assertEqual(response.status_code, 200)
+
+    def test_evaluation_reservee_au_compartiment(self):
+        """Décision du gérant (audit des rôles I2) : un consultant n'évalue que les compartiments qui
+        lui sont confiés ; un compartiment sans consultant reste ouvert ; le responsable du dossier
+        évalue tous les compartiments ; la lecture reste ouverte à toute l'équipe."""
+        self.policy.action_activate()
+        dossier = self.env["axispro.dossier"].create({
+            "name": "Centrale solaire", "promoter_id": self.promoter.id, "company_id": self.cabinet.id,
+            "consultant_id": self.responsable.id,
+        })
+        c1 = self.policy.compartment_ids.filtered(lambda k: k.code == "C1")
+        dossier.assign(c1, self.analyste)
+        evals = {e.criterion_id.name: e for e in dossier.evaluation_ids}
+        foncier, marche = evals["Foncier sécurisé"], evals["Étude de marché"]  # C1 confié, C3 sans consultant
+
+        autre = self.open_session("consultant3", app="axispro")["access_token"]
+        status, body = self.call("PATCH", f"/axispro/evaluations/{foncier.id}", {"status": "met"}, token=autre)
+        self.assertEqual(status, 403, "Compartiment confié à un autre consultant")
+        self.assertIn("Analyste3", body["message"], "Le consultant affecté est nommé")
+        response = self.url_open(f"/api/v1/axispro/evaluations/{foncier.id}/evidence",
+                                 files={"file": ("titre.pdf", io.BytesIO(b"%PDF-1.4 titre"), "application/pdf")},
+                                 headers={"Authorization": f"Bearer {autre}"}, method="POST", timeout=60)
+        self.assertEqual(response.status_code, 403, "Pas de preuve déposée hors de son compartiment")
+        sheet = f"code;statut\n{foncier.criterion_id.code};Disponible et exploitable\n".encode()
+        response = self.url_open(f"/api/v1/axispro/dossiers/{dossier.id}/evaluation/import",
+                                 files={"file": ("fiche.csv", io.BytesIO(sheet), "text/csv")},
+                                 headers={"Authorization": f"Bearer {autre}"}, method="POST", timeout=60)
+        result = response.json()
+        self.assertFalse(result["applied"], result)
+        self.assertIn("Analyste3", result["errors"][0])
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/assignments",
+                                 {"compartment_id": c1.id, "user_id": self.autre.id}, token=autre)
+        self.assertEqual(status, 403, "Un consultant ne reprend pas le compartiment confié à un autre")
+
+        status, body = self.call("PATCH", f"/axispro/evaluations/{marche.id}", {"status": "met"}, token=autre)
+        self.assertEqual(status, 200, "Compartiment sans consultant : ouvert à tout consultant du dossier")
+        status, rows = self.call("GET", f"/axispro/dossiers/{dossier.id}/criteria", token=autre)
+        self.assertEqual(status, 200, "La lecture reste ouverte à toute l'équipe")
+        rows = {r["name"]: r for r in rows}
+        self.assertEqual((rows["Foncier sécurisé"]["editable_by_me"], rows["Foncier sécurisé"]["owner"]),
+                         (False, "Analyste3"))
+        self.assertEqual((rows["Étude de marché"]["editable_by_me"], rows["Étude de marché"]["owner"]), (True, None))
+
+        analyste = self.open_session("analyste3", app="axispro")["access_token"]
+        status, body = self.call("PATCH", f"/axispro/evaluations/{foncier.id}", {"comment": "Titre foncier reçu"},
+                                 token=analyste)
+        self.assertEqual(status, 200, body)
+        responsable = self.open_session("responsable3", app="axispro")["access_token"]
+        status, body = self.call("PATCH", f"/axispro/evaluations/{foncier.id}", {"status": "partial"},
+                                 token=responsable)
+        self.assertEqual(status, 200, "Le responsable du dossier évalue tous les compartiments")
+        status, rows = self.call("GET", f"/axispro/dossiers/{dossier.id}/criteria", token=responsable)
+        self.assertTrue(all(r["editable_by_me"] for r in rows), rows)
+        self.env.invalidate_all()
+        self.assertEqual((foncier.status, foncier.comment), ("partial", "Titre foncier reçu"))
