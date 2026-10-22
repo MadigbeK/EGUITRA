@@ -11,6 +11,7 @@ class TestApiRh(ApiCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.rh_user = cls._create_user("aminata.rh", "rh")
+        cls.rh2_user = cls._create_user("binta.rh", "rh")
         cls.finance_user = cls._create_user("fatou.fin", "finance")
         cls.boss_user = cls._create_user("chef.atelier", "exploitation")
         cls.worker_user = cls._create_user("ousmane.chauffeur", "exploitation")
@@ -20,6 +21,11 @@ class TestApiRh(ApiCase):
         cls.worker = Employee.create({"name": "Ousmane Chauffeur", "hire_date": date(2024, 1, 1),
                                       "base_salary": 2_000_000, "manager_id": cls.boss.id,
                                       "user_id": cls.worker_user.id})
+
+    def _own_dossier(self, user, name):
+        """Dossier salarié lié au compte (créé hors API : un compte ne se lie pas lui-même à un dossier)."""
+        return self.env["eguitra.rh.employee"].create({"name": name, "hire_date": date(2024, 1, 1),
+                                                      "base_salary": 3_000_000, "user_id": user.id})
 
     def test_gestion_par_la_rh(self):
         token = self.open_session("aminata.rh", app="rh")["access_token"]
@@ -143,3 +149,53 @@ class TestApiRh(ApiCase):
         boss_slip = next(s for s in payroll["payslips"] if s["employee"]["name"] == "Chef Atelier")
         status, _b = self.call("GET", f"/rh/me/payslips/{boss_slip['id']}", token=token)
         self.assertEqual(status, 404, "Jamais le bulletin d'un autre")
+
+    # ─── Quatre yeux ─────────────────────────────────────────────────────
+
+    def test_quatre_yeux_sur_son_propre_dossier(self):
+        """Un compte RH ne modifie ni son dossier, ni ses éléments fixes et variables, ni ses avances et
+        prêts : un autre compte RH s'en charge."""
+        own = self._own_dossier(self.rh_user, "Aminata RH")
+        token = self.open_session("aminata.rh", app="rh")["access_token"]
+        status, meta = self.call("GET", "/rh/meta", token=token)
+        self.assertEqual(status, 200, meta)
+        rubrics = {r["code"]: r["id"] for r in meta["rubrics"]}
+        for method, path, payload in [
+            ("PATCH", f"/rh/employees/{own.id}", {"base_salary": 9_000_000, "salary_reason": "Promotion"}),
+            ("PATCH", f"/rh/employees/{own.id}", {"fixed_lines": [{"rubric_id": rubrics["LOGT"], "amount": 5_000_000}]}),
+            ("POST", f"/rh/employees/{own.id}/exit", {"exit_date": "2026-12-31"}),
+            ("POST", "/rh/advances", {"employee_id": own.id, "amount": 2_000_000, "installment": 100_000,
+                                      "first_month": "2026-09-01"}),
+            ("POST", "/rh/employees", {"name": "Second dossier", "hire_date": "2026-01-05",
+                                       "user_id": self.rh_user.id}),
+        ]:
+            status, body = self.call(method, path, payload, token=token)
+            self.assertEqual(status, 403, (path, body))
+        own.invalidate_recordset()
+        self.assertEqual((own.base_salary, len(own.line_ids), own.exit_date), (3_000_000, 0, False))
+        self.assertFalse(self.env["eguitra.rh.advance"].search([("employee_id", "=", own.id)]))
+
+        other = self.open_session("binta.rh", app="rh")["access_token"]
+        status, advance = self.call("POST", "/rh/advances", {"employee_id": own.id, "amount": 600_000,
+                                                             "installment": 200_000, "first_month": "2026-09-01"},
+                                    token=other)
+        self.assertEqual(status, 200, advance)
+        status, body = self.call("POST", f"/rh/advances/{advance['id']}/cancel", {}, token=token)
+        self.assertEqual(status, 403, "Pas d'annulation de sa propre avance")
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=other)
+        self.assertEqual(status, 200, payroll)
+        own_slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == own.id)
+        worker_slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == self.worker.id)
+        bonus = {"rubric_id": rubrics["RDT"], "amount": 500_000}
+        status, body = self.call("POST", f"/rh/payslips/{own_slip}/inputs", bonus, token=token)
+        self.assertEqual(status, 403, body)
+        status, slip = self.call("POST", f"/rh/payslips/{own_slip}/inputs", bonus, token=other)
+        self.assertEqual(status, 200, slip)
+        manual = next(i["id"] for i in slip["inputs"] if i["source"] == "manual")
+        status, body = self.call("DELETE", f"/rh/payslips/{own_slip}/inputs/{manual}", token=token)
+        self.assertEqual(status, 403, body)
+        status, body = self.call("POST", f"/rh/payslips/{worker_slip}/inputs", bonus, token=token)
+        self.assertEqual(status, 200, "Les bulletins des autres restent saisis par la RH")
+        status, body = self.call("PATCH", f"/rh/employees/{own.id}", {"base_salary": 3_200_000,
+                                                                       "salary_reason": "Revalorisation"}, token=other)
+        self.assertEqual((status, body.get("base_salary")), (200, 3_200_000), body)

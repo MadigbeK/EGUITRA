@@ -15,6 +15,14 @@ def today():
     return fields.Date.context_today(request.env.user)
 
 
+def refuse_own(emp):
+    """Quatre yeux : aucun compte, quel que soit son profil, ne modifie son propre dossier salarié, ses
+    éléments fixes ou variables de paie, ni ses avances et prêts : un autre compte s'en charge."""
+    if emp and emp.sudo().user_id == request.env.user:
+        raise ApiError(403, "forbidden", "Vous ne pouvez pas modifier votre propre dossier salarié ni vos "
+                                         "éléments de paie : un autre membre du service RH s'en charge.")
+
+
 def scope(kw=None):
     """Sociétés gérées : toutes celles du compte (gestion RH commune aux deux sociétés, comme la
     finance), ou celle du filtre company_id."""

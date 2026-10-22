@@ -35,6 +35,7 @@ from .common import (
     leave_type_row,
     number,
     ref,
+    refuse_own,
     rubric_row,
     scope,
     text,
@@ -309,6 +310,10 @@ class EguitraRh(http.Controller):
                 values[field] = int_or_false(data, key)
                 if values[field]:
                     _check_reference(key, values[field], company)
+        if values.get("user_id") == request.env.uid:
+            # Quatre yeux : un dossier lié à son propre compte serait un dossier qu'on se gère soi-même.
+            raise ApiError(403, "forbidden", "Vous ne pouvez pas lier un dossier salarié à votre propre compte : un "
+                                             "autre membre du service RH s'en charge.")
         if "fixed_lines" in data:
             lines = []
             for line in data.get("fixed_lines") or []:
@@ -337,6 +342,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/employees/<int:employee_id>", methods=("PATCH",), profiles=WRITE)
     def update_employee(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
+        refuse_own(emp)
         data = read_json()
         emp.with_context(salary_reason=text(data, "salary_reason")).write(self._employee_values(data, emp.company_id))
         return employee_detail(emp)
@@ -344,6 +350,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/employees/<int:employee_id>/exit", methods=("POST",), profiles=WRITE)
     def exit_employee(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
+        refuse_own(emp)
         data = read_json()
         require(data, "exit_date")
         reason = data.get("exit_reason") or "autre"
@@ -355,6 +362,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/employees/<int:employee_id>/documents", methods=("POST",), profiles=WRITE)
     def add_document(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
+        refuse_own(emp)
         form = request.httprequest.form
         kind = form.get("kind") or "autre"
         if kind not in dict(DOCUMENT_KINDS):
@@ -390,6 +398,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/documents/<int:document_id>", methods=("DELETE",), profiles=WRITE)
     def delete_document(self, document_id, **_kw):
         doc = get("eguitra.rh.document", document_id, "Document")
+        refuse_own(doc.employee_id)
         attachment = doc.attachment_id.sudo()
         doc.unlink()
         attachment.unlink()
@@ -668,6 +677,7 @@ class EguitraRh(http.Controller):
         data = read_json()
         require(data, "employee_id", "amount", "installment", "first_month")
         emp = get("eguitra.rh.employee", int_or_false(data, "employee_id"), "Salarié")
+        refuse_own(emp)
         kind = data.get("kind") or "avance"
         if kind not in ("avance", "pret"):
             raise ApiError(400, "invalid_parameter", "Nature inconnue.")
@@ -682,6 +692,7 @@ class EguitraRh(http.Controller):
     @api_route("/rh/advances/<int:advance_id>/cancel", methods=("POST",), profiles=WRITE)
     def cancel_advance(self, advance_id, **_kw):
         advance = get("eguitra.rh.advance", advance_id, "Avance")
+        refuse_own(advance.employee_id)
         advance.action_cancel()
         return advance_row(advance)
 

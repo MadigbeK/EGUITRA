@@ -11,7 +11,19 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from ..engine import Item, base_for_net, compute
 from ..models.employee import CONTRACTS, PAYMENT_METHODS, month_bounds
 from ..models.payroll import month_label
-from .common import READ, WRITE, can_write, date_value, get, int_or_false, number, payslip_row, scope, text
+from .common import (
+    READ,
+    WRITE,
+    can_write,
+    date_value,
+    get,
+    int_or_false,
+    number,
+    payslip_row,
+    refuse_own,
+    scope,
+    text,
+)
 from .rh import _payroll_row
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -126,6 +138,7 @@ class EguitraRhPaie(http.Controller):
     @api_route("/rh/payslips/<int:payslip_id>/inputs", methods=("POST",), profiles=WRITE)
     def add_input(self, payslip_id, **_kw):
         slip = get("eguitra.rh.payslip", payslip_id, "Bulletin")
+        refuse_own(slip.employee_id)
         slip.payroll_id._check_draft()
         data = read_json()
         require(data, "rubric_id")
@@ -147,6 +160,7 @@ class EguitraRhPaie(http.Controller):
     @api_route("/rh/payslips/<int:payslip_id>/inputs/<int:input_id>", methods=("DELETE",), profiles=WRITE)
     def delete_input(self, payslip_id, input_id, **_kw):
         slip = get("eguitra.rh.payslip", payslip_id, "Bulletin")
+        refuse_own(slip.employee_id)
         slip.payroll_id._check_draft()
         record = slip.input_ids.filtered(lambda i: i.id == input_id)
         if not record:
