@@ -79,6 +79,15 @@ const DESCRIPTIONS: Record<string, string> = {
   "/analyse/financements": "Montants obtenus et taux d'accord",
   "/analyse/activite": "Honoraires, temps et rentabilité",
   "/analyse/risques": "Risques et retards d'exécution",
+  "/rh": "Effectif, échéances, absences et masse salariale",
+  "/rh/guide": "Mode d'emploi de l'espace RH",
+  "/rh/salaries": "Dossiers du personnel, contrats et rémunérations",
+  "/rh/conges": "Demandes, planning et soldes de congés",
+  "/rh/avances": "Avances sur salaire et prêts, retenues mensuelles",
+  "/rh/paie": "Bulletins du mois, contrôles, validation, écriture",
+  "/rh/simulateur": "Du salaire de base au net, ou du net au brut",
+  "/rh/moi": "Vos congés, vos bulletins, votre équipe",
+  "/rh/parametres": "Barème, taux, rubriques, absences, jours fériés",
 };
 
 const SENS_PASTILLE: Record<NavBadge, string> = { approvals: " en attente", controls: " contrôle(s) en anomalie", alerts: " alerte(s)" };

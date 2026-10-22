@@ -533,6 +533,97 @@ const DESSINS: Record<string, ReactNode> = {
       <circle className="a-pop" style={k(6)} cx="38" cy="9.5" r="3.2" fill={B} />
     </>
   ),
+  rh: (
+    <>
+      <g className="a-saute" style={k(0)}>
+        <circle cx="12" cy="17" r="5.5" fill={GC} />
+        <path d="M2.5 40a9.5 9.5 0 0 1 19 0v1.5h-19Z" fill={G} />
+      </g>
+      <g className="a-saute" style={k(2)}>
+        <circle cx="36" cy="17" r="5.5" fill={S} />
+        <path d="M26.5 40a9.5 9.5 0 0 1 19 0v1.5h-19Z" fill={A} />
+      </g>
+      <g className="a-saute" style={k(1)}>
+        <circle cx="24" cy="13" r="7" fill={P} />
+        <path d="M11.5 43a12.5 12.5 0 0 1 25 0v1.5h-25Z" fill={P} />
+      </g>
+    </>
+  ),
+  "rh-salaries": (
+    <>
+      <rect x="19" y="2.5" width="10" height="7" rx="2.5" fill={F} />
+      <rect className="a-pop" style={k(0)} x="5" y="7" width="38" height="36" rx="6" fill={P} />
+      <circle className="a-pop" style={k(1)} cx="17" cy="21" r="5.5" fill={GC} />
+      <path className="a-pop" style={k(2)} d="M9 36a8 8 0 0 1 16 0Z" fill={GC} />
+      <rect className="a-pousse-x" style={k(3)} x="28" y="18" width="10" height="3.2" rx="1.6" fill={B} />
+      <rect className="a-pousse-x" style={k(4)} x="28" y="25" width="8" height="3.2" rx="1.6" fill={B} opacity=".8" />
+      <rect className="a-pousse-x" style={k(5)} x="28" y="32" width="9" height="3.2" rx="1.6" fill={B} opacity=".6" />
+    </>
+  ),
+  "rh-conges": (
+    <>
+      <rect x="4" y="9" width="40" height="35" rx="6" fill={B} stroke={F} strokeWidth="3" />
+      <rect x="4" y="9" width="40" height="10" rx="5" fill={P} />
+      <rect x="12" y="4" width="4" height="9" rx="2" fill={F} />
+      <rect x="32" y="4" width="4" height="9" rx="2" fill={F} />
+      <circle className="a-pop" style={k(1)} cx="24" cy="31" r="6.5" fill={G} />
+      <g className="a-engrenage" style={pivot(24, 31, 2)}>
+        <path d="M24 20.5v3M24 38.5v3M13.5 31h3M31.5 31h3M16.6 23.6l2.1 2.1M29.3 36.3l2.1 2.1M16.6 38.4l2.1-2.1M29.3 25.7l2.1-2.1" stroke={GF} strokeWidth="2.4" strokeLinecap="round" />
+      </g>
+    </>
+  ),
+  "rh-avances": (
+    <>
+      <ellipse className="a-pop" style={k(0)} cx="18" cy="38" rx="12" ry="4.5" fill={GF} />
+      <rect className="a-pop" style={k(0)} x="6" y="31" width="24" height="7" fill={G} />
+      <ellipse className="a-pop" style={k(1)} cx="18" cy="31" rx="12" ry="4.5" fill={GC} />
+      <rect className="a-pop" style={k(2)} x="6" y="24" width="24" height="7" fill={G} />
+      <ellipse className="a-pop" style={k(2)} cx="18" cy="24" rx="12" ry="4.5" fill={GC} />
+      <g className="a-fleche" style={k(3)}>
+        <path d="M37 40V12" stroke={P} strokeWidth="4" strokeLinecap="round" />
+        <path d="M30 18l7-8 7 8Z" fill={P} />
+      </g>
+    </>
+  ),
+  "rh-paie": (
+    <>
+      <g className="a-eventail" style={pivot(18, 42)}>
+        <rect x="5" y="8" width="25" height="34" rx="4.5" fill={M} transform="rotate(-9 18 25)" />
+      </g>
+      <rect x="15" y="5" width="27" height="37" rx="4.5" fill={P} />
+      <rect className="a-pousse-x" style={k(1)} x="20" y="12" width="17" height="3.2" rx="1.6" fill={B} />
+      <rect className="a-pousse-x" style={k(2)} x="20" y="18.5" width="12" height="3.2" rx="1.6" fill={B} opacity=".85" />
+      <rect className="a-pousse-x" style={k(3)} x="20" y="25" width="14" height="3.2" rx="1.6" fill={B} opacity=".7" />
+      <circle className="a-pop" style={k(4)} cx="35" cy="36" r="7.5" fill={G} />
+      <path className="a-pop" style={k(5)} d="M31.5 36.2l2.4 2.4 4.6-5" stroke={F} strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  "rh-simulateur": (
+    <>
+      <rect x="8" y="3" width="32" height="42" rx="6" fill={F} />
+      <rect className="a-pop" style={k(0)} x="13" y="8" width="22" height="9" rx="2.5" fill={M} />
+      <rect className="a-pousse-x" style={k(1)} x="22" y="11" width="10" height="3" rx="1.5" fill={F} />
+      <circle className="a-pop" style={k(2)} cx="16.5" cy="24.5" r="3" fill={B} />
+      <circle className="a-pop" style={k(3)} cx="24" cy="24.5" r="3" fill={B} />
+      <circle className="a-pop" style={k(4)} cx="31.5" cy="24.5" r="3" fill={G} />
+      <circle className="a-pop" style={k(3)} cx="16.5" cy="32" r="3" fill={B} />
+      <circle className="a-pop" style={k(4)} cx="24" cy="32" r="3" fill={B} />
+      <rect className="a-pop" style={k(5)} x="28.5" y="29" width="6" height="11" rx="3" fill={P} />
+      <circle className="a-pop" style={k(5)} cx="16.5" cy="39.5" r="3" fill={B} />
+      <circle className="a-pop" style={k(6)} cx="24" cy="39.5" r="3" fill={B} />
+    </>
+  ),
+  "rh-moi": (
+    <>
+      <rect className="a-pop" style={k(0)} x="4" y="6" width="40" height="36" rx="7" fill={M} />
+      <g className="a-saute" style={k(1)}>
+        <circle cx="24" cy="18" r="7" fill={P} />
+        <path d="M11 38a13 13 0 0 1 26 0v1H11Z" fill={P} />
+      </g>
+      <circle className="a-pop" style={k(3)} cx="37" cy="11" r="6.5" fill={G} />
+      <path className="a-pop" style={k(4)} d="M34 11.2l2 2 3.6-4" stroke={F} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
 };
 
 /** Icône d'un module par son adresse (et deux cas propres à l'accueil : réglages, Rotations). */
@@ -601,6 +692,15 @@ const PAR_ADRESSE: Record<string, string> = {
   "/analyse/financements": "an-financements",
   "/analyse/activite": "an-activite",
   "/analyse/risques": "an-risques",
+  "/rh": "rh",
+  "/rh/guide": "guide",
+  "/rh/salaries": "rh-salaries",
+  "/rh/conges": "rh-conges",
+  "/rh/avances": "rh-avances",
+  "/rh/paie": "rh-paie",
+  "/rh/simulateur": "rh-simulateur",
+  "/rh/moi": "rh-moi",
+  "/rh/parametres": "parametres",
 };
 
 export function IconeModule({ cle, className }: { cle: string; className?: string }) {

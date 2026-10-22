@@ -9,7 +9,8 @@ export type Profile =
   | "chantiers"
   | "immobilier"
   | "cabinet"
-  | "porteur";
+  | "porteur"
+  | "rh";
 
 export interface Company {
   id: number;

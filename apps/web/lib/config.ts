@@ -1,5 +1,5 @@
 /** Applications servies par ce projet. Le code d'application est transmis à l'API à la connexion. */
-export type AppCode = "finance" | "transport" | "axispro" | "portail" | "mobile" | "analyse";
+export type AppCode = "finance" | "transport" | "axispro" | "portail" | "mobile" | "analyse" | "rh";
 
 /** Les deux sociétés : EGUITRA GROUP SARLU (« groupe ») et MB AxisPro (« cabinet »). */
 export type EntiteSociete = "groupe" | "cabinet";
@@ -19,18 +19,20 @@ export const APPS: Record<AppCode, { name: string; home: string; tagline: string
   portail: { name: "Portail des porteurs de projets", home: "/portail", tagline: "MB AxisPro", entity: "cabinet" },
   mobile: { name: "NIMOVA · Rotations", home: "/mobile", tagline: "Saisie des rotations au parc", entity: "groupe" },
   analyse: { name: "NIMOVA · Analyse", home: "/analyse", tagline: "Constats, prévisions et décisions du dirigeant", entity: null },
+  // RH : les deux sociétés, chacune son personnel et sa paie (décision du gérant, 22 octobre 2026).
+  rh: { name: "NIMOVA · RH", home: "/rh", tagline: "Personnel, absences et paie", entity: null },
 };
 
 /** Espaces de gestion ouverts depuis l'accueil NIMOVA (le portail et Rotations ont leur propre entrée). */
-export type EspaceCode = "finance" | "transport" | "axispro" | "analyse";
-export const ESPACES: EspaceCode[] = ["finance", "transport", "axispro", "analyse"];
+export type EspaceCode = "finance" | "transport" | "axispro" | "analyse" | "rh";
+export const ESPACES: EspaceCode[] = ["finance", "transport", "axispro", "analyse", "rh"];
 
 export function isAppCode(value: unknown): value is AppCode {
   return typeof value === "string" && value in APPS;
 }
 
 export function isEspaceCode(value: unknown): value is EspaceCode {
-  return value === "finance" || value === "transport" || value === "axispro" || value === "analyse";
+  return value === "finance" || value === "transport" || value === "axispro" || value === "analyse" || value === "rh";
 }
 
 /** Application par défaut selon le nom d'hôte (axispro.* -> AxisPro Suite, sinon EGUITRA Finance). */
@@ -40,6 +42,7 @@ export function appFromHost(host: string | null): AppCode {
   if (h.startsWith("portail.")) return "portail";
   if (h.startsWith("analyse.")) return "analyse";
   if (h.startsWith("transport.")) return "transport";
+  if (h.startsWith("rh.")) return "rh";
   return "finance";
 }
 

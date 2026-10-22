@@ -9,7 +9,7 @@ import { IconeModule } from "@/components/accueil/icones-modules";
 import { Rosace } from "@/components/guilloche";
 import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
 import { APPS, ESPACES, type AppCode } from "@/lib/config";
-import { accueilFinance, navFor, type NavSection } from "@/lib/nav";
+import { accueilFinance, accueilRh, navFor, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
 import { cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
@@ -28,7 +28,7 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
 
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#7c5ce6" };
+const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#7c5ce6", rh: "#c4417a" };
 
 /**
  * Coque des applications, sans colonne latérale : une barre du haut à la manière d'Odoo (marque et
@@ -44,7 +44,8 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   // Les modules d'une société (transport, chantiers, immobilier) n'apparaissent que dans ses livres.
   const sections = useMemo(() => navFor(app, me.profiles, company?.entity), [app, me.profiles, company?.entity]);
   // Finance s'ouvre sur l'écran Achats pour le profil Achats seul (le tableau de bord lui est fermé).
-  const home = app === "finance" ? accueilFinance(me.profiles) : APPS[app].home;
+  // RH s'ouvre sur « Mon espace » pour un compte en libre-service (sans profil de gestion).
+  const home = app === "finance" ? accueilFinance(me.profiles) : app === "rh" ? accueilRh(me.profiles) : APPS[app].home;
   const entity = entityOf(company, app);
   // Finance : équilibre de l'exercice dans la barre du haut, pastilles dans la navigation.
   const enTete = useEnTeteFinance(app, me);

@@ -43,6 +43,14 @@ const COURT: Record<string, string> = {
   "/analyse/diagnostic": "Diagnostic",
   "/analyse/comites": "Décisions",
   "/analyse/activite": "Honoraires",
+  "/rh": "Tableau RH",
+  "/rh/guide": "Guide RH",
+  "/rh/salaries": "Salariés",
+  "/rh/conges": "Congés",
+  "/rh/avances": "Avances",
+  "/rh/paie": "Paie",
+  "/rh/simulateur": "Simulateur",
+  "/rh/moi": "Mon espace",
 };
 
 /**

@@ -566,4 +566,8 @@ export const ICONES: Record<string, Icon> = {
   Info,
   Layers,
   Target,
+  Calendar,
+  Calculator,
+  Wallet,
+  Home,
 };
