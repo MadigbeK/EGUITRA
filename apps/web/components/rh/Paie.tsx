@@ -176,6 +176,7 @@ export function DetailPaie({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-2">
             <PastilleSociete company={p.company} />
             <EtatPaie state={p.state} />
+            {p.prepared_by.length > 0 && <span>Préparée par {p.prepared_by.join(", ")}</span>}
             {p.validated_by && <span>Validée par {p.validated_by}, {fmtDateTime(p.validated_at)}</span>}
             {p.move && (
               <span>
@@ -190,14 +191,16 @@ export function DetailPaie({ id }: { id: string }) {
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
             {ecrit && p.state === "draft" && (
-              <>
-                <Button loading={busy === "compute"} onClick={() => void action("compute", "Bulletins recalculés.")}>
-                  <RefreshCw className="h-4 w-4" /> Recalculer
-                </Button>
-                <Button variant="primary" loading={busy === "validate"} disabled={bloquantes > 0} title={bloquantes ? "Corrigez d'abord les anomalies bloquantes" : undefined} onClick={() => void action("validate", "Paie validée : les bulletins sont figés et consultables par les salariés.")}>
-                  <Lock className="h-4 w-4" /> Valider la paie
-                </Button>
-              </>
+              <Button loading={busy === "compute"} onClick={() => void action("compute", "Bulletins recalculés.")}>
+                <RefreshCw className="h-4 w-4" /> Recalculer
+              </Button>
+            )}
+            {/* Quatre yeux (eguitra_rh/controllers/paie.py, can_validate) : la direction ou l'administration
+                valide une paie en préparation qu'elle n'a pas préparée ; la RH ne valide jamais. */}
+            {p.can_validate && (
+              <Button variant="primary" loading={busy === "validate"} disabled={bloquantes > 0} title={bloquantes ? "Corrigez d'abord les anomalies bloquantes" : undefined} onClick={() => void action("validate", "Paie validée : les bulletins sont figés et consultables par les salariés.")}>
+                <Lock className="h-4 w-4" /> Valider la paie
+              </Button>
             )}
             {ecrit && p.state === "validated" && (
               <>
@@ -220,6 +223,11 @@ export function DetailPaie({ id }: { id: string }) {
       <div className="mb-6">
         <Etapes steps={etapes} />
       </div>
+      {p.state === "draft" && !p.can_validate && (
+        <div className="mb-4">
+          <Notice tone="neutral">La paie est validée par la direction, et jamais par une personne qui l&apos;a préparée (création, calcul ou éléments variables).</Notice>
+        </div>
+      )}
       {message && (
         <div className="mb-4">
           <Notice tone={message.tone}>{message.text}</Notice>

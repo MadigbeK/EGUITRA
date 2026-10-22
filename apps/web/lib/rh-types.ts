@@ -332,7 +332,11 @@ export interface Payroll extends PayrollRow {
   by_department: Array<{ name: string; headcount: number; gross: number; employer_cost: number }>;
   validated_by: string | null;
   validated_at: string | null;
+  /** Comptes qui ont préparé la paie (création, calcul, éléments variables) : ils ne la valident pas. */
+  prepared_by: string[];
   can_write: boolean;
+  /** Le compte peut valider cette paie en préparation (direction ou administration, sans l'avoir préparée). */
+  can_validate: boolean;
 }
 
 export interface PayslipLine {
