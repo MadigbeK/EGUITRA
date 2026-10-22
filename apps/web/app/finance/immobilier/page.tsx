@@ -6,7 +6,7 @@ import { Badge, Button, Card, DataTable, Field, Input, Kpi, Loading, Modal, Noti
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { PAYMENT_STATES, type MoveSummary } from "@/lib/finance-types";
-import { fmtDate, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 interface Lease { id: number; name: string; property: { id: number; name: string }; tenant: { id: number; name: string }; date_start: string; date_end: string | null; rent: number; charges: number; periodicity: string; vat: boolean; deposit_amount: number; state: "draft" | "active" | "terminated"; next_invoice_date: string | null }
 interface Property { id: number; name: string; kind: string; address: string | null; city: string | null; area_m2: number; acquisition_value: number; current_value: number; valuation_date: string | null; occupied: boolean; lease: Lease | null }
@@ -20,7 +20,7 @@ export default function RealEstatePage() {
   async function generate() {
     try {
       const res = await apiSend<{ invoices: MoveSummary[] }>("POST", "/immobilier/rents/generate", {});
-      setMessage({ tone: "ok", text: res.invoices.length ? `${res.invoices.length} quittance(s) de loyer émise(s).` : "Aucun loyer échu à facturer." });
+      setMessage({ tone: "ok", text: res.invoices.length ? `${pluriel(res.invoices.length, "quittance de loyer émise", "quittances de loyer émises")}.` : "Aucun loyer échu à facturer." });
       void refreshSummary();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
@@ -32,11 +32,11 @@ export default function RealEstatePage() {
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       {summary && (
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Kpi label="Biens" value={String(summary.properties)} hint={`${summary.occupied} loué(s), ${fmtPct(summary.occupancy_rate, 0)} d'occupation`} />
+          <Kpi label="Biens" value={String(summary.properties)} hint={`${pluriel(summary.occupied, "loué")}, ${fmtPct(summary.occupancy_rate, 0)} d'occupation`} />
           <Kpi label="Loyers annuels" value={fmtShort(summary.annual_rent)} tone="ok" />
           <Kpi label="Valeur du patrimoine" value={fmtShort(summary.portfolio_value)} />
           <Kpi label="Rendement brut" value={fmtPct(summary.gross_yield)} tone="accent" />
-          <Kpi label="Loyers impayés" value={fmtShort(summary.unpaid_amount)} hint={`${summary.unpaid_count} échéance(s), ${summary.leases_expiring_3m} bail(aux) à échéance sous 3 mois`} tone={summary.unpaid_count ? "warn" : "neutral"} />
+          <Kpi label="Loyers impayés" value={fmtShort(summary.unpaid_amount)} hint={`${pluriel(summary.unpaid_count, "échéance")}, ${pluriel(summary.leases_expiring_3m, "bail", "baux")} à échéance sous 3 mois`} tone={summary.unpaid_count ? "warn" : "neutral"} />
         </div>
       )}
       <Tabs tabs={[{ key: "biens", label: "Biens et baux" }, { key: "loyers", label: "Loyers émis" }, { key: "impayes", label: "Impayés et relances" }]} value={tab} onChange={setTab} />

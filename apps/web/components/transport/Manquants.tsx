@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Droplet } from "@/components/icons";
 import { Badge, Card, DataTable, Field, Input, Kpi, Loading, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { SHORTAGE_RULES, type ProfitRow, type Ref, type ShortageRule } from "./types";
 
 interface ShortageRotation {
@@ -50,7 +50,7 @@ export function Manquants() {
       {data && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi label="Manquant total" value={`${fmtDec(sum("shortage"))} m³`} icon={Droplet} teinte="corail" hint={`${fmtPct(loaded ? (sum("shortage") / loaded) * 100 : null, 2)} du volume chargé`} />
-          <Kpi label="Hors tolérance" value={`${fmtDec(sum("shortage_excess"))} m³`} tone={sum("shortage_excess") > 0 ? "warn" : "ok"} hint={`${sum("excess_rotations")} rotation(s)`} />
+          <Kpi label="Hors tolérance" value={`${fmtDec(sum("shortage_excess"))} m³`} tone={sum("shortage_excess") > 0 ? "warn" : "ok"} hint={pluriel(sum("excess_rotations"), "rotation")} />
           <Kpi label="Valeur hors tolérance" value={fmtShort(sum("shortage_value"))} tone={sum("shortage_value") > 0 ? "warn" : "neutral"} hint="Au prix du m³ du produit ou du tarif" />
           <Kpi label="Coût net pour la marge" value={fmtShort(sum("shortage_net_cost"))} hint={`Déduit ${fmtShort(sum("shortage_deduction"))}, réclamé aux chauffeurs ${fmtShort(sum("shortage_claim"))}`} />
         </div>

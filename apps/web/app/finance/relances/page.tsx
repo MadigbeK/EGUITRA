@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Mail, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Kpi, Loading, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDateTime, fmtGNF, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
 interface Reminder {
   id: number;
@@ -46,7 +46,7 @@ export default function RemindersPage() {
     setMessage(null);
     try {
       const res = await apiSend<{ created: number }>("POST", "/finance/reminders/generate");
-      setMessage({ tone: "ok", text: res.created ? `${res.created} relance(s) à envoyer.` : "Aucune nouvelle relance : les retards sont déjà relancés à leur niveau." });
+      setMessage({ tone: "ok", text: res.created ? `${pluriel(res.created, "relance")} à envoyer.` : "Aucune nouvelle relance : les retards sont déjà relancés à leur niveau." });
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Calcul impossible." });

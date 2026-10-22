@@ -198,7 +198,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
                           aria-current={actif ? "page" : undefined}
                           onClick={() => fermer(false)}
                           className={cx(
-                            "tuile group relative flex flex-col items-center gap-1.5 rounded-xl px-1 pb-2.5 pt-3 text-center outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent-vif",
+                            "tuile group relative flex flex-col items-center gap-1.5 rounded-xl px-1 pb-2.5 pt-3 text-center outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent",
                             actif ? "bg-accent-doux" : "hover:bg-[#f1f6f3] focus-visible:bg-[#f1f6f3]",
                             joue && "joue",
                           )}
@@ -216,7 +216,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
             ))}
           </div>
           <div className="lanceur-pied border-t border-line bg-[#fafcfa] p-2">
-            <Link href="/accueil" onClick={versAccueil} className="group flex items-center gap-3 rounded-xl px-2.5 py-2 outline-none transition-colors hover:bg-[#f1f6f3] focus-visible:ring-2 focus-visible:ring-accent-vif">
+            <Link href="/accueil" onClick={versAccueil} className="group flex items-center gap-3 rounded-xl px-2.5 py-2 outline-none transition-colors hover:bg-[#f1f6f3] focus-visible:ring-2 focus-visible:ring-accent">
               <span className="gaufre grid h-9 w-9 flex-none place-items-center rounded-[10px] border border-line bg-[linear-gradient(135deg,#eaf4ef,#f8f4ea)] text-accent">
                 <Gaufre className="h-4 w-4" />
               </span>

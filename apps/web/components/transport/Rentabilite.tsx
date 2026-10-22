@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Gauge, Percent, Route as RouteIcon, TrendingUp } from "@/components/icons";
 import { Badge, Card, DataTable, Field, Input, Kpi, Loading, Notice, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import type { ProfitRow } from "./types";
 
 export interface Control { code: string; label: string; ok: boolean; count: number; items: string[]; hint: string }
@@ -168,7 +168,7 @@ export function Controles({ controls }: { controls: Control[] }) {
               <div className={c.ok ? "text-ink-2" : "font-semibold text-ink"}>{c.label}{c.ok ? "" : ` : ${c.count}`}</div>
               {!c.ok && (
                 <>
-                  <div className="mt-0.5 text-muted">{c.items.join(" ; ")}{c.count > c.items.length ? ` (et ${c.count - c.items.length} autre(s))` : ""}</div>
+                  <div className="mt-0.5 text-muted">{c.items.join(" ; ")}{c.count > c.items.length ? ` (et ${pluriel(c.count - c.items.length, "autre")})` : ""}</div>
                   <div className="mt-0.5 text-[12.5px] text-muted">{c.hint}</div>
                 </>
               )}

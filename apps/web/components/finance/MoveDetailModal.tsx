@@ -244,7 +244,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 </Button>
               ) : disputing ? (
                 <span className="inline-flex items-center gap-2">
-                  <Input className="w-64" placeholder="Motif du litige" value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} />
+                  <Input className="w-64" placeholder="Motif du litige" aria-label="Motif du litige" value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} />
                   <Button loading={busy === "dispute"} disabled={!disputeReason.trim()} onClick={() => act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: true, reason: disputeReason })).then(() => setDisputing(false))}>
                     Déclarer
                   </Button>

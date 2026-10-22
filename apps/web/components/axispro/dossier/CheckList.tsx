@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Targe
 import { Badge, Button, Card, DataTable, FileButton, Input, Loading, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
 import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, useCabinet, useRetour } from "./commun";
 
@@ -147,7 +147,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           />
           <div className="relative min-w-[200px] flex-1">
             <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <Input className="pl-9" placeholder="Rechercher un critère, une observation" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input className="pl-9" placeholder="Rechercher un critère, une observation" aria-label="Rechercher un critère ou une observation" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/evaluation.xlsx`, `${d.reference}_fiche_evaluation.xlsx`)}>
             <Download className="h-4 w-4" /> Fiche d&apos;évaluation
@@ -159,8 +159,8 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
             <Select aria-label="Compartiment" value={compartiment} onChange={(e) => { setCompartiment(e.target.value); setDomain(""); }} placeholder="Tous les compartiments" options={compartiments.map((x) => ({ value: x.compartment_id, label: `${x.code} ${x.name}${x.owner ? ` · ${x.owner.name}` : ""}` }))} />
           )}
           <Select aria-label="Domaine" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Tous les domaines" options={domainesVisibles.map((x) => ({ value: x.domain_id, label: `${x.code} ${x.name}` }))} />
-          <Select value={gate} onChange={(e) => setGate(e.target.value)} placeholder="Tous les gates" options={d.gates.map((g) => ({ value: g.code, label: `${g.code} ${g.name}` }))} />
-          <Select value={focus} onChange={(e) => setFocus(e.target.value as Focus)} options={FOCUS} />
+          <Select value={gate} onChange={(e) => setGate(e.target.value)} aria-label="Filtrer par gate" placeholder="Tous les gates" options={d.gates.map((g) => ({ value: g.code, label: `${g.code} ${g.name}` }))} />
+          <Select value={focus} onChange={(e) => setFocus(e.target.value as Focus)} aria-label="Filtrer par nature de critère" options={FOCUS} />
         </div>
         {compartiments.length > 0 && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -178,7 +178,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           </div>
         )}
         <p className="mt-2 text-[12.5px] text-muted">
-          {lignes.length} critère(s) affiché(s) sur {criteria.length}{miens ? " de vos compartiments" : ""}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.
+          {pluriel(lignes.length, "critère affiché", "critères affichés")} sur {criteria.length}{miens ? " de vos compartiments" : ""}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.
         </p>
       </Card>
 
@@ -233,7 +233,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           onClose={() => setApercu(null)}
           footer={
             <Button variant="primary" disabled={apercu.result.errors.length > 0 || apercu.result.changes.length === 0} onClick={appliquer}>
-              <FileUp className="h-4 w-4" /> Appliquer {apercu.result.changes.length} modification(s)
+              <FileUp className="h-4 w-4" /> Appliquer {pluriel(apercu.result.changes.length, "modification")}
             </Button>
           }
         >

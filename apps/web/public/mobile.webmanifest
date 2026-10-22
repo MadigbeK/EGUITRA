@@ -7,7 +7,7 @@
   "scope": "/mobile",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#eff6f1",
+  "background_color": "#eef2ef",
   "theme_color": "#b83e16",
   "icons": [
     { "src": "/icons/rotations-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

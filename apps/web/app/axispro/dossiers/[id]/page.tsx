@@ -7,7 +7,7 @@ import { Rosace } from "@/components/guilloche";
 import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, Tabs, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { RECO, type DossierDetail, type Message } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtGNF, pluriel } from "@/lib/format";
 import { Financements } from "@/components/axispro/Financements";
 import { ModeleFinancier } from "@/components/axispro/ModeleFinancier";
 import { PlanActions } from "@/components/axispro/PlanActions";
@@ -85,7 +85,7 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
                 <div className="text-white/85">Besoin de financement</div>
                 <div className="font-semibold tabular">{montant(d, d.financing_need)}</div>
               </div>
-              <div className="text-white/85">{d.progress.assessed} critère(s) évalué(s) sur {d.progress.criteria}</div>
+              <div className="text-white/85">{pluriel(d.progress.assessed, "critère évalué", "critères évalués")} sur {d.progress.criteria}</div>
             </div>
           </div>
         </div>
@@ -156,7 +156,7 @@ function Messages({ d }: { d: DossierDetail }) {
         {data && data.length === 0 && <p className="text-sm text-muted">Aucun échange.</p>}
       </div>
       <div className="mt-3 space-y-2 border-t border-line pt-3">
-        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={internal ? "Note interne, invisible du porteur" : "Message au porteur"} />
+        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={internal ? "Note interne, invisible du porteur" : "Message au porteur"} aria-label={internal ? "Note interne au cabinet" : "Message au porteur"} />
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} /> Note interne au cabinet</label>
           <Button variant="primary" disabled={!body.trim()} onClick={() => apiSend("POST", `/axispro/dossiers/${d.id}/messages`, { body, internal }).then(() => { setBody(""); void mutate(); })}><Send className="h-4 w-4" /> Envoyer</Button>
@@ -177,9 +177,9 @@ function Time({ d }: { d: DossierDetail }) {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card title="Saisir du temps">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-          <Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
-          <Input placeholder="Heures" inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} />
-          <Input placeholder="Travaux réalisés" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+          <Input type="date" aria-label="Date des travaux" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+          <Input placeholder="Heures" aria-label="Heures" inputMode="decimal" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} />
+          <Input placeholder="Travaux réalisés" aria-label="Travaux réalisés" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
           <Button variant="primary" disabled={!f.hours || !f.description} onClick={() => apiSend("POST", "/axispro/timesheets", { ...f, dossier_id: d.id, hours: Number(f.hours.replace(",", ".")) }).then(() => { setF({ ...f, hours: "", description: "" }); void mutate(); })}>Enregistrer</Button>
         </div>
       </Card>

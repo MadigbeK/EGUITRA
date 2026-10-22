@@ -7,7 +7,7 @@ import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Prog
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { FUNDING_STATE, INSTRUMENTS, type Funding, type FundingState } from "@/lib/axispro-types";
-import { fmtDate, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { CelluleNombre, CelluleTexte } from "./cellules";
 
 const EN_COURS: FundingState[] = ["identified", "submitted", "review", "agreed"];
@@ -46,7 +46,7 @@ export function Financements({ dossierId, besoin }: { dossierId?: number; besoin
         ) : (
           <Kpi label="Démarches en cours" value={String(data.filter((f) => EN_COURS.includes(f.state)).length)} icon={Target} teinte="azur" />
         )}
-        <Kpi label="Montant sollicité" value={fmtShort(sollicite)} icon={HandCoins} teinte="ambre" hint={`${actifs.length} démarche(s) active(s)`} />
+        <Kpi label="Montant sollicité" value={fmtShort(sollicite)} icon={HandCoins} teinte="ambre" hint={pluriel(actifs.length, "démarche active", "démarches actives")} />
         <Kpi label="Montant obtenu" value={fmtShort(obtenu)} icon={Coins} teinte="jade" tone={obtenu > 0 ? "ok" : "neutral"} hint="Conventions signées et décaissements" />
         <Kpi label={besoin !== undefined ? "Couverture du besoin" : "Taux d'obtention"} value={besoin ? fmtPct((obtenu / besoin) * 100, 0) : sollicite ? fmtPct((obtenu / sollicite) * 100, 0) : "–"} icon={Landmark} teinte="lagon" />
       </div>

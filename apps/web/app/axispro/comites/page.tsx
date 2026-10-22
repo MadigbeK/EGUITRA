@@ -6,7 +6,7 @@ import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, Loading, PageHeader, c
 import { useApi } from "@/lib/api-client";
 import { RECO, type DossierSummary, type Review } from "@/lib/axispro-types";
 import { couleurScore, note } from "@/components/axispro/dossier/commun";
-import { fmtDate, fmtShort } from "@/lib/format";
+import { fmtDate, fmtShort, pluriel } from "@/lib/format";
 
 type ReviewRow = Review & { dossier: { id: number; reference: string; name: string; promoter: string } };
 
@@ -16,7 +16,7 @@ export default function ComitesPage() {
   const agenda = (dossiers ?? []).filter((d) => d.progress.assessed > 0 && !d.decision);
   return (
     <div>
-      <PageHeader title="Comités" subtitle="Dossiers à présenter, décisions rendues et leur historique. Une décision verrouillée ne se modifie plus." actions={<span className="inline-flex items-center gap-2 rounded-xl bg-accent-doux px-3 py-2 text-[13px] font-semibold text-accent"><Gavel className="h-4 w-4" /> {(reviews ?? []).filter((r) => r.state === "locked").length} décision(s) verrouillée(s)</span>} />
+      <PageHeader title="Comités" subtitle="Dossiers à présenter, décisions rendues et leur historique. Une décision verrouillée ne se modifie plus." actions={<span className="inline-flex items-center gap-2 rounded-xl bg-accent-doux px-3 py-2 text-[13px] font-semibold text-accent"><Gavel className="h-4 w-4" /> {pluriel((reviews ?? []).filter((r) => r.state === "locked").length, "décision verrouillée", "décisions verrouillées")}</span>} />
       {(error || reviewsError) && <ErrorBox error={error ?? reviewsError} />}
       <div className="space-y-6">
         <Card title={`À présenter en comité (${agenda.length})`}>

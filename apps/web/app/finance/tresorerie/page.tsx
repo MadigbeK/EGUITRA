@@ -8,7 +8,7 @@ import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice 
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
 import type { Account, AnalyticShare, CashAccount, Ref } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
 interface StLine {
   id: number;
@@ -474,7 +474,7 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
         {result && (
           <Notice tone={result.statement && !result.statement.is_complete ? "warn" : "ok"}>
             <div>
-              {result.created} opération(s) importée(s), {result.attached} opération(s) saisie(s) rattachée(s), {result.skipped_duplicates} doublon(s) ignoré(s).
+              {pluriel(result.created, "opération importée", "opérations importées")}, {pluriel(result.attached, "opération saisie rattachée", "opérations saisies rattachées")}, {pluriel(result.skipped_duplicates, "doublon ignoré", "doublons ignorés")}.
             </div>
             <div>
               Solde initial {money(result.balances.start)}

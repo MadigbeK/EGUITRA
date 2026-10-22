@@ -6,6 +6,7 @@ import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal,
 import { AnalyticFields, AnalyticTags, fromDistribution, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { pluriel } from "@/lib/format";
 import type { Account, AnalyticShare, ExpenseCategory, Ref } from "@/lib/finance-types";
 
 type Tab = "regles" | "obligatoire" | "categories" | "types" | "modes";
@@ -195,7 +196,7 @@ function Categories() {
     setMessage(null);
     try {
       const res = await apiSend<{ created: number }>("POST", "/finance/expense-categories/defaults");
-      setMessage({ tone: "ok", text: res.created ? `${res.created} catégorie(s) usuelle(s) ajoutée(s), à revoir avec l'expert-comptable.` : "Les catégories usuelles sont déjà présentes." });
+      setMessage({ tone: "ok", text: res.created ? `${pluriel(res.created, "catégorie usuelle ajoutée", "catégories usuelles ajoutées")}, à revoir avec l'expert-comptable.` : "Les catégories usuelles sont déjà présentes." });
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
@@ -368,7 +369,7 @@ function OperationTypes() {
     setMessage(null);
     try {
       const res = await apiSend<{ created: number }>("POST", "/finance/treasury/operation-types/defaults");
-      setMessage({ tone: "ok", text: res.created ? `${res.created} type(s) usuel(s) ajouté(s).` : "Les types usuels sont déjà présents." });
+      setMessage({ tone: "ok", text: res.created ? `${pluriel(res.created, "type usuel ajouté", "types usuels ajoutés")}.` : "Les types usuels sont déjà présents." });
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
@@ -622,7 +623,7 @@ function Requirements() {
               align: "right",
               render: (r) =>
                 r.company ? (
-                  <button type="button" className="text-muted hover:text-danger" aria-label="Retirer" onClick={() => act(() => apiSend("DELETE", `/finance/analytic-requirements/${r.id}`), "Obligation retirée.")}>
+                  <button type="button" className="text-muted hover:text-danger" aria-label={`Retirer l'obligation ${r.plan}, comptes ${r.prefix}`} onClick={() => act(() => apiSend("DELETE", `/finance/analytic-requirements/${r.id}`), "Obligation retirée.")}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 ) : (

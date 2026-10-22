@@ -7,7 +7,7 @@ import { Badge, Button, Card, DataTable, Donut, ErrorBox, Field, Input, Kpi, Loa
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
-import { fmtPct, fmtShort } from "@/lib/format";
+import { fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
 import { ratio } from "@/components/axispro/cellules";
 import { note } from "@/components/axispro/dossier/commun";
@@ -89,7 +89,7 @@ export default function DossiersPage() {
       />
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Dossiers" value={String(rows.length)} icon={FolderKanban} teinte="azur" hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
-        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" icon={CheckCircle2} teinte="jade" hint={`${rows.filter((d) => d.recommendation === "bankable").length} bankable candidate(s)`} />
+        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" icon={CheckCircle2} teinte="jade" hint={pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate")} />
         <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" icon={AlertTriangle} teinte="ambre" />
         <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" icon={XCircle} teinte="danger" />
       </div>
@@ -164,7 +164,7 @@ function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
           return (
             <div key={g.id} className={cx("flex flex-col px-2", i > 0 && "border-l border-line")}>
               <div className="text-[12.5px] font-bold text-ink-2">{g.code}</div>
-              <div className="truncate text-[11.5px] text-muted" title={g.name}>
+              <div className="line-clamp-2 min-h-[2.5em] text-[11.5px] leading-tight text-muted" title={g.name}>
                 {g.name}
               </div>
               <div className="mt-1 font-display text-[24px] font-bold leading-none tabular text-ink">{n}</div>

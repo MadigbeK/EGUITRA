@@ -5,6 +5,11 @@ par le DG dans sa note de cadrage (nom, signature, palette, marque interne commu
 structures) et des captures d'écran retenues par le gérant. Elle écarte les choix par défaut des
 interfaces générées (voir la dernière partie).
 
+> Mise à jour du 22 octobre 2026. Le gérant a jugé la première version « fade » le 16 octobre :
+> la seconde, colorée et animée, est décrite au fil de `JOURNAL.md`. Cette charte en reprend les
+> règles qui tiennent ; la marque, les caractères et la liste des choix écartés sont à jour, le
+> détail des composants de la seconde version reste dans le journal.
+
 ## L'idée
 
 Deux images tiennent l'interface, toutes deux tirées du métier du groupe.
@@ -28,17 +33,19 @@ menus en texte seul.
 
 - **NIMOVA**, « Système intégré de gestion », signature « La maîtrise intégrée de votre
   performance. » (note du DG).
-- **Monogramme** : le N du DG dans son carré vert forêt, redessiné. Deux fûts vert d'eau, les deux
-  structures, reliés par une diagonale dorée, la plateforme commune. Fichiers :
-  `components/brand.tsx` (composant `Monogramme`), `public/icons/nimova.svg`, icônes de Rotations
-  dans `public/icons/`.
+- **Logo « le pli »** (choisi par le gérant le 21 octobre 2026, en production le jour même) : un
+  N fait d'un seul ruban plié, deux montants vert forêt reliés par une diagonale d'or. Fichiers
+  définitifs dans `docs/design/logos/nimova/` ; dans l'application, `components/brand.tsx`
+  (`Monogramme`, et `SceauNimova` / `CachetDocument` pour le sceau des rapports imprimés),
+  `public/icons/nimova.svg` et les icônes de Rotations dans `public/icons/`.
 - **Noms affichés** (décision du gérant, 16 octobre 2026) : NIMOVA · Finance, NIMOVA · AxisPro,
   NIMOVA · Rotations (`lib/config.ts`).
 - **Portail des porteurs de projets** : marque MB AxisPro Consulting, bleu nuit, sans nom ni
   monogramme NIMOVA (marque interne). En attendant le logo officiel du cabinet, une composition
   typographique sobre ; l'icône d'onglet `public/icons/portail.svg` reprend ses initiales.
-- **Couverture** de la page de connexion : celle de la note du DG (fond forêt, bande verticale,
-  carré vert d'eau portant le monogramme), avec la date du jour à Conakry.
+- **Page de connexion** : une photo d'équipe en réunion (Pexels 9301288, licence gratuite),
+  assombrie au vert forêt pour la lecture, le grand N du pli tracé au trait par-dessus, la date du
+  jour à Conakry. La photo s'affiche dès le premier rendu (aperçu flou inscrit dans la page).
 
 ## Les couleurs
 
@@ -59,7 +66,7 @@ contraste mesuré sur le crème (texte courant : 4,5:1 au moins).
 | Gris vert | #5B6B63 | Textes secondaires | 5,4:1 |
 | Or foncé | #7D5C17 | Textes d'avertissement | 5,8:1 |
 | Latérite | #A23B28 | Erreurs, retards, montants négatifs | 6,2:1 |
-| Trait fort | #7F928A | Contour des champs de saisie | 3,1:1 (seuil des composants) |
+| Trait de champ | #869690 | Contour des champs de saisie (`--line-champ`) | 3,1:1 sur blanc (seuil des composants) |
 
 Graphiques : une seule série par graphique, dans la couleur d'action ; l'ancienneté des créances
 suit une rampe ordonnée (vert pour le non échu, puis latérite de plus en plus sombre), toujours
@@ -68,15 +75,12 @@ le dit en toutes lettres.
 
 ## Les caractères
 
-Aptos, la police de la présentation du DG, n'est pas libre pour le web. La famille retenue est
-**Barlow** (licence libre OFL), dessinée d'après la signalétique routière et les plaques
-d'immatriculation : le vocabulaire du transport. Elle est embarquée à la construction par
-`next/font` et servie par le site lui-même.
+Choix du gérant (16 octobre 2026), licence libre OFL, embarquées à la construction par `next/font`
+et servies par le site lui-même :
 
-- **Barlow** : textes, menus, champs (14 px en courant).
-- **Barlow Semi Condensed** : titres de page (28 px), titres de bloc, chiffres des tableaux
-  (chiffres tabulaires, alignés) ; la classe `font-mono` désigne ces montants alignés.
-- **Barlow Condensed** : compteurs et cases du code de vérification.
+- **Funnel Display** : titres, grands chiffres, compteurs.
+- **Funnel Sans** : textes, menus, champs et montants (chiffres tabulaires) ; la classe
+  `font-mono` désigne ces montants alignés, sans chasse fixe.
 
 Casse normale partout : pas de libellés en capitales espacées. Ni Inter, ni Geist, ni Space Grotesk.
 
@@ -110,7 +114,9 @@ nom pour les lecteurs d'écran), état, pièce jointe. Les menus sont en texte s
 ## Ce qui est écarté
 
 Les signes d'une interface produite sans regard, relevés dans le guide transmis par le gérant, sont
-absents : dégradés, violet et bleu par défaut, fond blanc pur, palette arc-en-ciel, ombres partout,
+écartés. Deux exceptions de la seconde version attendent l'arbitrage du gérant (audit du
+22 octobre) : l'accent violet de l'Analyse, et les dégradés des boutons principaux et bandeaux.
+Restent absents : violet et bleu par défaut ailleurs, fond blanc pur, palette arc-en-ciel, ombres partout,
 grilles de cartes identiques, emoji, verre dépoli décoratif, tirets cadratins, polices par défaut,
 liserés colorés à gauche des encadrés, grilles décoratives, coches vertes sur toutes les listes,
 même grand arrondi partout, orbes flous, trames de points, étincelles, flèches animées, animations
@@ -118,6 +124,5 @@ au survol de tout, couleurs néon, pastels sans contraste. Les points médians d
 remplacés par une ponctuation française ordinaire, sauf dans les noms « NIMOVA · module » choisis
 par le gérant.
 
-Une seule animation non demandée par l'utilisateur subsiste : la rotation du compteur à
-l'ouverture du tableau de bord. Elle ne joue pas quand le système demande de réduire les
-animations.
+La seconde version anime davantage, à la demande du gérant (entrées des écrans, compteurs, tracés
+des graphiques, accueil). Aucune animation ne joue quand le système demande de les réduire.
