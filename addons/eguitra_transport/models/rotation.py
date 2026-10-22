@@ -52,6 +52,14 @@ def fmt_m3(value):
     return f"{value:,.3f}".replace(",", " ").replace(".", ",") + " m³"
 
 
+def fmt_bl(note):
+    """Bon de livraison dans un libellé : « BL 41250 », sans doubler un numéro qui porte déjà « BL »."""
+    note = (note or "").strip()
+    if not note:
+        return ""
+    return note if note[:2].upper() == "BL" else f"BL {note}"
+
+
 class EguitraTransportRotation(models.Model):
     _name = "eguitra.transport.rotation"
     _description = "Rotation de transport"
@@ -325,7 +333,7 @@ class EguitraTransportRotation(models.Model):
         self.ensure_one()
         if self.name and self.name != "/":
             return self.name
-        bl = f", BL {self.delivery_note}" if self.delivery_note else ""
+        bl = f", {fmt_bl(self.delivery_note)}" if self.delivery_note else ""
         return f"du {self.date_loading:%d/%m/%Y} ({self.vehicle_id.name}{bl})"
 
     # ─── Cycle de vie ─────────────────────────────────────────────────────
@@ -451,7 +459,7 @@ class EguitraTransportRotation(models.Model):
         billed = self.volume_delivered or self.volume_loaded
         label = f"Transport {self.product_id.name.lower()} {self.route_id.name}, {fmt_m3(billed)}"
         if self.delivery_note:
-            label += f", BL {self.delivery_note}"
+            label += f", {fmt_bl(self.delivery_note)}"
         label += f" ({self.name}, {self.vehicle_id.name}, {self.date_loading:%d/%m/%Y})"
         return {
             "name": label,
@@ -468,7 +476,7 @@ class EguitraTransportRotation(models.Model):
             return None
         tolerance = f"{self.shortage_tolerance:g}".replace(".", ",")
         price = f"{self.shortage_unit_price:,.0f}".replace(",", " ")
-        bl = f", BL {self.delivery_note}" if self.delivery_note else ""
+        bl = f", {fmt_bl(self.delivery_note)}" if self.delivery_note else ""
         # Quantité 1 et montant exact : la précision des quantités de facture ne tronque pas le m³.
         return {
             "name": (f"Manquant au-delà de la tolérance de {tolerance} % : {fmt_m3(self.shortage_excess)} "

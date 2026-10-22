@@ -18,6 +18,15 @@ class TestTransport(TransportCase):
                                headers={"X-Eguitra-App": "finance", "X-Eguitra-Company": str(self.company.id)})
         self.assertEqual(status, 200)
 
+    def test_libelle_du_bon_de_livraison(self):
+        from ..models.rotation import fmt_bl
+        self.assertEqual(fmt_bl("41250"), "BL 41250")
+        self.assertEqual(fmt_bl("BL-DEMO2-030"), "BL-DEMO2-030")
+        self.assertEqual(fmt_bl(" bl 778 "), "bl 778")
+        self.assertEqual(fmt_bl(""), "")
+        rot = self._rotation(delivery_note="41250")
+        self.assertIn("BL 41250", rot._label())
+
     def test_axes_analytiques_crees(self):
         self.assertEqual(self.truck.analytic_account_id.plan_id, self.env.ref("eguitra_base.analytic_plan_vehicule"))
         self.assertEqual(self.route.analytic_account_id.plan_id, self.env.ref("eguitra_base.analytic_plan_route"))
@@ -43,6 +52,8 @@ class TestTransport(TransportCase):
         self.assertEqual(set(rots.mapped("state")), {"invoiced"})
         line = invoice.invoice_line_ids.filtered(lambda l: "BL-778" in l.name)
         self.assertEqual(line.price_subtotal, 40 * 1_200_000)
+        self.assertIn(", BL-778 (", line.name, "Un numéro qui porte déjà « BL » n'est pas préfixé une seconde fois")
+        self.assertNotIn("BL BL", line.name)
         accounts = {int(k) for key in line.analytic_distribution for k in key.split(",")}
         self.assertIn(self.truck.analytic_account_id.id, accounts)
         self.assertIn(self.route.analytic_account_id.id, accounts)
