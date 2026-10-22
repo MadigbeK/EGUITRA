@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Monogramme } from "@/components/brand";
-import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
-import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
+import { AlertTriangle, Check, CloudOff, Loader2, LogOut, Pencil, RefreshCw, Trash2, Truck } from "@/components/icons";
+import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, classesBouton, cx, demanderConfirmation, tonEtat, useMouvementReduit } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
-import { fmtDate, fmtDec, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtInt, fmtM3, fmtVolume, pluriel } from "@/lib/format";
 
 interface Referentials {
   vehicles: Array<{ id: number; name: string; tractor_plate: string | false | null; capacity_liters: number; driver_id: number | null }>;
@@ -50,12 +50,36 @@ interface Form {
 
 type View = "saisie" | "attente" | "envoyees";
 
-const STATE_LABEL: Record<SentRotation["state"], [string, "neutral" | "ok" | "accent" | "danger"]> = {
-  draft: ["Reçue au bureau", "accent"],
-  done: ["Validée", "ok"],
-  invoiced: ["Facturée", "ok"],
-  cancelled: ["Annulée", "danger"],
+/** Mot de l'état d'une rotation envoyée ; son ton vient de la table commune des états (ETAT_TON). */
+const STATE_LABEL: Record<SentRotation["state"], string> = {
+  draft: "Reçue au bureau",
+  done: "Validée",
+  invoiced: "Facturée",
+  cancelled: "Annulée",
 };
+
+/** Champs sans lesquels le bureau ne peut pas traiter la rotation, dans l'ordre de l'écran. */
+const REQUIS = ["vehicle_id", "partner_id", "route_id", "volume_loaded"] as const;
+type Requis = (typeof REQUIS)[number];
+type Erreurs = Partial<Record<Requis, string>>;
+
+/** Retour d'une action. `reseau` : il tient au réseau (icône du nuage barré). */
+interface Retour {
+  tone: "ok" | "warn" | "danger" | "neutral";
+  text: string;
+  reseau?: boolean;
+}
+type RetourBandeau = Retour & { tone: "ok" | "warn" | "danger" };
+
+/** Bilan d'un envoi au bureau, pour dire où en est la saisie qu'on vient d'enregistrer. */
+interface Bilan {
+  created: number;
+  errors: number;
+  echec: { reseau: boolean; message: string } | null;
+}
+
+/** Bouton d'enregistrement : au repos, pendant l'écriture sur le téléphone, puis 1,5 s de confirmation. */
+type Phase = "repos" | "ecriture" | "enregistree";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blank = (): Form => ({
@@ -63,6 +87,106 @@ const blank = (): Form => ({
   delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+
+/** Contrôle avant enregistrement (mêmes règles qu'avant) : un message sous chaque champ manquant. */
+function controler(f: Form): Erreurs {
+  const e: Erreurs = {};
+  if (!f.vehicle_id) e.vehicle_id = "Choisissez le camion";
+  if (!f.partner_id) e.partner_id = "Choisissez le client";
+  if (!f.route_id) e.route_id = "Choisissez la route";
+  if (!num(f.volume_loaded) && !num(f.volume_delivered)) e.volume_loaded = "Indiquez le volume chargé";
+  return e;
+}
+
+/**
+ * Frais en GNF groupés par milliers pendant la frappe (« 1 500 000 ») : un zéro de trop se voit.
+ * num() retire les espaces avant l'envoi ; une saisie qui n'est pas un entier reste telle quelle.
+ */
+function grouper(v: string): string {
+  const brut = v.replace(/\s/g, "");
+  return /^\d+$/.test(brut) ? fmtInt(Number(brut)) : v;
+}
+
+/** « aujourd'hui 14:32 », « hier 18:05 », sinon « le 20/10 à 09:15 ». */
+function quand(d: Date): string {
+  const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const veille = new Date();
+  veille.setDate(veille.getDate() - 1);
+  if (d.toDateString() === new Date().toDateString()) return `aujourd'hui ${heure}`;
+  if (d.toDateString() === veille.toDateString()) return `hier ${heure}`;
+  return `le ${d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} à ${heure}`;
+}
+
+const NON_TEXTE = new Set(["date", "checkbox", "radio", "button", "submit", "file", "range", "color"]);
+
+/** Vrai si l'élément ouvre le clavier du téléphone (champ de texte ou de nombre). */
+function saisitTexte(el: Element | null): boolean {
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !NON_TEXTE.has(el.type));
+}
+
+/**
+ * Clavier ouvert au téléphone : un champ de texte a le focus et la partie visible de la page a
+ * rétréci. La barre d'action cesse alors d'être collée en bas : quand le clavier redimensionne la
+ * vue (Android), elle cacherait le champ en cours.
+ */
+function useClavierOuvert(): boolean {
+  const [ouvert, setOuvert] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !window.matchMedia("(pointer: coarse)").matches) return;
+    let repos = vv.height;
+    let image = 0;
+    const mesurer = () => {
+      const texte = saisitTexte(document.activeElement);
+      if (!texte) repos = vv.height;
+      setOuvert(texte && vv.height < repos - 120);
+    };
+    // Le focus change avant que le clavier ne s'ouvre ou ne se ferme : mesure à l'image suivante.
+    const differer = () => {
+      cancelAnimationFrame(image);
+      image = requestAnimationFrame(mesurer);
+    };
+    vv.addEventListener("resize", mesurer);
+    document.addEventListener("focusin", differer);
+    document.addEventListener("focusout", differer);
+    return () => {
+      cancelAnimationFrame(image);
+      vv.removeEventListener("resize", mesurer);
+      document.removeEventListener("focusin", differer);
+      document.removeEventListener("focusout", differer);
+    };
+  }, []);
+  return ouvert;
+}
+
+/**
+ * Lecture en plein soleil, sur un écran d'entrée de gamme : gris secondaire à 7,8:1, encre des
+ * libellés à 13:1, filets de champ à 5,4:1 sur 1,5 px (jetons « terrain », posés sur la racine de
+ * l'application).
+ */
+const TERRAIN = "[--muted:#44564f] [--ink-2:#22352e] [--line-champ:#5c6e66] [&_input]:border-[1.5px] [&_select]:border-[1.5px] [&_textarea]:border-[1.5px]";
+
+/** Libellé de champ en 14 px semi-gras à l'encre, aide et erreur en 14 px (Field, au téléphone). */
+const LIBELLE = "[&>span:first-child]:text-[14px] [&>span:first-child]:font-semibold [&>span:first-child]:text-ink [&>span:not(:first-child)]:text-[14px]";
+
+/** Champ en erreur : bordure et halo danger, qui l'emportent sur le survol et le focus. */
+const INVALIDE = "aria-[invalid=true]:border-2 aria-[invalid=true]:border-danger aria-[invalid=true]:ring-4 aria-[invalid=true]:ring-danger/15";
+
+/** Un champ atteint par le focus ne passe jamais sous la barre d'action collée en bas. */
+const SOUS_BARRE = "scroll-mb-32";
+
+const TON_RETOUR: Record<Retour["tone"], string> = {
+  ok: "text-ok-texte",
+  warn: "text-warn",
+  danger: "text-danger",
+  neutral: "text-ink",
+};
+
+/** Bouton d'enregistrement pendant la confirmation : aplat favorable, coche. */
+const BOUTON_FAIT = "inline-flex min-h-14 w-full flex-1 items-center justify-center gap-2 rounded-[10px] bg-ok px-4 text-[17px] font-semibold text-white transition-colors duration-150";
+
+/** Point d'envoi en attente : il bat trois fois, puis reste allumé (un seul état vivant par écran). */
+const POULS = { "--pouls": "rgb(165 230 194 / 0.7)", animationIterationCount: 3 } as CSSProperties;
 
 function toPayload(f: Form): Record<string, unknown> {
   const p: Record<string, unknown> = {
@@ -124,13 +248,48 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const [sent, setSent] = useState<SentRotation[] | null>(null);
   const [form, setForm] = useState<Form>(blank);
   const [showCosts, setShowCosts] = useState(false);
-  const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "danger"; text: string } | null>(null);
+  const [notice, setNotice] = useState<RetourBandeau | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [erreurs, setErreurs] = useState<Erreurs>({});
+  const [phase, setPhase] = useState<Phase>("repos");
+  const [retour, setRetour] = useState<Retour | null>(null);
   const busy = useRef(false);
+  // Verrou d'enregistrement : posé au premier toucher, avant toute attente. Un double toucher ne
+  // met jamais deux rotations en file.
+  const verrou = useRef(false);
+  const vueRef = useRef<View>(view);
+  const minuteRetour = useRef(0);
+  const minutePhase = useRef(0);
+  const minuteRemontee = useRef(0);
+  const clavier = useClavierOuvert();
+  const reduit = useMouvementReduit();
 
   const mine = items.filter((i) => i.user_id === me.id);
   const others = items.length - mine.length;
+
+  useEffect(() => {
+    vueRef.current = view;
+  }, [view]);
+
+  useEffect(() => () => {
+    window.clearTimeout(minuteRetour.current);
+    window.clearTimeout(minutePhase.current);
+    window.clearTimeout(minuteRemontee.current);
+  }, []);
+
+  /** Ligne d'état de la barre d'action (role=status) : 4 s, ou jusqu'au message suivant si `duree` est nul. */
+  const annoncer = useCallback((r: Retour | null, duree: number | null = 4000) => {
+    window.clearTimeout(minuteRetour.current);
+    setRetour(r);
+    if (r && duree) minuteRetour.current = window.setTimeout(() => setRetour(null), duree);
+  }, []);
+
+  /** Retour d'un envoi : sous le pouce sur « Nouvelle », dans le bandeau du haut ailleurs. */
+  const signaler = useCallback((r: RetourBandeau) => {
+    if (vueRef.current === "saisie") annoncer(r);
+    else setNotice(r);
+  }, [annoncer]);
 
   const loadQueue = useCallback(async () => {
     const all = await queue.all().catch(() => [] as QueuedRotation[]);
@@ -168,14 +327,20 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     }
   }, []);
 
-  const sync = useCallback(async () => {
-    if (busy.current || !navigator.onLine) return;
+  /**
+   * Envoi des saisies en attente. `origine` dit qui le demande : « saisie » (l'enregistrement dit
+   * lui-même son résultat dans la barre d'action), « envoi » (bouton de « À envoyer ») ou « auto »
+   * (ouverture, retour du réseau, toutes les deux minutes).
+   */
+  const sync = useCallback(async (origine: "auto" | "envoi" | "saisie" = "auto"): Promise<Bilan | null> => {
+    if (busy.current || !navigator.onLine) return null;
     const pending = (await loadQueue()).filter((i) => i.user_id === me.id);
-    if (!pending.length) return;
+    if (!pending.length) return null;
     busy.current = true;
     setSyncing(true);
     let created = 0;
     let errors = 0;
+    let echec: Bilan["echec"] = null;
     try {
       for (let i = 0; i < pending.length; i += 50) {
         const batch = pending.slice(i, i + 50);
@@ -194,18 +359,27 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           }
         }
       }
-      setLastSync(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
-      if (errors) setNotice({ tone: "danger", text: `${pluriel(errors, "saisie refusée : corrigez-la", "saisies refusées : corrigez-les")} dans « À envoyer ».` });
-      else if (created) setNotice({ tone: "ok", text: `${pluriel(created, "rotation transmise", "rotations transmises")} au bureau.` });
+      setLastSync(new Date());
+      if (errors) {
+        // Les refus du bureau gardent le bandeau du haut ; sur « Nouvelle », la barre le dit aussi.
+        const texte = `${pluriel(errors, "saisie refusée : corrigez-la", "saisies refusées : corrigez-les")} dans « À envoyer ».`;
+        setNotice({ tone: "danger", text: texte });
+        if (origine === "auto" && vueRef.current === "saisie") annoncer({ tone: "danger", text: texte });
+      } else if (created && origine !== "saisie") {
+        signaler({ tone: "ok", text: `${pluriel(created, "rotation transmise", "rotations transmises")} au bureau.` });
+      }
     } catch (e) {
-      setNotice({ tone: "warn", text: e instanceof ApiError ? e.message : "Réseau indisponible : les saisies partiront au retour du réseau." });
+      const reseau = !(e instanceof ApiError);
+      echec = { reseau, message: e instanceof ApiError ? e.message : "Réseau indisponible : les saisies partiront au retour du réseau." };
+      if (origine !== "saisie") signaler({ tone: "warn", text: echec.message, reseau });
     } finally {
       busy.current = false;
       setSyncing(false);
       await loadQueue();
       void loadSent();
     }
-  }, [loadQueue, loadSent, me.id]);
+    return { created, errors, echec };
+  }, [loadQueue, loadSent, me.id, annoncer, signaler]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -232,32 +406,93 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     };
   }, [loadQueue, loadRefs, loadSent, sync, me.id]);
 
+  /** Le champ fautif vient au milieu de l'écran et reçoit le focus. */
+  function allerAuChamp(k: Requis) {
+    const el = document.getElementById(`rotation-${k}`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: reduit ? "auto" : "smooth" });
+    el.focus({ preventScroll: true });
+  }
+
+  /** Une erreur disparaît dès que l'agent touche à son champ. */
+  function corriger(k: Requis) {
+    setErreurs((e) => {
+      if (!e[k]) return e;
+      const suite = { ...e };
+      delete suite[k];
+      return suite;
+    });
+  }
+
   async function save() {
-    setNotice(null);
-    if (!form.vehicle_id || !form.partner_id || !form.route_id) {
-      setNotice({ tone: "danger", text: "Ensemble routier, client et route sont obligatoires." });
-      return;
+    if (verrou.current) return;
+    verrou.current = true;
+    // Le verrou reste posé pendant la confirmation « Rotation enregistrée » (1,5 s), puis tombe.
+    let garde = false;
+    try {
+      setNotice(null);
+      const fautes = controler(form);
+      setErreurs(fautes);
+      const premier = REQUIS.find((k) => fautes[k]);
+      if (premier) {
+        const n = Object.keys(fautes).length;
+        annoncer({ tone: "danger", text: n > 1 ? `${n} champs à compléter, signalés en rouge.` : `${fautes[premier]}.` });
+        allerAuChamp(premier);
+        return;
+      }
+      const vehicle = refs?.vehicles.find((v) => String(v.id) === form.vehicle_id);
+      // Le bureau ne valide pas une rotation chargée au-delà de la capacité : l'agent est prévenu dès la saisie.
+      if (vehicle?.capacity_liters && num(form.volume_loaded) * 1000 > vehicle.capacity_liters &&
+        !(await demanderConfirmation(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtM3(vehicle.capacity_liters / 1000)}) : le bureau devra le corriger avant validation.`, { titre: "Enregistrer au-delà de la capacité ?", action: "Enregistrer quand même" }))) {
+        return;
+      }
+      const item: QueuedRotation = {
+        client_uuid: form.uuid ?? newUuid(), user_id: me.id, created_at: new Date().toISOString(), status: "pending",
+        payload: toPayload(form),
+      };
+      // « ER-09, 36,50 m³ » : ce que l'agent reconnaît de la rotation qu'il vient de saisir.
+      const resume = `${vehicle?.name ?? "Rotation"}, ${fmtM3(num(form.volume_loaded) || num(form.volume_delivered))}`;
+      setPhase("ecriture");
+      annoncer(null);
+      try {
+        await queue.put(item);
+      } catch {
+        setPhase("repos");
+        annoncer({ tone: "danger", text: "Enregistrement impossible sur ce téléphone : réessayez. Si cela recommence, prévenez le bureau." });
+        return;
+      }
+
+      // Enregistrée sur le téléphone : le bouton le dit 1,5 s, le téléphone vibre, la page remonte.
+      setForm({ ...blank(), date_loading: form.date_loading });
+      setShowCosts(false);
+      setErreurs({});
+      setPhase("enregistree");
+      garde = true;
+      navigator.vibrate?.(40);
+      window.clearTimeout(minutePhase.current);
+      minutePhase.current = window.setTimeout(() => {
+        setPhase("repos");
+        verrou.current = false;
+      }, 1500);
+      window.clearTimeout(minuteRemontee.current);
+      minuteRemontee.current = window.setTimeout(() => window.scrollTo({ top: 0, behavior: reduit ? "auto" : "smooth" }), 450);
+
+      await loadQueue();
+      if (!navigator.onLine) {
+        annoncer({ tone: "warn", text: `${resume} : partira au retour du réseau.`, reseau: true });
+        return;
+      }
+      annoncer({ tone: "neutral", text: `${resume} : envoi au bureau…` }, null);
+      const bilan = await sync("saisie");
+      const restant = (await queue.all().catch(() => [] as QueuedRotation[])).find((i) => i.client_uuid === item.client_uuid);
+      if (!restant) annoncer({ tone: "ok", text: `${resume} : envoyée au bureau.` });
+      else if (restant.status === "error") annoncer({ tone: "danger", text: `${resume} : refusée par le bureau, à corriger dans « À envoyer ».` });
+      else if (!bilan) annoncer({ tone: "ok", text: `${resume} : enregistrée, partira avec le prochain envoi.` });
+      else if (bilan.echec && !bilan.echec.reseau) annoncer({ tone: "warn", text: `${resume} : enregistrée sur le téléphone. ${bilan.echec.message}` });
+      else annoncer({ tone: "warn", text: `${resume} : partira au retour du réseau.`, reseau: true });
+    } finally {
+      if (!garde) verrou.current = false;
     }
-    if (!num(form.volume_loaded) && !num(form.volume_delivered)) {
-      setNotice({ tone: "danger", text: "Indiquez le volume chargé." });
-      return;
-    }
-    const vehicle = refs?.vehicles.find((v) => String(v.id) === form.vehicle_id);
-    // Le bureau ne valide pas une rotation chargée au-delà de la capacité : l'agent est prévenu dès la saisie.
-    if (vehicle?.capacity_liters && num(form.volume_loaded) * 1000 > vehicle.capacity_liters &&
-      !(await demanderConfirmation(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³) : le bureau devra le corriger avant validation.`, { titre: "Enregistrer au-delà de la capacité ?", action: "Enregistrer quand même" }))) {
-      return;
-    }
-    const item: QueuedRotation = {
-      client_uuid: form.uuid ?? newUuid(), user_id: me.id, created_at: new Date().toISOString(), status: "pending",
-      payload: toPayload(form),
-    };
-    await queue.put(item);
-    setForm({ ...blank(), date_loading: form.date_loading });
-    setShowCosts(false);
-    await loadQueue();
-    if (navigator.onLine) await sync();
-    else setNotice({ tone: "warn", text: "Rotation enregistrée sur le téléphone : elle partira au retour du réseau." });
   }
 
   async function remove(item: QueuedRotation) {
@@ -267,7 +502,11 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }
 
   async function logout() {
-    if (mine.length && !(await demanderConfirmation(`${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
+    // Toujours confirmée : l'icône est près de la pastille du réseau, et la déconnexion efface les listes.
+    const question = mine.length
+      ? `${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`
+      : "Les listes gardées sur ce téléphone seront effacées : il faudra du réseau pour vous reconnecter.";
+    if (!(await demanderConfirmation(question, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
     // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
     const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
     if (!res?.ok) {
@@ -283,35 +522,59 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     return list.find((x) => x.id === Number(id))?.name ?? "–";
   };
 
-  const champ = "min-h-12 text-base";
+  /** Changer d'onglet ouvre la vue en haut de page. */
+  function ouvrir(v: View) {
+    if (v !== view) window.scrollTo({ top: 0 });
+    setView(v);
+  }
+
+  const invalide = (k: Requis) => (erreurs[k] ? true : undefined);
+  const champ = cx("min-h-12 text-base", SOUS_BARRE, INVALIDE);
+  const champVolume = cx("min-h-14 font-compteur text-[28px] font-semibold tracking-wide", SOUS_BARRE, INVALIDE);
+  const aEnvoyer = mine.length;
   const views: Array<[View, string, number | null]> = [
     ["saisie", "Nouvelle", null],
-    ["attente", "À envoyer", mine.length],
+    ["attente", "À envoyer", aEnvoyer],
     ["envoyees", "Envoyées", null],
   ];
 
+  const reseau = syncing ? "Envoi en cours" : online ? "En ligne" : "Hors réseau";
+  const etiquettePastille = `${reseau}, ${aEnvoyer ? pluriel(aEnvoyer, "saisie à envoyer", "saisies à envoyer") : "rien à envoyer"}${lastSync ? `, dernier envoi ${quand(lastSync)}` : ""}. Ouvrir « À envoyer ».`;
+
+  // Ligne d'état de la barre d'action, au repos : réseau, saisies en attente, dernier envoi.
+  const etat: { icone: ReactNode; texte: string } = syncing
+    ? { icone: <Loader2 className="h-4 w-4 animate-spin text-muted" />, texte: "Envoi au bureau…" }
+    : !online
+      ? { icone: <CloudOff className="h-4 w-4 text-warn" />, texte: aEnvoyer ? `Hors réseau, ${aEnvoyer} à envoyer` : "Hors réseau : la saisie attendra le réseau" }
+      : aEnvoyer
+        ? { icone: <RefreshCw className="h-4 w-4 text-warn" />, texte: `${aEnvoyer} à envoyer${lastSync ? `, dernier envoi : ${quand(lastSync)}` : ""}` }
+        : lastSync
+          ? { icone: <Check className="h-4 w-4 text-ok" />, texte: `Dernier envoi : ${quand(lastSync)}` }
+          : { icone: <span className="m-1 block h-2 w-2 rounded-full bg-ok" />, texte: "En ligne : envoi dès l'enregistrement" };
+  const IconeRetour = !retour ? null : retour.tone === "ok" ? Check : retour.tone === "neutral" ? Loader2 : retour.reseau ? CloudOff : AlertTriangle;
+
   return (
-    <div className="rotations-app mx-auto flex min-h-screen max-w-xl flex-col">
-      <header className="sur-dos sticky top-0 z-10 bg-[linear-gradient(135deg,#c4471d_0%,#983210_60%,#142f29_140%)] text-white shadow-[0_10px_30px_-18px_rgb(152_50_16/0.8)]">
-        <div className="flex items-center gap-3 px-4 pb-3 pt-3.5">
+    <div className={cx("rotations-app mx-auto flex min-h-screen max-w-xl flex-col", TERRAIN)}>
+      {/* Seule la rangée des onglets reste collée : l'en-tête remonte de la hauteur de la rangée d'identité. */}
+      <header className="sur-dos sticky -top-17 z-10 bg-[linear-gradient(135deg,#c4471d_0%,#983210_60%,#142f29_140%)] text-white shadow-[0_10px_30px_-18px_rgb(152_50_16/0.8)]">
+        <div className="flex h-17 items-center gap-2.5 px-4">
           <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white/15">
             <Monogramme tuile={false} clair className="h-6 w-6" />
           </span>
           <div className="min-w-0 flex-1 leading-tight">
             <h1 className="font-display text-[19px] font-bold">Rotations</h1>
-            <div className="truncate text-[12.5px] text-white/95">{me.name}</div>
+            <div className="truncate text-[13px] text-white/95">{me.name}</div>
           </div>
-          <span
-            className={cx(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold",
-              online ? "bg-white/15 text-white" : "bg-or text-foret",
-            )}
-            role="status"
-          >
-            {online ? <span aria-hidden className="n-pouls h-2 w-2 rounded-full bg-menthe" style={{ ["--pouls" as string]: "rgb(165 230 194 / 0.7)" } as import("react").CSSProperties} /> : <CloudOff className="h-3.5 w-3.5" />}
-            {online && <Wifi className="h-3.5 w-3.5" />} {online ? "En ligne" : "Hors réseau"}
-          </span>
-          <button type="button" onClick={logout} aria-label="Se déconnecter" className="-mr-1.5 grid h-11 w-11 place-items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white">
+          <span role="status" className="sr-only">{online ? "En ligne" : "Hors réseau : les saisies restent sur le téléphone."}</span>
+          {/* Pastille du réseau : l'état et le nombre de saisies en attente ; un toucher ouvre « À envoyer ». */}
+          <button type="button" onClick={() => ouvrir("attente")} aria-label={etiquettePastille} className="grid min-h-12 flex-none place-items-center rounded-full">
+            <span className={cx("inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 text-[13px] font-semibold", aEnvoyer ? "pr-1" : "pr-2.5", online ? "bg-white/15 text-white" : "bg-or text-foret")}>
+              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : online ? <span key={aEnvoyer} aria-hidden className={cx("h-2 w-2 rounded-full bg-menthe", aEnvoyer > 0 && "n-pouls")} style={aEnvoyer > 0 ? POULS : undefined} /> : <CloudOff className="h-3.5 w-3.5" />}
+              {syncing ? "Envoi…" : online ? "En ligne" : "Hors réseau"}
+              {aEnvoyer > 0 && <span key={`n${aEnvoyer}`} className={cx("n-surgir grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-compteur text-[12.5px] font-bold", online ? "bg-or text-foret" : "bg-foret text-white")}>{aEnvoyer}</span>}
+            </span>
+          </button>
+          <button type="button" onClick={logout} aria-label="Se déconnecter" className="-mr-2 grid h-12 w-12 flex-none place-items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white">
             <LogOut className="h-5 w-5" />
           </button>
         </div>
@@ -320,7 +583,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
             <button
               key={key}
               type="button"
-              onClick={() => setView(key)}
+              onClick={() => ouvrir(key)}
               aria-current={view === key ? "page" : undefined}
               className={cx("flex min-h-12 items-center justify-center gap-2 border-b-[3px] font-semibold transition-colors", view === key ? "border-white text-white" : "border-transparent text-white/90")}
             >
@@ -331,7 +594,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
         </nav>
       </header>
 
-      <main className="flex-1 space-y-4 px-4 pb-10 pt-5">
+      <main className={cx("flex-1 space-y-4 px-4 pt-5", view === "saisie" && refs ? "pb-0" : "pb-10")}>
         {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
         {view === "saisie" && (
@@ -340,48 +603,72 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
             <div className="space-y-4">
               {form.uuid && <Notice tone="accent">Correction d&apos;une saisie en attente.</Notice>}
               <section className={cx(FEUILLE, "space-y-4 p-4")}>
-                <Field label="Date de chargement"><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
-                <Field label="Ensemble routier">
-                  <Select className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
+                <Field label="Date de chargement" className={LIBELLE}><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
+                <Field label="Ensemble routier" error={erreurs.vehicle_id} className={LIBELLE}>
+                  <Select id="rotation-vehicle_id" aria-invalid={invalide("vehicle_id")} className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
                     const v = refs.vehicles.find((x) => String(x.id) === e.target.value);
+                    corriger("vehicle_id");
                     setForm({ ...form, vehicle_id: e.target.value, driver_id: v?.driver_id ? String(v.driver_id) : form.driver_id });
                   }} options={refs.vehicles.map((v) => ({ value: v.id, label: v.tractor_plate ? `${v.name}, ${v.tractor_plate}` : v.name }))} />
                 </Field>
-                <Field label="Chauffeur"><Select className={champ} value={form.driver_id} placeholder="Chauffeur habituel" onChange={(e) => setForm({ ...form, driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
-                <Field label="Client"><Select className={champ} value={form.partner_id} placeholder="Choisir le client" onChange={(e) => setForm({ ...form, partner_id: e.target.value })} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-                <Field label="Route"><Select className={champ} value={form.route_id} placeholder="Choisir la route" onChange={(e) => setForm({ ...form, route_id: e.target.value })} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
+                <Field label="Chauffeur" className={LIBELLE}><Select className={champ} value={form.driver_id} placeholder="Chauffeur habituel" onChange={(e) => setForm({ ...form, driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
+                <Field label="Client" error={erreurs.partner_id} className={LIBELLE}><Select id="rotation-partner_id" aria-invalid={invalide("partner_id")} className={champ} value={form.partner_id} placeholder="Choisir le client" onChange={(e) => { corriger("partner_id"); setForm({ ...form, partner_id: e.target.value }); }} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
+                <Field label="Route" error={erreurs.route_id} className={LIBELLE}><Select id="rotation-route_id" aria-invalid={invalide("route_id")} className={champ} value={form.route_id} placeholder="Choisir la route" onChange={(e) => { corriger("route_id"); setForm({ ...form, route_id: e.target.value }); }} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Produit"><Select className={champ} value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
-                  <Field label="Bon de livraison"><Input className={champ} value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
+                  <Field label="Produit" className={LIBELLE}><Select className={champ} value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
+                  <Field label="Bon de livraison" className={LIBELLE}><Input className={champ} value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
                 </div>
               </section>
 
               <section className={cx(FEUILLE, "grid grid-cols-2 gap-3 p-4")}>
-                <Field label="Volume chargé (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide" inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
-                <Field label="Volume livré (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide placeholder:font-sans placeholder:text-sm placeholder:font-normal" inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
+                <Field label="Volume chargé (m³)" error={erreurs.volume_loaded} className={LIBELLE}><Input id="rotation-volume_loaded" aria-invalid={invalide("volume_loaded")} className={champVolume} inputMode="decimal" value={form.volume_loaded} onChange={(e) => { corriger("volume_loaded"); setForm({ ...form, volume_loaded: e.target.value }); }} /></Field>
+                <Field label="Volume livré (m³)" className={LIBELLE}><Input className={cx(champVolume, "placeholder:font-sans placeholder:text-sm placeholder:font-normal")} inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => { corriger("volume_loaded"); setForm({ ...form, volume_delivered: e.target.value }); }} /></Field>
                 {(refs.measures ?? []).map((m) => (
-                  <Field key={m.code} label={m.label}><Input className={champ} inputMode="decimal" value={form.measures[m.code] ?? ""} onChange={(e) => setForm({ ...form, measures: { ...form.measures, [m.code]: e.target.value } })} /></Field>
+                  <Field key={m.code} label={m.label} className={LIBELLE}><Input className={champ} inputMode="decimal" value={form.measures[m.code] ?? ""} onChange={(e) => setForm({ ...form, measures: { ...form.measures, [m.code]: e.target.value } })} /></Field>
                 ))}
               </section>
 
               <section className={cx(FEUILLE, "p-4")}>
-                <button type="button" aria-expanded={showCosts} className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px] font-medium text-ink" onClick={() => setShowCosts(!showCosts)}>
+                <button type="button" aria-expanded={showCosts} className={cx("flex min-h-12 w-full items-center justify-between gap-3 text-left text-[15px] font-semibold text-ink", SOUS_BARRE)} onClick={() => setShowCosts(!showCosts)}>
                   Frais de route
-                  <span className="text-right text-[13px] font-normal text-muted">{showCosts ? "Masquer" : "Carburant, péages, frais de route…"}</span>
+                  <span className="text-right text-[14px] font-normal text-muted">{showCosts ? "Masquer" : "Carburant, péages, frais de route…"}</span>
                 </button>
                 {showCosts && (
-                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-4">
+                  <div className="mt-3 grid grid-cols-2 items-end gap-3 border-t border-line pt-4">
                     {refs.costs.map((c) => (
-                      <Field key={c.code} label={`${c.label} (GNF)`}><Input className={champ} inputMode="numeric" value={form.costs[c.code] ?? ""} onChange={(e) => setForm({ ...form, costs: { ...form.costs, [c.code]: e.target.value } })} /></Field>
+                      <Field key={c.code} label={`${c.label} (GNF)`} className={LIBELLE}><Input className={cx(champ, "font-compteur font-semibold tracking-wide")} inputMode="numeric" value={grouper(form.costs[c.code] ?? "")} onChange={(e) => setForm({ ...form, costs: { ...form.costs, [c.code]: e.target.value } })} /></Field>
                     ))}
                   </div>
                 )}
               </section>
 
-              <Field label="Observations"><Textarea className="min-h-[72px] text-base" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-              <div className="flex gap-2 pt-1">
-                {form.uuid && <Button className="min-h-14 flex-1 text-base" onClick={() => setForm(blank())}>Annuler</Button>}
-                <Button variant="primary" className="min-h-14 flex-1 text-base" onClick={save}>Enregistrer la rotation</Button>
+              <Field label="Observations" className={LIBELLE}><Textarea className={cx("min-h-[72px] text-base", SOUS_BARRE)} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+
+              {/* Barre d'action collée en bas : le bouton et son retour, là où se trouve le pouce. */}
+              <div className={cx("-mx-4 border-t border-line-strong bg-panel px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5 shadow-[0_-10px_24px_-18px_rgb(16_36_31/0.4)]", clavier ? "relative" : "sticky bottom-0 z-10")}>
+                <div className="mb-2.5 flex min-h-5 items-start gap-2 text-[14px] leading-5">
+                  <span aria-hidden className={cx("mt-0.5 flex-none", retour && TON_RETOUR[retour.tone])}>
+                    {IconeRetour ? <IconeRetour className={cx("h-4 w-4", retour?.tone === "neutral" && "animate-spin")} /> : etat.icone}
+                  </span>
+                  <p role="status" className={cx("min-w-0 flex-1 font-semibold", retour ? TON_RETOUR[retour.tone] : "sr-only")}>{retour?.text ?? ""}</p>
+                  {!retour && <p className="min-w-0 flex-1 text-muted">{etat.texte}</p>}
+                </div>
+                <div className="flex gap-2">
+                  {form.uuid && phase === "repos" && <Button size="lg" className="min-h-14 px-5 text-base" onClick={() => { setForm(blank()); setErreurs({}); }}>Annuler</Button>}
+                  <button
+                    type="button"
+                    onClick={() => void save()}
+                    aria-disabled={phase !== "repos" || undefined}
+                    aria-busy={phase === "ecriture" || undefined}
+                    className={phase === "enregistree" ? BOUTON_FAIT : classesBouton("primary", "lg", "min-h-14 w-full flex-1 text-[17px]")}
+                  >
+                    {phase === "ecriture" ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Enregistrement…</>
+                    ) : phase === "enregistree" ? (
+                      <><Check className="n-surgir h-5 w-5" /> Rotation enregistrée</>
+                    ) : form.uuid ? "Enregistrer la correction" : "Enregistrer la rotation"}
+                  </button>
+                </div>
               </div>
             </div>
           )
@@ -389,32 +676,36 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
         {view === "attente" && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
-              <span>{lastSync ? `Dernier envoi à ${lastSync}` : "Les saisies partent seules dès que le réseau revient."}</span>
-              <Button size="lg" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
+            <div className="flex items-center justify-between gap-3 text-[14px] text-muted">
+              <span>{lastSync ? `Dernier envoi : ${quand(lastSync)}` : "Les saisies partent seules dès que le réseau revient."}</span>
+              <Button size="lg" className="min-h-12" loading={syncing} disabled={!online || !aEnvoyer} onClick={() => void sync("envoi")}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
             </div>
-            {mine.length === 0 && <p className="py-8 text-center text-sm text-muted">Toutes vos saisies ont été transmises.</p>}
-            {mine.map((item) => (
-              <div key={item.client_uuid} className={cx(FEUILLE, "n-surgir p-4 text-sm", item.status === "error" && "ring-1 ring-danger/40")}>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
-                    <Truck className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-ink">{label("vehicles", item.payload.vehicle_id)}, {fmtDate(item.payload.date_loading)}</div>
-                    <div className="mt-0.5 text-[13px] text-muted">{label("clients", item.payload.partner_id)}, {label("routes", item.payload.route_id)}</div>
+            {aEnvoyer === 0 && <p className="py-8 text-center text-[15px] text-muted">Toutes vos saisies ont été transmises.</p>}
+            {mine.map((item) => {
+              const mot = item.status === "error" ? "Refusée" : "En attente";
+              return (
+                <div key={item.client_uuid} className={cx(FEUILLE, "n-surgir p-4 text-sm", item.status === "error" && "ring-2 ring-danger/60")}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
+                      <Truck className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold text-ink">{label("vehicles", item.payload.vehicle_id)}, {fmtDate(item.payload.date_loading)}</div>
+                      <div className="mt-0.5 text-[14px] text-muted">{label("clients", item.payload.partner_id)}, {label("routes", item.payload.route_id)}</div>
+                    </div>
+                    {/* Le seul état vivant de l'écran est la pastille du réseau : le tampon ne bat pas. */}
+                    <Badge tone={tonEtat(mot)}>{mot}</Badge>
                   </div>
-                  <Badge tone={item.status === "error" ? "danger" : "warn"} vivant={item.status !== "error"}>{item.status === "error" ? "Refusée" : "En attente"}</Badge>
+                  <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtVolume(item.payload.volume_loaded ?? item.payload.volume_delivered)}{INSECABLE}<span className="text-[15px] font-semibold text-muted">m³</span></div>
+                  {item.message && <div className="mt-2 text-[14px] font-semibold text-danger">{item.message}</div>}
+                  <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
+                    <Button variant="ghost" size="lg" className="min-h-12" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setErreurs({}); ouvrir("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
+                    <Button variant="danger" size="lg" className="min-h-12" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
+                  </div>
                 </div>
-                <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} <span className="text-[15px] font-semibold text-muted">m³</span></div>
-                {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
-                <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
-                  <Button variant="ghost" size="lg" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
-                  <Button variant="danger" size="lg" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
-                </div>
-              </div>
-            ))}
-            {others > 0 && <p className="text-[13px] text-muted">{pluriel(others, "saisie")} d&apos;un autre utilisateur {others > 1 ? "restent sur ce téléphone : elles partiront" : "reste sur ce téléphone : elle partira"} à sa prochaine connexion.</p>}
+              );
+            })}
+            {others > 0 && <p className="text-[14px] text-muted">{pluriel(others, "saisie")} d&apos;un autre utilisateur {others > 1 ? "restent sur ce téléphone : elles partiront" : "reste sur ce téléphone : elle partira"} à sa prochaine connexion.</p>}
           </div>
         )}
 
@@ -426,12 +717,12 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 {sent.map((r) => (
                   <li key={r.id} className="flex items-start justify-between gap-3 py-3.5 text-sm">
                     <div className="min-w-0">
-                      <div className="font-semibold text-ink">{r.vehicle?.name ?? "–"}, {fmtDate(r.date_loading)}</div>
-                      <div className="mt-0.5 text-[13px] text-muted">{r.client?.name ?? "–"}, {r.route?.name ?? "–"}{r.name ? `, ${r.name}` : ""}</div>
+                      <div className="text-[15px] font-semibold text-ink">{r.vehicle?.name ?? "–"}, {fmtDate(r.date_loading)}</div>
+                      <div className="mt-0.5 text-[14px] text-muted">{r.client?.name ?? "–"}, {r.route?.name ?? "–"}{r.name ? `, ${r.name}` : ""}</div>
                     </div>
                     <div className="flex flex-none flex-col items-end gap-1">
-                      <span className="font-compteur text-[19px] font-semibold text-ink">{fmtDec(r.volume_delivered || r.volume_loaded)} m³</span>
-                      <Badge tone={STATE_LABEL[r.state][1]}>{STATE_LABEL[r.state][0]}</Badge>
+                      <span className="font-compteur text-[19px] font-semibold text-ink">{fmtM3(r.volume_delivered || r.volume_loaded)}</span>
+                      <Badge tone={tonEtat(STATE_LABEL[r.state])}>{STATE_LABEL[r.state]}</Badge>
                     </div>
                   </li>
                 ))}
