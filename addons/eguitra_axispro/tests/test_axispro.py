@@ -312,3 +312,16 @@ class TestAxispro(ApiCase):
         status, invoice = self.call("POST", f"/axispro/dossiers/{dossier.id}/invoice", {"hourly_rate": 500_000}, token=token)
         self.assertEqual(status, 200, invoice)
         self.assertEqual(invoice["amount_untaxed"], 3_000_000)
+
+    def test_facture_d_honoraires_refusee_a_l_admin(self):
+        """Audit des rôles I6 : seul le cabinet facture les honoraires ; l'admin ne fait que consulter."""
+        dossier = self._dossier()
+        self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 2, "description": "Analyse"})
+        self._create_user("admin.cabinet", "admin", company_id=self.cabinet.id, company_ids=[(6, 0, self.cabinet.ids)])
+        token = self.open_session("admin.cabinet", app="axispro")["access_token"]
+        self.assertEqual(self.call("GET", f"/axispro/dossiers/{dossier.id}", token=token)[0], 200, "L'admin consulte")
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/invoice", {"hourly_rate": 500_000}, token=token)
+        self.assertEqual((status, body["error"]), (403, "forbidden"), "mais ne facture pas")
+        self.env.invalidate_all()
+        self.assertFalse(self.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)]).invoice_id,
+                         "Aucun temps facturé")

@@ -702,8 +702,9 @@ class EguitraAxispro(http.Controller):
         })
         return {"id": sheet.id}
 
-    @api_route("/axispro/dossiers/<int:dossier_id>/invoice", methods=("POST",), profiles=("cabinet", "admin"))
+    @api_route("/axispro/dossiers/<int:dossier_id>/invoice", methods=("POST",), profiles=WRITE)
     def invoice(self, dossier_id, **_kw):
+        """Facture d'honoraires du dossier : seul le cabinet facture (les temps sont fermés à l'admin)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         sheets = request.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)])
