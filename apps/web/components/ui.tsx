@@ -272,7 +272,7 @@ function Sceau({ tone }: { tone: Tone }) {
  * Un faisceau guilloché propre à chaque libellé court au pied, dans l'encre de l'état ; le sceau
  * dit l'état, le libellé ou la précision le disent aussi en toutes lettres.
  */
-export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; icon?: Icon; teinte?: Teinte; delta?: number | null; inverse?: boolean }) {
+export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; delta?: number | null; inverse?: boolean }) {
   return (
     <div className={cx(FEUILLE, "n-kpi kpi relative isolate min-w-0 overflow-hidden px-5 pb-4 pt-4")}>
       <Ondes graine={label} className={cx("kpi-ondes pointer-events-none absolute -bottom-2 right-0 -z-10 h-[74px] w-[78%] max-w-[300px]", ENCRE[tone])} />

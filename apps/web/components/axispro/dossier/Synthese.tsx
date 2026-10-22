@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { useSWRConfig } from "swr";
-import { AlertTriangle, Coins, FileCheck2, FileText, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
+import { AlertTriangle, Coins, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
 import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type Currency, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
@@ -68,10 +68,10 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} icon={ShieldAlert} teinte={s.knockouts.length ? "danger" : "jade"} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${s.knockouts_pending} non évalué${s.knockouts_pending > 1 ? "s" : ""})` : ""}` : "Aucun"} />
-        <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} icon={AlertTriangle} teinte="ambre" tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${pluriel(s.critical_open.length, "critique")} au total`} />
-        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} icon={FileText} teinte="lagon" hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${s.criteria}, ${pluriel(s.proofs, "preuve")}`} />
-        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} icon={FileCheck2} teinte="azur" hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
+        <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${s.knockouts_pending} non évalué${s.knockouts_pending > 1 ? "s" : ""})` : ""}` : "Aucun"} />
+        <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${pluriel(s.critical_open.length, "critique")} au total`} />
+        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${s.criteria}, ${pluriel(s.proofs, "preuve")}`} />
+        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
       </div>
 
       <SuiviCompartiments d={d} />

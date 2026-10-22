@@ -99,7 +99,7 @@ export default function TreasuryPage() {
       {position && (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} icon={Landmark} teinte="jade" tone="ok" />
+            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} tone="ok" />
             {position.accounts.map((a) => {
               const choisi = current?.journal_id === a.journal_id;
               const I = a.type === "cash" ? Wallet : Landmark;

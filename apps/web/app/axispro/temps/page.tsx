@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Notice, PageHeader, RankBars, Select, Tabs, Badge } from "@/components/ui";
-import { Clock, FolderKanban, Receipt } from "@/components/icons";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { DossierSummary } from "@/lib/axispro-types";
 import { fmtDate, fmtDec } from "@/lib/format";
@@ -49,9 +48,9 @@ export default function TempsPage() {
     <div>
       <PageHeader title="Temps et facturation" subtitle="Temps passés par dossier ; la facture d'honoraires se crée depuis l'onglet Temps et facturation du dossier." />
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label="Heures affichées" value={fmtDec(rows.reduce((a, t) => a + t.hours, 0))} icon={Clock} teinte="azur" />
-        <Kpi label="Heures à facturer" value={fmtDec(rows.filter((t) => t.billable && !t.invoice).reduce((a, t) => a + t.hours, 0))} tone="warn" icon={Receipt} teinte="ambre" hint="Temps facturables sans facture d'honoraires" />
-        <Kpi label="Dossiers concernés" value={String(byDossier.length)} icon={FolderKanban} teinte="lagon" />
+        <Kpi label="Heures affichées" value={fmtDec(rows.reduce((a, t) => a + t.hours, 0))} />
+        <Kpi label="Heures à facturer" value={fmtDec(rows.filter((t) => t.billable && !t.invoice).reduce((a, t) => a + t.hours, 0))} tone="warn" hint="Temps facturables sans facture d'honoraires" />
+        <Kpi label="Dossiers concernés" value={String(byDossier.length)} />
       </div>
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       <Card title="Saisir du temps" className="mb-6">

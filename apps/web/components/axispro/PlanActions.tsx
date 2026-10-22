@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock, ListChecks, Plus, Trash2 } from "@/components/icons";
+import { ListChecks, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segmented, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { ACTION_SOURCE, ACTION_STATE, type Action, type ActionState } from "@/lib/axispro-types";
@@ -46,10 +46,10 @@ export function PlanActions({ dossierId }: { dossierId?: number }) {
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Actions ouvertes" value={String(ouvertes.length)} icon={ListChecks} teinte="azur" />
-        <Kpi label="En retard" value={String(ouvertes.filter((a) => a.overdue).length)} icon={AlertTriangle} teinte="danger" tone={ouvertes.some((a) => a.overdue) ? "danger" : "ok"} />
-        <Kpi label="Déclarées faites, à valider" value={String(ouvertes.filter((a) => a.state === "submitted").length)} icon={Clock} teinte="ambre" tone={ouvertes.some((a) => a.state === "submitted") ? "warn" : "neutral"} />
-        <Kpi label={dossierId ? "Réalisées" : "Confiées au porteur"} value={String(dossierId ? base.filter((a) => a.state === "done").length : ouvertes.filter((a) => a.assignee === "porteur").length)} icon={CheckCircle2} teinte="jade" />
+        <Kpi label="Actions ouvertes" value={String(ouvertes.length)} />
+        <Kpi label="En retard" value={String(ouvertes.filter((a) => a.overdue).length)} tone={ouvertes.some((a) => a.overdue) ? "danger" : "ok"} />
+        <Kpi label="Déclarées faites, à valider" value={String(ouvertes.filter((a) => a.state === "submitted").length)} tone={ouvertes.some((a) => a.state === "submitted") ? "warn" : "neutral"} />
+        <Kpi label={dossierId ? "Réalisées" : "Confiées au porteur"} value={String(dossierId ? base.filter((a) => a.state === "done").length : ouvertes.filter((a) => a.assignee === "porteur").length)} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { type CSSProperties } from "react";
-import { Calculator, Clock, Coins, FolderKanban, HandCoins, Landmark, PieChart, Receipt, Target, TrendingUp, Truck, Users } from "@/components/icons";
-import { AreaChart, Card, ErrorBox, SERIES, cx, type Teinte } from "@/components/ui";
+import { AreaChart, Card, ErrorBox, SERIES, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
 import { AttenteSection, Constats, EnTeteSection, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
-import type { Icon } from "@/components/icons";
 
 /** Cockpit : celui du groupe ou celui du cabinet selon la société de travail. */
 export function Synthese() {
@@ -47,18 +45,6 @@ function kpiDe(kpis: Kpi[] | undefined, key: string) {
 }
 
 /* ─── EGUITRA GROUP ────────────────────────────────────────────────────── */
-
-const ICONES_GROUPE: Record<string, [Icon, Teinte]> = {
-  revenue: [TrendingUp, "azur"],
-  ebe: [PieChart, "or"],
-  ebe_margin: [Target, "jade"],
-  net_result: [Calculator, "ambre"],
-  cash: [Landmark, "jade"],
-  bfr_days: [Coins, "lagon"],
-  dso: [Receipt, "rose"],
-  transport_margin: [Truck, "corail"],
-  dscr: [HandCoins, "lagon"],
-};
 
 const AXES_SANTE: Array<[keyof GroupeSynthese["health"]["axes"], string]> = [
   ["liquidite", "Liquidité"],
@@ -150,10 +136,9 @@ function CockpitGroupe() {
             <div className="grid gap-4 sm:grid-cols-2 xl:col-span-8 xl:grid-cols-3">
               {(d.kpis ?? [])
                 .filter((k) => k.key !== "ebe_margin")
-                .map((k) => {
-                  const [icon, teinte] = ICONES_GROUPE[k.key] ?? [Target, "accent"];
-                  return <KpiContrat key={k.key} kpi={k} icon={icon} teinte={teinte} />;
-                })}
+                .map((k) => (
+                  <KpiContrat key={k.key} kpi={k} />
+                ))}
             </div>
           </div>
 
@@ -224,17 +209,6 @@ function CockpitGroupe() {
 
 /* ─── MB AxisPro ────────────────────────────────────────────── */
 
-const ICONES_CABINET: Record<string, [Icon, Teinte]> = {
-  active_dossiers: [FolderKanban, "azur"],
-  financing_need: [HandCoins, "or"],
-  weighted_pipeline: [Target, "jade"],
-  readiness_avg: [PieChart, "lagon"],
-  gate_pass_rate: [TrendingUp, "jade"],
-  gate_median_days: [Clock, "ambre"],
-  fees: [Receipt, "rose"],
-  realization_rate: [Users, "corail"],
-};
-
 const RECO: Record<Recommendation, { label: string; couleur: string }> = {
   bankable: { label: "Bankable", couleur: COULEUR_VERDICT.bankable! },
   apd_ready: { label: "APD Ready", couleur: COULEUR_VERDICT.apd_ready! },
@@ -281,10 +255,9 @@ function CockpitCabinet() {
       {d && (
         <div className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {(d.kpis ?? []).map((k) => {
-              const [icon, teinte] = ICONES_CABINET[k.key] ?? [Target, "accent"];
-              return <KpiContrat key={k.key} kpi={k} icon={icon} teinte={teinte} />;
-            })}
+            {(d.kpis ?? []).map((k) => (
+              <KpiContrat key={k.key} kpi={k} />
+            ))}
           </div>
           <div className="grid gap-5 xl:grid-cols-12">
             <Card title="Les dossiers, gate après gate" className="xl:col-span-5" actions={<Link href="/analyse/portefeuille" className="no-print text-[13px] font-semibold text-accent hover:underline">Pipeline</Link>}>

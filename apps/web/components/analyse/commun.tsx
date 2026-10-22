@@ -661,14 +661,14 @@ export function Constats({ insights, titre = "Constats remarquables", colonnes =
 const STATUT: Record<Kpi["status"], Tone> = { good: "ok", warn: "warn", bad: "danger", neutral: "neutral" };
 
 /** Carte de chiffre clé du contrat : valeur, variation N-1, cible, tendance 12 mois, définition au survol. */
-export function KpiContrat({ kpi, icon, teinte }: { kpi: Kpi; icon?: Icon; teinte?: Teinte }) {
+export function KpiContrat({ kpi }: { kpi: Kpi }) {
   const cible = kpi.target !== null ? `cible ${fmtValeur(kpi.target, kpi.unit)}` : null;
   const ref = kpi.previous !== null && (kpi.previous !== 0 || kpi.delta_pct !== null) ? `N-1 ${fmtValeur(kpi.previous, kpi.unit)}` : null;
   const tendance = nombres(kpi.trend);
   const statut = STATUT[kpi.status] ?? "neutral";
   return (
     <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
-      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} icon={icon} teinte={teinte} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
+      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
         <div className="px-5 pb-3">
           <Sparkline values={tendance} color={statut === "danger" ? COULEUR.mauvais : statut === "warn" ? COULEUR.alerte : COULEUR.accent} height={32} />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
-import { AlertTriangle, CheckCircle2, FileText, FolderKanban, Plus, ShieldAlert, XCircle } from "@/components/icons";
+import { FileText, Plus, ShieldAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Donut, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
@@ -80,10 +80,10 @@ export default function DossiersPage() {
         }
       />
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Dossiers" value={String(rows.length)} icon={FolderKanban} teinte="azur" hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
-        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" icon={CheckCircle2} teinte="jade" hint={pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate")} />
-        <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" icon={AlertTriangle} teinte="ambre" />
-        <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" icon={XCircle} teinte="danger" />
+        <Kpi label="Dossiers" value={String(rows.length)} hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
+        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" hint={pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate")} />
+        <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" />
+        <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" />
       </div>
 
       {rows.length > 0 && etapes.length > 0 && (

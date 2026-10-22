@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Calculator, Coins, Download, Landmark, Percent, Plus, Scale, Target, Trash2, TrendingUp } from "@/components/icons";
+import { Download, Landmark, Plus, Trash2 } from "@/components/icons";
 import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, SERIES, Kpi, Loading, Notice, Segmented, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { LineKind, ModelRow, PlanLine, PlanPayload, Stress } from "@/lib/axispro-types";
@@ -138,12 +138,12 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-            <Kpi label="VAN du projet" value={fmtShort(ind.npv)} icon={TrendingUp} teinte={ind.npv >= 0 ? "jade" : "danger"} tone={ind.npv >= 0 ? "ok" : "danger"} hint={`Au taux de ${fmtPct(p.discount_rate, 1)}`} />
-            <Kpi label="TRI du projet" value={fmtPct(ind.irr_project)} icon={Percent} teinte="azur" tone={ind.irr_project !== null && ind.irr_project >= p.discount_rate ? "ok" : "warn"} hint={`Fonds propres : ${fmtPct(ind.irr_equity)}`} />
-            <Kpi label="DSCR minimal" value={ratio(ind.dscr_min)} icon={Scale} teinte={ind.dscr_min === null || ind.dscr_min >= p.dscr_target ? "jade" : "danger"} tone={ind.dscr_min === null ? "neutral" : ind.dscr_min >= p.dscr_target ? "ok" : "danger"} hint={ind.dscr_min === null ? "Pas d'emprunt" : `Exigé ${ratio(p.dscr_target)}, moyen ${ratio(ind.dscr_avg)}, LLCR ${ratio(ind.llcr)}`} />
-            <Kpi label="Délai de récupération" value={annees(ind.payback)} icon={Target} teinte="lagon" hint={`Actualisé : ${annees(ind.discounted_payback)}`} />
-            <Kpi label="Marge d'EBE en croisière" value={fmtPct(ind.ebitda_margin)} icon={Calculator} teinte="ambre" hint={`Point mort : ${fmtPct(ind.breakeven_ratio, 0)} du CA`} />
-            <Kpi label="Apport des promoteurs" value={fmtPct(ind.equity_share, 0)} icon={Coins} teinte="or" tone={ind.equity_share !== null && ind.equity_share >= p.equity_target ? "ok" : "warn"} hint={`Endettement : ${ratio(ind.gearing)} fois les fonds propres`} />
+            <Kpi label="VAN du projet" value={fmtShort(ind.npv)} tone={ind.npv >= 0 ? "ok" : "danger"} hint={`Au taux de ${fmtPct(p.discount_rate, 1)}`} />
+            <Kpi label="TRI du projet" value={fmtPct(ind.irr_project)} tone={ind.irr_project !== null && ind.irr_project >= p.discount_rate ? "ok" : "warn"} hint={`Fonds propres : ${fmtPct(ind.irr_equity)}`} />
+            <Kpi label="DSCR minimal" value={ratio(ind.dscr_min)} tone={ind.dscr_min === null ? "neutral" : ind.dscr_min >= p.dscr_target ? "ok" : "danger"} hint={ind.dscr_min === null ? "Pas d'emprunt" : `Exigé ${ratio(p.dscr_target)}, moyen ${ratio(ind.dscr_avg)}, LLCR ${ratio(ind.llcr)}`} />
+            <Kpi label="Délai de récupération" value={annees(ind.payback)} hint={`Actualisé : ${annees(ind.discounted_payback)}`} />
+            <Kpi label="Marge d'EBE en croisière" value={fmtPct(ind.ebitda_margin)} hint={`Point mort : ${fmtPct(ind.breakeven_ratio, 0)} du CA`} />
+            <Kpi label="Apport des promoteurs" value={fmtPct(ind.equity_share, 0)} tone={ind.equity_share !== null && ind.equity_share >= p.equity_target ? "ok" : "warn"} hint={`Endettement : ${ratio(ind.gearing)} fois les fonds propres`} />
           </div>
 
           {a.alerts.length > 0 && (

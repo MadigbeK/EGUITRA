@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Droplet, Percent, Receipt, Smartphone, TrendingUp, TriangleAlert } from "@/components/icons";
+import { CheckCircle2, Droplet, TriangleAlert } from "@/components/icons";
 import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
@@ -49,17 +49,17 @@ export function Synthese() {
             </div>
           </section>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
-            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} icon={TrendingUp} teinte="jade" hint="Rotations validées et facturées" />
+            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} hint="Rotations validées et facturées" />
             <Kpi
               label="Marge du mois"
               value={fmtShort(summary.margin)}
-              icon={Percent}
-              teinte={sousMinimum ? "ambre" : "jade"}
+             
+             
               tone={summary.margin_rate === null || summary.margin_min === null ? "neutral" : sousMinimum ? "warn" : "ok"}
               hint={`Taux de marge ${fmtPct(summary.margin_rate)}, ${summary.margin_min !== null ? `minimum ${fmtPct(summary.margin_min, 0)}` : "seuil non fixé"}`}
             />
-            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
-            <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
+            <Kpi label="Saisies à valider" value={String(summary.drafts)} tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ListChecks, Plus, ShieldAlert, Trash2 } from "@/components/icons";
+import { ListChecks, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { OWNER, RISK_LEVEL, RISK_STATE, type Risk, type RiskLevel, type RiskSummary } from "@/lib/axispro-types";
@@ -49,10 +49,10 @@ export function Risques({ dossierId }: { dossierId: number }) {
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Risques ouverts" value={String(data.summary.open)} icon={ShieldAlert} teinte="azur" />
-        <Kpi label="Critiques" value={String(data.summary.levels.critical)} tone={data.summary.levels.critical ? "danger" : "ok"} teinte="danger" icon={ShieldAlert} hint="Criticité de 15 à 25" />
-        <Kpi label="Élevés" value={String(data.summary.levels.high)} tone={data.summary.levels.high ? "warn" : "ok"} teinte="corail" icon={ShieldAlert} hint="Criticité de 10 à 14" />
-        <Kpi label="Avec plan de traitement" value={`${vivants.filter((r) => r.actions > 0).length} sur ${vivants.length}`} icon={ListChecks} teinte="jade" />
+        <Kpi label="Risques ouverts" value={String(data.summary.open)} />
+        <Kpi label="Critiques" value={String(data.summary.levels.critical)} tone={data.summary.levels.critical ? "danger" : "ok"} hint="Criticité de 15 à 25" />
+        <Kpi label="Élevés" value={String(data.summary.levels.high)} tone={data.summary.levels.high ? "warn" : "ok"} hint="Criticité de 10 à 14" />
+        <Kpi label="Avec plan de traitement" value={`${vivants.filter((r) => r.actions > 0).length} sur ${vivants.length}`} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">

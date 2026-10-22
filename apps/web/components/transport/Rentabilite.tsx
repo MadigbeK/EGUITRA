@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Gauge, Percent, Route as RouteIcon, TrendingUp } from "@/components/icons";
+import { AlertTriangle, CheckCircle2 } from "@/components/icons";
 import { Badge, Card, DataTable, Field, Input, Kpi, Loading, Notice, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -76,10 +76,10 @@ export function Rentabilite() {
       {error && <Notice tone="danger">{error.message}</Notice>}
       {ind && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Chiffre d'affaires transport" value={fmtShort(ind.transport_revenue)} icon={TrendingUp} teinte="jade" hint={ind.income_total === null ? "Rotations validées et facturées" : ind.revenue_share === null ? "Part du CA : produits non comptabilisés" : `${fmtPct(ind.revenue_share)} des produits de la période`} />
-          <Kpi label="Marge directe" value={fmtPct(ind.margin_rate)} icon={Percent} teinte={ind.below_threshold ? "ambre" : "jade"} tone={ind.below_threshold ? "warn" : "ok"} hint={`${fmtShort(ind.margin)}${ind.margin_threshold ? `, seuil ${fmtPct(ind.margin_threshold, 0)}` : ""}`} />
-          <Kpi label="Structure au km" value={ind.structure_per_km === null ? "–" : `${fmtInt(ind.structure_per_km)} GNF`} icon={RouteIcon} teinte="azur" hint={`${fmtShort(ind.structure)} sur ${fmtInt(ind.km)} km ; ${ind.cost_per_km === null ? "–" : fmtInt(ind.cost_per_km)} GNF/km de coûts directs`} />
-          <Kpi label="Ensembles déficitaires" value={`${ind.deficit_vehicles} / ${ind.vehicles}`} icon={Gauge} teinte={ind.deficit_vehicles ? "danger" : "jade"} tone={ind.deficit_vehicles ? "danger" : "ok"} hint={ind.deficit_vehicles ? `Perte cumulée ${fmtShort(ind.deficit_loss)} après structure` : `Résultat net ${fmtShort(ind.net_result)}`} />
+          <Kpi label="Chiffre d'affaires transport" value={fmtShort(ind.transport_revenue)} hint={ind.income_total === null ? "Rotations validées et facturées" : ind.revenue_share === null ? "Part du CA : produits non comptabilisés" : `${fmtPct(ind.revenue_share)} des produits de la période`} />
+          <Kpi label="Marge directe" value={fmtPct(ind.margin_rate)} tone={ind.below_threshold ? "warn" : "ok"} hint={`${fmtShort(ind.margin)}${ind.margin_threshold ? `, seuil ${fmtPct(ind.margin_threshold, 0)}` : ""}`} />
+          <Kpi label="Structure au km" value={ind.structure_per_km === null ? "–" : `${fmtInt(ind.structure_per_km)} GNF`} hint={`${fmtShort(ind.structure)} sur ${fmtInt(ind.km)} km ; ${ind.cost_per_km === null ? "–" : fmtInt(ind.cost_per_km)} GNF/km de coûts directs`} />
+          <Kpi label="Ensembles déficitaires" value={`${ind.deficit_vehicles} / ${ind.vehicles}`} tone={ind.deficit_vehicles ? "danger" : "ok"} hint={ind.deficit_vehicles ? `Perte cumulée ${fmtShort(ind.deficit_loss)} après structure` : `Résultat net ${fmtShort(ind.net_result)}`} />
         </div>
       )}
       {ind && (

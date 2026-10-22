@@ -58,9 +58,9 @@ export default function EngagementsPage() {
       />
       {tab === "open" && data && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Kpi label="Engagements en cours" value={String(engaged.length)} teinte="azur" />
-          <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} teinte="lagon" />
-          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} teinte="ambre" hint="Engagé moins pièces d'achat comptabilisées" />
+          <Kpi label="Engagements en cours" value={String(engaged.length)} />
+          <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} />
+          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} hint="Engagé moins pièces d'achat comptabilisées" />
         </div>
       )}
       <Tabs tabs={[{ key: "open", label: "En cours" }, { key: "pending", label: "À soumettre ou en approbation" }, { key: "all", label: "Tous" }]} value={tab} onChange={setTab} />

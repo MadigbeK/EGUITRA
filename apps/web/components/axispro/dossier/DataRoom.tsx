@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileStack, Printer } from "@/components/icons";
+import { Download, Printer } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, FileButton, Input, Kpi, ProgressBar, Segmented } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, type DocFile, type DossierDetail, type StandardDoc } from "@/lib/axispro-types";
@@ -37,9 +37,9 @@ export function DataRoom({ d }: { d: DossierDetail }) {
     <div className="space-y-4">
       {bandeau}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label="Complétude de la data room" value={`${arrondi(data.completeness)} %`} icon={FileStack} teinte="azur" hint={`${pluriel(disponibles, "pièce disponible", "pièces disponibles")} sur ${data.standard.length}`} />
-        <Kpi label="Pièces dues à ce gate" value={`${dues.filter((x) => x.available).length} / ${dues.length}`} teinte="lagon" hint={d.current_gate ? `${d.current_gate.code} ${d.current_gate.name}` : undefined} />
-        <Kpi label="À reprendre" value={String(data.files.filter((f) => f.state === "rejected").length)} teinte="ambre" tone="warn" />
+        <Kpi label="Complétude de la data room" value={`${arrondi(data.completeness)} %`} hint={`${pluriel(disponibles, "pièce disponible", "pièces disponibles")} sur ${data.standard.length}`} />
+        <Kpi label="Pièces dues à ce gate" value={`${dues.filter((x) => x.available).length} / ${dues.length}`} hint={d.current_gate ? `${d.current_gate.code} ${d.current_gate.name}` : undefined} />
+        <Kpi label="À reprendre" value={String(data.files.filter((f) => f.state === "rejected").length)} tone="warn" />
       </div>
       <Card
         title="Pièces standard"

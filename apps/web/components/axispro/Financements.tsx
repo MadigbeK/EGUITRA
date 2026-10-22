@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Calendar, Coins, HandCoins, Landmark, Plus, Target, Trash2 } from "@/components/icons";
+import { Calendar, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -42,13 +42,13 @@ export function Financements({ dossierId, besoin }: { dossierId?: number; besoin
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {besoin !== undefined ? (
-          <Kpi label="Besoin de financement" value={fmtShort(besoin)} icon={Target} teinte="azur" hint="Annoncé à l'ouverture du dossier" />
+          <Kpi label="Besoin de financement" value={fmtShort(besoin)} hint="Annoncé à l'ouverture du dossier" />
         ) : (
-          <Kpi label="Démarches en cours" value={String(data.filter((f) => EN_COURS.includes(f.state)).length)} icon={Target} teinte="azur" />
+          <Kpi label="Démarches en cours" value={String(data.filter((f) => EN_COURS.includes(f.state)).length)} />
         )}
-        <Kpi label="Montant sollicité" value={fmtShort(sollicite)} icon={HandCoins} teinte="ambre" hint={pluriel(actifs.length, "démarche active", "démarches actives")} />
-        <Kpi label="Montant obtenu" value={fmtShort(obtenu)} icon={Coins} teinte="jade" tone={obtenu > 0 ? "ok" : "neutral"} hint="Conventions signées et décaissements" />
-        <Kpi label={besoin !== undefined ? "Couverture du besoin" : "Taux d'obtention"} value={besoin ? fmtPct((obtenu / besoin) * 100, 0) : sollicite ? fmtPct((obtenu / sollicite) * 100, 0) : "–"} icon={Landmark} teinte="lagon" />
+        <Kpi label="Montant sollicité" value={fmtShort(sollicite)} hint={pluriel(actifs.length, "démarche active", "démarches actives")} />
+        <Kpi label="Montant obtenu" value={fmtShort(obtenu)} tone={obtenu > 0 ? "ok" : "neutral"} hint="Conventions signées et décaissements" />
+        <Kpi label={besoin !== undefined ? "Couverture du besoin" : "Taux d'obtention"} value={besoin ? fmtPct((obtenu / besoin) * 100, 0) : sollicite ? fmtPct((obtenu / sollicite) * 100, 0) : "–"} />
       </div>
       {besoin ? (
         <div>

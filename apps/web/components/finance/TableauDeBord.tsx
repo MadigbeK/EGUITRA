@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type CSSProperties } from "react";
-import { ArrowUpRight, Calculator, Coins, HandCoins, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
+import { ArrowUpRight, Printer } from "@/components/icons";
 import { Ondes, Rosace } from "@/components/guilloche";
 import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, Field, SERIES, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
@@ -147,30 +147,30 @@ function DashboardBody({ d }: { d: Dashboard }) {
         </section>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
-          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(d.revenue_month)} icon={TrendingUp} teinte="azur" delta={variation} hint={variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent"} />
+          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(d.revenue_month)} delta={variation} hint={variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent"} />
           <Kpi
             label="Chiffre d'affaires de l'exercice"
             value={fmtShort(d.margins.revenue)}
-            icon={Target}
-            teinte="jade"
+           
+           
             tone={budgetCa && (budgetCa.gap_pct ?? 0) < -(budget?.threshold_pct ?? 10) ? "warn" : "neutral"}
             hint={budgetCa ? `Budget ${fmtShort(budgetCa.budget)} · écart ${fmtPct(budgetCa.gap_pct)}` : "Aucun budget de produits"}
           />
-          <Kpi label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} icon={PieChart} teinte="or" tone={d.ebe_fy < 0 ? "danger" : "neutral"} hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`} />
-          <Kpi label="Résultat net de l'exercice" value={fmtShort(d.net_result_fy)} icon={Calculator} teinte={d.net_result_fy < 0 ? "danger" : "ambre"} tone={d.net_result_fy < 0 ? "danger" : "accent"} hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après IFRS 9 : ${fmtShort(d.net_result_fy - ecl)}`} />
+          <Kpi label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} tone={d.ebe_fy < 0 ? "danger" : "neutral"} hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`} />
+          <Kpi label="Résultat net de l'exercice" value={fmtShort(d.net_result_fy)} tone={d.net_result_fy < 0 ? "danger" : "accent"} hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après IFRS 9 : ${fmtShort(d.net_result_fy - ecl)}`} />
           <Kpi
             label="Délai de recouvrement (DSO)"
             value={wc.dso === null ? "–" : `${fmtDec(Math.round(wc.dso))} j`}
-            icon={Receipt}
-            teinte="rose"
+           
+           
             tone={wc.dso !== null && th.dso_target_days ? (wc.dso > th.dso_target_days ? "danger" : "ok") : "neutral"}
             hint={th.dso_target_days ? `Cible ${th.dso_target_days} jours · créances échues ${fmtPct(wc.overdue_share_pct)}` : "Cible de recouvrement non fixée"}
           />
           <Kpi
             label="Couverture de la dette (DSCR)"
             value={ratio(d.dscr)}
-            icon={HandCoins}
-            teinte="lagon"
+           
+           
             tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
             hint={dscrMin ? `Minimum fixé : ${ratio(dscrMin)}` : "Minimum : seuil non fixé"}
           />
@@ -181,8 +181,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
         <Kpi
           label={`Trésorerie prévue fin ${fin.label}`}
           value={fmtShort(fin.end)}
-          icon={Coins}
-          teinte="azur"
+         
+         
           tone={fin.end < 0 || (th.cash_min && fin.end < th.cash_min) ? "danger" : "ok"}
           hint={`+ ${fmtShort(fin.receivables)} clients, - ${fmtShort(fin.payables)} fournisseurs, - ${fmtShort(fin.loans)} emprunts`}
         />
@@ -190,20 +190,20 @@ function DashboardBody({ d }: { d: Dashboard }) {
           <Kpi
             label="Réalisé contre budget cumulé"
             value={fmtPct(budget.expenses.budget ? (budget.expenses.actual / budget.expenses.budget) * 100 : null)}
-            icon={Target}
-            teinte="or"
+           
+           
             tone={budget.overruns.length ? "warn" : "ok"}
             hint={`Charges ${fmtShort(budget.expenses.actual)} / ${fmtShort(budget.expenses.budget)} à fin ${fmtMonth(budget.through.slice(0, 7))}, ${pluriel(budget.overruns.length, "ligne")} hors tolérance`}
           />
         ) : (
-          <Kpi label="Réalisé contre budget cumulé" value="–" icon={Target} teinte="or" hint="Aucun budget pour l'exercice (Activités et budget)" />
+          <Kpi label="Réalisé contre budget cumulé" value="–" hint="Aucun budget pour l'exercice (Activités et budget)" />
         )}
-        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} icon={Coins} teinte="lagon" hint={`Cycle ${wc.cycle === null ? "–" : `${fmtDec(Math.round(wc.cycle))} j`} · DPO ${wc.dpo === null ? "–" : `${fmtDec(Math.round(wc.dpo))} j`}`} />
+        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} hint={`Cycle ${wc.cycle === null ? "–" : `${fmtDec(Math.round(wc.cycle))} j`} · DPO ${wc.dpo === null ? "–" : `${fmtDec(Math.round(wc.dpo))} j`}`} />
         <Kpi
           label="Dette financière"
           value={fmtShort(d.debt.accounting_outstanding ?? d.debt.outstanding)}
-          icon={HandCoins}
-          teinte="corail"
+         
+         
           tone={d.debt.overdue > 0 ? "danger" : Math.abs(d.debt.schedule_gap ?? 0) >= 1 ? "warn" : "neutral"}
           hint={`Dette nette ${fmtShort(d.debt.net_debt)} · gearing ${ratio(d.debt.gearing)}${Math.abs(d.debt.schedule_gap ?? 0) >= 1 ? ` · écart échéancier ${fmtShort(d.debt.schedule_gap)}` : ""}`}
         />

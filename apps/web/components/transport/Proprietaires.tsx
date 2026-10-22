@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileSpreadsheet, FileText, HandCoins, Plus, RefreshCw, Scale, Trash2, TrendingUp, Undo2, Users } from "@/components/icons";
+import { Download, FileSpreadsheet, FileText, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Loading, Modal, Notice, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
@@ -102,10 +102,10 @@ export function Proprietaires() {
       )}
       {items.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Chiffre d'affaires des ensembles" value={fmtShort(data?.totals.revenue)} icon={TrendingUp} teinte="jade" hint={`${items.length} relevé(s)`} />
-          <Kpi label="Commissions" value={fmtShort(data?.totals.commissions)} icon={HandCoins} teinte="or" hint="Pourcentages du chiffre d'affaires brut" />
-          <Kpi label="Part des propriétaires" value={fmtShort(owners)} icon={Users} teinte={owners < 0 ? "corail" : "jade"} tone={owners < 0 ? "danger" : "neutral"} hint={owners < 0 ? "Négative : charges non couvertes" : "À reverser"} />
-          <Kpi label="Part de la société" value={fmtShort(data?.totals.operator_amount)} icon={Scale} teinte="jade" hint="Commissions perçues et résultat des ensembles propres" />
+          <Kpi label="Chiffre d'affaires des ensembles" value={fmtShort(data?.totals.revenue)} hint={`${items.length} relevé(s)`} />
+          <Kpi label="Commissions" value={fmtShort(data?.totals.commissions)} hint="Pourcentages du chiffre d'affaires brut" />
+          <Kpi label="Part des propriétaires" value={fmtShort(owners)} tone={owners < 0 ? "danger" : "neutral"} hint={owners < 0 ? "Négative : charges non couvertes" : "À reverser"} />
+          <Kpi label="Part de la société" value={fmtShort(data?.totals.operator_amount)} hint="Commissions perçues et résultat des ensembles propres" />
         </div>
       )}
       <Card title="Relevés du mois" padded={false}>
