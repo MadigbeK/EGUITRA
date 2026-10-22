@@ -22,7 +22,7 @@ esac
 ADMIN_LOGIN=$(echo "$2" | tr '[:upper:]' '[:lower:]')
 ADMIN_NAME=$3
 EGUITRA_MODULES=(eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier
-                 eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail)
+                 eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh)
 ODOO=(docker compose run --rm -T "$SERVICE" odoo)
 CONF=(-c /etc/odoo/odoo.conf)
 
