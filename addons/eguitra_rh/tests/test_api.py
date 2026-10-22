@@ -127,7 +127,7 @@ class TestApiRh(ApiCase):
         self.assertEqual((leave["state"], leave["days"], leave["can_decide"]), ("submitted", 2, False))
 
         status, _b = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=token)
-        self.assertEqual(status, 404, "Pas d'approbation de sa propre demande")
+        self.assertEqual(status, 403, "Pas d'approbation de sa propre demande (refus explicite)")
         other = self.open_session("fatou.fin")["access_token"]
         status, _b = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=other)
         self.assertEqual(status, 404, "Ni par un tiers")
@@ -257,3 +257,36 @@ class TestApiRh(ApiCase):
         for token in (rh, other):
             status, body = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=token)
             self.assertEqual(status, 403, body)
+
+    def test_personne_n_approuve_sa_propre_absence(self):
+        """Ni la RH, ni la direction n'approuvent ou ne refusent leur propre absence, à la saisie comme en
+        décision ; chacune tranche celle de l'autre."""
+        own_rh = self._own_dossier(self.rh_user, "Aminata RH")
+        self._own_dossier(self.dg_user, "Directeur Général")
+        cp = self.env["eguitra.rh.leave.type"].search([("code", "=", "CP")]).id
+        monday = date.today() + timedelta(days=(7 - date.today().weekday()) % 7 or 7)
+        dates = {"type_id": cp, "date_from": str(monday), "date_to": str(monday + timedelta(days=1))}
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        status, body = self.call("POST", "/rh/leaves", dict(dates, employee_id=own_rh.id, approve=True, force=True),
+                                 token=rh)
+        self.assertEqual(status, 403, body)
+        self.assertFalse(self.env["eguitra.rh.leave"].search([("employee_id", "=", own_rh.id)]),
+                         "Demande non enregistrée")
+        status, leave = self.call("POST", "/rh/leaves", dict(dates, employee_id=own_rh.id), token=rh)
+        self.assertEqual((status, leave["state"], leave["can_decide"]), (200, "submitted", False), leave)
+        for action in ("approve", "refuse"):
+            status, body = self.call("POST", f"/rh/leaves/{leave['id']}/{action}", {"force": True, "reason": "Non"},
+                                     token=rh)
+            self.assertEqual(status, 403, body)
+
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        status, mine = self.call("POST", "/rh/me/leaves", dates, token=dg)
+        self.assertEqual((status, mine["can_decide"]), (200, False), mine)
+        for action in ("approve", "refuse"):
+            status, body = self.call("POST", f"/rh/leaves/{mine['id']}/{action}", {"reason": "Non"}, token=dg)
+            self.assertEqual(status, 403, body)
+            self.assertIn("propre demande", body["message"])
+        status, body = self.call("POST", f"/rh/leaves/{mine['id']}/approve", {}, token=rh)
+        self.assertEqual((status, body.get("state")), (200, "approved"), body)
+        status, body = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=dg)
+        self.assertEqual((status, body.get("state")), (200, "approved"), body)

@@ -17,6 +17,7 @@ from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASON
 from ..models.leave import InsufficientBalance
 from ..models.payroll import month_label
 from .common import (
+    OWN_LEAVE,
     READ,
     WRITE,
     advance_row,
@@ -34,6 +35,7 @@ from .common import (
     leave_row,
     leave_type_row,
     number,
+    own_leave,
     ref,
     refuse_own,
     rubric_row,
@@ -618,11 +620,18 @@ class EguitraRh(http.Controller):
             "note": (data.get("note") or "").strip() or False,
         })
         if data.get("approve"):
+            # Même contrôle que les décisions : personne n'approuve sa propre absence (l'erreur annule la
+            # création de la demande).
+            if not can_decide(leave):
+                raise ApiError(403, "forbidden", OWN_LEAVE if own_leave(leave)
+                               else "Cette absence relève d'un autre responsable.")
             approve(leave, force=bool(data.get("force")))
         return leave_row(leave)
 
     def _decidable(self, leave_id):
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
+        if leave and own_leave(leave):
+            raise ApiError(403, "forbidden", OWN_LEAVE)
         if not leave or not can_decide(leave):
             raise ApiError(404, "not_found", "Demande introuvable ou hors de votre périmètre.")
         return leave
@@ -644,8 +653,9 @@ class EguitraRh(http.Controller):
     @api_route("/rh/leaves/<int:leave_id>/cancel", methods=("POST",), profiles=None)
     def cancel_leave(self, leave_id, **_kw):
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
-        own = leave and leave.employee_id.user_id == request.env.user
-        manager = leave and can_write() and leave.company_id in request.env.user.company_ids
+        own = leave and own_leave(leave)
+        # Sur sa propre absence, la RH suit la règle du salarié (quatre yeux).
+        manager = leave and not own and can_write() and leave.company_id in request.env.user.company_ids
         if not leave or not (own or manager):
             raise ApiError(404, "not_found", "Absence introuvable.")
         if own and not manager and leave.state == "approved" and leave.date_from <= today():
