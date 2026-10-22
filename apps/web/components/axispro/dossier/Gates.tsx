@@ -4,9 +4,10 @@ import { useState } from "react";
 import { ArrowRight, CheckCircle2, FileCheck2, Flag, ShieldAlert } from "@/components/icons";
 import { Badge, Button, Card, FEUILLE, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend } from "@/lib/api-client";
-import { pluriel } from "@/lib/format";
+import { tonEtat } from "@/lib/couleurs";
+import { fmtInt, fmtPct, fmtRatio, pluriel } from "@/lib/format";
 import { GATE_DECISION, HYPOTHESES, YES_NO, type DossierDetail } from "@/lib/axispro-types";
-import { RULE_LABELS, arrondi, useCabinet, useRetour } from "./commun";
+import { RULE_LABELS, useCabinet, useRetour } from "./commun";
 
 /**
  * Stage gates : règle de passage, décision calculée et motifs, exigences d'entrée, livrables et
@@ -25,6 +26,9 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
   const gates = d.scoring.gates;
   const courant = gates.findIndex((g) => g.code === d.current_gate?.code);
   const dernier = courant >= gates.length - 1;
+  // DSCR retenu par la règle de bancabilité : modèle financier, à défaut celui déclaré dans la fiche.
+  const dscr = d.financial?.dscr_min ?? d.decision_inputs.dscr_manual ?? null;
+  const { no_go: nogo, go, conditional, hold } = GATE_DECISION;
 
   async function passer(reason?: string) {
     setRetour(null);
@@ -69,7 +73,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
           ))}
         </ol>
         <p className="mt-3 text-[12.5px] text-muted">
-          Un knock-out actif dans le périmètre d&apos;un gate impose NO-GO quel que soit le score ; sous la complétude documentaire minimale d&apos;un gate, un GO ou un CONDITIONAL GO est ramené à HOLD. Les hypothèses de décision des gates 4 à 7 (DSCR, red flag, data room, bailleurs, conditions précédentes, signature) se renseignent dans la synthèse.
+          Un knock-out actif dans le périmètre d&apos;un gate impose {nogo.label} quel que soit le score ; sous la complétude documentaire minimale d&apos;un gate, un {go.label} ou un {conditional.label} est ramené à {hold.label}. Les hypothèses de décision des gates 4 à 7 (DSCR, red flag, data room, bailleurs, conditions précédentes, signature) se renseignent dans la synthèse.
         </p>
       </Card>
 
@@ -82,8 +86,13 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
               <header className="flex flex-wrap items-center gap-2">
                 <span className="bg-accent grid h-8 min-w-8 place-items-center rounded-full px-2 text-[12.5px] font-bold text-white">{g.code}</span>
                 <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{g.name}</h3>
-                {i < courant && <Badge tone="ok">Franchi</Badge>}
-                {i === courant && <Badge tone="accent" vivant>Gate courant</Badge>}
+                {i < courant && <Badge tone={tonEtat("Franchi", "ok")}>Franchi</Badge>}
+                {/* Le seul état vivant de l'écran ; la couleur de l'application ne dit pas un état. */}
+                {i === courant && (
+                  <Badge tone={tonEtat("En cours")} vivant>
+                    Gate courant
+                  </Badge>
+                )}
                 <Badge tone={dec.tone}>{dec.label}</Badge>
               </header>
               <div className="mt-1 text-[12px] text-muted">{RULE_LABELS[g.rule] ?? g.rule}</div>
@@ -98,17 +107,23 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
               <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-muted">
                 {g.min_completeness ? (
                   <span title="Exigence d'entrée : en dessous, le gate ne s'examine pas (HOLD)" className="inline-flex items-center gap-1 rounded-md bg-panel-3 px-1.5 py-0.5 font-semibold text-ink-2">
-                    <FileCheck2 aria-hidden className="h-3.5 w-3.5 text-muted" /> Complétude minimale {arrondi(g.min_completeness)} %
+                    <FileCheck2 aria-hidden className="h-3.5 w-3.5 text-muted" /> Complétude minimale {fmtPct(g.min_completeness, 0)}
                   </span>
                 ) : null}
-                <span>{g.available}/{g.criteria} {g.available > 1 ? "critères disponibles" : "critère disponible"}</span>
+                <span>
+                  {pluriel(g.available, "critère disponible", "critères disponibles")} sur {fmtInt(g.criteria)}
+                </span>
                 {g.knockouts > 0 && <span className="font-semibold text-danger">{pluriel(g.knockouts, "knock-out")} du gate</span>}
                 {hyp.map((h) => (
                   <span key={h.key}>
                     {h.label} : <b className="text-ink-2">{d.decision_inputs[h.key] ? YES_NO[d.decision_inputs[h.key] as string] : "non renseigné"}</b>
                   </span>
                 ))}
-                {g.rule === "bankability" && <span>DSCR : <b className="text-ink-2">{d.financial?.dscr_min ?? d.decision_inputs.dscr_manual ?? "non renseigné"}</b> (seuil {d.scoring.thresholds.dscr})</span>}
+                {g.rule === "bankability" && (
+                  <span>
+                    DSCR : <b className="text-ink-2">{dscr === null ? "non renseigné" : fmtRatio(dscr)}</b> (seuil {fmtRatio(d.scoring.thresholds.dscr)})
+                  </span>
+                )}
               </div>
               {(g.entry_requirements || g.deliverables || g.exit_criteria) && (
                 <dl className="mt-3 grid grid-cols-1 gap-2 border-t border-line pt-3 text-[12.5px] sm:grid-cols-3">

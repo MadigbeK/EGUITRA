@@ -1,17 +1,26 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { useSWRConfig } from "swr";
-import { AlertTriangle, Coins, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
+import { AlertTriangle, Coins, FileCheck2, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
 import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, PasswordInput, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type Currency, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
-import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { tonEtat } from "@/lib/couleurs";
+import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type CriterionBrief, type Currency, type DomainScore, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
+import { fmtDate, fmtInt, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
 import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, montant, note, useCabinet, useRetour } from "./commun";
 
-/** « Où en est le dossier » : trois scores, classification, recommandation, prochain gate et les
- * cinq actions prioritaires, puis anomalies, domaines, fiche projet et hypothèses de décision. */
+/** Priorité d'un domaine en toutes lettres, avec son mot ; rien pour une priorité faible. */
+const PRIORITE_MOT: Partial<Record<NonNullable<DomainScore["priority"]>, string>> = {
+  URGENTE: "Urgente",
+  ÉLEVÉE: "Élevée",
+  MOYENNE: "Moyenne",
+};
+
+/** « Où en est le dossier » : trois scores, classification, recommandation, ce qui bloque le
+ * prochain gate et les cinq actions prioritaires, puis anomalies, domaines, fiche projet et
+ * hypothèses de décision. */
 export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const s = d.scoring;
   const { agir, bandeau } = useRetour();
@@ -25,55 +34,60 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
     { titre: "Bankability", valeur: s.bankability, aide: "Critères pertinents pour la bancabilité" },
   ];
   const next = s.next_gate;
+  // Scores provisoires : la méthode recommande « À compléter » (critères des gates atteints encore à
+  // évaluer). Les anneaux restent, dans la couleur de l'application, celle d'une mesure sans verdict,
+  // au lieu de la couleur de leur classe ; le tampon neutre et l'avancement disent le provisoire.
+  const provisoire = s.recommendation === "pending" && s.assessed > 0;
+  // Le motif « à compléter » du noyau s'écrit « critère(s) » : même phrase, accordée ici.
+  const detail = provisoire && s.pending_in_scope > 0 ? `${pluriel(s.pending_in_scope, "critère des gates atteints reste", "critères des gates atteints restent")} à évaluer avant la recommandation.` : s.recommendation_detail;
   return (
     <div className="space-y-6">
       {bandeau}
       <Card title="Où en est le dossier">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
-          <div className="flex flex-wrap justify-center gap-5">
-            {scores.map((x) => (
-              <div key={x.titre} className="flex flex-col items-center text-center">
-                <Anneau value={s.assessed ? note(x.valeur) : null} taille={112} epaisseur={10} couleur={couleurScore(x.valeur)} sous="/ 100" />
-                <div className="mt-1.5 text-[13px] font-semibold text-ink">{x.titre}</div>
-                <div className="max-w-[140px] text-[11.5px] text-muted">{x.aide}</div>
-              </div>
-            ))}
+          <div>
+            <div className="flex flex-wrap justify-center gap-5">
+              {scores.map((x) => (
+                <div key={x.titre} className="flex flex-col items-center text-center">
+                  <Anneau value={s.assessed ? note(x.valeur) : null} taille={112} epaisseur={10} couleur={provisoire ? "var(--accent-vif)" : couleurScore(x.valeur)} sous="/ 100" />
+                  <div className="mt-1.5 text-[13px] font-semibold text-ink">{x.titre}</div>
+                  <div className="max-w-[140px] text-[11.5px] text-muted">{x.aide}</div>
+                </div>
+              ))}
+            </div>
+            {provisoire && (
+              <p className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[12.5px] text-muted">
+                <Badge tone="neutral">Scores provisoires</Badge>
+                <span>
+                  {pluriel(s.assessed, "critère évalué", "critères évalués")} sur {fmtInt(s.criteria)}
+                </span>
+              </p>
+            )}
           </div>
           <div className="min-w-0 space-y-3">
+            {/* La recommandation vaut pour l'étape où se trouve le dossier ; le prochain gate a sa propre décision, juste dessous. */}
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] font-semibold text-ink">Recommandation{d.current_gate ? ` à l'étape ${d.current_gate.code}` : ""} :</span>
               <Badge tone={RECO[s.recommendation].tone}>{RECO[s.recommendation].label}</Badge>
               <span className="text-[12.5px] font-semibold text-muted">{s.classification}</span>
             </div>
-            <p className="text-[14px] text-ink-2">{s.recommendation_detail}</p>
+            <p className="text-[14px] text-ink-2">{detail}</p>
             {s.recommendation === "pending" && s.method_recommendation !== "pending" && s.assessed > 0 && (
               <p className="text-[12.5px] text-muted">Si l&apos;évaluation s&apos;arrêtait là, la méthode recommanderait : <b>{RECO[s.method_recommendation].label}</b>.</p>
             )}
-            {next ? (
-              <div className="rounded-xl border border-line bg-panel-2 px-3.5 py-2.5 text-[13px]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-ink">Prochain gate : {next.code} {next.name}</span>
-                  <Badge tone={GATE_DECISION[next.decision].tone}>{GATE_DECISION[next.decision].label}</Badge>
-                  {next.min_completeness ? <Tag>Complétude minimale {arrondi(next.min_completeness)} %</Tag> : null}
-                </div>
-                <ul className="mt-1 list-disc pl-5 text-muted">
-                  {next.motifs.map((m, i) => <li key={i}>{m}</li>)}
-                </ul>
-              </div>
-            ) : (
-              <Notice tone="ok">Tous les gates sont franchis : financial close effectif.</Notice>
-            )}
+            {next ? <Blocages d={d} /> : <Notice tone="ok">Tous les gates sont franchis : financial close effectif.</Notice>}
             <p className="text-[12px] text-muted">
-              Seuils : BANKABLE CANDIDATE {t.bankable}, APD READY {t.go}, CONDITIONAL GO {t.conditional}, HOLD {t.hold} ; DSCR bancaire {t.dscr}. Pondération {s.policy.weighting === "flat" ? "à plat sur toute la grille" : "par domaine"}.
+              Seuils : {RECO.bankable.label} {arrondi(t.bankable)}, {RECO.apd_ready.label} {arrondi(t.go)}, {RECO.conditional.label} {arrondi(t.conditional)}, {RECO.hold.label} {arrondi(t.hold)} ; DSCR bancaire {fmtRatio(t.dscr)}. Pondération {s.policy.weighting === "flat" ? "à plat sur toute la grille" : "par domaine"}.
             </p>
           </div>
         </div>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${s.knockouts_pending} non évalué${s.knockouts_pending > 1 ? "s" : ""})` : ""}` : "Aucun"} />
+        <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${pluriel(s.knockouts_pending, "non évalué", "non évalués")})` : ""}` : "Aucun"} />
         <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${pluriel(s.critical_open.length, "critique")} au total`} />
-        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${s.criteria}, ${pluriel(s.proofs, "preuve")}`} />
-        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
+        <Kpi label="Complétude documentaire" value={fmtPct(s.completeness, 0)} hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${fmtInt(s.criteria)}, ${pluriel(s.proofs, "preuve")}`} />
+        <Kpi label="Complétude de la data room" value={fmtPct(s.dataroom_completeness, 0)} hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
       </div>
 
       <SuiviCompartiments d={d} />
@@ -89,7 +103,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
                     {g.compartment && <PuceCompartiment code={g.compartment} nom={g.compartment_name} />}
                     <span className="font-medium">{g.code} {g.name}</span>
                     {g.knockout && <Badge tone="danger">Knock-out</Badge>}
-                    {g.critical && <Badge tone="warn">Critique</Badge>}
+                    {g.critical && <Badge tone={tonEtat("Critique")}>Critique</Badge>}
                     <span className="ml-auto text-[11.5px] font-semibold text-muted">priorité {arrondi(g.priority, 2)}</span>
                   </div>
                   <div className="mt-1.5 pl-[34px] text-[12.5px] leading-snug text-ink-2">{g.action}</div>
@@ -105,27 +119,30 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         </Card>
         <Card title="Score par domaine">
           <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
-            <span>Priorité : moins de 30 urgente, 50 élevée, 65 moyenne.</span>
+            <span>Du domaine le plus faible au plus fort. Priorité urgente sous 30, élevée sous 50, moyenne sous 65.</span>
           </div>
           <ul className="space-y-3">
-            {s.domains.map((dom, i) => (
-              <li key={dom.domain_id}>
-                <div className="mb-1 flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="min-w-0 truncate text-ink-2">
-                    <span className="font-semibold text-ink">{dom.code}</span> {dom.name}{" "}
-                    <span className="text-[12px] text-muted">{dom.assessed}/{dom.criteria} {dom.assessed > 1 ? "évalués" : "évalué"}{dom.gaps ? `, ${pluriel(dom.gaps, "écart")}` : ""}</span>
-                  </span>
-                  <span className="flex items-center gap-2">
-                    {dom.priority && <Badge tone={PRIORITE_TON[dom.priority]}>{dom.priority}</Badge>}
-                    <span className="w-8 text-right font-display text-[16px] font-bold tabular text-ink">{dom.score === null ? "–" : Math.round(dom.score)}</span>
-                  </span>
-                </div>
-                <div className="relative h-2.5 rounded-full bg-panel-3">
-                  <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(dom.score ?? 0, 1)}%`, background: couleurScore(dom.score), "--i": i } as CSSProperties} />
-                  {[30, 50, 65].map((x) => <span key={x} aria-hidden className="absolute -top-0.5 h-3.5 w-px bg-line-strong" style={{ left: `${x}%` }} />)}
-                </div>
-              </li>
-            ))}
+            {domainesTries(s.domains).map(({ dom, score }, i) => {
+              const mot = score !== null && dom.priority ? PRIORITE_MOT[dom.priority] : undefined;
+              return (
+                <li key={dom.domain_id}>
+                  <div className="mb-1 flex items-baseline justify-between gap-3 text-[13px]">
+                    <span className="min-w-0 truncate text-ink-2">
+                      <span className="font-semibold text-ink">{dom.code}</span> {dom.name}{" "}
+                      <span className="text-[12px] text-muted">{dom.assessed}/{dom.criteria} {dom.assessed > 1 ? "évalués" : "évalué"}{dom.gaps ? `, ${pluriel(dom.gaps, "écart")}` : ""}</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      {mot && dom.priority && <Badge tone={tonEtat(mot, PRIORITE_TON[dom.priority])}>Priorité {mot.toLocaleLowerCase("fr")}</Badge>}
+                      <span className="w-8 text-right font-display text-[16px] font-bold tabular text-ink">{score === null ? "–" : Math.round(score)}</span>
+                    </span>
+                  </div>
+                  <div className="relative h-2.5 rounded-full bg-panel-3">
+                    <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(score ?? 0, 1)}%`, background: couleurScore(score), "--i": i } as CSSProperties} />
+                    {[30, 50, 65].map((x) => <span key={x} aria-hidden className="absolute -top-0.5 h-3.5 w-px bg-line-strong" style={{ left: `${x}%` }} />)}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       </div>
@@ -157,12 +174,12 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 text-[13px]">
           <span className="inline-flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-muted" /> {pluriel(d.risks.open, "risque ouvert", "risques ouverts")}
-            {(["critical", "high"] as RiskLevel[]).map((l) => d.risks.levels[l] > 0 && <Badge key={l} tone={RISK_LEVEL[l].tone}>{d.risks.levels[l]} {RISK_LEVEL[l].label.toLowerCase()}</Badge>)}
+            {(["critical", "high"] as RiskLevel[]).map((l) => d.risks.levels[l] > 0 && <Badge key={l} tone={tonEtat(RISK_LEVEL[l].label, RISK_LEVEL[l].tone === "accent" ? undefined : RISK_LEVEL[l].tone)}>{pluriel(d.risks.levels[l], RISK_LEVEL[l].label.toLocaleLowerCase("fr"))}</Badge>)}
           </span>
           <span className="inline-flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-muted" /> {pluriel(d.actions.open, "action ouverte", "actions ouvertes")}
-            {d.actions.overdue > 0 && <Badge tone="danger">{d.actions.overdue} en retard</Badge>}
-            {d.actions.submitted > 0 && <Badge tone="warn">{d.actions.submitted} à valider</Badge>}
+            {d.actions.overdue > 0 && <Badge tone={tonEtat("En retard", "danger")}>{fmtInt(d.actions.overdue)} en retard</Badge>}
+            {d.actions.submitted > 0 && <Badge tone={tonEtat("À valider")}>{fmtInt(d.actions.submitted)} à valider</Badge>}
           </span>
         </div>
       </Card>
@@ -179,6 +196,105 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         )}
       </Card>
     </div>
+  );
+}
+
+/**
+ * Domaines du plus faible au plus fort, la grille départageant les égalités. Un domaine sans critère
+ * évalué n'a pas encore de score (comme un compartiment) : il passe en fin de liste, sans priorité.
+ */
+function domainesTries(domaines: DomainScore[]) {
+  return domaines
+    .map((dom, rang) => ({ dom, rang, score: dom.assessed ? dom.score : null }))
+    .sort((a, b) => (a.score ?? Infinity) - (b.score ?? Infinity) || a.rang - b.rang);
+}
+
+/** Critères cités dans une ligne : les trois premiers par leur code et leur nom, puis le reste compté. */
+function citer(liste: CriterionBrief[]) {
+  const vus = liste.slice(0, 3).map((c) => `${c.code} ${c.name}`);
+  const reste = liste.length - vus.length;
+  return reste > 0 ? `${vus.join(", ")} et ${pluriel(reste, "autre")}` : vus.join(", ");
+}
+
+/**
+ * Ce qui bloque le prochain gate, tiré du dossier déjà chargé : la décision calculée du gate et ses
+ * motifs (la méthode), les critères des gates atteints encore à évaluer, les critères du gate
+ * disponibles, puis les knock-outs actifs et les critères critiques manquants jusqu'à ce gate.
+ * L'écran ne décide rien : il rassemble ce que le noyau a déjà établi.
+ */
+function Blocages({ d }: { d: DossierDetail }) {
+  const titre = useId();
+  const s = d.scoring;
+  const next = s.next_gate;
+  if (!next) return null;
+  const dec = GATE_DECISION[next.decision];
+  // Rang de chaque gate dans la grille, pour ne citer que ce qui précède ou concerne ce gate.
+  const rang = new Map(s.gates.map((g) => [g.code, g.index]));
+  const jusquIci = (c: CriterionBrief) => (rang.get(c.gate ?? "") ?? 0) <= next.index;
+  const ko = s.knockouts.filter(jusquIci);
+  const codesKo = new Set(s.knockouts.map((k) => k.code));
+  const critiques = s.critical_open.filter((c) => !codesKo.has(c.code) && jusquIci(c));
+  const indisponibles = next.criteria - next.available;
+  const releve = s.pending_in_scope > 0 || indisponibles > 0 || ko.length > 0 || critiques.length > 0;
+  return (
+    <section aria-labelledby={titre} className="rounded-xl border border-line bg-panel-2 px-3.5 py-3 text-[13px]">
+      <h3 id={titre} className="text-[13.5px] font-semibold text-ink">
+        {next.decision === "conditional" ? "Ce qui conditionne le prochain gate" : "Ce qui bloque le prochain gate"}
+      </h3>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-ink-2">
+          {next.code} {next.name}
+        </span>
+        <Badge tone={dec.tone}>{dec.label}</Badge>
+        {next.min_completeness ? <Tag>Complétude minimale {fmtPct(next.min_completeness, 0)}</Tag> : null}
+      </div>
+      {next.motifs.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {next.motifs.map((m, i) => (
+            <li key={i} className={cx("flex gap-2", next.decision === "no_go" ? "text-danger" : "text-ink-2")}>
+              {next.decision === "no_go" ? <ShieldAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none" /> : <span aria-hidden className="mt-2 h-1 w-1 flex-none rounded-full bg-current" />}
+              {m}
+            </li>
+          ))}
+        </ul>
+      )}
+      {releve && (
+        <ul className="mt-2.5 space-y-1.5 border-t border-line pt-2.5 text-ink-2">
+          {s.pending_in_scope > 0 && (
+            <li className="flex gap-2">
+              <ListChecks aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none text-muted" />
+              <span>
+                <b className="font-semibold text-ink">{pluriel(s.pending_in_scope, "critère")} à évaluer</b> dans les gates atteints
+              </span>
+            </li>
+          )}
+          {indisponibles > 0 && (
+            <li className="flex gap-2">
+              <FileCheck2 aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none text-muted" />
+              <span>
+                Critères du gate {next.code} : <b className="font-semibold text-ink">{fmtInt(next.available)} {next.available > 1 ? "disponibles" : "disponible"} sur {fmtInt(next.criteria)}</b>
+              </span>
+            </li>
+          )}
+          {ko.length > 0 && (
+            <li className="flex gap-2 text-danger">
+              <ShieldAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none" />
+              <span>
+                <b className="font-semibold">{pluriel(ko.length, "knock-out actif", "knock-outs actifs")}</b> jusqu&apos;à {next.code} : {citer(ko)}
+              </span>
+            </li>
+          )}
+          {critiques.length > 0 && (
+            <li className="flex gap-2">
+              <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none text-warn" />
+              <span>
+                <b className="font-semibold text-ink">{pluriel(critiques.length, "critère critique manquant", "critères critiques manquants")}</b> jusqu&apos;à {next.code} : {citer(critiques)}
+              </span>
+            </li>
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -290,7 +406,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
 function Chiffre({ titre, court, valeur, ton }: { titre: string; court: string; valeur: string | number; ton?: string }) {
   return (
     <div title={titre} className="min-w-0 px-1">
-      <dt className="truncate text-[10.5px] font-medium uppercase tracking-wide text-muted">{court}</dt>
+      <dt className="truncate text-[11px] font-medium text-muted">{court}</dt>
       <dd className={cx("font-display text-[15px] font-bold tabular", ton ?? "text-ink")}>{valeur}</dd>
     </div>
   );

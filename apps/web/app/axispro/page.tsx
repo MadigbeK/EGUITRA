@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
-import { FileText, Plus, ShieldAlert } from "@/components/icons";
+import { FileText, Lock, Plus, ShieldAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Donut, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
-import { fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
 import { ratio } from "@/components/axispro/cellules";
 import { note, useCabinet } from "@/components/axispro/dossier/commun";
@@ -24,6 +24,29 @@ function teinteScore(score: number | null) {
 }
 
 const FAVORABLES: Recommendation[] = ["bankable", "apd_ready", "go"];
+
+/**
+ * Score provisoire : la méthode recommande « À compléter » tant que des critères des gates atteints
+ * restent à évaluer (le noyau compte un critère non évalué comme non disponible). L'écran ne fixe
+ * aucun seuil à lui : il reprend cet état de la méthode.
+ */
+function provisoire(d: DossierSummary) {
+  return d.recommendation === "pending" && d.progress.assessed > 0;
+}
+
+/** Avancement de l'évaluation : « 10 / 111 évalués », accordé au nombre de critères évalués. */
+function evalues(p: DossierSummary["progress"]) {
+  return `${fmtInt(p.assessed)} / ${fmtInt(p.criteria)} ${p.assessed > 1 ? "évalués" : "évalué"}`;
+}
+
+/** Score provisoire : tampon neutre, sans la couleur de sa classe, le mot à la suite du nombre. */
+function ScoreProvisoire({ valeur }: { valeur: number }) {
+  return (
+    <span title="Project Readiness Score provisoire : la méthode recommande « À compléter » tant que des critères des gates atteints restent à évaluer.">
+      <Badge tone="neutral">{note(valeur)} provisoire</Badge>
+    </span>
+  );
+}
 
 const CLE_VUE = "nimova.axispro.vue";
 
@@ -146,33 +169,42 @@ export default function DossiersPage() {
 /**
  * Entonnoir : combien de dossiers ont atteint chaque étape (le dossier compte pour son étape et
  * toutes celles d'avant). Les blocs rétrécissent avec le nombre, le pourcentage est donné en clair.
+ * Le sous-titre dit le cumul, et chaque étape rappelle combien de dossiers s'y trouvent : le chiffre
+ * se rapproche ainsi des colonnes du tableau, qui comptent l'étape actuelle.
  */
 function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
   const total = rangs.length || 1;
   const atteint = etapes.map((_, i) => rangs.filter((r) => r >= i).length);
+  const ici = etapes.map((_, i) => rangs.filter((r) => r === i).length);
   return (
-    <div className="overflow-x-auto">
-      <div className="grid min-w-[560px]" style={{ gridTemplateColumns: `repeat(${etapes.length}, minmax(0, 1fr))` }}>
-        {etapes.map((g, i) => {
-          const n = atteint[i] ?? 0;
-          const h = Math.max(10, (n / total) * 100);
-          return (
-            <div key={g.id} className={cx("flex flex-col px-2", i > 0 && "border-l border-line")}>
-              <div className="text-[12.5px] font-bold text-ink-2">{g.code}</div>
-              <div className="line-clamp-2 min-h-[2.5em] text-[11.5px] leading-tight text-muted" title={g.name}>
-                {g.name}
+    <div>
+      <p className="mb-4 text-[12.5px] text-muted">Dossiers ayant atteint l&apos;étape (cumul).</p>
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[560px]" style={{ gridTemplateColumns: `repeat(${etapes.length}, minmax(0, 1fr))` }}>
+          {etapes.map((g, i) => {
+            const n = atteint[i] ?? 0;
+            const h = Math.max(10, (n / total) * 100);
+            const actuels = ici[i] ?? 0;
+            return (
+              <div key={g.id} className={cx("flex flex-col px-2", i > 0 && "border-l border-line")}>
+                <div className="text-[12.5px] font-bold text-ink-2">{g.code}</div>
+                <div className="line-clamp-2 min-h-[2.5em] text-[11.5px] leading-tight text-muted" title={g.name}>
+                  {g.name}
+                </div>
+                <div className="mt-1 font-display text-[24px] font-bold leading-none tabular text-ink">{n}</div>
+                {/* Le zéro ne s'écrit pas ; la ligne garde sa hauteur pour aligner les blocs. */}
+                <div className="mt-1 min-h-[1.35em] text-[11.5px] leading-snug tabular text-muted">{actuels > 0 && `dont ${fmtInt(actuels)} à l'étape`}</div>
+                <div className="relative mt-2 flex h-[120px] items-center">
+                  <div
+                    className="n-pousser-y w-full rounded-xl"
+                    style={{ height: `${h}%`, background: "var(--accent)", opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
+                  />
+                </div>
+                <div className="mt-2 text-center text-[12px] font-semibold tabular text-muted">{fmtPct((n / total) * 100, 0)}</div>
               </div>
-              <div className="mt-1 font-display text-[24px] font-bold leading-none tabular text-ink">{n}</div>
-              <div className="relative mt-3 flex h-[120px] items-center">
-                <div
-                  className="n-pousser-y w-full rounded-xl"
-                  style={{ height: `${h}%`, background: "var(--accent)", opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
-                />
-              </div>
-              <div className="mt-2 text-center text-[12px] font-semibold tabular text-muted">{Math.round((n / total) * 100)} %</div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -204,34 +236,50 @@ function Tableau({ etapes, rows, rang }: { etapes: Gate[]; rows: DossierSummary[
   );
 }
 
+/**
+ * Carte d'un dossier. Score établi : il s'affiche en haut, à la couleur de sa classe. Score
+ * provisoire (la méthode recommande « À compléter ») : l'avancement prend sa place (« 10 / 111
+ * évalués ») et le score suit en tampon neutre ; le pied dit ce qui reste à évaluer.
+ */
 function CarteDossier({ d }: { d: DossierSummary }) {
-  const evalue = (d.progress.assessed / Math.max(1, d.progress.criteria)) * 100;
+  const { assessed, criteria } = d.progress;
+  const evalue = (assessed / Math.max(1, criteria)) * 100;
+  const etabli = assessed > 0 && !provisoire(d);
   return (
     <Link href={`/axispro/dossiers/${d.id}`} className={cx(FEUILLE, "n-levable block p-3.5")}>
       <div className="flex items-center justify-between gap-2">
         <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
-        <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.progress.assessed ? d.readiness : null))} title="Project Readiness Score">{d.progress.assessed ? `${note(d.readiness)} / 100` : "Non noté"}</span>
+        {etabli ? (
+          <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.readiness))} title="Project Readiness Score">{note(d.readiness)} / 100</span>
+        ) : (
+          <span className="whitespace-nowrap text-[12px] font-semibold tabular text-ink-2" title="Critères de la grille évalués">{evalues(d.progress)}</span>
+        )}
       </div>
       <div className="mt-2.5 line-clamp-2 text-[14px] font-semibold leading-snug text-ink">{d.name}</div>
       <div className="mt-0.5 truncate text-[12.5px] text-muted">{d.promoter.name}</div>
-      {d.progress.assessed > 0 && (
-        <div className="mt-2 flex gap-3 text-[11.5px] text-muted">
+      {assessed > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted">
+          {!etabli && <ScoreProvisoire valeur={d.readiness} />}
           <span>APD <b className="tabular text-ink-2">{note(d.apd)}</b></span>
           <span>Bankability <b className="tabular text-ink-2">{note(d.bankability)}</b></span>
-          {d.locked && <span className="font-semibold text-accent">Décision verrouillée</span>}
+          {d.locked && (
+            <span className="inline-flex items-center gap-1 font-semibold text-ink-2">
+              <Lock aria-hidden className="h-3.5 w-3.5" /> Décision verrouillée
+            </span>
+          )}
         </div>
       )}
-      {d.knockouts > 0 && d.progress.assessed > 0 && (
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-danger-doux px-2 py-1 text-[12px] font-semibold text-danger">
-          <ShieldAlert className="h-3.5 w-3.5" /> {d.knockouts} knock-out{d.knockouts > 1 ? "s" : ""} actif{d.knockouts > 1 ? "s" : ""}
+      {d.knockouts > 0 && assessed > 0 && (
+        <div className="mt-2">
+          <Badge tone="danger">
+            <ShieldAlert aria-hidden className="mr-1.5 h-3.5 w-3.5" /> {pluriel(d.knockouts, "knock-out actif", "knock-outs actifs")}
+          </Badge>
         </div>
       )}
       <div className="mt-3">
         <div className="mb-1 flex justify-between text-[11.5px] text-muted">
           <span>Évaluation</span>
-          <span className="font-semibold tabular text-ink-2">
-            {d.progress.assessed} / {d.progress.criteria}
-          </span>
+          <span className="font-semibold tabular text-ink-2">{etabli ? `${fmtInt(assessed)} / ${fmtInt(criteria)}` : `${fmtInt(Math.max(0, criteria - assessed))} à évaluer`}</span>
         </div>
         <ProgressBar value={evalue} tone={evalue >= 100 ? "ok" : "accent"} epaisseur={6} />
       </div>
@@ -280,21 +328,33 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
           render: (d) => (
             <div className="w-32">
               <ProgressBar value={(d.progress.assessed / Math.max(1, d.progress.criteria)) * 100} epaisseur={6} />
-              <span className="text-[11.5px] text-muted">
-                {d.progress.assessed} / {d.progress.criteria} critères
-              </span>
+              <span className="whitespace-nowrap text-[11.5px] text-muted">{evalues(d.progress)}</span>
             </div>
           ),
         },
-        { key: "readiness", label: "Readiness", align: "right", sortValue: (d) => d.readiness, render: (d) => <span className={cx("inline-block min-w-12 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.progress.assessed ? d.readiness : null))}>{d.progress.assessed ? note(d.readiness) : "–"}</span> },
-        { key: "apd", label: "APD", align: "right", sortValue: (d) => d.apd, render: (d) => (d.progress.assessed ? note(d.apd) : "–") },
-        { key: "bankability", label: "Bankability", align: "right", sortValue: (d) => d.bankability, render: (d) => (d.progress.assessed ? note(d.bankability) : "–") },
+        {
+          key: "readiness",
+          label: "Readiness",
+          align: "right",
+          sortValue: (d) => d.readiness,
+          render: (d) =>
+            !d.progress.assessed ? (
+              <span className="text-muted">–</span>
+            ) : provisoire(d) ? (
+              <ScoreProvisoire valeur={d.readiness} />
+            ) : (
+              <span className={cx("inline-block min-w-12 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.readiness))}>{note(d.readiness)}</span>
+            ),
+        },
+        // Scores partiels d'un dossier au score provisoire : en gris, comme le tampon qui les précède.
+        { key: "apd", label: "APD", align: "right", sortValue: (d) => d.apd, render: (d) => (d.progress.assessed ? <span className={cx(provisoire(d) && "text-muted")}>{note(d.apd)}</span> : "–") },
+        { key: "bankability", label: "Bankability", align: "right", sortValue: (d) => d.bankability, render: (d) => (d.progress.assessed ? <span className={cx(provisoire(d) && "text-muted")}>{note(d.bankability)}</span> : "–") },
         { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
         { key: "next_gate", label: "Prochain gate", render: (d) => (d.next_gate ? <span className="whitespace-nowrap text-[12.5px]">{d.next_gate.code} · {GATE_DECISION[d.next_gate.decision].label}</span> : "–") },
         { key: "irr", label: "TRI", align: "right", sortValue: (d) => d.financial?.irr_project ?? null, render: (d) => fmtPct(d.financial?.irr_project) },
         { key: "dscr", label: "DSCR min.", align: "right", sortValue: (d) => d.financial?.dscr_min ?? null, render: (d) => ratio(d.financial?.dscr_min) },
         { key: "financing_need", label: "Besoin", align: "right", render: (d) => fmtShort(d.financing_need) },
-        { key: "documents", label: "Data room", align: "right", sortValue: (d) => d.dataroom_completeness, render: (d) => `${Math.round(d.dataroom_completeness)} %` },
+        { key: "documents", label: "Data room", align: "right", sortValue: (d) => d.dataroom_completeness, render: (d) => fmtPct(d.dataroom_completeness, 0) },
       ]}
     />
   );
