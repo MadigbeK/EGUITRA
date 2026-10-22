@@ -4,7 +4,7 @@ import { FournisseurMoi } from "@/components/axispro/moi";
 import { AppShell } from "@/components/shell/AppShell";
 import { requireUser } from "@/lib/server-api";
 
-export const metadata: Metadata = { title: { absolute: "NIMOVA · AxisPro", template: "%s · NIMOVA AxisPro" } };
+export const metadata: Metadata = { title: { absolute: "NIMOVA · MB AxisPro Consulting", template: "%s · MB AxisPro Consulting" } };
 
 export default async function Layout({ children }: { children: ReactNode }) {
   const me = await requireUser("axispro");
