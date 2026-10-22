@@ -205,12 +205,22 @@ export const NAV: Record<AppCode, NavSection[]> = {
 };
 
 /**
- * Accueil d'EGUITRA Finance selon les profils : le tableau de bord du dirigeant pour la finance et la
- * direction ; pour le profil Achats seul, l'écran Achats et dépenses (le tableau de bord lui est fermé).
+ * Accueil d'EGUITRA Finance selon les profils. Le tableau de bord du dirigeant est réservé par le noyau
+ * à l'administration, à la direction et à la finance (FIN_READ) : un compte qui porte l'un de ces
+ * profils le garde, quels que soient ses autres profils. Les autres comptes s'ouvrent sur leur premier
+ * écran utile : Achats et dépenses pour le profil Achats, BTP pour les chantiers, Immobilier pour
+ * l'immobilier, Engagements de dépense pour l'exploitation (elle n'approuve aucune étape : sa corbeille
+ * « À valider » reste vide). BTP et Immobilier ne servent que le groupe : dans les livres du cabinet
+ * (entity, société de travail de Finance quand on la connaît), ces profils vont aux engagements.
  */
-export function accueilFinance(profiles: readonly Profile[]): string {
+export function accueilFinance(profiles: readonly Profile[], entity?: EntiteSociete | null): string {
   if (profiles.some((p) => FIN.includes(p))) return "/finance";
-  return profiles.includes("achats") ? "/finance/achats" : "/finance";
+  if (profiles.includes("achats")) return "/finance/achats";
+  const groupe = entity !== "cabinet";
+  if (groupe && profiles.includes("chantiers")) return "/finance/chantiers";
+  if (groupe && profiles.includes("immobilier")) return "/finance/immobilier";
+  if (profiles.some((p) => p === "exploitation" || p === "chantiers" || p === "immobilier")) return "/finance/engagements";
+  return "/finance";
 }
 
 /**

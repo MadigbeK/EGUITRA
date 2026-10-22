@@ -31,6 +31,19 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
 const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a" };
 
 /**
+ * Accueil d'une application pour ce compte. Finance s'ouvre sur le premier écran que ses profils
+ * ouvrent (le tableau de bord est réservé à la finance et à la direction), RH sur « Mon espace » pour un
+ * compte en libre-service. La société de travail (BTP et Immobilier ne servent que le groupe) n'est
+ * connue que pour l'application ouverte : chaque application garde la sienne.
+ */
+function accueilDe(a: AppCode, me: Me, ouverte: AppCode): string {
+  const entite = a === ouverte ? me.companies.find((c) => c.id === me.company_id)?.entity : undefined;
+  if (a === "finance") return accueilFinance(me.profiles, entite);
+  if (a === "rh") return accueilRh(me.profiles);
+  return APPS[a].home;
+}
+
+/**
  * Coque des applications, sans colonne latérale : une barre du haut à la manière d'Odoo (marque et
  * espace, rubriques en menus illustrés, recherche, applications, société, compte) et le contenu sur
  * toute la largeur. Un filigrane guilloché se grave en haut de chaque écran, comme sur un billet.
@@ -43,9 +56,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   const company = me.companies.find((c) => c.id === me.company_id);
   // Les modules d'une société (transport, chantiers, immobilier) n'apparaissent que dans ses livres.
   const sections = useMemo(() => navFor(app, me.profiles, company?.entity), [app, me.profiles, company?.entity]);
-  // Finance s'ouvre sur l'écran Achats pour le profil Achats seul (le tableau de bord lui est fermé).
-  // RH s'ouvre sur « Mon espace » pour un compte en libre-service (sans profil de gestion).
-  const home = app === "finance" ? accueilFinance(me.profiles) : app === "rh" ? accueilRh(me.profiles) : APPS[app].home;
+  // Finance s'ouvre sur le premier écran des profils sans tableau de bord (Achats, BTP, Immobilier,
+  // Engagements) ; RH sur « Mon espace » pour un compte en libre-service (sans profil de gestion).
+  const home = accueilDe(app, me, app);
   const entity = entityOf(company, app);
   // Finance : équilibre de l'exercice dans la barre du haut, pastilles dans la navigation.
   const enTete = useEnTeteFinance(app, me);
@@ -244,7 +257,7 @@ function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
 
   if (!plusieurs) {
     return (
-      <Link href={APPS[app].home} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2">
+      <Link href={accueilDe(app, me, app)} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2">
         {marque}
       </Link>
     );
@@ -260,7 +273,7 @@ function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
           {espaces.map((a) => (
             <Link
               key={a}
-              href={APPS[a].home}
+              href={accueilDe(a, me, app)}
               onClick={() => setOpen(false)}
               aria-current={a === app ? "true" : undefined}
               className={cx("tuile group flex items-center gap-3 rounded-xl p-2.5 transition-colors", a === app ? "bg-accent-doux" : "hover:bg-panel-2")}
@@ -297,7 +310,7 @@ function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: (
           return (
             <Link
               key={a}
-              href={APPS[a].home}
+              href={accueilDe(a, me, app)}
               onClick={onNavigate}
               aria-current={actif ? "true" : undefined}
               className={cx("flex min-w-0 items-center justify-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-[13px] font-semibold transition-all duration-200", actif ? "bg-panel text-ink shadow-[0_1px_3px_rgb(16_36_31/0.12),0_0_0_1px_rgb(16_36_31/0.04)]" : "text-muted hover:text-ink")}
@@ -462,7 +475,7 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
               <KeyRound className="h-4 w-4 text-muted" /> Changer le mot de passe
             </Link>
             {others.map((a) => (
-              <Link key={a} href={APPS[a].home} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
+              <Link key={a} href={accueilDe(a, me, app)} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
                 <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: TEINTE_APP[a] }} />
                 Ouvrir {APPS[a].name}
               </Link>
@@ -499,13 +512,13 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
     const ecrans = sections.flatMap((s) => s.items.map((i) => ({ cle: i.href, libelle: i.label, rubrique: s.label, icone: ICONES[i.icon] ?? ICONES.LayoutDashboard!, aller: aller(i.href) })));
     const apps = me.apps
       .filter((a) => a !== app && a !== "portail")
-      .map((a) => ({ cle: `app-${a}`, libelle: `Ouvrir ${APPS[a].name}`, rubrique: "Applications", icone: Grid, aller: aller(APPS[a].home) }));
+      .map((a) => ({ cle: `app-${a}`, libelle: `Ouvrir ${APPS[a].name}`, rubrique: "Applications", icone: Grid, aller: aller(accueilDe(a, me, app)) }));
     const compte = [
       { cle: "mdp", libelle: "Changer le mot de passe", rubrique: "Compte", icone: KeyRound, aller: aller("/compte/mot-de-passe") },
       { cle: "sortie", libelle: "Se déconnecter", rubrique: "Compte", icone: LogOut, aller: onLogout },
     ];
     return [...ecrans, ...apps, ...compte];
-  }, [sections, me.apps, app, onClose, onLogout, router]);
+  }, [sections, me, app, onClose, onLogout, router]);
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
   const filtres = choix.filter((c) => mots.every((m) => sansAccents(`${c.libelle} ${c.rubrique}`).includes(m)));
