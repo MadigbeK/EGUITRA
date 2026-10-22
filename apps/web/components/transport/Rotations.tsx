@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { parseNumber, type Ref, type Referentials } from "./types";
 
 interface Rotation {
@@ -57,9 +57,9 @@ export function Rotations() {
         setMessage({ tone: "ok", text: "Rotations validées." });
       } else {
         const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
-        const claims = res.claims.length ? ` ${res.claims.length} créance(s) sur chauffeur en opérations diverses, à valider dans Journaux et OD.` : "";
+        const claims = res.claims.length ? ` ${pluriel(res.claims.length, "créance sur chauffeur", "créances sur chauffeur")} en opérations diverses, à valider dans Journaux et OD.` : "";
         const unclaimed = res.unclaimed.length ? ` Sans fiche tiers, créance à passer à la main : ${res.unclaimed.map((u) => `${u.driver?.name ?? "chauffeur non renseigné"} (${u.rotation}, ${fmtGNF(u.amount)})`).join(", ")}.` : "";
-        setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${res.invoices.length} facture(s) créée(s) en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
+        setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${pluriel(res.invoices.length, "facture créée", "factures créées")} en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
       }
       setSelected([]);
       void mutate();
@@ -98,14 +98,14 @@ export function Rotations() {
             onRowClick={(r) => setSelected((s) => (s.includes(r.id) ? s.filter((x) => x !== r.id) : [...s, r.id]))}
             empty="Aucune rotation pour ce filtre."
             columns={[
-              { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={selected.includes(r.id)} /> },
+              { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={selected.includes(r.id)} aria-label={`Sélectionner la rotation ${r.name ?? r.id}`} /> },
               { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name ?? "–"}{r.source === "mobile" && <Smartphone className="ml-1 inline h-3 w-3 text-accent" />}</span> },
               { key: "date_loading", label: "Chargement", render: (r) => fmtDate(r.date_loading) },
               { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name, sortValue: (r) => r.vehicle.name },
               { key: "client", label: "Client", render: (r) => r.client.name, sortValue: (r) => r.client.name },
               { key: "route", label: "Route", render: (r) => r.route.name },
-              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => <span title={r.over_capacity ? `Chargé au-delà de la capacité (${fmtDec(r.capacity_liters / 1000)} m³)` : undefined} className={r.over_capacity ? "text-danger" : ""}>{fmtDec(r.volume_delivered || r.volume_loaded)}</span> },
-              { key: "shortage", label: "Manquant", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtDec(r.shortage)}</span> : "–") },
+              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => <span title={r.over_capacity ? `Chargé au-delà de la capacité (${fmtDec(r.capacity_liters / 1000)} m³)` : undefined} className={r.over_capacity ? "text-danger" : ""}>{fmtDec(r.volume_delivered || r.volume_loaded)}{r.over_capacity && <span className="sr-only">, chargé au-delà de la capacité ({fmtDec(r.capacity_liters / 1000)} m³)</span>}</span> },
+              { key: "shortage", label: "Manquant", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtDec(r.shortage)}<span className="sr-only">{r.shortage_excess > 0 ? `, ${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : ", dans la tolérance"}</span></span> : "–") },
               { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
               { key: "margin", label: "Marge", align: "right", render: (r) => (!r.total_cost && r.std_cost ? (
                 <span className="italic text-muted" title={`Marge estimée avec le coût standard de la route (${fmtGNF(r.std_cost)}) : aucun frais saisi`}>{fmtShort(r.estimated_margin)} est.</span>

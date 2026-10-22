@@ -5,7 +5,7 @@ import { Badge, Card, DataTable, ErrorBox, Kpi, Loading, ProgressBar, Segmented,
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import type { Aging } from "@/lib/finance-types";
-import { fmtGNF, fmtInt, fmtPct, fmtShort } from "@/lib/format";
+import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 interface PartnerAging {
   partner_id: number | null;
@@ -60,9 +60,9 @@ export function BalanceAgee() {
       {data && (
         <>
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-            <Kpi label={kind === "customer" ? "Créances clients" : "Dettes fournisseurs"} value={fmtShort(data.total)} hint={`${data.partners.length} compte(s) ouvert(s), ${data.documents} pièce(s)`} />
+            <Kpi label={kind === "customer" ? "Créances clients" : "Dettes fournisseurs"} value={fmtShort(data.total)} hint={`${pluriel(data.partners.length, "compte ouvert", "comptes ouverts")}, ${pluriel(data.documents, "pièce")}`} />
             <Kpi label="Dont échu" value={fmtShort(data.overdue)} hint={`${fmtPct(data.total ? (data.overdue / data.total) * 100 : null)} de l'encours`} tone={data.overdue > 0.5 ? (kind === "customer" ? "danger" : "warn") : "ok"} />
-            <Kpi label="Plus de 90 jours" value={fmtShort(data.aging.plus_90)} hint={`${data.aging_count.plus_90} pièce(s)`} tone={data.aging.plus_90 > 0.5 ? "danger" : "ok"} />
+            <Kpi label="Plus de 90 jours" value={fmtShort(data.aging.plus_90)} hint={pluriel(data.aging_count.plus_90, "pièce")} tone={data.aging.plus_90 > 0.5 ? "danger" : "ok"} />
             <Kpi label="Tiers en contentieux" value={fmtInt(data.partners.filter((p) => p.status === "contentieux").length)} hint={`${data.partners.filter((p) => p.status === "retard").length} en retard`} tone={data.partners.some((p) => p.status === "contentieux") ? "danger" : "neutral"} />
           </div>
           <Card title={`Balance âgée des ${kind === "customer" ? "créances clients" : "dettes fournisseurs"}`} padded={false}>

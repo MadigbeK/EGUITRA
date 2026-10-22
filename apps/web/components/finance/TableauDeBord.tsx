@@ -9,7 +9,7 @@ import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/com
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import type { Dashboard } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
 const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = [
@@ -192,7 +192,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
             icon={Target}
             teinte="or"
             tone={budget.overruns.length ? "warn" : "ok"}
-            hint={`Charges ${fmtShort(budget.expenses.actual)} / ${fmtShort(budget.expenses.budget)} à fin ${fmtMonth(budget.through.slice(0, 7))}, ${budget.overruns.length} ligne(s) hors tolérance`}
+            hint={`Charges ${fmtShort(budget.expenses.actual)} / ${fmtShort(budget.expenses.budget)} à fin ${fmtMonth(budget.through.slice(0, 7))}, ${pluriel(budget.overruns.length, "ligne")} hors tolérance`}
           />
         ) : (
           <Kpi label="Réalisé contre budget cumulé" value="–" icon={Target} teinte="or" hint="Aucun budget pour l'exercice (Activités et budget)" />
@@ -278,7 +278,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
         <Card title="Ancienneté des créances clients" className="xl:col-span-5">
           <Donut parts={AGING.map(([key, label, color]) => ({ key, label, value: aging[key], color }))} format={(v) => fmtShort(v)} centre={{ titre: "Encours clients", valeur: fmtShort(d.receivables.total) }} />
           <p className="mt-3 text-[12.5px] leading-snug text-muted">
-            {fmtShort(aging.plus_90)} GNF dorment depuis plus de 90 jours ({d.receivables.aging_count?.plus_90 ?? 0} pièce(s)). Perte attendue IFRS 9 : {fmtShort(ecl)} GNF{d.expected_credit_loss.rate_pct !== null ? `, soit ${fmtPct(d.expected_credit_loss.rate_pct)} de l'encours` : ""}.
+            {fmtShort(aging.plus_90)} GNF dorment depuis plus de 90 jours ({pluriel(d.receivables.aging_count?.plus_90 ?? 0, "pièce")}). Perte attendue IFRS 9 : {fmtShort(ecl)} GNF{d.expected_credit_loss.rate_pct !== null ? `, soit ${fmtPct(d.expected_credit_loss.rate_pct)} de l'encours` : ""}.
           </p>
         </Card>
         <Card title="Couverture de la dette" className="xl:col-span-3">
@@ -305,7 +305,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
               <RankBars items={transport.vehicles.items.slice(0, 8).map((v) => ({ key: String(v.key ?? v.label), label: v.label, value: v.result, detail: v.km !== null ? `${fmtShort(v.km)} km` : `CA ${fmtShort(v.revenue)}` }))} />
               <p className="mt-3 text-[12.5px] leading-snug text-muted">
                 {transport.vehicles.basis === "net"
-                  ? `${transport.vehicles.deficit.length} camion(s) sur ${transport.vehicles.count} déficitaire(s) une fois les charges de structure absorbées.`
+                  ? `${pluriel(transport.vehicles.deficit.length, "camion")} sur ${transport.vehicles.count} déficitaire${transport.vehicles.deficit.length > 1 ? "s" : ""} une fois les charges de structure absorbées.`
                   : "Marge directe des rotations : le résultat après charges de structure s'affichera dès que le module transport le calcule."}
               </p>
             </>

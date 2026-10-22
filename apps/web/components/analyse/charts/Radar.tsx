@@ -69,7 +69,7 @@ export function Radar({ axes, score, taille = 300, label, couleur }: { axes: Axe
             <div className="font-display text-[26px] font-bold leading-none tabular text-ink">
               <Valeur value={String(Math.round(score))} />
             </div>
-            <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted">sur 100</div>
+            <div className="text-[11.5px] font-medium text-muted">sur 100</div>
           </div>
         </div>
         {choisi && focus !== null && <Bulle x={point(focus, (R * choisi.score) / 100)[0]} y={point(focus, (R * choisi.score) / 100)[1]} largeur={S} titre={choisi.label} lignes={[{ nom: "Score", valeur: `${Math.round(choisi.score)} / 100`, couleur: teinte }, ...(choisi.value ? [{ nom: "Mesure", valeur: choisi.value }] : [])]} texte={choisi.comment} />}

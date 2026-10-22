@@ -3,7 +3,7 @@
 import { CheckCircle2, Droplet, Percent, Receipt, Smartphone, TrendingUp, TriangleAlert } from "@/components/icons";
 import { Card, Compteur, IconTile, Kpi, Loading, Repartition } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 /** Chiffres du mois : volume livré au compteur, état de la flotte, chiffre d'affaires, marge, à facturer, saisies. */
 export function Synthese() {
@@ -28,7 +28,7 @@ export function Synthese() {
             <Compteur value={summary.volume} unit="m³" className="mt-5 text-[42px] text-ink sm:text-[50px]" />
             {summary.shortage_excess.count > 0 && (
               <p className="mt-2 text-[13px] font-medium text-danger">
-                {fmtDec(summary.shortage_excess.volume)} m³ manquants au-delà de la tolérance sur {summary.shortage_excess.count} rotation(s)
+                {fmtDec(summary.shortage_excess.volume)} m³ manquants au-delà de la tolérance sur {pluriel(summary.shortage_excess.count, "rotation")}
                 {summary.shortage_excess.value ? `, ${fmtGNF(summary.shortage_excess.value)}` : ""}
               </p>
             )}
@@ -57,7 +57,7 @@ export function Synthese() {
               tone={summary.margin_rate === null || summary.margin_min === null ? "neutral" : sousMinimum ? "warn" : "ok"}
               hint={`Taux de marge ${fmtPct(summary.margin_rate)}, ${summary.margin_min !== null ? `minimum ${fmtPct(summary.margin_min, 0)}` : "seuil non fixé"}`}
             />
-            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={`${summary.to_invoice.count} rotation(s) validée(s)`} />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
             <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>
         </div>

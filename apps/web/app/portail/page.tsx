@@ -199,7 +199,7 @@ function Taches({ taches, closed, onDone, onError }: { taches: Task[]; closed: b
               {!closed && (t.state === "todo" || t.state === "in_progress" || t.state === "submitted") && (
                 ouverte === t.id ? (
                   <div className="mt-2 space-y-2">
-                    <Textarea className="min-h-[60px]" value={compteRendu} placeholder="Ce que vous avez fait, et les pièces déposées s'il y en a" onChange={(e) => setCompteRendu(e.target.value)} />
+                    <Textarea className="min-h-[60px]" value={compteRendu} aria-label={`Compte rendu de l'action « ${t.name} »`} placeholder="Ce que vous avez fait, et les pièces déposées s'il y en a" onChange={(e) => setCompteRendu(e.target.value)} />
                     <div className="flex gap-2">
                       <Button variant="primary" disabled={!compteRendu.trim()} onClick={() => declarer(t)}>Transmettre au cabinet</Button>
                       <Button variant="ghost" onClick={() => setOuverte(null)}>Annuler</Button>

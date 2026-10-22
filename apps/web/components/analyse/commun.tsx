@@ -9,12 +9,12 @@
 
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sparkles, Sun, TriangleAlert, type Icon } from "@/components/icons";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, TriangleAlert, type Icon } from "@/components/icons";
 import { Badge, Button, Delta, Empty, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import type { EntiteSociete } from "@/lib/config";
-import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { COULEUR, fmtValeur, moisCourt } from "@/components/analyse/charts/commun";
 
 /* ─── Valeurs tolérantes ───────────────────────────────────────────────── */
@@ -51,11 +51,6 @@ export function gnfOu(v: number | null | undefined): string {
 /** « 38 j » ou « – ». */
 export function joursOu(v: number | null | undefined, digits = 0): string {
   return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${v.toLocaleString("fr-FR", { maximumFractionDigits: digits })} j`;
-}
-
-/** Pluriel simple. */
-export function pluriel(n: number, un: string, plusieurs = `${un}s`): string {
-  return `${fmtInt(n)} ${n > 1 ? plusieurs : un}`;
 }
 
 /* ─── Contexte ─────────────────────────────────────────────────────────── */
@@ -291,7 +286,7 @@ export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteS
       <Notice tone="accent">
         <p className="font-semibold">Cette analyse concerne {nom}.</p>
         <p className="mt-1">
-          Vous travaillez dans les livres de {contexte.company.name}. {contexte.can_switch ? "Choisissez l'autre société en haut à droite pour ouvrir cette section, ou " : "Votre compte n'est pas ouvert à cette société ; "}
+          Vous travaillez dans les livres de {contexte.company.name}. {contexte.can_switch ? "Choisissez l'autre société dans la barre du haut, à droite, pour ouvrir cette section, ou " : "Votre compte n'est pas ouvert à cette société ; "}
           <Link href="/analyse" className="font-semibold text-accent underline underline-offset-2">
             revenez au cockpit
           </Link>
@@ -560,24 +555,19 @@ export function valeurMetrique(value: number | null, unit: Unit): string {
 export function CarteConstat({ insight, compact, rang }: { insight: Insight; compact?: boolean; rang?: number }) {
   const g = GRAVITE[insight.severity] ?? GRAVITE.info;
   const [ouvert, setOuvert] = useState(false);
-  const I = g.icon;
   const evidence = normaliserEvidence(insight.evidence);
   const metric = insight.metric && insight.metric.value !== null ? insight.metric : null;
   const impact = nombre(insight.impact_gnf);
   return (
-    <article className={cx("an-carte n-levable relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[var(--ombre-carte)]", compact ? "p-4" : "p-5")} style={{ "--i": rang ?? 0 } as CSSProperties}>
-      <span aria-hidden className="absolute inset-y-0 left-0 w-1" style={{ background: g.couleur }} />
+    <article className={cx("an-carte n-levable relative flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]", compact ? "p-4" : "p-5")} style={{ "--i": rang ?? 0 } as CSSProperties}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span aria-hidden className="grid h-8 w-8 flex-none place-items-center rounded-[9px]" style={{ background: `color-mix(in oklab, ${g.couleur} 16%, var(--panel))`, color: g.couleur }}>
-            <I className="h-4 w-4" />
-          </span>
           <Badge tone={g.tone}>{g.label}</Badge>
           <span className="truncate rounded-md bg-panel-3 px-1.5 py-px text-[11.5px] font-medium text-ink-2">{DOMAINES[insight.domain] ?? insight.domain}</span>
         </div>
         {impact !== null && impact > 0 && (
           <span className="flex-none text-right">
-            <span className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted">Impact</span>
+            <span className="block text-[11.5px] font-medium text-muted">Impact</span>
             <span className="block font-display text-[15px] font-bold leading-tight tabular text-ink">{fmtShort(impact)} GNF</span>
           </span>
         )}
@@ -605,12 +595,9 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
         </div>
       )}
       {insight.action && (
-        <p className="mt-3 flex gap-2 rounded-xl border border-accent/15 bg-accent-doux/60 px-3 py-2 text-[12.5px] leading-snug text-ink">
-          <Sparkles className="mt-0.5 h-3.5 w-3.5 flex-none text-accent" />
-          <span>
-            <span className="font-semibold">Action : </span>
-            {insight.action}
-          </span>
+        <p className="mt-3 rounded-xl bg-accent-doux/60 px-3 py-2 text-[12.5px] leading-snug text-ink">
+          <span className="font-semibold">Action : </span>
+          {insight.action}
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
@@ -744,4 +731,4 @@ export function LienFiche({ href, children, className }: { href?: string | null;
   );
 }
 
-export { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, fmtValeur, moisCourt };
+export { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, fmtValeur, moisCourt, pluriel };

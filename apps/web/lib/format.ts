@@ -28,6 +28,11 @@ export function fmtInt(value: unknown): string {
   return n === null ? "–" : intFmt.format(round0(n));
 }
 
+/** Pluriel simple : « 0 dossier », « 1 dossier », « 2 dossiers ». */
+export function pluriel(n: number, un: string, plusieurs = `${un}s`): string {
+  return `${fmtInt(n)} ${n > 1 ? plusieurs : un}`;
+}
+
 export function fmtDec(value: unknown): string {
   const n = toNumber(value);
   return n === null ? "–" : decFmt.format(n);

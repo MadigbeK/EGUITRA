@@ -69,7 +69,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const cible = e.target as HTMLElement | null;
-      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.isContentEditable)) return;
+      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.tagName === "SELECT" || cible.isContentEditable)) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         champ.current?.focus();
@@ -182,7 +182,9 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
       </header>
 
       <main className="relative z-10 mx-auto max-w-[800px] px-4 pb-16 pt-[6vh] sm:px-6">
-        <div className={cx("mx-auto mb-8 max-w-md transition-all duration-300 ease-[var(--ease-sortie)]", q ? "translate-y-0 opacity-100" : "pointer-events-none h-0 -translate-y-2 opacity-0 sm:h-auto")} aria-hidden={!q}>
+        <h1 className="sr-only">Applications NIMOVA</h1>
+        {/* Recherche toujours visible : au toucher, aucune frappe au clavier ne pourrait la faire apparaître. */}
+        <div className="n-entree mx-auto mb-8 max-w-md" style={{ "--i": 1 } as CSSProperties}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -206,15 +208,16 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
                   grille.current?.querySelector<HTMLAnchorElement>("a.tuile")?.focus();
                 }
               }}
-              tabIndex={q ? 0 : -1}
               aria-label="Rechercher un module"
               placeholder="Rechercher un module"
               className="h-full min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted/70"
             />
-            {q && (
+            {q ? (
               <button type="button" onClick={() => setQ("")} className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-panel-2 hover:text-ink" aria-label="Effacer la recherche">
                 <X className="h-4 w-4" />
               </button>
+            ) : (
+              <kbd className="hidden rounded-md border border-line bg-panel-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-muted sm:inline">Ctrl K</kbd>
             )}
           </form>
         </div>
@@ -267,8 +270,8 @@ function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: T
       <span
         ref={boite}
         className={cx(
-          "tuile-boite relative grid h-[66px] w-[66px] place-items-center rounded-[15px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_4px_10px_-3px_rgb(16_36_31/0.12)] group-hover:shadow-[0_2px_4px_rgb(16_36_31/0.08),0_14px_24px_-8px_rgb(16_36_31/0.26)] group-focus-visible:ring-2 group-focus-visible:ring-accent-vif group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#f3f6f1]",
-          premiere && "ring-2 ring-accent-vif ring-offset-2 ring-offset-[#f3f6f1]",
+          "tuile-boite relative grid h-[66px] w-[66px] place-items-center rounded-[15px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_4px_10px_-3px_rgb(16_36_31/0.12)] group-hover:shadow-[0_2px_4px_rgb(16_36_31/0.08),0_14px_24px_-8px_rgb(16_36_31/0.26)] group-focus-visible:ring-2 group-focus-visible:ring-accent group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#f3f6f1]",
+          premiere && "ring-2 ring-accent ring-offset-2 ring-offset-[#f3f6f1]",
         )}
       >
         <span aria-hidden className="tuile-reflet pointer-events-none absolute inset-0 rounded-[15px]" />

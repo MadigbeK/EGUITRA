@@ -119,6 +119,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   if (app === "portail") {
     return (
       <div data-app={app} data-societe="cabinet" className="min-h-screen bg-bg text-ink">
+        <a href="#contenu" className="sr-only z-[60] rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-ink shadow-[var(--ombre-flottante)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+          Aller au contenu
+        </a>
         <header className="no-print sticky top-0 z-30 border-b border-line bg-panel/95">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 md:px-8">
             <Link href={home} className="rounded-lg">
@@ -129,7 +132,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
           <div aria-hidden className="h-[3px] bg-[linear-gradient(90deg,#1f73d6,#2d82dc_40%,#0f9fa0)]" />
         </header>
         {passwordBanner}
-        <main key={pathname} className="n-page mx-auto min-w-0 max-w-6xl px-5 py-8 md:px-8 md:py-10">
+        <main id="contenu" tabIndex={-1} key={pathname} className="outline-none n-page mx-auto min-w-0 max-w-6xl px-5 py-8 md:px-8 md:py-10">
           {children}
         </main>
       </div>
@@ -138,6 +141,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 
   return (
     <div data-app={app} data-societe={entity} className="min-h-screen bg-bg text-ink">
+      <a href="#contenu" className="sr-only z-[60] rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-ink shadow-[var(--ombre-flottante)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+        Aller au contenu
+      </a>
       {/* Menu du téléphone et de la tablette */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
@@ -192,7 +198,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
       {passwordBanner}
       <div className="relative overflow-x-clip">
         <Rosace key={`filigrane-${pathname}`} className="filigrane no-print pointer-events-none absolute -right-40 -top-48 h-[560px] w-[560px] text-accent-vif" />
-        <main key={pathname} className="n-page relative min-w-0 px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
+        <main id="contenu" tabIndex={-1} key={pathname} className="outline-none n-page relative min-w-0 px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
           {children}
         </main>
       </div>

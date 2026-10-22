@@ -5,7 +5,7 @@ import { AlertTriangle, Calendar, Clock, HandCoins, ShieldAlert, Users } from "@
 import { Badge, Card, RankBars, Repartition, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { FUNDING_STATE, RISK_LEVEL, type FundingState, type Portfolio } from "@/lib/axispro-types";
-import { fmtDate, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { ratio } from "./cellules";
 import { note } from "./dossier/commun";
 
@@ -148,7 +148,7 @@ export function Portefeuille() {
           {data.workload.length === 0 ? (
             <p className="text-[13px] text-muted">Aucun temps saisi.</p>
           ) : (
-            <RankBars items={data.workload.map((w) => ({ key: w.name, label: w.name, value: w.hours, detail: `${w.dossiers} dossier(s)` }))} format={(v) => `${v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`} />
+            <RankBars items={data.workload.map((w) => ({ key: w.name, label: w.name, value: w.hours, detail: pluriel(w.dossiers, "dossier") }))} format={(v) => `${v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`} />
           )}
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-line pt-3 text-[13px] text-ink-2">
             <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4 text-muted" /> {data.fees.unbilled_hours.toLocaleString("fr-FR")} h à facturer</span>

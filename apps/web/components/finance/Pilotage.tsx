@@ -12,7 +12,7 @@ import { type ReactNode } from "react";
 import { AlertTriangle, ChevronRight, Info, ShieldAlert, TriangleAlert, type Icon } from "@/components/icons";
 import { Badge, DataTable, IconTile, cx, type Teinte, type Tone } from "@/components/ui";
 import type { Alert, AlertUnit, CashForecast, MonthStatus, MonthlyCash, Question, Severity, Thresholds, Verdict, WorkingCapital } from "@/lib/finance-types";
-import { MONTHS_FR, fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort } from "@/lib/format";
+import { MONTHS_FR, fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 /* ─── Gravités et valeurs ──────────────────────────────────────────────── */
 
@@ -343,7 +343,7 @@ export function CarteBfr({ wc, thresholds }: { wc: WorkingCapital; thresholds: T
       <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} GNF sur ${fmtShort(wc.receivables)} GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
       <Chiffre label="Dettes fournisseurs échues" value={`${fmtShort(wc.payables_overdue)}`} hint={`sur ${fmtShort(wc.payables)} GNF`} tone={wc.payables_overdue > 0.5 ? "warn" : undefined} />
       <Chiffre label="Premier client" value={fmtPct(wc.concentration.pct)} hint={`${wc.concentration.partner ?? "du chiffre d'affaires"} · ${concMax ? `seuil ${fmtPct(concMax, 0)}` : "seuil non fixé"}`} tone={wc.concentration.pct !== null && concMax && wc.concentration.pct > concMax ? "warn" : undefined} />
-      <Chiffre label="Douteux (+ de 90 j)" value={`${fmtShort(wc.receivables_doubtful)}`} hint={`${wc.receivables_aging_count.plus_90} pièce(s)`} tone={wc.receivables_doubtful > 0 ? "danger" : undefined} />
+      <Chiffre label="Douteux (+ de 90 j)" value={`${fmtShort(wc.receivables_doubtful)}`} hint={pluriel(wc.receivables_aging_count.plus_90, "pièce")} tone={wc.receivables_doubtful > 0 ? "danger" : undefined} />
     </div>
   );
 }

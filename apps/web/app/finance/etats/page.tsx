@@ -6,7 +6,7 @@ import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, PageH
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { IfrsPanel } from "@/components/finance/IfrsPanel";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtGNF, fmtInt, fmtPct } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtInt, fmtPct, pluriel } from "@/lib/format";
 
 type Tab = "bilan" | "resultat" | "flux" | "consolide" | "rapports" | "ifrs" | "export";
 interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number; month?: number; pct_revenue?: number | null }
@@ -301,7 +301,7 @@ function ReportBuilder({ scope }: { scope: string }) {
       {Boolean(error) && <ErrorBox error={error} />}
       {result && (
         <Card
-          title={`${result.label}, ${result.total_count} ligne(s)`}
+          title={`${result.label}, ${pluriel(result.total_count, "ligne")}`}
           padded={false}
           actions={
             <div className="no-print flex gap-2">
@@ -441,7 +441,7 @@ function Consolidated() {
       {data && (
         <>
           <Notice tone="accent">
-            Les opérations entre sociétés du groupe (ventes et achats réciproques, créances et dettes, comptes courants) s&apos;éliminent : {data.intra_group_partners} fiche(s) de tiers représentent les sociétés du groupe. Les frais communs refacturés s&apos;éliminent de même dès qu&apos;ils sont facturés entre sociétés.
+            Les opérations entre sociétés du groupe (ventes et achats réciproques, créances et dettes, comptes courants) s&apos;éliminent : {pluriel(data.intra_group_partners, "fiche de tiers représente", "fiches de tiers représentent")} les sociétés du groupe. Les frais communs refacturés s&apos;éliminent de même dès qu&apos;ils sont facturés entre sociétés.
           </Notice>
           <Card title={`Compte de résultat consolidé du ${fmtDate(data.date_from)} au ${fmtDate(data.date_to)}`} padded={false}>{table(data.income)}</Card>
           <Card title={`Bilan consolidé au ${fmtDate(data.date_to)}`} padded={false}>{table(data.balance)}</Card>

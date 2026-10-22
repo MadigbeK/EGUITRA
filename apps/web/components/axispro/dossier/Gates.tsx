@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRight, CheckCircle2, Flag, ShieldAlert } from "@/components/icons";
 import { Badge, Button, Card, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend } from "@/lib/api-client";
+import { pluriel } from "@/lib/format";
 import { GATE_DECISION, HYPOTHESES, YES_NO, type DossierDetail } from "@/lib/axispro-types";
 import { RULE_LABELS, useRetour } from "./commun";
 
@@ -84,8 +85,8 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
                 ))}
               </ul>
               <div className="mt-3 flex flex-wrap gap-3 text-[12px] text-muted">
-                <span>{g.available}/{g.criteria} critère(s) disponibles</span>
-                {g.knockouts > 0 && <span className="font-semibold text-danger">{g.knockouts} knock-out(s) du gate</span>}
+                <span>{g.available}/{g.criteria} {g.available > 1 ? "critères disponibles" : "critère disponible"}</span>
+                {g.knockouts > 0 && <span className="font-semibold text-danger">{pluriel(g.knockouts, "knock-out")} du gate</span>}
                 {hyp.map((h) => (
                   <span key={h.key}>
                     {h.label} : <b className="text-ink-2">{d.decision_inputs[h.key] ? YES_NO[d.decision_inputs[h.key] as string] : "non renseigné"}</b>
