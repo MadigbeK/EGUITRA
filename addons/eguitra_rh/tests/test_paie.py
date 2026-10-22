@@ -1,5 +1,6 @@
 from datetime import date
 
+from odoo import Command, fields
 from odoo.exceptions import AccessError, UserError
 from odoo.tests import TransactionCase, tagged
 
@@ -212,6 +213,36 @@ class TestRh(FinanceDataMixin, TransactionCase):
             payroll.with_user(self.administrateur).action_validate()
         payroll.with_user(self.valideur).action_validate()
         self.assertEqual((payroll.state, payroll.validated_by), ("validated", self.valideur))
+
+    def test_champs_de_la_paie_proteges(self):
+        """Statut, validation et préparateurs ne s'écrivent que par les actions de la paie : ni par un compte
+        RH dans l'ORM, ni en sudo, ni avec le drapeau de contexte reçu d'un appel distant."""
+        payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
+        rh = payroll.with_user(self.gestionnaire)
+        for vals in ({"state": "validated"}, {"prepared_by_ids": [Command.clear()]},
+                     {"validated_by": self.gestionnaire.id}, {"validated_at": fields.Datetime.now()}):
+            for target in (rh, rh.sudo(), rh.with_context(eguitra_rh_payroll_workflow=True)):
+                with self.assertRaisesRegex(AccessError, "ne changent que par ses actions"):
+                    target.write(vals)
+        with self.assertRaisesRegex(AccessError, "ne changent que par ses actions"):
+            self.env["eguitra.rh.payroll"].with_user(self.gestionnaire).create(
+                {"company_id": self.company.id, "month": date(2026, 10, 1), "state": "validated"})
+        self.assertEqual((payroll.state, payroll.prepared_by_ids), ("draft", self.env.user))
+
+        # Écritures directes dans l'ORM : le compte est retenu parmi les préparateurs.
+        slip = payroll.payslip_ids.filtered(lambda s: s.employee_id == self.alpha)
+        self.env["eguitra.rh.payslip.input"].with_user(self.gestionnaire).create({
+            "payslip_id": slip.id, "rubric_id": self.env.ref("eguitra_rh.rubric_rendement").id, "amount": 100_000})
+        slip.line_ids[:1].with_user(self.administrateur).write({"amount": 1})
+        self.assertEqual(payroll.prepared_by_ids, self.env.user | self.gestionnaire | self.administrateur)
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            payroll.with_user(self.administrateur).action_validate()
+
+        # Paie validée : ses bulletins, leurs lignes et éléments variables ne se modifient plus.
+        payroll.with_user(self.valideur).action_validate()
+        for record, vals in ((slip, {"net": 1}), (slip.line_ids[:1], {"amount": 2}), (slip.input_ids[:1], {"amount": 2})):
+            with self.assertRaisesRegex(UserError, "rouvrez-la"):
+                record.with_user(self.gestionnaire).write(vals)
 
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
