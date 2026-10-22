@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { type SWRConfiguration } from "swr";
-import type { ApiErrorBody, Me } from "./types";
+import type { ApiErrorBody, Me, Profile } from "./types";
 
 /** Erreur d'appel à l'API, avec le message destiné à l'utilisateur. */
 export class ApiError extends Error {
@@ -104,6 +104,16 @@ export const PROFILS_FINANCE = ["admin", "direction", "finance"] as const;
 export function useSaisieLibre(enabled = true): boolean {
   const { data } = useApi<Me>(enabled ? "/auth/me" : null);
   return data?.rights?.free_accounts === true && data.profiles.some((p) => (PROFILS_FINANCE as readonly string[]).includes(p));
+}
+
+/**
+ * Le compte connecté porte-t-il l'un de ces profils (session) ? Les écrans y recopient les profils
+ * d'une route d'écriture pour ne montrer que les commandes que le noyau accepte. Faux tant que la
+ * session n'est pas lue : une commande réservée n'apparaît qu'une fois le droit confirmé.
+ */
+export function useAutorise(autorises: readonly Profile[]): boolean {
+  const { data } = useApi<Me>("/auth/me");
+  return Boolean(data?.profiles.some((p) => autorises.includes(p)));
 }
 
 /** Le compte n'ouvre-t-il Finance que par le profil Achats (aucun profil de la finance) ? */
