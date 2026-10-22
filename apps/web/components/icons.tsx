@@ -62,6 +62,7 @@ export const Search = dessin("Search", (
 ));
 export const Download = dessin("Download", <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />);
 export const FileUp = dessin("FileUp", <path d="M12 16V4.5M7.5 9 12 4.5 16.5 9M5 19.5h14" />);
+export const ImageUp = FileUp;
 export const Printer = dessin("Printer", (
   <>
     <path d="M7 8.5V4h10v4.5" />
@@ -102,6 +103,14 @@ export const LogOut = dessin("LogOut", (
   </>
 ));
 export const Menu = dessin("Menu", <path d="M4 7h16M4 12h16M4 17h10" />);
+export const Filter = dessin("Filter", <path d="M4 5h16l-6.25 7.5V19l-3.5 1.5v-8Z" />);
+export const MoreHorizontal = dessin("MoreHorizontal", (
+  <>
+    <circle cx="6" cy="12" r="1.5" {...POINT} />
+    <circle cx="12" cy="12" r="1.5" {...POINT} />
+    <circle cx="18" cy="12" r="1.5" {...POINT} />
+  </>
+));
 export const Grid = dessin("Grid", (
   <>
     {[6, 12, 18].flatMap((y) => [6, 12, 18].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.6" {...POINT} />))}
@@ -110,13 +119,17 @@ export const Grid = dessin("Grid", (
 
 /* Directions */
 export const ChevronDown = dessin("ChevronDown", <path d="M7 10l5 5 5-5" />);
+export const ChevronUp = dessin("ChevronUp", <path d="M7 14l5-5 5 5" />);
 export const ChevronRight = dessin("ChevronRight", <path d="M10 7l5 5-5 5" />);
 export const ChevronLeft = dessin("ChevronLeft", <path d="M14 7l-5 5 5 5" />);
+export const ChevronsLeft = dessin("ChevronsLeft", <path d="M11.5 7 6.5 12l5 5M17.5 7l-5 5 5 5" />);
+export const ChevronsRight = dessin("ChevronsRight", <path d="M12.5 7l5 5-5 5M6.5 7l5 5-5 5" />);
 export const ArrowUp = dessin("ArrowUp", <path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" />);
 export const ArrowDown = dessin("ArrowDown", <path d="M12 5v14M6.5 13.5 12 19l5.5-5.5" />);
 export const ArrowRight = dessin("ArrowRight", <path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5" />);
 export const ArrowUpRight = dessin("ArrowUpRight", <path d="M7 17 17 7M8.5 7H17v8.5" />);
 export const ArrowLeftRight = dessin("ArrowLeftRight", <path d="M4 8.5h15.5M16 5l3.5 3.5L16 12M20 15.5H4.5M8 12l-3.5 3.5L8 19" />);
+export const ArrowUpDown = dessin("ArrowUpDown", <path d="M8 4.5v15M4.5 8 8 4.5 11.5 8M16 19.5v-15M12.5 16l3.5 3.5 3.5-3.5" />);
 /** Triangles pleins des variations (hausse, baisse). */
 export const Hausse = dessin("Hausse", <path d="M12 6.5 18.5 17h-13Z" {...POINT} />);
 export const Baisse = dessin("Baisse", <path d="M12 17.5 18.5 7h-13Z" {...POINT} />);
@@ -126,10 +139,17 @@ export const TrendingUp = dessin("TrendingUp", (
     <path d="M15 7.5h5.5V13" />
   </>
 ));
+export const TrendingDown = dessin("TrendingDown", (
+  <>
+    <path d="M3.5 7.5 9 13l4-4 7.5 7.5" />
+    <path d="M15 16.5h5.5V11" />
+  </>
+));
 
 /* États */
 export const Check = dessin("Check", <path d="M5 12.5l4.5 4.5L19 7.5" />);
 export const CheckCheck = dessin("CheckCheck", <path d="M2.5 12.5l4.5 4.5 8.5-9.5M11.5 15.5l1.5 1.5 8.5-9.5" />);
+export const Circle = dessin("Circle", <circle cx="12" cy="12" r="8.5" />);
 export const CheckCircle2 = dessin("CheckCircle2", (
   <>
     <circle cx="12" cy="12" r="8.5" />
@@ -247,6 +267,12 @@ export const FileStack = dessin("FileStack", (
   <>
     <path d="M9 3.5h6.5L20 8v9.5a1.5 1.5 0 0 1-1.5 1.5H9A1.5 1.5 0 0 1 7.5 17.5V5A1.5 1.5 0 0 1 9 3.5Z" />
     <path d="M15.5 3.5V8H20M4.5 7.5v12A1.5 1.5 0 0 0 6 21h9" />
+  </>
+));
+export const Inbox = dessin("Inbox", (
+  <>
+    <path d="M3.5 13.5 6 5.5h12l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z" />
+    <path d="M3.5 13.5h5l1 2.5h5l1-2.5h5" />
   </>
 ));
 export const Mail = dessin("Mail", (
@@ -411,6 +437,12 @@ export const Calendar = dessin("Calendar", (
   </>
 ));
 export const Home = dessin("Home", <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19Z" />);
+export const Fuel = dessin("Fuel", (
+  <>
+    <path d="M4.5 20.5V5.5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v15M3 20.5h13M4.5 10.5h10" />
+    <path d="M14.5 8.5H16a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3" />
+  </>
+));
 export const Droplet = dessin("Droplet", <path d="M12 3.5s-6 6.6-6 11a6 6 0 0 0 12 0c0-4.4-6-11-6-11Z" />);
 export const MapPin = dessin("MapPin", (
   <>
@@ -480,6 +512,14 @@ export const Sparkles = dessin("Sparkles", (
   <>
     <path d="M12 4.5 13.9 9.6 19 11.5l-5.1 1.9L12 18.5l-1.9-5.1L5 11.5l5.1-1.9Z" />
     <path d="M18.5 3.5v3M17 5h3M5 17.5v3M3.5 19h3" />
+  </>
+));
+export const Waterfall = dessin("Waterfall", (
+  <>
+    <path d="M4 20.5h16" />
+    <rect x="4.5" y="6" width="3.2" height="14.5" rx="0.8" />
+    <rect x="10.4" y="9.5" width="3.2" height="5" rx="0.8" />
+    <rect x="16.3" y="12" width="3.2" height="8.5" rx="0.8" />
   </>
 ));
 export const Moon = dessin("Moon", <path d="M19.5 14.2A8 8 0 0 1 9.8 4.5a8 8 0 1 0 9.7 9.7Z" />);
