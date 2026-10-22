@@ -365,7 +365,10 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/portal-access", methods=("POST",), profiles=WRITE)
     def portal_access(self, dossier_id, **_kw):
-        """Ouvre le portail au porteur : compte porteur créé au besoin, mot de passe provisoire."""
+        """Ouvre le portail au porteur : compte porteur créé au besoin, mot de passe provisoire. Un
+        compte porteur existant n'est rattaché que s'il ne suit aucun dossier d'un autre promoteur
+        (même partenaire, ou même société pour un contact) : une erreur de saisie ne lui ouvre pas
+        le dossier d'un autre."""
         dossier = _dossier(dossier_id)
         data = read_json()
         login, name, password = require(data, "login", "name", "password")
@@ -373,6 +376,17 @@ class EguitraAxispro(http.Controller):
         user = Users.with_context(active_test=False).search([("login", "=", str(login).strip().lower())], limit=1)
         if user and not user.share:
             raise ApiError(409, "conflict", "Cet identifiant appartient à un utilisateur interne.")
+        if user:
+            promoter = dossier.promoter_id.commercial_partner_id
+            others = request.env["axispro.dossier"].sudo().search([("portal_user_ids", "in", user.id)]).filtered(
+                lambda d: d.promoter_id.commercial_partner_id != promoter)
+            if others:
+                raise ApiError(
+                    409, "conflict",
+                    f"Le compte porteur « {user.login} » suit déjà le dossier {', '.join(others.mapped('reference'))} "
+                    f"d'un autre promoteur ({', '.join(sorted(set(others.mapped('promoter_id.name'))))}) : un compte "
+                    "porteur ne sert qu'un promoteur. Vérifiez l'identifiant ou choisissez-en un autre pour ce porteur.",
+                )
         if not user:
             user = Users.create({
                 "name": name, "login": str(login).strip().lower(), "password": password,
