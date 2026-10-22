@@ -11,6 +11,7 @@ Un guide par profil, à remettre lors de la formation et à garder à portée de
 | BTP | [guide-chantiers.md](guide-chantiers.md) |
 | Gestion immobilière | [guide-immobilier.md](guide-immobilier.md) |
 | Cabinet MB AxisPro | [guide-cabinet.md](guide-cabinet.md) |
+| Ressources humaines (et « Mon espace » de chaque salarié) | [guide-rh.md](guide-rh.md) |
 | Porteurs de projets | [guide-porteur.md](guide-porteur.md) |
 | Administration de la plateforme | [guide-administration.md](guide-administration.md) |
 

@@ -68,6 +68,12 @@ factures échues et relances des trois niveaux, échéance de prêt en retard, r
 négative, biens vacants, demande d'approbation rejetée, alerte bloquante (compte de passage 585 non
 soldé), dossier AxisPro en NO-GO sur un critère éliminatoire et dossier sans aucune évaluation.
 
+AxisPro suit la version 3 de l'outil de scoring du cabinet : les grilles v2 (en vigueur) et v3 (brouillon,
+modifiable) ont huit compartiments C0 à C7, la v1 (archivée, dossiers clos) n'en a pas ; les gates G1 et
+G4 exigent une complétude documentaire minimale de 40 % et 70 %. Dans les dossiers ouverts, C1 et C4
+restent à affecter et le dossier d'aquaculture n'a pas d'équipe ; `cabinet` (Aïssatou Barry) reçoit C0, C5
+et C6 des dossiers qu'elle mène, dont la rizerie de Kankan (« Mes compartiments »).
+
 ## NIMOVA · Analyse
 
 Les routes `/analyse/contexte`, `/analyse/groupe/*` (synthèse, rentabilité, trésorerie, clients, transport,

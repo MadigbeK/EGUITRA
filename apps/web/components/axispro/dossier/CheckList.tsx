@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, X } from "@/components/icons";
+import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, Users, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, FileButton, Input, Loading, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PRIORITE_TON, arrondi, couleurScore, useRetour } from "./commun";
+import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, useCabinet, useRetour } from "./commun";
 
 /** Couleur de la puce d'état choisie. */
 const ETAT: Record<Status, string> = {
@@ -35,13 +35,19 @@ const FOCUS: Array<{ value: Focus; label: string }> = [
 /**
  * Check-list d'évaluation, par domaine : statut saisi, statut retenu par la méthode (requalification
  * sans toucher la saisie), preuves déposées sur le critère et leur validité, livrable, responsable,
- * échéance, observation. Saisie guidée : les critères des gates atteints, non évalués d'abord.
+ * échéance, observation. Saisie guidée : les critères des gates atteints, non évalués d'abord. Pour une
+ * grille à compartiments, chaque domaine porte le code de son compartiment et son consultant ; un filtre
+ * isole un compartiment, et « Mes compartiments » ne garde que ceux confiés à l'utilisateur (mine=1).
  */
 export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
-  const { data: criteria, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria`);
+  const compartiments = d.scoring.compartments ?? [];
+  const [miens, setMiens] = useState(false);
+  const { moi } = useCabinet();
+  const { data: criteria, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria${miens ? "?mine=1" : ""}`, { keepPreviousData: true });
   const { data: room, mutate: mutateRoom } = useApi<{ files: DocFile[] }>(`/axispro/dossiers/${d.id}/documents`);
   const [mode, setMode] = useState<"guidee" | "complete">(d.progress.assessed < d.progress.criteria ? "guidee" : "complete");
   const [q, setQ] = useState("");
+  const [compartiment, setCompartiment] = useState("");
   const [domain, setDomain] = useState("");
   const [gate, setGate] = useState("");
   const [focus, setFocus] = useState<Focus>("");
@@ -58,6 +64,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     if (mode === "guidee") rows = rows.filter((c) => (gateIndex.get(c.gate) ?? 0) <= courant);
     const t = q.trim().toLowerCase();
     if (t) rows = rows.filter((c) => `${c.code} ${c.name} ${c.comment ?? ""}`.toLowerCase().includes(t));
+    if (compartiment) rows = rows.filter((c) => String(c.compartment_id) === compartiment);
     if (domain) rows = rows.filter((c) => String(c.domain_id) === domain);
     if (gate) rows = rows.filter((c) => c.gate === gate);
     const f: Record<Exclude<Focus, "">, (c: CriterionEval) => boolean> = {
@@ -75,7 +82,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     return rows;
     // gateIndex et courant dérivent de d.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [criteria, mode, q, domain, gate, focus, d.current_gate?.code]);
+  }, [criteria, mode, q, compartiment, domain, gate, focus, d.current_gate?.code]);
 
   async function save(c: CriterionEval, patch: Record<string, unknown>) {
     const r = await agir(() => apiSend("PATCH", `/axispro/evaluations/${c.id}`, patch));
@@ -120,6 +127,8 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     .map((dom) => ({ dom, rows: lignes.filter((c) => c.domain_id === dom.domain_id) }))
     .filter((x) => x.rows.length > 0);
   const restant = criteria.filter((c) => c.status === "not_assessed" && (gateIndex.get(c.gate) ?? 0) <= courant).length;
+  const mesCodes = compartiments.filter((c) => moi && c.owner?.id === moi.id).map((c) => c.code);
+  const domainesVisibles = compartiment ? d.scoring.domains.filter((x) => criteria.some((c) => c.domain_id === x.domain_id && String(c.compartment_id) === compartiment)) : d.scoring.domains;
 
   return (
     <div className="space-y-4">
@@ -145,19 +154,38 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           </Button>
           {!verrou && <FileButton label="Importer une fiche" accept=".xlsx,.csv,.json" onFile={previsualiser} />}
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Select value={domain} onChange={(e) => setDomain(e.target.value)} aria-label="Filtrer par domaine" placeholder="Tous les domaines" options={d.scoring.domains.map((x) => ({ value: x.domain_id, label: `${x.code} ${x.name}` }))} />
+        <div className={cx("mt-3 grid grid-cols-1 gap-2", compartiments.length ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
+          {compartiments.length > 0 && (
+            <Select aria-label="Compartiment" value={compartiment} onChange={(e) => { setCompartiment(e.target.value); setDomain(""); }} placeholder="Tous les compartiments" options={compartiments.map((x) => ({ value: x.compartment_id, label: `${x.code} ${x.name}${x.owner ? ` · ${x.owner.name}` : ""}` }))} />
+          )}
+          <Select aria-label="Domaine" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Tous les domaines" options={domainesVisibles.map((x) => ({ value: x.domain_id, label: `${x.code} ${x.name}` }))} />
           <Select value={gate} onChange={(e) => setGate(e.target.value)} aria-label="Filtrer par gate" placeholder="Tous les gates" options={d.gates.map((g) => ({ value: g.code, label: `${g.code} ${g.name}` }))} />
           <Select value={focus} onChange={(e) => setFocus(e.target.value as Focus)} aria-label="Filtrer par nature de critère" options={FOCUS} />
         </div>
+        {compartiments.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={miens}
+              onClick={() => setMiens((v) => !v)}
+              className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-200", miens ? "n-degrade border-transparent text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : "border-line bg-panel text-ink-2 hover:border-line-strong hover:text-ink")}
+            >
+              <Users className="h-3.5 w-3.5" /> Mes compartiments
+            </button>
+            <span className="text-[12px] text-muted">
+              {mesCodes.length ? <>Confiés à vous : {mesCodes.map((code) => <PuceCompartiment key={code} code={code} nom={compartiments.find((x) => x.code === code)?.name} className="ml-1" />)}</> : "Aucun compartiment ne vous est confié sur ce dossier."}
+            </span>
+          </div>
+        )}
         <p className="mt-2 text-[12.5px] text-muted">
-          {pluriel(lignes.length, "critère affiché", "critères affichés")} sur {criteria.length}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.
+          {pluriel(lignes.length, "critère affiché", "critères affichés")} sur {criteria.length}{miens ? " de vos compartiments" : ""}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.
         </p>
       </Card>
 
-      {parDomaine.length === 0 && <Notice>Aucun critère ne correspond aux filtres.</Notice>}
+      {parDomaine.length === 0 && <Notice>{miens && criteria.length === 0 ? "Aucun critère : aucun compartiment de ce dossier ne vous est confié. Le cabinet affecte les compartiments depuis la synthèse." : "Aucun critère ne correspond aux filtres."}</Notice>}
       {parDomaine.map(({ dom, rows }) => {
         const ferme = fermes.has(dom.domain_id);
+        const tete = rows[0];
         return (
           <section key={dom.domain_id} className="rounded-2xl border border-line bg-panel shadow-[var(--ombre-carte)]">
             <button
@@ -167,8 +195,15 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
               className="flex w-full flex-wrap items-center gap-3 rounded-2xl px-4 py-3 text-left hover:bg-panel-2"
             >
               {ferme ? <ChevronRight className="h-4 w-4 text-muted" /> : <ChevronDown className="h-4 w-4 text-muted" />}
+              {tete?.compartment && <PuceCompartiment code={tete.compartment} nom={`${tete.compartment_name ?? ""}, ${tete.owner ? `confié à ${tete.owner}` : "non affecté"}`} />}
               <span className="font-mono text-[12px] text-muted">{dom.code}</span>
               <span className="min-w-0 flex-1 truncate font-semibold text-ink">{dom.name}</span>
+              {tete?.compartment && (
+                <span className={cx("hidden max-w-[180px] items-center gap-1 truncate text-[12px] sm:inline-flex", tete.owner ? "text-ink-2" : "italic text-muted")} title={tete.owner ? `Compartiment confié à ${tete.owner}` : "Compartiment non affecté"}>
+                  <Users aria-hidden className="h-3.5 w-3.5 flex-none text-muted" />
+                  <span className="truncate">{tete.owner ?? "Non affecté"}</span>
+                </span>
+              )}
               <span className="text-[12px] text-muted">{dom.assessed}/{dom.criteria} évalués</span>
               {dom.knockouts > 0 && <Badge tone="danger">{dom.knockouts} KO</Badge>}
               {dom.priority && <Badge tone={PRIORITE_TON[dom.priority]}>{dom.priority}</Badge>}

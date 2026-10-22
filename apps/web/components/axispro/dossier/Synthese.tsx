@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { useSWRConfig } from "swr";
 import { AlertTriangle, Coins, FileCheck2, FileText, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
-import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, Select, Textarea, cx } from "@/components/ui";
+import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type Currency, type DossierDetail, type RiskLevel } from "@/lib/axispro-types";
+import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type Currency, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
 import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PRIORITE_TON, arrondi, couleurScore, montant, note, useRetour } from "./commun";
+import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, montant, note, useCabinet, useRetour } from "./commun";
 
 /** « Où en est le dossier » : trois scores, classification, recommandation, prochain gate et les
  * cinq actions prioritaires, puis anomalies, domaines, fiche projet et hypothèses de décision. */
@@ -18,7 +19,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
   const t = s.thresholds;
   const scores = [
     { titre: "Project Readiness", valeur: s.readiness, aide: "Toute la grille" },
-    { titre: "APD Readiness", valeur: s.apd, aide: "Hors exigences DD, SPV, closing" },
+    { titre: "APD Readiness", valeur: s.apd, aide: "Hors exigences de due diligence et de closing" },
     { titre: "Bankability", valeur: s.bankability, aide: "Critères pertinents pour la bancabilité" },
   ];
   const next = s.next_gate;
@@ -50,6 +51,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-ink">Prochain gate : {next.code} {next.name}</span>
                   <Badge tone={GATE_DECISION[next.decision].tone}>{GATE_DECISION[next.decision].label}</Badge>
+                  {next.min_completeness ? <Tag>Complétude minimale {arrondi(next.min_completeness)} %</Tag> : null}
                 </div>
                 <ul className="mt-1 list-disc pl-5 text-muted">
                   {next.motifs.map((m, i) => <li key={i}>{m}</li>)}
@@ -72,6 +74,8 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} icon={FileCheck2} teinte="azur" hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
       </div>
 
+      <SuiviCompartiments d={d} />
+
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card title="Les actions prioritaires">
           {d.gaps.length === 0 ? <p className="text-sm text-muted">Aucun écart.</p> : (
@@ -80,6 +84,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
                 <li key={g.criterion_id} className={cx("rounded-xl border bg-panel px-3.5 py-3 text-sm", g.knockout ? "border-danger/30 bg-danger-doux/40" : "border-line")}>
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                     <span className="n-degrade grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
+                    {g.compartment && <PuceCompartiment code={g.compartment} nom={g.compartment_name} />}
                     <span className="font-medium">{g.code} {g.name}</span>
                     {g.knockout && <Badge tone="danger">Knock-out</Badge>}
                     {g.critical && <Badge tone="warn">Critique</Badge>}
@@ -169,6 +174,110 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
           <Button variant="primary" disabled={!portal.login || !portal.name || portal.password.length < 10} onClick={() => agir(() => apiSend("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), "Accès au portail ouvert.").then((r) => { if (r !== undefined) { setPortal({ login: "", name: "", password: "" }); onChanged(); } })}>Ouvrir l&apos;accès</Button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+/** Initiales d'un consultant (pastille de l'équipe du dossier). */
+function initiales(nom: string) {
+  return nom.split(/[\s-]+/).filter(Boolean).slice(0, 2).map((m) => m[0]?.toUpperCase() ?? "").join("");
+}
+
+/**
+ * Suivi par compartiment : chaque bloc d'expertise de la grille (domaines regroupés) avec son score sur
+ * 100, ses manques à traiter, ses études renseignées, ses knock-outs actifs et le consultant à qui il est
+ * confié. Le cabinet affecte ou retire un consultant sur place ; la direction et l'administration lisent.
+ * Rien ne s'affiche pour une grille sans compartiments.
+ */
+function SuiviCompartiments({ d }: { d: DossierDetail }) {
+  const compartiments = d.scoring.compartments ?? [];
+  const { cabinet } = useCabinet();
+  const { data: consultants } = useApi<UserRef[]>(cabinet && compartiments.length ? "/axispro/consultants" : null);
+  const { mutate } = useSWRConfig();
+  const { agir, bandeau } = useRetour();
+  const [enCours, setEnCours] = useState<number | null>(null);
+  if (!compartiments.length) return null;
+  const confies = compartiments.filter((c) => c.owner).length;
+
+  async function confier(c: CompartmentScore, valeur: string) {
+    const userId = valeur ? Number(valeur) : null;
+    const nom = consultants?.find((u) => u.id === userId)?.name;
+    setEnCours(c.compartment_id);
+    const r = await agir(
+      () => apiSend<{ status: string; compartments: CompartmentScore[] }>("POST", `/axispro/dossiers/${d.id}/assignments`, { compartment_id: c.compartment_id, user_id: userId }),
+      userId ? `Compartiment ${c.code} confié à ${nom ?? "ce consultant"}.` : `Compartiment ${c.code} sans consultant affecté.`,
+    );
+    setEnCours(null);
+    // Le dossier en cache prend la nouvelle équipe sans être rechargé : seule l'affectation change.
+    if (r) void mutate(`/axispro/dossiers/${d.id}`, (cur?: DossierDetail) => (cur ? { ...cur, scoring: { ...cur.scoring, compartments: r.compartments } } : cur), { revalidate: false });
+  }
+
+  return (
+    <Card title="Suivi par compartiment" actions={<span className="text-[12.5px] font-medium text-muted">{confies} sur {compartiments.length} confié{confies > 1 ? "s" : ""} à un consultant</span>}>
+      {bandeau && <div className="mb-3">{bandeau}</div>}
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {compartiments.map((c, i) => {
+          const score = c.assessed ? c.score : null;
+          const options = [...(consultants ?? [])];
+          if (c.owner && !options.some((u) => u.id === c.owner?.id)) options.unshift(c.owner);
+          return (
+            <li key={c.compartment_id} className={cx("flex min-w-0 flex-col rounded-xl border p-3.5 transition-colors", c.knockouts ? "border-danger/35 bg-danger-doux/25" : "border-line bg-panel hover:border-line-strong")}>
+              <div className="flex items-start gap-2.5">
+                <PuceCompartiment code={c.code} nom={c.name} className="mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-semibold leading-snug text-ink">{c.name}</div>
+                  <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-muted" title={c.domains.join(", ")}>{c.domains.join(" · ") || "Aucun domaine"}</div>
+                </div>
+                <div className="flex-none text-right">
+                  <span className="font-display text-[22px] font-bold leading-none tabular text-ink">{score === null ? "–" : Math.round(score)}</span>
+                  <span className="block text-[10.5px] text-muted">/ 100</span>
+                </div>
+              </div>
+              <div className="relative mt-2.5 h-2 rounded-full bg-panel-3" role="img" aria-label={score === null ? `${c.code} : aucun critère évalué` : `${c.code} : score ${Math.round(score)} sur 100`}>
+                <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(score ?? 0, 1)}%`, background: couleurScore(score), "--i": i } as CSSProperties} />
+                {[30, 50, 65].map((x) => <span key={x} aria-hidden className="absolute -top-0.5 h-3 w-px bg-line-strong" style={{ left: `${x}%` }} />)}
+              </div>
+              <dl className="mt-3 grid grid-cols-4 divide-x divide-line rounded-lg bg-panel-2 py-1.5 text-center">
+                <Chiffre titre="Critères évalués" court="Évalués" valeur={`${c.assessed}/${c.criteria}`} />
+                <Chiffre titre="Manques à traiter" court="Manques" valeur={c.gaps} ton={c.gaps ? "text-warn" : undefined} />
+                <Chiffre titre="Études à produire renseignées" court="Études" valeur={c.studies} />
+                <Chiffre titre="Knock-outs actifs" court="KO" valeur={c.knockouts} ton={c.knockouts ? "text-danger" : undefined} />
+              </dl>
+              <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
+                <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "n-degrade text-white" : "border border-dashed border-line-strong text-muted")}>
+                  {c.owner ? initiales(c.owner.name) : "?"}
+                </span>
+                {cabinet ? (
+                  <Select
+                    aria-label={`Consultant du compartiment ${c.code}`}
+                    className="min-h-8 min-w-0 flex-1 py-1 pl-2 text-[12.5px]"
+                    value={c.owner?.id ?? ""}
+                    disabled={enCours === c.compartment_id || !consultants}
+                    placeholder="Non affecté"
+                    onChange={(e) => confier(c, e.target.value)}
+                    options={options.map((u) => ({ value: u.id, label: u.name }))}
+                  />
+                ) : (
+                  <span className={cx("min-w-0 truncate text-[12.5px]", c.owner ? "font-medium text-ink" : "italic text-muted")}>{c.owner?.name ?? "Non affecté"}</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-3 text-[12px] text-muted">
+        Un compartiment regroupe des domaines de la grille. Le consultant qui le reçoit retrouve ses critères par « Mes compartiments » dans l&apos;évaluation ; le score se lit comme celui d&apos;un domaine (repères 30, 50 et 65).
+      </p>
+    </Card>
+  );
+}
+
+/** Chiffre d'une tuile de compartiment : libellé court, titre complet en infobulle. */
+function Chiffre({ titre, court, valeur, ton }: { titre: string; court: string; valeur: string | number; ton?: string }) {
+  return (
+    <div title={titre} className="min-w-0 px-1">
+      <dt className="truncate text-[10.5px] font-medium uppercase tracking-wide text-muted">{court}</dt>
+      <dd className={cx("font-display text-[15px] font-bold tabular", ton ?? "text-ink")}>{valeur}</dd>
     </div>
   );
 }

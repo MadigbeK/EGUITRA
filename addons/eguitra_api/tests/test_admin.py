@@ -23,7 +23,9 @@ class TestAdmin(ApiCase):
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual(status, 200)
         self.assertEqual([p["code"] for p in profils], ["admin", "direction", "finance", "achats", "exploitation",
-                                                        "chantiers", "immobilier", "cabinet", "porteur"])
+                                                        "chantiers", "immobilier", "cabinet", "rh", "porteur"])
+        rh = next(p for p in profils if p["code"] == "rh")
+        self.assertEqual((rh["name"], rh["entity"]), ("Ressources humaines", None), "Profil commun aux deux sociétés")
         achats = next(p for p in profils if p["code"] == "achats")
         self.assertEqual((achats["name"], achats["entity"]), ("Achats", None), "Profil commun aux deux sociétés")
         self.assertIn("pièces d'achat", achats["description"])

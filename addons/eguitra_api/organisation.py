@@ -35,6 +35,9 @@ APPS = {
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
     "transport": {"profiles": {"admin", "direction", "finance", "exploitation"}, "entity": "groupe"},
     "analyse": {"profiles": {"admin", "direction", "finance", "cabinet"}, "entity": None},
+    # RH (NIMOVA · RH) : personnel, absences et paie de chacune des deux sociétés. Un compte lié à un
+    # dossier salarié l'ouvre aussi, réduite à « Mon espace » (eguitra_rh, res.users._eguitra_apps).
+    "rh": {"profiles": {"admin", "direction", "rh"}, "entity": None},
 }
 
 # Préfixe des routes de l'API -> société servie par le module : ses routes refusent de travailler

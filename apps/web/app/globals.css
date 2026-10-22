@@ -175,6 +175,16 @@
   --accent-lueur: rgb(224 138 30 / 0.35);
 }
 
+/* RH : la prune, chaleur des personnes, distincte du violet de l'Analyse et de l'ambre du transport. */
+[data-app="rh"] {
+  --accent: #9b2f6c;
+  --accent-strong: #7f2459;
+  --accent-haut: #ab3a7a;
+  --accent-vif: #c4417a;
+  --accent-doux: #fbe9f2;
+  --accent-lueur: rgb(196 65 122 / 0.35);
+}
+
 /* Analyse : le violet de l'intelligence des données, à part des couleurs métier. */
 [data-app="analyse"] {
   --accent: #5b3fb8;

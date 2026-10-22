@@ -24,6 +24,8 @@ const FIN: Profile[] = ["admin", "direction", "finance"];
 const ACHATS: Profile[] = ["achats"];
 /** Profils qui tranchent ou suivent les validations depuis « À valider » (le profil Achats suit les siennes). */
 const VALIDATION: Profile[] = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"];
+/** Profils qui gèrent l'espace RH (la direction lit et approuve ; l'administration et la RH écrivent). */
+export const RH_GESTION: Profile[] = ["admin", "direction", "rh"];
 
 /** Navigation par application ; chaque entrée n'apparaît qu'aux profils listés (offre, chapitre 3.4). */
 export const NAV: Record<AppCode, NavSection[]> = {
@@ -165,6 +167,40 @@ export const NAV: Record<AppCode, NavSection[]> = {
       ],
     },
   ],
+  // RH : les deux sociétés. La gestion (RH_GESTION) ; « Mon espace » et le guide, à tout compte lié à
+  // un dossier salarié (libre-service : congés, bulletins, demandes de son équipe).
+  rh: [
+    {
+      label: "Pilotage",
+      items: [
+        { href: "/rh", label: "Tableau de bord", icon: "LayoutDashboard", profiles: RH_GESTION },
+        { href: "/rh/guide", label: "Guide RH", icon: "Info" },
+      ],
+    },
+    {
+      label: "Personnel",
+      items: [
+        { href: "/rh/salaries", label: "Salariés", icon: "Users", profiles: RH_GESTION },
+        { href: "/rh/conges", label: "Absences et congés", icon: "Calendar", profiles: RH_GESTION },
+        { href: "/rh/avances", label: "Avances et prêts", icon: "HandCoins", profiles: RH_GESTION },
+      ],
+    },
+    {
+      label: "Paie",
+      items: [
+        { href: "/rh/paie", label: "Paie du mois", icon: "Wallet", profiles: RH_GESTION },
+        { href: "/rh/simulateur", label: "Simulateur de salaire", icon: "Calculator", profiles: RH_GESTION },
+      ],
+    },
+    {
+      label: "Mon espace",
+      items: [{ href: "/rh/moi", label: "Mon espace", icon: "Home" }],
+    },
+    {
+      label: "Administration",
+      items: [{ href: "/rh/parametres", label: "Paramètres RH", icon: "SlidersHorizontal", profiles: ["admin", "rh"] }],
+    },
+  ],
 };
 
 /**
@@ -174,6 +210,14 @@ export const NAV: Record<AppCode, NavSection[]> = {
 export function accueilFinance(profiles: readonly Profile[]): string {
   if (profiles.some((p) => FIN.includes(p))) return "/finance";
   return profiles.includes("achats") ? "/finance/achats" : "/finance";
+}
+
+/**
+ * Accueil de NIMOVA · RH selon les profils : le tableau de bord pour la gestion (administration,
+ * direction, RH) ; « Mon espace » pour un compte en libre-service (dossier salarié lié, sans profil).
+ */
+export function accueilRh(profiles: readonly Profile[]): string {
+  return profiles.some((p) => RH_GESTION.includes(p)) ? "/rh" : "/rh/moi";
 }
 
 export function navFor(app: AppCode, profiles: Profile[], entity?: EntiteSociete | null): NavSection[] {

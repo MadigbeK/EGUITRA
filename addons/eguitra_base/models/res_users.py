@@ -10,6 +10,7 @@ PROFILE_GROUPS = {
     "chantiers": "eguitra_base.group_profile_chantiers",
     "immobilier": "eguitra_base.group_profile_immobilier",
     "cabinet": "eguitra_base.group_profile_cabinet",
+    "rh": "eguitra_base.group_profile_rh",
     "porteur": "eguitra_base.group_profile_porteur",
 }
 
