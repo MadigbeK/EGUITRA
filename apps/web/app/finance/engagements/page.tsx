@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Download, Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
+import { ApiError, PROFILS_FINANCE, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import type { ExpenseCategory } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 
@@ -89,13 +89,17 @@ export default function EngagementsPage() {
 
 /**
  * Nouvel engagement. Le profil Achats ne choisit pas le compte : la catégorie de dépense le fixe (le plan
- * de comptes ne lui est pas ouvert) ; les autres profils désignent le compte, ou le laissent à la finance.
+ * de comptes ne lui est pas ouvert). Les profils de la finance désignent le compte, ou le laissent à
+ * préciser. Les profils métier (exploitation, chantiers, immobilier, cabinet) ne lisent pas le plan de
+ * comptes (GET /finance/accounts : FIN_READ) : sans champ, le compte reste à préciser par la finance,
+ * ce que la création accepte (compte facultatif, eguitra_approval/controllers/commitments.py).
  */
 function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
   const { achats, pret } = useAchatsSeul();
-  const { data: accounts } = useApi<Array<{ id: number; code: string; name: string }>>(pret && !achats ? "/finance/accounts?prefix=6&limit=2000" : null);
-  const { data: assets } = useApi<Array<{ id: number; code: string; name: string }>>(pret && !achats ? "/finance/accounts?prefix=2&limit=2000" : null);
+  const comptes = useAutorise(PROFILS_FINANCE);
+  const { data: accounts } = useApi<Array<{ id: number; code: string; name: string }>>(comptes ? "/finance/accounts?prefix=6&limit=2000" : null);
+  const { data: assets } = useApi<Array<{ id: number; code: string; name: string }>>(comptes ? "/finance/accounts?prefix=2&limit=2000" : null);
   const { data: categories } = useApi<ExpenseCategory[]>(achats ? "/finance/expense-categories" : null);
   const [f, setF] = useState({ object: "", amount: "", account_id: "", category_id: "", date_expected: "", note: "" });
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +109,7 @@ function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id:
       const { account_id, category_id, ...rest } = f;
       const c = await apiSend<Commitment>("POST", "/finance/commitments", {
         ...rest, partner_id: partner?.id, amount: Number(f.amount.replace(/\s/g, "").replace(",", ".")) || 0,
-        ...(achats ? { category_id: category_id ? Number(category_id) : undefined } : { account_id: account_id ? Number(account_id) : null }),
+        ...(achats ? { category_id: category_id ? Number(category_id) : undefined } : comptes ? { account_id: account_id ? Number(account_id) : null } : {}),
         date_expected: f.date_expected || null, submit: send,
       });
       onDone(c.id);
@@ -130,12 +134,14 @@ function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id:
           <Field label="Catégorie de dépense" hint="Elle fixe le compte de charge ou d'immobilisation.">
             <Select value={f.category_id} placeholder="À préciser par la finance" onChange={(e) => setF({ ...f, category_id: e.target.value })} options={(categories ?? []).map((c) => ({ value: c.id, label: c.account ? `${c.name} (${c.account.code})` : c.name }))} />
           </Field>
-        ) : (
+        ) : comptes ? (
           <Field label="Compte de charge ou d'immobilisation"><Select value={f.account_id} placeholder="À préciser par la finance" onChange={(e) => setF({ ...f, account_id: e.target.value })} options={[...(accounts ?? []), ...(assets ?? [])].map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} /></Field>
-        )}
+        ) : null}
         <Field label="Livraison ou exécution prévue"><Input type="date" value={f.date_expected} onChange={(e) => setF({ ...f, date_expected: e.target.value })} /></Field>
         <Field label="Justification" className="md:col-span-2"><Textarea value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
-        <p className="text-[12px] text-muted md:col-span-2">Le devis se joint après l&apos;enregistrement. L&apos;engagement suit les seuils d&apos;approbation des engagements (À valider &gt; Circuits).</p>
+        <p className="text-[12px] text-muted md:col-span-2">
+          Le devis se joint après l&apos;enregistrement.{pret && !achats && !comptes && " La finance précise le compte de charge ou d'immobilisation."} L&apos;engagement suit les seuils d&apos;approbation des engagements{comptes && " (À valider > Circuits)"}.
+        </p>
       </div>
     </Modal>
   );
