@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 import type { Advance, AdvanceState, Meta } from "@/lib/rh-types";
@@ -65,10 +65,9 @@ export function AvancesPrets() {
           <Notice tone="danger">{erreur}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={data}

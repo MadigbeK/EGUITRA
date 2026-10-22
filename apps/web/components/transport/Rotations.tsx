@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { parseNumber, type Ref, type Referentials } from "./types";
@@ -87,10 +87,9 @@ export function Rotations() {
           </Button>
         </div>
       </div>
-      {error && <ErrorBox error={error} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={rows}

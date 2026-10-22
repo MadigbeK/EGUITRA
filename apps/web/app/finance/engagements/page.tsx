@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
 import type { ExpenseCategory } from "@/lib/finance-types";
@@ -64,8 +64,7 @@ export default function EngagementsPage() {
         </div>
       )}
       <Tabs tabs={[{ key: "open", label: "En cours" }, { key: "pending", label: "À soumettre ou en approbation" }, { key: "all", label: "Tous" }]} value={tab} onChange={setTab} />
-      {error && <ErrorBox error={error} />}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <Card padded={false}>
           <DataTable rows={rows} rowKey={(c) => c.id} onRowClick={(c) => setSelected(c.id)} empty="Aucun engagement." columns={[
             { key: "name", label: "Engagement", render: (c) => <div className="min-w-[200px]"><b>{c.name}</b> {c.object}<div className="text-[12px] text-muted">{c.partner.name}{c.account ? ` · ${c.account.code}` : ""}</div></div> },

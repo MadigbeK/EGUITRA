@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { FileText, Plus, ShieldAlert } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Donut, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Donut, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -114,10 +114,9 @@ export default function DossiersPage() {
         value={state}
         onChange={setState}
       />
-      {error && <ErrorBox error={error} />}
       {!data ? (
         <Card padded={false}>
-          <Loading label="Chargement des dossiers…" />
+          <Etat error={error} onRetry={() => mutate()} label="Chargement des dossiers…" />
         </Card>
       ) : vue === "tableau" && etapes.length > 0 ? (
         <Tableau etapes={etapes} rows={rows} rang={rang} />

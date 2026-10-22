@@ -276,10 +276,9 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
         </Field>
       </div>
       {erreur && <Notice tone="danger">{erreur}</Notice>}
-      {error && <ErrorBox error={error} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={data}

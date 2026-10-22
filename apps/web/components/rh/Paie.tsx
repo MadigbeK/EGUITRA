@@ -51,10 +51,9 @@ export function ListePaies() {
           <Notice tone="ok">{message}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : data.length === 0 ? (
           <Empty title="Aucune paie" hint="Préparez la paie du mois : les bulletins de tous les salariés présents sont calculés d'un coup, avec leurs absences, avances et éléments fixes." />
         ) : (

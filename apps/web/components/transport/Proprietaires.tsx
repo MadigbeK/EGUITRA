@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
@@ -82,7 +82,6 @@ export function Proprietaires() {
   return (
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      {error && <Notice tone="danger">{error.message}</Notice>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Mois"><Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></Field>
@@ -109,7 +108,7 @@ export function Proprietaires() {
         </div>
       )}
       <Card title="Relevés du mois" padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={items} rowKey={(s) => s.id} onRowClick={(s) => setOpened(s.id)} empty="Aucun relevé établi pour ce mois." columns={[
             { key: "vehicle", label: "Ensemble", render: (s) => s.vehicle.name, sortValue: (s) => s.vehicle.name },
             { key: "owner", label: "Propriétaire", render: (s) => (s.ownership === "managed" ? s.owner?.name ?? "–" : <span className="text-muted">Propre</span>) },

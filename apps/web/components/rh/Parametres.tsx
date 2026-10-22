@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
@@ -583,9 +583,8 @@ function Feries({ ecrit }: { ecrit: boolean }) {
           <Notice tone="danger">{erreur}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} />}
       {!data ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <DataTable
           dense

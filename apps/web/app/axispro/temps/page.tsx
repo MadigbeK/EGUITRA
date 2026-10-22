@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Notice, PageHeader, RankBars, Select, Tabs, Badge } from "@/components/ui";
+import { Button, Card, DataTable, Etat, Field, Input, Kpi, Notice, PageHeader, RankBars, Select, Tabs, Badge } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { DossierSummary } from "@/lib/axispro-types";
 import { fmtDate, fmtDec } from "@/lib/format";
@@ -66,7 +66,6 @@ export default function TempsPage() {
         </div>
       </Card>
       <Tabs tabs={[{ key: "unbilled", label: "À facturer" }, { key: "all", label: "Tous les temps" }]} value={filter} onChange={setFilter} />
-      {error && <ErrorBox error={error} />}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card title="Heures par dossier">
           {byDossier.length === 0 ? (
@@ -87,7 +86,7 @@ export default function TempsPage() {
           </div>
         </Card>
         <Card title="Détail" padded={false} className="xl:col-span-2">
-          {!data ? <Loading /> : (
+          {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
             <DataTable dense rows={rows} rowKey={(t) => t.id} empty="Aucun temps." columns={[
               { key: "date", label: "Date", render: (t) => fmtDate(t.date) },
               { key: "dossier", label: "Dossier", render: (t) => t.dossier.reference },

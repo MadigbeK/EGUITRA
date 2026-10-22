@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "@/components/icons";
-import { Badge, Card, DataTable, Field, Input, Kpi, Loading, Notice, Select } from "@/components/ui";
+import { Badge, Card, DataTable, Etat, Field, Input, Kpi, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import type { ProfitRow } from "./types";
@@ -62,7 +62,7 @@ export function Rentabilite() {
   const [group, setGroup] = useState("vehicle");
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const { data, error } = useApi<Report>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
+  const { data, error, mutate } = useApi<Report>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
   const ind = data?.indicators;
   // Colonnes comptables : axes analytiques disponibles, et profil qui lit la comptabilité.
   const booked = (group === "vehicle" || group === "route" || group === "month") && ind?.booked_cost !== null;
@@ -73,7 +73,6 @@ export function Rentabilite() {
         <Field label="Du"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="Au"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
       </div>
-      {error && <Notice tone="danger">{error.message}</Notice>}
       {ind && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi label="Chiffre d'affaires transport" value={fmtShort(ind.transport_revenue)} hint={ind.income_total === null ? "Rotations validées et facturées" : ind.revenue_share === null ? "Part du CA : produits non comptabilisés" : `${fmtPct(ind.revenue_share)} des produits de la période`} />
@@ -90,7 +89,7 @@ export function Rentabilite() {
         </p>
       )}
       <Card padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data.rows} rowKey={(r, i) => `${r.key}-${i}`} empty="Aucune rotation validée sur la période." columns={[
             { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé" },
             { key: "rotations", label: "Rot.", align: "right", render: (r) => String(r.rotations) },
