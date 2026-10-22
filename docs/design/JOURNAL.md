@@ -280,16 +280,66 @@ AA), cohérence visuelle, revue des écrans sur la maquette. Corrigé :
 - Code mort : quatre animations et douze icônes inutilisées.
 - `CHARTE.md` mise à jour (logo le pli, Funnel, page de connexion, arbitrages en attente).
 
+## Harmonisation des composants (22 octobre 2026)
+
+Suite de l'audit, sur la branche `claude/harmonisation-composants` tirée de
+`claude/bold-shannon-gpg2hv`. Présentation seulement : aucune logique métier ni aucun appel d'API ne
+change. Un commit par point (deux pour l'état commun) :
+- État commun : `Etat` (`components/ui.tsx`) rend le chargement, l'erreur avec « Réessayer » ou
+  l'état vide, puis le contenu ; sans enfant, il sert de retour anticipé
+  (`if (!data) return <Etat error={error} onRetry={() => mutate()} />`). Appliqué à 82 états :
+  61 lisaient la donnée sans son erreur et restaient sur « Chargement » si l'API tombait, dont
+  l'espace du porteur (une panne de `/portail/espace` bloquait tout le portail) et la cloche de
+  ses notifications ; 21 affichaient l'erreur au-dessus d'une carte qui tournait encore (comités,
+  temps, engagements, relances, imputations, utilisateurs, RH, transport). Les listes de choix des
+  formulaires (comptes, taxes, journaux) restent vides en cas d'erreur, sans attente sans fin :
+  non touchées. `ErrorBox` appelle `onRetry()` sans argument (un `mutate` passé tel quel recevait
+  l'événement du clic).
+- Tailles de bouton : `size` (`sm` 32 px, `md` 36 px par défaut, `lg` 44 px au toucher) remplace
+  les 83 boutons dimensionnés à la main. `classesBouton()` donne la même allure à un lien : page
+  d'erreur, raccourcis du tableau de bord, liens d'action du portail. `FileButton` suit `sm`/`md`.
+- Surfaces : `FEUILLE` (rayon 20 px, `--ombre-feuille`, sans bordure) pour `Card`, `Kpi` et les
+  blocs faits à la main (rayons de 14 à 22 px, bordure et `--ombre-carte`) ; un état porté par la
+  bordure (gate en cours, échéance dépassée, envoi en erreur) passe en anneau. `PANNEAU`
+  (`rounded-2xl`, soit 18 px dans ce thème, bordure, `--ombre-flottante`, marge 6 px, entrées en
+  `rounded-xl`, 14 px) pour les menus de la coque,
+  des rubriques, du lanceur, de l'accueil, du portail et pour `Modal` ; ceux qui étaient en
+  `bg-white` suivent le thème sombre. Survols en dur (`#f2f6f3`, `#f1f6f3`, `#fafcfa`, blanc
+  translucide) passés sur `panel-2`, `panel-3` et `panel`.
+- Confirmations : `demanderConfirmation(question, { titre, action, danger })` ouvre la `Modal`
+  commune (titre tiré de la question, « Annuler », action en rouge si destructrice) et remplace les
+  31 `window.confirm`. La fenêtre prend l'application et le thème du bouton qui l'ouvre. `Modal`
+  tient une pile : Échap ne ferme que la fenêtre du dessus.
+- Couleurs des graphiques : `lib/couleurs.ts` tient la seule gamme (`SERIES`, réexportée par
+  `ui.tsx` et `analyse/charts/commun.tsx`) et les couleurs d'état (`ETATS`, `ECHELLE`,
+  `COULEUR_VERDICT`, `COULEUR_DECISION`, `COULEUR_FINANCEMENT`), sur les jetons `var(--g-*)`.
+  Jetons ajoutés : `--g-jade-fonce`, `--g-jade-clair`, `--g-rouge`, `--g-bordeaux`, `--g-gris`,
+  `--or-fonce`. `GAMME` est retirée. Gardés : palette du billet (fond sombre), types d'événements
+  du portail, papier du bulletin.
+- `Kpi` : `icon` et `teinte`, ignorées depuis la refonte, quittent sa signature et ses 62 appels
+  (et `KpiContrat`). `IconTile` et `TUILE` restent : le portail, l'Analyse, le pilotage et la
+  synthèse Transport s'en servent. Aucune icône retirée de `icons.tsx`.
+
+Vérifié : `tsc --noEmit` et `next build` passent ; sur la maquette d'API, tableau de bord Finance
+(gamme et états sur jetons, balance âgée, jauge du DSCR), menus de la coque et lanceur (`PANNEAU`),
+erreur dans `Etat` sur les engagements (route absente de la maquette), confirmation de mise en
+vigueur de la grille (titre, explication, Échap, retour du focus), confirmation posée sur la fiche
+d'un chantier (Échap ne ferme qu'elle), boutons `sm` des situations (32 px), cockpit de l'Analyse.
+Non vérifié à l'écran : le portail des porteurs, car la maquette ne sert pas `/portail/espace`
+(réécrit depuis) ; la coque y affiche désormais l'erreur au lieu de « Préparation de votre
+espace » sans fin.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : accent violet de l'Analyse (proscrit par son guide) ;
   dégradés des boutons principaux, avatars et bandeaux (aplat proposé, dégradé gardé pour le seul
   billet) ; jargon anglais du cabinet (Readiness, Bankability, Data room, Pipeline) ; icônes en tête
   des boutons texte.
-- Harmonisation des composants relevée par l'audit : état commun chargement, erreur et vide (112
-  appels d'API n'affichent pas leur erreur et restent sur « Chargement »), tailles de `Button`,
-  un seul panneau flottant, une seule feuille, échelle des titres et des tailles de texte,
-  confirmations en fenêtre au lieu de `window.confirm`, couleurs des graphiques sur jetons.
+- Harmonisation des composants : faite le 22 octobre (section ci-dessus), sauf l'échelle des
+  titres et des tailles de texte. Restent aussi les sceaux d'icône (`TUILE`) et les couleurs des
+  types d'événements du portail, encore en hexadécimal, et les listes « Chargement des listes » et
+  « Chargement des rotations » de Rotations mobile (hors `useApi`), qui attendent sans fin hors
+  réseau sans cache. Maquette d'API : ajouter les routes du portail réécrit (`/portail/espace`).
 - Charte d'EGUITRA GROUP (PDF confié le 21 octobre, disque E:) : à confronter aux choix faits,
   dont les logos des deux sociétés repris de leurs sites, à faire confirmer par le client.
 
@@ -299,3 +349,7 @@ AA), cohérence visuelle, revue des écrans sur la maquette. Corrigé :
 - À la fusion : les écrans ont été retouchés pour leur seule présentation (imports d'icônes,
   libellés, classes) ; en cas de conflit avec une évolution fonctionnelle, garder la logique de
   la session fonctionnelle et réappliquer la présentation.
+- Depuis l'harmonisation : un nouvel écran prend `Etat` pour ses appels d'API, `size` pour un petit
+  bouton, `FEUILLE` ou `PANNEAU` pour une surface, `demanderConfirmation` au lieu de
+  `window.confirm`, et ses couleurs dans `lib/couleurs.ts`. `GAMME` n'existe plus : un écran écrit
+  ailleurs qui la cite passe sur `SERIES` (même ordre). `Kpi` refuse `icon` et `teinte`.
