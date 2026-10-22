@@ -188,3 +188,42 @@ donne le modèle complet.
 valider) ; « Financements » montre les démarches par étape et les relances à venir ; « Comités »
 liste les dossiers à présenter et les décisions rendues ; « Temps et facturation » récapitule les
 heures par dossier ; « Pièces standard » montre la liste attendue des porteurs.
+
+## Le portail des porteurs (Cabinet > Portail des porteurs)
+
+Les onglets en tête de l'écran mènent à chaque outil ; la lecture est ouverte à l'administration
+et à la direction, l'écriture au profil cabinet.
+
+- **Synthèse** : porteurs inscrits et actifs, messages non lus ou en attente de réponse, rendez-vous
+  demandés, comptes rendus d'actions à valider, inscriptions aux événements, satisfaction, contenus
+  publiés et accusés de lecture en attente, puis la liste de ce qui attend le cabinet.
+- **Messages** : la messagerie de tous les dossiers ouverts au portail. Une conversation en attente
+  de réponse est signalée. « Note interne » écrit une note réservée au cabinet, que le porteur ne
+  voit jamais ; un fichier joint à un message public rejoint la data room du dossier et devient
+  visible du porteur. Une demande de mise à jour de la fiche de l'entreprise, faite par le porteur
+  depuis son profil, arrive ici : reportez-la vous-même dans la fiche du tiers après contrôle.
+- **Communications** : annonces, opportunités de financement, alertes. Choisissez le public (tous
+  les porteurs, certains dossiers, les dossiers à certaines étapes, ceux de certains secteurs), une
+  date d'expiration, l'épinglage, un bouton vers une page ou un site, et au besoin l'accusé de
+  lecture. La publication prévient chaque porteur du public ; les statistiques disent qui a lu et
+  qui a confirmé.
+- **Ressources** : le centre de conseils du portail, en rubriques. Un contenu (article, guide,
+  fiche, question fréquente, vidéo, modèle à télécharger) peut être recommandé à certaines étapes ;
+  il est alors proposé en priorité aux dossiers qui y sont. Mise en forme du texte : `# titre`,
+  `**gras**`, `*italique*`, `- liste`, `> encadré`, `[lien](https://…)`, avec aperçu en direct.
+  Les contenus proposés à l'installation sont des brouillons : relisez-les, complétez-les, publiez.
+- **Événements** : ateliers, formations, webinaires, permanences, rencontres avec des financeurs.
+  Nombre de places (liste d'attente au-delà), clôture des inscriptions, lien de connexion réservé aux
+  inscrits. La liste des inscrits s'exporte en CSV et se pointe (présent, absent) ; annuler un
+  événement prévient les inscrits.
+- **Rendez-vous** : les demandes des porteurs (jusqu'à trois créneaux proposés). Confirmez un
+  créneau ou une autre date, avec le lieu ou le lien de visioconférence et un message ; ou
+  déclinez. Après le rendez-vous, « Marquer tenu » partage le compte rendu avec le porteur.
+  « Planifier un rendez-vous » fixe directement une date.
+- **Porteurs et avis** : les comptes du portail, leur dernière connexion et leur dernier message ;
+  les avis des porteurs (note sur 5, recommandation sur 10 et indice de recommandation, commentaires).
+
+Le porteur reçoit une notification dans le portail pour chaque message du cabinet, pièce validée ou
+à reprendre, nouvelle action, étape franchie, décision de comité, piste de financement, rendez-vous
+et publication ; les consultants sont prévenus des messages, dépôts, comptes rendus et demandes de
+rendez-vous de leurs dossiers. Les courriels de notification viendront avec le serveur d'envoi.
