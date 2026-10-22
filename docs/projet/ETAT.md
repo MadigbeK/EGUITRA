@@ -201,8 +201,10 @@ portail, complet, carte blanche »). Fait :
   est dans `release.sh`, `init-db.sh` et `scripts/reprise/essai.sh`. Protocole entre sessions : on se
   prévient avant chaque `test.sh` (base `eguitra_ci` partagée).
 - Reste : courriels de notification quand le serveur d'envoi sera fourni (aujourd'hui, notifications
-  dans le portail seulement) ; pagination des notifications et des rendez-vous anciens ; publication
-  des neuf contenus proposés par le cabinet (brouillons en production).
+  dans le portail seulement) ; pagination des notifications et des rendez-vous anciens.
+- Les neuf conseils proposés à l'installation sont publiés en production le 22 octobre à 14 h 19, à
+  la demande du gérant (le cabinet peut les modifier ou les archiver dans Portail des porteurs >
+  Ressources).
 - **En production depuis la version 20261022-1012** (22 octobre, 10 h 13, mise en production conduite
   par la session AXISPRO SUITE) : tests des dix modules sur ce code, 342 au vert ; répétition sur une
   copie de la base de production ; contrôlé ensuite : portail installé (6 rubriques, 9 contenus en
