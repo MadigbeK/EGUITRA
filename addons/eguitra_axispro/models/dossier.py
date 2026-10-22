@@ -1,4 +1,4 @@
-"""Dossier de projet : évaluation selon la méthode MB AxisPro (scoring.py), stage gates, écarts,
+"""Dossier de projet : évaluation selon la méthode MB AxisPro Consulting (scoring.py), stage gates, écarts,
 data room, hypothèses de décision, révisions verrouillées et journal.
 
 Statuts et points : disponible et exploitable (1), incomplet / à actualiser (0,5), non disponible

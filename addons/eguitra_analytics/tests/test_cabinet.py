@@ -1,6 +1,6 @@
-"""NIMOVA · Analyse de MB AxisPro (spécification, chapitre 6).
+"""NIMOVA · Analyse de MB AxisPro Consulting (spécification, chapitre 6).
 
-Jeu d'essai fictif : grille au format MB AxisPro (huit gates, trois domaines, sept critères, trois
+Jeu d'essai fictif : grille au format MB AxisPro Consulting (huit gates, trois domaines, sept critères, trois
 pièces), cinq dossiers en cours à des gates différents et un dossier clos, passages de gate datés au
 journal (dont un passage forcé), évaluations et preuves, trois revues de comité verrouillées, quatre
 recherches de financement, temps passés et une facture d'honoraires validée, actions (dont une en
@@ -128,7 +128,7 @@ class TestAnalyseCabinet(ApiCase):
         cls.groupe = cls.env.ref("base.main_company")
         cls.env = cls.env(context=dict(cls.env.context, allowed_company_ids=cls.cabinet.ids))
         cls.today = fields.Date.today()
-        cls.policy = cls.env["axispro.policy"].import_grid(cls.cabinet, "Méthode MB AxisPro (essai)", "grille.csv", GRID)
+        cls.policy = cls.env["axispro.policy"].import_grid(cls.cabinet, "Méthode MB AxisPro Consulting (essai)", "grille.csv", GRID)
         cls.policy.action_activate()
         cls.gates = {g.code: g for g in cls.policy.gate_ids}
         cabinet = {"company_id": cls.cabinet.id, "company_ids": [(6, 0, cls.cabinet.ids)]}

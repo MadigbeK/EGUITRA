@@ -5,7 +5,7 @@
 Analyse répond aux questions du dirigeant à partir des données saisies dans NIMOVA, sans rien
 ressaisir et sans rien modifier. Son contenu dépend de la société choisie dans la colonne de gauche :
 pour EGUITRA GROUP SARLU, la santé financière, la trésorerie, les clients, la flotte et les routes, les
-dépenses et l'atterrissage de l'exercice ; pour MB AxisPro, le portefeuille de projets, leurs
+dépenses et l'atterrissage de l'exercice ; pour MB AxisPro Consulting, le portefeuille de projets, leurs
 faiblesses, la qualité des décisions de comité, les financements, l'activité et les honoraires du
 cabinet. Un compte ouvert aux deux sociétés passe de l'une à l'autre par le sélecteur de société.
 
@@ -52,7 +52,7 @@ sections ; un constat positif y figure toujours.
 | Atterrissage et simulateur | Où finira l'exercice ? | Prévision du chiffre d'affaires et de l'EBE jusqu'à la fin de l'exercice, probabilité d'atteindre le budget ; simulateur : faire varier tarif, volume, carburant et masse salariale et lire l'EBE recalculé. |
 | Fiabilité des données | Peut-on se fier aux chiffres ? | Onze contrôles pondérés : imputation analytique, relevés rapprochés, justificatifs, délais de saisie, brouillons anciens, comptes d'attente, tiers sans NIF, rotations non facturées. |
 
-## MB AxisPro
+## MB AxisPro Consulting
 
 | Écran | Question | À retenir |
 |---|---|---|

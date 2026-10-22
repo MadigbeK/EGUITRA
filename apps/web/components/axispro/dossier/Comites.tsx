@@ -51,7 +51,7 @@ function dernierVerrou(d: DossierDetail) {
 }
 
 export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
-  const [f, setF] = useState({ decision: PROPOSEE[d.scoring.recommendation], instance: "Comité d'investissement MB AxisPro", members: "", motive: "", conditions: "", minutes: "" });
+  const [f, setF] = useState({ decision: PROPOSEE[d.scoring.recommendation], instance: "Comité d'investissement MB AxisPro Consulting", members: "", motive: "", conditions: "", minutes: "" });
   const [compare, setCompare] = useState<number[]>([]);
   const { data: diff } = useApi<Diff>(compare.length === 2 ? `/axispro/reviews/compare?a=${compare[0]}&b=${compare[1]}` : null);
   const { agir, bandeau, setRetour } = useRetour();

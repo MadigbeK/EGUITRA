@@ -122,7 +122,7 @@ for emp, kind, label, expiry in [(drivers[0], "permis", "Permis C", TODAY + time
     if not emp.document_ids.filtered(lambda d, label=label: d.name == label):
         env["eguitra.rh.document"].create({"employee_id": emp.id, "kind": kind, "name": label, "expiry_date": expiry})
 
-# ─── MB AxisPro ─────────────────────────────────────────────────────────
+# ─── MB AxisPro Consulting ─────────────────────────────────────────────────────────
 
 cabinet_d = department(cabinet, "Conseil et accompagnement")
 conseil_a = activity(cabinet, "Conseil et accompagnement de projets")

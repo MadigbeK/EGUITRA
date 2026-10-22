@@ -1,4 +1,4 @@
-"""Conformité à la méthode MB AxisPro du prototype de la direction (réf. MBAP/PROJECT-DEVELOPMENT/SC-01) :
+"""Conformité à la méthode MB AxisPro Consulting du prototype de la direction (réf. MBAP/PROJECT-DEVELOPMENT/SC-01) :
 formules (scoring.py), puis la méthode dans la plateforme (grille étendue, preuves, gates, comités
 scellés, révisions, journal, imports et rapports)."""
 
@@ -170,7 +170,7 @@ class TestFormules(TransactionCase):
 
 
 def extended_grid():
-    """Grille au format MB AxisPro (colonne « exigence ») : huit gates, deux domaines, cinq critères."""
+    """Grille au format MB AxisPro Consulting (colonne « exigence ») : huit gates, deux domaines, cinq critères."""
     header = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
               "exigence", "bancabilite", "livrable", "role", "regle", "seuil_attente", "seuil_go", "portee", "domaines",
               "criteres")
@@ -217,7 +217,7 @@ class TestMethodeDansLaPlateforme(ApiCase):
         super().setUpClass()
         cls.cabinet = cls.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         cls.env = cls.env(context=dict(cls.env.context, allowed_company_ids=cls.cabinet.ids))
-        cls.policy = cls.env["axispro.policy"].import_grid(cls.cabinet, "Méthode MB AxisPro", "grille.csv",
+        cls.policy = cls.env["axispro.policy"].import_grid(cls.cabinet, "Méthode MB AxisPro Consulting", "grille.csv",
                                                           extended_grid())
         cls.policy.action_activate()
         cls.promoter = cls.env["res.partner"].create({"name": "SPV Soleil"})
@@ -245,7 +245,7 @@ class TestMethodeDansLaPlateforme(ApiCase):
 
     def test_grille_etendue(self):
         p = self.policy
-        self.assertEqual((p.weighting, p.go_threshold), ("flat", 65.0), "Format MB AxisPro : à plat, APD READY à 65")
+        self.assertEqual((p.weighting, p.go_threshold), ("flat", 65.0), "Format MB AxisPro Consulting : à plat, APD READY à 65")
         gates = {g.code: g for g in p.gate_ids}
         self.assertEqual((gates["G1"].rule_code, gates["G1"].threshold_hold, gates["G1"].threshold_go,
                           gates["G1"].score_scope), ("prequalification", 30.0, 50.0, "cumulative"))

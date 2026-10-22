@@ -11,7 +11,7 @@
 
 export type Ref = { id: number; name: string };
 
-/** Société employeur (entity : groupe = EGUITRA GROUP, cabinet = MB AxisPro). */
+/** Société employeur (entity : groupe = EGUITRA GROUP, cabinet = MB AxisPro Consulting). */
 export type CompanyRef = { id: number; name: string; entity: "groupe" | "cabinet" | null };
 
 export type Gender = "homme" | "femme";

@@ -1,6 +1,6 @@
 """Organisation de la plateforme : deux sociétés distinctes, des applications, des profils.
 
-EGUITRA GROUP SARLU (entité « groupe ») et MB AxisPro (entité « cabinet ») sont deux
+EGUITRA GROUP SARLU (entité « groupe ») et MB AxisPro Consulting (entité « cabinet ») sont deux
 entreprises différentes du même groupe : même direction générale, mêmes locaux, métiers distincts.
 Le département finance tient leurs deux comptabilités, séparément, dans la même base.
 
@@ -10,7 +10,7 @@ Le département finance tient leurs deux comptabilités, séparément, dans la m
 - Transport (NIMOVA · Transport, décision du gérant du 22 octobre 2026) est une application à part
   entière, comme Finance et AxisPro Suite : flotte, rotations, rentabilité, propriétaires des
   ensembles gérés ; elle ne sert qu'EGUITRA GROUP.
-- AxisPro Suite et le portail des porteurs de projets ne servent que MB AxisPro.
+- AxisPro Suite et le portail des porteurs de projets ne servent que MB AxisPro Consulting.
 - Rotations (saisie mobile des rotations) ne sert qu'EGUITRA GROUP.
 - Analyse (NIMOVA · Analyse) sert les deux sociétés, avec des analyses propres à chacune : celles du
   groupe sous /analyse/groupe/, celles du cabinet sous /analyse/cabinet/.
@@ -23,7 +23,7 @@ réservé à une société, dans MODULE_ENTITY ; un nouveau profil propre à une
 PROFILE_ENTITY.
 """
 
-ENTITY_NAMES = {"groupe": "EGUITRA GROUP SARLU", "cabinet": "MB AxisPro"}
+ENTITY_NAMES = {"groupe": "EGUITRA GROUP SARLU", "cabinet": "MB AxisPro Consulting"}
 
 # Application -> profils qui l'ouvrent et société servie (None : les deux sociétés).
 APPS = {

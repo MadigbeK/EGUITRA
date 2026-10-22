@@ -121,7 +121,7 @@ class TestAuth(ApiCase):
         self.assertEqual(session["user"]["profiles"], ["porteur"])
 
     def test_application_reservee_a_sa_societe(self):
-        """AxisPro Suite et le portail ne servent que MB AxisPro ; Rotations, qu'EGUITRA GROUP."""
+        """AxisPro Suite et le portail ne servent que MB AxisPro Consulting ; Rotations, qu'EGUITRA GROUP."""
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         groupe = self.env.ref("base.main_company")
         self._create_user("consultante.groupe", "cabinet", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])

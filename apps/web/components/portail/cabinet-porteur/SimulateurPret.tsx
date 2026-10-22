@@ -24,7 +24,7 @@ function cellule(v: string | number, chiffres = 2): string {
 /** Tableau d'amortissement en CSV : point-virgule, virgule décimale, en-tête des hypothèses. */
 function exporterCsv(p: ParamsPret, r: Extract<ResultatPret, { ok: true }>) {
   const lignes: Array<Array<string | number>> = [
-    ["Simulation de prêt", "Portail MB AxisPro"],
+    ["Simulation de prêt", "Portail MB AxisPro Consulting"],
     ["Montant emprunté (GNF)", p.montant],
     ["Taux annuel (%)", p.taux],
     ["Durée totale (mois)", String(p.duree)],

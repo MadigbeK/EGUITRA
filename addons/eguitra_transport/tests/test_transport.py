@@ -7,7 +7,7 @@ from .common import TransportCase
 @tagged("post_install", "-at_install")
 class TestTransport(TransportCase):
     def test_transport_reserve_a_eguitra(self):
-        """Les modules métier d'EGUITRA GROUP refusent de travailler dans MB AxisPro."""
+        """Les modules métier d'EGUITRA GROUP refusent de travailler dans MB AxisPro Consulting."""
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         self._create_user("finance.deux", "finance", company_ids=[(6, 0, (self.company | cabinet).ids)])
         token = self.open_session("finance.deux")["access_token"]

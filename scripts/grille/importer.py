@@ -1,6 +1,6 @@
 # ruff: noqa: F821 (env est fourni par « odoo shell »)
 """Importe une grille d'évaluation AxisPro (outil de scoring du cabinet tel quel, ou format d'import
-de la plateforme) dans MB AxisPro, en nouvelle version, et la met en vigueur sur demande.
+de la plateforme) dans MB AxisPro Consulting, en nouvelle version, et la met en vigueur sur demande.
 
 Le classeur du cabinet n'est jamais dans le dépôt : il est déposé sur le serveur (infra/secrets/) et
 lu dans le conteneur par son chemin. GRILLE_ENVIRONNEMENT doit valoir le libellé de la base
@@ -8,7 +8,7 @@ lu dans le conteneur par son chemin. GRILLE_ENVIRONNEMENT doit valoir le libell�
 
 Lancement sur le serveur, depuis infra/ (classeur copié dans le conteneur, lu sur l'entrée standard) :
 
-  docker compose exec -T -e GRILLE_ENVIRONNEMENT=recette -e GRILLE_NOM="Outil de scoring MB AxisPro (SC-01)" \\
+  docker compose exec -T -e GRILLE_ENVIRONNEMENT=recette -e GRILLE_NOM="Outil de scoring MB AxisPro Consulting (SC-01)" \\
       -e GRILLE_ACTIVER=1 -e GRILLE_FICHIER=/tmp/outil.xlsx odoo-recette odoo shell -c /etc/odoo/odoo.conf \\
       -d "$RECETTE_DB" --no-http --log-level=warn < ../scripts/grille/importer.py
 

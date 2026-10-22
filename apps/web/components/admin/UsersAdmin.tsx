@@ -14,7 +14,7 @@ interface UserRow extends Me {
 /**
  * Profil de la plateforme, tel que le noyau le décrit (libellé et description du groupe : Achats compris).
  * entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur :
- * MB AxisPro) ; null pour un profil commun aux deux sociétés (direction, finance, achats).
+ * MB AxisPro Consulting) ; null pour un profil commun aux deux sociétés (direction, finance, achats).
  */
 interface ProfileDef { code: string; name: string; description: string | null; entity: "groupe" | "cabinet" | null }
 /** Droit complémentaire aux profils (free_accounts : saisie libre des comptes). */
@@ -199,7 +199,7 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
         )}
         {manquantes.length > 0 && (
           <Notice tone="warn">
-            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro" : "EGUITRA GROUP SARLU")}.`).join(" ")}
+            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro Consulting" : "EGUITRA GROUP SARLU")}.`).join(" ")}
           </Notice>
         )}
         {user && (

@@ -1,6 +1,6 @@
 /**
  * Marques affichées. NIMOVA est la marque interne commune aux deux structures ; le portail des
- * porteurs de projets, ouvert aux clients du cabinet, porte la marque MB AxisPro.
+ * porteurs de projets, ouvert aux clients du cabinet, porte la marque MB AxisPro Consulting.
  *
  * La marque NIMOVA est le pli (choix du gérant, 21 octobre 2026) : un ruban de papier-valeur plié
  * en N, le vert forêt et l'or du DG ; son sceau signe les documents officiels. Les logos des deux sociétés
@@ -130,7 +130,7 @@ export type Entite = "groupe" | "cabinet";
 
 const LOGOS: Record<Entite, { complet: [string, string, number, number]; embleme: [string, string, number, number]; nom: string }> = {
   groupe: { complet: ["/brand/eguitra-group.png", "/brand/eguitra-group-blanc.png", 370, 176], embleme: ["/brand/eguitra-embleme.png", "/brand/eguitra-embleme-blanc.png", 188, 128], nom: "EGUITRA GROUP" },
-  cabinet: { complet: ["/brand/mb-axispro.png", "/brand/mb-axispro-blanc.png", 634, 152], embleme: ["/brand/mb-axispro-embleme.png", "/brand/mb-axispro-embleme-blanc.png", 134, 128], nom: "MB AxisPro" },
+  cabinet: { complet: ["/brand/mb-axispro.png", "/brand/mb-axispro-blanc.png", 634, 152], embleme: ["/brand/mb-axispro-embleme.png", "/brand/mb-axispro-embleme-blanc.png", 134, 128], nom: "MB AxisPro Consulting" },
 };
 
 /**

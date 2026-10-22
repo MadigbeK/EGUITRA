@@ -1,4 +1,4 @@
-"""Méthode d'évaluation MB AxisPro, sans dépendance au noyau.
+"""Méthode d'évaluation MB AxisPro Consulting, sans dépendance au noyau.
 
 Reprend le prototype de la direction « Project Readiness & Bankability Assessment »
 (réf. MBAP/PROJECT-DEVELOPMENT/SC-01) et ses formules :

@@ -81,7 +81,7 @@ function Bulles({ g, onTelecharger }: { g: Groupe; onTelecharger: (a: Attachment
         {!g.moi && (
           <span className="px-1 text-[12px] font-semibold text-ink-2">
             {g.auteur}
-            {g.cabinet && <span className="font-normal text-muted"> · MB AxisPro</span>}
+            {g.cabinet && <span className="font-normal text-muted"> · MB AxisPro Consulting</span>}
           </span>
         )}
         {g.messages.map((m, i) => {
@@ -211,11 +211,11 @@ export default function Messagerie() {
       >
         {/* Interlocuteur */}
         <header className="flex items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
-          <Avatar nom={consultant?.name ?? "MB AxisPro"} taille={44} plein />
+          <Avatar nom={consultant?.name ?? "MB AxisPro Consulting"} taille={44} plein />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[15px] font-semibold text-ink">{consultant?.name ?? "L'équipe MB AxisPro"}</div>
+            <div className="truncate text-[15px] font-semibold text-ink">{consultant?.name ?? "L'équipe MB AxisPro Consulting"}</div>
             <div className="truncate text-[12.5px] text-muted">
-              {consultant ? "Votre consultant MB AxisPro" : "Le cabinet vous répond ici"} · {dossier.reference}
+              {consultant ? "Votre consultant MB AxisPro Consulting" : "Le cabinet vous répond ici"} · {dossier.reference}
             </div>
           </div>
           {consultant?.phone && (

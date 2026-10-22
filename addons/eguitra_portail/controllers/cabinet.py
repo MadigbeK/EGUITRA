@@ -2,7 +2,7 @@
 dossiers, communications, centre de ressources, événements et inscriptions, rendez-vous, avis.
 
 Lecture : administration, direction et cabinet ; écriture : cabinet. Tout est borné à la société de
-travail (MB AxisPro), que le préfixe /axispro/ impose."""
+travail (MB AxisPro Consulting), que le préfixe /axispro/ impose."""
 
 import base64
 from datetime import timedelta

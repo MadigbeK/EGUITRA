@@ -157,7 +157,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       ],
     },
     {
-      label: "MB AxisPro",
+      label: "MB AxisPro Consulting",
       items: [
         { href: "/analyse/portefeuille", label: "Projets et pipeline", icon: "FolderKanban", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
         { href: "/analyse/diagnostic", label: "Diagnostic des projets", icon: "Layers", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },

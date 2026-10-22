@@ -338,7 +338,7 @@ function Repondre({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; 
             <Select value={duration} onChange={(e) => setDuration(e.target.value)} options={OPTIONS_DUREE} />
           </Field>
           <Field label="Lieu" className="md:col-span-2">
-            <Input value={location} maxLength={200} placeholder={m.mode === "office" ? "Exemple : bureaux de MB AxisPro, Kaloum" : "Facultatif"} onChange={(e) => setLocation(e.target.value)} />
+            <Input value={location} maxLength={200} placeholder={m.mode === "office" ? "Exemple : bureaux de MB AxisPro Consulting, Kaloum" : "Facultatif"} onChange={(e) => setLocation(e.target.value)} />
           </Field>
         </div>
         <Field label="Lien de visioconférence" hint={m.mode === "video" ? "Le porteur a demandé une visioconférence : indiquez le lien (https://…)." : "Facultatif, https://…"}>

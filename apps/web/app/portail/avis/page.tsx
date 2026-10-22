@@ -57,7 +57,7 @@ function Recommandation({ value, onChange }: { value: number | null; onChange: (
   const nom = useId();
   return (
     <fieldset>
-      <legend className="mb-2 text-[13px] font-medium text-ink-2">Recommanderiez-vous MB AxisPro à un autre porteur de projet ? (facultatif)</legend>
+      <legend className="mb-2 text-[13px] font-medium text-ink-2">Recommanderiez-vous MB AxisPro Consulting à un autre porteur de projet ? (facultatif)</legend>
       <div className="grid grid-cols-11 gap-1 sm:gap-1.5">
         {Array.from({ length: 11 }, (_, n) => (
           <label key={n} className="has-[:focus-visible]:rounded-lg has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-accent-vif">

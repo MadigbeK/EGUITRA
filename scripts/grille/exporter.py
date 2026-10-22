@@ -1,5 +1,5 @@
 # ruff: noqa: F821 (env est fourni par « odoo shell »)
-"""Exporte la grille AxisPro en vigueur (MB AxisPro) au format d'import de la plateforme, à
+"""Exporte la grille AxisPro en vigueur (MB AxisPro Consulting) au format d'import de la plateforme, à
 l'identique : gates et leurs règles, compartiments, domaines, critères (codes, aides, livrables,
 indicateurs), pièces et leurs rattachements. Sert à porter en production la grille validée en
 recette, quand la production n'a pas de version précédente dont reprendre codes et rattachements.

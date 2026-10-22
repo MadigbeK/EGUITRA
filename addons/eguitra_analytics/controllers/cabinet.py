@@ -1,6 +1,6 @@
 """Routes /analyse/cabinet/<section> (spécification, chapitre 6).
 
-Une route par section, sous l'identité de l'utilisateur ; MB AxisPro seulement
+Une route par section, sous l'identité de l'utilisateur ; MB AxisPro Consulting seulement
 (organisation.MODULE_ENTITY : une autre société de travail reçoit 422 wrong_company). Profils :
 admin, direction et cabinet ; la finance en plus pour « Activité et honoraires ». Paramètres de
 période communs (date_to, period, date_from : controllers/common.parse_period).

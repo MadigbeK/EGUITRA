@@ -4,7 +4,7 @@ export type Recommendation = "bankable" | "apd_ready" | "go" | "conditional" | "
 export type Decision = "go" | "conditional" | "hold" | "no_go" | "postponed";
 type Tone = "ok" | "warn" | "danger" | "neutral" | "accent";
 
-/** Recommandations et décisions, vocabulaire de la méthode MB AxisPro. */
+/** Recommandations et décisions, vocabulaire de la méthode MB AxisPro Consulting. */
 export const RECO: Record<Recommendation, { label: string; tone: Tone }> = {
   bankable: { label: "BANKABLE CANDIDATE", tone: "ok" },
   apd_ready: { label: "APD READY", tone: "ok" },

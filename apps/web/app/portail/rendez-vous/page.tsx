@@ -120,7 +120,7 @@ function CarteAVenir({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean; o
             <Button
               onClick={() =>
                 ajouterAuCalendrier({
-                  titre: `Rendez-vous MB AxisPro : ${m.subject}`,
+                  titre: `Rendez-vous MB AxisPro Consulting : ${m.subject}`,
                   debut: m.start!,
                   fin: m.end,
                   lieu: m.location ?? (lienSur(m.online_url) ? m.online_url : m.mode_label),

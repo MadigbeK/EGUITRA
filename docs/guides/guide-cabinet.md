@@ -9,7 +9,7 @@ retard, comptes rendus des porteurs à valider, risques critiques, relances des 
 les quatorze jours), la rentabilité des projets modélisés (TRI, DSCR, VAN) et la charge des
 consultants. Les dossiers s'affichent en colonnes par étape (« Tableau ») ou en « Liste ».
 
-## La méthode MB AxisPro
+## La méthode MB AxisPro Consulting
 
 AxisPro Suite applique la méthode du cabinet « Project Readiness & Bankability Assessment » (réf.
 MBAP/PROJECT-DEVELOPMENT/SC-01) :

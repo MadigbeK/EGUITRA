@@ -1,13 +1,13 @@
 /** Applications servies par ce projet. Le code d'application est transmis à l'API à la connexion. */
 export type AppCode = "finance" | "transport" | "axispro" | "portail" | "mobile" | "analyse" | "rh";
 
-/** Les deux sociétés : EGUITRA GROUP SARLU (« groupe ») et MB AxisPro (« cabinet »). */
+/** Les deux sociétés : EGUITRA GROUP SARLU (« groupe ») et MB AxisPro Consulting (« cabinet »). */
 export type EntiteSociete = "groupe" | "cabinet";
 
 /**
  * Registre des applications (le pendant du noyau : addons/eguitra_api/organisation.py).
  * Noms affichés (décision du gérant, 16 octobre 2026) : NIMOVA, marque interne, suivie du module.
- * Le portail, ouvert aux clients du cabinet, porte la marque MB AxisPro.
+ * Le portail, ouvert aux clients du cabinet, porte la marque MB AxisPro Consulting.
  * entity : société servie, null pour les deux. Finance et Analyse servent les deux sociétés ;
  * AxisPro Suite et le portail, le seul cabinet ; Transport et Rotations, le seul groupe (le noyau
  * l'impose). Transport est une application à part entière (décision du gérant, 22 octobre 2026).
@@ -15,8 +15,8 @@ export type EntiteSociete = "groupe" | "cabinet";
 export const APPS: Record<AppCode, { name: string; home: string; tagline: string; entity: EntiteSociete | null }> = {
   finance: { name: "NIMOVA · Finance", home: "/finance", tagline: "Pilotage financier du groupe", entity: null },
   transport: { name: "NIMOVA · Transport", home: "/transport", tagline: "Flotte, rotations et rentabilité du transport", entity: "groupe" },
-  axispro: { name: "NIMOVA · AxisPro", home: "/axispro", tagline: "Évaluation et suivi des projets", entity: "cabinet" },
-  portail: { name: "Portail des porteurs de projets", home: "/portail", tagline: "MB AxisPro", entity: "cabinet" },
+  axispro: { name: "NIMOVA · MB AxisPro Consulting", home: "/axispro", tagline: "Évaluation et suivi des projets", entity: "cabinet" },
+  portail: { name: "Portail des porteurs de projets", home: "/portail", tagline: "MB AxisPro Consulting", entity: "cabinet" },
   mobile: { name: "NIMOVA · Rotations", home: "/mobile", tagline: "Saisie des rotations au parc", entity: "groupe" },
   analyse: { name: "NIMOVA · Analyse", home: "/analyse", tagline: "Constats, prévisions et décisions du dirigeant", entity: null },
   // RH : les deux sociétés, chacune son personnel et sa paie (décision du gérant, 22 octobre 2026).

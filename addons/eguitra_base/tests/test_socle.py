@@ -11,7 +11,7 @@ class TestSocle(TransactionCase):
 
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")])
         self.assertEqual(len(cabinet), 1)
-        self.assertEqual(cabinet.name, "MB AxisPro")
+        self.assertEqual(cabinet.name, "MB AxisPro Consulting")
         self.assertEqual(cabinet.currency_id.name, "GNF")
         self.assertEqual(cabinet.chart_template, "gn")
         nb_comptes = self.env["account.account"].search_count([("company_ids", "in", cabinet.ids)])

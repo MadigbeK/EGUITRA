@@ -1,4 +1,4 @@
-"""Méthodes propres au portefeuille du cabinet (MB AxisPro), sans dépendance au noyau.
+"""Méthodes propres au portefeuille du cabinet (MB AxisPro Consulting), sans dépendance au noyau.
 
 - Probabilité de bancabilité : fonction logistique du score Bankability, calée sur trois points
   (50 → 0,2 ; 65 → 0,5 ; 80 → 0,8), nulle en présence d'un knock-out confirmé.

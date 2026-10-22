@@ -99,7 +99,7 @@ export default function MonProfil() {
 
   return (
     <div className="space-y-6">
-      <EnTete surtitre="Outils" titre="Mon profil" texte="Vos coordonnées, la fiche de votre entreprise et vos dossiers suivis par MB AxisPro." />
+      <EnTete surtitre="Outils" titre="Mon profil" texte="Vos coordonnées, la fiche de votre entreprise et vos dossiers suivis par MB AxisPro Consulting." />
 
       <div className="grid gap-6 xl:grid-cols-12">
         <div className="space-y-6 xl:col-span-7">
@@ -269,7 +269,7 @@ export default function MonProfil() {
             <div className="mt-4 flex gap-3 rounded-2xl bg-panel-2 px-4 py-3.5 text-[13px] leading-relaxed text-ink-2">
               <Lock className="mt-0.5 h-4 w-4 flex-none text-accent" />
               <p>
-                Vos informations et les pièces de votre dossier ne sont visibles que de vous et de l'équipe MB AxisPro qui vous accompagne. Gardez votre mot de passe pour vous : le cabinet ne vous le demandera jamais.
+                Vos informations et les pièces de votre dossier ne sont visibles que de vous et de l'équipe MB AxisPro Consulting qui vous accompagne. Gardez votre mot de passe pour vous : le cabinet ne vous le demandera jamais.
               </p>
             </div>
           </Card>

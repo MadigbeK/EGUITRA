@@ -1,4 +1,4 @@
-"""Portail des porteurs de projets de MB AxisPro : contenus du cabinet (communications, ressources,
+"""Portail des porteurs de projets de MB AxisPro Consulting : contenus du cabinet (communications, ressources,
 événements), rendez-vous, notifications et avis ; API du porteur (/portail/...) et outils de
 publication du cabinet (/axispro/portail/...). Le dossier, ses pièces et ses actions restent ceux
 d'eguitra_axispro."""

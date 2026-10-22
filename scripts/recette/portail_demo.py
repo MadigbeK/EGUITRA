@@ -62,7 +62,7 @@ ANNONCES = [
      "body": "La liste des pièces de l'étape **Étude de faisabilité** évolue : les devis doivent dater de moins de trois mois.\n\n"
              "Merci de confirmer votre lecture.", "audience": "all"},
     {"name": "Le cabinet sera fermé le 1er novembre (démo)", "kind": "info",
-     "body": "Les bureaux de MB AxisPro seront fermés. La messagerie du portail reste ouverte.", "audience": "all",
+     "body": "Les bureaux de MB AxisPro Consulting seront fermés. La messagerie du portail reste ouverte.", "audience": "all",
      "expire_date": today + timedelta(days=15)},
 ]
 for values in ANNONCES:
@@ -73,7 +73,7 @@ for values in ANNONCES:
 # Événements et formations.
 EVENEMENTS = [
     {"name": "Atelier : bâtir son plan de financement (démo)", "kind": "atelier", "start": at(6, 9), "end": at(6, 12),
-     "location": "Locaux de MB AxisPro, Kaloum", "capacity": 12, "speaker": "Équipe financement du cabinet",
+     "location": "Locaux de MB AxisPro Consulting, Kaloum", "capacity": 12, "speaker": "Équipe financement du cabinet",
      "description": "# Au programme\n- Besoins et ressources\n- Apport, prêt, subvention : le bon dosage\n- Exercices sur vos chiffres\n\n"
                     "Apportez votre ordinateur et vos devis."},
     {"name": "Webinaire : comprendre le DSCR en 45 minutes (démo)", "kind": "webinaire", "start": at(10, 15),
@@ -83,7 +83,7 @@ EVENEMENTS = [
      "location": "Hôtel de Conakry, salle Niger", "capacity": 2, "registration_deadline": at(18, 18),
      "description": "Cinq minutes pour présenter votre projet à trois établissements de crédit, puis échanges libres."},
     {"name": "Permanence du cabinet : vos questions (démo)", "kind": "permanence", "start": at(-12, 14), "end": at(-12, 17),
-     "location": "Locaux de MB AxisPro, Kaloum", "description": "Venez sans rendez-vous avec vos questions."},
+     "location": "Locaux de MB AxisPro Consulting, Kaloum", "description": "Venez sans rendez-vous avec vos questions."},
 ]
 for values in EVENEMENTS:
     event = env["portail.event"].search([("name", "=", values["name"])], limit=1)
@@ -103,7 +103,7 @@ for dossier in dossiers:
     if not Meeting.search_count([("dossier_id", "=", dossier.id)]):
         Meeting.create({"dossier_id": dossier.id, "requested_by": consultant.id, "consultant_id": consultant.id,
                         "subject": "Revue des devis d'équipement (démo)", "mode": "office", "duration": 60,
-                        "location": "Locaux de MB AxisPro, Kaloum"}).confirm(at(4, 10))
+                        "location": "Locaux de MB AxisPro Consulting, Kaloum"}).confirm(at(4, 10))
         done = Meeting.create({"dossier_id": dossier.id, "requested_by": porteur.id, "consultant_id": consultant.id,
                                "subject": "Lancement de l'accompagnement (démo)", "mode": "video", "duration": 45,
                                "slot_1": at(-5, 10)})
