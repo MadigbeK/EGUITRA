@@ -237,6 +237,18 @@ export const Unlock = dessin("Unlock", (
   </>
 ));
 export const LockOpen = Unlock;
+export const Eye = dessin("Eye", (
+  <>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </>
+));
+export const EyeOff = dessin("EyeOff", (
+  <>
+    <path d="M9.9 5.8A9.4 9.4 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M14.1 14.2a3 3 0 0 1-4.3-4.3M6.6 6.7C4 8.4 2.5 12 2.5 12S6 18.5 12 18.5c1.7 0 3.2-.5 4.5-1.2" />
+    <path d="M3.5 3.5l17 17" />
+  </>
+));
 export const KeyRound = dessin("KeyRound", (
   <>
     <circle cx="8" cy="15.5" r="4" />

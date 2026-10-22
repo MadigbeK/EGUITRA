@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { useSWRConfig } from "swr";
 import { AlertTriangle, Coins, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
-import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, Select, Tag, Textarea, cx } from "@/components/ui";
+import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, PasswordInput, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type Currency, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
 import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -170,7 +170,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
           <Input placeholder="Identifiant" value={portal.login} onChange={(e) => setPortal({ ...portal, login: e.target.value })} />
           <Input placeholder="Nom du porteur" value={portal.name} onChange={(e) => setPortal({ ...portal, name: e.target.value })} />
-          <Input type="password" autoComplete="new-password" placeholder="Mot de passe provisoire (10+)" value={portal.password} onChange={(e) => setPortal({ ...portal, password: e.target.value })} />
+          <PasswordInput autoComplete="new-password" placeholder="Mot de passe provisoire (10+)" value={portal.password} onChange={(e) => setPortal({ ...portal, password: e.target.value })} />
           <Button variant="primary" disabled={!portal.login || !portal.name || portal.password.length < 10} onClick={() => agir(() => apiSend("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), "Accès au portail ouvert.").then((r) => { if (r !== undefined) { setPortal({ login: "", name: "", password: "" }); onChanged(); } })}>Ouvrir l&apos;accès</Button>
         </div>
       </Card>

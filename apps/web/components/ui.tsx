@@ -18,7 +18,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
+import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, Eye, EyeOff, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
 import { fmtPct, fmtShort } from "@/lib/format";
@@ -375,6 +375,28 @@ const FIELD =
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={ajuste(cx(FIELD, "min-h-9"), props.className)} />;
+}
+
+/** Mot de passe avec l'œil : un clic l'affiche en clair pour vérifier la saisie, un second le masque. */
+export function PasswordInput({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [visible, setVisible] = useState(false);
+  const Oeil = visible ? EyeOff : Eye;
+  return (
+    <div className="relative">
+      <Input {...props} type={visible ? "text" : "password"} className={cx(className, "pr-10")} />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+        aria-pressed={visible}
+        title={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+        disabled={props.disabled}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-[10px] text-muted outline-none transition-colors hover:text-ink focus-visible:text-accent disabled:pointer-events-none"
+      >
+        <Oeil className="h-[18px] w-[18px]" />
+      </button>
+    </div>
+  );
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

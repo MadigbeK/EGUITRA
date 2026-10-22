@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { KeyRound, Plus, ShieldOff } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tag } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, PasswordInput, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Company, Me } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -141,7 +141,7 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
           </Field>
           {!user && (
             <Field label="Mot de passe provisoire" hint="10 caractères minimum ; à changer à la première connexion.">
-              <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </Field>
           )}
         </div>
@@ -230,7 +230,7 @@ function PasswordReset({ userId }: { userId: number }) {
     );
   return (
     <div className="flex items-center gap-2">
-      <Input type="password" autoComplete="new-password" placeholder="10 caractères minimum" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <PasswordInput autoComplete="new-password" placeholder="10 caractères minimum" value={password} onChange={(e) => setPassword(e.target.value)} />
       <Button
         disabled={password.length < 10}
         onClick={() =>

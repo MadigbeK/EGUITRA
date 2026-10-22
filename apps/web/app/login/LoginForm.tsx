@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Button, Field, Input, Notice, cx } from "@/components/ui";
+import { Button, Field, Input, Notice, PasswordInput, cx } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
 
 type Step = { kind: "credentials" } | { kind: "mfa" } | { kind: "setup"; secret: string; qr: string };
@@ -91,7 +91,7 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
               <Input autoComplete="username" autoFocus value={login} onChange={(e) => setLogin(e.target.value)} required className="min-h-11" />
             </Field>
             <Field label="Mot de passe">
-              <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
+              <PasswordInput autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
             </Field>
             <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" loading={busy}>
               Se connecter

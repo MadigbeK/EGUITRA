@@ -339,6 +339,12 @@ input[type="radio"] {
   height: 1rem;
 }
 
+/* Mot de passe : l'œil de NIMOVA seul (Edge ajoute le sien). */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* Liste déroulante : flèche dessinée, la même sur tous les systèmes. */
 .champ-liste {
   appearance: none;
