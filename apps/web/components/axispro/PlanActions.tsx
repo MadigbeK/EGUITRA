@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Clock, ListChecks, Plus, Trash2 } from "@/
 import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segmented, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { ACTION_SOURCE, ACTION_STATE, type Action, type ActionState } from "@/lib/axispro-types";
-import { fmtDate, pluriel } from "@/lib/format";
+import { fmtDate } from "@/lib/format";
 
 type Filtre = "open" | "overdue" | "submitted" | "all";
 
@@ -31,7 +31,7 @@ export function PlanActions({ dossierId }: { dossierId?: number }) {
     setMessage(null);
     try {
       const r = await fn();
-      if (ok) setMessage({ tone: "ok", text: typeof r === "object" && r && "created" in r ? `${pluriel((r as { created: number }).created, "action créée", "actions créées")} depuis les écarts.` : ok });
+      if (ok) setMessage({ tone: "ok", text: typeof r === "object" && r && "created" in r ? `${(r as { created: number }).created} action(s) créée(s) depuis les écarts.` : ok });
       await Promise.all([mutate(), recompter()]);
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Enregistrement impossible." });
