@@ -225,6 +225,33 @@ class TestAxispro(ApiCase):
         status, _b = self.call("GET", f"/axispro/dossiers/{dossier.id}", token=porteur)
         self.assertEqual(status, 403, "Le porteur n'accède pas à l'API du cabinet")
 
+    def test_portail_rattachement_d_un_porteur_existant(self):
+        """Audit des rôles I3 : un compte porteur existant n'est rattaché qu'aux dossiers de son promoteur."""
+        dossier = self._dossier()
+        tiers = self.env["res.partner"].create({"name": "Cimenterie de Kamsar"})
+        etranger = self.env["axispro.dossier"].create({"name": "Cimenterie", "promoter_id": tiers.id,
+                                                       "company_id": self.cabinet.id})
+        contact = self.env["res.partner"].create({"name": "Directeur financier", "parent_id": self.promoter.id})
+        extension = self.env["axispro.dossier"].create({"name": "Extension de l'usine", "promoter_id": contact.id,
+                                                        "company_id": self.cabinet.id})
+        token = self.open_session("consultant", app="axispro")["access_token"]
+        acces = {"login": "porteur.smn", "name": "Porteur SMN", "password": PASSWORD}
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/portal-access", acces, token=token)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", f"/axispro/dossiers/{etranger.id}/portal-access", acces, token=token)
+        self.assertEqual(status, 409, "Compte qui suit le dossier d'un autre promoteur : rattachement refusé")
+        self.assertIn(dossier.reference, body["message"])
+        status, body = self.call("POST", f"/axispro/dossiers/{extension.id}/portal-access", acces, token=token)
+        self.assertEqual(status, 200, "Même promoteur (contact de sa société) : rattachement permis")
+        self.env.invalidate_all()
+        porteur = self.env["res.users"].search([("login", "=", "porteur.smn")])
+        self.assertEqual(set(self.env["axispro.dossier"].search([("portal_user_ids", "in", porteur.id)]).ids),
+                         {dossier.id, extension.id})
+        self._create_user("porteur.libre", "porteur", company_id=self.cabinet.id, company_ids=[(6, 0, self.cabinet.ids)])
+        status, body = self.call("POST", f"/axispro/dossiers/{etranger.id}/portal-access",
+                                 dict(acces, login="porteur.libre"), token=token)
+        self.assertEqual(status, 200, "Compte porteur qui ne suit aucun dossier : rattachement permis")
+
     def test_depots_du_porteur_controles(self):
         dossier = self._dossier()
         porteur = self._create_user("porteur.depots", "porteur", company_id=self.cabinet.id,
@@ -257,6 +284,21 @@ class TestAxispro(ApiCase):
             self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
             self.assertEqual(self.call("POST", path, {"body": "Encore"}, token=token)[0], 429, "Messages bornés par jour")
 
+    def test_messagerie_du_portail_fermee_sur_un_dossier_clos(self):
+        """Audit des rôles, à améliorer 8 : un dossier clos ne reçoit plus de message du porteur."""
+        dossier = self._dossier()
+        porteur = self._create_user("porteur.clos", "porteur", company_id=self.cabinet.id,
+                                    company_ids=[(6, 0, self.cabinet.ids)])
+        dossier.portal_user_ids = [(4, porteur.id)]
+        token = self.open_session("porteur.clos", app="portail")["access_token"]
+        path = f"/portail/dossiers/{dossier.id}/messages"
+        self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
+        dossier.state = "closed"
+        status, body = self.call("POST", path, {"body": "Encore une question"}, token=token)
+        self.assertEqual((status, body["message"]), (422, "Ce dossier est clos."))
+        status, messages = self.call("GET", path, token=token)
+        self.assertEqual((status, [m["body"] for m in messages]), (200, ["Bonjour"]), "Les échanges restent lisibles")
+
     def test_activites_du_cabinet(self):
         """Les services du cabinet sont des activités de MB AxisPro, proposées aux lignes de facture."""
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
@@ -285,3 +327,16 @@ class TestAxispro(ApiCase):
         status, invoice = self.call("POST", f"/axispro/dossiers/{dossier.id}/invoice", {"hourly_rate": 500_000}, token=token)
         self.assertEqual(status, 200, invoice)
         self.assertEqual(invoice["amount_untaxed"], 3_000_000)
+
+    def test_facture_d_honoraires_refusee_a_l_admin(self):
+        """Audit des rôles I6 : seul le cabinet facture les honoraires ; l'admin ne fait que consulter."""
+        dossier = self._dossier()
+        self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 2, "description": "Analyse"})
+        self._create_user("admin.cabinet", "admin", company_id=self.cabinet.id, company_ids=[(6, 0, self.cabinet.ids)])
+        token = self.open_session("admin.cabinet", app="axispro")["access_token"]
+        self.assertEqual(self.call("GET", f"/axispro/dossiers/{dossier.id}", token=token)[0], 200, "L'admin consulte")
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/invoice", {"hourly_rate": 500_000}, token=token)
+        self.assertEqual((status, body["error"]), (403, "forbidden"), "mais ne facture pas")
+        self.env.invalidate_all()
+        self.assertFalse(self.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)]).invoice_id,
+                         "Aucun temps facturé")

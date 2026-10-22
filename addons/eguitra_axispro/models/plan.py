@@ -1,6 +1,7 @@
 """Modèle financier du projet : hypothèses saisies par le cabinet et analyse par le moteur
 (`engine.py`). Un modèle par dossier ; ses indicateurs alimentent la synthèse, les suggestions
-d'évaluation des critères adossés à un indicateur et l'instantané des revues de comité."""
+d'évaluation des critères adossés à un indicateur et l'instantané des revues de comité. Qui le
+modifie rejoint les auteurs de la révision en cours du dossier (quatre yeux)."""
 
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
@@ -68,8 +69,15 @@ class AxisproPlan(models.Model):
         first_year = self.first_year or (self.dossier_id.date_start.year if self.dossier_id.date_start else None)
         return params, lines, first_year
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records.dossier_id._note_decision_input()
+        return records
+
     def write(self, vals):
         self.dossier_id._check_unlocked()
+        self.dossier_id._note_decision_input()
         return super().write(vals)
 
     def analysis(self, factors=None):
@@ -112,14 +120,17 @@ class AxisproPlanLine(models.Model):
     def create(self, vals_list):
         records = super().create(vals_list)
         records.plan_id.dossier_id._check_unlocked()
+        records.plan_id.dossier_id._note_decision_input()
         return records
 
     def write(self, vals):
         self.plan_id.dossier_id._check_unlocked()
+        self.plan_id.dossier_id._note_decision_input()
         return super().write(vals)
 
     def unlink(self):
         self.plan_id.dossier_id._check_unlocked()
+        self.plan_id.dossier_id._note_decision_input()
         return super().unlink()
 
     @api.constrains("kind", "amount", "quantity", "price", "unit_cost", "rate", "year", "life", "grace", "funding_type")

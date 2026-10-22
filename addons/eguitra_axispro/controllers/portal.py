@@ -28,6 +28,13 @@ def _own(dossier_id):
     return dossier
 
 
+def _open(dossier):
+    """Un dossier clos se consulte, mais ne reçoit plus ni pièce ni message (même contrôle que le
+    portail des porteurs, eguitra_portail)."""
+    if dossier.state == "closed":
+        raise ApiError(422, "business_rule", "Ce dossier est clos.")
+
+
 def _portal_view(dossier):
     result = dossier.evaluate()
     docs = [{k: d[k] for k in PORTAL_DOCUMENT_KEYS} for d in dossier.documents_status(result)]
@@ -84,8 +91,7 @@ class EguitraPortal(http.Controller):
     @api_route("/portail/dossiers/<int:dossier_id>/documents", methods=("POST",), profiles=PORTEUR)
     def upload(self, dossier_id, **_kw):
         dossier = _own(dossier_id)
-        if dossier.state == "closed":
-            raise ApiError(422, "business_rule", "Ce dossier est clos.")
+        _open(dossier)
         form = request.httprequest.form
         return document_row(store_upload(dossier, form.get("document_type_id"), form.get("name"), quota=True),
                             portal=True)
@@ -119,6 +125,7 @@ class EguitraPortal(http.Controller):
     @api_route("/portail/dossiers/<int:dossier_id>/messages", methods=("POST",), profiles=PORTEUR)
     def post_message(self, dossier_id, **_kw):
         dossier = _own(dossier_id)
+        _open(dossier)
         (body,) = require(read_json(), "body")
         Message = request.env["axispro.message"].sudo()
         recent = Message.search_count([
