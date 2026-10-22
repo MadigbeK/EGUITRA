@@ -20,18 +20,29 @@ MBAP/PROJECT-DEVELOPMENT/SC-01) :
 - la politique peut requalifier un statut sans toucher la saisie : un critère qui exige une preuve
   (knock-out ou exigence bloquante), déclaré disponible sans pièce, est retenu « incomplet » ; une
   preuve dont la validité est dépassée aussi ;
-- trois scores sur 100 : Project Readiness (toute la grille), APD Readiness (hors exigences DD,
-  SPV, closing) et Bankability (critères pertinents pour la bancabilité) ; un score par domaine
-  avec sa priorité (moins de 30 urgente, de 30 à 50 élevée, de 50 à 65 moyenne) ;
-- un knock-out non disponible (ou incomplet, selon la politique) impose NO-GO quel que soit le
-  score ;
+- trois scores sur 100 : Project Readiness (toute la grille), APD Readiness (hors exigences de due
+  diligence et de closing) et Bankability (critères pertinents pour la bancabilité) ; un score par
+  domaine avec sa priorité (moins de 30 urgente, de 30 à 50 élevée, de 50 à 65 moyenne) ;
+- un suivi par compartiment : les domaines sont répartis en compartiments d'expertise (C0
+  coordination, C1 foncier et autorisations, C2 technique, C3 marché et commercial, C4 coûts et
+  modélisation financière, C5 juridique et corporate, C6 environnement, social et HSSE, C7
+  financement, partenaires et garanties), chacun confié à un consultant : score, critères, manques
+  à traiter et études à produire renseignées ;
+- un knock-out non disponible impose NO-GO quel que soit le score ; un knock-out incomplet ne
+  bloque pas dans la version 3 de l'outil du cabinet (réglage de la politique) ;
 - classification : ADVANCED / BANKABLE CANDIDATE (80), APD READY (65), CONDITIONAL GO (50), MAJOR
   GAPS / HOLD (30), CRITICAL / NO-GO ;
-- chaque stage gate a sa règle de passage : recevabilité de la fiche (G0), préqualification (G1),
-  préfaisabilité sans knock-out sur le foncier, le marché, le commercial et le réglementaire (G2),
-  APD Readiness sans aucun knock-out (G3), Bankability et DSCR bancaire (G4), absence de red flag et
-  data room exploitable (G5), accord des bailleurs et domaines SPV et Financement (G6), conditions
-  levées et documentation signée (G7) ;
+- chaque stage gate a sa règle de passage. Version 3 de l'outil (7 gates) : recevabilité de la
+  fiche (G0), préqualification avec une checklist complétée à 40 % au moins et un score de maturité
+  d'au moins 30 (G1), préfaisabilité sans knock-out sur le foncier, le marché, le commercial et le
+  réglementaire et un Project Readiness d'au moins 50 (G2), APD Readiness d'au moins 50 sans aucun
+  knock-out (G3), Bankability d'au moins 65 et DSCR bancaire (G4), absence de red flag et data room
+  exploitable (G5), structuration financière et financial close : conditions levées et
+  documentation signée (G6). La version 2 comptait un gate SPV (accord des bailleurs, domaines SPV
+  et Financement) avant le financial close ;
+- une complétude documentaire minimale peut conditionner l'examen d'un gate : en dessous, le gate
+  reste en HOLD même si son score est atteint (mesurée, comme le score, sur les gates atteints pour
+  la préqualification et la préfaisabilité) ;
 - la recommandation : BANKABLE CANDIDATE, APD READY, CONDITIONAL GO, HOLD ou NO-GO, « à
   compléter » tant que les critères des gates atteints ne sont pas tous évalués ;
 - les écarts sont classés par priorité : un critère non disponible pèse son poids, plus 2 s'il est
@@ -40,15 +51,36 @@ MBAP/PROJECT-DEVELOPMENT/SC-01) :
 
 ## La grille d'évaluation (Méthode > Grille d'évaluation)
 
-La grille du cabinet (stage gates et leurs règles, domaines, critères, pièces de la data room et
-leurs rattachements aux critères) est une donnée : « Classeur modèle » donne le format (onglet
-Aide), « Importer une grille » charge le classeur du cabinet en nouvelle version, en brouillon.
+La grille du cabinet (stage gates et leurs règles, compartiments, domaines, critères, pièces de la
+data room et leurs rattachements aux critères) est une donnée : « Classeur modèle » donne le
+format (onglet Aide), « Importer une grille » charge une grille en nouvelle version, en brouillon.
+
+L'outil de scoring du cabinet (« Project Readiness & Bankability Assessment Tool », onglets
+Scoring, Stage_Gate, Data_Room_Index et Parametres) s'importe tel quel, sans conversion :
+
+- critères, poids, critiques, knock-outs, gates cibles, bancabilité, domaines et compartiments
+  viennent de l'onglet Scoring ; une preuve est exigée pour les knock-outs et les exigences
+  bloquantes ;
+- les gates viennent de l'onglet Stage_Gate : la règle de passage se déduit du nom du gate, le
+  seuil des critères de passage (« ≥ 50/100 »), la complétude minimale des exigences d'entrée
+  (« au moins 40 % »), les domaines contrôlés des blocs cités (« Foncier / Marché-Commercial /
+  Réglementaire ») ; le DSCR bancaire du gate de bancabilité (« 1,3x ») ;
+- les seuils de classement et le barème viennent de l'onglet Parametres : « non applicable » à
+  1 point y est compté comme tel ; un barème différent de celui de la méthode est refusé ;
+- les pièces viennent de l'onglet Data_Room_Index ;
+- codes des critères et des pièces, aides, livrables, indicateurs du modèle financier et
+  rattachements des pièces aux critères sont repris de la version en vigueur quand le libellé est
+  le même : les dossiers, exports et analyses gardent leurs repères ;
+- les notices explicatives sous chaque tableau sont ignorées.
+
 Vérifier la version (le contrôle de cohérence signale knock-outs non critiques, pièces sans
-critère, gates sans critère), régler la méthode (seuils des classes, DSCR bancaire, pondération à
-plat ou par domaine, knock-out incomplet bloquant, preuve obligatoire, non applicables exclus,
-péremption des preuves), les règles des gates (seuils, portée du score, domaines contrôlés), puis
-« Mettre en vigueur ». Chaque modification ultérieure passe par « Nouvelle version » : un dossier
-reste évalué selon la version en vigueur à son ouverture, rappelée dans chaque rapport.
+critère, critères sans pièce, domaines sans compartiment, gates sans critère), régler la méthode
+(seuils des classes, DSCR bancaire, pondération à plat ou par domaine, knock-out incomplet
+bloquant, preuve obligatoire, non applicables exclus, péremption des preuves), les règles des
+gates (seuils, portée du score, complétude minimale, domaines contrôlés), le compartiment de
+chaque domaine, puis « Mettre en vigueur ». Chaque modification ultérieure passe par « Nouvelle
+version » : un dossier reste évalué selon la version en vigueur à son ouverture, rappelée dans
+chaque rapport.
 
 Un critère peut être adossé à un indicateur du modèle financier (DSCR minimal, TRI, apport des
 promoteurs, délai de récupération, point mort…) avec un seuil de satisfaction et, au besoin, un
@@ -70,10 +102,15 @@ d'évaluation, investissement, besoin de financement. La fiche du dossier compor
   les scores par domaine, la fiche projet et les hypothèses de décision des gates 4 à 7 (DSCR et
   TRI déclarés à défaut de modèle financier, red flag, data room ouverte, accord des bailleurs,
   conditions levées, documentation signée), la rentabilité et l'accès du porteur au portail.
+  Le suivi par compartiment montre, pour chaque bloc d'expertise, son score, ses critères, ses
+  manques à traiter, ses études à produire renseignées et le consultant qui en a la charge ; le
+  cabinet y confie chaque compartiment à un consultant (le changement est inscrit au journal).
 - Évaluation : la check-list, par domaine. « Saisie guidée » ne montre que les critères des gates
-  atteints, les non évalués d'abord ; « Grille complète » montre tout. Filtres : domaine, gate,
-  non évalués, écarts, knock-outs, critiques, exigences bloquantes, requalifiés, avec ou sans
-  preuve. Pour chaque critère : le statut, le statut retenu par la politique s'il diffère (avec la
+  atteints, les non évalués d'abord ; « Grille complète » montre tout. Filtres : compartiment,
+  « Mes compartiments » (ceux qui vous sont confiés), domaine, gate, non évalués, écarts,
+  knock-outs, critiques, exigences bloquantes, requalifiés, avec ou sans preuve. L'outil de scoring
+  du cabinet, rempli hors ligne, se réimporte comme une fiche (statut, observation, étude à
+  produire, responsable, échéance). Pour chaque critère : le statut, le statut retenu par la politique s'il diffère (avec la
   raison), et dans « Détails » l'étude ou le document à produire, le responsable, l'échéance,
   l'observation, les preuves (« Joindre une preuve » dépose la pièce dans la data room et la
   rattache au critère, avec sa date de validité). « Fiche d'évaluation » télécharge la fiche ;
