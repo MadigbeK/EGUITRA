@@ -5,8 +5,11 @@ entreprises différentes du même groupe : même direction générale, mêmes lo
 Le département finance tient leurs deux comptabilités, séparément, dans la même base.
 
 - EGUITRA Finance sert les deux sociétés : la société de travail se choisit à l'écran, la vue
-  consolidée est réservée à la direction et à la finance. Ses modules métier (transport, chantiers,
-  immobilier) ne concernent qu'EGUITRA GROUP.
+  consolidée est réservée à la direction et à la finance. Ses modules métier (chantiers, immobilier)
+  ne concernent qu'EGUITRA GROUP.
+- Transport (NIMOVA · Transport, décision du gérant du 22 octobre 2026) est une application à part
+  entière, comme Finance et AxisPro Suite : flotte, rotations, rentabilité, propriétaires des
+  ensembles gérés ; elle ne sert qu'EGUITRA GROUP.
 - AxisPro Suite et le portail des porteurs de projets ne servent que MB AxisPro.
 - Rotations (saisie mobile des rotations) ne sert qu'EGUITRA GROUP.
 - Analyse (NIMOVA · Analyse) sert les deux sociétés, avec des analyses propres à chacune : celles du
@@ -30,6 +33,7 @@ APPS = {
     "axispro": {"profiles": {"admin", "direction", "cabinet"}, "entity": "cabinet"},
     "portail": {"profiles": {"porteur"}, "entity": "cabinet"},
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
+    "transport": {"profiles": {"admin", "direction", "finance", "exploitation"}, "entity": "groupe"},
     "analyse": {"profiles": {"admin", "direction", "finance", "cabinet"}, "entity": None},
 }
 

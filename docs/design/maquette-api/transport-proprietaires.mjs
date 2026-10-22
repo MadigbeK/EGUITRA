@@ -274,6 +274,21 @@ export function enregistrerProprietaires(refs) {
     return R.fileReply(R.xlsxBuffer([{ name: "Relevé", rows }]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `releve_${st.id}.xlsx`);
   });
 
+  route("GET", "/transport/controls", TR_READ, () => {
+    const check = (code, label, items, hint) => ({ code, label, ok: !items.length, count: items.length, items, hint });
+    const routes = DB.routes.filter((r) => r.std_fuel_liters && r.distance_km);
+    const ratios = routes.map((r) => r.std_fuel_liters / (2 * r.distance_km)).sort((a, b) => a - b);
+    const median = ratios[Math.floor(ratios.length / 2)];
+    return [
+      check("vehicle_without_asset", "Ensembles en service rattachés à une immobilisation", ["ER-14", "ER-15"], "Rattachez la fiche d'immobilisation (Flotte) : ses dotations entrent dans la structure du transport."),
+      check("driver_several_vehicles", "Un chauffeur habituel par ensemble en service", [], "Un même chauffeur ne conduit pas deux ensembles à la fois."),
+      check("route_without_distance", "Routes avec une distance", [], "Sans distance, ni coût au km ni part de structure."),
+      check("route_fuel_inconsistent", "Carburant de référence des routes cohérent (écart de 40 % au plus avec la médiane au km)",
+        routes.filter((r) => Math.abs(r.std_fuel_liters / (2 * r.distance_km) - median) > 0.4 * median).map((r) => `${r.name} : ${(r.std_fuel_liters / (2 * r.distance_km)).toFixed(2).replace(".", ",")} L/km pour ${median.toFixed(2).replace(".", ",")} L/km en médiane`),
+        "Un forfait de carburant trop bas gonfle la marge estimée de la route ; corrigez-le d'après les bons de carburant."),
+      check("shortage_claim_missing", "Créances sur les chauffeurs passées", [], "Chauffeur sans fiche tiers : créez sa fiche, puis passez la créance."),
+    ];
+  });
   route("GET", "/transport/settings", TR_READ, (ctx) => {
     const finance = ctx.user.profiles.some((p) => SETTINGS.includes(p));
     return {

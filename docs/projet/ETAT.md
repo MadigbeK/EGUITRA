@@ -201,6 +201,28 @@ l'analyse du logiciel actuel, sur l'accord du gérant : « poursuis »). `eguitr
   l'analyse).
 - Production : par `infra/release.sh` après validation du gérant (module transport à mettre à jour).
 
+**22 octobre : NIMOVA · Transport, application à part entière** (décision du gérant : « TRANSPORT est
+un module comme AxisPro Suite et Finance »).
+- Noyau : application `transport` dans `organisation.py` (profils administration, direction,
+  finance, exploitation ; société servie : EGUITRA GROUP). Liens des alertes et des constats
+  d'Analyse vers les pages du transport (`/transport/rentabilite`, `/transport/rotations`,
+  `/transport/manquants`). Contrôle du tiers propriétaire ou bénéficiaire (lisible, commun ou de la
+  société de travail), à la suite de la revue de sécurité.
+- Web : espace `/transport` (accent ambre) : tableau de bord (chiffres du mois, contrôles, rotations
+  à traiter), Rotations, Manquants, Rentabilité, Propriétaires et répartition (direction et
+  finance), Taxes spécifiques, Flotte et chauffeurs, Routes et tarifs, Paramètres ; registre des
+  applications, navigation, accueil (rayon Transport), bascule des espaces, passerelle (en-tête
+  X-Eguitra-App), garde des pages. Les écrans sont des composants partagés
+  (`components/transport/`). L'ancienne adresse `/finance/transport` redirige ; l'entrée Finance >
+  Métiers > Transport disparaît. Le profil exploitation garde Finance (engagements, validations).
+- Maquette d'API : application transport, relevés, règles, prix du carburant, contrôles. Vérifié
+  dans le navigateur sur la maquette (connexion, accueil, tableau de bord, relevés, pièces, flotte,
+  charges, routes, gain estimé).
+- Constat à traiter à part : la passerelle web refuse toute route `/auth/*`, si bien que
+  `useSaisieLibre()` et `useAchatsSeul()` (lecture de `/auth/me` dans le navigateur, `lib/api-client.ts`)
+  reçoivent toujours 404 ; l'écran Transport lit donc ses droits dans `/transport/settings`
+  (`sees_accounts`).
+
 **21 octobre fin d'après-midi : mise en production 20261021-1505 et comptes du client.**
 - Décisions du gérant sur la liste des utilisateurs : un vrai profil « Achats » pour la responsable
   des achats ; module RH plus tard (la personne concernée reçoit en attendant le profil cabinet) ; société

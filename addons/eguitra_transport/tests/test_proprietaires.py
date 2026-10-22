@@ -207,9 +207,21 @@ class TestProprietaires(TransportCase):
         self.assertEqual(status, 403)
         status, body = self.call("GET", "/transport/settings", None, parc, headers)
         self.assertEqual((status, body["sees_accounts"]), (200, False), "Onglet des relevés masqué au parc")
+        # Transport est une application à part entière : le parc l'ouvre, dans les livres du groupe.
+        status, body = self.call("GET", "/transport/summary", None, parc, {"X-Eguitra-App": "transport"})
+        self.assertEqual(status, 200, body)
         status, _b = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {"ownership": "managed"}, parc, headers)
         self.assertEqual(status, 403)
         status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}",
                                  {"charges": [{"name": "Assurance", "amount": 1_200_000}]}, token, headers)
         self.assertEqual(status, 200, body)
         self.assertEqual(self.truck.charge_ids.mapped("amount"), [1_200_000])
+        # Un tiers propre à l'autre société n'est ni propriétaire ni bénéficiaire.
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        if cabinet:
+            other = self.env["res.partner"].sudo().create({"name": "Tiers du cabinet", "company_id": cabinet.id})
+            status, body = self.call("PATCH", f"/transport/vehicles/{self.managed.id}", {"owner_id": other.id}, token, headers)
+            self.assertEqual(status, 422, body)
+            status, body = self.call("POST", "/transport/share-rules", {"partner_id": other.id, "rate": 5,
+                                                                         "ownership": "managed"}, token, headers)
+            self.assertEqual(status, 422, body)

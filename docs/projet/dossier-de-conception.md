@@ -12,22 +12,25 @@ de l'offre ne changent pas.
 Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro :
 
 - **EGUITRA Finance** : pilotage du dirigeant, comptabilité SYSCOHADA, trésorerie, approbations,
-  clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers transport,
-  chantiers et immobilier.
+  clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers chantiers et
+  immobilier.
+- **NIMOVA · Transport** (application à part entière depuis le 22 octobre 2026) : rotations,
+  facturation, manquants, rentabilité (coûts standard, déclarés, comptabilisés), ensembles gérés
+  pour des propriétaires et leurs relevés, taxes spécifiques, flotte, routes et tarifs.
 - **AxisPro Suite** : évaluation des projets selon la méthode MB AxisPro (stage gates, scoring
   Readiness et Bankability, knock-outs, écarts prioritaires), data room, comités et décisions
   scellées, rapports, modèle financier, risques et plan d'actions, temps et honoraires du cabinet.
 - **Portail des porteurs de projets** : suivi du dossier, dépôt des pièces, échanges avec le cabinet.
 - **Rotations** : application de saisie au parc, installable sur téléphone, utilisable sans réseau.
 
-Les utilisateurs ne voient que ces quatre applications. Le noyau de gestion (Odoo Community 19)
+Les utilisateurs ne voient que ces applications (et NIMOVA · Analyse, pour le dirigeant). Le noyau de gestion (Odoo Community 19)
 tient les comptes et n'est accessible qu'à l'équipe technique.
 
 ## 2. Architecture
 
 | Couche | Réalisation |
 |---|---|
-| Applications | Une application web (quatre espaces : finance, axispro, portail, mobile), à l'image du groupe et du cabinet, en français. |
+| Applications | Une application web (espaces : finance, transport, axispro, analyse, portail, mobile), à l'image du groupe et du cabinet, en français. |
 | Passerelle | Le navigateur ne détient jamais les jetons d'accès (cookies protégés) ; contrôle d'origine contre la falsification de requêtes ; fichiers déposés toujours servis en téléchargement. |
 | API métier | Huit modules spécifiques ; chaque appel s'exécute sous l'identité de l'utilisateur, avec ses droits. Double authentification, sessions révocables, limitation des essais, journal des accès. |
 | Noyau | Odoo Community 19, localisation guinéenne (plan SYSCOHADA en GNF), dix modules OCA. |

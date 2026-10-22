@@ -18,7 +18,7 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 | Un encaissement ou un paiement | Comptabilité > Trésorerie | Rapprocher chaque ligne du relevé de sa facture : c'est ce qui solde la créance ou la dette. |
 | Une échéance d'emprunt prélevée en banque | Comptabilité > Trésorerie, « Rapprocher » | L'échéance est proposée sur la ligne du relevé : capital et intérêts en contrepartie, la sortie n'est comptée qu'une fois. |
 | Un virement entre deux comptes | Comptabilité > Trésorerie, « Virement interne » | Il passe par le compte de passage 585, qui doit être soldé. |
-| Une rotation de camion | Métiers > Transport (ou Rotations au parc) | Une rotation par voyage : source unique de la facturation et de la rentabilité par camion et par route. |
+| Une rotation de camion | Application Transport > Rotations (ou Rotations au parc) | Une rotation par voyage : source unique de la facturation et de la rentabilité par camion et par route. |
 | Un bien amortissable | Comptabilité > Immobilisations | Les dotations échues sont comptabilisées chaque nuit. |
 | Un nouvel emprunt ou crédit-bail | Comptabilité > Dette et financement | Renseigner l'objet, le compte de dette, le compte d'intérêts et le journal, puis « Mettre en service ». |
 | Le déblocage d'un emprunt | Comptabilité > Trésorerie, type « Déblocage d'emprunt » | Désigner le financement : l'entrée de banque crédite son compte de dette. |
@@ -79,7 +79,10 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
   depuis leurs écrans : ne pas les ressaisir ici.
 - Impression PDF de la facture, pièces jointes, suivi du reste à encaisser.
 
-## Transport : paramètres, manquants et taxes (Métiers > Transport)
+## Transport : paramètres, manquants et taxes (application NIMOVA · Transport)
+
+Le transport a sa propre application, NIMOVA · Transport (accueil NIMOVA, rayon Transport, ou
+adresse `/transport`) ; l'ancienne entrée Finance > Métiers > Transport y mène.
 
 - Paramètres : tolérance de manquant par défaut (en % du volume chargé) et traitement du manquant
   hors tolérance (constat, déduction sur la facture du client, créance sur le chauffeur, ou les

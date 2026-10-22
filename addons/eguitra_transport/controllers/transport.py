@@ -4,7 +4,7 @@ import io
 import logging
 
 from odoo import fields, http
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
@@ -269,6 +269,23 @@ def _get(model, record_id, label):
     return record
 
 
+def _partner(value, label):
+    """Tiers désigné par la saisie : lisible par l'utilisateur, commun ou de la société de travail."""
+    try:
+        partner = request.env["res.partner"].browse(int(value)).exists()
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"{label} inconnu.") from e
+    # Société lue en sudo : un tiers d'une autre société n'est pas lisible, le refus doit rester un 422.
+    company = partner.sudo().company_id
+    if not partner or (company and company != request.env.company):
+        raise ApiError(422, "business_rule", f"{label} inconnu dans la société de travail.")
+    try:
+        partner.check_access("read")
+    except AccessError as e:
+        raise ApiError(422, "business_rule", f"{label} inconnu dans la société de travail.") from e
+    return partner
+
+
 class EguitraTransport(http.Controller):
     # ─── Référentiels ─────────────────────────────────────────────────────
 
@@ -350,12 +367,7 @@ class EguitraTransport(http.Controller):
                 raise ApiError(400, "invalid_parameter", "Propriété inconnue.")
             values["ownership"] = data["ownership"]
         if "owner_id" in data:
-            owner = request.env["res.partner"]
-            if data["owner_id"]:
-                owner = owner.browse(int(data["owner_id"])).exists()
-                if not owner:
-                    raise ApiError(422, "business_rule", "Propriétaire inconnu.")
-            values["owner_id"] = owner.id or False
+            values["owner_id"] = _partner(data["owner_id"], "Propriétaire").id if data["owner_id"] else False
         if "charges" in data:
             # Les charges sont renvoyées en entier, comme les tarifs d'une route.
             commands = [(5, 0, 0)]

@@ -440,13 +440,14 @@ const PROFILE_DEFS = [
   { code: "cabinet", name: "Cabinet AxisPro", description: "Dossiers de projets, évaluations, data room, comités, rapports, facturation des prestations." },
   { code: "porteur", name: "Porteur de projet", description: "Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet." },
 ];
-const APPS = ["finance", "axispro", "portail", "mobile", "analyse"];
+const APPS = ["finance", "transport", "axispro", "portail", "mobile", "analyse"];
 /** Applications ouvertes à chaque profil (eguitra_api.models.res_users.APP_PROFILES). */
 const APP_PROFILES = {
   finance: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"],
   axispro: ["admin", "direction", "cabinet"],
   portail: ["porteur"],
   mobile: ["admin", "exploitation"],
+  transport: ["admin", "direction", "finance", "exploitation"],
   analyse: ["admin", "direction", "finance", "cabinet"],
 };
 const INTERNAL = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet"];
@@ -1970,7 +1971,7 @@ function companyAlerts(cid, day) {
   if (t && t.value) {
     const weak = profitability([cid], addDays(day, -30), day, "vehicle").filter((r) => r.margin_rate !== null && r.margin_rate < t.value);
     if (weak.length) {
-      alerts.push(make(t, "Marge transport sous le seuil", `${weak.length} ensemble(s) sous ${Math.round(t.value)} % de marge sur 30 jours : ${weak.slice(0, 5).map((r) => r.label).join(", ")}.`, null, "/finance/transport"));
+      alerts.push(make(t, "Marge transport sous le seuil", `${weak.length} ensemble(s) sous ${Math.round(t.value)} % de marge sur 30 jours : ${weak.slice(0, 5).map((r) => r.label).join(", ")}.`, null, "/transport/rentabilite"));
     }
   }
   t = th.approval_delay_days;

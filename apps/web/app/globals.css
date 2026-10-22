@@ -164,6 +164,16 @@
   --accent-lueur: rgb(47 140 230 / 0.35);
 }
 
+/* Transport : l'ambre du carburant et de la route, entre le vert de la finance et le corail du parc. */
+[data-app="transport"] {
+  --accent: #a85a0c;
+  --accent-strong: #8a4908;
+  --accent-haut: #bb6612;
+  --accent-vif: #e08a1e;
+  --accent-doux: #fdf0de;
+  --accent-lueur: rgb(224 138 30 / 0.35);
+}
+
 /* Analyse : le violet de l'intelligence des données, à part des couleurs métier. */
 [data-app="analyse"] {
   --accent: #5b3fb8;

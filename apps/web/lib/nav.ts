@@ -63,7 +63,6 @@ export const NAV: Record<AppCode, NavSection[]> = {
     {
       label: "Métiers",
       items: [
-        { href: "/finance/transport", label: "Transport", icon: "Truck", profiles: ["admin", "direction", "finance", "exploitation"], entity: "groupe" },
         { href: "/finance/chantiers", label: "BTP", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"], entity: "groupe" },
         { href: "/finance/immobilier", label: "Immobilier", icon: "Building2", profiles: ["admin", "direction", "finance", "immobilier"], entity: "groupe" },
       ],
@@ -103,6 +102,33 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/axispro/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
         { href: "/axispro/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
+      ],
+    },
+  ],
+  // Transport : application à part entière, servie au seul groupe (organisation.py).
+  transport: [
+    {
+      label: "Exploitation",
+      items: [
+        { href: "/transport", label: "Tableau de bord", icon: "LayoutDashboard" },
+        { href: "/transport/rotations", label: "Rotations", icon: "Truck" },
+        { href: "/transport/manquants", label: "Manquants", icon: "Droplet" },
+      ],
+    },
+    {
+      label: "Gestion",
+      items: [
+        { href: "/transport/rentabilite", label: "Rentabilité", icon: "TrendingUp" },
+        { href: "/transport/proprietaires", label: "Propriétaires et répartition", icon: "HandCoins", profiles: FIN },
+        { href: "/transport/taxes", label: "Taxes spécifiques", icon: "Receipt" },
+      ],
+    },
+    {
+      label: "Référentiels",
+      items: [
+        { href: "/transport/flotte", label: "Flotte et chauffeurs", icon: "Gauge" },
+        { href: "/transport/routes", label: "Routes et tarifs", icon: "Route" },
+        { href: "/transport/parametres", label: "Paramètres", icon: "SlidersHorizontal" },
       ],
     },
   ],

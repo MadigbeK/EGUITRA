@@ -81,8 +81,10 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
 - Rotations, sur le téléphone : ajouter l'adresse /mobile à l'écran d'accueil, saisir une rotation
   (camion, chauffeur, route, volumes), couper le réseau, en saisir une autre, rétablir le réseau :
   elles partent seules, sans doublon.
-- Finance > Transport : rotations à valider, rentabilité par camion, par route et par mois, flotte
-  et chauffeurs, routes et tarifs. La facturation des rotations revient à la finance.
+- Application NIMOVA · Transport (accueil NIMOVA, rayon Transport) : tableau de bord, rotations à
+  valider (marge estimée à la saisie), rentabilité par camion, par route et par mois, flotte et
+  chauffeurs, routes et tarifs. La facturation des rotations et les relevés des propriétaires
+  reviennent à la finance.
 
 ### Chantiers (test.chantiers)
 

@@ -126,8 +126,8 @@ LINKS = {
     "receivable_overdue_amount": "/finance/tiers", "receivable_overdue_share_pct": "/finance/tiers",
     "dso_target_days": "/finance/relances", "client_concentration_pct": "/finance/tiers",
     "payable_overdue_amount": "/finance/tiers", "dscr_min": "/finance/dette", "net_result_negative": "/finance/etats",
-    "close_delay_days": "/finance/clotures", "transport_margin_min": "/finance/transport",
-    "transport_unbilled": "/finance/transport", "vehicle_deficit": "/finance/transport",
+    "close_delay_days": "/finance/clotures", "transport_margin_min": "/transport/rentabilite",
+    "transport_unbilled": "/transport/rotations", "vehicle_deficit": "/transport/rentabilite",
     "budget_overrun_pct": "/finance/pilotage", "approval_delay_days": "/finance/approbations",
 }
 

@@ -11,7 +11,7 @@ from odoo.addons.eguitra_finance.controllers.exporting import export_meta, table
 
 from ..models.ownership import OWNERSHIPS
 from ..models.settings import OWNER_COST_BASES
-from .transport import ACCOUNTING, READ, SETTINGS, _get, _move_ref, _ref
+from .transport import ACCOUNTING, READ, SETTINGS, _get, _move_ref, _partner, _ref
 
 STATES = {"draft": "Établi", "posted": "Pièces préparées"}
 KINDS = {"charge": "Charge de l'ensemble", "commission": "Commission", "owner": "Part du propriétaire"}
@@ -44,7 +44,7 @@ def _rule_values(data):
             raise ApiError(400, "invalid_parameter", "Catégorie d'ensembles inconnue.")
         values["ownership"] = data["ownership"] or False
     if "partner_id" in data:
-        values["partner_id"] = _get("res.partner", int(data["partner_id"]), "Bénéficiaire").id
+        values["partner_id"] = _partner(data["partner_id"], "Bénéficiaire").id
     if "rate" in data:
         values["rate"] = as_float(data["rate"] or 0, "rate")
     for key in ("date_from", "date_to"):

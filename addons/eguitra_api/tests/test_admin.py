@@ -44,7 +44,7 @@ class TestAdmin(ApiCase):
         self.assertEqual(user["login"], "ibrahima")
         self.assertEqual(user["profiles"], ["exploitation"])
         self.assertTrue(user["password_change_required"])
-        self.assertEqual(sorted(user["apps"]), ["finance", "mobile"])
+        self.assertEqual(sorted(user["apps"]), ["finance", "mobile", "transport"])
 
         status, _b = self.call("POST", "/admin/users", {
             "name": "Doublon", "login": "ibrahima", "password": "Provisoire-2026", "profiles": ["finance"],
