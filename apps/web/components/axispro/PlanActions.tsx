@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock, ListChecks, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segmented, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segmented, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { ACTION_SOURCE, ACTION_STATE, type Action, type ActionState } from "@/lib/axispro-types";
 import { fmtDate, pluriel } from "@/lib/format";
@@ -126,7 +126,7 @@ function LigneAction({ a, global, agir }: { a: Action; global: boolean; agir: (f
             </Button>
           )}
           {!global && (
-            <button type="button" aria-label={`Supprimer ${a.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => window.confirm(`Supprimer l'action « ${a.name} » ?`) && agir(() => apiSend("DELETE", `/axispro/actions/${a.id}`), "Action supprimée.")}>
+            <button type="button" aria-label={`Supprimer ${a.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer l'action « ${a.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/actions/${a.id}`), "Action supprimée.")}>
               <Trash2 className="h-4 w-4" />
             </button>
           )}

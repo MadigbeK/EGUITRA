@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Calculator, Download, Plus, ShieldCheck } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import type { Account, Journal } from "@/lib/finance-types";
@@ -265,7 +265,7 @@ function DisposeForm({ asset, onCancel, onDone }: { asset: Asset; onCancel: () =
       </div>
       <div className="flex justify-end gap-2">
         <Button onClick={onCancel}>Annuler</Button>
-        <Button variant="danger" loading={busy} onClick={() => window.confirm(`Sortir « ${asset.name} » de l'actif ? Les écritures seront comptabilisées.`) && submit()}>Confirmer la sortie</Button>
+        <Button variant="danger" loading={busy} onClick={async () => (await demanderConfirmation(`Sortir « ${asset.name} » de l'actif ? Les écritures seront comptabilisées.`, { action: "Sortir de l'actif", danger: true })) && submit()}>Confirmer la sortie</Button>
       </div>
     </div>
   );

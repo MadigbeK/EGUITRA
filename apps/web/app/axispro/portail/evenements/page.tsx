@@ -9,7 +9,7 @@ import {
   useRetour, type PublicSaisi,
 } from "@/components/portail/cabinet/outils";
 import { dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { Cibles, EventAdmin, EventKind, RegistrationRow, RegistrationState } from "@/lib/portail-types";
@@ -55,7 +55,7 @@ export default function EvenementsPage() {
       annuler: `Annuler « ${e.name} » ? ${e.registered + e.waitlist > 0 ? `Les ${e.registered + e.waitlist} personnes inscrites ou en liste d'attente seront prévenues.` : "Personne n'est encore inscrit."}`,
       supprimer: `Supprimer définitivement le brouillon « ${e.name} » ?`,
     };
-    if (!window.confirm(questions[action])) return;
+    if (!(await demanderConfirmation(questions[action], { action: { publier: "Publier", annuler: "Annuler l'événement", supprimer: "Supprimer" }[action], danger: action !== "publier" }))) return;
     const ok = { publier: "Événement publié : les porteurs visés sont prévenus.", annuler: "Événement annulé : les inscrits sont prévenus.", supprimer: "Brouillon supprimé." };
     const r = await agir(() => apiSend("POST", `/axispro/portail/evenements/${e.id}/${action}`), ok[action]);
     if (r !== undefined) await mutate();
@@ -286,7 +286,7 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
       setErreur(probleme);
       return;
     }
-    if (publier && etat === "draft" && !window.confirm("Publier cet événement ? Les porteurs visés seront prévenus et pourront s'inscrire.")) return;
+    if (publier && etat === "draft" && !(await demanderConfirmation("Publier cet événement ? Les porteurs visés seront prévenus et pourront s'inscrire.", { action: "Publier" }))) return;
     setEnvoi(publier ? "publier" : "brouillon");
     setErreur(null);
     const corps = {
@@ -406,7 +406,7 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
   const n = (s: RegistrationState) => (data ?? []).filter((r) => r.state === s).length;
 
   async function pointer(r: RegistrationRow, state: RegistrationState) {
-    if (state === "cancelled" && !window.confirm(`Désinscrire ${r.user} ? ${r.state === "registered" ? "La première personne en liste d'attente prendra la place." : ""}`)) return;
+    if (state === "cancelled" && !(await demanderConfirmation(`Désinscrire ${r.user} ? ${r.state === "registered" ? "La première personne en liste d'attente prendra la place." : ""}`, { action: "Désinscrire", danger: true }))) return;
     setErreur(null);
     setEnCours(r.id);
     try {

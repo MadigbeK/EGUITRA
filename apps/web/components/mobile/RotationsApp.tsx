@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monogramme } from "@/components/brand";
 import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
-import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
 import { fmtDate, fmtDec, pluriel } from "@/lib/format";
@@ -245,7 +245,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     const vehicle = refs?.vehicles.find((v) => String(v.id) === form.vehicle_id);
     // Le bureau ne valide pas une rotation chargée au-delà de la capacité : l'agent est prévenu dès la saisie.
     if (vehicle?.capacity_liters && num(form.volume_loaded) * 1000 > vehicle.capacity_liters &&
-      !window.confirm(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³) : le bureau devra le corriger avant validation. Enregistrer quand même ?`)) {
+      !(await demanderConfirmation(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³) : le bureau devra le corriger avant validation.`, { titre: "Enregistrer au-delà de la capacité ?", action: "Enregistrer quand même" }))) {
       return;
     }
     const item: QueuedRotation = {
@@ -261,13 +261,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }
 
   async function remove(item: QueuedRotation) {
-    if (!window.confirm("Supprimer cette saisie du téléphone ? Elle ne sera pas transmise.")) return;
+    if (!(await demanderConfirmation("Supprimer cette saisie du téléphone ? Elle ne sera pas transmise.", { action: "Supprimer", danger: true }))) return;
     await queue.remove(item.client_uuid);
     await loadQueue();
   }
 
   async function logout() {
-    if (mine.length && !window.confirm(`${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion. Se déconnecter ?`)) return;
+    if (mine.length && !(await demanderConfirmation(`${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
     // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
     const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
     if (!res?.ok) {

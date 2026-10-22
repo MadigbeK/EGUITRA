@@ -7,7 +7,7 @@ import {
   Coche, EditeurTexte, Intitule, LectureSeule, RESERVE_CABINET, Recherche, basculerCode, correspond, etatPublication, listeCodes, messageErreur, pluriel, useEcriture, useRetour,
 } from "@/components/portail/cabinet/outils";
 import { COULEUR, FORMATS, FORMATS_TEXTE, iconeRubrique, quand, taille } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, FileButton, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Tag, Textarea, cx, type Column } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, FileButton, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Tag, Textarea, cx, demanderConfirmation, type Column } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import type { ArticleAdmin, ArticleKind, CategoryColor, CategoryRow, Cibles, PublicationState } from "@/lib/portail-types";
 
@@ -53,7 +53,7 @@ export default function RessourcesPage() {
       supprimer: `Supprimer définitivement « ${a.title} » et ses fichiers ?`,
     };
     const question = questions[act];
-    if (question && !window.confirm(question)) return;
+    if (question && !(await demanderConfirmation(question, { action: { publier: "Publier", brouillon: "Repasser en brouillon", archiver: "Archiver", supprimer: "Supprimer" }[act], danger: act === "supprimer" }))) return;
     const ok: Record<ActionArticle, string> = { publier: "Contenu publié.", brouillon: "Contenu repassé en brouillon.", archiver: "Contenu archivé.", supprimer: "Contenu supprimé." };
     const r = await agir(() => apiSend("POST", `/axispro/portail/articles/${a.id}/${act}`), ok[act]);
     if (r !== undefined) await Promise.all([mutate(), majRubriques()]);
@@ -439,7 +439,7 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
       setRetour({ tone: "danger", text: probleme });
       return;
     }
-    if (publier && etat !== "published" && !window.confirm("Publier ce contenu ? Les porteurs des dossiers en cours en seront prévenus.")) return;
+    if (publier && etat !== "published" && !(await demanderConfirmation("Publier ce contenu ? Les porteurs des dossiers en cours en seront prévenus.", { action: "Publier" }))) return;
     setEnvoi(publier ? "publier" : "brouillon");
     setRetour(null);
     const corps = {
@@ -494,7 +494,7 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
   }
 
   async function retirer(attId: number, nom: string) {
-    if (!article || !window.confirm(`Retirer le fichier « ${nom} » ?`)) return;
+    if (!article || !(await demanderConfirmation(`Retirer le fichier « ${nom} » ?`, { action: "Retirer", danger: true }))) return;
     setRetour(null);
     try {
       setArticle(await apiSend<ArticleAdmin>("DELETE", `/axispro/portail/articles/${article.id}/fichiers/${attId}`));

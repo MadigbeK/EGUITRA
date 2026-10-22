@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Calculator, Coins, Download, Landmark, Percent, Plus, Scale, Target, Trash2, TrendingUp } from "@/components/icons";
-import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, GAMME, Kpi, Loading, Notice, Segmented, Textarea, cx } from "@/components/ui";
+import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, GAMME, Kpi, Loading, Notice, Segmented, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { LineKind, ModelRow, PlanLine, PlanPayload, Stress } from "@/lib/axispro-types";
 import { fmtPct, fmtShort } from "@/lib/format";
@@ -311,7 +311,7 @@ function Section({
                     </td>
                   ))}
                   <td className="px-1 text-right">
-                    <button type="button" aria-label={`Supprimer ${l.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => window.confirm(`Supprimer « ${l.name} » ?`) && envoyer("DELETE", `/axispro/plan-lines/${l.id}`)}>
+                    <button type="button" aria-label={`Supprimer ${l.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer « ${l.name} » ?`, { action: "Supprimer", danger: true })) && envoyer("DELETE", `/axispro/plan-lines/${l.id}`)}>
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>

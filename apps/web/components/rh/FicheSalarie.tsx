@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronLeft, Download, FileText, LogOut, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
@@ -361,7 +361,7 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
   const [depot, setDepot] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   async function supprimer(d: EmployeeDocument) {
-    if (!window.confirm(`Supprimer le document « ${d.name} » ?`)) return;
+    if (!(await demanderConfirmation(`Supprimer le document « ${d.name} » ?`, { action: "Supprimer", danger: true }))) return;
     try {
       await apiSend("DELETE", `/rh/documents/${d.id}`);
       onChanged();

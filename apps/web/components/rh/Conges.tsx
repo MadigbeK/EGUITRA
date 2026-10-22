@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "@/components/icons";
-import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, GAMME, cx } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, GAMME, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
@@ -249,7 +249,7 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
   const [erreur, setErreur] = useState<string | null>(null);
 
   async function annuler(l: Leave) {
-    if (!window.confirm(`Annuler l'absence de ${l.employee.name} (${periode(l.date_from, l.date_to, l.half_day)}) ?`)) return;
+    if (!(await demanderConfirmation(`Annuler l'absence de ${l.employee.name} (${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler l'absence", danger: true }))) return;
     try {
       await apiSend("POST", `/rh/leaves/${l.id}/cancel`);
       void mutate();

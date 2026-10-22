@@ -6,7 +6,7 @@ import { Calendar, CheckCircle2, Clock, Link2, MapPin, Plus, XCircle } from "@/c
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import { Intitule, LectureSeule, RESERVE_CABINET, Recherche, correspond, majuscule, messageErreur, pluriel, useEcriture, useMonId, useRetour } from "@/components/portail/cabinet/outils";
 import { ajouterAuCalendrier, dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
-import { Badge, Button, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { Cibles, MeetingMode, MeetingRow, MeetingState } from "@/lib/portail-types";
 
@@ -285,9 +285,9 @@ function Repondre({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; 
     void envoyer("confirm", () => apiSend("PATCH", chemin, { action: "confirm", start, location: location.trim(), online_url: url.trim(), duration: Number(duration), cabinet_note: note.trim() }), "Rendez-vous confirmé : le porteur est prévenu.");
   }
 
-  function decliner() {
-    if (!note.trim() && !window.confirm("Décliner sans message ? Un mot d'explication aide le porteur à proposer d'autres créneaux.")) return;
-    if (note.trim() && !window.confirm("Décliner cette demande ? Le porteur sera prévenu avec votre message.")) return;
+  async function decliner() {
+    if (!note.trim() && !(await demanderConfirmation("Décliner sans message ? Un mot d'explication aide le porteur à proposer d'autres créneaux.", { action: "Décliner", danger: true }))) return;
+    if (note.trim() && !(await demanderConfirmation("Décliner cette demande ? Le porteur sera prévenu avec votre message.", { action: "Décliner", danger: true }))) return;
     void envoyer("decline", () => apiSend("PATCH", chemin, { action: "decline", cabinet_note: note.trim() }), "Demande déclinée : le porteur est prévenu.");
   }
 
@@ -355,9 +355,9 @@ function Repondre({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; 
 function Annuler({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; onDone: (message: string) => Promise<void> }) {
   const [note, setNote] = useState("");
   const { envoi, erreur, setErreur, envoyer } = useEnvoi(onDone);
-  function annuler() {
+  async function annuler() {
     if (!note.trim()) return setErreur("Expliquez au porteur pourquoi le rendez-vous est annulé.");
-    if (!window.confirm(`Annuler le rendez-vous « ${m.subject} » ? Le porteur sera prévenu.`)) return;
+    if (!(await demanderConfirmation(`Annuler le rendez-vous « ${m.subject} » ? Le porteur sera prévenu.`, { action: "Annuler le rendez-vous", danger: true }))) return;
     void envoyer("cancel", () => apiSend("PATCH", `/axispro/portail/rendez-vous/${m.id}`, { action: "cancel", cabinet_note: note.trim() }), "Rendez-vous annulé : le porteur est prévenu.");
   }
   return (

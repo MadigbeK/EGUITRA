@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Wallet, XCircle } from "@/components/icons";
-import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
 import { MoveForm } from "./MoveForm";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
@@ -216,7 +216,9 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 variant="danger"
                 loading={busy === "delete"}
                 onClick={() => {
-                  if (window.confirm("Supprimer ce brouillon ?")) void remove(move.id);
+                  void demanderConfirmation("Supprimer ce brouillon ?", { action: "Supprimer", danger: true }).then((oui) => {
+                    if (oui) void remove(move.id);
+                  });
                 }}
               >
                 <Trash2 className="h-4 w-4" /> Supprimer le brouillon

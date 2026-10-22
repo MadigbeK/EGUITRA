@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
@@ -555,7 +555,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
     }
   }
   async function supprimer(h: Holiday) {
-    if (!window.confirm(`Retirer le jour férié « ${h.name} » du ${fmtDate(h.date)} ?`)) return;
+    if (!(await demanderConfirmation(`Retirer le jour férié « ${h.name} » du ${fmtDate(h.date)} ?`, { action: "Retirer", danger: true }))) return;
     try {
       await apiSend("DELETE", `/rh/holidays/${h.id}`);
       void mutate();

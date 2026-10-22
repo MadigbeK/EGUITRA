@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
 import type { ExpenseCategory } from "@/lib/finance-types";
@@ -195,8 +195,8 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
           </Card>
           <div className="flex flex-wrap gap-2">
             {(c.state === "draft" || c.state === "rejected") && <Button variant="primary" onClick={() => run(() => apiSend("POST", `/finance/commitments/${c.id}/submit`), "Engagement soumis à l'approbation.")}>Soumettre à l&apos;approbation</Button>}
-            {c.state === "approved" && soldeur && <Button onClick={() => window.confirm("Solder l'engagement ? Plus aucune pièce ne pourra s'y rattacher.") && run(() => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé.")}>Solder</Button>}
-            {["draft", "submitted", "rejected", "approved"].includes(c.state) && <Button variant="danger" onClick={() => window.confirm("Annuler l'engagement ?") && run(() => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé.")}>Annuler</Button>}
+            {c.state === "approved" && soldeur && <Button onClick={async () => (await demanderConfirmation("Solder l'engagement ? Plus aucune pièce ne pourra s'y rattacher.", { action: "Solder" })) && run(() => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé.")}>Solder</Button>}
+            {["draft", "submitted", "rejected", "approved"].includes(c.state) && <Button variant="danger" onClick={async () => (await demanderConfirmation("Annuler l'engagement ?", { action: "Annuler l'engagement", danger: true })) && run(() => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé.")}>Annuler</Button>}
           </div>
         </div>
       )}

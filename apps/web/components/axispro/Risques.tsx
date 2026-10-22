@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ListChecks, Plus, ShieldAlert, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { OWNER, RISK_LEVEL, RISK_STATE, type Risk, type RiskLevel, type RiskSummary } from "@/lib/axispro-types";
 import { CelluleChoix } from "./cellules";
@@ -200,7 +200,7 @@ function EditionRisque({ r, categories, agir }: { r: Risk; categories: Record<st
         <Field label="Impact après traitement"><Select value={f.residual_impact} onChange={(e) => setF({ ...f, residual_impact: e.target.value })} options={choix(true, IMPACT)} /></Field>
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <Button variant="danger" onClick={() => window.confirm(`Supprimer le risque « ${r.name} » ?`) && agir(() => apiSend("DELETE", `/axispro/risks/${r.id}`), "Risque supprimé.")}>
+        <Button variant="danger" onClick={async () => (await demanderConfirmation(`Supprimer le risque « ${r.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/risks/${r.id}`), "Risque supprimé.")}>
           <Trash2 className="h-4 w-4" /> Supprimer
         </Button>
         <Button onClick={() => agir(() => apiSend("POST", `/axispro/risks/${r.id}/action`), "Action de traitement ajoutée au plan d'actions.")} disabled={!r.mitigation}>

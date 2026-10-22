@@ -8,7 +8,7 @@ import {
   resumePublic, telechargerCsv, useEcriture, useRetour, type PublicSaisi,
 } from "@/components/portail/cabinet/outils";
 import { quand } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, IconTile, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Tag, cx, type Teinte } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, IconTile, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Tag, cx, demanderConfirmation, type Teinte } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { AnnouncementAdmin, AnnouncementKind, Cibles, PublicationState } from "@/lib/portail-types";
@@ -52,7 +52,7 @@ export default function CommunicationsPage() {
       archiver: `Archiver « ${a.title} » ? Elle disparaîtra du portail des porteurs.`,
       supprimer: `Supprimer définitivement le brouillon « ${a.title} » ?`,
     };
-    if (!window.confirm(questions[action])) return;
+    if (!(await demanderConfirmation(questions[action], { action: { publier: "Publier", archiver: "Archiver", supprimer: "Supprimer" }[action], danger: action === "supprimer" }))) return;
     const ok = { publier: "Communication publiée : les porteurs visés sont prévenus.", archiver: "Communication archivée.", supprimer: "Brouillon supprimé." };
     const r = await agir(() => apiSend("POST", `/axispro/portail/annonces/${a.id}/${action}`), ok[action]);
     if (r !== undefined) await mutate();
@@ -258,7 +258,7 @@ function Editeur({ annonce, cibles, ecriture, onClose, onSaved }: { annonce: Ann
       setErreur(probleme);
       return;
     }
-    if (publier && etat !== "published" && !window.confirm("Publier cette communication ? Les porteurs visés seront prévenus sur leur portail.")) return;
+    if (publier && etat !== "published" && !(await demanderConfirmation("Publier cette communication ? Les porteurs visés seront prévenus sur leur portail.", { action: "Publier" }))) return;
     setEnvoi(publier ? "publier" : "brouillon");
     setErreur(null);
     const corps = {

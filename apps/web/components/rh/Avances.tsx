@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 import type { Advance, AdvanceState, Meta } from "@/lib/rh-types";
@@ -29,7 +29,7 @@ export function AvancesPrets() {
   const encours = (data ?? []).filter((a) => a.state === "open");
 
   async function annuler(a: Advance) {
-    if (!window.confirm(`Annuler ${a.kind === "pret" ? "le prêt" : "l'avance"} de ${a.employee.name} ? Les retenues déjà faites restent acquises.`)) return;
+    if (!(await demanderConfirmation(`Annuler ${a.kind === "pret" ? "le prêt" : "l'avance"} de ${a.employee.name} ? Les retenues déjà faites restent acquises.`, { action: a.kind === "pret" ? "Annuler le prêt" : "Annuler l'avance", danger: true }))) return;
     try {
       await apiSend("POST", `/rh/advances/${a.id}/cancel`);
       void mutate();

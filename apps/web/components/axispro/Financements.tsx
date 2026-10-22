@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Calendar, Coins, HandCoins, Landmark, Plus, Target, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { FUNDING_STATE, INSTRUMENTS, type Funding, type FundingState } from "@/lib/axispro-types";
@@ -163,7 +163,7 @@ function LigneFinancement({ f, global, agir }: { f: Funding; global: boolean; ag
         </div>
         <Select aria-label={`Étape, ${f.funder.name}`} className="min-h-8 w-48 py-1 text-[13px]" value={f.state} onChange={(e) => patch({ state: e.target.value })} options={(Object.keys(FUNDING_STATE) as FundingState[]).map((k) => ({ value: k, label: FUNDING_STATE[k].label }))} />
         {!global && (
-          <button type="button" aria-label={`Supprimer la démarche ${f.funder.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => window.confirm(`Supprimer la démarche auprès de ${f.funder.name} ?`) && agir(() => apiSend("DELETE", `/axispro/fundings/${f.id}`), "Démarche supprimée.")}>
+          <button type="button" aria-label={`Supprimer la démarche ${f.funder.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer la démarche auprès de ${f.funder.name} ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/fundings/${f.id}`), "Démarche supprimée.")}>
             <Trash2 className="h-4 w-4" />
           </button>
         )}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Calendar, FileText, Plus, Users } from "@/components/icons";
-import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Textarea } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Leave, type LeaveType, type MySpace } from "@/lib/rh-types";
@@ -34,7 +34,7 @@ export function MonEspace() {
   }
 
   async function annuler(l: Leave) {
-    if (!window.confirm(`Annuler votre demande (${l.type.name}, ${periode(l.date_from, l.date_to, l.half_day)}) ?`)) return;
+    if (!(await demanderConfirmation(`Annuler votre demande (${l.type.name}, ${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler la demande", danger: true }))) return;
     setErreur(null);
     try {
       await apiSend("POST", `/rh/me/leaves/${l.id}/cancel`);

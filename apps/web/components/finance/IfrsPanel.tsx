@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtGNF, fmtInt, fmtShort } from "@/lib/format";
 
@@ -84,7 +84,7 @@ function EclCard({ date }: { date: string }) {
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   async function post() {
-    if (!window.confirm("Comptabiliser l'ajustement de dépréciation du mois (pièce ECL) ? Par défaut, la perte attendue reste un retraitement hors des livres.")) return;
+    if (!(await demanderConfirmation("Comptabiliser l'ajustement de dépréciation du mois (pièce ECL) ? Par défaut, la perte attendue reste un retraitement hors des livres.", { action: "Comptabiliser" }))) return;
     setMessage(null);
     try {
       const move = await apiSend<{ name: string; ref: string; amount: number }>("POST", "/finance/ifrs/ecl/post", { date });

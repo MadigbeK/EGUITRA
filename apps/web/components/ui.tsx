@@ -17,6 +17,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { createRoot } from "react-dom/client";
 import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
@@ -725,7 +726,10 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
   );
 }
 
-export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/** Fenêtres ouvertes, de la plus ancienne à la plus récente : seule la dernière répond à Échap. */
+const PILE: string[] = [];
+
+export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const fenetre = useRef<HTMLDivElement>(null);
   const titreId = useId();
   // onClose change à chaque rendu de l'écran : lu par référence, il ne relance pas l'effet (qui
@@ -741,7 +745,10 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     // Le premier champ prend le focus ; à défaut, la fenêtre elle-même.
     const premier = boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
     (premier ?? boite)?.focus();
+    PILE.push(titreId);
     const onKey = (e: globalThis.KeyboardEvent) => {
+      // Une confirmation ouverte par-dessus une fenêtre garde les touches pour elle.
+      if (PILE[PILE.length - 1] !== titreId) return;
       if (e.key === "Escape") fermer.current();
       if (e.key !== "Tab" || !boite) return;
       const cibles = [...boite.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
@@ -759,9 +766,10 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      PILE.splice(PILE.indexOf(titreId), 1);
       if (avant?.isConnected) avant.focus();
     };
-  }, [open]);
+  }, [open, titreId]);
   if (!open) return null;
   return (
     <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
@@ -772,11 +780,73 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        {children != null && children !== false && <div className="p-5">{children}</div>}
         {footer && <div className="flex flex-wrap justify-end gap-2 rounded-b-2xl border-t border-line bg-panel-2 px-5 py-3.5">{footer}</div>}
       </div>
     </div>
   );
+}
+
+export interface OptionsConfirmation {
+  /** Titre de la fenêtre ; à défaut, la question jusqu'à son premier point d'interrogation. */
+  titre?: string;
+  /** Libellé du bouton qui confirme (« Supprimer », « Publier ») ; « Confirmer » à défaut. */
+  action?: string;
+  /** Action destructrice ou irréversible : le bouton passe en rouge. */
+  danger?: boolean;
+}
+
+/** Fenêtre de confirmation : la question, « Annuler » et le bouton de l'action. */
+export function Confirmation({ open, question, titre, action = "Confirmer", danger, onConfirm, onCancel }: OptionsConfirmation & { open: boolean; question: string; onConfirm: () => void; onCancel: () => void }) {
+  const fin = question.indexOf("?");
+  const entete = titre ?? (fin >= 0 ? question.slice(0, fin + 1) : question);
+  const corps = titre ? question : fin >= 0 ? question.slice(fin + 1).trim() : "";
+  return (
+    <Modal
+      open={open}
+      title={entete}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button onClick={onCancel}>Annuler</Button>
+          <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
+            {action}
+          </Button>
+        </>
+      }
+    >
+      {corps ? <p className="text-sm leading-relaxed text-ink-2">{corps}</p> : undefined}
+    </Modal>
+  );
+}
+
+/**
+ * Demande une confirmation dans une fenêtre NIMOVA, à la place de `window.confirm`, et rend la
+ * réponse. La fenêtre prend l'application et le thème de l'élément qui a déclenché la demande.
+ */
+export function demanderConfirmation(question: string, options: OptionsConfirmation = {}): Promise<boolean> {
+  return new Promise((resolve) => {
+    const origine = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+    const hote = document.createElement("div");
+    const app = origine.closest("[data-app]")?.getAttribute("data-app");
+    const theme = origine.closest("[data-theme]")?.getAttribute("data-theme");
+    if (app) hote.dataset.app = app;
+    if (theme) hote.dataset.theme = theme;
+    document.body.appendChild(hote);
+    const racine = createRoot(hote);
+    let repondu = false;
+    const repondre = (oui: boolean) => {
+      if (repondu) return;
+      repondu = true;
+      resolve(oui);
+      // Démontée après l'événement en cours : React ne retire pas une racine pendant qu'il la traite.
+      setTimeout(() => {
+        racine.unmount();
+        hote.remove();
+      });
+    };
+    racine.render(<Confirmation open question={question} {...options} onConfirm={() => repondre(true)} onCancel={() => repondre(false)} />);
+  });
 }
 
 /* ─── Chiffres et graphiques (SVG et HTML, sans dépendance) ─────────────── */

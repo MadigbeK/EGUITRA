@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Copy, Download, FileUp } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { PuceCompartiment } from "@/components/axispro/dossier/commun";
 import type { Compartment, IndicatorInfo } from "@/lib/axispro-types";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
@@ -191,7 +191,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
         actions={
           <div className="flex flex-wrap gap-2">
             {editable && (
-              <Button variant="primary" onClick={() => window.confirm(`Mettre la version ${p.version} en vigueur ? La version actuelle sera archivée ; les dossiers ouverts gardent leur version.`) && act(() => apiSend("POST", `/axispro/policies/${p.id}/activate`), "Version mise en vigueur.")}>
+              <Button variant="primary" onClick={async () => (await demanderConfirmation(`Mettre la version ${p.version} en vigueur ? La version actuelle sera archivée ; les dossiers ouverts gardent leur version.`, { action: "Mettre en vigueur" })) && act(() => apiSend("POST", `/axispro/policies/${p.id}/activate`), "Version mise en vigueur.")}>
                 <CheckCircle2 className="h-4 w-4" /> Mettre en vigueur
               </Button>
             )}
