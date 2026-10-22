@@ -388,6 +388,37 @@ Le gérant a transmis la charte graphique d'EGUITRA GROUP (Black Baobab, 2025, 1
 L'interface reste celle de NIMOVA, la marque interne voulue par le DG : palette forêt, pin et or,
 polices Funnel. La charte d'EGUITRA s'applique aux documents émis au nom de la société.
 
+## Critique en six angles et mise en œuvre (22 octobre 2026, carte blanche du gérant)
+
+Onze écrans capturés sur la maquette, critiqués sous six angles indépendants (lecture des données,
+marque, système, mouvement, terrain, parcours), synthèse en douze chantiers, puis contre-expertise
+de chacun. Mis en œuvre, côté interface seulement :
+- Chiffres justes : Valeur rend la valeur finale (plus de zéros au téléphone, à l'impression ni
+  dans une capture) et ne défile qu'avant l'entrée à l'écran ; chiffre d'affaires du mois sans
+  fausse baisse (« du 1er au 15/10, mois en cours ») ; billet qui s'additionne (ligne « Autres
+  comptes de trésorerie (classe 5) ») avec la contre-valeur en GNF du compte en dollars.
+- Une seule écriture des nombres : « Md » invariable à deux décimales, millions entiers dès 100 M,
+  jours à une décimale (fmtJours), ratios à deux (fmtRatio), graduations par fmtAxe.
+- Signature : sous un chiffre clé qui a une vraie série, une gravure de tendance (faisceau
+  guilloché qui suit la série) ; sinon les ondes, en or, jamais à la couleur de l'état.
+- États : tampons (rayon 4 px, filet ; plein pour ce qui demande une action), table ETAT_TON de
+  `lib/couleurs.ts` ; la couleur d'une application ne dit plus un état (règle dans CHARTE.md).
+- Finance, Transport : listes en montants entiers, devise dans l'en-tête, volumes à deux
+  décimales, retards en jours, « volume manquant », totaux sur une ligne.
+- Rotations : barre d'action sous le pouce, confirmation et vibration, saisies en attente dans la
+  pastille, erreurs au champ.
+- AxisPro : score « provisoire » tant que la méthode dit « à compléter », priorités en mots,
+  entonnoir « (cumul) », bloc « Ce qui bloque le prochain gate » (les anneaux restent).
+- Accueil rangé par application (celle du compte en tête), icônes propres au Transport, barre de
+  progression au changement d'écran. Les loading.tsx préparés ont été retirés avant livraison :
+  ils font précharger par Next la mise en page de chaque lien visible, soit un appel au noyau par
+  tuile, et repoussent les redirections par profil après l'envoi de la page.
+Écartés volontairement (risque de retomber sur le « fade ») : recomposition du tableau de bord du
+DG, icônes en camaïeu, retrait des anneaux AxisPro. Les demandes au noyau (même période du mois
+précédent, détail de la classe 5, séries des chiffres clés, seuil margin_min avec la liste des
+rotations, pluriels des messages AxisPro, délais réseau de Rotations) sont transmises à la session
+fonctionnelle.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,
