@@ -192,7 +192,7 @@ class TestPortail(ApiCase):
         self.assertIn(f"meeting-{demande['id']}", [i["key"] for i in agenda])
         _s, annule = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {"reason": "Empêchement"},
                                token=self.porteur)
-        self.assertEqual(annule["state"], "cancelled")
+        self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "porteur", "Empêchement"))
 
     def test_notifications_du_dossier(self):
         self.env["axispro.action"].create({"dossier_id": self.dossier_a.id, "name": "Fournir le bilan d'ouverture",

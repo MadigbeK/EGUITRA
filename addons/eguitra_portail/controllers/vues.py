@@ -193,7 +193,8 @@ def meeting_row(m, me=None):
             "state": m.state, "state_label": dict(MEETING_STATES)[m.state],
             "consultant": person(m.consultant_id or m.dossier_id.consultant_id),
             "requested_by": m.requested_by.name, "requested_by_me": bool(me and m.requested_by == me),
-            "cabinet_note": m.cabinet_note or None, "minutes": m.minutes or None, "create_date": m.create_date}
+            "cabinet_note": m.cabinet_note or None, "minutes": m.minutes or None, "create_date": m.create_date,
+            "cancelled_by": m.cancelled_by or None}
 
 
 def notification_row(n):
@@ -205,7 +206,7 @@ def notification_row(n):
 def feedback_row(f):
     return {"id": f.id, "dossier": {"id": f.dossier_id.id, "reference": f.dossier_id.reference, "name": f.dossier_id.name},
             "author": f.user_id.name, "topic": f.topic, "topic_label": dict(FEEDBACK_TOPICS)[f.topic],
-            "event": f.event_id.name or None, "score": f.score, "recommend": f.recommend if f.recommend >= 0 else None,
+            "event": f.event_id.name or None, "event_id": f.event_id.id or None, "score": f.score, "recommend": f.recommend if f.recommend >= 0 else None,
             "comment": f.comment or None, "date": f.create_date}
 
 

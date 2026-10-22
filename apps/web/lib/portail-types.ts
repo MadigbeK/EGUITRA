@@ -212,6 +212,8 @@ export interface MeetingRow {
   cabinet_note: string | null;
   minutes: string | null;
   create_date: string;
+  /** Rendez-vous annulé : par le porteur (motif dans cabinet_note) ou par le cabinet. */
+  cancelled_by: "porteur" | "cabinet" | null;
 }
 
 export type AnnouncementKind = "info" | "important" | "opportunity" | "event" | "alert";
@@ -351,6 +353,7 @@ export interface FeedbackRow {
   topic: FeedbackTopic;
   topic_label: string;
   event: string | null;
+  event_id: number | null;
   score: number;
   recommend: number | null;
   comment: string | null;
@@ -429,6 +432,8 @@ export interface AnnouncementAdmin extends AnnouncementRow, AudienceFields {
 
 export interface ArticleAdmin extends ArticleRow {
   body: string;
+  create_date: string;
+  write_date: string;
   author: string;
   files: Attachment[];
   state: PublicationState;

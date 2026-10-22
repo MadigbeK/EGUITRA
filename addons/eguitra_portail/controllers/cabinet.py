@@ -78,7 +78,7 @@ def _audience_row(record):
 
 
 def _announcement_admin(a):
-    audience = a._audience_users() if a.state == "published" else request.env["res.users"]
+    audience = a._audience_users() if a.state in ("published", "archived") else request.env["res.users"]
     reads = a.read_ids
     return dict(vues.announcement_row(a, full=True), **_audience_row(a), state=a.state,
                 stats={"audience": len(audience), "read": len(reads),
@@ -89,6 +89,7 @@ def _article_admin(a):
     reactions = a.reaction_ids
     row = vues.article_row(a, full=True)
     row.update({"state": a.state, "gate_codes": a.gate_codes or "", "tags_text": a.tags or "",
+                "create_date": a.create_date, "write_date": a.write_date,
                 "stats": {"views": a.view_count, "readers": len(reactions.filtered("viewed_at")),
                           "helpful": len(reactions.filtered(lambda r: r.helpful == "yes")),
                           "not_helpful": len(reactions.filtered(lambda r: r.helpful == "no")),
@@ -333,7 +334,7 @@ class EguitraPortailCabinet(http.Controller):
         announcement = _browse("portail.announcement", announcement_id, "Communication")
         reads = {r.user_id.id: r for r in announcement.read_ids}
         users = announcement._audience_users() | announcement.read_ids.user_id
-        return [{"user": u.name, "read_at": reads[u.id].read_at if u.id in reads else None,
+        return [{"user_id": u.id, "user": u.name, "read_at": reads[u.id].read_at if u.id in reads else None,
                  "acknowledged_at": reads[u.id].acknowledged_at if u.id in reads else None} for u in users]
 
     # ─── Centre de ressources ────────────────────────────────────────────
@@ -589,6 +590,8 @@ class EguitraPortailCabinet(http.Controller):
                     values[key] = _text(data[key], size)
             if "duration" in data:
                 values["duration"] = int(data["duration"] or 60)
+            if data.get("mode") in dict(MEETING_MODES):
+                values["mode"] = data["mode"]
             if note:
                 values["cabinet_note"] = note
             meeting.confirm(_datetime(data.get("start"), "Date du rendez-vous"), **values)

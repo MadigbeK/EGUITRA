@@ -512,7 +512,7 @@ class EguitraPortailPorteur(http.Controller):
         for e in events.filtered(lambda e: e.state == "published" and e.start <= end):
             registration = registrations.get(e.id)
             items.append({"key": f"event-{e.id}", "kind": "event", "title": e.name, "start": e.start, "end": e.end,
-                          "all_day": False, "link": "/portail/evenements",
+                          "all_day": False, "link": f"/portail/evenements#evenement-{e.id}",
                           "state": registration.state if registration else "open", "detail": e.location or "En ligne",
                           "dossier": None})
         for a in dossiers.action_ids.filtered(lambda a: a.portal_visible and a.assignee == "porteur" and a.due_date

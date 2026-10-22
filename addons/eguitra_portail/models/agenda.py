@@ -171,6 +171,7 @@ class PortailMeeting(models.Model):
     state = fields.Selection(MEETING_STATES, default="requested", required=True)
     cabinet_note = fields.Text("Message du cabinet")
     minutes = fields.Text("Compte rendu partagé")
+    cancelled_by = fields.Selection([("porteur", "Porteur"), ("cabinet", "Cabinet")], "Annulé par", readonly=True)
 
     @api.constrains("duration", "online_url")
     def _check_meeting(self):
@@ -210,7 +211,8 @@ class PortailMeeting(models.Model):
         self.ensure_one()
         if self.state not in ("requested", "confirmed"):
             raise UserError("Ce rendez-vous n'est plus à venir.")
-        self.write({"state": "cancelled", "cabinet_note": note or self.cabinet_note})
+        self.write({"state": "cancelled", "cabinet_note": note or self.cabinet_note,
+                    "cancelled_by": "porteur" if by_porteur else "cabinet"})
         if by_porteur:
             target = self.consultant_id or self.dossier_id.consultant_id
             self.env["portail.notification"].sudo().notify(
