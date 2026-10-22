@@ -9,7 +9,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { X } from "@/components/icons";
-import { Card, Empty, Notice, cx, type Tone } from "@/components/ui";
+import { Card, classesBouton, Empty, Notice, cx, type Tone } from "@/components/ui";
 import { apiDownload } from "@/lib/api-client";
 import { FORMATS } from "@/components/portail/commun";
 
@@ -37,19 +37,9 @@ export function Avatar({ nom, taille = 40, className, degrade }: { nom: string; 
   );
 }
 
-const LIEN: Record<"primary" | "secondary" | "ghost", string> = {
-  primary: "n-degrade text-white shadow-[0_8px_18px_-10px_var(--accent-lueur)] hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)] hover:brightness-[1.07]",
-  secondary: "border border-line bg-panel text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] hover:border-line-strong hover:bg-panel-2",
-  ghost: "text-ink-2 hover:bg-panel-3 hover:text-ink",
-};
-
 /** Lien interne ou externe à l'allure d'un bouton. */
-export function LienBouton({ href, children, variant = "secondary", className, externe, label }: { href: string; children: ReactNode; variant?: keyof typeof LIEN; className?: string; externe?: boolean; label?: string }) {
-  const classes = cx(
-    "inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-[transform,box-shadow,background-color,border-color,color,filter] duration-200 active:scale-[0.97]",
-    LIEN[variant],
-    className,
-  );
+export function LienBouton({ href, children, variant = "secondary", className, externe, label }: { href: string; children: ReactNode; variant?: "primary" | "secondary" | "ghost"; className?: string; externe?: boolean; label?: string }) {
+  const classes = classesBouton(variant, "md", className);
   if (externe || /^(https?:|tel:|mailto:)/.test(href)) {
     const nouvelOnglet = href.startsWith("http");
     return (

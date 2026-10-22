@@ -64,9 +64,9 @@ export function DataRoom({ d }: { d: DossierDetail }) {
           { key: "validity", label: "Valable jusqu'au", render: (s) => (s.document_id ? <Input type="date" disabled={figee(s)} className="w-[150px] py-1 text-[12px]" defaultValue={s.validity_date ?? ""} onBlur={(e) => e.target.value !== (s.validity_date ?? "") && patch(s.document_id!, { validity_date: e.target.value || null })} /> : "–") },
           { key: "actions", label: "", render: (s) => (
             <div className="flex items-center justify-end gap-2">
-              {s.document_id && <Button aria-label="Télécharger" title="Télécharger" className="px-2 py-1 text-xs" onClick={() => apiDownload(`/axispro/documents/${s.document_id}/download`, s.name)}><Download className="h-3.5 w-3.5" /></Button>}
-              {s.document_id && s.state === "received" && !figee(s) && <Button className="px-2 py-1 text-xs" onClick={() => patch(s.document_id!, { state: "validated" })}>Valider</Button>}
-              {s.document_id && s.state === "received" && !figee(s) && <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => { const comment = window.prompt("Motif de la reprise demandée au porteur :"); if (comment) void patch(s.document_id!, { state: "rejected", comment }); }}>À reprendre</Button>}
+              {s.document_id && <Button aria-label="Télécharger" title="Télécharger" size="sm" onClick={() => apiDownload(`/axispro/documents/${s.document_id}/download`, s.name)}><Download className="h-3.5 w-3.5" /></Button>}
+              {s.document_id && s.state === "received" && !figee(s) && <Button size="sm" onClick={() => patch(s.document_id!, { state: "validated" })}>Valider</Button>}
+              {s.document_id && s.state === "received" && !figee(s) && <Button variant="danger" size="sm" onClick={() => { const comment = window.prompt("Motif de la reprise demandée au porteur :"); if (comment) void patch(s.document_id!, { state: "rejected", comment }); }}>À reprendre</Button>}
               <FileButton small label="Déposer" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(f) => upload(f, s.document_type_id)} />
             </div>
           ) },

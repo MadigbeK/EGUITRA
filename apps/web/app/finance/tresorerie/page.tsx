@@ -228,7 +228,7 @@ export default function TreasuryPage() {
                             <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée <Undo2 className="h-3.5 w-3.5" />
                           </button>
                         ) : (
-                          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setMatching(l)}>
+                          <Button variant="secondary" size="sm" onClick={() => setMatching(l)}>
                             <Link2 className="h-3.5 w-3.5" /> Rapprocher
                           </Button>
                         ),

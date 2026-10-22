@@ -161,20 +161,20 @@ function LigneCommunication({ a, ecriture, onEditer, onLectures, onEtat }: { a: 
 
         <div className="flex flex-wrap items-center gap-1.5">
           {a.state !== "draft" && (
-            <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[13px]" onClick={onLectures}>
+            <Button variant="ghost" size="sm" onClick={onLectures}>
               <CheckCheck className="h-4 w-4" /> Lectures
             </Button>
           )}
-          <Button variant="secondary" className="min-h-8 px-2.5 py-1 text-[13px]" onClick={onEditer}>
+          <Button variant="secondary" size="sm" onClick={onEditer}>
             <Pencil className="h-3.5 w-3.5" /> {ecriture ? "Modifier" : "Voir"}
           </Button>
           {a.state !== "published" && (
-            <Button variant="primary" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
+            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
               <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
           {a.state === "published" && (
-            <Button variant="secondary" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={blocage} onClick={() => onEtat("archiver")}>
+            <Button variant="secondary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("archiver")}>
               <Inbox className="h-3.5 w-3.5" /> Archiver
             </Button>
           )}

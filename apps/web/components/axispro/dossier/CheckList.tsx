@@ -408,7 +408,7 @@ function Suggestion({ c, verrou, onApply }: { c: CriterionEval; verrou: boolean;
           <span className="text-muted">Statut suggéré :</span>
           <b>{STATUS_LABELS[s.status]}</b>
           {c.status !== s.status && !verrou && (
-            <Button className="ml-auto min-h-7 px-2.5 py-0.5 text-[12px]" onClick={() => onApply(s.status!)}>
+            <Button size="sm" className="ml-auto" onClick={() => onApply(s.status!)}>
               <Target className="h-3.5 w-3.5" /> Appliquer
             </Button>
           )}

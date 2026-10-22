@@ -64,7 +64,6 @@ export default function RessourcesPage() {
     e.stopPropagation();
     fn();
   };
-  const petit = "min-h-8 px-2.5 py-1 text-[12.5px]";
 
   const colonnes: Column<ArticleAdmin>[] = [
     {
@@ -137,17 +136,17 @@ export default function RessourcesPage() {
       render: (a) => (
         <div className="flex items-center justify-end gap-1">
           {a.state !== "published" && (
-            <Button variant="primary" className={petit} disabled={!ecriture} title={blocage} onClick={stop(() => void action(a, "publier"))}>
+            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={stop(() => void action(a, "publier"))}>
               <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
           {a.state !== "draft" && (
-            <Button variant="ghost" className={petit} disabled={!ecriture} title={blocage ?? "Repasser en brouillon"} onClick={stop(() => void action(a, "brouillon"))}>
+            <Button variant="ghost" size="sm" disabled={!ecriture} title={blocage ?? "Repasser en brouillon"} onClick={stop(() => void action(a, "brouillon"))}>
               <RotateCcw className="h-3.5 w-3.5" /> Brouillon
             </Button>
           )}
           {a.state !== "archived" && (
-            <Button variant="ghost" className={petit} disabled={!ecriture} title={blocage ?? "Archiver"} onClick={stop(() => void action(a, "archiver"))}>
+            <Button variant="ghost" size="sm" disabled={!ecriture} title={blocage ?? "Archiver"} onClick={stop(() => void action(a, "archiver"))}>
               <Inbox className="h-3.5 w-3.5" /> Archiver
             </Button>
           )}
@@ -198,7 +197,7 @@ export default function RessourcesPage() {
               <span>
                 <b>{pluriel(brouillons, "contenu attend", "contenus attendent")} une relecture.</b> Les contenus proposés à l&apos;installation sont des brouillons : relisez-les, adaptez-les au cabinet, puis publiez-les.
               </span>
-              <Button className="min-h-8 px-2.5 py-1 text-[13px]" onClick={() => setEtat("draft")}>
+              <Button size="sm" onClick={() => setEtat("draft")}>
                 Afficher les brouillons
               </Button>
             </span>

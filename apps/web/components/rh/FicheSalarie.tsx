@@ -167,7 +167,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
           title="Rémunération mensuelle"
           actions={
             ecrit && (
-              <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition(true)}>
+              <Button size="sm" onClick={() => setEdition(true)}>
                 <Pencil className="h-3.5 w-3.5" /> Éléments fixes
               </Button>
             )
@@ -319,7 +319,7 @@ function CongesSalarie({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta;
         title="Absences"
         actions={
           ecrit && (
-            <Button className="px-2.5 py-1 text-xs" onClick={() => setSaisie(true)}>
+            <Button size="sm" onClick={() => setSaisie(true)}>
               <Plus className="h-3.5 w-3.5" /> Saisir une absence
             </Button>
           )
@@ -374,7 +374,7 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
       title="Documents du dossier"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setDepot(true)}>
+          <Button size="sm" onClick={() => setDepot(true)}>
             <Plus className="h-3.5 w-3.5" /> Ajouter un document
           </Button>
         )
@@ -416,12 +416,12 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
               render: (d) => (
                 <span className="flex justify-end gap-1.5">
                   {d.has_file && (
-                    <Button className="min-h-0 px-2 py-1 text-xs" onClick={() => void apiDownload(`/rh/documents/${d.id}/file`, d.name)}>
+                    <Button size="sm" onClick={() => void apiDownload(`/rh/documents/${d.id}/file`, d.name)}>
                       <Download className="h-3.5 w-3.5" /> Ouvrir
                     </Button>
                   )}
                   {ecrit && (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Supprimer" onClick={() => void supprimer(d)}>
+                    <Button variant="ghost" size="sm" aria-label="Supprimer" onClick={() => void supprimer(d)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
@@ -525,7 +525,7 @@ function PaieSalarie({ e }: { e: Employee }) {
                 align: "right",
                 render: (p) => (
                   <Link href={`/rh/paie/bulletins/${p.id}`}>
-                    <Button className="min-h-0 px-2 py-1 text-xs">
+                    <Button size="sm">
                       <FileText className="h-3.5 w-3.5" /> Bulletin
                     </Button>
                   </Link>

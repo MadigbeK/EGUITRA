@@ -144,7 +144,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
                 label: "",
                 align: "right",
                 render: (l) =>
-                  l.paid ? <Badge tone="ok">{l.statement_line_id ? "Rapprochée du relevé" : "Réglée"}</Badge> : loan.state === "active" ? <Button className="px-2 py-1 text-xs" onClick={() => act(() => apiSend("POST", `/finance/loans/lines/${l.id}/pay`, {}))}>Régler</Button> : null,
+                  l.paid ? <Badge tone="ok">{l.statement_line_id ? "Rapprochée du relevé" : "Réglée"}</Badge> : loan.state === "active" ? <Button size="sm" onClick={() => act(() => apiSend("POST", `/finance/loans/lines/${l.id}/pay`, {}))}>Régler</Button> : null,
               },
             ]}
           />

@@ -82,7 +82,7 @@ export default function RendezVousPage() {
               {demandes.map((m) => (
                 <Carte key={m.id} m={m}>
                   <div className="flex flex-wrap gap-1.5">
-                    <Button variant="primary" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "repondre", m })}>
+                    <Button variant="primary" size="sm" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "repondre", m })}>
                       Répondre
                     </Button>
                   </div>
@@ -95,19 +95,19 @@ export default function RendezVousPage() {
                 return (
                   <Carte key={m.id} m={m} alerte={passe ? "Date passée : marquez-le tenu avec son compte rendu, ou annulez-le." : undefined}>
                     <div className="flex flex-wrap gap-1.5">
-                      <Button variant={passe ? "primary" : "secondary"} className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "tenu", m })}>
+                      <Button variant={passe ? "primary" : "secondary"} size="sm" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "tenu", m })}>
                         <CheckCircle2 className="h-3.5 w-3.5" /> Marquer tenu
                       </Button>
                       {m.start && (
                         <Button
                           variant="ghost"
-                          className="min-h-8 px-2.5 py-1 text-[13px]"
+                          size="sm"
                           onClick={() => ajouterAuCalendrier({ titre: `${m.subject} (${m.dossier.reference})`, debut: m.start ?? "", fin: m.end, lieu: m.location ?? m.online_url, description: m.agenda, uid: `rdv-${m.id}` })}
                         >
                           <Calendar className="h-3.5 w-3.5" /> Agenda
                         </Button>
                       )}
-                      <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[13px] text-danger hover:text-danger" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "annuler", m })}>
+                      <Button variant="ghost" size="sm" className="text-danger hover:text-danger" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "annuler", m })}>
                         <XCircle className="h-3.5 w-3.5" /> Annuler
                       </Button>
                     </div>
@@ -119,7 +119,7 @@ export default function RendezVousPage() {
               {passes.slice(0, historique).map((m) => (
                 <Carte key={m.id} m={m}>
                   {m.state === "done" && (
-                    <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "compte_rendu", m })}>
+                    <Button variant="ghost" size="sm" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "compte_rendu", m })}>
                       {m.minutes ? "Modifier le compte rendu" : "Rédiger le compte rendu"}
                     </Button>
                   )}

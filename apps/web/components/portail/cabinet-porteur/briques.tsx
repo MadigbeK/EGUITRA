@@ -9,7 +9,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AlertTriangle, ArrowRight, ArrowUpRight, Calendar, ChevronLeft, HandCoins, Info, ShieldAlert, type Icon } from "@/components/icons";
-import { cx, type Tone } from "@/components/ui";
+import { classesBouton, cx, type Tone } from "@/components/ui";
 import type { AnnouncementKind } from "@/lib/portail-types";
 
 /* ─── Natures des communications ───────────────────────────────────────── */
@@ -75,10 +75,8 @@ export function natureLien(url: string | null | undefined): "externe" | "interne
   return null;
 }
 
-export const BOUTON_PRINCIPAL =
-  "n-degrade inline-flex min-h-10 items-center justify-center gap-2 rounded-[10px] px-4 py-2 text-sm font-semibold text-accent-ink shadow-[0_8px_18px_-10px_var(--accent-lueur)] transition-[filter,box-shadow] hover:brightness-[1.07] hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)]";
-export const BOUTON_SECONDAIRE =
-  "inline-flex min-h-9 items-center justify-center gap-2 rounded-[10px] border border-line bg-panel px-3.5 py-1.5 text-sm font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2";
+export const BOUTON_PRINCIPAL = classesBouton("primary");
+export const BOUTON_SECONDAIRE = classesBouton("secondary");
 
 /** Lien d'appel à l'action : externe en nouvel onglet, interne par le routeur ; rien s'il n'est pas sûr. */
 export function LienAction({ url, children, className = BOUTON_PRINCIPAL }: { url: string | null | undefined; children: ReactNode; className?: string }) {

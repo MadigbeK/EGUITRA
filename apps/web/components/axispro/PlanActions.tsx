@@ -121,7 +121,7 @@ function LigneAction({ a, global, agir }: { a: Action; global: boolean; agir: (f
           <Input aria-label={`Échéance de ${a.name}`} type="date" className="min-h-8 w-40 py-1 text-[13px]" defaultValue={a.due_date ?? ""} onBlur={(e) => e.target.value !== (a.due_date ?? "") && patch({ due_date: e.target.value || null })} />
           <Select aria-label={`État de ${a.name}`} className="min-h-8 w-44 py-1 text-[13px]" value={a.state} onChange={(e) => patch({ state: e.target.value as ActionState })} options={(Object.keys(ACTION_STATE) as ActionState[]).map((k) => ({ value: k, label: ACTION_STATE[k].label }))} />
           {a.state === "submitted" && (
-            <Button variant="primary" className="min-h-8 px-2.5 py-1 text-[13px]" onClick={() => patch({ state: "done" }, "Action validée.")}>
+            <Button variant="primary" size="sm" onClick={() => patch({ state: "done" }, "Action validée.")}>
               Valider
             </Button>
           )}

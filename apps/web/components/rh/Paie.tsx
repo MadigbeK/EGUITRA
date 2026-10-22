@@ -243,10 +243,10 @@ export function DetailPaie({ id }: { id: string }) {
         title="Bulletins"
         actions={
           <span className="flex items-center gap-2">
-            <Button variant={filtre === "tous" ? "secondary" : "ghost"} className="min-h-0 px-2.5 py-1 text-xs" onClick={() => setFiltre("tous")}>
+            <Button variant={filtre === "tous" ? "secondary" : "ghost"} size="sm" onClick={() => setFiltre("tous")}>
               Tous ({p.payslips.length})
             </Button>
-            <Button variant={filtre === "anomalies" ? "secondary" : "ghost"} className="min-h-0 px-2.5 py-1 text-xs" onClick={() => setFiltre("anomalies")}>
+            <Button variant={filtre === "anomalies" ? "secondary" : "ghost"} size="sm" onClick={() => setFiltre("anomalies")}>
               <AlertTriangle className="h-3.5 w-3.5" /> Avec anomalie ({p.payslips.filter((s) => s.anomalies.length).length})
             </Button>
           </span>
@@ -311,12 +311,12 @@ export function DetailPaie({ id }: { id: string }) {
               render: (s) => (
                 <span className="flex justify-end gap-1.5">
                   {ecrit && p.state === "draft" && (
-                    <Button className="min-h-0 px-2 py-1 text-xs" onClick={() => setSaisie(s)}>
+                    <Button size="sm" onClick={() => setSaisie(s)}>
                       <Plus className="h-3.5 w-3.5" /> Éléments
                     </Button>
                   )}
                   <Link href={`/rh/paie/bulletins/${s.id}`}>
-                    <Button className="min-h-0 px-2 py-1 text-xs">
+                    <Button size="sm">
                       <FileText className="h-3.5 w-3.5" /> Bulletin
                     </Button>
                   </Link>
@@ -430,7 +430,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
                 align: "right",
                 render: (i) =>
                   i.source === "manual" ? (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Retirer" onClick={() => void retirer(i.id)}>
+                    <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void retirer(i.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   ) : null,

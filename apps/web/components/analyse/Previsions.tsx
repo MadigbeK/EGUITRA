@@ -185,7 +185,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
                   <Sparkles className="h-3.5 w-3.5" /> {s.label}
                 </button>
               ))}
-              <Button variant="ghost" onClick={() => setValeurs({ tariff: 0, volume: 0, fuel: 0, payroll: 0 })} className="text-[12px]">
+              <Button variant="ghost" onClick={() => setValeurs({ tariff: 0, volume: 0, fuel: 0, payroll: 0 })} size="sm">
                 <RotateCcw className="h-3.5 w-3.5" /> Remettre à zéro
               </Button>
             </div>

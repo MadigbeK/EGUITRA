@@ -104,7 +104,7 @@ export function MonEspace() {
                   <span className="flex items-center gap-2">
                     <EtatAbsence state={l.state} />
                     {(l.state === "submitted" || (l.state === "approved" && l.date_from > aujourdhui)) && (
-                      <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => void annuler(l)}>
+                      <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
                         Annuler
                       </Button>
                     )}
@@ -132,7 +132,7 @@ export function MonEspace() {
                     align: "right",
                     render: (p) => (
                       <Link href={`/rh/moi/bulletins/${p.id}`}>
-                        <Button className="min-h-0 px-2 py-1 text-xs">Ouvrir</Button>
+                        <Button size="sm">Ouvrir</Button>
                       </Link>
                     ),
                   },

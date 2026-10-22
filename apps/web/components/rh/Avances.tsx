@@ -90,7 +90,7 @@ export function AvancesPrets() {
                 align: "right",
                 render: (a) =>
                   meta?.can_write && a.state === "open" ? (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => void annuler(a)}>
+                    <Button variant="ghost" size="sm" onClick={() => void annuler(a)}>
                       Annuler
                     </Button>
                   ) : null,

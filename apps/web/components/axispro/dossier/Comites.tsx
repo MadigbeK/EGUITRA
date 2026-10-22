@@ -106,11 +106,11 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
           { key: "state", label: "", render: (r) => (r.state === "locked" ? (
             <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
               <Badge tone="ok"><Lock className="mr-1 h-3 w-3" />Scellée</Badge>
-              {r.fingerprint && <Button className="px-2 py-1 text-xs" title={`Empreinte ${r.fingerprint}`} onClick={() => verifier(r.id)}><ShieldCheck className="h-3.5 w-3.5" /> Vérifier</Button>}
+              {r.fingerprint && <Button size="sm" title={`Empreinte ${r.fingerprint}`} onClick={() => verifier(r.id)}><ShieldCheck className="h-3.5 w-3.5" /> Vérifier</Button>}
             </div>
           ) : (
             <div onClick={(e) => e.stopPropagation()}>
-              <Button className="px-2 py-1 text-xs" disabled={Boolean(d.locked_review)} onClick={() => agir(() => apiSend("POST", `/axispro/reviews/${r.id}/lock`), "Décision scellée et verrouillée.").then((x) => x !== undefined && onChanged())}>Verrouiller</Button>
+              <Button size="sm" disabled={Boolean(d.locked_review)} onClick={() => agir(() => apiSend("POST", `/axispro/reviews/${r.id}/lock`), "Décision scellée et verrouillée.").then((x) => x !== undefined && onChanged())}>Verrouiller</Button>
             </div>
           )) },
         ]} />

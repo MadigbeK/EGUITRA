@@ -275,7 +275,7 @@ function Section({
           <h3 className="text-[15px] font-semibold text-ink">{section.titre}</h3>
           <p className="text-[12.5px] text-muted">{section.aide}</p>
         </div>
-        <Button className="min-h-8 px-2.5 py-1 text-[13px]" onClick={() => envoyer("POST", `${chemin}/lines`, { kind: section.kind, ...section.nouveau })}>
+        <Button size="sm" onClick={() => envoyer("POST", `${chemin}/lines`, { kind: section.kind, ...section.nouveau })}>
           <Plus className="h-4 w-4" /> Ajouter
         </Button>
       </div>

@@ -126,7 +126,6 @@ function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }
   const debut = new Date(e.start);
   const memeJour = debut.toDateString() === new Date(e.end).toDateString();
   const blocage = !ecriture ? RESERVE_CABINET : undefined;
-  const petit = "min-h-8 px-2.5 py-1 text-[13px]";
   return (
     <li className={cx("px-5 py-4 sm:px-6", e.state === "cancelled" && "opacity-70")}>
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
@@ -181,19 +180,19 @@ function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button variant="secondary" className={petit} onClick={onInscriptions}>
+          <Button variant="secondary" size="sm" onClick={onInscriptions}>
             <Users className="h-3.5 w-3.5" /> Inscriptions
           </Button>
-          <Button variant="ghost" className={petit} onClick={onEditer}>
+          <Button variant="ghost" size="sm" onClick={onEditer}>
             <Pencil className="h-3.5 w-3.5" /> {ecriture ? "Modifier" : "Voir"}
           </Button>
           {e.state === "draft" && (
-            <Button variant="primary" className={petit} disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
+            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
               <Send className="h-3.5 w-3.5" /> Publier
             </Button>
           )}
           {e.state === "published" && !passe && (
-            <Button variant="danger" className={petit} disabled={!ecriture} title={blocage} onClick={() => onEtat("annuler")}>
+            <Button variant="danger" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("annuler")}>
               <XCircle className="h-3.5 w-3.5" /> Annuler
             </Button>
           )}
@@ -506,10 +505,10 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
                   render: (r) =>
                     r.state === "cancelled" ? null : r.state === "waitlist" ? (
                       <div className="flex justify-end gap-1">
-                        <Button className="min-h-8 px-2.5 py-1 text-[12.5px]" disabled={!ecriture || enCours === r.id} title={blocage ?? "Lui donner une place, au-delà de la limite au besoin"} onClick={() => void pointer(r, "registered")}>
+                        <Button size="sm" disabled={!ecriture || enCours === r.id} title={blocage ?? "Lui donner une place, au-delà de la limite au besoin"} onClick={() => void pointer(r, "registered")}>
                           Inscrire
                         </Button>
-                        <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[12.5px]" disabled={!ecriture || enCours === r.id} title={blocage} onClick={() => void pointer(r, "cancelled")}>
+                        <Button variant="ghost" size="sm" disabled={!ecriture || enCours === r.id} title={blocage} onClick={() => void pointer(r, "cancelled")}>
                           Retirer
                         </Button>
                       </div>

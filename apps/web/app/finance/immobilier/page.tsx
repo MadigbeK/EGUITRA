@@ -69,8 +69,8 @@ function Properties({ onChanged }: { onChanged: () => void }) {
             { key: "current_value", label: "Valeur", align: "right", render: (p) => <span title={p.valuation_date ? `Évaluée le ${fmtDate(p.valuation_date)}` : "Valeur d'acquisition"}>{fmtGNF(p.current_value || p.acquisition_value)}</span> },
             { key: "lease", label: "Locataire", render: (p) => p.lease ? `${p.lease.tenant.name}, ${fmtGNF(p.lease.rent)} / ${p.lease.periodicity === "monthly" ? "mois" : p.lease.periodicity === "quarterly" ? "trimestre" : "an"}` : "–" },
             { key: "occupied", label: "", render: (p) => p.occupied ? (
-              <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{p.lease && <Button className="px-2 py-1 text-xs" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
-            ) : <Button className="px-2 py-1 text-xs" onClick={() => setLeasing(p)}>Louer</Button> },
+              <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{p.lease && <Button size="sm" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
+            ) : <Button size="sm" onClick={() => setLeasing(p)}>Louer</Button> },
           ]} />
         )}
       </Card>
@@ -154,7 +154,7 @@ function Rents() {
             { key: "partner", label: "Locataire", render: (m) => m.partner?.name ?? "–" },
             { key: "amount_total", label: "Montant", align: "right", render: (m) => fmtGNF(m.amount_total) },
             { key: "payment_state", label: "Règlement", render: (m) => <Badge tone={PAYMENT_STATES[m.payment_state]?.tone}>{PAYMENT_STATES[m.payment_state]?.label ?? m.payment_state}</Badge> },
-            { key: "x", label: "", render: (m) => (m.payment_state === "paid" || m.payment_state === "in_payment") ? <Button className="px-2 py-1 text-xs" onClick={() => setReceipt(m.id)}><FileCheck2 className="h-3.5 w-3.5" /> Quittance</Button> : null },
+            { key: "x", label: "", render: (m) => (m.payment_state === "paid" || m.payment_state === "in_payment") ? <Button size="sm" onClick={() => setReceipt(m.id)}><FileCheck2 className="h-3.5 w-3.5" /> Quittance</Button> : null },
           ]} />
         )}
       </Card>

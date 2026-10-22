@@ -268,7 +268,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </tbody>
         </table>
         {ecrit && (
-          <Button className="mt-2 px-2.5 py-1 text-xs" onClick={() => setBareme([...bareme, { from: "", rate: "" }])}>
+          <Button size="sm" className="mt-2" onClick={() => setBareme([...bareme, { from: "", rate: "" }])}>
             <Plus className="h-3.5 w-3.5" /> Ajouter une tranche
           </Button>
         )}
@@ -288,7 +288,7 @@ function Rubriques({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; onC
       title="Rubriques de paie"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition("nouvelle")}>
+          <Button size="sm" onClick={() => setEdition("nouvelle")}>
             <Plus className="h-3.5 w-3.5" /> Nouvelle rubrique
           </Button>
         )
@@ -321,7 +321,7 @@ function Rubriques({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; onC
             align: "right",
             render: (r) =>
               ecrit && !r.system ? (
-                <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Modifier" onClick={() => setEdition(r)}>
+                <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(r)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               ) : null,
@@ -432,7 +432,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
       title="Types d'absence"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition("nouveau")}>
+          <Button size="sm" onClick={() => setEdition("nouveau")}>
             <Plus className="h-3.5 w-3.5" /> Nouveau type
           </Button>
         )
@@ -455,7 +455,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
             align: "right",
             render: (t) =>
               ecrit ? (
-                <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Modifier" onClick={() => setEdition(t)}>
+                <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(t)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               ) : null,
@@ -601,7 +601,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
               align: "right",
               render: (h) =>
                 ecrit ? (
-                  <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Retirer" onClick={() => void supprimer(h)}>
+                  <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void supprimer(h)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 ) : null,
@@ -634,7 +634,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
       title="Départements"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition("nouveau")}>
+          <Button size="sm" onClick={() => setEdition("nouveau")}>
             <Plus className="h-3.5 w-3.5" /> Nouveau département
           </Button>
         )
@@ -656,7 +656,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
             align: "right",
             render: (d) =>
               ecrit ? (
-                <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Modifier" onClick={() => setEdition(d)}>
+                <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(d)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               ) : null,

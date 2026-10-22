@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { Monogramme } from "@/components/brand";
+import { classesBouton } from "@/components/ui";
 import { APPS, appFromPath } from "@/lib/config";
 
 /**
@@ -33,7 +34,7 @@ export function PageErreur({ code, titre, texte, actions }: { code: string; titr
         </p>
         <div className="n-entree mt-7 flex flex-wrap justify-center gap-2" style={{ "--i": 5 } as CSSProperties}>
           {actions}
-          <Link href={APPS[app].home} className="n-degrade inline-flex min-h-10 items-center rounded-[10px] px-4 text-sm font-semibold text-white shadow-[0_8px_18px_-10px_var(--accent-lueur)] transition hover:brightness-[1.07]">
+          <Link href={APPS[app].home} className={classesBouton("primary")}>
             Revenir à l&apos;accueil de {APPS[app].name.replace("NIMOVA · ", "")}
           </Link>
         </div>

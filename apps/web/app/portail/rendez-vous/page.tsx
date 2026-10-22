@@ -181,7 +181,7 @@ function CarteEnAttente({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean
       <p className="mt-3 text-[12.5px] text-muted">Le cabinet retient l'un de ces créneaux ou vous en propose un autre. Vous êtes prévenu dès sa réponse.</p>
       {!ferme && (
         <div className="mt-3">
-          <Button variant="danger" className="min-h-8 px-3 text-[13px]" onClick={() => onAnnuler(m)}>
+          <Button variant="danger" size="sm" className="px-3" onClick={() => onAnnuler(m)}>
             <Trash2 className="h-4 w-4" />
             Retirer la demande
           </Button>
@@ -212,7 +212,7 @@ function LigneHistorique({ m, ouvertParDefaut }: { m: MeetingRow; ouvertParDefau
           </div>
         </div>
         {m.minutes && (
-          <Button variant="ghost" className="min-h-8 px-2.5 text-[13px]" aria-expanded={ouvert} onClick={() => setOuvert((v) => !v)}>
+          <Button variant="ghost" size="sm" aria-expanded={ouvert} onClick={() => setOuvert((v) => !v)}>
             {ouvert ? "Masquer le compte rendu" : "Lire le compte rendu"}
             <ChevronDown className={cx("h-4 w-4 transition-transform", ouvert && "rotate-180")} />
           </Button>
@@ -360,7 +360,7 @@ function Demande({ chemin, onClose, onEnvoye }: { chemin: string; onClose: () =>
             ))}
           </ul>
           {creneaux.length < 3 && (
-            <Button variant="ghost" className="mt-2 min-h-8 px-2.5 text-[13px]" onClick={() => setCreneaux((l) => [...l, ""])}>
+            <Button variant="ghost" size="sm" className="mt-2" onClick={() => setCreneaux((l) => [...l, ""])}>
               <Plus className="h-4 w-4" />
               Proposer un autre créneau
             </Button>

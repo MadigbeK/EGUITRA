@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type CSSProperties } from "react";
 import { ArrowUpRight, Calculator, Coins, HandCoins, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
 import { Ondes, Rosace } from "@/components/guilloche";
-import { AreaChart, Button, Card, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
 import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
@@ -354,8 +354,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
       </Card>
 
       <div className="no-print flex flex-wrap gap-2">
-        <Link href="/finance/alertes" className="inline-flex min-h-9 items-center rounded-[10px] border border-line bg-panel px-3.5 text-sm font-semibold text-ink hover:bg-panel-2">Toutes les alertes</Link>
-        <Link href="/finance/rapport" className="inline-flex min-h-9 items-center rounded-[10px] border border-line bg-panel px-3.5 text-sm font-semibold text-ink hover:bg-panel-2">Rapport mensuel</Link>
+        <Link href="/finance/alertes" className={classesBouton()}>Toutes les alertes</Link>
+        <Link href="/finance/rapport" className={classesBouton()}>Rapport mensuel</Link>
         <Button variant="primary" onClick={() => window.print()}>
           <Printer className="h-4 w-4" /> Imprimer ce tableau de bord
         </Button>

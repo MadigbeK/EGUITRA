@@ -100,8 +100,8 @@ function EclCard({ date }: { date: string }) {
       padded={false}
       actions={
         <div className="no-print flex gap-2">
-          <Button className="px-2 py-1 text-xs" onClick={() => setEditing(true)}>Matrice</Button>
-          {data && !data.posted && data.adjustment !== 0 && <Button className="px-2 py-1 text-xs" onClick={post}>Comptabiliser l&apos;ajustement</Button>}
+          <Button size="sm" onClick={() => setEditing(true)}>Matrice</Button>
+          {data && !data.posted && data.adjustment !== 0 && <Button size="sm" onClick={post}>Comptabiliser l&apos;ajustement</Button>}
         </div>
       }
     >

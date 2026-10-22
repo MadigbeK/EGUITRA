@@ -391,7 +391,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
               <span>{lastSync ? `Dernier envoi à ${lastSync}` : "Les saisies partent seules dès que le réseau revient."}</span>
-              <Button className="min-h-11 px-4" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
+              <Button size="lg" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
             </div>
             {mine.length === 0 && <p className="py-8 text-center text-sm text-muted">Toutes vos saisies ont été transmises.</p>}
             {mine.map((item) => (
@@ -409,8 +409,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} <span className="text-[15px] font-semibold text-muted">m³</span></div>
                 {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
                 <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
-                  <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
-                  <Button variant="danger" className="min-h-11" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
+                  <Button variant="ghost" size="lg" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
+                  <Button variant="danger" size="lg" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
                 </div>
               </div>
             ))}

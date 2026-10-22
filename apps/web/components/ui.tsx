@@ -320,7 +320,7 @@ function ajuste(base: string, extra?: string): string {
   return [...garde, ...ajout].join(" ");
 }
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON: Record<ButtonVariant, string> = {
   primary: "n-degrade text-accent-ink shadow-[0_8px_18px_-10px_var(--accent-lueur)] hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)] hover:brightness-[1.07]",
@@ -329,22 +329,31 @@ const BUTTON: Record<ButtonVariant, string> = {
   danger: "border border-danger/30 bg-panel text-danger hover:border-danger hover:bg-danger hover:text-white",
 };
 
-export function Button({ variant = "secondary", loading, className, children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; loading?: boolean }) {
+export type ButtonSize = "sm" | "md" | "lg";
+
+/** Tailles : 32 px dans une ligne de tableau ou une barre d'outils, 36 px par défaut, 44 px au toucher. */
+const TAILLE: Record<ButtonSize, string> = {
+  sm: "min-h-8 gap-1.5 px-2.5 py-1 text-[13px]",
+  md: "min-h-9 gap-2 px-3.5 py-1.5 text-sm",
+  lg: "min-h-11 gap-2 px-4 py-2 text-[15px]",
+};
+
+/** Classes d'un bouton, pour un lien qui doit en avoir l'allure (page d'erreur, raccourcis). */
+export function classesBouton(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string): string {
+  return ajuste(
+    cx(
+      "inline-flex items-center justify-center whitespace-nowrap rounded-[10px] font-semibold transition-[transform,box-shadow,background-color,border-color,color,filter] duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:active:scale-100",
+      TAILLE[size],
+      BUTTON[variant],
+    ),
+    className,
+  );
+}
+
+export function Button({ variant = "secondary", size = "md", loading, className, children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; loading?: boolean }) {
   return (
-    <button
-      type="button"
-      {...props}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      className={ajuste(
-        cx(
-          "inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-[transform,box-shadow,background-color,border-color,color,filter] duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:active:scale-100",
-          BUTTON[variant],
-        ),
-        className,
-      )}
-    >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+    <button type="button" {...props} disabled={disabled || loading} aria-busy={loading || undefined} className={classesBouton(variant, size, className)}>
+      {loading && <Loader2 className={size === "sm" ? "h-3.5 w-3.5 animate-spin" : "h-4 w-4 animate-spin"} />}
       {children}
     </button>
   );
@@ -655,7 +664,7 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
 /** Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire. */
 export function FileButton({ label, accept, onFile, small }: { label: string; accept?: string; onFile: (file: File) => void; small?: boolean }) {
   return (
-    <label className={cx("relative inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif", small ? "px-2.5 py-1 text-[12.5px]" : "min-h-9 px-3.5 py-1.5 text-sm")}>
+    <label className={classesBouton("secondary", small ? "sm" : "md", "relative cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif")}>
       <FileUpIcon className={small ? "h-3.5 w-3.5" : "h-4 w-4"} />
       {label}
       <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />

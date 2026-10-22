@@ -7,7 +7,7 @@ import { ArrowUpRight, ChevronLeft, Lock, Paperclip, Send, X } from "@/component
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import { Coche, LectureSeule, RESERVE_CABINET, Recherche, correspond, messageErreur, useEcriture } from "@/components/portail/cabinet/outils";
 import { FORMATS, FORMATS_TEXTE, dateLongue, heure, quand, taille } from "@/components/portail/commun";
-import { Badge, Button, Empty, ErrorBox, Loading, Notice, PageHeader, Segmented, Textarea, cx } from "@/components/ui";
+import { Badge, Button, classesBouton, Empty, ErrorBox, Loading, Notice, PageHeader, Segmented, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiUpload, useApi } from "@/lib/api-client";
 import type { Attachment, Conversation, ConversationRow, MessageRow } from "@/lib/portail-types";
 
@@ -229,7 +229,7 @@ function Fil({ dossierId, ecriture, onRetour, onLu, onEnvoye }: { dossierId: num
             <div className="n-squelette h-5 w-60 rounded-full" />
           )}
         </div>
-        <Link href={`/axispro/dossiers/${dossierId}`} className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2">
+        <Link href={`/axispro/dossiers/${dossierId}`} className={classesBouton("secondary", "sm")}>
           Fiche du dossier <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </header>

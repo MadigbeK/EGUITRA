@@ -228,14 +228,13 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
     }
   }
 
-  const taille = compact ? "px-2 py-1 text-xs min-h-0" : undefined;
   return (
     <>
       <span className="flex flex-wrap items-center justify-end gap-1.5">
-        <Button variant="primary" className={taille} loading={busy && !refus} onClick={() => approuver(false)}>
+        <Button variant="primary" size={compact ? "sm" : "md"} loading={busy && !refus} onClick={() => approuver(false)}>
           <Check className="h-3.5 w-3.5" /> Approuver
         </Button>
-        <Button variant="danger" className={taille} disabled={busy} onClick={() => setRefus(true)}>
+        <Button variant="danger" size={compact ? "sm" : "md"} disabled={busy} onClick={() => setRefus(true)}>
           <X className="h-3.5 w-3.5" /> Refuser
         </Button>
       </span>

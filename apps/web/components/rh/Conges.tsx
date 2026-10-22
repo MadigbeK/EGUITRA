@@ -153,7 +153,7 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
           <Button variant="ghost" aria-label="Mois précédent" onClick={() => setMois(decaler(mois, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setMois(moisCourant())}>
+          <Button size="sm" onClick={() => setMois(moisCourant())}>
             Ce mois
           </Button>
           <Button variant="ghost" aria-label="Mois suivant" onClick={() => setMois(decaler(mois, 1))}>
@@ -300,7 +300,7 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
                   l.state === "submitted" && l.can_decide ? (
                     <DecisionAbsence compact leave={l} peutForcer={Boolean(meta?.can_write)} onDone={() => { void mutate(); onChanged(); }} />
                   ) : meta?.can_write && (l.state === "submitted" || l.state === "approved") ? (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => void annuler(l)}>
+                    <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
                       Annuler
                     </Button>
                   ) : null,
