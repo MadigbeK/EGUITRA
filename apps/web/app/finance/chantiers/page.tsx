@@ -4,8 +4,15 @@ import { useState } from "react";
 import { HardHat, Plus, Unlock } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import type { Profile } from "@/lib/types";
+
+// Profils des routes du noyau (addons/eguitra_chantier/controllers/chantier.py) : saisie des chantiers
+// et des situations (WRITE), facturation des situations et libération des retenues (INVOICE). La
+// direction lit seulement ; le profil chantiers saisit, la finance facture.
+const SAISIE: Profile[] = ["admin", "finance", "chantiers"];
+const FACTURATION: Profile[] = ["admin", "finance"];
 
 interface Situation {
   id: number;
@@ -45,12 +52,13 @@ export default function ChantiersPage() {
   const { data, error, mutate } = useApi<{ items: Chantier[]; totals: Record<string, number> }>("/chantiers");
   const [selected, setSelected] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
+  const saisie = useAutorise(SAISIE);
   return (
     <div>
       <PageHeader
         title="BTP"
         subtitle="Situations d'avancement, facturation à l'avancement, retenues de garantie suivies jusqu'à leur libération."
-        actions={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau chantier</Button>}
+        actions={saisie ? <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau chantier</Button> : undefined}
       />
       {error && <ErrorBox error={error} />}
       {!data && !error && <Loading />}
@@ -92,6 +100,8 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  const saisie = useAutorise(SAISIE);
+  const facturation = useAutorise(FACTURATION);
   async function act(fn: () => Promise<unknown>, ok?: string) {
     setMessage(null);
     try {
@@ -121,19 +131,27 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
             { key: "cumulative_amount", label: "Cumul HT", align: "right", render: (s) => fmtGNF(s.cumulative_amount) },
             { key: "amount_period", label: "Période HT", align: "right", render: (s) => fmtGNF(s.amount_period) },
             { key: "retention_amount", label: `Retenue ${c.retention_rate} %`, align: "right", render: (s) => fmtGNF(s.retention_amount) },
-            { key: "state", label: "", render: (s) => s.state === "draft" ? <span className="flex justify-end gap-2"><Button size="sm" onClick={() => act(() => apiSend("POST", `/chantiers/situations/${s.id}/invoice`), "Situation facturée.")}>Facturer</Button><Button variant="danger" size="sm" onClick={async () => { if (await demanderConfirmation("Annuler cette situation saisie ? Elle ne sera pas facturée.", { action: "Annuler la situation", danger: true })) void act(() => apiSend("POST", `/chantiers/situations/${s.id}/cancel`), "Situation annulée."); }}>Annuler</Button></span> : s.invoice ? <Badge tone="ok">{s.invoice.name}</Badge> : <Badge>Annulée</Badge> },
+            { key: "state", label: "", render: (s) => s.state === "draft" ? (
+              <span className="flex justify-end gap-2">
+                {/* Sans droit de facturer (chantiers, direction), la situation attend la finance. */}
+                {facturation ? <Button size="sm" onClick={() => act(() => apiSend("POST", `/chantiers/situations/${s.id}/invoice`), "Situation facturée.")}>Facturer</Button> : <Badge tone="warn">À facturer</Badge>}
+                {saisie && <Button variant="danger" size="sm" onClick={async () => { if (await demanderConfirmation("Annuler cette situation saisie ? Elle ne sera pas facturée.", { action: "Annuler la situation", danger: true })) void act(() => apiSend("POST", `/chantiers/situations/${s.id}/cancel`), "Situation annulée."); }}>Annuler</Button>}
+              </span>
+            ) : s.invoice ? <Badge tone="ok">{s.invoice.name}</Badge> : <Badge>Annulée</Badge> },
           ]} />
-          <Card title="Nouvelle situation">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-              <Field label="Saisie"><Select value={mode} onChange={(e) => setMode(e.target.value as "amount" | "pct")} options={[{ value: "pct", label: "Avancement cumulé (%)" }, { value: "amount", label: "Travaux cumulés HT" }]} /></Field>
-              <Field label={mode === "pct" ? "Avancement cumulé (%)" : "Montant cumulé HT"}><Input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} /></Field>
-              <Field label="Période" className="md:col-span-2"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Travaux d'octobre 2026" /></Field>
-              <div className="flex items-end"><Button variant="primary" disabled={!value} onClick={() => act(() => apiSend("POST", `/chantiers/${c.id}/situations`, mode === "pct" ? { progress_pct: Number(value.replace(",", ".")), period_label: label } : { cumulative_amount: Number(value.replace(/\s/g, "")), period_label: label }), "Situation enregistrée en brouillon.").then(() => { setValue(""); setLabel(""); })}>Enregistrer</Button></div>
-            </div>
-          </Card>
+          {saisie && (
+            <Card title="Nouvelle situation">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                <Field label="Saisie"><Select value={mode} onChange={(e) => setMode(e.target.value as "amount" | "pct")} options={[{ value: "pct", label: "Avancement cumulé (%)" }, { value: "amount", label: "Travaux cumulés HT" }]} /></Field>
+                <Field label={mode === "pct" ? "Avancement cumulé (%)" : "Montant cumulé HT"}><Input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} /></Field>
+                <Field label="Période" className="md:col-span-2"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Travaux d'octobre 2026" /></Field>
+                <div className="flex items-end"><Button variant="primary" disabled={!value} onClick={() => act(() => apiSend("POST", `/chantiers/${c.id}/situations`, mode === "pct" ? { progress_pct: Number(value.replace(",", ".")), period_label: label } : { cumulative_amount: Number(value.replace(/\s/g, "")), period_label: label }), "Situation enregistrée en brouillon.").then(() => { setValue(""); setLabel(""); })}>Enregistrer</Button></div>
+              </div>
+            </Card>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-panel-2 px-4 py-3 text-sm">
             <span>Retenues constituées {fmtGNF(c.retention_total)}, libérées {fmtGNF(c.retention_released)}, à recouvrer <b>{fmtGNF(c.retention_outstanding)}</b>.</span>
-            <Button disabled={c.retention_outstanding <= 0} onClick={() => act(() => apiSend("POST", `/chantiers/${c.id}/release-retention`), "Retenues libérées : elles redeviennent exigibles du client.")}><Unlock className="h-4 w-4" /> Libérer les retenues</Button>
+            {facturation && <Button disabled={c.retention_outstanding <= 0} onClick={() => act(() => apiSend("POST", `/chantiers/${c.id}/release-retention`), "Retenues libérées : elles redeviennent exigibles du client.")}><Unlock className="h-4 w-4" /> Libérer les retenues</Button>}
           </div>
         </div>
       )}
