@@ -244,6 +244,33 @@ class TestRh(FinanceDataMixin, TransactionCase):
             with self.assertRaisesRegex(UserError, "rouvrez-la"):
                 record.with_user(self.gestionnaire).write(vals)
 
+    def test_donnees_de_paie_modifiees_pendant_la_preparation(self):
+        """Élément fixe, coordonnées bancaires ou avance modifiés dans l'ORM pendant que des paies sont en
+        préparation : l'auteur rejoint les préparateurs des paies concernées. Le suivi du solde des avances
+        par la validation n'inscrit personne."""
+        Payroll = self.env["eguitra.rh.payroll"]
+        advance = self.env["eguitra.rh.advance"].create({"employee_id": self.alpha.id, "amount": 400_000,
+                                                         "installment": 200_000, "first_month": SEPT})
+        september = Payroll.prepare(self.company, SEPT)
+        october = Payroll.prepare(self.company, date(2026, 10, 1))
+        autre = self._user("autre.paie", "rh")
+        self.alpha.line_ids[:1].with_user(self.gestionnaire).write({"amount": 900_000})
+        self.alpha.with_user(self.administrateur).write({"bank_account": "GN99"})
+        self.env["eguitra.rh.advance"].with_user(autre).create({"employee_id": self.alpha.id, "amount": 100_000,
+                                                                "installment": 100_000, "first_month": date(2026, 10, 1)})
+        for payroll in (september, october):
+            self.assertIn(self.gestionnaire, payroll.prepared_by_ids)
+            self.assertIn(self.administrateur, payroll.prepared_by_ids)
+        self.assertIn(autre, october.prepared_by_ids)
+        self.assertNotIn(autre, september.prepared_by_ids, "Avance retenue à partir d'octobre seulement")
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            september.with_user(self.administrateur).action_validate()
+        september.with_user(self.valideur).action_validate()
+        self.assertEqual(advance.state, "open")
+        self.assertNotIn(self.valideur, october.prepared_by_ids, "Le suivi du solde n'inscrit pas la direction")
+        october.with_user(self.valideur).action_validate()
+        self.assertEqual(october.state, "validated")
+
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
         payroll.with_user(self.valideur).action_validate()

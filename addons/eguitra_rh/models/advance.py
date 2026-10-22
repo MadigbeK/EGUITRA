@@ -2,10 +2,15 @@
 
 Le versement de l'avance ou du prêt est enregistré par la finance (débit du compte 421 au nom du
 salarié) ; la paie en retient chaque mois la mensualité, jusqu'à épuisement du reste dû.
+
+Quatre yeux : créer, modifier ou annuler une avance inscrit son auteur parmi les préparateurs des paies
+en préparation concernées ; seul le suivi du solde par la paie (validation, réouverture) ne le fait pas.
 """
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+
+from .payroll import is_trusted, trusted
 
 
 class EguitraRhAdvance(models.Model):
@@ -33,6 +38,33 @@ class EguitraRhAdvance(models.Model):
             if adv.installment > adv.amount:
                 raise UserError("La mensualité dépasse le montant.")
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        records._draft_payrolls()._mark_prepared()
+        return records
+
+    def write(self, vals):
+        if is_trusted(self.env):
+            return super().write(vals)
+        payrolls = self._draft_payrolls()
+        result = super().write(vals)
+        (payrolls | self._draft_payrolls())._mark_prepared()
+        return result
+
+    def unlink(self):
+        self._draft_payrolls()._mark_prepared()
+        return super().unlink()
+
+    def _draft_payrolls(self):
+        """Paies en préparation de la société à partir du premier mois de retenue."""
+        Payroll = self.env["eguitra.rh.payroll"].sudo()
+        result = Payroll
+        for adv in self.sudo():
+            result |= Payroll.search([("company_id", "=", adv.company_id.id), ("state", "=", "draft"),
+                                      ("month", ">=", adv.first_month.replace(day=1))])
+        return result
+
     def _reimbursed(self, exclude_payslip=None):
         """Retenues des bulletins validés (et du bulletin en préparation, sauf celui à exclure)."""
         self.ensure_one()
@@ -54,8 +86,10 @@ class EguitraRhAdvance(models.Model):
         return min(self.installment, self._remaining(exclude_payslip=payslip))
 
     def _update_state(self):
-        for adv in self.filtered(lambda a: a.state in ("open", "done")):
-            adv.state = "done" if adv._remaining() <= 0 else "open"
+        """Solde suivi par la paie (validation, réouverture) : écriture de confiance, qui n'inscrit personne
+        parmi les préparateurs."""
+        for adv in trusted(self.filtered(lambda a: a.state in ("open", "done"))):
+            adv.write({"state": "done" if adv._remaining() <= 0 else "open"})
 
     def action_cancel(self):
         for adv in self:

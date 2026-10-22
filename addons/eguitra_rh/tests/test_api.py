@@ -260,6 +260,27 @@ class TestApiRh(ApiCase):
         status, done = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=dg)
         self.assertEqual((status, done.get("state")), (200, "validated"), done)
 
+    def test_modifier_un_salaire_interdit_de_valider_la_paie(self):
+        """Un compte administration qui modifie le salaire d'un salarié pendant que la paie du mois est en
+        préparation ne valide pas cette paie ; la direction, qui n'a rien modifié, la valide."""
+        self._create_user("admin.rh", "admin")
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        admin = self.open_session("admin.rh", app="rh")["access_token"]
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
+        self.assertEqual(status, 200, payroll)
+        status, body = self.call("PATCH", f"/rh/employees/{self.worker.id}",
+                                 {"base_salary": 2_400_000, "salary_reason": "Revalorisation"}, token=admin)
+        self.assertEqual(status, 200, body)
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=admin)
+        self.assertEqual((status, "Admin.Rh" in detail["prepared_by"], detail["can_validate"]), (200, True, False),
+                         detail)
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
+
     def test_personne_n_approuve_sa_propre_absence(self):
         """Ni la RH, ni la direction n'approuvent ou ne refusent leur propre absence, à la saisie comme en
         décision ; chacune tranche celle de l'autre."""

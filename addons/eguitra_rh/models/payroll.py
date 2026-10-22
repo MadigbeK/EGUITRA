@@ -6,8 +6,9 @@ salaires, que la finance relit et comptabilise). Une paie se rouvre tant que la 
 comptabilisée par la finance.
 
 Quatre yeux : la RH prépare la paie, la direction (ou l'administration, qui l'implique) la valide,
-jamais un compte qui l'a préparée (création, recalcul, saisie ou suppression d'éléments variables),
-retenu dans « Préparée par ».
+jamais un compte qui l'a préparée, retenu dans « Préparée par » : création, recalcul, bulletins,
+lignes et éléments variables, mais aussi, tant qu'elle est en préparation, les données qui y entrent
+(dossier du salarié, éléments fixes, avances et prêts : models/employee.py et advance.py).
 """
 
 from collections import defaultdict
@@ -31,7 +32,8 @@ WORKFLOW_MESSAGE = ("Le statut, la validation et les préparateurs d'une paie ne
                     "calcul, validation, réouverture, comptabilisation.")
 WORKFLOW_KEY = "eguitra_rh_payroll_workflow"
 # Drapeau de contexte de confiance : un objet Python, qu'aucun appel distant (contexte en JSON) ne peut
-# reproduire. Posé par trusted() dans les seules actions de la paie (et la migration 19.0.1.0.1).
+# reproduire. Posé par trusted() dans les seules actions de la paie, le suivi du solde des avances et la
+# migration 19.0.1.0.1.
 _TRUSTED = object()
 
 
@@ -63,8 +65,8 @@ class EguitraRhPayroll(models.Model):
     validated_at = fields.Datetime("Validée le", readonly=True)
     prepared_by_ids = fields.Many2many(
         "res.users", "eguitra_rh_payroll_preparer_rel", "payroll_id", "user_id", "Préparée par", readonly=True,
-        copy=False, help="Comptes qui ont créé ou recalculé la paie, ou saisi ses éléments variables : aucun d'eux "
-                         "ne la valide.")
+        copy=False, help="Comptes qui ont créé ou recalculé la paie, saisi ses éléments variables, ou modifié "
+                         "pendant sa préparation des données qui y entrent : aucun d'eux ne la valide.")
 
     _month_unique = models.Constraint("unique(company_id, month)", "La paie de ce mois existe déjà.")
 
