@@ -39,7 +39,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={RECO[s.recommendation].tone}>{RECO[s.recommendation].label}</Badge>
-              <span className="text-[12.5px] font-semibold uppercase tracking-wide text-muted">{s.classification}</span>
+              <span className="text-[12.5px] font-semibold text-muted">{s.classification}</span>
             </div>
             <p className="text-[14px] text-ink-2">{s.recommendation_detail}</p>
             {s.recommendation === "pending" && s.method_recommendation !== "pending" && s.assessed > 0 && (

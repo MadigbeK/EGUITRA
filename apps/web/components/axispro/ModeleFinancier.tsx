@@ -359,7 +359,7 @@ function TableauModele({ labels, rows }: { labels: string[]; rows: ModelRow[] })
 function PlanInitial({ plan }: { plan: PlanPayload["analysis"]["financing_plan"] }) {
   const lignes = (titre: string, items: Array<{ label: string; amount: number }>, total: number): ReactNode => (
     <div>
-      <div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted">{titre}</div>
+      <div className="mb-1.5 text-[12.5px] font-semibold text-muted">{titre}</div>
       <ul className="space-y-1 text-[13.5px]">
         {items.map((x) => (
           <li key={x.label} className="flex justify-between gap-3">
