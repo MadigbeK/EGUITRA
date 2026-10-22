@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { parseNumber, type Ref, type Referentials } from "./types";
@@ -133,7 +133,7 @@ export function Rotations() {
 }
 
 function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const { data: ref } = useApi<Referentials>("/transport/referentials");
+  const { data: ref, error: erreurChargement, mutate: majReferentiels } = useApi<Referentials>("/transport/referentials");
   const [f, setF] = useState<Record<string, string>>({ date_loading: new Date().toISOString().slice(0, 10), product: "gasoil" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -160,7 +160,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
   return (
     <Modal open wide title="Nouvelle rotation" onClose={onClose} footer={<><Button loading={busy} onClick={() => submit(false)} disabled={!f.vehicle_id || !f.partner_id || !f.route_id}>Enregistrer</Button><Button variant="primary" loading={busy} onClick={() => submit(true)} disabled={!f.vehicle_id || !f.partner_id || !f.route_id}>Enregistrer et valider</Button></>}>
       {!ref ? (
-        <Loading />
+        <Etat error={erreurChargement} onRetry={() => majReferentiels()} />
       ) : (
         <div className="space-y-4">
           {error && <Notice tone="danger">{error}</Notice>}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileCheck2, Plus, Printer, RefreshCw } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { PAYMENT_STATES, type MoveSummary } from "@/lib/finance-types";
@@ -48,7 +48,7 @@ export default function RealEstatePage() {
 }
 
 function Properties({ onChanged }: { onChanged: () => void }) {
-  const { data, mutate } = useApi<{ items: Property[]; kinds: Array<{ code: string; label: string }> }>("/immobilier/properties");
+  const { data, error, mutate } = useApi<{ items: Property[]; kinds: Array<{ code: string; label: string }> }>("/immobilier/properties");
   const [creating, setCreating] = useState(false);
   const [leasing, setLeasing] = useState<Property | null>(null);
   const [ending, setEnding] = useState<Property | null>(null);
@@ -57,7 +57,7 @@ function Properties({ onChanged }: { onChanged: () => void }) {
     <>
       <div className="mb-3 flex justify-end"><Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button></div>
       <Card padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data.items} rowKey={(p) => p.id} empty="Aucun bien." columns={[
             { key: "name", label: "Bien", render: (p) => (
               <button type="button" className="text-left font-medium text-ink underline-offset-2 hover:underline" title="Modifier le bien" onClick={() => setEditing(p)}>
@@ -142,12 +142,12 @@ function LeaseForm({ property, onClose, onDone }: { property: Property; onClose:
 }
 
 function Rents() {
-  const { data } = useApi<MoveSummary[]>("/immobilier/rents");
+  const { data, error, mutate } = useApi<MoveSummary[]>("/immobilier/rents");
   const [receipt, setReceipt] = useState<number | null>(null);
   return (
     <>
       <Card padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data} rowKey={(m) => m.id} empty="Aucun loyer émis." columns={[
             { key: "name", label: "Quittance", render: (m) => <span className="font-mono text-xs">{m.name}</span> },
             { key: "invoice_date", label: "Date", render: (m) => fmtDate(m.invoice_date) },
@@ -209,10 +209,10 @@ function ReceiptModal({ id, onClose }: { id: number; onClose: () => void }) {
 }
 
 function Unpaid() {
-  const { data } = useApi<Array<MoveSummary & { late_days: number }>>("/immobilier/unpaid");
+  const { data, error, mutate } = useApi<Array<MoveSummary & { late_days: number }>>("/immobilier/unpaid");
   return (
     <Card padded={false}>
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data} rowKey={(m) => m.id} empty="Aucun loyer impayé." columns={[
           { key: "partner", label: "Locataire", render: (m) => m.partner?.name ?? "–" },
           { key: "name", label: "Échéance", render: (m) => `${m.name} du ${fmtDate(m.invoice_date)}` },

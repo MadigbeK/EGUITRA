@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, Users, X } from "@/components/icons";
-import { Badge, Button, Card, DataTable, FileButton, Input, Loading, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -43,7 +43,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const compartiments = d.scoring.compartments ?? [];
   const [miens, setMiens] = useState(false);
   const { moi } = useCabinet();
-  const { data: criteria, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria${miens ? "?mine=1" : ""}`, { keepPreviousData: true });
+  const { data: criteria, error, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria${miens ? "?mine=1" : ""}`, { keepPreviousData: true });
   const { data: room, mutate: mutateRoom } = useApi<{ files: DocFile[] }>(`/axispro/dossiers/${d.id}/documents`);
   const [mode, setMode] = useState<"guidee" | "complete">(d.progress.assessed < d.progress.criteria ? "guidee" : "complete");
   const [q, setQ] = useState("");
@@ -121,7 +121,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     }
   }
 
-  if (!criteria) return <Loading label="Chargement de la check-list…" />;
+  if (!criteria) return <Etat error={error} onRetry={() => mutate()} label="Chargement de la check-list…" />;
   const files = room?.files ?? [];
   const parDomaine = d.scoring.domains
     .map((dom) => ({ dom, rows: lignes.filter((c) => c.domain_id === dom.domain_id) }))

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Mail, Printer, RefreshCw } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Kpi, Loading, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Kpi, Loading, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
@@ -88,7 +88,7 @@ export default function RemindersPage() {
 }
 
 function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailServer: boolean; onClose: () => void; onChanged: () => void }) {
-  const { data, mutate } = useApi<Reminder & { letter: Letter }>(`/finance/reminders/${id}`);
+  const { data, error: erreurChargement, mutate } = useApi<Reminder & { letter: Letter }>(`/finance/reminders/${id}`);
   const [error, setError] = useState<string | null>(null);
   async function act(path: string, body?: unknown) {
     setError(null);
@@ -117,7 +117,7 @@ function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailS
       )}
     >
       {error && <Notice tone="danger">{error}</Notice>}
-      {!l ? <Loading /> : (
+      {!l ? <Etat error={erreurChargement} onRetry={() => mutate()} /> : (
         <article className="space-y-4 text-sm leading-relaxed">
           <div className="flex justify-between">
             <div className="font-semibold">{l.company}</div>

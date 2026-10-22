@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, BookOpen, Calculator, Check, ChevronLeft, FileSpreadsheet, FileText, Lock, Plus, RefreshCw, RotateCcw, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { Anomaly, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
@@ -362,7 +362,7 @@ const SOURCE: Record<string, string> = { manual: "Saisi", fixed: "Élément fixe
 
 /** Éléments du mois d'un bulletin : primes, heures supplémentaires, retenues ; le bulletin se recalcule. */
 function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; meta: Meta; onClose: () => void }) {
-  const { data: b, mutate } = useApi<Payslip>(`/rh/payslips/${payslipId}`);
+  const { data: b, error, mutate } = useApi<Payslip>(`/rh/payslips/${payslipId}`);
   const rubriques = meta.rubrics.filter((r) => r.active && !r.system);
   const [rubriqueId, setRubriqueId] = useState<string>("");
   const [valeur, setValeur] = useState("");
@@ -399,7 +399,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
   return (
     <Modal open wide title={b ? `Éléments du mois, ${b.employee.name}` : "Éléments du mois"} onClose={onClose} footer={<Button onClick={onClose}>Fermer</Button>}>
       {!b ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <div className="space-y-4">
           {erreur && <Notice tone="danger">{erreur}</Notice>}

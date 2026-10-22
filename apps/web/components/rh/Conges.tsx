@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "@/components/icons";
-import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, GAMME, cx } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, GAMME, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
@@ -16,11 +16,11 @@ type Onglet = "valider" | "planning" | "absences" | "soldes";
  * à valider, planning du mois, toutes les absences, soldes.
  */
 export function GestionConges() {
-  const { data: meta } = useMeta();
+  const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useMeta();
   const [onglet, setOnglet] = useState<Onglet>("valider");
   const [saisie, setSaisie] = useState(false);
   const [societe, setSociete] = useState<number | null>(null);
-  const { data: attente, mutate: rafraichirAttente } = useApi<Leave[]>(avecSociete("/rh/leaves?state=submitted", societe));
+  const { data: attente, error: erreurAttente, mutate: rafraichirAttente } = useApi<Leave[]>(avecSociete("/rh/leaves?state=submitted", societe));
   const [version, setVersion] = useState(0);
   const rafraichir = () => {
     void rafraichirAttente();
@@ -52,7 +52,12 @@ export function GestionConges() {
           { key: "soldes", label: "Soldes de congés" },
         ]}
       />
-      {onglet === "valider" && <AValider leaves={attente} meta={meta} onChanged={rafraichir} />}
+      {erreurMeta && !meta && (
+        <div className="mb-4">
+          <ErrorBox error={erreurMeta} onRetry={() => rafraichirMeta()} />
+        </div>
+      )}
+      {onglet === "valider" && <AValider leaves={attente} error={erreurAttente} onRetry={() => rafraichirAttente()} meta={meta} onChanged={rafraichir} />}
       {onglet === "planning" && <Planning key={version} meta={meta} societe={societe} />}
       {onglet === "absences" && <Absences key={version} meta={meta} societe={societe} onChanged={rafraichir} />}
       {onglet === "soldes" && <Soldes key={version} societe={societe} />}
@@ -70,8 +75,8 @@ export function GestionConges() {
   );
 }
 
-function AValider({ leaves, meta, onChanged }: { leaves: Leave[] | undefined; meta: Meta | undefined; onChanged: () => void }) {
-  if (!leaves) return <Loading />;
+function AValider({ leaves, error, onRetry, meta, onChanged }: { leaves: Leave[] | undefined; error?: unknown; onRetry?: () => void; meta: Meta | undefined; onChanged: () => void }) {
+  if (!leaves) return <Etat error={error} onRetry={onRetry} />;
   if (leaves.length === 0)
     return (
       <Card>
@@ -121,7 +126,7 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
   const debut = new Date(`${mois}T00:00:00`);
   const nbJours = new Date(debut.getFullYear(), debut.getMonth() + 1, 0).getDate();
   const fin = `${mois.slice(0, 8)}${String(nbJours).padStart(2, "0")}`;
-  const { data: leaves } = useApi<Leave[]>(avecSociete(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`, societe));
+  const { data: leaves, error, mutate } = useApi<Leave[]>(avecSociete(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`, societe));
   const { data: feries } = useApi<Holiday[]>(`/rh/holidays?year=${debut.getFullYear()}`);
   const types = meta?.leave_types ?? [];
   const couleur = (typeId: number) => GAMME[Math.max(0, types.findIndex((t) => t.id === typeId)) % GAMME.length]!;
@@ -158,7 +163,7 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
       }
     >
       {!leaves || !meta ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : salaries.length === 0 ? (
         <Empty title="Aucun salarié" />
       ) : (

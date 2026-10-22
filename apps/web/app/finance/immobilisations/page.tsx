@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Calculator, Download, Plus, ShieldCheck } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import type { Account, Journal } from "@/lib/finance-types";
@@ -127,7 +127,7 @@ export default function AssetsPage() {
 }
 
 function AssetModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: asset, mutate } = useApi<Asset>(`/finance/assets/${id}`);
+  const { data: asset, error: erreurChargement, mutate } = useApi<Asset>(`/finance/assets/${id}`);
   const [error, setError] = useState<string | null>(null);
   const [disposing, setDisposing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -155,7 +155,7 @@ function AssetModal({ id, onClose, onChanged }: { id: number; onClose: () => voi
       {disposing && asset && <DisposeForm asset={asset} onCancel={() => setDisposing(false)} onDone={() => { setDisposing(false); void mutate(); onChanged(); }} />}
       {editing && asset && <DetailsForm asset={asset} onCancel={() => setEditing(false)} onDone={() => { setEditing(false); void mutate(); onChanged(); }} />}
       {!asset ? (
-        <Loading />
+        <Etat error={erreurChargement} onRetry={() => mutate()} />
       ) : (
         <div className="space-y-4">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-4">

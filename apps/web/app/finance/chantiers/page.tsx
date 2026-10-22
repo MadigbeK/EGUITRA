@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { HardHat, Plus, Unlock } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
@@ -87,7 +87,7 @@ export default function ChantiersPage() {
 }
 
 function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: c, mutate } = useApi<Chantier>(`/chantiers/${id}`);
+  const { data: c, error, mutate } = useApi<Chantier>(`/chantiers/${id}`);
   const [mode, setMode] = useState<"amount" | "pct">("pct");
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
@@ -105,7 +105,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
   }
   return (
     <Modal open wide title={c ? `${c.name}, ${c.client.name}` : "Chantier"} onClose={onClose}>
-      {!c ? <Loading /> : (
+      {!c ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-5">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

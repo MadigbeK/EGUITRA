@@ -453,11 +453,35 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
       <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
       <div className="flex-1">{message}</div>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="font-semibold underline underline-offset-2">
+        <button type="button" onClick={() => onRetry()} className="font-semibold underline underline-offset-2">
           Réessayer
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * État d'un appel d'API : chargement tant que `data` n'est pas arrivé, erreur avec « Réessayer »
+ * si l'appel a échoué, état vide pour une liste sans ligne, sinon le contenu. Sans enfant, il tient
+ * lieu de retour anticipé : `if (!data) return <Etat error={error} onRetry={() => mutate()} />`.
+ */
+export function Etat<T>({ data, error, onRetry, label, vide, children }: { data?: T; error?: unknown; onRetry?: () => void; label?: string; vide?: string | { title: string; hint?: string }; children?: ReactNode | ((data: T) => ReactNode) }) {
+  if (data === undefined) return error ? <ErrorBox error={error} onRetry={onRetry} /> : <Loading label={label} />;
+  if (vide && Array.isArray(data) && data.length === 0) {
+    const v = typeof vide === "string" ? { title: vide } : vide;
+    return <Empty title={v.title} hint={v.hint} />;
+  }
+  const contenu = typeof children === "function" ? children(data) : children;
+  // Données déjà là mais rechargement en échec : l'erreur s'affiche au-dessus des dernières valeurs.
+  if (!error) return <>{contenu}</>;
+  return (
+    <>
+      <div className="mb-4">
+        <ErrorBox error={error} onRetry={onRetry} />
+      </div>
+      {contenu}
+    </>
   );
 }
 

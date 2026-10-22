@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
 import type { ExpenseCategory } from "@/lib/finance-types";
@@ -143,7 +143,7 @@ function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id:
 }
 
 function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: c, mutate } = useApi<Commitment>(`/finance/commitments/${id}`);
+  const { data: c, error, mutate } = useApi<Commitment>(`/finance/commitments/${id}`);
   // Solder un engagement : finance et direction (le noyau refuse les autres profils).
   const { data: me } = useApi<{ profiles: string[] }>("/auth/me");
   const soldeur = Boolean(me?.profiles.some((p) => p === "finance" || p === "direction"));
@@ -161,7 +161,7 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
   }
   return (
     <Modal open wide title={c ? `${c.name} · ${c.object}` : "Engagement"} onClose={onClose}>
-      {!c ? <Loading /> : (
+      {!c ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-4 text-sm">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

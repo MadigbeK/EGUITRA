@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { analyticLabel, useAxes } from "@/components/finance/AnalyticFields";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Account, AnalyticAccount } from "@/lib/finance-types";
@@ -19,8 +19,8 @@ export default function AxesPage() {
   const [archived, setArchived] = useState(false);
   const [editing, setEditing] = useState<AnalyticAccount | "new" | null>(null);
   const { data: activities, error, mutate: refreshActivities } = useApi<AnalyticAccount[]>(`/finance/analytic-accounts?plan=activite${archived ? "&active=all" : ""}`);
-  const { data: centers, mutate: refreshCenters } = useApi<AnalyticAccount[]>(`/finance/analytic-accounts?plan=centre_cout${archived ? "&active=all" : ""}`);
-  const { data: axes, mutate: refreshAxes } = useAxes();
+  const { data: centers, error: erreurCentres, mutate: refreshCenters } = useApi<AnalyticAccount[]>(`/finance/analytic-accounts?plan=centre_cout${archived ? "&active=all" : ""}`);
+  const { data: axes, error: erreurAxes, mutate: refreshAxes } = useAxes();
   const rows = tab === "activite" ? activities : centers;
 
   function refresh() {
@@ -51,7 +51,6 @@ export default function AxesPage() {
         value={tab}
         onChange={setTab}
       />
-      {error && <ErrorBox error={error} />}
       {tab !== "metiers" && (
         <Card padded={false}>
           <div className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
@@ -65,7 +64,7 @@ export default function AxesPage() {
             </label>
           </div>
           {!rows ? (
-            <Loading />
+            <Etat error={tab === "activite" ? error : erreurCentres} onRetry={refresh} />
           ) : (
             <DataTable
               rows={rows}
@@ -88,7 +87,7 @@ export default function AxesPage() {
       )}
       {tab === "metiers" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {!axes && <Loading />}
+          {!axes && <Etat error={erreurAxes} onRetry={() => refreshAxes()} />}
           {axes
             ?.filter((a) => !a.managed)
             .map((axis) => (

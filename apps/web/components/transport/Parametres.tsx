@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt } from "@/lib/format";
 import { SHORTAGE_RULES, parseNumber, type AccountRef, type ClientTerms, type Message, type Product, type Ref, type ShortageRule, type TransportSettings } from "./types";
@@ -26,8 +26,8 @@ function useSend(onDone: () => void) {
 
 /** Paramétrage du transport : manquants, conditions des clients, produits transportés. */
 export function Parametres() {
-  const { data: settings, mutate } = useApi<TransportSettings>("/transport/settings");
-  if (!settings) return <Loading />;
+  const { data: settings, error, mutate } = useApi<TransportSettings>("/transport/settings");
+  if (!settings) return <Etat error={error} onRetry={() => mutate()} />;
   return (
     <div className="space-y-6">
       {!settings.can_edit && <Notice tone="accent">Paramètres tenus par la finance : consultation seulement.</Notice>}
@@ -62,7 +62,7 @@ const RATE_UNIT: Record<TaxRule["base"], string> = { delivered: "GNF par m³", l
 
 /** Barème des taxes spécifiques : chaque taxe applicable devient une ligne des rotations. */
 function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
-  const { data, mutate } = useApi<{ taxes: TaxRule[]; natures: Choice[]; bases: Choice[] }>("/transport/taxes");
+  const { data, error, mutate } = useApi<{ taxes: TaxRule[]; natures: Choice[]; bases: Choice[] }>("/transport/taxes");
   const [editing, setEditing] = useState<TaxRule | "new" | null>(null);
   const { message, send } = useSend(() => void mutate());
   const label = (list: Choice[] | undefined, code: string) => list?.find((c) => c.code === code)?.label ?? code;
@@ -73,7 +73,7 @@ function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
         Calculées sur chaque rotation saisie ou validée (une rotation facturée garde les siennes). Une taxe refacturée s&apos;ajoute à la facture du
         client. Les taxes payées hors barème se saisissent sur la rotation (« Autres taxes payées »).
       </p>
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data.taxes} rowKey={(t) => t.id} empty="Aucune taxe au barème." onRowClick={canEdit ? (t) => setEditing(t) : undefined} columns={[
           { key: "name", label: "Taxe", render: (t) => <span className={t.active ? "" : "text-muted line-through"}>{t.name}</span> },
           { key: "nature", label: "Nature", render: (t) => label(data.natures, t.nature) },
@@ -244,12 +244,12 @@ function Manquants({ settings, onSaved }: { settings: TransportSettings; onSaved
 const ruleLabel = (rule: ShortageRule | null) => SHORTAGE_RULES.find((r) => r.value === rule)?.label;
 
 function ConditionsClients({ canEdit }: { canEdit: boolean }) {
-  const { data, mutate } = useApi<ClientTerms[]>("/transport/clients");
+  const { data, error, mutate } = useApi<ClientTerms[]>("/transport/clients");
   const { message, send } = useSend(() => void mutate());
   return (
     <Card title="Conditions de manquant des clients" padded={false}>
       {message && <div className="p-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data} rowKey={(c) => c.id} empty="Aucun client du transport (tarif ou rotation)." columns={[
           { key: "name", label: "Client" },
           { key: "shortage_tolerance", label: "Tolérance (%)", render: (c) => (
@@ -268,14 +268,14 @@ function ConditionsClients({ canEdit }: { canEdit: boolean }) {
 
 /** Produits transportés : le code est la clé des saisies de Rotations, il ne change plus une fois créé. */
 function Produits({ canEdit }: { canEdit: boolean }) {
-  const { data, mutate } = useApi<Product[]>("/transport/products");
+  const { data, error, mutate } = useApi<Product[]>("/transport/products");
   const [f, setF] = useState({ name: "", code: "" });
   const { message, send } = useSend(() => void mutate());
   const patch = (p: Product, body: Record<string, unknown>, ok: string) => void send("PATCH", `/transport/products/${p.id}`, body, ok);
   return (
     <Card title="Produits transportés" padded={false}>
       {message && <div className="p-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data} rowKey={(p) => p.id} empty="Aucun produit." columns={[
           { key: "name", label: "Produit", render: (p) => <Input disabled={!canEdit} className="w-48" defaultValue={p.name} onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== p.name && patch(p, { name: e.target.value.trim() }, "Produit renommé.")} /> },
           { key: "code", label: "Code", render: (p) => <span className="font-mono text-xs">{p.code}</span> },

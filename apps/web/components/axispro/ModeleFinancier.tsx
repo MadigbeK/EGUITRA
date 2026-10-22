@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Calculator, Coins, Download, Landmark, Percent, Plus, Scale, Target, Trash2, TrendingUp } from "@/components/icons";
-import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Field, GAMME, Kpi, Loading, Notice, Segmented, Textarea, cx } from "@/components/ui";
+import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, GAMME, Kpi, Loading, Notice, Segmented, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { LineKind, ModelRow, PlanLine, PlanPayload, Stress } from "@/lib/axispro-types";
 import { fmtPct, fmtShort } from "@/lib/format";
@@ -102,7 +102,7 @@ const PARAMETRES: Array<{ champ: string; titre: string; aide?: string }> = [
 export function ModeleFinancier({ dossierId, reference }: { dossierId: number; reference: string }) {
   const chemin = `/axispro/dossiers/${dossierId}/plan`;
   const { data, error, mutate } = useApi<PlanPayload>(chemin);
-  const { data: stress, mutate: recalculer } = useApi<Stress | null>(data?.lines.length ? `${chemin}/stress` : null);
+  const { data: stress, error: erreurStress, mutate: recalculer } = useApi<Stress | null>(data?.lines.length ? `${chemin}/stress` : null);
   const [message, setMessage] = useState<string | null>(null);
   const [vue, setVue] = useState<Vue>("statements");
 
@@ -197,7 +197,7 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
               <PlanInitial plan={a.financing_plan} />
             </Card>
             <Card title="Sensibilités et scénarios" className="xl:col-span-7">
-              {!stress ? <Loading label="Calcul des sensibilités…" /> : <Sensibilites s={stress} />}
+              {!stress ? <Etat error={erreurStress} onRetry={() => recalculer()} label="Calcul des sensibilités…" /> : <Sensibilites s={stress} />}
             </Card>
           </div>
         </>

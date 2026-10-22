@@ -8,7 +8,7 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
-import { cx } from "@/components/ui";
+import { ErrorBox, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
@@ -208,7 +208,7 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
   const router = useRouter();
-  const { data, mutate } = useApi<Notifications>(open ? "/portail/notifications" : null);
+  const { data, error, mutate } = useApi<Notifications>(open ? "/portail/notifications" : null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -240,7 +240,14 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
             {count > 0 && <button type="button" onClick={() => lire()} className="text-[12.5px] font-semibold text-accent hover:underline">Tout marquer comme lu</button>}
           </div>
           <ul className="max-h-[420px] overflow-y-auto p-1.5">
-            {!data && <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>}
+            {!data &&
+              (error ? (
+                <li className="p-1.5">
+                  <ErrorBox error={error} onRetry={() => mutate()} />
+                </li>
+              ) : (
+                <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>
+              ))}
             {data?.items.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Aucune notification.</li>}
             {data?.items.slice(0, 12).map((n) => {
               const I = KIND_ICON[n.kind] ?? Bell;
@@ -331,7 +338,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   const params = useSearchParams();
   const router = useRouter();
   const [tiroir, setTiroir] = useState(false);
-  const { data: espace, mutate } = useApi<Espace>("/portail/espace", { refreshInterval: 60_000 });
+  const { data: espace, error: erreurEspace, mutate } = useApi<Espace>("/portail/espace", { refreshInterval: 60_000 });
   const [choisi, setChoisi] = useState<number | null>(null);
 
   useEffect(() => {
@@ -436,7 +443,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
             </div>
           )}
           <main key={pathname} className="n-page mx-auto min-w-0 max-w-[1240px] px-4 pb-28 pt-6 sm:px-6 md:pt-8 lg:px-10 lg:pb-12">
-            {children}
+            {erreurEspace && !espace ? <ErrorBox error={erreurEspace} onRetry={rafraichir} /> : children}
           </main>
         </div>
 

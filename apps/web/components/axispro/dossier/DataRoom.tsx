@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, FileStack, Printer } from "@/components/icons";
-import { Badge, Button, Card, DataTable, FileButton, Input, Kpi, Loading, ProgressBar, Segmented } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, FileButton, Input, Kpi, ProgressBar, Segmented } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, type DocFile, type DossierDetail, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, pluriel } from "@/lib/format";
@@ -11,7 +11,7 @@ import { arrondi, useRetour } from "./commun";
 /** Data room : 42 pièces standard, disponibles par dépôt ou par la preuve d'un critère rattaché,
  * validité des pièces, versions, data room compressée et liste des pièces à fournir. */
 export function DataRoom({ d }: { d: DossierDetail }) {
-  const { data, mutate } = useApi<{ standard: StandardDoc[]; files: DocFile[]; completeness: number }>(`/axispro/dossiers/${d.id}/documents`);
+  const { data, error, mutate } = useApi<{ standard: StandardDoc[]; files: DocFile[]; completeness: number }>(`/axispro/dossiers/${d.id}/documents`);
   const [filtre, setFiltre] = useState<"toutes" | "dues" | "manquantes">("toutes");
   const { agir, bandeau } = useRetour();
   async function upload(file: File, typeId?: number) {
@@ -25,7 +25,7 @@ export function DataRoom({ d }: { d: DossierDetail }) {
     const r = await agir(() => apiSend("PATCH", `/axispro/documents/${id}`, body));
     if (r !== undefined) void mutate();
   }
-  if (!data) return <Loading />;
+  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
   // Une pièce déposée avant la décision verrouillée entre dans le score scellé : elle ne change plus
   // avant une nouvelle révision ; une pièce reçue après la décision se traite librement.
   const figee = (s: StandardDoc) => Boolean(d.locked_review) && !s.after_lock;

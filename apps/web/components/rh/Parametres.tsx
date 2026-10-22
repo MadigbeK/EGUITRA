@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
@@ -16,12 +16,12 @@ type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "ferie
  * chacune (société choisie en tête, défaut : la société de travail).
  */
 export function ParametresRh() {
-  const { data: meta, mutate: rafraichirMeta } = useMeta();
+  const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useMeta();
   const [societe, setSociete] = useState<number | null>(null);
   const { data: settings, error, mutate } = useApi<Settings>(avecSociete("/rh/settings", societe));
   const [onglet, setOnglet] = useState<Onglet>("paie");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
-  if (!settings || !meta) return <Loading label="Chargement des paramètres…" />;
+  if (!settings || !meta) return <Etat error={erreurMeta} onRetry={() => rafraichirMeta()} label="Chargement des paramètres…" />;
   const ecrit = meta.can_write;
   return (
     <div>

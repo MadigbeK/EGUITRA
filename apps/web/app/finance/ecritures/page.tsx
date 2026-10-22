@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Field, Input, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -26,7 +26,7 @@ const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; 
 };
 
 export default function EntriesPage() {
-  const { data, mutate } = useApi<Paged<MoveSummary>>("/finance/moves?type=entry&limit=100");
+  const { data, error, mutate } = useApi<Paged<MoveSummary>>("/finance/moves?type=entry&limit=100");
   const { data: me } = useApi<Me>("/auth/me");
   // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes ».
   const libre = me?.rights?.free_accounts === true;
@@ -52,7 +52,7 @@ export default function EntriesPage() {
       )}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={data.items}

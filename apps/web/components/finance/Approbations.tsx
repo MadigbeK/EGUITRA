@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, X } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
 
@@ -42,8 +42,8 @@ const CHEMINS: Partial<Record<Onglet, string>> = {
 export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
   const demandes = mode === "demandes";
   const [tab, setTab] = useState<Onglet>(demandes ? "pending" : "inbox");
-  const { data: inbox, mutate: refreshInbox } = useApi<Req[]>(demandes ? null : "/approvals/inbox");
-  const { data: list, mutate } = useApi<Req[]>(CHEMINS[tab] ?? null);
+  const { data: inbox, error: erreurCorbeille, mutate: refreshInbox } = useApi<Req[]>(demandes ? null : "/approvals/inbox");
+  const { data: list, error: erreurListe, mutate } = useApi<Req[]>(CHEMINS[tab] ?? null);
   const [selected, setSelected] = useState<number | null>(null);
   const rows = tab === "inbox" ? inbox : list;
   const onglets: Array<{ key: Onglet; label: string; count?: number }> = demandes
@@ -69,7 +69,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
       {tab === "rules" ? (
         <Rules />
       ) : !rows ? (
-        <Loading />
+        <Etat error={tab === "inbox" ? erreurCorbeille : erreurListe} onRetry={() => void (tab === "inbox" ? refreshInbox() : mutate())} />
       ) : rows.length === 0 ? (
         <Card>
           <Empty title={tab === "inbox" ? "Rien à valider" : "Aucune demande"} hint={tab === "inbox" ? "Les pièces soumises à votre profil apparaîtront ici." : demandes ? "Les pièces et engagements que vous soumettez apparaîtront ici." : undefined} />
@@ -97,7 +97,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
 }
 
 function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => void; onDecided: () => void }) {
-  const { data: r, mutate } = useApi<Req>(`/approvals/${id}`);
+  const { data: r, error: erreurChargement, mutate } = useApi<Req>(`/approvals/${id}`);
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -134,7 +134,7 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
       }
     >
       {!r ? (
-        <Loading />
+        <Etat error={erreurChargement} onRetry={() => mutate()} />
       ) : (
         <div className="space-y-4">
           {error && <Notice tone="danger">{error}</Notice>}
@@ -185,7 +185,7 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
 }
 
 function Rules() {
-  const { data: rules, mutate } = useApi<Rule[]>("/approvals/rules");
+  const { data: rules, error, mutate } = useApi<Rule[]>("/approvals/rules");
   const [form, setForm] = useState({ name: "", document: "in_invoice", sequence: "1", min_amount: "0", max_amount: "", account_prefix: "", approver_profile: "finance" });
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   async function add() {
@@ -202,7 +202,7 @@ function Rules() {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card padded={false}>
         {!rules ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={rules}

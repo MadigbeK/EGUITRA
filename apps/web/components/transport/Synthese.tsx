@@ -1,18 +1,18 @@
 "use client";
 
 import { CheckCircle2, Droplet, Percent, Receipt, Smartphone, TrendingUp, TriangleAlert } from "@/components/icons";
-import { Card, Compteur, IconTile, Kpi, Loading, Repartition } from "@/components/ui";
+import { Card, Compteur, Etat, IconTile, Kpi, Repartition } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 /** Chiffres du mois : volume livré au compteur, état de la flotte, chiffre d'affaires, marge, à facturer, saisies. */
 export function Synthese() {
   // margin_min : marge minimale de la règle d'alerte (30 % par défaut) ; null : seuil à 0, la marge n'est pas jugée.
-  const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; margin_min: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
+  const { data: summary, error, mutate } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; margin_min: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
   const sousMinimum = Boolean(summary && summary.margin_rate !== null && summary.margin_min !== null && summary.margin_rate < summary.margin_min);
   return (
     <>
-      {!summary ? <Loading /> : (
+      {!summary ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
           {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne ; l'état de la flotte dessous. */}
           <section className="min-w-0 rounded-2xl border border-line bg-panel p-6 shadow-[var(--ombre-carte)] xl:col-span-5">
@@ -70,10 +70,10 @@ interface Controle { code: string; label: string; ok: boolean; count: number; it
 
 /** Contrôles permanents de la flotte et des rotations (vigilance, non bloquants). */
 export function Controles() {
-  const { data } = useApi<Controle[]>("/transport/controls");
+  const { data, error, mutate } = useApi<Controle[]>("/transport/controls");
   return (
     <Card title="Contrôles de la flotte et des rotations">
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <ul className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
           {data.map((c) => (
             <li key={c.code} className="flex items-start gap-3 border-b border-line py-2.5">

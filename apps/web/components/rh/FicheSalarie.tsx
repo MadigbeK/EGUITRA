@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronLeft, Download, FileText, LogOut, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
@@ -16,12 +16,12 @@ type Onglet = "identite" | "contrat" | "conges" | "documents" | "paie";
 /** Fiche d'un salarié : identité, contrat et rémunération, congés, documents, paie. */
 export function FicheSalarie({ id }: { id: string }) {
   const { data: e, error, mutate } = useApi<Employee>(`/rh/employees/${id}`);
-  const { data: meta } = useApi<Meta>("/rh/meta");
+  const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useApi<Meta>("/rh/meta");
   const [onglet, setOnglet] = useState<Onglet>("identite");
   const [edition, setEdition] = useState(false);
   const [sortie, setSortie] = useState(false);
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
-  if (!e || !meta) return <Loading label="Chargement du dossier…" />;
+  if (!e || !meta) return <Etat error={erreurMeta} onRetry={() => rafraichirMeta()} label="Chargement du dossier…" />;
   const ecrit = meta.can_write;
   const rafraichir = () => void mutate();
 

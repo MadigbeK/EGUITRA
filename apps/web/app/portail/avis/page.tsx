@@ -103,7 +103,7 @@ export default function VotreAvis() {
   const evenementVoulu = Number(params.get("evenement")) || null;
   const { espace, dossier } = usePortail();
   const { data: historique, error, mutate } = useApi<FeedbackRow[]>("/portail/avis");
-  const { data: evenements } = useApi<EventRow[]>("/portail/evenements");
+  const { data: evenements, error: erreurEvenements, mutate: majEvenements } = useApi<EventRow[]>("/portail/evenements");
 
   const [dossierId, setDossierId] = useState<number | null>(null);
   const [sujet, setSujet] = useState<FeedbackTopic>(evenementVoulu ? "event" : "global");
@@ -243,7 +243,7 @@ export default function VotreAvis() {
 
                 {sujet === "event" &&
                   (passes.length === 0 ? (
-                    <Notice tone="neutral">{evenements ? "Vous n'avez participé à aucun événement du cabinet ces deux derniers mois." : "Chargement de vos événements…"}</Notice>
+                    !evenements && erreurEvenements ? <ErrorBox error={erreurEvenements} onRetry={() => majEvenements()} /> : <Notice tone="neutral">{evenements ? "Vous n'avez participé à aucun événement du cabinet ces deux derniers mois." : "Chargement de vos événements…"}</Notice>
                   ) : (
                     <Field label="Événement">
                       <Select
