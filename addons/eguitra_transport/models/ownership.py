@@ -159,7 +159,7 @@ class EguitraTransportOwnerStatement(models.Model):
     basis = fields.Selection(OWNER_COST_BASES, "Base des charges", readonly=True)
     rotation_ids = fields.Many2many("eguitra.transport.rotation", "eguitra_transport_owner_statement_rotation_rel",
                                     "statement_id", "rotation_id", "Rotations", readonly=True)
-    rotation_count = fields.Integer("Rotations", readonly=True)
+    rotation_count = fields.Integer("Nombre de rotations", readonly=True)
     volume = fields.Float("Volume livré (m³)", digits=(12, 3), readonly=True)
     revenue = fields.Monetary("Chiffre d'affaires du transport", readonly=True)
     taxes_rebilled = fields.Monetary("Taxes refacturées", readonly=True)

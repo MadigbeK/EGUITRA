@@ -331,8 +331,11 @@ un module comme AxisPro Suite et Finance »).
   registre « rh » sans la coque correspondante) ; la session RH est prévenue. Ensuite `/transport`
   apparaîtra sur la recette ; l'écran Finance > Transport de la version en service porte déjà les
   relevés des propriétaires et les coûts standard.
-- Production : après validation du gérant, par `infra/release.sh` (`eguitra_transport` à mettre à
-  jour, application web à reconstruire).
+- Production : en service depuis la version 20261022-1012 (22 octobre, 10 h 13 ; code e396cf6 ;
+  release.sh mené par la session AXISPRO SUITE après 342 tests sans échec et une répétition générale
+  sur une copie de la base de production). Vérifié : /transport et sa connexion, transport
+  19.0.1.3.0, quatre nouvelles tables, piste d'audit des onze modèles du transport, journal sans
+  erreur, double authentification toujours coupée (mfa_required = 0, demande du gérant).
 - Constat à traiter à part : la passerelle web refuse toute route `/auth/*`, si bien que
   `useSaisieLibre()` et `useAchatsSeul()` (lecture de `/auth/me` dans le navigateur, `lib/api-client.ts`)
   reçoivent toujours 404 ; l'écran Transport lit donc ses droits dans `/transport/settings`
