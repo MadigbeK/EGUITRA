@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Types d'absence par défaut ; durées et règles modifiables dans les paramètres RH. -->
+<odoo noupdate="1">
+    <record id="leave_annual" model="eguitra.rh.leave.type">
+        <field name="code">CP</field><field name="name">Congé annuel</field>
+        <field name="deducts_balance" eval="True"/><field name="sequence">1</field>
+    </record>
+    <record id="leave_sick" model="eguitra.rh.leave.type">
+        <field name="code">MAL</field><field name="name">Maladie</field>
+        <field name="needs_document" eval="True"/><field name="sequence">2</field>
+    </record>
+    <record id="leave_maternity" model="eguitra.rh.leave.type">
+        <field name="code">MAT</field><field name="name">Congé de maternité</field>
+        <field name="needs_document" eval="True"/><field name="sequence">3</field>
+    </record>
+    <record id="leave_birth" model="eguitra.rh.leave.type">
+        <field name="code">NAIS</field><field name="name">Naissance d'un enfant</field>
+        <field name="max_days">3</field><field name="sequence">4</field>
+    </record>
+    <record id="leave_family" model="eguitra.rh.leave.type">
+        <field name="code">EVT</field><field name="name">Événement familial (mariage, décès)</field>
+        <field name="max_days">5</field><field name="sequence">5</field>
+    </record>
+    <record id="leave_permission" model="eguitra.rh.leave.type">
+        <field name="code">PERM</field><field name="name">Permission exceptionnelle</field>
+        <field name="max_days">3</field><field name="sequence">6</field>
+    </record>
+    <record id="leave_training" model="eguitra.rh.leave.type">
+        <field name="code">FORM</field><field name="name">Formation</field><field name="sequence">7</field>
+    </record>
+    <record id="leave_unpaid" model="eguitra.rh.leave.type">
+        <field name="code">SS</field><field name="name">Congé sans solde</field>
+        <field name="paid" eval="False"/><field name="sequence">8</field>
+    </record>
+    <record id="leave_unjustified" model="eguitra.rh.leave.type">
+        <field name="code">ABSI</field><field name="name">Absence injustifiée</field>
+        <field name="paid" eval="False"/><field name="sequence">9</field>
+    </record>
+</odoo>

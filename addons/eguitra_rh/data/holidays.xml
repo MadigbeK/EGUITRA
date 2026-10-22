@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jours fériés de la Guinée (deux sociétés). Fêtes musulmanes : dates estimées, à corriger dans les
+     paramètres RH dès l'annonce officielle ; les années suivantes s'ajoutent dans les paramètres. -->
+<odoo noupdate="1">
+    <record id="holiday_2026_01_01" model="eguitra.rh.holiday">
+        <field name="date">2026-01-01</field><field name="name">Jour de l'An</field>
+    </record>
+    <record id="holiday_2026_04_06" model="eguitra.rh.holiday">
+        <field name="date">2026-04-06</field><field name="name">Lundi de Pâques</field>
+    </record>
+    <record id="holiday_2026_05_01" model="eguitra.rh.holiday">
+        <field name="date">2026-05-01</field><field name="name">Fête du travail</field>
+    </record>
+    <record id="holiday_2026_05_25" model="eguitra.rh.holiday">
+        <field name="date">2026-05-25</field><field name="name">Journée de l'Afrique</field>
+    </record>
+    <record id="holiday_2026_08_15" model="eguitra.rh.holiday">
+        <field name="date">2026-08-15</field><field name="name">Assomption</field>
+    </record>
+    <record id="holiday_2026_10_02" model="eguitra.rh.holiday">
+        <field name="date">2026-10-02</field><field name="name">Fête de l'indépendance</field>
+    </record>
+    <record id="holiday_2026_11_01" model="eguitra.rh.holiday">
+        <field name="date">2026-11-01</field><field name="name">Toussaint</field>
+    </record>
+    <record id="holiday_2026_12_25" model="eguitra.rh.holiday">
+        <field name="date">2026-12-25</field><field name="name">Noël</field>
+    </record>
+    <record id="holiday_2027_01_01" model="eguitra.rh.holiday">
+        <field name="date">2027-01-01</field><field name="name">Jour de l'An</field>
+    </record>
+    <record id="holiday_2027_03_10" model="eguitra.rh.holiday">
+        <field name="date">2027-03-10</field><field name="name">Aïd el-Fitr (date estimée, à confirmer)</field>
+    </record>
+    <record id="holiday_2027_03_29" model="eguitra.rh.holiday">
+        <field name="date">2027-03-29</field><field name="name">Lundi de Pâques</field>
+    </record>
+    <record id="holiday_2027_05_01" model="eguitra.rh.holiday">
+        <field name="date">2027-05-01</field><field name="name">Fête du travail</field>
+    </record>
+    <record id="holiday_2027_05_17" model="eguitra.rh.holiday">
+        <field name="date">2027-05-17</field><field name="name">Tabaski (date estimée, à confirmer)</field>
+    </record>
+    <record id="holiday_2027_05_25" model="eguitra.rh.holiday">
+        <field name="date">2027-05-25</field><field name="name">Journée de l'Afrique</field>
+    </record>
+    <record id="holiday_2027_08_15" model="eguitra.rh.holiday">
+        <field name="date">2027-08-15</field><field name="name">Assomption et Maouloud (date estimée, à confirmer)</field>
+    </record>
+    <record id="holiday_2027_10_02" model="eguitra.rh.holiday">
+        <field name="date">2027-10-02</field><field name="name">Fête de l'indépendance</field>
+    </record>
+    <record id="holiday_2027_11_01" model="eguitra.rh.holiday">
+        <field name="date">2027-11-01</field><field name="name">Toussaint</field>
+    </record>
+    <record id="holiday_2027_12_25" model="eguitra.rh.holiday">
+        <field name="date">2027-12-25</field><field name="name">Noël</field>
+    </record>
+</odoo>

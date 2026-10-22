@@ -1,0 +1,49 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_rh_settings_rh,paramètres de paie RH,model_eguitra_rh_settings,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_settings_admin,paramètres de paie administration,model_eguitra_rh_settings,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_settings_direction,paramètres de paie direction,model_eguitra_rh_settings,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_tax_bracket_rh,barème de la RTS RH,model_eguitra_rh_tax_bracket,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_tax_bracket_admin,barème de la RTS administration,model_eguitra_rh_tax_bracket,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_tax_bracket_direction,barème de la RTS direction,model_eguitra_rh_tax_bracket,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_rubric_rh,rubriques de paie RH,model_eguitra_rh_rubric,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_rubric_admin,rubriques de paie administration,model_eguitra_rh_rubric,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_rubric_direction,rubriques de paie direction,model_eguitra_rh_rubric,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_department_rh,départements RH,model_eguitra_rh_department,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_department_admin,départements administration,model_eguitra_rh_department,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_department_direction,départements direction,model_eguitra_rh_department,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_holiday_rh,jours fériés RH,model_eguitra_rh_holiday,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_holiday_admin,jours fériés administration,model_eguitra_rh_holiday,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_holiday_direction,jours fériés direction,model_eguitra_rh_holiday,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_leave_type_rh,types d'absence RH,model_eguitra_rh_leave_type,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_leave_type_admin,types d'absence administration,model_eguitra_rh_leave_type,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_leave_type_direction,types d'absence direction,model_eguitra_rh_leave_type,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_employee_rh,salariés RH,model_eguitra_rh_employee,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_employee_admin,salariés administration,model_eguitra_rh_employee,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_employee_direction,salariés direction,model_eguitra_rh_employee,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_employee_line_rh,éléments fixes RH,model_eguitra_rh_employee_line,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_employee_line_admin,éléments fixes administration,model_eguitra_rh_employee_line,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_employee_line_direction,éléments fixes direction,model_eguitra_rh_employee_line,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_document_rh,documents du personnel RH,model_eguitra_rh_document,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_document_admin,documents du personnel administration,model_eguitra_rh_document,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_document_direction,documents du personnel direction,model_eguitra_rh_document,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_salary_change_rh,historique du salaire RH,model_eguitra_rh_salary_change,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_salary_change_admin,historique du salaire administration,model_eguitra_rh_salary_change,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_salary_change_direction,historique du salaire direction,model_eguitra_rh_salary_change,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_leave_rh,absences RH,model_eguitra_rh_leave,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_leave_admin,absences administration,model_eguitra_rh_leave,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_leave_direction,absences direction,model_eguitra_rh_leave,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_advance_rh,avances et prêts RH,model_eguitra_rh_advance,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_advance_admin,avances et prêts administration,model_eguitra_rh_advance,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_advance_direction,avances et prêts direction,model_eguitra_rh_advance,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_payroll_rh,paies RH,model_eguitra_rh_payroll,eguitra_base.group_profile_rh,1,1,1,0
+access_rh_payroll_admin,paies administration,model_eguitra_rh_payroll,eguitra_base.group_profile_admin,1,1,1,0
+access_rh_payroll_direction,paies direction,model_eguitra_rh_payroll,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_payslip_rh,bulletins RH,model_eguitra_rh_payslip,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_payslip_admin,bulletins administration,model_eguitra_rh_payslip,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_payslip_direction,bulletins direction,model_eguitra_rh_payslip,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_payslip_line_rh,lignes de bulletin RH,model_eguitra_rh_payslip_line,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_payslip_line_admin,lignes de bulletin administration,model_eguitra_rh_payslip_line,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_payslip_line_direction,lignes de bulletin direction,model_eguitra_rh_payslip_line,eguitra_base.group_profile_direction,1,0,0,0
+access_rh_payslip_input_rh,éléments variables RH,model_eguitra_rh_payslip_input,eguitra_base.group_profile_rh,1,1,1,1
+access_rh_payslip_input_admin,éléments variables administration,model_eguitra_rh_payslip_input,eguitra_base.group_profile_admin,1,1,1,1
+access_rh_payslip_input_direction,éléments variables direction,model_eguitra_rh_payslip_input,eguitra_base.group_profile_direction,1,0,0,0
