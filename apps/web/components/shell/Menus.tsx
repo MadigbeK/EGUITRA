@@ -70,7 +70,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/analyse/risques": "Risques et retards d'exécution",
 };
 
-const SENS_PASTILLE: Record<NavBadge, string> = { approvals: " en attente", controls: " contrôle(s) en anomalie", alerts: " alerte(s)" };
+const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" en attente", " en attente"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };
 
 function Compte({ n, severe, sens }: { n: number; severe: boolean; sens: string }) {
   return (
@@ -83,7 +83,7 @@ function Compte({ n, severe, sens }: { n: number; severe: boolean; sens: string 
 
 function pastilleDe(item: NavItem, badges?: Pastilles) {
   const p = item.badge ? badges?.[item.badge] : undefined;
-  return p && p.count > 0 ? { ...p, sens: SENS_PASTILLE[item.badge!] } : null;
+  return p && p.count > 0 ? { ...p, sens: SENS_PASTILLE[item.badge!][p.count > 1 ? 1 : 0] } : null;
 }
 
 /**

@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Targe
 import { Badge, Button, Card, DataTable, FileButton, Input, Loading, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
 import { PRIORITE_TON, arrondi, couleurScore, useRetour } from "./commun";
 
@@ -151,7 +151,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           <Select value={focus} onChange={(e) => setFocus(e.target.value as Focus)} options={FOCUS} />
         </div>
         <p className="mt-2 text-[12.5px] text-muted">
-          {lignes.length} critère(s) affiché(s) sur {criteria.length}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.
+          {pluriel(lignes.length, "critère affiché", "critères affichés")} sur {criteria.length}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.
         </p>
       </Card>
 
@@ -198,7 +198,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           onClose={() => setApercu(null)}
           footer={
             <Button variant="primary" disabled={apercu.result.errors.length > 0 || apercu.result.changes.length === 0} onClick={appliquer}>
-              <FileUp className="h-4 w-4" /> Appliquer {apercu.result.changes.length} modification(s)
+              <FileUp className="h-4 w-4" /> Appliquer {pluriel(apercu.result.changes.length, "modification")}
             </Button>
           }
         >

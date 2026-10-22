@@ -7,7 +7,7 @@ import { Rosace } from "@/components/guilloche";
 import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, Tabs, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { RECO, type DossierDetail, type Message } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtGNF, pluriel } from "@/lib/format";
 import { Financements } from "@/components/axispro/Financements";
 import { ModeleFinancier } from "@/components/axispro/ModeleFinancier";
 import { PlanActions } from "@/components/axispro/PlanActions";
@@ -85,7 +85,7 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
                 <div className="text-white/85">Besoin de financement</div>
                 <div className="font-semibold tabular">{montant(d, d.financing_need)}</div>
               </div>
-              <div className="text-white/85">{d.progress.assessed} critère(s) évalué(s) sur {d.progress.criteria}</div>
+              <div className="text-white/85">{pluriel(d.progress.assessed, "critère évalué", "critères évalués")} sur {d.progress.criteria}</div>
             </div>
           </div>
         </div>

@@ -10,7 +10,7 @@ import { Rentabilite } from "@/components/transport/Rentabilite";
 import { Taxes } from "@/components/transport/Taxes";
 import { parseNumber, type Ref, type Referentials, type TransportSettings } from "@/components/transport/types";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 interface Rotation {
   id: number;
@@ -75,7 +75,7 @@ export default function TransportPage() {
             <Compteur value={summary.volume} unit="m³" className="mt-5 text-[42px] text-ink sm:text-[50px]" />
             {summary.shortage_excess.count > 0 && (
               <p className="mt-2 text-[13px] font-medium text-danger">
-                {fmtDec(summary.shortage_excess.volume)} m³ manquants au-delà de la tolérance sur {summary.shortage_excess.count} rotation(s)
+                {fmtDec(summary.shortage_excess.volume)} m³ manquants au-delà de la tolérance sur {pluriel(summary.shortage_excess.count, "rotation")}
                 {summary.shortage_excess.value ? `, ${fmtGNF(summary.shortage_excess.value)}` : ""}
               </p>
             )}
@@ -104,7 +104,7 @@ export default function TransportPage() {
               tone={summary.margin_rate === null || summary.margin_min === null ? "neutral" : sousMinimum ? "warn" : "ok"}
               hint={`Taux de marge ${fmtPct(summary.margin_rate)}, ${summary.margin_min !== null ? `minimum ${fmtPct(summary.margin_min, 0)}` : "seuil non fixé"}`}
             />
-            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={`${summary.to_invoice.count} rotation(s) validée(s)`} />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
             <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>
         </div>
@@ -138,9 +138,9 @@ function Rotations() {
         setMessage({ tone: "ok", text: "Rotations validées." });
       } else {
         const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
-        const claims = res.claims.length ? ` ${res.claims.length} créance(s) sur chauffeur en opérations diverses, à valider dans Journaux et OD.` : "";
+        const claims = res.claims.length ? ` ${pluriel(res.claims.length, "créance sur chauffeur", "créances sur chauffeur")} en opérations diverses, à valider dans Journaux et OD.` : "";
         const unclaimed = res.unclaimed.length ? ` Sans fiche tiers, créance à passer à la main : ${res.unclaimed.map((u) => `${u.driver?.name ?? "chauffeur non renseigné"} (${u.rotation}, ${fmtGNF(u.amount)})`).join(", ")}.` : "";
-        setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${res.invoices.length} facture(s) créée(s) en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
+        setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${pluriel(res.invoices.length, "facture créée", "factures créées")} en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
       }
       setSelected([]);
       void mutate();

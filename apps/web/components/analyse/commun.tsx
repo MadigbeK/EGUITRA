@@ -14,7 +14,7 @@ import { Badge, Button, Delta, Empty, Input, Kpi as KpiCarte, Notice, Segmented,
 import { apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import type { EntiteSociete } from "@/lib/config";
-import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { COULEUR, fmtValeur, moisCourt } from "@/components/analyse/charts/commun";
 
 /* ─── Valeurs tolérantes ───────────────────────────────────────────────── */
@@ -51,11 +51,6 @@ export function gnfOu(v: number | null | undefined): string {
 /** « 38 j » ou « – ». */
 export function joursOu(v: number | null | undefined, digits = 0): string {
   return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${v.toLocaleString("fr-FR", { maximumFractionDigits: digits })} j`;
-}
-
-/** Pluriel simple. */
-export function pluriel(n: number, un: string, plusieurs = `${un}s`): string {
-  return `${fmtInt(n)} ${n > 1 ? plusieurs : un}`;
 }
 
 /* ─── Contexte ─────────────────────────────────────────────────────────── */
@@ -703,4 +698,4 @@ export function LienFiche({ href, children, className }: { href?: string | null;
   );
 }
 
-export { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, fmtValeur, moisCourt };
+export { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, fmtValeur, moisCourt, pluriel };

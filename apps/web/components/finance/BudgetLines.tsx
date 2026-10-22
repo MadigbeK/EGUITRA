@@ -5,7 +5,7 @@ import { Download, FileUp, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, Segmented, Select, type Tone } from "@/components/ui";
 import { useAxes } from "./AnalyticFields";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import { MONTHS_FR, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { MONTHS_FR, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 type Nature = "income" | "expense" | "capex";
 type View = "lignes" | "activite" | "centre_cout";
@@ -96,7 +96,7 @@ export function BudgetLines() {
             <Kpi label="Produits budgétés" value={fmtShort(s.income_budget)} hint={`Cumul à fin ${MONTHS_FR[data.month - 1]}`} />
             <Kpi label="Produits réalisés" value={fmtShort(s.income_actual)} hint={`Écart ${fmtPct(s.income_gap_pct)}`} tone={(s.income_gap_pct ?? 0) < -data.underrun_pct ? "danger" : (s.income_gap_pct ?? 0) < 0 ? "warn" : "ok"} />
             <Kpi label="Charges réalisées" value={fmtShort(s.expense_actual)} hint={`Budget ${fmtShort(s.expense_budget)}, écart ${fmtPct(s.expense_gap_pct)}`} tone={(s.expense_gap_pct ?? 0) > data.threshold_pct ? "danger" : (s.expense_gap_pct ?? 0) > 0 ? "warn" : "ok"} />
-            <Kpi label="Lignes en dépassement" value={`${s.overrun_lines}`} hint={`Sur ${s.expense_lines} poste(s) de charges, seuil ${fmtPct(data.threshold_pct, 0)}`} tone={s.overrun_lines ? "warn" : "ok"} />
+            <Kpi label="Lignes en dépassement" value={`${s.overrun_lines}`} hint={`Sur ${pluriel(s.expense_lines, "poste de charges", "postes de charges")}, seuil ${fmtPct(data.threshold_pct, 0)}`} tone={s.overrun_lines ? "warn" : "ok"} />
           </div>
           {view === "lignes" ? (
             <Card title={`Détail par ligne budgétaire, cumul à fin ${MONTHS_FR[data.month - 1]}`} padded={false}>
@@ -348,7 +348,7 @@ function ImportBudget({ budgetId, onClose, onDone }: { budgetId: number; onClose
             )}
           </Notice>
         )}
-        {result && <Notice tone="ok">{result.created} ligne(s) créée(s), {result.updated} mise(s) à jour ; {result.lines} ligne(s) au budget.</Notice>}
+        {result && <Notice tone="ok">{pluriel(result.created, "ligne créée", "lignes créées")}, {pluriel(result.updated, "mise à jour", "mises à jour")} ; {pluriel(result.lines, "ligne")} au budget.</Notice>}
         <input type="file" accept=".xlsx,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /> Remplacer toutes les lignes du budget

@@ -6,7 +6,7 @@ import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, M
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Account, DebtSummary, Journal } from "@/lib/finance-types";
-import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
 interface Loan {
   id: number;
@@ -54,7 +54,7 @@ export default function DebtPage() {
       {data && s && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Encours comptable" value={fmtShort(s.accounting_outstanding)} hint={`Comptes 16 et 17 · ${s.loans} financement(s)`} tone="accent" />
+            <Kpi label="Encours comptable" value={fmtShort(s.accounting_outstanding)} hint={`Comptes 16 et 17 · ${pluriel(s.loans, "financement")}`} tone="accent" />
             <Kpi label="Capital restant dû des échéanciers" value={fmtShort(s.outstanding)} hint={ecart ? `Écart avec la comptabilité : ${fmtShort(s.schedule_gap)}` : "Conforme à la comptabilité"} tone={ecart ? "warn" : "ok"} />
             <Kpi label="Dette nette" value={fmtShort(s.net_debt)} hint="Encours comptable moins la trésorerie" />
             <Kpi label="Gearing" value={ratio(s.gearing)} hint={s.equity !== undefined && s.equity <= 0 ? "Capitaux propres négatifs ou nuls" : "Dette / capitaux propres"} tone={(s.gearing ?? 0) > 1 ? "warn" : "neutral"} />

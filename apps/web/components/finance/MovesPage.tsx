@@ -7,7 +7,7 @@ import { MoveDetailModal } from "./MoveDetailModal";
 import { MoveForm } from "./MoveForm";
 import { useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type MoveSummary, type Paged } from "@/lib/finance-types";
-import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
 type View = "all" | "draft" | "open" | "overdue" | "dispute" | "paid";
 
@@ -61,8 +61,8 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
         }
       />
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label={sale ? "Reste à encaisser" : "Reste à payer"} value={fmtShort(openData?.totals?.amount_residual)} hint={`${openData?.total_count ?? 0} pièce(s)`} tone="accent" />
-        <Kpi label="Dont échu" value={fmtShort(overdueData?.totals?.amount_residual)} hint={`${overdueData?.total_count ?? 0} pièce(s) en retard`} tone={overdueData?.total_count ? "warn" : "neutral"} />
+        <Kpi label={sale ? "Reste à encaisser" : "Reste à payer"} value={fmtShort(openData?.totals?.amount_residual)} hint={pluriel(openData?.total_count ?? 0, "pièce")} tone="accent" />
+        <Kpi label="Dont échu" value={fmtShort(overdueData?.totals?.amount_residual)} hint={`${pluriel(overdueData?.total_count ?? 0, "pièce")} en retard`} tone={overdueData?.total_count ? "warn" : "neutral"} />
         <Kpi label="Pièces affichées" value={String(data?.total_count ?? "–")} hint={`Total TTC ${fmtGNF(data?.totals?.amount_total)}`} />
       </div>
       <Card padded={false}>

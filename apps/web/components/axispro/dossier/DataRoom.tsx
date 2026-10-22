@@ -5,7 +5,7 @@ import { Download, FileStack, Printer } from "@/components/icons";
 import { Badge, Button, Card, DataTable, FileButton, Input, Kpi, Loading, ProgressBar, Segmented } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { DOC_STATE, type DocFile, type DossierDetail, type StandardDoc } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtDate, fmtDateTime, pluriel } from "@/lib/format";
 import { arrondi, useRetour } from "./commun";
 
 /** Data room : 42 pièces standard, disponibles par dépôt ou par la preuve d'un critère rattaché,
@@ -37,7 +37,7 @@ export function DataRoom({ d }: { d: DossierDetail }) {
     <div className="space-y-4">
       {bandeau}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label="Complétude de la data room" value={`${arrondi(data.completeness)} %`} icon={FileStack} teinte="azur" hint={`${disponibles} pièce(s) disponible(s) sur ${data.standard.length}`} />
+        <Kpi label="Complétude de la data room" value={`${arrondi(data.completeness)} %`} icon={FileStack} teinte="azur" hint={`${pluriel(disponibles, "pièce disponible", "pièces disponibles")} sur ${data.standard.length}`} />
         <Kpi label="Pièces dues à ce gate" value={`${dues.filter((x) => x.available).length} / ${dues.length}`} teinte="lagon" hint={d.current_gate ? `${d.current_gate.code} ${d.current_gate.name}` : undefined} />
         <Kpi label="À reprendre" value={String(data.files.filter((f) => f.state === "rejected").length)} teinte="ambre" tone="warn" />
       </div>

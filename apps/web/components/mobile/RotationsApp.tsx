@@ -6,7 +6,7 @@ import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/comp
 import { Badge, Button, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
-import { fmtDate, fmtDec } from "@/lib/format";
+import { fmtDate, fmtDec, pluriel } from "@/lib/format";
 
 interface Referentials {
   vehicles: Array<{ id: number; name: string; tractor_plate: string | false | null; capacity_liters: number; driver_id: number | null }>;
@@ -195,8 +195,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
         }
       }
       setLastSync(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
-      if (errors) setNotice({ tone: "danger", text: `${errors} saisie(s) refusée(s) : corrigez-les dans « À envoyer ».` });
-      else if (created) setNotice({ tone: "ok", text: `${created} rotation(s) transmise(s) au bureau.` });
+      if (errors) setNotice({ tone: "danger", text: `${pluriel(errors, "saisie refusée : corrigez-la", "saisies refusées : corrigez-les")} dans « À envoyer ».` });
+      else if (created) setNotice({ tone: "ok", text: `${pluriel(created, "rotation transmise", "rotations transmises")} au bureau.` });
     } catch (e) {
       setNotice({ tone: "warn", text: e instanceof ApiError ? e.message : "Réseau indisponible : les saisies partiront au retour du réseau." });
     } finally {
@@ -267,7 +267,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }
 
   async function logout() {
-    if (mine.length && !window.confirm(`${mine.length} saisie(s) n'ont pas encore été transmises. Elles restent sur ce téléphone et partiront à votre prochaine connexion. Se déconnecter ?`)) return;
+    if (mine.length && !window.confirm(`${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion. Se déconnecter ?`)) return;
     // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
     const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
     if (!res?.ok) {
@@ -413,7 +413,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 </div>
               </div>
             ))}
-            {others > 0 && <p className="text-[13px] text-muted">{others} saisie(s) d&apos;un autre utilisateur restent sur ce téléphone : elles partiront à sa prochaine connexion.</p>}
+            {others > 0 && <p className="text-[13px] text-muted">{pluriel(others, "saisie")} d&apos;un autre utilisateur {others > 1 ? "restent sur ce téléphone : elles partiront" : "reste sur ce téléphone : elle partira"} à sa prochaine connexion.</p>}
           </div>
         )}
 

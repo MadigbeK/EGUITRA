@@ -5,7 +5,7 @@ import { AlertTriangle, Coins, FileCheck2, FileText, ListChecks, Pencil, Percent
 import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, Select, Textarea, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type Currency, type DossierDetail, type RiskLevel } from "@/lib/axispro-types";
-import { fmtDate, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
 import { PRIORITE_TON, arrondi, couleurScore, montant, note, useRetour } from "./commun";
 
@@ -67,9 +67,9 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} icon={ShieldAlert} teinte={s.knockouts.length ? "danger" : "jade"} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${s.knockouts_pending} non évalué${s.knockouts_pending > 1 ? "s" : ""})` : ""}` : "Aucun"} />
-        <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} icon={AlertTriangle} teinte="ambre" tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${s.critical_open.length} critique(s) au total`} />
-        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} icon={FileText} teinte="lagon" hint={`${s.assessed} critère(s) évalué(s) sur ${s.criteria}, ${s.proofs} preuve(s)`} />
-        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} icon={FileCheck2} teinte="azur" hint={`${s.documents_missing} pièce(s) non disponible(s)`} />
+        <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} icon={AlertTriangle} teinte="ambre" tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${pluriel(s.critical_open.length, "critique")} au total`} />
+        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} icon={FileText} teinte="lagon" hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${s.criteria}, ${pluriel(s.proofs, "preuve")}`} />
+        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} icon={FileCheck2} teinte="azur" hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -106,7 +106,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
                 <div className="mb-1 flex items-baseline justify-between gap-3 text-[13px]">
                   <span className="min-w-0 truncate text-ink-2">
                     <span className="font-semibold text-ink">{dom.code}</span> {dom.name}{" "}
-                    <span className="text-[12px] text-muted">{dom.assessed}/{dom.criteria} évalués{dom.gaps ? `, ${dom.gaps} écart(s)` : ""}</span>
+                    <span className="text-[12px] text-muted">{dom.assessed}/{dom.criteria} {dom.assessed > 1 ? "évalués" : "évalué"}{dom.gaps ? `, ${pluriel(dom.gaps, "écart")}` : ""}</span>
                   </span>
                   <span className="flex items-center gap-2">
                     {dom.priority && <Badge tone={PRIORITE_TON[dom.priority]}>{dom.priority}</Badge>}
@@ -130,7 +130,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
               <li key={i} className="flex gap-2 text-warn"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" /> {a}</li>
             ))}
           </ul>
-          {s.requalified.length > 0 && <p className="mt-2 text-[12.5px] text-muted">{s.requalified.length} critère(s) requalifié(s) par la politique d&apos;évaluation, sans modification de la saisie.</p>}
+          {s.requalified.length > 0 && <p className="mt-2 text-[12.5px] text-muted">{pluriel(s.requalified.length, "critère requalifié", "critères requalifiés")} par la politique d&apos;évaluation, sans modification de la saisie.</p>}
         </Card>
       )}
 
@@ -149,11 +149,11 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         )}
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 text-[13px]">
           <span className="inline-flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-muted" /> {d.risks.open} risque(s) ouvert(s)
+            <ShieldAlert className="h-4 w-4 text-muted" /> {pluriel(d.risks.open, "risque ouvert", "risques ouverts")}
             {(["critical", "high"] as RiskLevel[]).map((l) => d.risks.levels[l] > 0 && <Badge key={l} tone={RISK_LEVEL[l].tone}>{d.risks.levels[l]} {RISK_LEVEL[l].label.toLowerCase()}</Badge>)}
           </span>
           <span className="inline-flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-muted" /> {d.actions.open} action(s) ouverte(s)
+            <ListChecks className="h-4 w-4 text-muted" /> {pluriel(d.actions.open, "action ouverte", "actions ouvertes")}
             {d.actions.overdue > 0 && <Badge tone="danger">{d.actions.overdue} en retard</Badge>}
             {d.actions.submitted > 0 && <Badge tone="warn">{d.actions.submitted} à valider</Badge>}
           </span>
