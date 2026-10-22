@@ -11,7 +11,8 @@
         <xpath expr="//img[hasclass('o_company_logo_small')]/.." position="attributes">
             <attribute name="style">margin-bottom: 5mm !important;</attribute>
         </xpath>
-        <xpath expr="//div[hasclass('article')]" position="inside">
+        <!-- La classe de l'article est calculée (t-attf-class) : hasclass() ne la voit pas. -->
+        <xpath expr="//div[contains(@t-attf-class, 'o_report_layout_standard')]" position="inside">
             <style t-if="company.primary_color">
                 <t t-out="'.o_company_%s_layout table thead th { border-bottom: 1.5pt solid %s !important; }' % (company.id, company.primary_color)"/>
             </style>
