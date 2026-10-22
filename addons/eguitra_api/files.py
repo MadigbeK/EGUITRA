@@ -80,9 +80,7 @@ def csv_text(value):
     return "'" + text if text.startswith(FORMULA_START) else text
 
 
-def workbook_rows(content, max_rows=MAX_ROWS, sheets=()):
-    """Lignes d'une feuille d'un classeur XLSX (la première dont le nom figure dans `sheets`, casse et
-    accents ignorés, sinon la première du classeur), après contrôle de sa taille décompressée."""
+def _open_workbook(content):
     try:
         infos = zipfile.ZipFile(io.BytesIO(content)).infolist()
     except ZIP_ERRORS as exc:
@@ -94,20 +92,44 @@ def workbook_rows(content, max_rows=MAX_ROWS, sheets=()):
     import openpyxl
 
     try:
-        book = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        return openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as exc:  # classeur corrompu ou d'un autre format
+        raise UserError("Classeur illisible : enregistrez-le au format XLSX ou CSV.") from exc
+
+
+def _sheet_rows(sheet, max_rows):
+    rows = []
+    for row in sheet.iter_rows(values_only=True):
+        if len(rows) >= max_rows:
+            raise UserError(f"Classeur trop long : {max_rows} lignes au plus.")
+        rows.append(list(row))
+    return rows
+
+
+def workbook_rows(content, max_rows=MAX_ROWS, sheets=()):
+    """Lignes d'une feuille d'un classeur XLSX (la première dont le nom figure dans `sheets`, casse et
+    accents ignorés, sinon la première du classeur), après contrôle de sa taille décompressée."""
+    book = _open_workbook(content)
+    try:
         wanted = [_sheet_key(name) for name in sheets]
         named = {_sheet_key(ws.title): ws for ws in book.worksheets}
-        sheet = next((named[key] for key in wanted if key in named), book.worksheets[0])
-        rows = []
-        for row in sheet.iter_rows(values_only=True):
-            if len(rows) >= max_rows:
-                raise UserError(f"Classeur trop long : {max_rows} lignes au plus.")
-            rows.append(list(row))
+        return _sheet_rows(next((named[key] for key in wanted if key in named), book.worksheets[0]), max_rows)
     except UserError:
         raise
     except Exception as exc:  # classeur corrompu ou d'un autre format
         raise UserError("Classeur illisible : enregistrez-le au format XLSX ou CSV.") from exc
-    return rows
+
+
+def workbook_sheets(content, max_rows=MAX_ROWS):
+    """Toutes les feuilles d'un classeur XLSX : {nom normalisé (casse, accents et « _ » ignorés) :
+    lignes}, dans l'ordre du classeur, mêmes contrôles que workbook_rows."""
+    book = _open_workbook(content)
+    try:
+        return {_sheet_key(ws.title): _sheet_rows(ws, max_rows) for ws in book.worksheets}
+    except UserError:
+        raise
+    except Exception as exc:
+        raise UserError("Classeur illisible : enregistrez-le au format XLSX ou CSV.") from exc
 
 
 def _sheet_key(name):

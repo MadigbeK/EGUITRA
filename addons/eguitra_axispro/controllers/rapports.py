@@ -5,6 +5,7 @@ compressée."""
 import csv
 import io
 import json
+import re
 import unicodedata
 import zipfile
 from datetime import date
@@ -280,17 +281,28 @@ class EguitraAxisproRapports(http.Controller):
                 sheet.write_string(r, 0, row[0], fmt)
                 xlsx_row(sheet, r, [row[1]], fmt if fmt is head else None, col=1)
             r += 1
+        if s["compartments"]:
+            r += 1
+            xlsx_row(sheet, r, ["SUIVI PAR COMPARTIMENT", "Score /100", "Critères", "Manques à traiter",
+                                "Études à produire renseignées", "Consultant"], head)
+            for c in s["compartments"]:
+                r += 1
+                xlsx_row(sheet, r, [f"{c['code']} — {c['name']}", round(c["score"]) if c["score"] is not None else "",
+                                    c["criteria"], c["gaps"], c["studies"], (c["owner"] or {}).get("name") or ""])
+            r += 1
         r += 1
         sheet.write_string(r, 0, "ANOMALIES", head)
         for i, note in enumerate(s["anomalies"] or ["Aucune"], start=r + 1):
             xlsx_row(sheet, i, [note])
         sheet.set_column(0, 0, 44)
         sheet.set_column(1, 1, 80)
+        sheet.set_column(2, 5, 16)
 
         lines = {x["id"]: x for x in result["lines"]}
         priorities = {g["id"]: g["priority"] for g in result["gaps"]}
         crit = book.add_worksheet("Scoring")
-        xlsx_row(crit, 0, ["Code", "Domaine", "Critère / pièce", "Type d'exigence", "Statut saisi", "Statut retenu",
+        xlsx_row(crit, 0, ["Code", "Compartiment", "Domaine", "Critère / pièce", "Type d'exigence", "Statut saisi",
+                           "Statut retenu",
                            "Points", "Poids", "Score pondéré", "Critique ?", "Knock-out ?", "Gate cible",
                            "Pertinent Bancabilité", "Étude / analyse / document à produire", "Preuve / fichier",
                            "Validité preuve", "Responsable", "Échéance", "Observation", "Priorité gap", "Alertes"], head)
@@ -300,8 +312,10 @@ class EguitraAxisproRapports(http.Controller):
             line = lines.get(c.id, {})
             proofs = e.document_ids.filtered(lambda d: d.state != "rejected")
             validity = max([day for day in proofs.mapped("validity_date") if day], default=None)
+            compartment = c.domain_id.compartment_id
             xlsx_row(crit, r, [
-                c.code, c.domain_id.name, c.name, REQUIREMENTS.get(c.requirement_type, ""), statuses[e.status],
+                c.code, f"{compartment.code} — {compartment.name}" if compartment else "", c.domain_id.name, c.name,
+                REQUIREMENTS.get(c.requirement_type, ""), statuses[e.status],
                 statuses.get(line.get("status"), ""), line.get("points", ""), c.weight,
                 round(line.get("points", 0) * c.weight, 2), "Oui" if c.critical else "Non", "Oui" if c.knockout else "Non",
                 c.gate_id.code, "Oui" if c.bankability else "Non", e.deliverable or c.default_deliverable(),
@@ -309,25 +323,26 @@ class EguitraAxisproRapports(http.Controller):
                 _date(e.due_date), e.comment or "", round(priorities.get(c.id, 0), 2), "; ".join(line.get("alerts", [])),
             ])
         crit.set_column(0, 0, 8)
-        crit.set_column(1, 1, 26)
-        crit.set_column(2, 2, 56)
-        crit.set_column(3, 5, 22)
-        crit.set_column(13, 13, 46)
-        crit.set_column(14, 14, 28)
-        crit.set_column(18, 18, 30)
-        crit.set_column(20, 20, 40)
-        crit.freeze_panes(1, 3)
+        crit.set_column(1, 2, 26)
+        crit.set_column(3, 3, 56)
+        crit.set_column(4, 6, 22)
+        crit.set_column(14, 14, 46)
+        crit.set_column(15, 15, 28)
+        crit.set_column(19, 19, 30)
+        crit.set_column(21, 21, 40)
+        crit.freeze_panes(1, 4)
 
         gaps = book.add_worksheet("Gaps_Prioritaires")
-        xlsx_row(gaps, 0, ["Rang", "Domaine", "Critère / pièce", "Étude / document à produire", "Statut", "Knock-out ?",
-                           "Priorité", "Responsable", "Échéance", "Preuve"], head)
+        xlsx_row(gaps, 0, ["Rang", "Compartiment", "Domaine", "Critère / pièce", "Étude / document à produire", "Statut",
+                           "Knock-out ?", "Priorité", "Responsable", "Échéance", "Preuve"], head)
         for r, g in enumerate(dossier.gaps(20, result), start=1):
-            xlsx_row(gaps, r, [r, g["domain"], f"{g['code']} {g['name']}", g["action"], statuses[g["status"]],
-                               "Oui" if g["knockout"] else "Non", g["priority"], g["responsible"] or "",
-                               _date(g["due_date"]), "Disponible" if g["has_proof"] else ""])
-        gaps.set_column(1, 1, 26)
-        gaps.set_column(2, 3, 52)
-        gaps.set_column(4, 4, 24)
+            xlsx_row(gaps, r, [r, g["compartment"] or "", g["domain"], f"{g['code']} {g['name']}", g["action"],
+                               statuses[g["status"]], "Oui" if g["knockout"] else "Non", g["priority"],
+                               g["responsible"] or "", _date(g["due_date"]), "Disponible" if g["has_proof"] else ""])
+        gaps.set_column(1, 1, 12)
+        gaps.set_column(2, 2, 26)
+        gaps.set_column(3, 4, 52)
+        gaps.set_column(5, 5, 24)
 
         room = book.add_worksheet("Data_Room_Index")
         xlsx_row(room, 0, ["Catégorie", "Code", "Pièce", "Statut", "Origine", "Critères rattachés", "Gate", "Version",
@@ -344,15 +359,16 @@ class EguitraAxisproRapports(http.Controller):
 
         gates = book.add_worksheet("Stage_Gate")
         xlsx_row(gates, 0, ["Gate", "Nom", "Règle", "Décision", "Motifs", "Exigences d'entrée", "Livrables",
-                            "Critères de passage"], head)
+                            "Critères de passage", "Complétude minimale (%)"], head)
         for r, g in enumerate(s["gates"], start=1):
             xlsx_row(gates, r, [g["code"], g["name"], RULES.get(g["rule"], g["rule"]), DECISIONS[g["decision"]],
                                 " / ".join(g["motifs"]), g["entry_requirements"] or "", g["deliverables"] or "",
-                                g["exit_criteria"] or ""], wrap)
+                                g["exit_criteria"] or "", g["min_completeness"] or ""], wrap)
         gates.set_column(0, 0, 9)
         gates.set_column(1, 2, 28)
         gates.set_column(3, 3, 17)
         gates.set_column(4, 7, 55)
+        gates.set_column(8, 8, 14)
 
         pol = book.add_worksheet("Politique")
         policy = dossier.policy_id
@@ -663,7 +679,9 @@ def _evaluation_rows(filename, content):
             raise UserError("Fichier CSV illisible.") from e
     if not raw:
         raise UserError("Fichier vide.")
-    header = [_plain(h) for h in raw[0]]
+    # « Étude / analyse / document à produire (compartiment) » : la précision entre parenthèses ne
+    # change pas la colonne.
+    header = [re.sub(r"\s*\(.*?\)\s*", " ", _plain(h)).strip() for h in raw[0]]
     index = {}
     for i, h in enumerate(header):
         key = IMPORT_HEADERS.get(h)

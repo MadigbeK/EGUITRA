@@ -3,7 +3,7 @@ from . import controllers
 
 
 def post_init_hook(env):
-    env["eguitra.setup"].ensure_audit_rules(CORE_MODELS + EXPERT_MODELS)
+    env["eguitra.setup"].ensure_audit_rules(CORE_MODELS + EXPERT_MODELS + COMPARTMENT_MODELS)
 
 
 # Grille (versions, gates, domaines, critères, pièces), dossiers, évaluations, revues, data room et
@@ -14,3 +14,7 @@ CORE_MODELS = ["axispro.policy", "axispro.gate", "axispro.domain", "axispro.crit
 
 # Mode expert (version 19.0.1.1.0) : piste d'audit posée aussi par la migration sur une base existante.
 EXPERT_MODELS = ["axispro.plan", "axispro.plan.line", "axispro.risk", "axispro.action", "axispro.funding"]
+
+
+# Outil du cabinet version 3 (19.0.1.3.0) : compartiments de la grille et consultants des dossiers.
+COMPARTMENT_MODELS = ["axispro.compartment", "axispro.assignment"]
