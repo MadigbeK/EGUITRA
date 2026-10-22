@@ -637,9 +637,11 @@ class TestMethodeDansLaPlateforme(ApiCase):
         """Hypothèses, fiche, modèle financier et pièces font des auteurs de la révision : qui n'a
         modifié qu'une hypothèse ou l'état d'une pièce, seul, ne verrouille pas ; deux auteurs, oui ;
         la nouvelle révision repart à vide et ne se verrouille pas sans contribution d'un autre."""
-        attachment = self.env["ir.attachment"].create({"name": "titre.pdf", "raw": b"%PDF-1.4 titre"})
         seconde = self.env["axispro.dossier"].create({"name": "Seconde centrale", "promoter_id": self.promoter.id,
                                                       "company_id": self.cabinet.id})
+        # Pièce jointe rattachée au dossier, comme un dépôt par l'API : lisible par tout le cabinet.
+        attachment = self.env["ir.attachment"].create({"name": "titre.pdf", "raw": b"%PDF-1.4 titre",
+                                                       "res_model": "axispro.dossier", "res_id": seconde.id})
         piece = self.env["axispro.document"].create({"dossier_id": seconde.id, "name": "Titre foncier",
                                                      "attachment_id": attachment.id})
         status, body = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}", {"dd_red_flag": "no"},
@@ -660,6 +662,9 @@ class TestMethodeDansLaPlateforme(ApiCase):
                                  files={"file": ("bail.pdf", io.BytesIO(b"%PDF-1.4 bail"), "application/pdf")},
                                  headers={"Authorization": f"Bearer {relecteur}"}, method="POST", timeout=60)
         self.assertEqual(response.status_code, 200, response.text)
+        status, body = self.call("PATCH", f"/axispro/documents/{response.json()['id']}",
+                                 {"state": "validated", "validity_date": "2030-12-31"}, token=self.token)
+        self.assertEqual((status, body["state"]), (200, "validated"), "Pièce déposée par un autre consultant validée")
         self.env.invalidate_all()
         self.assertEqual(sorted(self.dossier.decision_inputs_by.mapped("login")), ["analyste", "relecteur"])
         status, review = self.call("POST", path, {"decision": "go", "lock": True}, token=self.token)
