@@ -147,7 +147,15 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Version en service : 20261022-1445 (commit b5af2d9), mise en production le 22 octobre à 14 h 47 à la
+- Version en service : 20261022-1935 (commit c5df60b), mise en production le 22 octobre à 19 h 37 à la
+  demande du gérant, sauvegarde prise avant : application web seule, modules identiques à la 20261022-1445.
+  **Sécurité : Next.js 16.4.2** (la 16.4.0 avait trois failles publiées, dont deux exécutions de code à
+  distance sans authentification : GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r ;
+  `npm audit` à 0). Design du 22 octobre (critique en six angles : montants arrondis, billet de trésorerie,
+  Transport, Rotations, AxisPro), cache `rotations-v6`, titre d'onglet « NIMOVA · MB AxisPro Consulting ».
+  Contrôlé : Next 16.4.2 dans le conteneur, trois adresses HTTPS 200, santé de l'API, mfa_required à 0,
+  charte EGUITRA intacte. Lancer `npm audit --omit=dev` dans `apps/web` avant chaque mise en production.
+- Version précédente : 20261022-1445 (commit b5af2d9), mise en production le 22 octobre à 14 h 47 à la
   demande du gérant (« mets la correction en production », « GNF partout et mets tout en production »),
   conduite par la session RH : corrections de droits de l'audit, « MB AxisPro Consulting », charte des
   documents, devise « GNF » après le montant, noms de paie (« Paie d'octobre »), bon de livraison du
