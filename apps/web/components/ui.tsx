@@ -685,6 +685,12 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
 export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const fenetre = useRef<HTMLDivElement>(null);
   const titreId = useId();
+  // onClose change à chaque rendu de l'écran : lu par référence, il ne relance pas l'effet (qui
+  // reprendrait le focus à chaque frappe).
+  const fermer = useRef(onClose);
+  useEffect(() => {
+    fermer.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
     const avant = document.activeElement as HTMLElement | null;
@@ -693,7 +699,7 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     const premier = boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
     (premier ?? boite)?.focus();
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") fermer.current();
       if (e.key !== "Tab" || !boite) return;
       const cibles = [...boite.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
       const debut = cibles[0];
@@ -712,7 +718,7 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
       window.removeEventListener("keydown", onKey);
       if (avant?.isConnected) avant.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
