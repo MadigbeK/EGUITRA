@@ -5,10 +5,9 @@ import { ChevronLeft, Lock, MapPin, RotateCcw, Send } from "@/components/icons";
 import Link from "next/link";
 import { Rosace } from "@/components/guilloche";
 import { Anneau, Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, Tabs, Textarea, cx } from "@/components/ui";
-import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { RECO, type DossierDetail, type Message } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtGNF, pluriel } from "@/lib/format";
-import type { Profile } from "@/lib/types";
 import { Financements } from "@/components/axispro/Financements";
 import { ModeleFinancier } from "@/components/axispro/ModeleFinancier";
 import { PlanActions } from "@/components/axispro/PlanActions";
@@ -20,9 +19,6 @@ import { Gates } from "@/components/axispro/dossier/Gates";
 import { Journal, Rapport } from "@/components/axispro/dossier/Rapport";
 import { Synthese } from "@/components/axispro/dossier/Synthese";
 import { montant, note, useCabinet } from "@/components/axispro/dossier/commun";
-
-/** Profils de la route de facture d'honoraires (addons/eguitra_axispro/controllers/axispro.py). */
-const FACTURE_HONORAIRES: Profile[] = ["cabinet", "admin"];
 
 type Tab = "synthese" | "evaluation" | "gates" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "comites" | "journal" | "echanges" | "rapport" | "temps";
 
@@ -182,10 +178,9 @@ function Time({ d }: { d: DossierDetail }) {
   const [rate, setRate] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const unbilled = (data ?? []).filter((t) => t.billable && !t.invoice).reduce((a, t) => a + t.hours, 0);
-  // Saisie des temps : profil cabinet seul (POST /axispro/timesheets). Facture d'honoraires : la route
-  // accepte aussi l'administration (POST /axispro/dossiers/<id>/invoice) ; la direction lit seulement.
+  // Saisie des temps (POST /axispro/timesheets) et facture d'honoraires (POST /axispro/dossiers/<id>/invoice,
+  // dont l'administration est retirée, I6) : profil cabinet seul ; la direction et l'administration lisent.
   const { cabinet } = useCabinet();
-  const facture = useAutorise(FACTURE_HONORAIRES);
   return (
     <div className="space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
@@ -208,7 +203,7 @@ function Time({ d }: { d: DossierDetail }) {
           { key: "invoice", label: "Facture", render: (t) => t.invoice ?? (t.billable ? <Badge tone="warn">À facturer</Badge> : "Non facturable") },
         ]} />
       </Card>
-      {(cabinet || facture) && (
+      {cabinet && (
         <Card title={`Facturer les honoraires (${unbilled} h non facturées)`}>
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Taux horaire HT (GNF)"><Input inputMode="numeric" className="font-mono" value={rate} onChange={(e) => setRate(e.target.value)} /></Field>
