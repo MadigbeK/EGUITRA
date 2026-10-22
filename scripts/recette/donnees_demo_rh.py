@@ -138,7 +138,7 @@ consultant = employee(cabinet, "Moussa Doumbouya", job_title="Consultant", depar
 # ─── Comptes de test liés (Mon espace) ──────────────────────────────────
 
 for login, emp in [("test.dg", dg), ("test.exploitation", chef_parc), ("test.parc", drivers[0]),
-                   ("test.consultant", consultant)]:
+                   ("test.consultant", consultant), ("test.salarie", recrue)]:
     account = user(login)
     if account and not emp.user_id and not Employee.search([("user_id", "=", account.id),
                                                             ("company_id", "=", emp.company_id.id)]):
