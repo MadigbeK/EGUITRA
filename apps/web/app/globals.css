@@ -139,15 +139,9 @@
   --info: #1d68c4;
   --info-doux: #e6f0fc;
 
-  /* Accent de l'application : Finance, jade (vert EGUITRA). */
-  --accent: #097550;
-  --accent-strong: #075f40;
-  --accent-haut: #0b8457;
-  --accent-vif: #16a672;
-  --accent-doux: #e2f5ea;
+  /* Accent de l'application : Finance, jade (vert EGUITRA), dans la règle qui suit ce bloc. */
   --accent-ink: #ffffff;
   --accent-2: var(--n-or);
-  --accent-lueur: rgb(22 166 114 / 0.35);
 
   /* Coque : la couleur de la société dont on tient les livres. */
   --dos: var(--n-foret);
@@ -162,6 +156,20 @@
   --ombre-feuille: 0 0 0 1px rgb(16 36 31 / 0.05), 0 1px 2px rgb(16 36 31 / 0.04), 0 16px 32px -22px rgb(16 36 31 / 0.26);
 
   color-scheme: light;
+}
+
+/*
+ * Finance : le jade du vert EGUITRA, couleur de la racine. [data-app="finance"] le rétablit sous une
+ * autre application (famille Finance du lanceur ouvert depuis Transport ou RH) : une seule source.
+ */
+:root,
+[data-app="finance"] {
+  --accent: #097550;
+  --accent-strong: #075f40;
+  --accent-haut: #0b8457;
+  --accent-vif: #16a672;
+  --accent-doux: #e2f5ea;
+  --accent-lueur: rgb(22 166 114 / 0.35);
 }
 
 /* AxisPro et le portail des porteurs : outils du cabinet, en azur. */
@@ -738,6 +746,11 @@ input::-ms-clear {
   }
 }
 
+/* Économie de données : les rouleaux sont posés sur leur chiffre, sans tourner. */
+.compteur-fixe .compteur-rouleau {
+  animation: none;
+}
+
 /* ─── Coque ─────────────────────────────────────────────────────────────── */
 
 /* Repère glissant de la navigation : il suit la page ouverte. */
@@ -762,18 +775,18 @@ input::-ms-clear {
   animation-delay: calc(var(--i, 0) * 60ms + 120ms);
 }
 
-/* Faisceau d'un chiffre clé : discret au repos, il s'avive et glisse sous le curseur. */
+/* Ondes d'un chiffre clé sans série : un décor de papier-valeur, en or quel que soit l'état (le
+   sceau porte l'état). Gravées une fois à l'ouverture, puis immobiles : le chiffre n'est pas un
+   lien, il ne réagit pas au survol. */
 .kpi-ondes {
-  opacity: 0.28;
+  opacity: 0.5;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%);
   mask-image: linear-gradient(90deg, transparent, #000 60%);
-  transition:
-    opacity 400ms ease,
-    transform 1100ms var(--ease-sortie);
 }
-.kpi:hover .kpi-ondes {
-  opacity: 0.75;
-  transform: translateX(-14px);
+
+/* Gravure de tendance (chiffre clé avec une vraie série) : les traits se gravent comme les ondes. */
+.kpi-gravure .guilloche-trait {
+  animation-duration: 1200ms;
 }
 
 /* Chiffre clé suivi de sa courbe (Analyse) : une seule feuille ; la vraie courbe remplace la gravure. */
@@ -801,10 +814,34 @@ input::-ms-clear {
   box-shadow:
     inset 1px 0 0 var(--line),
     inset 0 1px 0 var(--line);
-  transition: background-color 300ms ease;
 }
-:where(.grid):has(> .kpi):not(:has(> :not(.kpi))) > .kpi:hover {
-  background: color-mix(in oklab, var(--accent-doux) 38%, transparent);
+
+/* ─── Tampons d'état (Badge) ─────────────────────────────────────────── */
+
+/* État vivant (seul de son écran) : le filet du tampon s'élargit et s'efface, trois fois, puis
+   s'arrête. Transformation et opacité seulement : rien ne se repeint entre deux battements. */
+.tampon-vivant {
+  position: relative;
+}
+.tampon-vivant::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 1px solid currentColor;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  animation: tampon-battre 1800ms var(--ease-sortie) 600ms 3;
+}
+@keyframes tampon-battre {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.12, 1.45);
+  }
 }
 
 /* ─── Accueil : tuiles et icônes vivantes ──────────────────────────────── */
@@ -1390,6 +1427,26 @@ input::-ms-clear {
   .n-tracer,
   .an-tracer {
     stroke-dashoffset: 0;
+  }
+  /* Chiffres qui défilent : le texte final s'imprime, jamais l'image en cours du défilement
+     (filet de sécurité de l'écouteur beforeprint de Valeur). */
+  .valeur-anim {
+    display: none !important;
+  }
+  .valeur-texte {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    clip: auto !important;
+    clip-path: none !important;
+    white-space: inherit !important;
+  }
+  /* Tampons pleins (ce qui demande une action) : leur fond s'imprime. */
+  .tampon-plein {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   /* Analyse : les cartes ne se coupent pas entre deux pages, le mode nuit s'efface à l'impression. */
   [data-theme="sombre"] {

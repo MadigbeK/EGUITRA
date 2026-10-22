@@ -8,7 +8,7 @@ import { COULEUR, Cadre } from "@/components/analyse/charts/commun";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CostStructure, GroupeRentabilite } from "@/lib/analyse-types";
-import { fmtGNF, fmtInt } from "@/lib/format";
+import { fmtAxe, fmtGNF, fmtInt } from "@/lib/format";
 
 type Onglet = "pont" | "structure" | "budget" | "metiers";
 
@@ -308,8 +308,8 @@ function NuageRegression({ sc }: { sc: CostStructure }) {
               {x.ticks(5).map((t) => (
                 <g key={t}>
                   <line x1={x(t)} x2={x(t)} y1={M.haut} y2={H - M.bas} stroke={COULEUR.trait} strokeDasharray="3 5" />
-                  <text x={x(t)} y={H - M.bas + 16} textAnchor="middle" fontSize={11} fill="var(--muted)">{fmtShort(t)}</text>
-                  <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{fmtShort(t)}</text>
+                  <text x={x(t)} y={H - M.bas + 16} textAnchor="middle" fontSize={11} fill="var(--muted)">{fmtAxe(t)}</text>
+                  <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{fmtAxe(t)}</text>
                 </g>
               ))}
               <text x={(M.gauche + W - M.droite) / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--ink-2)">Chiffre d&apos;affaires du mois</text>

@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type R
 import { scaleLinear } from "d3-scale";
 import { cx } from "@/lib/cx";
 import { SERIES } from "@/lib/couleurs";
-import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, MONTHS_FR } from "@/lib/format";
+import { fmtAxe as axeMontant, fmtDec, fmtGNF, fmtInt, fmtJours, fmtPct, fmtRatio, fmtShort, MONTHS_FR } from "@/lib/format";
 import type { Unit } from "@/lib/analyse-types";
 
 /* ─── Mesure ───────────────────────────────────────────────────────────── */
@@ -39,7 +39,10 @@ export function useLargeur<T extends HTMLElement>(defaut = 640): [RefObject<T | 
 
 /* ─── Formats ──────────────────────────────────────────────────────────── */
 
-/** Valeur selon son unité : « 1,2 Mds GNF », « 12,5 % », « 38 j », « 1,35 », « 72 / 100 ». */
+/**
+ * Valeur selon son unité, écrite comme dans Finance (lib/format.ts) : « 1,74 Md GNF », « 12,5 % »,
+ * « 38,5 j », « 1,35 », « 72 / 100 ».
+ */
 export function fmtValeur(value: number | null | undefined, unit: Unit, court = true): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "–";
   switch (unit) {
@@ -48,9 +51,9 @@ export function fmtValeur(value: number | null | undefined, unit: Unit, court = 
     case "pct":
       return fmtPct(value, Math.abs(value) >= 100 ? 0 : 1);
     case "days":
-      return `${fmtDec(Math.round(value * 10) / 10)} j`;
+      return fmtJours(value);
     case "ratio":
-      return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return fmtRatio(value);
     case "km":
       return `${fmtInt(value)} km`;
     case "liters":
@@ -64,11 +67,14 @@ export function fmtValeur(value: number | null | undefined, unit: Unit, court = 
   }
 }
 
-/** Valeur courte pour une graduation d'axe. */
+/**
+ * Valeur courte pour une graduation d'axe. Les montants s'écrivent comme sur les axes de Finance,
+ * sans zéros inutiles sur une graduation ronde : « 6 Md », « 2,5 Md », « 500 M ».
+ */
 export function fmtAxe(value: number, unit: Unit): string {
   switch (unit) {
     case "gnf":
-      return fmtShort(value);
+      return axeMontant(value);
     case "pct":
       return `${fmtDec(Math.round(value * 10) / 10)} %`;
     case "days":
@@ -78,7 +84,7 @@ export function fmtAxe(value: number, unit: Unit): string {
     case "ratio":
       return fmtDec(value);
     default:
-      return fmtShort(value);
+      return axeMontant(value);
   }
 }
 

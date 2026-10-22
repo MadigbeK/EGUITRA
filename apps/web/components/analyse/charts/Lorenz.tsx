@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { scaleBand, scaleLinear } from "d3-scale";
 import { area, line, curveMonotoneX } from "d3-shape";
-import { fmtPct, fmtShort } from "@/lib/format";
+import { fmtAxe, fmtPct, fmtShort } from "@/lib/format";
 import { Bulle, COULEUR, Cadre, TableRepli, deplacer, plusProche, positionDans, tronquer } from "./commun";
 
 const M = { haut: 16, droite: 16, bas: 36, gauche: 44 };
@@ -103,7 +103,7 @@ export function Pareto({ items, hauteur = 260, label, format }: { items: Array<{
               {y.ticks(4).map((t) => (
                 <g key={t}>
                   <line x1={M.gauche} x2={W - 44} y1={y(t)} y2={y(t)} stroke={t === 0 ? COULEUR.traitFort : COULEUR.trait} strokeDasharray={t === 0 ? undefined : "3 5"} />
-                  <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{fmtShort(t)}</text>
+                  <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{fmtAxe(t)}</text>
                 </g>
               ))}
               {[0, 50, 80, 100].map((t) => (

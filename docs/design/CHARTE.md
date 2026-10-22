@@ -97,16 +97,50 @@ nom pour les lecteurs d'écran), état, pièce jointe. Les menus sont en texte s
 
 - **Surfaces** : aplats crème posés sur la brume, rayon de 10 px, sans bordure ni ombre. Seuls les
   éléments qui flottent (menus, fenêtres, info-bulles) ont une ombre.
-- **Chiffres clés** (`Kpi`) : un filet, le libellé, la valeur, comme les « chiffres clés » d'un
-  rapport annuel. Posés côte à côte, ils forment une bande de chiffres et non une grille de cartes
-  identiques ; la couleur du filet reprend l'état.
+- **Chiffres clés** (`Kpi`) : le libellé, la valeur, une précision, comme les « chiffres clés »
+  d'un rapport annuel. Posés côte à côte, ils forment un registre (une seule feuille réglée) et non
+  une grille de cartes identiques. Le sceau porte l'état, par la couleur et par la forme : disque
+  pour conforme, triangle pour à surveiller, losange pour alerte ; pas de sceau sans état. Au pied,
+  la gravure : quand une vraie série existe (`serie`), une gravure de tendance, faisceau guilloché
+  dont le trait médian suit la série, dernier point marqué, en encre neutre ; c'est alors la seule
+  courbe sous le chiffre. Sans série, des ondes décoratives en or, gravées une fois puis immobiles,
+  jamais à la couleur de l'état. Un chiffre clé ne réagit pas au survol tant qu'il n'est pas un lien.
+- **Chiffres qui défilent** (`Valeur`) : la valeur juste est rendue dès le départ (rendu serveur,
+  impression, capture, lecteur d'écran). Le défilement depuis zéro part juste avant que le chiffre
+  entre à l'écran, dure 700 ms au plus et ne remplace jamais une valeur juste déjà visible. D'une
+  valeur à la suivante, le chiffre glisse seulement si l'écriture est la même (« 980 M » se pose
+  sur « 1,02 Md » sans défiler). Rien ne défile si le système demande de réduire les animations ou
+  si le navigateur économise les données.
+- **Nombres** (`lib/format.ts`) : une seule écriture. Milliards en « Md », invariable, à deux
+  décimales (« 1,74 Md », « 6,00 Md ») ; millions entiers à partir de 100 M (« 384 M »), à une
+  décimale en dessous (« 7,0 M ») ; sous le million, l'entier groupé ; jamais de « k ». Milliers
+  toujours groupés, espace insécable avant l'unité. Délais en jours à une décimale (`fmtJours`,
+  « 56,5 j »), ratios à deux décimales (`fmtRatio`, « 2,90 »). Les graduations d'axe gardent les
+  mêmes unités sans zéros inutiles (`fmtAxe`, « 6 Md »). Dans un tableau, le montant entier
+  (`fmtInt`) et l'unité dans l'en-tête.
 - **Compteur** (`Compteur`) : un seul par écran.
+- **Courbes** (`AreaChart`) : une période qui n'est pas close (mois en cours, `enCours`) se trace en
+  pointillé, avec un point creux, et l'info-bulle le dit ; une fin de mois partielle ne se lit pas
+  comme une chute.
 - **Registre d'indicateurs** (tableau de bord) : libellé et précision à gauche, valeur à droite.
 - **Répartition** (`Repartition`) : barre segmentée avec filets de séparation et légende chiffrée.
 - **Colonnes** (`BarChart`) : barres fines, valeurs négatives sous la ligne de base, info-bulle au
   survol et au clavier, dernière valeur étiquetée.
 - **Étapes** (`Etapes`) : les gates d'un dossier, numérotés parce qu'ils forment un parcours.
-- **États** (`Badge`) : un carré de couleur et le mot ; pas de pastilles pastel.
+- **États** (`Badge`, table `ETAT_TON` de `lib/couleurs.ts`) : un tampon, et non plus un carré de
+  couleur ni une pastille pastel à point. Rayon de 4 px, filet de 1 px à la couleur de l'état, le mot
+  en toutes lettres. Quatre tons : alerte (danger), à surveiller (warn), favorable (ok), neutre. Le
+  tampon est plein, sur le fond doux, pour ce qui demande une action (warn, danger) ; il est au trait
+  pour le reste. Un même mot garde le même ton dans toutes les applications : Critique et Bloquante
+  en alerte ; Élevée à surveiller ; Moyenne et Information neutres ; Point fort favorable ;
+  Brouillon et Annulée neutres ; Saisie, À valider et Non payée à surveiller ; Échue en alerte ;
+  Validée, Comptabilisée, Facturée et Payée favorables. Dans Transport, une rotation validée qui
+  attend sa facture s'écrit « À facturer », au trait neutre, pour ne pas se confondre avec
+  « Facturée ». Un mot absent de la table s'y ajoute, au lieu de recevoir sa couleur sur place.
+  **La couleur d'une application ne dit jamais un état** : elle sert à la marque, aux actions, à la
+  sélection et aux graphiques. Un tampon qui reçoit encore le ton `accent` s'écrit à l'encre. Un
+  état vivant (le seul de son écran : gate en cours, envoi en attente) bat trois fois, puis
+  s'arrête ; jamais dans une ligne de tableau.
 - **Champs** : contour au trait fort, focus visible ; boutons d'envoi de fichier accessibles au
   clavier (`FileButton`).
 - **Chargement** : un libellé qui dit ce qui charge, avec une barre fine, jamais un disque seul.

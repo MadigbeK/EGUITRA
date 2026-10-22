@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -17,11 +18,13 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, Eye, EyeOff, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
-import { fmtPct, fmtShort } from "@/lib/format";
+import { tamponPlein, type TonEtat } from "@/lib/couleurs";
+import { fmtAxe, fmtPct, fmtShort } from "@/lib/format";
 
 export { cx };
 
@@ -42,8 +45,8 @@ export function useMouvementReduit(): boolean {
   );
 }
 
-/** Vrai dès que l'élément entre à l'écran (une seule fois). */
-export function useVisible<T extends Element>(): [RefObject<T | null>, boolean] {
+/** Vrai dès que l'élément entre à l'écran (une seule fois). `marge` l'annonce un peu avant. */
+export function useVisible<T extends Element>(marge = "0px"): [RefObject<T | null>, boolean] {
   const ref = useRef<T>(null);
   const [vu, setVu] = useState(false);
   useEffect(() => {
@@ -58,69 +61,201 @@ export function useVisible<T extends Element>(): [RefObject<T | null>, boolean] 
         setVu(true);
         io.disconnect();
       }
-    }, { threshold: 0.15 });
+    }, { threshold: 0.15, rootMargin: marge });
     io.observe(el);
     return () => io.disconnect();
-  }, [vu]);
+  }, [vu, marge]);
   return [ref, vu];
 }
 
-/** Valeur qui défile jusqu'à sa cible (ralentissement en fin de course). */
-export function useDefilement(cible: number, actif: boolean, duree = 1300): number {
-  const reduit = useMouvementReduit();
-  const [valeur, setValeur] = useState(0);
-  const depuis = useRef(0);
-  useEffect(() => {
-    if (!actif) return;
-    if (reduit) {
-      depuis.current = cible;
-      setValeur(cible);
-      return;
-    }
-    const origine = depuis.current;
-    const t0 = performance.now();
-    let image = 0;
-    let courant = origine;
-    const pas = (t: number) => {
-      const p = Math.min(1, (t - t0) / duree);
-      courant = origine + (cible - origine) * (1 - Math.pow(1 - p, 4));
-      setValeur(courant);
-      if (p < 1) image = requestAnimationFrame(pas);
-    };
-    image = requestAnimationFrame(pas);
-    return () => {
-      cancelAnimationFrame(image);
-      depuis.current = courant;
-    };
-  }, [cible, actif, reduit, duree]);
-  return valeur;
+type Connexion = { saveData?: boolean; addEventListener?: (type: "change", rappel: () => void) => void; removeEventListener?: (type: "change", rappel: () => void) => void };
+
+function connexion(): Connexion | undefined {
+  return typeof navigator === "undefined" ? undefined : (navigator as Navigator & { connection?: Connexion }).connection;
 }
 
-const NOMBRE = /[-−]?\d{1,3}(?:[   ]\d{3})+(?:,\d+)?|[-−]?\d+(?:,\d+)?/;
+/** Économie de données demandée au navigateur (Android, Chrome) : les chiffres ne défilent pas. */
+function economieDonnees(): boolean {
+  return connexion()?.saveData === true;
+}
+
+function abonnerConnexion(rappel: () => void) {
+  const c = connexion();
+  c?.addEventListener?.("change", rappel);
+  return () => c?.removeEventListener?.("change", rappel);
+}
+
+/** Vrai si le navigateur demande d'économiser les données. */
+export function useEconomieDonnees(): boolean {
+  return useSyncExternalStore(abonnerConnexion, economieDonnees, () => false);
+}
+
+/** Un chiffre s'affiche directement, sans défiler : mouvement réduit ou économie de données. */
+function chiffresFixes(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches || economieDonnees();
+}
+
+const sansAbonnement = () => () => {};
+
+/** Vrai pendant l'hydratation d'une page rendue par le serveur : ce qui s'affiche est déjà peint. */
+function useHydratation(): boolean {
+  return useSyncExternalStore(sansAbonnement, () => false, () => true);
+}
+
+/** Durées du défilement d'un chiffre : entrée à l'écran, puis passage d'une valeur à la suivante. */
+const DUREE_ENTREE = 700;
+const DUREE_CHANGEMENT = 500;
+/** L'entrée part quand le chiffre arrive à 200 px sous le bas de la fenêtre, avant qu'on le voie. */
+const MARGE_ENTREE = 200;
 
 /**
- * Valeur affichée : le premier nombre d'un texte défile depuis zéro quand il entre à l'écran
- * (« 384 M », « 20,6 Mds », « 12 en service »). Le lecteur d'écran lit le texte final.
+ * Nombre affiché par un chiffre qui défile. La valeur finale est l'état de départ : le rendu
+ * serveur, l'impression, une capture et le lecteur d'écran sont justes sans attendre. Le défilement
+ * depuis zéro ne joue qu'une fois, et seulement sur un chiffre que l'on n'a pas encore vu : au
+ * premier affichage s'il est déjà dans la fenêtre, sinon juste avant qu'il y entre. Une valeur juste
+ * déjà visible n'est jamais remplacée par un zéro. Ensuite, une nouvelle valeur glisse depuis
+ * l'ancienne si elle s'écrit de la même façon (`cle` : préfixe, unité, décimales), sinon elle se pose.
+ */
+function useChiffre<T extends Element>(ref: RefObject<T | null>, cible: number, cle: string, actif: boolean): number {
+  const [affiche, setAffiche] = useState(cible);
+  const hydratation = useHydratation();
+  // Un nombre est-il déjà peint ? Un texte sans nombre (« – » en attendant les données) ne compte pas.
+  const peint = useRef(hydratation && actif);
+  const courant = useRef(cible);
+  const vise = useRef({ cible, cle });
+  const entree = useRef(false);
+  const image = useRef(0);
+
+  const poser = useCallback((v: number) => {
+    cancelAnimationFrame(image.current);
+    courant.current = v;
+    setAffiche(v);
+  }, []);
+
+  const lancer = useCallback(
+    (depuis: number, vers: number, duree: number) => {
+      cancelAnimationFrame(image.current);
+      if (depuis === vers) {
+        poser(vers);
+        return;
+      }
+      courant.current = depuis;
+      setAffiche(depuis);
+      const t0 = performance.now();
+      const pas = (t: number) => {
+        const p = Math.min(1, (t - t0) / duree);
+        const v = p < 1 ? depuis + (vers - depuis) * (1 - Math.pow(1 - p, 4)) : vers;
+        courant.current = v;
+        setAffiche(v);
+        if (p < 1) image.current = requestAnimationFrame(pas);
+      };
+      image.current = requestAnimationFrame(pas);
+    },
+    [poser],
+  );
+
+  // Impression lancée pendant un défilement ou avant l'entrée : la valeur finale, tout de suite.
+  useEffect(() => {
+    const imprimer = () => {
+      entree.current = true;
+      cancelAnimationFrame(image.current);
+      courant.current = vise.current.cible;
+      flushSync(() => setAffiche(vise.current.cible));
+    };
+    window.addEventListener("beforeprint", imprimer);
+    return () => window.removeEventListener("beforeprint", imprimer);
+  }, []);
+
+  useLayoutEffect(() => {
+    const avant = vise.current;
+    vise.current = { cible, cle };
+    const dejaPeint = peint.current;
+    if (actif) peint.current = true;
+    const el = ref.current;
+    if (!actif || !el || chiffresFixes()) {
+      // « – » en attendant les données : l'entrée reste à jouer, pour le premier vrai nombre.
+      if (actif) entree.current = true;
+      poser(cible);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    const enVue = r.width > 0 && r.bottom > 0 && r.top < window.innerHeight;
+    const arreter = () => cancelAnimationFrame(image.current);
+
+    if (entree.current) {
+      if (avant.cle === cle && enVue) lancer(courant.current, cible, DUREE_CHANGEMENT);
+      else poser(cible);
+      return arreter;
+    }
+    if (enVue) {
+      entree.current = true;
+      // Rendu serveur déjà peint : la valeur juste reste, sans repartir de zéro.
+      if (dejaPeint) poser(cible);
+      else lancer(0, cible, DUREE_ENTREE);
+      return arreter;
+    }
+    if (r.width === 0 || r.bottom <= 0 || typeof IntersectionObserver === "undefined") {
+      // Masqué, ou déjà dépassé par le défilement : rien à jouer.
+      entree.current = true;
+      poser(cible);
+      return;
+    }
+    // Plus bas dans la page : la valeur juste en attendant, le défilement juste avant l'entrée.
+    poser(cible);
+    const io = new IntersectionObserver(
+      (entrees) => {
+        if (!entrees.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        if (entree.current) return;
+        entree.current = true;
+        // Atteint d'un saut (ancre, défilement rapide) : déjà visible, la valeur juste reste.
+        if (el.getBoundingClientRect().top < window.innerHeight) return;
+        lancer(0, vise.current.cible, DUREE_ENTREE);
+      },
+      { rootMargin: `0px 0px ${MARGE_ENTREE}px 0px` },
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      arreter();
+    };
+  }, [cible, cle, actif, ref, poser, lancer]);
+
+  return affiche;
+}
+
+/** Séparateurs de milliers acceptés : espace, espace insécable, espace fine insécable. */
+const NOMBRE = /[-−]?\d{1,3}(?:[   ]\d{3})+(?:,\d+)?|[-−]?\d+(?:,\d+)?/;
+const SEPARATEUR = /[   ]/g;
+
+/**
+ * Valeur affichée : le premier nombre d'un texte défile depuis zéro juste avant d'entrer à l'écran
+ * (« 384 M », « 1,74 Md », « 12 en service »), en 700 ms au plus. Le texte final est rendu dès le
+ * départ (serveur, impression, capture) ; le lecteur d'écran lit toujours le texte final.
  */
 export function Valeur({ value }: { value: ReactNode }) {
   const texte = typeof value === "number" ? new Intl.NumberFormat("fr-FR").format(value) : typeof value === "string" ? value : null;
   const trouve = texte ? NOMBRE.exec(texte) : null;
-  const [ref, vu] = useVisible<HTMLSpanElement>();
+  const ref = useRef<HTMLSpanElement>(null);
   const brut = trouve ? trouve[0] : "";
   const decimales = brut.includes(",") ? (brut.split(",")[1] ?? "").length : 0;
-  const cible = trouve ? Number(brut.replace(/[   ]/g, "").replace("−", "-").replace(",", ".")) : 0;
-  const courant = useDefilement(cible, vu && trouve !== null);
+  const cible = trouve ? Number(brut.replace(SEPARATEUR, "").replace("−", "-").replace(",", ".")) : 0;
+  const avant = texte && trouve ? texte.slice(0, trouve.index) : "";
+  const apres = texte && trouve ? texte.slice(trouve.index + brut.length) : "";
+  const groupe = brut.replace(SEPARATEUR, "") !== brut || Math.abs(cible) >= 10000;
+  // Deux valeurs ne glissent l'une vers l'autre que si elles s'écrivent de la même façon :
+  // « 980 M » ne défile pas vers « 1,02 Md » (on lirait un instant « 980,00 Md »).
+  const cle = `${avant}|${apres}|${decimales}|${groupe ? 1 : 0}`;
+  const affiche = useChiffre(ref, cible, cle, trouve !== null);
   if (!texte || !trouve) return <span ref={ref}>{value}</span>;
-  const groupe = /[   ]/.test(brut) || Math.abs(cible) >= 10000;
-  const format = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales, useGrouping: groupe });
-  const avant = texte.slice(0, trouve.index);
-  const apres = texte.slice(trouve.index + brut.length);
+  // Au repos, le nombre tel qu'il a été écrit (signe, espaces) ; pendant le défilement, reformaté.
+  const nombre = affiche === cible ? brut : new Intl.NumberFormat("fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales, useGrouping: groupe }).format(affiche);
   return (
     <span ref={ref}>
-      <span className="sr-only">{texte}</span>
-      <span aria-hidden className="tabular">
+      <span className="valeur-texte tabular sr-only">{texte}</span>
+      <span aria-hidden className="valeur-anim tabular">
         {avant}
-        {format.format(courant)}
+        {nombre}
         {apres}
       </span>
     </span>
@@ -129,19 +264,18 @@ export function Valeur({ value }: { value: ReactNode }) {
 
 /* ─── Couleurs ─────────────────────────────────────────────────────────── */
 
-/** Couleurs des graphiques et des repères d'état : une seule gamme, sur les jetons (lib/couleurs.ts). */
-export { ETATS, SERIES } from "@/lib/couleurs";
+/**
+ * Couleurs des graphiques et des repères d'état : une seule gamme, sur les jetons (lib/couleurs.ts).
+ * ETAT_TON donne le ton d'un état par son mot (« Saisie », « Échue ») : tonEtat(mot).
+ */
+export { ETATS, ETAT_TON, SERIES, tonEtat } from "@/lib/couleurs";
 
-export type Tone = "neutral" | "ok" | "warn" | "danger" | "accent";
-
-/** Teinte vive de chaque état, pour les repères graphiques. */
-const VIF: Record<Tone, string> = {
-  neutral: "var(--accent-vif)",
-  ok: "var(--g-jade)",
-  warn: "var(--warn-vif)",
-  danger: "var(--danger-vif)",
-  accent: "var(--n-or)",
-};
+/**
+ * Ton : les quatre tons d'état (lib/couleurs.ts), plus « accent », la couleur de l'application,
+ * réservée à la marque, aux actions et à la sélection. Un tampon d'état ne la prend plus : un
+ * Badge « accent » s'écrit à l'encre (à remplacer écran par écran par le ton de ETAT_TON).
+ */
+export type Tone = TonEtat | "accent";
 
 export type Teinte = "accent" | "jade" | "azur" | "ambre" | "rose" | "lagon" | "corail" | "or" | "danger";
 
@@ -171,8 +305,22 @@ export function IconTile({ icon: I, teinte = "accent", className }: { icon: Icon
   );
 }
 
-/** Variation en pourcentage : flèche et pastille verte ou rouge (« inverse » pour une charge). */
-export function Delta({ value, inverse, digits = 1 }: { value: number | null; inverse?: boolean; digits?: number }) {
+/** Unité d'une variation : en % de la valeur précédente, ou en points pour un taux (marge, part échue). */
+export type UniteDelta = "pct" | "pts";
+
+/** Écart de taux en points : « 2,6 pts », « 1,0 pt » (espace insécable). */
+function fmtPoints(v: number, digits: number): string {
+  const p = 10 ** digits;
+  const r = Math.round(v * p) / p;
+  return `${r.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: "always" })} ${r >= 2 ? "pts" : "pt"}`;
+}
+
+/**
+ * Variation : flèche et pastille verte ou rouge (« inverse » pour une charge). Un taux varie en
+ * points (`unite="pts"`, valeur = écart des deux taux) : de 34,7 % à 32,1 %, « ▼ 2,6 pts », et non
+ * « ▼ 7,4 % », qui se lirait comme un écart de taux.
+ */
+export function Delta({ value, inverse, digits = 1, unite = "pct" }: { value: number | null; inverse?: boolean; digits?: number; unite?: UniteDelta }) {
   if (value === null || !Number.isFinite(value)) return null;
   const hausse = value >= 0;
   const bon = inverse ? !hausse : hausse;
@@ -181,7 +329,7 @@ export function Delta({ value, inverse, digits = 1 }: { value: number | null; in
       <svg viewBox="0 0 10 10" aria-hidden className={cx("h-2 w-2", !hausse && "rotate-180")}>
         <path d="M5 1 9.5 9h-9Z" fill="currentColor" />
       </svg>
-      {fmtPct(Math.abs(value), digits)}
+      {unite === "pts" ? fmtPoints(Math.abs(value), digits) : fmtPct(Math.abs(value), digits)}
       <span className="sr-only">{hausse ? " en hausse" : " en baisse"}</span>
     </span>
   );
@@ -227,85 +375,143 @@ export function Card({ title, actions, children, className, padded = true }: { t
   );
 }
 
-/** Encre de la gravure d'un chiffre clé, selon son état. */
-const ENCRE: Record<Tone, string> = {
-  neutral: "text-accent-vif",
-  ok: "text-jade",
-  warn: "text-warn-vif",
-  danger: "text-danger-vif",
-  accent: "text-or",
-};
+/** Sceau d'un chiffre clé : seuls les trois états qui disent quelque chose en portent un. */
+type EtatSceau = "ok" | "warn" | "danger";
 
-/** Couleur du sceau : plus soutenue que l'encre des ondes, il porte l'état (3:1 au moins). */
-const SCEAU: Record<Tone, string> = {
-  neutral: "text-accent",
+/** Couleur du sceau : il porte l'état (3:1 au moins sur le blanc et sur le fond). */
+const SCEAU: Record<EtatSceau, string> = {
   ok: "text-ok",
   warn: "text-warn",
   danger: "text-danger",
-  accent: "text-or-fonce",
 };
 
 /** L'état du sceau en toutes lettres, pour qui ne voit pas sa couleur. */
-const ETAT: Record<Tone, string> = {
-  neutral: "",
+const ETAT_SCEAU: Record<EtatSceau, string> = {
   ok: "Conforme",
   warn: "À surveiller",
   danger: "Alerte",
-  accent: "À noter",
 };
 
-/** Sceau d'état : un petit cachet gravé (anneau et point), dans la couleur de l'état. */
-function Sceau({ tone }: { tone: Tone }) {
+/**
+ * Sceau d'état : un petit cachet gravé, anneau pointillé et marque au centre. La forme dit l'état
+ * autant que la couleur : disque pour conforme, triangle pour à surveiller, losange pour alerte.
+ */
+function Sceau({ tone }: { tone: EtatSceau }) {
   return (
     <>
       <svg viewBox="0 0 16 16" aria-hidden className={cx("mt-0.5 h-4 w-4 flex-none", SCEAU[tone])}>
         <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="1.2 1.4" />
-        <circle cx="8" cy="8" r="3.4" fill="currentColor" />
+        {tone === "ok" && <circle cx="8" cy="8" r="3.4" fill="currentColor" />}
+        {tone === "warn" && <path d="M8 4.1 11.9 10.6H4.1Z" fill="currentColor" />}
+        {tone === "danger" && <path d="M8 3.7 12.3 8 8 12.3 3.7 8Z" fill="currentColor" />}
       </svg>
-      <span className="sr-only">{ETAT[tone]}</span>
+      <span className="sr-only">{ETAT_SCEAU[tone]}</span>
     </>
+  );
+}
+
+/** Boîte de dessin de la gravure de tendance (étirée à la largeur du chiffre clé). */
+const GRAVURE_L = 240;
+const GRAVURE_H = 40;
+
+/**
+ * Gravure de tendance : la vraie série d'un chiffre clé, gravée comme le faisceau d'un billet. Le
+ * trait médian suit la série, quatre traits voisins l'accompagnent en se resserrant et en s'écartant
+ * (le guillochis), le dernier point est marqué. Encre neutre : l'état reste au sceau. Les bornes sont
+ * élargies à ±15 % de la moyenne au moins, pour qu'une variation de 2 % ne dessine pas une chute.
+ */
+function GravureTendance({ valeurs }: { valeurs: number[] }) {
+  const n = valeurs.length;
+  let lo = Math.min(...valeurs);
+  let hi = Math.max(...valeurs);
+  const plancher = (valeurs.reduce((s, v) => s + Math.abs(v), 0) / n) * 0.3;
+  if (hi - lo < plancher) {
+    const milieu = (hi + lo) / 2;
+    lo = milieu - plancher / 2;
+    hi = milieu + plancher / 2;
+  }
+  const haut = 10;
+  const bas = GRAVURE_H - 10;
+  const pts = valeurs.map((v, i) => [(i / (n - 1)) * GRAVURE_L, hi === lo ? GRAVURE_H / 2 : bas - ((v - lo) / (hi - lo)) * (bas - haut)] as [number, number]);
+  const suivre = hermite(pts);
+  const voisins = [-2, -1, 1, 2].map((k) => {
+    let d = "";
+    for (let p = 0; p <= 64; p++) {
+      const x = (p / 64) * GRAVURE_L;
+      const ecart = k * 3.4 * (1 + 0.42 * Math.sin((x / GRAVURE_L) * Math.PI * 5 + k * 1.3));
+      d += `${p ? "L" : "M"}${arrondi(x)},${arrondi(suivre(x) + ecart)}`;
+    }
+    return d;
+  });
+  const dernier = pts[n - 1]!;
+  return (
+    <div aria-hidden className="kpi-gravure relative mt-3 h-10 text-ink-2">
+      {/* Pas de vector-effect ici : combiné à pathLength sur un tracé étiré, il ne grave qu'une partie
+          de la ligne. La hauteur n'est pas étirée (GRAVURE_H vaut la hauteur affichée) : le trait
+          garde son épaisseur. */}
+      <svg viewBox={`0 0 ${GRAVURE_L} ${GRAVURE_H}`} preserveAspectRatio="none" focusable="false" className="absolute inset-0 h-full w-full overflow-visible">
+        {voisins.map((d, i) => (
+          <path key={i} d={d} pathLength={1} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.8} className="guilloche-trait" style={{ "--i": i } as CSSProperties} />
+        ))}
+        <path d={courbe(pts)} pathLength={1} fill="none" stroke="currentColor" strokeOpacity={0.85} strokeWidth={1.6} strokeLinecap="round" className="guilloche-trait" style={{ "--i": 2 } as CSSProperties} />
+      </svg>
+      <span className="n-apparaitre absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-current shadow-[0_0_0_2px_var(--panel)]" style={{ left: "100%", top: `${(dernier[1] / GRAVURE_H) * 100}%`, animationDelay: "900ms" }} />
+    </div>
   );
 }
 
 /**
  * Chiffre clé, gravé comme un coupon : le libellé, la valeur en grand qui défile, une précision.
- * Un faisceau guilloché propre à chaque libellé court au pied, dans l'encre de l'état ; le sceau
- * dit l'état, le libellé ou la précision le disent aussi en toutes lettres.
+ * Le sceau dit l'état (couleur et forme), le libellé ou la précision le disent aussi en toutes
+ * lettres. Au pied, la gravure : avec une vraie série (`serie`), la gravure de tendance, seule
+ * courbe sous le chiffre ; sans série, des ondes en or, décoratives, gravées une fois puis
+ * immobiles, jamais à la couleur de l'état. Le chiffre ne réagit pas au survol : il n'est pas un lien.
+ * Un chiffre qui est un taux passe sa variation en points (`deltaUnite="pts"`).
  */
-export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; delta?: number | null; inverse?: boolean }) {
+export function Kpi({ label, value, hint, tone = "neutral", delta, deltaUnite, inverse, serie }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; delta?: number | null; deltaUnite?: UniteDelta; inverse?: boolean; serie?: number[] }) {
+  const tendance = serie?.filter((v) => Number.isFinite(v)) ?? [];
+  const grave = tendance.length >= 2;
   return (
     <div className={cx(FEUILLE, "n-kpi kpi relative isolate min-w-0 overflow-hidden px-5 pb-4 pt-4")}>
-      <Ondes graine={label} className={cx("kpi-ondes pointer-events-none absolute -bottom-2 right-0 -z-10 h-[74px] w-[78%] max-w-[300px]", ENCRE[tone])} />
+      {!grave && <Ondes graine={label} className="kpi-ondes pointer-events-none absolute -bottom-2 right-0 -z-10 h-[74px] w-[78%] max-w-[300px] text-or" />}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 text-[13px] font-medium leading-snug text-ink-2">{label}</div>
-        {tone !== "neutral" && <Sceau tone={tone} />}
+        {(tone === "ok" || tone === "warn" || tone === "danger") && <Sceau tone={tone} />}
       </div>
       <div className={cx("mt-3 font-display text-[30px] font-[650] leading-none tracking-[-0.03em]", tone === "danger" ? "text-danger" : "text-ink")}>
         <Valeur value={value} />
       </div>
       {(hint || delta !== undefined) && (
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] leading-snug text-muted">
-          {delta !== undefined && <Delta value={delta} inverse={inverse} />}
+          {delta !== undefined && <Delta value={delta} inverse={inverse} unite={deltaUnite} />}
           {hint && <span className="min-w-0">{hint}</span>}
         </div>
       )}
+      {grave && <GravureTendance valeurs={tendance} />}
     </div>
   );
 }
 
-const PASTILLE: Record<Tone, string> = {
-  neutral: "bg-panel-3 text-ink-2",
-  ok: "bg-ok-doux text-ok-texte",
-  warn: "bg-warn-doux text-warn",
-  danger: "bg-danger-doux text-danger",
-  accent: "bg-accent-doux text-accent",
+/**
+ * Tampon d'état : rayon de 4 px, filet de 1 px à la couleur de l'état, le mot sans point. Plein
+ * (fond doux) pour ce qui demande une action, au trait pour le reste. Le ton « accent » ne dit pas
+ * d'état : il s'écrit à l'encre, au trait.
+ */
+const TAMPON: Record<Tone, string> = {
+  neutral: "border-muted/45 text-ink-2",
+  ok: "border-ok/55 text-ok-texte",
+  warn: "border-warn/45 bg-warn-doux text-warn",
+  danger: "border-danger/40 bg-danger-doux text-danger",
+  accent: "border-ink/40 text-ink",
 };
 
-/** Puce d'état : le texte dit l'état, la couleur l'appuie. `vivant` fait battre le point. */
+/**
+ * Tampon d'état : le mot dit l'état, la couleur et le plein l'appuient (charte, « États »).
+ * `vivant` fait battre le tampon trois fois, pour le seul état vivant d'un écran.
+ */
 export function Badge({ tone = "neutral", children, vivant }: { tone?: Tone; children: ReactNode; vivant?: boolean }) {
   return (
-    <span className={cx("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-[3px] pl-2 pr-2.5 text-[12px] font-semibold leading-4", PASTILLE[tone])}>
-      <span aria-hidden className={cx("h-1.5 w-1.5 flex-none rounded-full", vivant && "n-pouls")} style={{ background: tone === "neutral" ? "var(--muted)" : VIF[tone === "accent" ? "neutral" : tone], "--pouls": "currentColor" } as CSSProperties} />
+    <span className={cx("inline-flex items-center whitespace-nowrap rounded-[4px] border px-2 py-[2px] text-[12px] font-semibold leading-4", TAMPON[tone], tamponPlein(tone) ? "tampon-plein" : "tampon-trait", vivant && "tampon-vivant")}>
       {children}
     </span>
   );
@@ -488,12 +694,16 @@ export function Squelette({ className }: { className?: string }) {
   return <div aria-hidden className={cx("n-squelette rounded-2xl", className)} />;
 }
 
-export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+/** Erreur d'un appel, avec « Réessayer ». `titre` dit d'abord ce que l'échec laisse à l'écran. */
+export function ErrorBox({ error, onRetry, titre }: { error: unknown; onRetry?: () => void; titre?: ReactNode }) {
   const message = error instanceof Error ? error.message : "Une erreur est survenue.";
   return (
     <div role="alert" className="n-surgir flex items-start gap-3 rounded-xl border border-danger/15 bg-danger-doux px-4 py-3 text-sm text-danger">
       <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
-      <div className="flex-1">{message}</div>
+      <div className="flex-1">
+        {titre && <div className="font-semibold">{titre}</div>}
+        {message}
+      </div>
       {onRetry && (
         <button type="button" onClick={() => onRetry()} className="font-semibold underline underline-offset-2">
           Réessayer
@@ -875,17 +1085,20 @@ export function demanderConfirmation(question: string, options: OptionsConfirmat
 
 /**
  * Compteur : un montant affiché chiffre par chiffre, comme sur le compteur volumétrique d'une
- * citerne. Les rouleaux tournent au premier affichage (sauf mouvement réduit). Un seul compteur
- * par écran : c'est le chiffre que l'écran met en avant.
+ * citerne. Les rouleaux tournent au premier affichage (sauf mouvement réduit ou économie de
+ * données). Chaque rouleau porte sa position finale (--chiffre) : l'impression, une capture et le
+ * lecteur d'écran lisent toujours le montant juste. Un seul compteur par écran : c'est le chiffre
+ * que l'écran met en avant.
  */
 export function Compteur({ value, unit = "GNF", className }: { value: number; unit?: string; className?: string }) {
+  const econome = useEconomieDonnees();
   const n = Math.round(value);
   const digits = Math.abs(n).toString();
   const groups: string[] = [];
   for (let end = digits.length; end > 0; end -= 3) groups.unshift(digits.slice(Math.max(0, end - 3), end));
   let rang = 0;
   return (
-    <span className={cx("compteur", className)}>
+    <span className={cx("compteur", econome && "compteur-fixe", className)}>
       <span className="sr-only">{`${n < 0 ? "moins " : ""}${new Intl.NumberFormat("fr-FR").format(Math.abs(n))} ${unit}`}</span>
       {n < 0 && (
         <span aria-hidden className="compteur-signe">
@@ -946,12 +1159,12 @@ function graduations(min: number, max: number, nombre = 4): number[] {
   return t;
 }
 
-/** Courbe monotone (Fritsch-Carlson) : lisse, sans dépasser les valeurs réelles. */
-function courbe(points: Array<[number, number]>): string {
+/** Coordonnée arrondie au centième, pour des tracés SVG courts. */
+const arrondi = (v: number) => Math.round(v * 100) / 100;
+
+/** Pentes de Fritsch-Carlson en chaque point : la courbe reste monotone entre deux valeurs. */
+function pentes(points: Array<[number, number]>): number[] {
   const n = points.length;
-  const p = (v: number) => Math.round(v * 100) / 100;
-  if (n === 0) return "";
-  if (n === 1) return `M${p(points[0]![0])},${p(points[0]![1])}`;
   const dx: number[] = [];
   const m: number[] = [];
   for (let i = 0; i < n - 1; i++) {
@@ -972,28 +1185,63 @@ function courbe(points: Array<[number, number]>): string {
     }
   }
   t.push(m[n - 2]!);
-  let d = `M${p(points[0]![0])},${p(points[0]![1])}`;
+  return t;
+}
+
+/** Tronçons de Bézier de la courbe monotone, un par intervalle (« C… »), sans le point de départ. */
+function troncons(points: Array<[number, number]>): string[] {
+  const n = points.length;
+  if (n < 2) return [];
+  const t = pentes(points);
+  const liste: string[] = [];
   for (let i = 0; i < n - 1; i++) {
     const [x0, y0] = points[i]!;
     const [x1, y1] = points[i + 1]!;
-    const h = dx[i]!;
-    d += ` C${p(x0 + h / 3)},${p(y0 + (t[i]! * h) / 3)} ${p(x1 - h / 3)},${p(y1 - (t[i + 1]! * h) / 3)} ${p(x1)},${p(y1)}`;
+    const h = x1 - x0;
+    liste.push(` C${arrondi(x0 + h / 3)},${arrondi(y0 + (t[i]! * h) / 3)} ${arrondi(x1 - h / 3)},${arrondi(y1 - (t[i + 1]! * h) / 3)} ${arrondi(x1)},${arrondi(y1)}`);
   }
-  return d;
+  return liste;
+}
+
+/** Courbe monotone (Fritsch-Carlson) : lisse, sans dépasser les valeurs réelles. */
+function courbe(points: Array<[number, number]>): string {
+  if (points.length === 0) return "";
+  const [x0, y0] = points[0]!;
+  return `M${arrondi(x0)},${arrondi(y0)}${troncons(points).join("")}`;
+}
+
+/** La même courbe monotone, lue en un point quelconque (x croissants, deux points au moins). */
+function hermite(points: Array<[number, number]>): (x: number) => number {
+  const t = pentes(points);
+  return (x) => {
+    let i = 0;
+    while (i < points.length - 2 && x > points[i + 1]![0]) i++;
+    const [x0, y0] = points[i]!;
+    const [x1, y1] = points[i + 1] ?? points[i]!;
+    const h = x1 - x0 || 1;
+    const s = Math.min(1, Math.max(0, (x - x0) / h));
+    const s2 = s * s;
+    const s3 = s2 * s;
+    return (2 * s3 - 3 * s2 + 1) * y0 + (s3 - 2 * s2 + s) * h * t[i]! + (-2 * s3 + 3 * s2) * y1 + (s3 - s2) * h * (t[i + 1] ?? 0);
+  };
 }
 
 /**
  * Courbes d'une ou plusieurs séries sur un même axe (jamais deux échelles) : tracé animé, aire en
  * dégradé sous la première série, réticule et info-bulle au survol comme au clavier (flèches).
- * Avec deux séries ou plus, la légende permet de masquer une série.
+ * Avec deux séries ou plus, la légende permet de masquer une série. `enCours` : la dernière période
+ * n'est pas close (mois en cours) ; son tronçon se trace en pointillé et son point est creux, pour
+ * qu'une fin de mois partielle ne se lise pas comme une chute.
  */
-export function AreaChart({ labels, series, height = 220, format, formatAxis, label }: { labels: string[]; series: Array<{ key: string; label: string; values: number[]; color: string }>; height?: number; format?: (v: number) => string; formatAxis?: (v: number) => string; label?: string }) {
+export function AreaChart({ labels, series, height = 220, format, formatAxis, label, enCours }: { labels: string[]; series: Array<{ key: string; label: string; values: number[]; color: string }>; height?: number; format?: (v: number) => string; formatAxis?: (v: number) => string; label?: string; enCours?: boolean }) {
   const id = useId().replace(/:/g, "");
   const [masque, setMasque] = useState<string[]>([]);
   const [focus, setFocus] = useState<number | null>(null);
   const zone = useRef<HTMLDivElement>(null);
   const show = format ?? ((v: number) => fmtShort(v));
-  const axe = formatAxis ?? ((v: number) => fmtShort(v));
+  const axe = formatAxis ?? ((v: number) => fmtAxe(v));
+  const partiel = Boolean(enCours) && labels.length >= 2;
+  const periode = (i: number) => `${labels[i] ?? ""}${partiel && i === labels.length - 1 ? " (en cours)" : ""}`;
   const visibles = series.filter((s) => !masque.includes(s.key));
   const n = labels.length;
   const toutes = visibles.flatMap((s) => s.values);
@@ -1082,14 +1330,26 @@ export function AreaChart({ labels, series, height = 220, format, formatAxis, la
               const pts = s.values.map((v, i) => [x(i), y(v)] as [number, number]);
               const d = courbe(pts);
               const aire = pts.length ? `${d} L${x(pts.length - 1)},${zero} L${x(0)},${zero} Z` : "";
+              // Période en cours : le tracé plein s'arrête à la dernière période close, la suite en pointillé.
+              const coupe = partiel && pts.length === n && n >= 2;
+              const segments = coupe ? troncons(pts) : [];
+              const plein = coupe ? `M${arrondi(pts[0]![0])},${arrondi(pts[0]![1])}${segments.slice(0, -1).join("")}` : d;
+              const pointille = coupe ? `M${arrondi(pts[n - 2]![0])},${arrondi(pts[n - 2]![1])}${segments[n - 2] ?? ""}` : "";
               return (
                 <g key={s.key}>
                   {k === 0 && <path d={aire} fill={`url(#${id}-${s.key})`} className="n-apparaitre" style={{ animationDuration: "1200ms" }} />}
-                  <path d={d} fill="none" stroke={s.color} strokeWidth="2.25" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength={1} className="n-tracer" style={{ "--retard": `${150 + k * 180}ms` } as CSSProperties} />
+                  <path d={plein} fill="none" stroke={s.color} strokeWidth="2.25" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength={1} className="n-tracer" style={{ "--retard": `${150 + k * 180}ms` } as CSSProperties} />
+                  {coupe && <path d={pointille} fill="none" stroke={s.color} strokeWidth="2.25" strokeLinecap="round" strokeDasharray="5 6" vectorEffect="non-scaling-stroke" className="n-apparaitre" style={{ animationDelay: `${900 + k * 180}ms` }} />}
                 </g>
               );
             })}
           </svg>
+          {partiel &&
+            visibles.map((s, k) => {
+              const v = s.values[n - 1];
+              if (v === undefined || s.values.length !== n || focus === n - 1) return null;
+              return <span key={s.key} aria-hidden className="n-apparaitre pointer-events-none absolute h-[9px] w-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-panel" style={{ left: "100%", top: `${(y(v) / height) * 100}%`, borderColor: s.color, animationDelay: `${900 + k * 180}ms` }} />;
+            })}
           {focus !== null && n > 0 && (
             <>
               <span aria-hidden className="pointer-events-none absolute inset-y-0 w-px border-l border-dashed border-ink/35" style={{ left: `${pct(focus)}%` }} />
@@ -1099,7 +1359,7 @@ export function AreaChart({ labels, series, height = 220, format, formatAxis, la
                 return <span key={s.key} aria-hidden className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel shadow-[0_1px_4px_rgb(16_36_31/0.3)]" style={{ left: `${pct(focus)}%`, top: (y(v) / height) * 100 + "%", background: s.color }} />;
               })}
               <Bulle
-                titre={labels[focus] ?? ""}
+                titre={periode(focus)}
                 lignes={visibles.map((s) => ({ couleur: s.color, nom: visibles.length > 1 ? s.label : undefined, valeur: show(s.values[focus] ?? 0) }))}
                 className="top-1"
                 style={pct(focus) > 62 ? { right: `calc(${100 - pct(focus)}% + 14px)` } : { left: `calc(${pct(focus)}% + 14px)` }}
@@ -1132,7 +1392,7 @@ export function AreaChart({ labels, series, height = 220, format, formatAxis, la
         <tbody>
           {labels.map((l, i) => (
             <tr key={`${l}-${i}`}>
-              <th scope="row">{l}</th>
+              <th scope="row">{periode(i)}</th>
               {series.map((s) => (
                 <td key={s.key}>{show(s.values[i] ?? 0)}</td>
               ))}
@@ -1162,7 +1422,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
       <div aria-hidden className="relative w-12 flex-none" style={{ height }}>
         {ticks.map((t) => (
           <span key={t} className="absolute right-0 -translate-y-1/2 text-[11px] tabular text-muted" style={{ top: `${((hi - t) / span) * 100}%` }}>
-            {fmtShort(t)}
+            {fmtAxe(t)}
           </span>
         ))}
       </div>
