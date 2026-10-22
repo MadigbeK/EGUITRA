@@ -25,9 +25,13 @@
                         <p t-esc="lettre['intro']"/>
                         <table class="table table-sm">
                             <thead>
-                                <tr t-attf-style="background-color: {{couleur}}; color: #ffffff;">
-                                    <th>Facture</th><th>Date</th><th>Échéance</th>
-                                    <th class="text-end">Montant TTC</th><th class="text-end">Reste dû</th>
+                                <!-- La couleur sur chaque cellule : celle de la ligne est recouverte par le tableau. -->
+                                <t t-set="entete" t-value="'background-color: %s; color: #ffffff;' % couleur"/>
+                                <tr>
+                                    <th t-att-style="entete">Facture</th><th t-att-style="entete">Date</th>
+                                    <th t-att-style="entete">Échéance</th>
+                                    <th class="text-end" t-att-style="entete">Montant TTC</th>
+                                    <th class="text-end" t-att-style="entete">Reste dû</th>
                                 </tr>
                             </thead>
                             <tbody>
