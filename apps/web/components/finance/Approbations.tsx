@@ -3,8 +3,14 @@
 import { useState } from "react";
 import { Check, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
+import type { Profile } from "@/lib/types";
+
+// Profils des routes des circuits (addons/eguitra_approval/controllers/approvals.py) : lecture
+// (GET /approvals/rules), création et modification (POST et PATCH, administration seule).
+const CIRCUITS_LECTURE: Profile[] = ["admin", "direction", "finance"];
+const CIRCUITS_ECRITURE: Profile[] = ["admin"];
 
 interface Req {
   id: number;
@@ -45,6 +51,8 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
   const { data: inbox, error: erreurCorbeille, mutate: refreshInbox } = useApi<Req[]>(demandes ? null : "/approvals/inbox");
   const { data: list, error: erreurListe, mutate } = useApi<Req[]>(CHEMINS[tab] ?? null);
   const [selected, setSelected] = useState<number | null>(null);
+  // Les profils métier (exploitation, chantiers, immobilier, cabinet) suivent leurs demandes sans lire les circuits.
+  const circuits = useAutorise(CIRCUITS_LECTURE);
   const rows = tab === "inbox" ? inbox : list;
   const onglets: Array<{ key: Onglet; label: string; count?: number }> = demandes
     ? [
@@ -56,7 +64,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
         { key: "inbox", label: "Ma corbeille", count: inbox?.length },
         { key: "mine", label: "Mes demandes" },
         { key: "all", label: "Toutes" },
-        { key: "rules", label: "Circuits" },
+        ...(circuits ? [{ key: "rules" as const, label: "Circuits" }] : []),
       ];
   return (
     <div>
@@ -66,7 +74,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
         <PageHeader title="À valider" subtitle="Corbeille de validation : engagements de dépense, pièces d'achat, règlements et décaissements soumis au circuit d'approbation, par seuil et par niveau." />
       )}
       <Tabs tabs={onglets} value={tab} onChange={setTab} />
-      {tab === "rules" ? (
+      {tab === "rules" && circuits ? (
         <Rules />
       ) : !rows ? (
         <Etat error={tab === "inbox" ? erreurCorbeille : erreurListe} onRetry={() => void (tab === "inbox" ? refreshInbox() : mutate())} />
@@ -186,6 +194,8 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
 
 function Rules() {
   const { data: rules, error, mutate } = useApi<Rule[]>("/approvals/rules");
+  // Ajouter une règle ou l'activer : administration seule ; la direction et la finance consultent.
+  const ecriture = useAutorise(CIRCUITS_ECRITURE);
   const [form, setForm] = useState({ name: "", document: "in_invoice", sequence: "1", min_amount: "0", max_amount: "", account_prefix: "", approver_profile: "finance" });
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   async function add() {
@@ -200,6 +210,7 @@ function Rules() {
   return (
     <div className="space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      {rules && !ecriture && <Notice tone="accent">Circuits tenus par l&apos;administration : consultation seulement.</Notice>}
       <Card padded={false}>
         {!rules ? (
           <Etat error={error} onRetry={() => mutate()} />
@@ -215,41 +226,43 @@ function Rules() {
               { key: "max_amount", label: "Jusqu'à", align: "right", render: (r) => (r.max_amount ? fmtGNF(r.max_amount) : "–") },
               { key: "account_prefix", label: "Comptes", render: (r) => r.account_prefix ?? "Tous" },
               { key: "approver_label", label: "Approbateur" },
-              { key: "active", label: "", render: (r) => <input type="checkbox" checked={r.active} onChange={(e) => apiSend("PATCH", `/approvals/rules/${r.id}`, { active: e.target.checked }).then(() => mutate()).catch(() => setMessage({ tone: "danger", text: "Réservé à l'administration." }))} /> },
+              { key: "active", label: "", render: (r) => (ecriture ? <input type="checkbox" checked={r.active} aria-label={`Règle ${r.name} active`} onChange={(e) => apiSend("PATCH", `/approvals/rules/${r.id}`, { active: e.target.checked }).then(() => mutate()).catch(() => setMessage({ tone: "danger", text: "Réservé à l'administration." }))} /> : r.active ? <Badge tone="ok">Active</Badge> : <Badge>Inactive</Badge>) },
             ]}
           />
         )}
       </Card>
-      <Card title="Nouvelle règle">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <Field label="Libellé" className="md:col-span-2">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Investissements : accord de la direction" />
-          </Field>
-          <Field label="Nature">
-            <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
-          </Field>
-          <Field label="Approbateur">
-            <Select value={form.approver_profile} onChange={(e) => setForm({ ...form, approver_profile: e.target.value })} options={[{ value: "finance", label: "Finance" }, { value: "direction", label: "Direction générale" }, { value: "admin", label: "Administration" }]} />
-          </Field>
-          <Field label="Niveau">
-            <Input value={form.sequence} onChange={(e) => setForm({ ...form, sequence: e.target.value })} />
-          </Field>
-          <Field label="À partir de (GNF)">
-            <Input className="font-mono" value={form.min_amount} onChange={(e) => setForm({ ...form, min_amount: e.target.value })} />
-          </Field>
-          <Field label="Jusqu'à (GNF, vide = sans plafond)">
-            <Input className="font-mono" value={form.max_amount} onChange={(e) => setForm({ ...form, max_amount: e.target.value })} />
-          </Field>
-          <Field label="Comptes commençant par">
-            <Input value={form.account_prefix} onChange={(e) => setForm({ ...form, account_prefix: e.target.value })} placeholder="2 pour les investissements" />
-          </Field>
-        </div>
-        <div className="mt-3">
-          <Button variant="primary" onClick={add} disabled={!form.name}>
-            Ajouter la règle
-          </Button>
-        </div>
-      </Card>
+      {ecriture && (
+        <Card title="Nouvelle règle">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <Field label="Libellé" className="md:col-span-2">
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Investissements : accord de la direction" />
+            </Field>
+            <Field label="Nature">
+              <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
+            </Field>
+            <Field label="Approbateur">
+              <Select value={form.approver_profile} onChange={(e) => setForm({ ...form, approver_profile: e.target.value })} options={[{ value: "finance", label: "Finance" }, { value: "direction", label: "Direction générale" }, { value: "admin", label: "Administration" }]} />
+            </Field>
+            <Field label="Niveau">
+              <Input value={form.sequence} onChange={(e) => setForm({ ...form, sequence: e.target.value })} />
+            </Field>
+            <Field label="À partir de (GNF)">
+              <Input className="font-mono" value={form.min_amount} onChange={(e) => setForm({ ...form, min_amount: e.target.value })} />
+            </Field>
+            <Field label="Jusqu'à (GNF, vide = sans plafond)">
+              <Input className="font-mono" value={form.max_amount} onChange={(e) => setForm({ ...form, max_amount: e.target.value })} />
+            </Field>
+            <Field label="Comptes commençant par">
+              <Input value={form.account_prefix} onChange={(e) => setForm({ ...form, account_prefix: e.target.value })} placeholder="2 pour les investissements" />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Button variant="primary" onClick={add} disabled={!form.name}>
+              Ajouter la règle
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
