@@ -411,16 +411,31 @@ class EguitraRh(http.Controller):
             values["active"] = bool(data["active"])
         return values
 
+    def _check_shared_department(self, dept=None, values=None):
+        """Un département commun (sans société) ne se crée et ne se modifie que par un compte ouvert à
+        toutes les sociétés : il peut contenir des salariés de chacune."""
+        shared = (dept is not None and not dept.company_id) or (values is not None and values.get("company_id") is False)
+        if shared:
+            everyone = request.env["res.company"].sudo().search([])
+            if everyone - request.env.companies:
+                raise ApiError(403, "forbidden", "Un département commun aux deux sociétés ne se gère que par un compte "
+                                                 "ouvert aux deux sociétés.")
+
     @api_route("/rh/departments", methods=("POST",), profiles=WRITE)
     def create_department(self, **_kw):
         data = read_json()
         require(data, "name")
-        return department_row(request.env["eguitra.rh.department"].create(self._department_values(data)))
+        values = self._department_values(data)
+        values.setdefault("company_id", False)
+        self._check_shared_department(values=values)
+        return department_row(request.env["eguitra.rh.department"].create(values))
 
     @api_route("/rh/departments/<int:department_id>", methods=("PATCH",), profiles=WRITE)
     def update_department(self, department_id, **_kw):
         dept = get("eguitra.rh.department", department_id, "Département")
-        dept.write(self._department_values(read_json()))
+        values = self._department_values(read_json())
+        self._check_shared_department(dept, values if "company_id" in values else None)
+        dept.write(values)
         return department_row(dept)
 
     def _rubric_values(self, data):

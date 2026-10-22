@@ -159,6 +159,16 @@ class EguitraRhDepartment(models.Model):
     manager_id = fields.Many2one("eguitra.rh.employee", "Responsable")
     active = fields.Boolean(default=True)
 
+    @api.constrains("company_id")
+    def _check_company_staff(self):
+        """Un département propre à une société ne contient que des salariés de cette société."""
+        for dept in self.filtered("company_id"):
+            others = self.env["eguitra.rh.employee"].sudo().with_context(active_test=False).search_count(
+                [("department_id", "=", dept.id), ("company_id", "!=", dept.company_id.id)])
+            if others:
+                raise UserError(f"Le département {dept.name} contient des salariés d'une autre société : il reste "
+                                "commun aux deux sociétés.")
+
 
 class EguitraRhHoliday(models.Model):
     _name = "eguitra.rh.holiday"

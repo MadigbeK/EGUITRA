@@ -106,8 +106,10 @@ def leave_type_row(t):
 
 
 def department_row(d):
-    headcount = request.env["eguitra.rh.employee"].sudo().search_count([
-        ("department_id", "=", d.id), "|", ("exit_date", "=", False), ("exit_date", ">=", today())])
+    # Effectif dans les sociétés du compte seulement (un département commun compte aussi l'autre société).
+    headcount = request.env["eguitra.rh.employee"].search_count([
+        ("department_id", "=", d.id), ("company_id", "in", request.env.companies.ids),
+        "|", ("exit_date", "=", False), ("exit_date", ">=", today())])
     return {"id": d.id, "name": d.name, "company": company_ref(d.company_id), "manager": ref(d.manager_id),
             "headcount": headcount, "active": d.active}
 

@@ -39,6 +39,11 @@ class TestApiRh(ApiCase):
         self.assertEqual(emp["salary_history"][0]["reason"], "Revalorisation")
         other_company = self.env["res.company"].search([("id", "!=", self.boss.company_id.id)], limit=1)
         if other_company:
+            status, _b = self.call("POST", "/rh/departments", {"name": "Commun"}, token=token)
+            self.assertEqual(status, 403, "Département commun réservé à un compte ouvert aux deux sociétés")
+            status, own = self.call("POST", "/rh/departments", {"name": "Atelier",
+                                                                "company_id": self.boss.company_id.id}, token=token)
+            self.assertEqual((status, own["company"]["id"]), (200, self.boss.company_id.id), own)
             stranger = self.env["eguitra.rh.employee"].create({"name": "Autre société", "hire_date": date(2025, 1, 1),
                                                                "company_id": other_company.id})
             status, body = self.call("PATCH", f"/rh/employees/{emp['id']}", {"manager_id": stranger.id}, token=token)
