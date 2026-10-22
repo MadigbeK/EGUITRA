@@ -75,10 +75,12 @@ class EguitraFinancePilotage(http.Controller):
         approvals = 0
         if "eguitra.approval.request" in env:
             user = env.user
-            approvals = env["eguitra.approval.request"].sudo().search_count([
+            pending = env["eguitra.approval.request"].sudo().search([
                 ("state", "=", "pending"), ("company_id", "in", user.company_ids.ids),
                 ("pending_profile", "in", user._eguitra_profiles()), ("requested_by", "!=", user.id),
             ])
+            # Même critère que la corbeille : sans les demandes dont le compte a déjà tranché une étape.
+            approvals = len(pending.filtered(lambda r: r._can_decide(user)))
         close = env["eguitra.period.close"]._get(company, day.replace(day=1) - relativedelta(months=1))
         checks = [c for c in close._run_controls() if c["status"] != "ok"]
         return {

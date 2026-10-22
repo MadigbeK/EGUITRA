@@ -112,12 +112,16 @@ class TestApproval(FinanceDataMixin, ApiCase):
         token = self.open_session("daf.dg")["access_token"]
         status, inbox = self.call("GET", "/approvals/inbox", token=token)
         self.assertEqual((status, [r["id"] for r in inbox]), (200, [req.id]), inbox)
+        status, shell = self.call("GET", "/finance/shell", token=token)
+        self.assertEqual((status, shell["badges"]["approvals"]), (200, 1), shell)
         status, done = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Contrôlé"}, token=token)
         self.assertEqual(status, 200, done)
         self.assertEqual(done["pending_with"], "Direction générale")
         self.assertFalse(done["can_decide"], "L'étape de la direction revient à une autre personne")
         status, inbox = self.call("GET", "/approvals/inbox", token=token)
         self.assertEqual((status, inbox), (200, []), "Plus rien à trancher pour ce compte")
+        status, shell = self.call("GET", "/finance/shell", token=token)
+        self.assertEqual((status, shell["badges"]["approvals"]), (200, 0), "Pastille cohérente avec la corbeille")
         status, body = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Accord"}, token=token)
         self.assertEqual(status, 403, body)
         self.assertIn("autre personne", body["message"])
@@ -125,6 +129,8 @@ class TestApproval(FinanceDataMixin, ApiCase):
         self.assertEqual(status, 403, body)
         self.assertEqual(bill.state, "draft")
         token_dg = self.open_session("dg")["access_token"]
+        status, shell = self.call("GET", "/finance/shell", token=token_dg)
+        self.assertEqual((status, shell["badges"]["approvals"]), (200, 1), shell)
         status, done = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Accord"}, token=token_dg)
         self.assertEqual((status, done["state"]), (200, "approved"), done)
 
