@@ -1,86 +1,173 @@
-// Génère docs/projet/Engagement_de_confidentialite.docx : engagement court du prestataire, signé avant la
+// Génère docs/projet/Engagement_de_confidentialite.docx : engagement du prestataire, signé avant la
 // remise des données réelles du client (complète l'accord de confidentialité réciproque).
+// Deux pages au plus, à l'identité d'E-VOLUTION XP : logo, bleu nuit et sarcelle du logo, titres en
+// Century Gothic (proche du lettrage du logo), texte en Garamond.
 // Usage : node docs/projet/engagement-de-confidentialite.js
 const fs = require('fs');
 const path = require('path');
-const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, VerticalAlign, LevelFormat, Header, Footer, PageNumber } = require('docx');
+const {
+  Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle,
+  AlignmentType, VerticalAlign, Header, Footer, PageNumber, TabStopType, TableLayoutType,
+} = require('docx');
 
-const NAVY = '1C1E6B', TEAL = '1A9E9E', GREY = '888888', FONT = 'Calibri', W = 9638;
-const run = (t, o = {}) => new TextRun({ text: t, font: FONT, size: o.size || 21, bold: o.bold, color: o.color, italics: o.italics });
-const para = (t, o = {}) => new Paragraph({ children: [run(t, o)], spacing: { after: o.after ?? 120, before: o.before ?? 0, line: 276 }, alignment: o.align ?? AlignmentType.JUSTIFIED });
-const art = (t) => new Paragraph({ children: [run(t, { size: 23, bold: true, color: NAVY })], spacing: { before: 220, after: 100 }, keepNext: true });
-const li = (t) => new Paragraph({ numbering: { reference: 'puces', level: 0 }, children: [run(t)], spacing: { after: 60, line: 264 }, alignment: AlignmentType.JUSTIFIED });
-const liRich = (parts) => new Paragraph({ numbering: { reference: 'puces', level: 0 }, children: parts.map(([t, s]) => run(t, s)), spacing: { after: 60, line: 264 }, alignment: AlignmentType.JUSTIFIED });
+const NUIT = '1D1D69', SARCELLE = '00A89C', ENCRE = '2B2B33', GRIS = '7A7F8C', PALE = 'A3A8B3', FILET = 'D9DDE3';
+const TITRE = 'Century Gothic', TEXTE = 'Garamond';
+const A4 = { width: 11906, height: 16838 };
+const MARGE = 1080;
+const W = A4.width - 2 * MARGE; // largeur utile, en DXA
+
+// Apostrophe typographique partout.
+const run = (text, o = {}) => new TextRun({
+  text: text.replace(/'/g, '’'), font: o.font ?? TEXTE, size: o.size ?? 20, bold: o.bold, italics: o.italics,
+  color: o.color ?? ENCRE, characterSpacing: o.espace, allCaps: o.caps,
+});
+const para = (enfants, o = {}) => new Paragraph({
+  children: Array.isArray(enfants) ? enfants : [enfants],
+  alignment: o.align ?? AlignmentType.JUSTIFIED,
+  spacing: { before: o.avant ?? 0, after: o.apres ?? 80, line: o.interligne ?? 246 },
+  keepNext: o.keepNext, border: o.border, tabStops: o.tabs,
+});
+// Petite étiquette en capitales espacées : la signature typographique du document.
+// Capitales écrites (et non le format « majuscules » de Word) : les accents restent visibles.
+const etiquette = (text, o = {}) => run(text.toLocaleUpperCase('fr-FR'), { font: TITRE, size: o.size ?? 13, color: o.color ?? SARCELLE, espace: 50, bold: o.bold });
+
+const aucun = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+const sansBord = { top: aucun, bottom: aucun, left: aucun, right: aucun };
+const cellule = (enfants, largeur, o = {}) => new TableCell({
+  children: enfants, width: { size: largeur, type: WidthType.DXA }, verticalAlign: o.valign ?? VerticalAlign.TOP,
+  borders: o.borders ?? sansBord, margins: { top: o.haut ?? 0, bottom: o.bas ?? 0, left: o.gauche ?? 0, right: o.droite ?? 0 },
+});
+const grille = (lignes, largeurs) => new Table({
+  width: { size: W, type: WidthType.DXA }, columnWidths: largeurs, layout: TableLayoutType.FIXED,
+  borders: { top: aucun, bottom: aucun, left: aucun, right: aucun, insideHorizontal: aucun, insideVertical: aucun },
+  rows: lignes,
+});
 
 const PRESTATAIRE = 'E-volution Experience';
 const CLIENT1 = 'EGUITRA GROUP SARLU';
 const CLIENT2 = 'MB AxisPro';
+const logo = fs.readFileSync(path.join(__dirname, 'assets', 'logo-evolution-xp.png'));
 
 const c = [];
-c.push(new Paragraph({ children: [run('ENGAGEMENT DE CONFIDENTIALITÉ', { size: 34, bold: true, color: NAVY })], alignment: AlignmentType.CENTER, spacing: { before: 120, after: 60 } }));
-c.push(new Paragraph({ children: [run('Données d\'entreprise remises pour la plateforme EGUITRA Finance et AxisPro Suite', { size: 22, color: TEAL, bold: true })], alignment: AlignmentType.CENTER, spacing: { after: 320 } }));
 
-c.push(para(`Je soussigné, Madigbè KOUYATÉ, Gérant de ${PRESTATAIRE} (E-VOLUTION XP), prestataire de la plateforme de gestion intégrée EGUITRA Finance et AxisPro Suite (offre OTF-EGUITRA-2026-37 du 29 septembre 2026), m'engage, au nom de ma société et de toute personne qui travaille sous ma responsabilité, à respecter les règles ci-dessous pour toutes les données que ${CLIENT1} et ${CLIENT2} (ensemble « le Client ») me remettent ou me rendent accessibles.`));
-c.push(para('Cet engagement complète l\'accord de confidentialité réciproque conclu entre les parties. En cas de différence entre les deux textes, la règle la plus protectrice pour le Client s\'applique.'));
+// En-tête de la première page : le logo, et à droite la référence du document.
+c.push(grille([new TableRow({ children: [
+  cellule([new Paragraph({ children: [new ImageRun({
+    type: 'png', data: logo, transformation: { width: 116, height: 68 },
+    altText: { title: 'E-VOLUTION XP', description: 'Logo E-VOLUTION XP, Transformation numérique', name: 'logo' },
+  })] })], W / 2, { valign: VerticalAlign.BOTTOM }),
+  cellule([
+    para(etiquette('Engagement de confidentialité', { color: GRIS }), { align: AlignmentType.RIGHT, apres: 30 }),
+    para(etiquette('Réf. EC-EGUITRA-2026-01', { color: NUIT, bold: true }), { align: AlignmentType.RIGHT, apres: 30 }),
+    para(etiquette('Conakry · octobre 2026', { color: GRIS }), { align: AlignmentType.RIGHT, apres: 0 }),
+  ], W / 2, { valign: VerticalAlign.BOTTOM }),
+] })], [W / 2, W / 2]));
 
-c.push(art('1. Les données concernées'));
-c.push(para('Toutes les données du Client, quel que soit leur support (fichier, papier, accès à un logiciel, échange oral), notamment :', { after: 80 }));
-c.push(li('la comptabilité, les finances, la banque, la trésorerie, les budgets et les emprunts ;'));
-c.push(li('le transport : rotations, véhicules, chauffeurs, routes, tarifs et exports du logiciel actuel ;'));
-c.push(li('les contrats, les clients, les fournisseurs, les baux et les tarifs ;'));
-c.push(li('les données personnelles des salariés, des chauffeurs, des clients et des porteurs de projets ;'));
-c.push(li('les dossiers des porteurs de projets et la méthode d\'évaluation AxisPro ;'));
-c.push(li('les identifiants, les mots de passe et les accès aux systèmes.'));
+// Titre : grand, sobre, souligné d'un filet sarcelle.
+c.push(para(etiquette('Protection des données du client'), { avant: 180, apres: 30, align: AlignmentType.LEFT }));
+c.push(para(run('Engagement de confidentialité', { font: TITRE, size: 40, color: NUIT }), { apres: 40, align: AlignmentType.LEFT, interligne: 240 }));
+c.push(para(run('Données d\'EGUITRA GROUP SARLU et de MB AxisPro confiées pour la plateforme NIMOVA', { italics: true, size: 22, color: GRIS }), {
+  align: AlignmentType.LEFT, apres: 150,
+  border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: SARCELLE, space: 10 } },
+}));
 
-c.push(art('2. Un seul usage : le projet'));
-c.push(para('Les données servent uniquement à reprendre l\'historique dans la plateforme, à la paramétrer, à la tester et à assurer le support. Elles ne sont jamais vendues, communiquées à un tiers, réutilisées pour un autre client, publiées, ni utilisées à des fins personnelles ou commerciales.'));
+// Les parties, côte à côte.
+const partie = (titre, nom, detail, contact) => [
+  para(etiquette(titre), { apres: 30, align: AlignmentType.LEFT }),
+  para(run(nom, { font: TITRE, size: 18, bold: true, color: NUIT }), { apres: 20, align: AlignmentType.LEFT }),
+  para(run(detail, { size: 20, color: GRIS }), { apres: 0, align: AlignmentType.LEFT, interligne: 240 }),
+  ...(contact ? [para(run(contact, { size: 19, color: NUIT }), { avant: 20, apres: 0, align: AlignmentType.LEFT, interligne: 240 })] : []),
+];
+const tiers = Math.round(W * 0.5);
+c.push(grille([new TableRow({ children: [
+  cellule(partie('Le prestataire', 'E-VOLUTION XP', `${PRESTATAIRE}, représentée par M. Madigbè KOUYATÉ, gérant`, '+224 628 86 22 55 · emkouyate@e-volutionxp.com'), tiers, { droite: 240 }),
+  cellule(partie('Le client', `${CLIENT1} et ${CLIENT2}`, 'Représentées par M. Mohamed NIMAGA, directeur général'), W - tiers, { gauche: 240 }),
+] })], [tiers, W - tiers]));
 
-c.push(art('3. Un accès limité et tracé'));
-c.push(para('Seules les personnes qui en ont besoin pour le projet accèdent aux données : moi-même et, si nécessaire, des collaborateurs nommément désignés, qui signent un engagement identique avant tout accès. Leur liste est communiquée au Client sur simple demande.'));
-c.push(para('Dans la plateforme, chaque compte est nominatif, protégé par un mot de passe personnel et une double authentification. Chaque création, modification ou suppression y est enregistrée dans une piste d\'audit.'));
+c.push(para([
+  run('Pour la plateforme NIMOVA (offre OTF-EGUITRA-2026-37 du 29 septembre 2026), le prestataire s\'engage, pour lui-même et pour toute personne travaillant sous sa responsabilité, à protéger les données que le Client lui remet ou lui rend accessibles, selon les huit règles ci-dessous. Cet engagement complète l\'accord de confidentialité réciproque ; en cas de différence, la règle la plus protectrice pour le Client s\'applique.'),
+], { avant: 200, apres: 120 }));
 
-c.push(art('4. Où les données sont conservées'));
-c.push(liRich([['Dans la plateforme : ', { bold: true }], ['sur le serveur dédié au projet, situé dans l\'Union européenne, accessible uniquement par connexion chiffrée (HTTPS), avec des sauvegardes chiffrées.']]));
-c.push(liRich([['Copies de travail ', { bold: true }], ['(fichiers reçus, conversions, contrôles) : sur ce serveur ou sur mon poste de travail, protégé par mot de passe et par chiffrement du disque, le temps strictement nécessaire.']]));
-c.push(liRich([['Jamais ', { bold: true }], ['dans le dépôt du code source, sur une clé USB ou un disque non chiffré, dans une messagerie personnelle, sur un réseau social ou dans un espace de partage public.']]));
-c.push(liRich([['Démonstration et recette : ', { bold: true }], ['données fictives. Un essai sur données réelles se fait sur une base temporaire, effacée après l\'essai.']]));
+// Les huit règles : un numéro en marge, le titre, le texte. Un filet fin sépare chaque règle.
+const regles = [
+  ['Les données protégées', 'Toute donnée du Client, quel qu\'en soit le support : comptabilité, banque et trésorerie ; transport (rotations, véhicules, chauffeurs, tarifs, exports du logiciel actuel) ; contrats, clients et fournisseurs ; données personnelles des salariés, chauffeurs et porteurs de projets ; dossiers et méthode d\'évaluation AxisPro ; identifiants et accès.'],
+  ['Un seul usage : le projet', 'Reprise de l\'historique, paramétrage, essais et support de la plateforme. Aucune vente, communication à un tiers, réutilisation pour un autre client, publication ni usage personnel ou commercial.'],
+  ['Un accès limité et tracé', 'Seules les personnes nommément désignées, liées par un engagement identique, accèdent aux données ; leur liste est remise au Client sur demande. Dans la plateforme, chaque compte est nominatif, protégé par un mot de passe personnel et une double authentification ; chaque modification est tracée.'],
+  ['Où vivent les données', 'Plateforme : serveur dédié dans l\'Union européenne, connexion chiffrée, sauvegardes chiffrées. Copies de travail : ce serveur ou un poste au disque chiffré, le temps strictement nécessaire. Jamais dans le code source, sur un support amovible non chiffré, une messagerie personnelle ou un espace de partage public. Démonstrations et recette : données fictives ; un essai sur données réelles se fait sur une base temporaire, effacée ensuite.'],
+  ['Les outils logiciels', 'Les outils d\'assistance, y compris d\'intelligence artificielle, ne sont utilisés que dans un cadre professionnel, réglés pour que les données ne servent pas à entraîner leurs modèles et ne soient pas accessibles à des tiers. Leur liste est remise sur demande.'],
+  ['En cas d\'incident', 'Perte, vol, erreur d\'envoi ou accès non autorisé : le Client est prévenu par écrit dans les 48 heures, avec les données touchées et les mesures prises ; le prestataire coopère pour en limiter les conséquences.'],
+  ['À la fin de la mission', 'Les copies de travail sont supprimées dans les 30 jours suivant la validation de la reprise, ou à la demande écrite du Client, et la suppression est confirmée par écrit ; les sauvegardes s\'effacent selon leur cycle, en 12 mois au plus. Les données de la plateforme restent la propriété du Client : une copie complète lui est remise avant toute suppression.'],
+  ['Durée', 'Dès la signature, y compris pour les données déjà reçues ; pendant tout le projet, hébergement et maintenance compris, puis 5 ans après la fin de la relation ; sans limite de durée pour la méthode AxisPro, les dossiers des porteurs de projets et les secrets d\'affaires du Client.'],
+];
+const MARGE_NUM = 700;
+const filet = { style: BorderStyle.SINGLE, size: 2, color: FILET };
+c.push(grille(regles.map(([titre, texte], i) => new TableRow({ cantSplit: true, children: [
+  cellule([para(run(String(i + 1).padStart(2, '0'), { font: TITRE, size: 24, color: SARCELLE }), { align: AlignmentType.LEFT, apres: 0, interligne: 240 })],
+    MARGE_NUM, { borders: { ...sansBord, top: filet }, haut: 64, bas: 44 }),
+  cellule([
+    para(run(titre, { font: TITRE, size: 17, bold: true, color: NUIT }), { align: AlignmentType.LEFT, apres: 20 }),
+    para(run(texte), { apres: 0 }),
+  ], W - MARGE_NUM, { borders: { ...sansBord, top: filet }, haut: 64, bas: 44 }),
+] })), [MARGE_NUM, W - MARGE_NUM]));
 
-c.push(art('5. Outils logiciels'));
-c.push(para('Pour analyser et convertir les données, je peux utiliser des outils d\'assistance, y compris d\'intelligence artificielle. Je ne les utilise que dans un cadre professionnel, paramétrés pour que les données ne servent pas à entraîner leurs modèles et ne soient pas accessibles à des tiers. La liste des outils utilisés est communiquée au Client sur simple demande.'));
+// Signatures : pas de cadre, un filet sous lequel on signe.
+c.push(para([etiquette('Fait à Conakry, le', { color: GRIS }), run('  ____________________, en deux exemplaires originaux.', { size: 20, color: GRIS })], {
+  avant: 120, apres: 110, align: AlignmentType.LEFT, border: { top: { style: BorderStyle.SINGLE, size: 2, color: FILET, space: 10 } },
+}));
+const ligneSignature = { ...sansBord, bottom: { style: BorderStyle.SINGLE, size: 4, color: NUIT } };
+const signature = (role, societe, nom) => [
+  para(etiquette(role), { apres: 30, align: AlignmentType.LEFT }),
+  para(run(societe, { font: TITRE, size: 17, bold: true, color: NUIT }), { apres: 20, align: AlignmentType.LEFT }),
+  para(run(nom, { size: 20, color: GRIS }), { apres: 0, align: AlignmentType.LEFT }),
+];
+const espace = 480;
+const col = (W - espace) / 2;
+c.push(new Table({
+  width: { size: W, type: WidthType.DXA }, columnWidths: [col, espace, col], layout: TableLayoutType.FIXED,
+  borders: { top: aucun, bottom: aucun, left: aucun, right: aucun, insideHorizontal: aucun, insideVertical: aucun },
+  rows: [
+    new TableRow({ cantSplit: true, children: [
+      cellule(signature('Le prestataire', 'E-VOLUTION XP', 'Madigbè KOUYATÉ, gérant'), col),
+      cellule([new Paragraph({ children: [] })], espace),
+      cellule(signature('Pris connaissance, pour le client', `${CLIENT1} et ${CLIENT2}`, 'Mohamed NIMAGA, directeur général'), col),
+    ] }),
+    // L'espace de signature, fermé par un filet bleu nuit ; la mention discrète en tête de l'espace.
+    new TableRow({ cantSplit: true, height: { value: 600, rule: 'atLeast' }, children: [
+      cellule([para(etiquette('Signature et cachet', { color: PALE, size: 11 }), { avant: 90, apres: 0, align: AlignmentType.RIGHT })], col, { borders: ligneSignature }),
+      cellule([new Paragraph({ children: [] })], espace),
+      cellule([para(etiquette('Signature et cachet', { color: PALE, size: 11 }), { avant: 90, apres: 0, align: AlignmentType.RIGHT })], col, { borders: ligneSignature }),
+    ] }),
+  ],
+}));
 
-c.push(art('6. En cas d\'incident'));
-c.push(para('En cas de perte, de vol, d\'erreur d\'envoi ou d\'accès non autorisé, je préviens le Client par écrit dans les 48 heures qui suivent la découverte. J\'indique les données touchées et les mesures prises, et je coopère pour en limiter les conséquences.'));
+// Word exige un paragraphe après le dernier tableau : minuscule, il ne pousse rien en page 2.
+c.push(new Paragraph({ children: [run('', { size: 2 })], spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' } }));
 
-c.push(art('7. À la fin du projet'));
-c.push(para('Dans les 30 jours qui suivent la validation de la reprise, ou à tout moment sur demande écrite du Client, je supprime les copies de travail, sauf ce que la loi impose de conserver, et je le confirme par écrit. Les sauvegardes s\'effacent selon leur cycle normal, en 12 mois au plus.'));
-c.push(para('Les données enregistrées dans la plateforme restent la propriété du Client. À la fin du contrat, une copie complète lui est remise avant toute suppression, conformément à l\'engagement de réversibilité de l\'offre.'));
-
-c.push(art('8. Durée'));
-c.push(para('Cet engagement s\'applique dès sa signature, et aux données déjà reçues. Il vaut pendant tout le projet, hébergement et maintenance compris, puis 5 ans après la fin de la relation contractuelle ; sans limite de durée pour la méthode AxisPro, les dossiers des porteurs de projets et les secrets d\'affaires du Client.'));
-
-c.push(para('Contact pour toute question de confidentialité', { bold: true, size: 20, after: 20, before: 120, align: AlignmentType.LEFT }));
-c.push(para('M. Madigbè KOUYATÉ, +224 628 86 22 55, emkouyate@e-volutionxp.com', { size: 20, after: 200, align: AlignmentType.LEFT }));
-c.push(para('Fait à Conakry, le ____________________, en deux exemplaires originaux.', { before: 120, after: 200 }));
-
-const cb = { style: BorderStyle.SINGLE, size: 4, color: 'C9CFD8' };
-const borders = { top: cb, bottom: cb, left: cb, right: cb };
-const cell = (lines, width) => new TableCell({ width: { size: width, type: WidthType.DXA }, borders, verticalAlign: VerticalAlign.TOP, margins: { top: 100, bottom: 100, left: 140, right: 140 },
-  children: lines.map(([t, s]) => new Paragraph({ children: [run(t, Object.assign({ size: 20 }, s))], spacing: { after: 60 } })) });
-const half = W / 2;
-c.push(new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: [half, half], rows: [new TableRow({ cantSplit: true, children: [
-  cell([['Le Prestataire', { bold: true, color: NAVY }], [`${PRESTATAIRE} (E-VOLUTION XP)`], ['M. Madigbè KOUYATÉ, Gérant'], [''], ['Signature et cachet :'], [''], [''], ['']], half),
-  cell([['Pris connaissance, pour le Client', { bold: true, color: NAVY }], [`${CLIENT1} et ${CLIENT2}`], ['M. Mohamed NIMAGA, Directeur Général'], [''], ['Signature et cachet :'], [''], [''], ['']], half),
-] })] }));
-
+const pied = (texte) => run(texte, { font: TITRE, size: 13, color: GRIS, espace: 30 });
 const doc = new Document({
-  creator: 'E-VOLUTION XP', title: 'Engagement de confidentialité',
-  styles: { default: { document: { run: { font: FONT, size: 21 } } } },
-  numbering: { config: [{ reference: 'puces', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 280 } } } }] }] },
+  creator: 'E-VOLUTION XP', title: 'Engagement de confidentialité', description: 'Engagement de confidentialité du prestataire envers EGUITRA GROUP SARLU et MB AxisPro',
+  styles: { default: { document: { run: { font: TEXTE, size: 21, color: ENCRE } } } },
   sections: [{
-    properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
-    headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'C9CFD8', space: 4 } }, children: [run(`Engagement de confidentialité, ${PRESTATAIRE} envers ${CLIENT1} et ${CLIENT2}`, { size: 16, color: GREY })] })] }) },
-    footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [run('Confidentiel. Paraphes : ______  ______      Page ', { size: 16, color: GREY }), new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 16, color: GREY })] })] }) },
+    properties: { titlePage: true, page: { size: A4, margin: { top: 760, bottom: 820, left: MARGE, right: MARGE, header: 400, footer: 400 } } },
+    headers: {
+      first: new Header({ children: [new Paragraph({ children: [] })] }),
+      default: new Header({ children: [para([etiquette('E-VOLUTION XP', { color: NUIT, bold: true }), etiquette('\tEngagement de confidentialité · Réf. EC-EGUITRA-2026-01', { color: GRIS })], {
+        align: AlignmentType.LEFT, apres: 0, tabs: [{ type: TabStopType.RIGHT, position: W }],
+        border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: FILET, space: 6 } },
+      })] }),
+    },
+    footers: { first: piedDePage(), default: piedDePage() },
     children: c,
   }],
 });
+
+function piedDePage() {
+  return new Footer({ children: [para([
+        pied('E-VOLUTION XP · TRANSFORMATION NUMÉRIQUE · CONAKRY'),
+        pied('\tRÉF. EC-EGUITRA-2026-01 · PAGE '),
+        new TextRun({ children: [PageNumber.CURRENT], font: TITRE, size: 13, color: NUIT, bold: true }),
+        new TextRun({ children: [' / ', PageNumber.TOTAL_PAGES], font: TITRE, size: 13, color: GRIS }),
+      ], { align: AlignmentType.LEFT, apres: 0, tabs: [{ type: TabStopType.RIGHT, position: W }],
+        border: { top: { style: BorderStyle.SINGLE, size: 2, color: FILET, space: 6 } } })] });
+}
 Packer.toBuffer(doc).then((b) => { fs.writeFileSync(path.join(__dirname, 'Engagement_de_confidentialite.docx'), b); console.log('OK'); });
