@@ -26,6 +26,7 @@
         "security/eguitra_security.xml",
         "data/analytic_plans.xml",
         "data/res_company.xml",
+        "views/report_layout.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,
