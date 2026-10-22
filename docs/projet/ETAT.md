@@ -175,6 +175,43 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**22 octobre, nuit : outil de scoring du cabinet, version 3 (AxisPro)**, demandé par le gérant (« intègre
+tout, carte blanche »). Reçu : deux versions du classeur « MB AxisPro Outil Scoring Maturité Projet »
+(réf. MBAP/PROJECT-DEVELOPMENT/SC-01). L'ancienne (111 critères, 15 domaines, 8 gates) est la grille v2
+déjà en service. La nouvelle compte 104 critères (domaine SPV / Gouvernance retiré), 14 domaines
+renommés en clair, 8 compartiments d'expertise C0 à C7 confiés chacun à un consultant, 7 gates (gate
+SPV fusionné avec le financial close), 39 pièces et une notice sous chaque onglet. Les classeurs restent
+hors du dépôt (document du client, nom du mandat) : `infra/secrets/grille/` du serveur.
+- Fait (eguitra_axispro 19.0.1.3.0, migration de la piste d'audit) :
+  - Import natif de l'outil du cabinet (`addons/eguitra_axispro/grille_cabinet.py`). Règles des gates
+    déduites des noms, seuils, complétude minimale et domaines contrôlés lus dans Stage_Gate ; seuils
+    et barème lus dans Parametres (barème différent refusé). Codes, aides, livrables, indicateurs et
+    rattachements des pièces repris de la version en vigueur. L'ancien classeur redonne exactement la v2.
+  - Réglages du classeur : un knock-out incomplet ne bloque pas, « non applicable » vaut 1 point.
+  - Compartiments, consultant par compartiment sur un dossier (journal), suivi par compartiment
+    (score, manques, études renseignées, knock-outs), check-list filtrée (« Mes compartiments »),
+    complétude documentaire minimale pour examiner un gate (HOLD en dessous).
+  - Exports et réimport de l'outil rempli hors ligne (études à produire), compartiment des actions.
+  - Analyse : bloc « Par compartiment d'expertise » du diagnostic des projets, deux constats.
+  - Guide du cabinet, cahier de recette (A01 revu, A12 à A14). Tests : 55 AxisPro et 10 Analyse du
+    cabinet au vert.
+  - Passerelle web : `GET /auth/me` ouvert au navigateur. Il était refusé (404), si bien que le profil
+    Achats seul et la saisie libre des comptes ne s'appliquaient jamais dans les écrans, en production
+    aussi : à mettre en production.
+- Recette : modules mis à jour le 22 octobre à 01 h 00, grille v3 importée et en vigueur (version 3 :
+  7 gates, 8 compartiments, 14 domaines, 104 critères, 9 knock-outs, 39 pièces, 95 rattachements ;
+  30 critères sans pièce rattachée) ; dossiers de démonstration restés sur leur version ; web-recette
+  reconstruit. Incident : `apps/web/lib/nav.ts` du serveur était rempli d'octets nuls (écrit à 00 h 40,
+  origine inconnue) et bloquait toute reconstruction ; remplacé par la version commitée.
+- Production (sur décision du gérant) : `release.sh`, puis grille. La production n'a aucune grille
+  AxisPro : aucun dossier ne peut y être ouvert. Y importer la grille validée en recette, exportée à
+  l'identique (`scripts/grille/exporter.py`, aller-retour vérifié ; export dans
+  `infra/secrets/grille/grille-v3-recette.xlsx`, réglages dans `export-recette.log`) par
+  `scripts/grille/importer.py` avec `GRILLE_ENVIRONNEMENT=production`, `GRILLE_REGLAGES` et
+  `GRILLE_ACTIVER=1`.
+- À demander au cabinet : le questionnaire Word de préqualification (14 sections, une par domaine,
+  section 19 : fiche de synthèse), qui pourrait devenir le formulaire du porteur au portail.
+
 **22 octobre : module RH (NIMOVA · RH)**, à la demande du gérant (« une gestion complète, simple et
 intelligente des ressources humaines », carte blanche). La paie était hors du périmètre de l'offre
 (chapitre 3) : évolution demandée par le gérant. Spécification : `docs/projet/rh/specification.md` ;
