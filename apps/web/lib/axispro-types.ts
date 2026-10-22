@@ -39,7 +39,7 @@ export const STATUS_SHORT: Record<Status, string> = {
   na: "Non applicable",
 };
 
-export const REQUIREMENT: Record<string, string> = { blocking: "Bloquant", apd: "Pendant l'APD", closing: "DD, SPV, closing" };
+export const REQUIREMENT: Record<string, string> = { blocking: "Bloquant", apd: "Pendant l'APD", closing: "Due diligence et closing" };
 export const YES_NO: Record<string, string> = { yes: "Oui", no: "Non" };
 export type HypothesisKey = "dd_red_flag" | "dataroom_open" | "lenders_agreement" | "cp_lifted" | "financing_signed";
 export const HYPOTHESES: Array<{ key: HypothesisKey; label: string; gate: string }> = [
@@ -52,6 +52,26 @@ export const HYPOTHESES: Array<{ key: HypothesisKey; label: string; gate: string
 
 export interface Gate { id: number; code: string; name: string; sequence?: number }
 export interface Currency { id: number; name: string; symbol: string }
+export interface UserRef { id: number; name: string }
+
+/** Compartiment d'expertise d'une version de la grille : bloc de domaines confié à un même consultant. */
+export interface Compartment { id: number; code: string; name: string; sequence: number; domain_ids: number[] }
+
+/** Suivi d'un compartiment dans un dossier (scoring.compartments) : score sur 100 des critères de ses
+ * domaines, manques à traiter, études à produire renseignées, knock-outs actifs et consultant affecté. */
+export interface CompartmentScore {
+  compartment_id: number;
+  code: string;
+  name: string;
+  score: number | null;
+  criteria: number;
+  assessed: number;
+  gaps: number;
+  studies: number;
+  knockouts: number;
+  domains: string[];
+  owner: UserRef | null;
+}
 
 export interface DossierSummary {
   id: number;
@@ -118,6 +138,8 @@ export interface GateResult {
   entry_requirements: string | null;
   deliverables: string | null;
   exit_criteria: string | null;
+  /** Complétude documentaire exigée pour examiner le gate (exigence d'entrée), en % ; null : aucune. */
+  min_completeness: number | null;
 }
 export interface DomainScore {
   domain_id: number;
@@ -144,6 +166,8 @@ export interface Scoring {
   recommendation_detail: string;
   method_recommendation: Recommendation;
   domains: DomainScore[];
+  /** Vide pour une grille sans compartiments. */
+  compartments: CompartmentScore[];
   knockouts: CriterionBrief[];
   knockouts_pending: number;
   critical_open: CriterionBrief[];
@@ -191,6 +215,9 @@ export interface Gap {
   code: string;
   name: string;
   domain: string;
+  compartment: string | null;
+  compartment_id: number | null;
+  compartment_name: string | null;
   gate: string | null;
   status: Status;
   entered: Status;
@@ -229,6 +256,11 @@ export interface CriterionEval {
   domain: string;
   domain_id: number;
   domain_code: string;
+  compartment_id: number | null;
+  compartment: string | null;
+  compartment_name: string | null;
+  /** Consultant à qui le compartiment est confié dans ce dossier. */
+  owner: string | null;
   gate_id: number;
   gate: string;
   weight: number;
@@ -260,7 +292,7 @@ export interface JournalEntry {
   id: number;
   date: string;
   user: string;
-  kind: "status" | "document" | "gate" | "decision" | "revision" | "import";
+  kind: "status" | "document" | "gate" | "decision" | "revision" | "import" | "assignment";
   kind_label: string;
   criterion: string | null;
   before: string | null;

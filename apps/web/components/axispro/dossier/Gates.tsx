@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, Flag, ShieldAlert } from "@/components/icons";
+import { ArrowRight, CheckCircle2, FileCheck2, Flag, ShieldAlert } from "@/components/icons";
 import { Badge, Button, Card, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend } from "@/lib/api-client";
 import { GATE_DECISION, HYPOTHESES, YES_NO, type DossierDetail } from "@/lib/axispro-types";
-import { RULE_LABELS, useRetour } from "./commun";
+import { RULE_LABELS, arrondi, useRetour } from "./commun";
 
 /**
  * Stage gates : règle de passage, décision calculée et motifs, exigences d'entrée, livrables et
@@ -57,7 +57,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
           ))}
         </ol>
         <p className="mt-3 text-[12.5px] text-muted">
-          Un knock-out actif dans le périmètre d&apos;un gate impose NO-GO quel que soit le score. Les hypothèses de décision des gates 4 à 7 (DSCR, red flag, data room, bailleurs, conditions précédentes, signature) se renseignent dans la synthèse.
+          Un knock-out actif dans le périmètre d&apos;un gate impose NO-GO quel que soit le score ; sous la complétude documentaire minimale d&apos;un gate, un GO ou un CONDITIONAL GO est ramené à HOLD. Les hypothèses de décision des gates 4 à 7 (DSCR, red flag, data room, bailleurs, conditions précédentes, signature) se renseignent dans la synthèse.
         </p>
       </Card>
 
@@ -83,7 +83,12 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
                   </li>
                 ))}
               </ul>
-              <div className="mt-3 flex flex-wrap gap-3 text-[12px] text-muted">
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-muted">
+                {g.min_completeness ? (
+                  <span title="Exigence d'entrée : en dessous, le gate ne s'examine pas (HOLD)" className="inline-flex items-center gap-1 rounded-md bg-panel-3 px-1.5 py-0.5 font-semibold text-ink-2">
+                    <FileCheck2 aria-hidden className="h-3.5 w-3.5 text-muted" /> Complétude minimale {arrondi(g.min_completeness)} %
+                  </span>
+                ) : null}
                 <span>{g.available}/{g.criteria} critère(s) disponibles</span>
                 {g.knockouts > 0 && <span className="font-semibold text-danger">{g.knockouts} knock-out(s) du gate</span>}
                 {hyp.map((h) => (

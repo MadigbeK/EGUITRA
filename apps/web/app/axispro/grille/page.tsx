@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { CheckCircle2, Copy, Download, FileUp } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea } from "@/components/ui";
-import type { IndicatorInfo } from "@/lib/axispro-types";
+import { PuceCompartiment } from "@/components/axispro/dossier/commun";
+import type { Compartment, IndicatorInfo } from "@/lib/axispro-types";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 
@@ -49,6 +50,8 @@ interface GateRow {
   threshold_go: number | null;
   score_scope: "global" | "cumulative";
   domain_ids: number[];
+  /** Complétude documentaire exigée pour examiner le gate (%), null : aucune. */
+  min_completeness: number | null;
   entry_requirements: string | null;
   deliverables: string | null;
   exit_criteria: string | null;
@@ -75,11 +78,13 @@ interface Policy {
   requirements: Record<string, string>;
   notes: string | null;
   integrity: {
-    criteria: number; domains: number; gates: number; documents: number; weight: number; knockouts: number; critical: number;
+    criteria: number; domains: number; gates: number; compartments: number; documents: number; weight: number; knockouts: number; critical: number;
     bankability: number; requirements: Record<string, number>; links: number; gates_without_criteria: string[]; notes: string[];
   };
   gates: GateRow[];
-  domains: Array<{ id: number; code: string; name: string; weight: number; deliverable: string | null }>;
+  /** Compartiments d'expertise (C0, C1…) : vide pour une grille qui n'en a pas. */
+  compartments: Compartment[];
+  domains: Array<{ id: number; code: string; name: string; weight: number; deliverable: string | null; compartment_id: number | null }>;
   criteria: Criterion[];
   documents: Array<{ id: number; code: string; name: string; category: string | null; gate_id: number | null; required: boolean; criteria: string[] }>;
   indicators: Record<string, IndicatorInfo>;
@@ -144,11 +149,14 @@ export default function GrillePage() {
 function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () => void; onSelect: (id: number) => void }) {
   const { data: p, mutate } = useApi<Policy>(`/axispro/policies/${id}`);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
-  const [vue, setVue] = useState<"criteres" | "gates" | "pieces">("criteres");
+  const [vue, setVue] = useState<"criteres" | "compartiments" | "gates" | "pieces">("criteres");
   if (!p) return <Loading />;
   const editable = p.state === "draft";
   const gateCode = Object.fromEntries(p.gates.map((g) => [g.id, g.code]));
   const domainCode = Object.fromEntries(p.domains.map((d) => [d.id, d.code]));
+  const compartiments = p.compartments ?? [];
+  const compartimentDe = new Map(compartiments.map((k) => [k.id, k]));
+  const vueAffichee = vue === "compartiments" && !compartiments.length ? "criteres" : vue;
 
   async function act(fn: () => Promise<unknown>, ok: string) {
     setMessage(null);
@@ -164,6 +172,9 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
   const patch = (c: Criterion, values: Partial<Criterion>) => act(() => apiSend("PATCH", `/axispro/criteria/${c.id}`, values), `Critère ${c.code} mis à jour.`);
   const patchPolicy = (values: Record<string, unknown>) => act(() => apiSend("PATCH", `/axispro/policies/${p.id}`, values), "Réglages de la méthode enregistrés.");
   const patchGate = (g: GateRow, values: Record<string, unknown>) => act(() => apiSend("PATCH", `/axispro/gates/${g.id}`, values), `Gate ${g.code} mis à jour.`);
+  const patchDomain = (d: Policy["domains"][number], compartmentId: number | null) =>
+    act(() => apiSend("PATCH", `/axispro/domains/${d.id}`, { compartment_id: compartmentId }), compartmentId ? `Domaine ${d.code} rattaché au compartiment ${compartimentDe.get(compartmentId)?.code ?? ""}.` : `Domaine ${d.code} retiré de son compartiment.`);
+  const patchCompartment = (k: Compartment, values: { code?: string; name?: string }) => act(() => apiSend("PATCH", `/axispro/compartments/${k.id}`, values), `Compartiment ${values.code ?? k.code} mis à jour.`);
   const nombre = (v: string) => (v.trim() === "" ? null : Number(v.replace(/\s/g, "").replace(",", ".")));
   const seuil = (key: "threshold_bankable" | "go_threshold" | "conditional_threshold" | "threshold_hold" | "dscr_target", label: string) => (
     <Field label={label}>
@@ -194,7 +205,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
           <Badge tone={STATE[p.state][1]}>{STATE[p.state][0]}</Badge>
           {p.date_active && <span className="text-muted">depuis le {fmtDate(p.date_active)}</span>}
           <span className="text-muted">
-            · {ig.gates} gates, {ig.domains} domaines, {ig.criteria} critères ({ig.knockouts} knock-outs, {ig.critical} critiques, {ig.bankability} pour la bancabilité), {ig.documents} pièces, {ig.links} rattachements pièce-critère
+            · {ig.gates} gates, {ig.compartments ? `${ig.compartments} compartiments, ` : ""}{ig.domains} domaines, {ig.criteria} critères ({ig.knockouts} knock-outs, {ig.critical} critiques, {ig.bankability} pour la bancabilité), {ig.documents} pièces, {ig.links} rattachements pièce-critère
           </span>
         </div>
         <p className="mt-1 text-[12.5px] text-muted">Exigences : {Object.entries(ig.requirements).map(([k, n]) => `${p.requirements[k] ?? k} ${n}`).join(", ")}.</p>
@@ -238,15 +249,99 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
         {!editable && <p className="mt-4 text-xs text-muted">Cette version n&apos;est plus modifiable. Pour ajuster un réglage, un gate ou un critère, créez une nouvelle version.</p>}
       </Card>
 
-      <Segmented label="Contenu de la grille" value={vue} onChange={setVue} options={[{ key: "criteres", label: "Domaines et critères" }, { key: "gates", label: "Stage gates" }, { key: "pieces", label: "Pièces de la data room" }]} />
+      <Segmented
+        label="Contenu de la grille"
+        value={vueAffichee}
+        onChange={setVue}
+        options={[
+          { key: "criteres", label: "Domaines et critères" },
+          ...(compartiments.length ? [{ key: "compartiments" as const, label: "Compartiments" }] : []),
+          { key: "gates", label: "Stage gates" },
+          { key: "pieces", label: "Pièces de la data room" },
+        ]}
+      />
 
-      {vue === "gates" && (
+      {vueAffichee === "compartiments" && (
+        <div className="space-y-4">
+          <Card title={`Compartiments d'expertise (${compartiments.length})`}>
+            <p className="mb-3 text-[12.5px] text-muted">
+              Un compartiment regroupe des domaines de la grille. Dans un dossier, il se confie à un consultant du cabinet, qui suit son score, ses manques à traiter et ses études, et retrouve ses critères par « Mes compartiments » dans l&apos;évaluation.
+            </p>
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {compartiments.map((k) => {
+                const doms = p.domains.filter((x) => x.compartment_id === k.id);
+                const n = p.criteria.filter((c) => doms.some((x) => x.id === c.domain_id)).length;
+                return (
+                  <li key={k.id} className="flex min-w-0 flex-col rounded-xl border border-line bg-panel p-3.5">
+                    {editable ? (
+                      <div className="flex items-center gap-2">
+                        <Input aria-label={`Code du compartiment ${k.code}`} className="min-h-8 w-16 py-1 font-mono text-[12.5px] font-bold" defaultValue={k.code} onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== k.code && patchCompartment(k, { code: e.target.value.trim() })} />
+                        <Input aria-label={`Intitulé du compartiment ${k.code}`} className="min-h-8 min-w-0 flex-1 py-1 text-[13px]" defaultValue={k.name} onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== k.name && patchCompartment(k, { name: e.target.value.trim() })} />
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-2.5">
+                        <PuceCompartiment code={k.code} className="mt-0.5" />
+                        <div className="min-w-0 flex-1 text-[13.5px] font-semibold leading-snug text-ink">{k.name}</div>
+                      </div>
+                    )}
+                    <div className="mt-1.5 text-[12px] text-muted">{doms.length} domaine{doms.length > 1 ? "s" : ""}, {n} critère{n > 1 ? "s" : ""}</div>
+                    <ul className="mt-2 space-y-1 border-t border-line pt-2 text-[12.5px]">
+                      {doms.map((x) => (
+                        <li key={x.id} className="flex gap-2 leading-snug">
+                          <span className="font-mono text-[11.5px] text-muted">{x.code}</span>
+                          <span className="min-w-0 text-ink-2">{x.name}</span>
+                        </li>
+                      ))}
+                      {doms.length === 0 && <li className="italic text-muted">Aucun domaine rattaché.</li>}
+                    </ul>
+                  </li>
+                );
+              })}
+            </ul>
+            {p.domains.some((x) => !x.compartment_id) && (
+              <div className="mt-3">
+                <Notice tone="warn">Domaines sans compartiment : {p.domains.filter((x) => !x.compartment_id).map((x) => `${x.code} ${x.name}`).join(", ")}. Leurs critères ne sont confiés à personne dans les dossiers.</Notice>
+              </div>
+            )}
+          </Card>
+          {editable && (
+            <Card title="Rattachement des domaines" padded={false}>
+              <p className="px-6 pb-2 text-[12.5px] text-muted">Version en brouillon : choisissez le compartiment de chaque domaine. Les dossiers ouverts gardent la version de grille de leur ouverture.</p>
+              <DataTable dense rows={p.domains} rowKey={(x) => x.id} columns={[
+                { key: "code", label: "Code", render: (x) => <span className="font-mono text-xs">{x.code}</span> },
+                { key: "name", label: "Domaine", render: (x) => <span className="min-w-[180px]">{x.name}</span> },
+                { key: "criteria", label: "Critères", align: "right", render: (x) => String(p.criteria.filter((c) => c.domain_id === x.id).length) },
+                {
+                  key: "compartment",
+                  label: "Compartiment",
+                  render: (x) => (
+                    <Select aria-label={`Compartiment du domaine ${x.code}`} className="min-h-8 w-72 py-1 text-[12.5px]" value={x.compartment_id ?? ""} placeholder="Aucun compartiment" onChange={(e) => patchDomain(x, e.target.value ? Number(e.target.value) : null)} options={compartiments.map((k) => ({ value: k.id, label: `${k.code} ${k.name}` }))} />
+                  ),
+                },
+              ]} />
+            </Card>
+          )}
+        </div>
+      )}
+
+      {vueAffichee === "gates" && (
         <Card title="Stage gates et règles de passage" padded={false}>
           <DataTable rows={p.gates} rowKey={(g) => g.id} columns={[
             { key: "code", label: "Gate", render: (g) => <div className="min-w-[160px]"><b>{g.code}</b> {g.name}</div> },
             { key: "rule", label: "Règle", render: (g) => (editable ? <Select className="min-h-8 w-56 py-1 text-[12.5px]" value={g.rule_code} onChange={(e) => patchGate(g, { rule_code: e.target.value })} options={Object.entries(p.rules).map(([value, label]) => ({ value, label }))} /> : <span className="text-[12.5px]">{p.rules[g.rule_code]}</span>) },
             { key: "hold", label: "Seuil HOLD", align: "right", render: (g) => (editable ? <Input className="w-16 py-1 text-right" defaultValue={g.threshold_hold ?? ""} onBlur={(e) => nombre(e.target.value) !== g.threshold_hold && patchGate(g, { threshold_hold: nombre(e.target.value) ?? 0 })} /> : (g.threshold_hold ?? "–")) },
             { key: "go", label: "Seuil GO", align: "right", render: (g) => (editable ? <Input className="w-16 py-1 text-right" defaultValue={g.threshold_go ?? ""} onBlur={(e) => nombre(e.target.value) !== g.threshold_go && patchGate(g, { threshold_go: nombre(e.target.value) ?? 0 })} /> : (g.threshold_go ?? "–")) },
+            {
+              key: "completeness",
+              label: "Complétude min.",
+              align: "right",
+              render: (g) => (editable ? (
+                <span className="inline-flex items-center gap-1">
+                  <Input aria-label={`Complétude documentaire minimale du gate ${g.code} (%)`} title="Exigence d'entrée : en dessous, le gate ne s'examine pas (HOLD). Vide : aucune." placeholder="–" className="w-16 py-1 text-right" defaultValue={g.min_completeness ?? ""} onBlur={(e) => nombre(e.target.value) !== g.min_completeness && patchGate(g, { min_completeness: nombre(e.target.value) ?? 0 })} />
+                  <span className="text-muted">%</span>
+                </span>
+              ) : g.min_completeness ? `${g.min_completeness.toLocaleString("fr-FR")} %` : "–"),
+            },
             { key: "scope", label: "Portée du score", render: (g) => (editable ? <Select className="min-h-8 w-44 py-1 text-[12.5px]" value={g.score_scope} onChange={(e) => patchGate(g, { score_scope: e.target.value })} options={Object.entries(p.scopes).map(([value, label]) => ({ value, label }))} /> : <span className="text-[12.5px]">{p.scopes[g.score_scope]}</span>) },
             { key: "domains", label: "Domaines contrôlés", render: (g) => <span className="text-[12.5px]">{g.domain_ids.map((d) => domainCode[d]).join(", ") || "–"}</span> },
             { key: "texts", label: "Entrée, livrables, passage", render: (g) => <div className="max-w-[360px] space-y-0.5 text-[11.5px] text-muted">{g.entry_requirements && <div><b>Entrée.</b> {g.entry_requirements}</div>}{g.deliverables && <div><b>Livrables.</b> {g.deliverables}</div>}{g.exit_criteria && <div><b>Passage.</b> {g.exit_criteria}</div>}</div> },
@@ -254,7 +349,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
         </Card>
       )}
 
-      {vue === "pieces" && (
+      {vueAffichee === "pieces" && (
         <Card title={`Pièces de la data room (${p.documents.length})`} padded={false}>
           <DataTable dense rows={p.documents} rowKey={(t) => t.id} columns={[
             { key: "code", label: "Code", render: (t) => <span className="font-mono text-xs">{t.code}</span> },
@@ -266,10 +361,12 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
         </Card>
       )}
 
-      {vue === "criteres" && p.domains.map((d) => {
+      {vueAffichee === "criteres" && p.domains.map((d) => {
         const rows = p.criteria.filter((c) => c.domain_id === d.id);
+        const k = d.compartment_id ? compartimentDe.get(d.compartment_id) : undefined;
+        const titre = `${d.code}, ${d.name}${p.weighting === "domain" ? `, poids ${d.weight}` : ""}, ${rows.length} critères`;
         return (
-          <Card key={d.id} title={`${d.code}, ${d.name}${p.weighting === "domain" ? `, poids ${d.weight}` : ""}, ${rows.length} critères`} padded={false}>
+          <Card key={d.id} title={k ? <span className="inline-flex flex-wrap items-center gap-2"><PuceCompartiment code={k.code} nom={k.name} /><span>{titre}</span></span> : titre} actions={k ? <span className="text-[12.5px] text-muted">{k.name}</span> : undefined} padded={false}>
             {d.deliverable && <p className="px-4 pt-2 text-[12px] text-muted">Livrable type d&apos;un écart : {d.deliverable}</p>}
             <DataTable dense rows={rows} rowKey={(c) => c.id} columns={[
               { key: "code", label: "Code", render: (c) => <span className="font-mono text-xs">{c.code}</span> },
@@ -338,8 +435,11 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (id: nu
     <Modal open title="Importer une grille" onClose={onClose} footer={<Button variant="primary" loading={busy} disabled={!file} onClick={submit}>Importer en brouillon</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger"><span className="whitespace-pre-wrap">{error}</span></Notice>}
+        <Notice tone="accent">
+          <b>Outil de scoring du cabinet.</b> Le classeur du cabinet (onglets Scoring, Stage_Gate, Data_Room_Index et Parametres) s&apos;importe tel quel : compartiments, domaines, critères, gates et leur complétude minimale, pièces de la data room, barème et seuils de classement en sont lus. Les codes des critères et des pièces, les aides, les livrables et les rattachements pièce-critère sont repris de la version en vigueur quand le libellé est le même, pour que dossiers, exports et analyses gardent leurs repères.
+        </Notice>
         <p className="text-xs text-muted">
-          Classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide ; lignes de type gate, domaine, critere et piece. Colonnes facultatives de la méthode MB AxisPro : exigence (bloquant, apd, closing), bancabilite, livrable, role (capex), règles des gates (regle, seuil_attente, seuil_go, portee, domaines, entree, passage) et rattachement des pièces (criteres). Une grille avec la colonne « exigence » est notée à plat, APD READY à 65 ; sinon, par domaine, à 70. Le détail est dans l&apos;onglet Aide du classeur modèle. La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.
+          Format générique, classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide ; lignes de type gate, domaine, critere et piece. Colonnes facultatives de la méthode MB AxisPro : exigence (bloquant, apd, closing), bancabilite, livrable, role (capex), règles des gates (regle, seuil_attente, seuil_go, portee, domaines, entree, passage, completude_min), compartiment des domaines (« C0 — Coordination et cadrage projet ») et rattachement des pièces (criteres). Une grille avec la colonne « exigence » est notée à plat, APD READY à 65 ; sinon, par domaine, à 70. Le détail est dans l&apos;onglet Aide du classeur modèle. La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.
         </p>
         <Field label="Classeur"><input type="file" accept=".xlsx,.xlsm,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" /></Field>
         <Field label="Intitulé"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
