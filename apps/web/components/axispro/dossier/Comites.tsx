@@ -59,12 +59,18 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
   // la direction et l'administration consultent, comparent et vérifient les empreintes.
   const { cabinet } = useCabinet();
   const motifRequis = f.decision === "hold" || f.decision === "no_go";
+  // Le retour (dont le refus des quatre yeux, 403 « une décision du comité engage au moins deux
+  // personnes… ») s'affiche près de la commande : au-dessus du formulaire pour une nouvelle revue,
+  // au-dessus de l'historique pour le verrouillage ou la vérification d'une revue existante.
+  const [depuisHistorique, setDepuisHistorique] = useState(false);
 
   async function create(lock: boolean) {
+    setDepuisHistorique(false);
     const r = await agir(() => apiSend("POST", `/axispro/dossiers/${d.id}/reviews`, { ...f, lock }), lock ? "Décision enregistrée, scellée et verrouillée : le dossier est figé." : "Revue enregistrée en brouillon.");
     if (r !== undefined) onChanged();
   }
   async function verifier(id: number) {
+    setDepuisHistorique(true);
     const r = await agir(() => apiGet<{ sealed: boolean; intact?: boolean; unchanged?: boolean | null; fingerprint?: string }>(`/axispro/reviews/${id}/verify`));
     if (!r) return;
     if (!r.sealed) setRetour({ tone: "warn", text: "Revue non scellée." });
@@ -73,9 +79,15 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
     else setRetour({ tone: "ok", text: `Empreinte valide${r.unchanged ? ", dossier inchangé depuis la décision" : ""} : ${r.fingerprint?.slice(0, 16)}…` });
   }
 
+  async function verrouiller(id: number) {
+    setDepuisHistorique(true);
+    const r = await agir(() => apiSend("POST", `/axispro/reviews/${id}/lock`), "Décision scellée et verrouillée.");
+    if (r !== undefined) onChanged();
+  }
+
   return (
     <div className="space-y-4">
-      {bandeau}
+      {!depuisHistorique && bandeau}
       {d.locked_review && (
         <Notice tone="warn">
           Décision {RECO[d.locked_review.decision]?.label ?? d.locked_review.decision} du {fmtDate(d.locked_review.date)} verrouillée (révision {d.revision}) : ouvrez une nouvelle révision pour une nouvelle décision.
@@ -100,6 +112,7 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
           </div>
         </Card>
       )}
+      {depuisHistorique && bandeau}
       <Card title="Historique (cochez deux revues pour les comparer)" padded={false}>
         <DataTable rows={d.reviews} rowKey={(r) => r.id} empty="Aucune revue." onRowClick={(r) => setCompare((c) => (c.includes(r.id) ? c.filter((x) => x !== r.id) : [...c, r.id].slice(-2)))} columns={[
           { key: "sel", label: "", render: (r) => <input type="checkbox" readOnly checked={compare.includes(r.id)} aria-label="Comparer cette revue" /> },
@@ -115,7 +128,7 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
             </div>
           ) : cabinet ? (
             <div onClick={(e) => e.stopPropagation()}>
-              <Button size="sm" disabled={Boolean(d.locked_review)} onClick={() => agir(() => apiSend("POST", `/axispro/reviews/${r.id}/lock`), "Décision scellée et verrouillée.").then((x) => x !== undefined && onChanged())}>Verrouiller</Button>
+              <Button size="sm" disabled={Boolean(d.locked_review)} onClick={() => void verrouiller(r.id)}>Verrouiller</Button>
             </div>
           ) : (
             <Badge>Brouillon</Badge>

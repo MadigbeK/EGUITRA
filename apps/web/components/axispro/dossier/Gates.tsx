@@ -19,12 +19,16 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
   const { cabinet } = useCabinet();
   const [force, setForce] = useState<string | null>(null);
   const [motif, setMotif] = useState("");
+  // Refus d'un passage forcé (quatre yeux : 403 « une décision du comité engage au moins deux
+  // personnes… ») : affiché dans la fenêtre, restée ouverte, et non derrière elle.
+  const [refusForce, setRefusForce] = useState<string | null>(null);
   const gates = d.scoring.gates;
   const courant = gates.findIndex((g) => g.code === d.current_gate?.code);
   const dernier = courant >= gates.length - 1;
 
   async function passer(reason?: string) {
     setRetour(null);
+    setRefusForce(null);
     try {
       await apiSend("POST", `/axispro/dossiers/${d.id}/advance-gate`, reason ? { force_reason: reason } : {});
       setRetour({ tone: "ok", text: reason ? "Passage forcé enregistré au journal du dossier." : "Le dossier passe au gate suivant." });
@@ -33,9 +37,14 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
       onChanged();
     } catch (e) {
       const text = e instanceof ApiError ? e.message : "Passage impossible.";
-      if (!reason && e instanceof ApiError && e.status === 422 && !d.locked) setForce(text);
+      if (reason) setRefusForce(text);
+      else if (e instanceof ApiError && e.status === 422 && !d.locked) setForce(text);
       else setRetour({ tone: "danger", text });
     }
+  }
+  function fermerForce() {
+    setForce(null);
+    setRefusForce(null);
   }
 
   return (
@@ -117,7 +126,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
         <Modal
           open
           title="Passage contre la règle du gate"
-          onClose={() => setForce(null)}
+          onClose={fermerForce}
           footer={
             <Button variant="danger" disabled={motif.trim().length < 10} onClick={() => agir(() => passer(motif.trim()))}>
               Forcer le passage
@@ -125,6 +134,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
           }
         >
           <div className="space-y-3 text-sm">
+            {refusForce && <Notice tone="danger">{refusForce}</Notice>}
             <Notice tone="warn">{force}</Notice>
             <p className="text-muted">Le cabinet peut décider de passer outre : le motif, son auteur et la décision calculée sont inscrits au journal du dossier et figurent dans le rapport.</p>
             <Field label="Motif du passage forcé (10 caractères au moins)">
