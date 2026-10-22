@@ -175,6 +175,32 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**22 octobre : ensembles gérés pour des propriétaires et coûts standard** (écarts 5.1 et 5.2 de
+l'analyse du logiciel actuel, sur l'accord du gérant : « poursuis »). `eguitra_transport` 19.0.1.3.0.
+- Fait, noyau : propriété de l'ensemble (propre, géré pour un propriétaire) et charges mensuelles
+  (prorata des jours, charge annuelle au douzième) ; règles de répartition en % du chiffre d'affaires
+  brut, par ensemble ou par catégorie ; relevés par ensemble et par période (frais déclarés et
+  charges mensuelles, ou pièces comptabilisées sur l'ensemble, selon le paramètre ; les deux
+  montants gardés), figés, imprimables (PDF) et exportables (Excel) ; pièces en brouillon (facture
+  d'achat du propriétaire, refacturation d'une part négative, factures des commissions des tiers),
+  supprimées si le relevé est rouvert. Coûts standard des routes (litres aller et retour, prime,
+  péages, autres frais) et prix du carburant datés ; coût standard et marge estimée des rotations,
+  mis à jour tant qu'elles sont saisies, figés à la validation ; rentabilité avec coûts standard ;
+  contrôle des forfaits de carburant incohérents (écart de plus de 40 % à la médiane au km).
+  Routes `/transport/share-rules`, `/transport/fuel-prices`, `/transport/owner-statements` (lecture
+  administration, direction, finance ; écriture administration, finance). Piste d'audit étendue
+  (migration 19.0.1.3.0). 10 tests ; 54 tests du module au vert sur base jetable.
+- Fait, application web : onglet « Propriétaires » (relevés du mois, détail, PDF, Excel, pièces,
+  règles de répartition), propriété et charges dans « Flotte et chauffeurs », forfaits et prix du
+  carburant dans « Routes et tarifs », gain estimé dans le formulaire de rotation, marge estimée dans
+  la liste tant qu'aucun frais n'est saisi, paramètres des relevés (base, comptes).
+- Recette : module mis à jour (`-u eguitra_transport`), noyau redémarré, application web reconstruite.
+- À décider avec l'expert-comptable : traitement des ensembles gérés (mandat ou commission) et comptes
+  (par défaut 6223 part des propriétaires, 7078 refacturation, 6322 commissions, avec repli sur la
+  racine) ; avec le client : contrats des propriétaires et du partenaire (questions 7 à 11 de
+  l'analyse).
+- Production : par `infra/release.sh` après validation du gérant (module transport à mettre à jour).
+
 **21 octobre fin d'après-midi : mise en production 20261021-1505 et comptes du client.**
 - Décisions du gérant sur la liste des utilisateurs : un vrai profil « Achats » pour la responsable
   des achats ; module RH plus tard (la personne concernée reçoit en attendant le profil cabinet) ; société

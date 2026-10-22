@@ -32,6 +32,7 @@ export function Parametres() {
     <div className="space-y-6">
       {!settings.can_edit && <Notice tone="accent">Paramètres tenus par la finance : consultation seulement.</Notice>}
       <Manquants settings={settings} onSaved={() => void mutate()} />
+      <RelevesProprietaires settings={settings} onSaved={() => void mutate()} />
       <ConditionsClients canEdit={settings.can_edit} />
       <BaremeTaxes canEdit={settings.can_edit} />
       <Produits canEdit={settings.can_edit} />
@@ -149,6 +150,43 @@ function TaxForm({ tax, natures, bases, onClose, onSave }: { tax: TaxRule | null
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Relevés des ensembles gérés : base des charges et comptes des pièces préparées. */
+function RelevesProprietaires({ settings, onSaved }: { settings: TransportSettings; onSaved: () => void }) {
+  const { message, send } = useSend(onSaved);
+  const { data: charges } = useApi<AccountRef[]>(settings.can_edit ? "/finance/accounts?prefix=6&limit=2000" : null);
+  const { data: produits } = useApi<AccountRef[]>(settings.can_edit ? "/finance/accounts?prefix=7&limit=2000" : null);
+  const ro = !settings.can_edit;
+  const options = (current: AccountRef | null, list: AccountRef[] | undefined) =>
+    current && !list ? [{ value: current.id, label: `${current.code} ${current.name}` }] : (list ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }));
+  const account = (label: string, hint: string, key: string, current: AccountRef | null, list: AccountRef[] | undefined) => (
+    <Field label={label} hint={hint}>
+      <Select disabled={ro} value={current?.id ?? ""} placeholder="Compte par défaut"
+        onChange={(e) => void send("PATCH", "/transport/settings", { [key]: e.target.value ? Number(e.target.value) : null }, "Compte enregistré.")}
+        options={options(current, list)} />
+    </Field>
+  );
+  return (
+    <Card title="Ensembles gérés pour des propriétaires">
+      {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
+      <p className="mb-4 max-w-3xl text-[13px] leading-relaxed text-muted">
+        Le relevé d&apos;un ensemble géré retient, selon la base choisie, les frais déclarés des rotations et les charges mensuelles de
+        l&apos;ensemble, ou les pièces comptabilisées sur l&apos;ensemble ; il montre toujours les deux. Ses pièces se préparent en brouillon :
+        facture d&apos;achat du propriétaire, refacturation d&apos;une part négative, factures des commissions. Comptes à valider avec
+        l&apos;expert-comptable.
+      </p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Field label="Charges des relevés">
+          <Select disabled={ro} value={settings.owner_cost_basis} onChange={(e) => void send("PATCH", "/transport/settings", { owner_cost_basis: e.target.value }, "Base des relevés enregistrée.")}
+            options={settings.owner_cost_bases.map((b) => ({ value: b.code, label: b.label }))} />
+        </Field>
+        {account("Part des propriétaires", "Vide : 6223, sinon 622 ou 62.", "owner_account_id", settings.owner_account, charges)}
+        {account("Charges refacturées aux propriétaires", "Vide : 7078, sinon 707 ou 706.", "owner_income_account_id", settings.owner_income_account, produits)}
+        {account("Commissions versées", "Vide : 6322, sinon 632 ou 63.", "commission_account_id", settings.commission_account, charges)}
+      </div>
+    </Card>
   );
 }
 

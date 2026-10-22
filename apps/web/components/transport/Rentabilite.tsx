@@ -98,6 +98,7 @@ export function Rentabilite() {
             { key: "volume", label: "Volume (m³)", align: "right", render: (r) => fmtDec(r.volume) },
             { key: "revenue", label: "CA", align: "right", render: (r) => fmtShort(r.revenue) },
             { key: "revenue_per_km", label: "CA/km", align: "right", render: (r) => fmtInt(r.revenue_per_km) },
+            { key: "standard_cost", label: "Coûts standard", align: "right", render: (r) => <span title="Forfaits des routes au prix du carburant de la date de chargement">{fmtShort(r.standard_cost)}</span> },
             { key: "declared_cost", label: "Coûts déclarés", align: "right", render: (r) => fmtShort(r.declared_cost) },
             ...(booked ? [
               { key: "booked_cost", label: "Coûts comptabilisés", align: "right" as const, render: (r: ReportRow) => fmtShort(r.booked_cost) },

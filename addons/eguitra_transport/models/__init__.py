@@ -3,6 +3,8 @@ from . import settings
 from . import fleet
 from . import tax
 from . import rotation
+from . import standard
+from . import ownership
 from . import analysis
 from . import alert
 from . import period_close

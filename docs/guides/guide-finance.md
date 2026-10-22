@@ -98,6 +98,29 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 - Export des rotations (XLSX ou CSV) : une colonne par frais (pneumatiques compris), puis
   kilométrage et ratios (distance, carburant, durée, chiffre d'affaires et coût au kilomètre, coût
   au litre, consommation aux 100 km).
+- Coûts standard (Routes et tarifs) : pour chaque route, les forfaits d'une rotation complète
+  (litres de carburant aller et retour, prime de route, péages, autres frais), et les prix du
+  litre de carburant avec leur date d'application. La rotation affiche dès la saisie son coût
+  standard et sa marge estimée ; la validation les fige (un nouveau prix ne réécrit pas les
+  rotations passées). La rentabilité montre côte à côte coûts standard, déclarés et comptabilisés ;
+  les contrôles signalent une route dont le carburant au km s'écarte de plus de 40 % de la médiane.
+- Ensembles gérés pour des propriétaires (Flotte et chauffeurs) : propriété de chaque ensemble
+  (propre, ou géré pour un propriétaire désigné) et ses charges mensuelles (assurance,
+  géolocalisation, vignettes… ; une charge annuelle compte pour un douzième par mois).
+- Règles de répartition (onglet Propriétaires) : un bénéficiaire reçoit un pourcentage du chiffre
+  d'affaires brut d'un ensemble ou de tous les ensembles propres ou gérés, rotation par rotation,
+  même quand la marge est négative ; la règle d'un ensemble remplace la règle générale du même
+  bénéficiaire. La part que la société retient sur un ensemble géré est une règle à son nom.
+- Relevés des propriétaires (onglet Propriétaires) : « Établir les relevés du mois » calcule, pour
+  chaque ensemble géré ou visé par une règle, le chiffre d'affaires des rotations validées, les
+  charges (frais déclarés et charges mensuelles, ou pièces comptabilisées sur l'ensemble, selon les
+  paramètres ; les deux montants restent affichés), la marge, les commissions et la part du
+  propriétaire (le résiduel, négatif quand l'ensemble n'a pas couvert ses charges). Le relevé
+  s'imprime (PDF pour le propriétaire) et s'exporte (Excel). « Préparer les pièces » crée en
+  brouillon la facture d'achat du propriétaire (part positive) ou la facture de refacturation (part
+  négative) et la facture de chaque bénéficiaire tiers ; à valider dans Achats et Ventes.
+  « Rouvrir » supprime des pièces restées en brouillon. Comptes (Paramètres) à valider avec
+  l'expert-comptable.
 
 ## Relances clients (Comptabilité > Relances clients)
 

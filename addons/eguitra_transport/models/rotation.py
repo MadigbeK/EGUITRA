@@ -575,7 +575,7 @@ class EguitraTransportRotation(models.Model):
         Rotation = self.sudo()
         sums = ["volume_delivered", "volume_loaded", "revenue", "billed_amount", "total_cost", "margin", "shortage",
                 "shortage_excess", "shortage_value", "shortage_deduction", "shortage_claim", "shortage_net_cost",
-                "taxes_rebilled", "distance_km", "fuel_liters"]
+                "taxes_rebilled", "distance_km", "fuel_liters", "std_cost", "estimated_margin"]
         groups = Rotation._read_group(
             domain, [groupby], ["__count", *[f"{f}:sum" for f in sums], *[f"{c}:sum" for c, _l in COSTS]],
         )
@@ -600,6 +600,7 @@ class EguitraTransportRotation(models.Model):
                 "volume": volume, "volume_loaded": loaded,
                 "revenue": revenue, "billed_amount": totals["billed_amount"], "cost": totals["total_cost"],
                 "declared_cost": declared, "taxes_rebilled": totals["taxes_rebilled"],
+                "standard_cost": totals["std_cost"], "estimated_margin": totals["estimated_margin"],
                 "km": km, "fuel_liters": totals["fuel_liters"], "fuel_km": fuel_km.get(key) or 0.0,
                 "revenue_per_km": revenue / km if km else None, "cost_per_km": declared / km if km else None,
                 "cost_per_liter": declared / (volume * 1000) if volume else None,

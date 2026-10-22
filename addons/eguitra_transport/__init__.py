@@ -5,6 +5,8 @@ from . import controllers
 AUDITED_MODELS = [
     "eguitra.transport.vehicle", "eguitra.transport.driver", "eguitra.transport.route",
     "eguitra.transport.rotation", "eguitra.transport.tariff", "eguitra.transport.product", "eguitra.transport.tax",
+    "eguitra.transport.vehicle.charge", "eguitra.transport.share.rule", "eguitra.transport.owner.statement",
+    "eguitra.transport.fuel.price",
 ]
 
 

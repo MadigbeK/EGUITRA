@@ -19,6 +19,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
+import { enregistrerProprietaires, fuelPriceAt, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
 const HOST = "127.0.0.1";
@@ -567,6 +568,9 @@ addPartner(169, "Aquaculture du Konkouré (démo)", "Kindia", "c");
 addPartner(170, "Groupement d'Intérêt Économique des Producteurs de Pomme de Terre et de Légumes du Fouta Djallon (démo)", "Timbi-Madina", "c");
 addPartner(171, "Bureau Services Kaloum (démo)", "Conakry", "f");
 addPartner(172, "Expertise Agro Conseil (démo)", "Conakry", "f");
+addPartner(173, "Transports Camara et Fils (démo)", "Conakry", "f");
+addPartner(174, "Moussa Kourouma", "Kankan", "f", { person: true });
+addPartner(175, "Consortium Logistique du Niger (démo)", "Conakry", "f");
 const partnerById = (id) => PARTNERS.find((p) => p.id === id);
 const partnerRef = (id) => {
   const p = id ? partnerById(id) : null;
@@ -1847,7 +1851,7 @@ function profitability(cids, from, to, group = "vehicle") {
     rows.push({
       key: key ?? null, label: (key !== null && labelOf(key)) || "Non renseigné", rotations: list.length,
       volume: round3(delivered || loaded), revenue: rev, cost, margin, shortage: round3(sum(list, (r) => r.shortage)),
-      margin_rate: rev ? (margin / rev) * 100 : null,
+      margin_rate: rev ? (margin / rev) * 100 : null, standard_cost: sum(list, (r) => standardOf(r).std_cost),
       costs: Object.fromEntries(COSTS.map(([c]) => [c, sum(list, (r) => r[c])])),
     });
   }
@@ -3487,6 +3491,7 @@ function calibrate() {
 function seed() {
   seedLoans();
   seedTransport();
+  seedProprietaires(DB);
   seedChantiers();
   seedImmobilier();
   buildLedger();
@@ -5137,6 +5142,7 @@ function rotationRow(rot) {
     product: rot.product, delivery_note: rot.delivery_note, volume_loaded: rot.volume_loaded, volume_delivered: rot.volume_delivered, shortage: rot.shortage,
     rate: rot.rate, revenue: rot.revenue, costs: Object.fromEntries(COSTS.map(([c]) => [c, rot[c] || 0])), total_cost: rot.total_cost, margin: rot.margin, margin_rate: rot.margin_rate,
     note: rot.note, invoice: invoice ? { id: invoice.id, name: invoice.name ?? "/" } : null, client_uuid: rot.client_uuid,
+    ...standardOf(rot),
   };
 }
 const companyRotations = (ctx) => DB.rotations.filter((r) => r.company_id === ctx.company);
@@ -5191,7 +5197,9 @@ route("GET", "/transport/referentials", TR_READ, (ctx) => {
     routes: DB.routes.filter((r) => r.company_id === ctx.company && r.active).map((r) => ({
       id: r.id, name: r.name, distance_km: r.distance_km, default_rate: r.default_rate,
       tariffs: DB.tariffs.filter((t) => t.route_id === r.id).map((t) => ({ partner_id: t.partner_id, product: t.product, rate: t.rate })),
+      std_fuel_liters: r.std_fuel_liters || 0, std_driver_bonus: r.std_driver_bonus || 0, std_tolls: r.std_tolls || 0, std_other_costs: r.std_other_costs || 0,
     })),
+    fuel_price: fuelPriceAt(ctx.company, TODAY),
     clients: [...clientIds].map(partnerRef).filter(Boolean).sort((a, b) => byFr(a.name, b.name)),
     products: PRODUCTS.map(([code, label]) => ({ code, label })),
     costs: COSTS.map(([code, label]) => ({ code, label })),
@@ -5201,6 +5209,7 @@ route("GET", "/transport/vehicles", TR_READ, (ctx) =>
   DB.vehicles.filter((v) => v.company_id === ctx.company).map((v) => ({
     id: v.id, name: v.name, tractor_plate: v.tractor_plate, trailer_plate: v.trailer_plate, brand: v.brand, capacity_liters: v.capacity_liters,
     driver: simpleRef(DB.drivers, v.driver_id), state: v.state, active: v.active,
+    ownership: v.ownership, owner: partnerRef(v.owner_id), charges: v.charges, monthly_charges: v.charges.reduce((s, c) => s + monthlyOf(c), 0),
   })));
 function vehicleValues(v, data) {
   for (const key of ["name", "tractor_plate", "trailer_plate", "brand"]) if (key in data) v[key] = data[key] || null;
@@ -5208,11 +5217,14 @@ function vehicleValues(v, data) {
   if (["service", "maintenance", "off"].includes(data.state)) v.state = data.state;
   if ("driver_id" in data) v.driver_id = data.driver_id ? Number(data.driver_id) : null;
   if ("active" in data) v.active = Boolean(data.active);
+  if (data.ownership in OWNERSHIP_LABELS) v.ownership = data.ownership;
+  if ("owner_id" in data) v.owner_id = data.owner_id ? Number(data.owner_id) : null;
+  if ("charges" in data) v.charges = (data.charges || []).map((c, i) => ({ id: Date.now() + i, name: c.name, amount: Number(c.amount) || 0, periodicity: c.periodicity === "year" ? "year" : "month", date_from: c.date_from || null, date_to: c.date_to || null }));
 }
 route("POST", "/transport/vehicles", TR_WRITE, (ctx) => {
   requireFields(ctx.body, "name");
   if (DB.vehicles.some((v) => v.company_id === ctx.company && v.name === ctx.body.name)) throw new ApiError(409, "conflict", "Ce code d'ensemble existe déjà.");
-  const v = { id: newId("vehicle"), company_id: ctx.company, name: "", tractor_plate: null, trailer_plate: null, brand: null, capacity_liters: 0, driver_id: null, state: "service", active: true };
+  const v = { id: newId("vehicle"), company_id: ctx.company, name: "", tractor_plate: null, trailer_plate: null, brand: null, capacity_liters: 0, driver_id: null, state: "service", active: true, ownership: "own", owner_id: null, charges: [] };
   vehicleValues(v, ctx.body);
   DB.vehicles.push(v);
   DB.analytic.push({ id: newId("analytic"), company_id: ctx.company, plan: "vehicule", name: v.name, code: null, active: true });
@@ -5247,12 +5259,16 @@ route("PATCH", "/transport/drivers/:id", TR_WRITE, (ctx) => {
 route("GET", "/transport/routes", TR_READ, (ctx) =>
   DB.routes.filter((r) => r.company_id === ctx.company).map((r) => ({
     id: r.id, name: r.name, origin: r.origin, destination: r.destination, distance_km: r.distance_km, default_rate: r.default_rate, active: r.active,
+    distance_return_km: null, round_trip_km: 2 * (r.distance_km || 0), round_trip_inconsistent: false, duration_days: null,
     tariffs: DB.tariffs.filter((t) => t.route_id === r.id).map((t) => ({ id: t.id, partner: partnerRef(t.partner_id), product: t.product, rate: t.rate })),
+    std_fuel_liters: r.std_fuel_liters || 0, std_driver_bonus: r.std_driver_bonus || 0, std_tolls: r.std_tolls || 0, std_other_costs: r.std_other_costs || 0,
+    fuel_per_km: r.distance_km && r.std_fuel_liters ? r.std_fuel_liters / (2 * r.distance_km) : null,
   })));
 function routeValues(rt, data) {
   for (const key of ["name", "origin", "destination"]) if (key in data) rt[key] = data[key] || null;
   if ("distance_km" in data) rt.distance_km = Number.parseInt(data.distance_km || 0, 10) || 0;
   if ("default_rate" in data) rt.default_rate = numArg(data.default_rate || 0, "default_rate");
+  for (const key of ["std_fuel_liters", "std_driver_bonus", "std_tolls", "std_other_costs"]) if (key in data) rt[key] = numArg(data[key] || 0, key);
   if ("active" in data) rt.active = Boolean(data.active);
   if ("tariffs" in data) {
     DB.tariffs = DB.tariffs.filter((t) => t.route_id !== rt.id);
@@ -5356,6 +5372,7 @@ route("GET", "/transport/summary", TR_READ, (ctx) => {
   return {
     date_from: start, date_to: end, rotations: done.length, volume: round3(sum(done, (r) => r.volume_delivered)), revenue: rev, cost: sum(done, (r) => r.total_cost), margin,
     margin_rate: rev ? (margin / rev) * 100 : null, to_invoice: { count: toInvoice.length, amount: sum(toInvoice, (r) => r.revenue) },
+    margin_min: 15, shortage_excess: { count: 0, volume: 0, value: 0 },
     drafts: all.filter((r) => r.state === "draft").length,
     fleet: Object.fromEntries(["service", "maintenance", "off"].map((s) => [s, vehicles.filter((v) => v.state === s).length])),
   };
@@ -6098,6 +6115,7 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
 /* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */
 
 enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES });
+enregistrerProprietaires({ route, DB, ApiError, TR_READ, TODAY, COMPANIES, partnerRef, simpleRef, fileReply, xlsxBuffer });
 
 /* ════════════════════════════════════════════════════════════════════════════
  * Serveur HTTP

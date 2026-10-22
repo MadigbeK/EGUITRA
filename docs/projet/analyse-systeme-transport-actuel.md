@@ -179,10 +179,10 @@ C'est le cœur du logiciel et ce qui le distingue.
 | Tarif | GNF/L par dépôt et destination, barème national et tarif contractuel | GNF/m³ par route, tarif par client et par produit | Équivalent (× 1 000) ; reprendre les tarifs à deux décimales depuis l'écran des tarifs, pas depuis l'export |
 | Chiffre d'affaires | livré × tarif | livré (à défaut chargé) × tarif | Identique |
 | Manquant | fret perdu, sans tolérance | tolérance, excédent valorisé au prix du produit, déduit de la facture ou réclamé au chauffeur, ou constat seulement ; volumes à 15 °C en option | Régler NIMOVA sur « constat seulement » reproduit Datakö ; la pratique réelle reste à confirmer (questions 1 à 3) |
-| Coûts | forfaits de route, carburant au prix du mois | coûts déclarés sur la rotation, coûts réels comptabilisés par ensemble et par route, écart entre les deux | Ajouter des **coûts standard par route** pour le gain estimé à la saisie (voir 5.2) |
+| Coûts | forfaits de route, carburant au prix du mois | coûts standard figés à la validation, coûts déclarés, coûts réels comptabilisés par ensemble et par route | Réalisé (5.2) |
 | Taxes spécifiques | aucune (péages seulement) | barème, assiette, refacturation | Avantage NIMOVA |
 | Charges fixes | saisies par mois, parts égales | comptabilité imputée par ensemble, répartition des charges de structure | Avantage NIMOVA (charges réelles) ; prévoir la vue mensuelle par véhicule |
-| Camions de tiers, commissions, relevé propriétaire | oui | non | **Écart principal** (voir 5.1) |
+| Camions de tiers, commissions, relevé propriétaire | oui | oui depuis le 22 octobre (coûts réels possibles, pièces comptables préparées) | Réalisé (5.1) |
 | Facture | état coché, pas de pièce | facture réelle par client, plusieurs rotations, taxes refacturées, manquants déduits | Avantage NIMOVA |
 | Encaissement | coché par livraison | règlements et lettrage comptables, relances, délais réels | Avantage NIMOVA ; montrer l'état de paiement sur chaque rotation |
 | Dossier de livraison | n° de BL, n° de tournée, bons de commande, état complet | bon de livraison seul | Ajouter n° de tournée, bons de commande, pièces jointes et état (voir 5.3) |
@@ -203,7 +203,13 @@ hors du périmètre de l'offre sauf décision du gérant ; les points 5.1 à 5.3
 « suivi des coûts et de la rentabilité par trajet et par véhicule » demandé par le responsable
 financier et entrent dans l'esprit de l'offre.
 
-### 5.1 Camions gérés pour le compte de tiers (priorité haute)
+### 5.1 Camions gérés pour le compte de tiers (priorité haute) : réalisé le 22 octobre
+
+Module `eguitra_transport` 19.0.1.3.0, onglet « Propriétaires » de Transport : propriété et charges
+mensuelles des ensembles, règles de répartition, relevés mensuels (PDF, Excel), pièces en
+brouillon. Reste à décider avec l'expert-comptable : traitement comptable (mandat ou commission) et
+comptes définitifs. Proposition initiale :
+
 
 - Propriétaire sur l'ensemble routier : EGUITRA ou un tiers (fiche de tiers).
 - Règles de répartition datées, par véhicule ou par catégorie : bénéficiaire, base (chiffre d'affaires
@@ -215,7 +221,11 @@ financier et entrent dans l'esprit de l'offre.
   lui (compte de tiers), réglée par la trésorerie ; un résiduel négatif devient une créance.
 - Commissions des partenaires : charge à payer, au taux de la règle, sur la période.
 
-### 5.2 Coûts standard par route et gain estimé (priorité haute)
+### 5.2 Coûts standard par route et gain estimé (priorité haute) : réalisé le 22 octobre
+
+Forfaits des routes et prix du carburant dans « Routes et tarifs », marge estimée à la saisie,
+coûts standard dans la rentabilité, contrôle des forfaits incohérents. Proposition initiale :
+
 
 - Sur la route : consommation de référence (litres par voyage aller-retour), prime du chauffeur,
   péages, frais de chargement ; prix du carburant par mois (prix officiel, ou prix d'achat réel).

@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCheck, Download, Droplet, FileText, Percent, Plus, Receipt, Smartphone, TrendingUp } from "@/components/icons";
+import { CheckCheck, Download, Droplet, FileText, Fuel, Percent, Plus, Receipt, Smartphone, Trash2, TrendingUp } from "@/components/icons";
 import { Badge, Button, Card, Compteur, DataTable, ErrorBox, Field, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Repartition, Select, Tabs } from "@/components/ui";
 import { Manquants } from "@/components/transport/Manquants";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { Parametres } from "@/components/transport/Parametres";
+import { Proprietaires } from "@/components/transport/Proprietaires";
 import { Rentabilite } from "@/components/transport/Rentabilite";
 import { Taxes } from "@/components/transport/Taxes";
-import { parseNumber, type Ref, type Referentials, type TransportSettings } from "@/components/transport/types";
+import { OWNERSHIPS, parseNumber, type Ownership, type Ref, type Referentials, type RouteStandards, type TransportSettings, type VehicleCharge } from "@/components/transport/types";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 
@@ -37,14 +38,19 @@ interface Rotation {
   total_cost: number;
   margin: number;
   margin_rate: number;
+  std_cost: number;
+  estimated_margin: number;
   invoice: { id: number; name: string | null } | null;
 }
 
 const STATE = { draft: ["Saisie", "warn"], done: ["Validée", "accent"], invoiced: ["Facturée", "ok"], cancelled: ["Annulée", "neutral"] } as const;
-type Tab = "rotations" | "rentabilite" | "manquants" | "taxes" | "flotte" | "routes" | "parametres";
+type Tab = "rotations" | "rentabilite" | "proprietaires" | "manquants" | "taxes" | "flotte" | "routes" | "parametres";
 
 export default function TransportPage() {
   const [tab, setTab] = useState<Tab>("rotations");
+  // Relevés des propriétaires et règles de répartition : profils qui lisent la comptabilité.
+  const { data: settings } = useApi<TransportSettings>("/transport/settings");
+  const comptable = Boolean(settings?.sees_accounts);
   // margin_min : marge minimale de la règle d'alerte (30 % par défaut) ; null : seuil à 0, la marge n'est pas jugée.
   const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; margin_min: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
   const sousMinimum = Boolean(summary && summary.margin_rate !== null && summary.margin_min !== null && summary.margin_rate < summary.margin_min);
@@ -109,9 +115,10 @@ export default function TransportPage() {
           </div>
         </div>
       )}
-      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, { key: "manquants", label: "Manquants" }, { key: "taxes", label: "Taxes spécifiques" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: "rotations", label: "Rotations" }, { key: "rentabilite", label: "Rentabilité" }, ...(comptable ? [{ key: "proprietaires" as const, label: "Propriétaires" }] : []), { key: "manquants", label: "Manquants" }, { key: "taxes", label: "Taxes spécifiques" }, { key: "flotte", label: "Flotte et chauffeurs" }, { key: "routes", label: "Routes et tarifs" }, { key: "parametres", label: "Paramètres" }]} value={tab} onChange={setTab} />
       {tab === "rotations" && <Rotations />}
       {tab === "rentabilite" && <Rentabilite />}
+      {tab === "proprietaires" && comptable && <Proprietaires />}
       {tab === "manquants" && <Manquants />}
       {tab === "taxes" && <Taxes />}
       {tab === "flotte" && <Fleet />}
@@ -188,7 +195,9 @@ function Rotations() {
               { key: "volume", label: "Livré (m³)", align: "right", render: (r) => <span title={r.over_capacity ? `Chargé au-delà de la capacité (${fmtDec(r.capacity_liters / 1000)} m³)` : undefined} className={r.over_capacity ? "text-danger" : ""}>{fmtDec(r.volume_delivered || r.volume_loaded)}</span> },
               { key: "shortage", label: "Manquant", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtDec(r.shortage)}</span> : "–") },
               { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
-              { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span> },
+              { key: "margin", label: "Marge", align: "right", render: (r) => (!r.total_cost && r.std_cost ? (
+                <span className="italic text-muted" title={`Marge estimée avec le coût standard de la route (${fmtGNF(r.std_cost)}) : aucun frais saisi`}>{fmtShort(r.estimated_margin)} est.</span>
+              ) : <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span>) },
               { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]} vivant={r.state === "draft"}>{STATE[r.state][0]}</Badge> },
             ]}
             footer={
@@ -267,6 +276,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
               <Notice tone="danger">Le volume chargé dépasse la capacité de {vehicle.name} ({fmtDec(vehicle.capacity_liters / 1000)} m³) : la rotation ne pourra pas être validée.</Notice>
             ) : null;
           })()}
+          <GainEstime ref_={ref} f={f} />
           <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
             {ref.costs.map((c) => (
               <Field key={c.code} label={c.label}><Input inputMode="numeric" className="font-mono" value={f[c.code] ?? ""} onChange={set(c.code)} /></Field>
@@ -278,7 +288,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
   );
 }
 
-interface Vehicle { id: number; name: string; tractor_plate: string | null; trailer_plate: string | null; brand: string | null; capacity_liters: number; driver: Ref | null; state: string; year: number | null; date_service: string | null; asset: Ref | null }
+interface Vehicle { id: number; name: string; tractor_plate: string | null; trailer_plate: string | null; brand: string | null; capacity_liters: number; driver: Ref | null; state: string; year: number | null; date_service: string | null; asset: Ref | null; ownership: Ownership; owner: Ref | null; charges: VehicleCharge[]; monthly_charges: number }
 interface Driver { id: number; name: string; phone: string | null; license_number: string | null; license_expiry: string | null; partner: Ref | null }
 
 const VEHICLE_STATES = [{ value: "service", label: "En service" }, { value: "maintenance", label: "Maintenance" }, { value: "off", label: "Hors service" }, { value: "sold", label: "Cédé" }];
@@ -291,6 +301,7 @@ function Fleet() {
   const [v, setV] = useState({ name: "", tractor_plate: "", trailer_plate: "", capacity_liters: "", driver_id: "", year: "" });
   const [d, setD] = useState({ name: "", phone: "", license_number: "", license_expiry: "" });
   const [message, setMessage] = useState<string | null>(null);
+  const [charging, setCharging] = useState<Vehicle | null>(null);
   const patch = (path: string, body: Record<string, unknown>, refresh: () => void) =>
     apiSend("PATCH", path, body).then(() => { setMessage(null); refresh(); }).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"));
   return (
@@ -308,6 +319,17 @@ function Fleet() {
           ) : x.asset ? x.asset.name : <Badge tone={x.state === "service" || x.state === "maintenance" ? "warn" : "neutral"}>Non rattaché</Badge>) },
           { key: "driver", label: "Chauffeur", render: (x) => <Select value={x.driver?.id ?? ""} placeholder="–" onChange={(e) => void patch(`/transport/vehicles/${x.id}`, { driver_id: e.target.value ? Number(e.target.value) : null }, () => void mutate())} options={(drivers ?? []).map((dr) => ({ value: dr.id, label: dr.name }))} /> },
           { key: "state", label: "État", render: (x) => <Select value={x.state} onChange={(e) => void patch(`/transport/vehicles/${x.id}`, { state: e.target.value }, () => void mutate())} options={VEHICLE_STATES} /> },
+          { key: "ownership", label: "Propriété", render: (x) => (settings?.can_edit ? (
+            <div className="flex min-w-64 flex-col gap-1.5">
+              <Select value={x.ownership} onChange={(e) => void patch(`/transport/vehicles/${x.id}`, { ownership: e.target.value }, () => void mutate())} options={OWNERSHIPS} />
+              {x.ownership === "managed" && <PartnerPicker kind="supplier" value={x.owner} placeholder="Propriétaire…" onChange={(p) => void patch(`/transport/vehicles/${x.id}`, { owner_id: p?.id ?? null }, () => void mutate())} />}
+            </div>
+          ) : x.ownership === "managed" ? <span>Géré · {x.owner?.name ?? "–"}</span> : "Propre") },
+          { key: "monthly_charges", label: "Charges / mois", align: "right", render: (x) => (
+            <button type="button" className="font-mono underline decoration-dotted underline-offset-4 hover:text-accent" onClick={(e) => { e.stopPropagation(); setCharging(x); }}>
+              {x.monthly_charges ? fmtGNF(x.monthly_charges) : settings?.can_edit ? "Saisir" : "–"}
+            </button>
+          ) },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-7">
           <Input placeholder="Code (ER-01)" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />
@@ -319,6 +341,7 @@ function Fleet() {
           <Button variant="primary" disabled={!v.name} onClick={() => apiSend("POST", "/transport/vehicles", { ...v, capacity_liters: Number(v.capacity_liters) || 0, year: Number(v.year) || 0, driver_id: v.driver_id ? Number(v.driver_id) : undefined }).then(() => { setV({ name: "", tractor_plate: "", trailer_plate: "", capacity_liters: "", driver_id: "", year: "" }); void mutate(); }).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"))}>Ajouter</Button>
         </div>
       </Card>
+      {charging && <ChargesModal vehicle={charging} canEdit={Boolean(settings?.can_edit)} onClose={() => setCharging(null)} onSaved={() => { setCharging(null); void mutate(); }} />}
       <Card title="Chauffeurs" padded={false}>
         <DataTable rows={drivers ?? []} rowKey={(x) => x.id} columns={[
           { key: "name", label: "Nom" },
@@ -340,7 +363,7 @@ function Fleet() {
 }
 
 interface Tariff { id: number; partner: Ref; product: string | null; rate: number; shortage_tolerance: number | null; shortage_price: number | null }
-interface RouteRow { id: number; name: string; distance_km: number; distance_return_km: number | null; round_trip_km: number; round_trip_inconsistent: boolean; duration_days: number | null; default_rate: number; tariffs: Tariff[] }
+interface RouteRow extends RouteStandards { id: number; name: string; distance_km: number; distance_return_km: number | null; round_trip_km: number; round_trip_inconsistent: boolean; duration_days: number | null; default_rate: number; tariffs: Tariff[]; fuel_per_km: number | null }
 
 function Routes() {
   const { data: routes, mutate } = useApi<RouteRow[]>("/transport/routes");
@@ -374,6 +397,16 @@ function Routes() {
           ) },
           { key: "duration_days", label: "Durée (j)", align: "right", render: (x) => <Input className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.duration_days ? String(x.duration_days).replace(".", ",") : ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== (x.duration_days ?? 0) && patchRoute(x, { duration_days: parseNumber(e.target.value) ?? 0 })} /> },
           { key: "default_rate", label: "Tarif par m³", align: "right", render: (x) => fmtGNF(x.default_rate) },
+          { key: "std_fuel_liters", label: "Carburant réf. (L)", align: "right", render: (x) => (
+            <span className="inline-flex items-center gap-2">
+              {x.fuel_per_km !== null && <span className="text-[11.5px] text-muted" title="Litres par km parcouru, aller et retour">{fmtDec(x.fuel_per_km)} L/km</span>}
+              <Input className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.std_fuel_liters || ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== x.std_fuel_liters && patchRoute(x, { std_fuel_liters: parseNumber(e.target.value) ?? 0 })} />
+            </span>
+          ) },
+          ...(["std_driver_bonus", "std_tolls", "std_other_costs"] as const).map((k) => ({
+            key: k, label: { std_driver_bonus: "Prime de route", std_tolls: "Péages", std_other_costs: "Autres frais" }[k], align: "right" as const,
+            render: (x: RouteRow) => <Input className="w-28 text-right font-mono" inputMode="numeric" defaultValue={x[k] || ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== x[k] && patchRoute(x, { [k]: parseNumber(e.target.value) ?? 0 })} />,
+          })),
           { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${productLabel(t.product)})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-6">
@@ -385,6 +418,7 @@ function Routes() {
           <Button variant="primary" disabled={!r.name} onClick={() => apiSend("POST", "/transport/routes", { name: r.name, distance_km: Number(r.distance_km) || 0, distance_return_km: Number(r.distance_return_km) || 0, duration_days: parseNumber(r.duration_days) ?? 0, default_rate: parseNumber(r.default_rate) ?? 0 }).then(() => { setR({ name: "", distance_km: "", distance_return_km: "", duration_days: "", default_rate: "" }); void mutate(); }).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"))}>Ajouter la route</Button>
         </div>
       </Card>
+      <PrixCarburant canEdit={Boolean(settings?.can_edit)} />
       <Card title="Tarif négocié par client">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
           <Select value={tariff.route_id} onChange={(e) => setTariff({ ...tariff, route_id: e.target.value })} placeholder="Route…" options={(routes ?? []).map((x) => ({ value: x.id, label: x.name }))} />
@@ -417,5 +451,117 @@ function Routes() {
         ]} />
       </Card>
     </div>
+  );
+}
+
+/** Gain estimé à la saisie : montant facturable moins les forfaits de la route au prix du carburant en vigueur. */
+function GainEstime({ ref_, f }: { ref_: Referentials; f: Record<string, string> }) {
+  const route = ref_.routes.find((r) => String(r.id) === f.route_id);
+  if (!route) return null;
+  const volume = parseNumber(f.volume_delivered ?? "") ?? parseNumber(f.volume_loaded ?? "") ?? 0;
+  const tariffs = route.tariffs.filter((t) => String(t.partner_id) === f.partner_id);
+  const rate = parseNumber(f.rate ?? "") ?? (tariffs.find((t) => t.product === f.product) ?? tariffs.find((t) => !t.product))?.rate ?? route.default_rate;
+  const fuel = route.std_fuel_liters * (ref_.fuel_price ?? 0);
+  const standard = fuel + route.std_driver_bonus + route.std_tolls + route.std_other_costs;
+  const revenue = volume * rate;
+  if (!standard && !revenue) return null;
+  return (
+    <div className="grid grid-cols-2 gap-3 rounded-xl bg-[var(--fond-doux,transparent)] p-3 ring-1 ring-line md:grid-cols-4">
+      <div><div className="text-[12px] text-muted">Montant estimé</div><div className="font-mono text-[15px] text-ink">{fmtGNF(revenue)}</div></div>
+      <div>
+        <div className="text-[12px] text-muted">Coût standard de la route</div>
+        <div className="font-mono text-[15px] text-ink">{fmtGNF(standard)}</div>
+        {route.std_fuel_liters > 0 && !ref_.fuel_price && <div className="text-[11.5px] text-warn">Prix du carburant non renseigné (Routes et tarifs)</div>}
+      </div>
+      <div><div className="text-[12px] text-muted">Marge estimée</div><div className={`font-mono text-[15px] font-semibold ${revenue - standard < 0 ? "text-danger" : "text-ink"}`}>{fmtGNF(revenue - standard)}</div></div>
+      <div className="text-[12px] leading-snug text-muted">
+        {route.std_fuel_liters ? `${fmtDec(route.std_fuel_liters)} L à ${fmtGNF(ref_.fuel_price ?? 0)}, prime, péages et autres forfaits. ` : "Aucun forfait de carburant pour cette route. "}
+        Figé à la validation de la rotation.
+      </div>
+    </div>
+  );
+}
+
+/** Charges mensuelles d'un ensemble (assurance, géolocalisation, vignettes…) : relevés des propriétaires. */
+function ChargesModal({ vehicle, canEdit, onClose, onSaved }: { vehicle: Vehicle; canEdit: boolean; onClose: () => void; onSaved: () => void }) {
+  const [lines, setLines] = useState<VehicleCharge[]>(vehicle.charges.map((c) => ({ ...c })));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const set = (i: number, patch: Partial<VehicleCharge>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const monthly = lines.reduce((sum, l) => sum + (l.periodicity === "year" ? l.amount / 12 : l.amount), 0);
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend("PATCH", `/transport/vehicles/${vehicle.id}`, { charges: lines.filter((l) => l.name.trim()).map(({ name, amount, periodicity, date_from, date_to }) => ({ name, amount, periodicity, date_from, date_to })) });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal open wide title={`Charges mensuelles de ${vehicle.name}`} onClose={onClose} footer={canEdit ? <Button variant="primary" loading={busy} onClick={() => void save()}>Enregistrer</Button> : undefined}>
+      <div className="space-y-3">
+        {error && <Notice tone="danger">{error}</Notice>}
+        <p className="text-[13px] text-muted">
+          Charges fixes de l&apos;ensemble, retenues dans les relevés des propriétaires au prorata des jours de la période (base « frais déclarés »).
+          Une charge annuelle compte pour un douzième par mois. Total : <span className="font-mono text-ink">{fmtGNF(monthly)}</span> par mois.
+        </p>
+        {lines.map((l, i) => (
+          <div key={i} className="grid grid-cols-2 items-end gap-2 md:grid-cols-12">
+            <Field label="Charge" className="md:col-span-3"><Input disabled={!canEdit} value={l.name} placeholder="Assurance, GPS, vignette…" onChange={(e) => set(i, { name: e.target.value })} /></Field>
+            <Field label="Montant" className="md:col-span-2"><Input disabled={!canEdit} inputMode="numeric" className="font-mono" value={l.amount ? String(l.amount) : ""} onChange={(e) => set(i, { amount: parseNumber(e.target.value) ?? 0 })} /></Field>
+            <Field label="Périodicité" className="md:col-span-2"><Select disabled={!canEdit} value={l.periodicity} onChange={(e) => set(i, { periodicity: e.target.value as VehicleCharge["periodicity"] })} options={[{ value: "month", label: "Mensuelle" }, { value: "year", label: "Annuelle" }]} /></Field>
+            <Field label="Du" className="md:col-span-2"><Input disabled={!canEdit} type="date" value={l.date_from ?? ""} onChange={(e) => set(i, { date_from: e.target.value || null })} /></Field>
+            <Field label="Au" className="md:col-span-2"><Input disabled={!canEdit} type="date" value={l.date_to ?? ""} onChange={(e) => set(i, { date_to: e.target.value || null })} /></Field>
+            {canEdit && <button type="button" title="Retirer" className="mb-2 text-muted hover:text-danger md:col-span-1" onClick={() => setLines(lines.filter((_l, j) => j !== i))}><Trash2 className="h-4 w-4" /></button>}
+          </div>
+        ))}
+        {canEdit && <Button onClick={() => setLines([...lines, { name: "", amount: 0, periodicity: "month", date_from: null, date_to: null }])}><Plus className="h-4 w-4" /> Ajouter une charge</Button>}
+      </div>
+    </Modal>
+  );
+}
+
+/** Prix du carburant de la flotte : coût standard des rotations (prix applicable à la date de chargement). */
+function PrixCarburant({ canEdit }: { canEdit: boolean }) {
+  const { data, mutate } = useApi<{ current: number; items: Array<{ id: number; date_from: string; price: number; note: string | null }> }>("/transport/fuel-prices");
+  const [form, setForm] = useState({ date_from: new Date().toISOString().slice(0, 10), price: "", note: "" });
+  const [message, setMessage] = useState<string | null>(null);
+  async function send(method: "POST" | "DELETE", path: string, body?: Record<string, unknown>) {
+    setMessage(null);
+    try {
+      await apiSend(method, path, body);
+      void mutate();
+      return true;
+    } catch (e) {
+      setMessage(e instanceof ApiError ? e.message : "Erreur");
+      return false;
+    }
+  }
+  return (
+    <Card title="Prix du carburant" padded={false} actions={data ? <span className="inline-flex items-center gap-1.5 text-[13px] text-muted"><Fuel className="h-4 w-4" /> En vigueur : <span className="font-mono text-ink">{data.current ? `${fmtGNF(data.current)} / L` : "non renseigné"}</span></span> : undefined}>
+      <p className="px-5 pt-4 text-[13px] text-muted">
+        Prix du litre appliqué aux forfaits de carburant des routes (coût standard). Une rotation prend le prix en vigueur à sa date de
+        chargement ; validée, elle le garde : un nouveau prix ne réécrit pas les rotations passées.
+      </p>
+      {message && <div className="px-5 pt-3"><Notice tone="danger">{message}</Notice></div>}
+      <DataTable rows={data?.items ?? []} rowKey={(x) => x.id} empty="Aucun prix enregistré." columns={[
+        { key: "date_from", label: "À partir du", render: (x) => fmtDate(x.date_from) },
+        { key: "price", label: "Prix du litre", align: "right", render: (x) => fmtGNF(x.price) },
+        { key: "note", label: "Source", render: (x) => x.note ?? "–" },
+        { key: "actions", label: "", render: (x) => (canEdit ? <button type="button" title="Supprimer" className="text-muted hover:text-danger" onClick={() => void send("DELETE", `/transport/fuel-prices/${x.id}`)}><Trash2 className="h-4 w-4" /></button> : null) },
+      ]} />
+      {canEdit && (
+        <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-5">
+          <Input type="date" value={form.date_from} onChange={(e) => setForm({ ...form, date_from: e.target.value })} />
+          <Input placeholder="Prix du litre (GNF)" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          <Input className="md:col-span-2" placeholder="Source (structure des prix d'octobre…)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+          <Button variant="primary" disabled={!form.date_from || !parseNumber(form.price)} onClick={() => void send("POST", "/transport/fuel-prices", { date_from: form.date_from, price: parseNumber(form.price), note: form.note || null }).then((ok) => ok && setForm({ ...form, price: "", note: "" }))}>Enregistrer le prix</Button>
+        </div>
+      )}
+    </Card>
   );
 }

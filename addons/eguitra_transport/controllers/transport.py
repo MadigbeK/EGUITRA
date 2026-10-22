@@ -11,8 +11,10 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
+from ..models.ownership import OWNERSHIPS, PERIODICITIES
 from ..models.rotation import COSTS, ENTRY_COSTS
-from ..models.settings import SHORTAGE_RULES
+from ..models.settings import OWNER_COST_BASES, SHORTAGE_RULES
+from ..models.standard import ROUTE_STANDARDS
 from ..models.tax import TAX_BASES, TAX_NATURES
 
 _logger = logging.getLogger(__name__)
@@ -81,6 +83,8 @@ def _rotation_row(rot):
         "tax_lines": [{"id": t.id, "name": t.name, "nature": t.nature, "base": t.base, "base_amount": t.base_amount,
                        "rate": t.rate, "amount": t.amount, "rebillable": t.rebillable} for t in rot.tax_line_ids],
         "total_cost": rot.total_cost, "margin": rot.margin, "margin_rate": rot.margin_rate,
+        "std_fuel_liters": rot.std_fuel_liters, "std_fuel_price": rot.std_fuel_price, "std_cost": rot.std_cost,
+        "estimated_margin": rot.estimated_margin,
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
     }
@@ -202,10 +206,17 @@ def _settings_payload():
         "volume_correction": company.transport_volume_correction,
         "shortage_account": _account_ref(accounts.transport_shortage_account_id) if accounts else None,
         "claim_account": _account_ref(accounts.transport_claim_account_id) if accounts else None,
+        "owner_cost_basis": company.transport_owner_cost_basis,
+        "owner_cost_bases": [{"code": k, "label": v} for k, v in OWNER_COST_BASES],
+        "owner_account": _account_ref(accounts.transport_owner_account_id) if accounts else None,
+        "owner_income_account": _account_ref(accounts.transport_owner_income_account_id) if accounts else None,
+        "commission_account": _account_ref(accounts.transport_commission_account_id) if accounts else None,
         "activity": _activity_ref(company.sudo().transport_activity_id),
         "activities": [_activity_ref(a) for a in _activities(company)] if finance else [],
         "rules": [{"code": k, "label": v} for k, v in SHORTAGE_RULES],
         "can_edit": finance,
+        # Relevés des propriétaires, règles de répartition : profils qui lisent la comptabilité.
+        "sees_accounts": _sees_accounts(),
     }
 
 
@@ -238,6 +249,11 @@ def _tax_row(t):
         "rebillable": t.rebillable, "rebill_vat": t.rebill_vat, "date_from": t.date_from or None,
         "date_to": t.date_to or None, "sequence": t.sequence, "active": t.active,
     }
+
+
+def _charge_row(charge):
+    return {"id": charge.id, "name": charge.name, "amount": charge.amount, "periodicity": charge.periodicity,
+            "monthly": charge._monthly(), "date_from": charge.date_from or None, "date_to": charge.date_to or None}
 
 
 def _product_row(product):
@@ -274,8 +290,11 @@ class EguitraTransport(http.Controller):
                           "driver_id": v.driver_id.id or None, "state": v.state} for v in vehicles],
             "drivers": [{"id": d.id, "name": d.name, "phone": d.phone} for d in env["eguitra.transport.driver"].search([])],
             "routes": [{"id": r.id, "name": r.name, "distance_km": r.distance_km, "default_rate": r.default_rate,
-                        "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids]}
+                        "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids],
+                        **{k: r[k] for k in ROUTE_STANDARDS}}
                        for r in routes],
+            # Prix du litre en vigueur : coût standard estimé à la saisie (le noyau le recalcule).
+            "fuel_price": env["eguitra.transport.fuel.price"]._price_at(env.company, today()),
             "clients": [{"id": c.id, "name": c.name} for c in clients],
             # Le code reste la clé des saisies du téléphone (y compris celles gardées hors réseau).
             "products": [{"id": p.id, "code": p.code, "label": p.name}
@@ -295,7 +314,9 @@ class EguitraTransport(http.Controller):
              "brand": v.brand or None, "capacity_liters": v.capacity_liters, "driver": _ref(v.driver_id), "state": v.state,
              "year": v.year or None, "date_service": v.date_service or None,
              # L'immobilisation se lit pour tous (le parc voit si l'ensemble est rattaché), se choisit par la finance.
-             "asset": _ref(v.sudo().asset_id), "active": v.active}
+             "asset": _ref(v.sudo().asset_id), "active": v.active,
+             "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
+             "monthly_charges": sum(c._monthly() for c in v.charge_ids)}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
 
@@ -322,6 +343,33 @@ class EguitraTransport(http.Controller):
             values["asset_id"] = asset.id or False
         if "active" in data:
             values["active"] = bool(data["active"])
+        if {"ownership", "owner_id", "charges"} & set(data) and not _is_finance():
+            raise ApiError(403, "forbidden", "Propriété et charges d'un ensemble relèvent de la finance.")
+        if "ownership" in data:
+            if data["ownership"] not in dict(OWNERSHIPS):
+                raise ApiError(400, "invalid_parameter", "Propriété inconnue.")
+            values["ownership"] = data["ownership"]
+        if "owner_id" in data:
+            owner = request.env["res.partner"]
+            if data["owner_id"]:
+                owner = owner.browse(int(data["owner_id"])).exists()
+                if not owner:
+                    raise ApiError(422, "business_rule", "Propriétaire inconnu.")
+            values["owner_id"] = owner.id or False
+        if "charges" in data:
+            # Les charges sont renvoyées en entier, comme les tarifs d'une route.
+            commands = [(5, 0, 0)]
+            for c in data["charges"] or []:
+                if not c.get("name"):
+                    raise ApiError(400, "invalid_parameter", "Libellé de charge manquant.")
+                if c.get("periodicity", "month") not in dict(PERIODICITIES):
+                    raise ApiError(400, "invalid_parameter", "Périodicité inconnue.")
+                commands.append((0, 0, {
+                    "name": c["name"], "amount": as_float(c.get("amount") or 0, "amount"),
+                    "periodicity": c.get("periodicity", "month"),
+                    "date_from": parse_date(c, "date_from") or False, "date_to": parse_date(c, "date_to") or False,
+                }))
+            values["charge_ids"] = commands
         return values
 
     @api_route("/transport/vehicles", methods=("POST",), profiles=WRITE)
@@ -380,7 +428,8 @@ class EguitraTransport(http.Controller):
              "distance_km": r.distance_km, "distance_return_km": r.distance_return_km or None,
              "round_trip_km": r._round_trip_km(), "round_trip_inconsistent": r._round_trip_inconsistent(),
              "duration_days": r.duration_days or None, "default_rate": r.default_rate, "active": r.active,
-             "tariffs": [_tariff_row(t) for t in r.tariff_ids]}
+             "tariffs": [_tariff_row(t) for t in r.tariff_ids],
+             **{k: r[k] for k in ROUTE_STANDARDS}, "fuel_per_km": r._fuel_per_km()}
             for r in request.env["eguitra.transport.route"].with_context(active_test=False).search([])
         ]
 
@@ -393,6 +442,9 @@ class EguitraTransport(http.Controller):
             values["duration_days"] = as_float(data["duration_days"] or 0, "duration_days")
         if "default_rate" in data:
             values["default_rate"] = as_float(data["default_rate"] or 0, "default_rate")
+        for key in ROUTE_STANDARDS:
+            if key in data:
+                values[key] = as_float(data[key] or 0, key)
         if "active" in data:
             values["active"] = bool(data["active"])
         if "tariffs" in data:
@@ -494,8 +546,15 @@ class EguitraTransport(http.Controller):
             values["transport_shortage_rule"] = data["shortage_rule"]
         if "volume_correction" in data:
             values["transport_volume_correction"] = bool(data["volume_correction"])
+        if "owner_cost_basis" in data:
+            if data["owner_cost_basis"] not in dict(OWNER_COST_BASES):
+                raise ApiError(400, "invalid_parameter", "Base des charges des relevés inconnue.")
+            values["transport_owner_cost_basis"] = data["owner_cost_basis"]
         for key, field in (("shortage_account_id", "transport_shortage_account_id"),
-                           ("claim_account_id", "transport_claim_account_id")):
+                           ("claim_account_id", "transport_claim_account_id"),
+                           ("owner_account_id", "transport_owner_account_id"),
+                           ("owner_income_account_id", "transport_owner_income_account_id"),
+                           ("commission_account_id", "transport_commission_account_id")):
             if key in data:
                 account = request.env["account.account"]
                 if data[key]:
