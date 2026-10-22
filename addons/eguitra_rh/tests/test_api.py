@@ -59,6 +59,40 @@ class TestApiRh(ApiCase):
         self.assertEqual(status, 200, summary)
         self.assertEqual(summary["headcount"], 3)
 
+    def test_gestion_commune_aux_deux_societes(self):
+        main = self.boss.company_id
+        other = self.env["res.company"].search([("id", "!=", main.id)], limit=1)
+        if not other:
+            self.skipTest("Une seule société dans la base de test")
+        self._create_user("rh.groupe", "rh", company_ids=[(6, 0, [main.id, other.id])], company_id=main.id)
+        token = self.open_session("rh.groupe", app="rh")["access_token"]
+        status, emp = self.call("POST", "/rh/employees", {
+            "name": "Consultante Cabinet", "hire_date": "2025-01-06", "base_salary": 5_000_000,
+            "company_id": other.id, "manager_id": self.boss.id,
+        }, token=token)
+        self.assertEqual(status, 200, emp)
+        self.assertEqual(emp["company"]["id"], other.id, "Employeur choisi à la création")
+        self.assertEqual(emp["manager"]["id"], self.boss.id, "Responsable de l'autre société accepté")
+        status, both = self.call("GET", "/rh/employees", token=token)
+        self.assertEqual({e["company"]["id"] for e in both}, {main.id, other.id}, "Une seule liste pour les deux")
+        status, only = self.call("GET", f"/rh/employees?company_id={other.id}", token=token)
+        self.assertEqual([e["name"] for e in only], ["Consultante Cabinet"])
+        status, dept = self.call("POST", "/rh/departments", {"name": "Finance commune"}, token=token)
+        self.assertEqual((status, dept["company"]), (200, None), "Département commun aux deux sociétés")
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=token)
+        self.assertEqual(status, 200, payroll)
+        self.assertEqual(len(payroll["created"]), 2, "Une paie par société, préparées ensemble")
+        status, payrolls = self.call("GET", "/rh/payrolls", token=token)
+        self.assertEqual({p["company"]["id"] for p in payrolls}, {main.id, other.id})
+        status, settings = self.call("PATCH", "/rh/settings", {"smig": 600_000, "cnss_employer_number": "C-1"},
+                                     token=token)
+        self.assertEqual(status, 200, settings)
+        status, other_settings = self.call("GET", f"/rh/settings?company_id={other.id}", token=token)
+        self.assertEqual(other_settings["smig"], 600_000, "Taux communs aux deux sociétés")
+        self.assertIsNone(other_settings["cnss_employer_number"], "Numéro d'employeur propre à chaque société")
+        status, summary = self.call("GET", "/rh/summary", token=token)
+        self.assertEqual(len(summary["by_company"]), 2)
+
     def test_finance_sans_acces(self):
         token = self.open_session("fatou.fin")["access_token"]
         status, _body = self.call("GET", "/rh/employees", token=token)

@@ -60,8 +60,10 @@ class EguitraRhEmployee(models.Model):
     emergency_phone = fields.Char("Téléphone de la personne à prévenir")
 
     job_title = fields.Char("Poste")
-    department_id = fields.Many2one("eguitra.rh.department", "Département", check_company=True)
-    manager_id = fields.Many2one("eguitra.rh.employee", "Responsable hiérarchique", check_company=True)
+    # Gestion RH commune aux deux sociétés : département commun ou de l'employeur, responsable de
+    # l'une ou l'autre société (contrôlés par _check_links).
+    department_id = fields.Many2one("eguitra.rh.department", "Département")
+    manager_id = fields.Many2one("eguitra.rh.employee", "Responsable hiérarchique")
     category = fields.Selection(CATEGORIES, "Catégorie")
     activity_account_id = fields.Many2one(
         "account.analytic.account", "Activité",
@@ -104,6 +106,14 @@ class EguitraRhEmployee(models.Model):
                 raise UserError("La date de sortie précède l'embauche.")
             if emp.contract_type == "cdd" and not emp.contract_end:
                 raise UserError("Un CDD a une date de fin.")
+
+    @api.constrains("department_id", "activity_account_id", "company_id")
+    def _check_links(self):
+        for emp in self:
+            if emp.department_id.company_id and emp.department_id.company_id != emp.company_id:
+                raise UserError(f"Le département {emp.department_id.name} appartient à une autre société.")
+            if emp.activity_account_id.company_id and emp.activity_account_id.company_id != emp.company_id:
+                raise UserError(f"L'activité {emp.activity_account_id.name} appartient à une autre société.")
 
     @api.constrains("user_id")
     def _check_user(self):

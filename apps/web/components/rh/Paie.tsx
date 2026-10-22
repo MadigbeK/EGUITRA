@@ -8,23 +8,31 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Field, Input, 
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { Anomaly, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
-import { ChampMontant, EtatPaie, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, avecSociete, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const TON_ANOMALIE: Record<Anomaly["severity"], Tone> = { danger: "danger", warn: "warn", info: "accent" };
 
-/** Liste des paies par mois et préparation de la paie d'un mois. */
+/**
+ * Liste des paies par mois et par société (chaque société reste l'employeur légal : une paie, une
+ * déclaration et une écriture chacune), et préparation du mois pour toutes les sociétés d'un coup.
+ */
 export function ListePaies() {
   const router = useRouter();
   const { data: meta } = useMeta();
-  const { data, error, mutate } = useApi<PayrollRow[]>("/rh/payrolls");
+  const [societe, setSociete] = useState<number | null>(null);
+  const { data, error, mutate } = useApi<PayrollRow[]>(avecSociete("/rh/payrolls", societe));
   const [creation, setCreation] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const courant = moisCourant();
-  const dejaCourant = (data ?? []).some((p) => p.month.slice(0, 7) === courant.slice(0, 7));
+  const plusieurs = (meta?.companies.length ?? 0) > 1;
+  // Le mois courant est « fait » quand chaque société du compte a sa paie (sans filtre : toutes).
+  const societesVisees = societe === null ? (meta?.companies ?? []).map((c) => c.id) : [societe];
+  const dejaCourant = Boolean(data) && societesVisees.length > 0 && societesVisees.every((id) => (data ?? []).some((p) => p.company.id === id && p.month.slice(0, 7) === courant.slice(0, 7)));
   return (
     <div>
       <PageHeader
         title="Paie"
-        subtitle="Une paie par mois et par société : préparation des bulletins, contrôles, validation, puis écriture de paie transmise à la finance."
+        subtitle="Une paie par mois et par société employeur : préparation des bulletins, contrôles, validation, puis écriture de paie de chaque société transmise à la finance."
         actions={
           meta?.can_write && (
             <Button variant="primary" onClick={() => setCreation(true)}>
@@ -33,6 +41,16 @@ export function ListePaies() {
           )
         }
       />
+      {plusieurs && (
+        <div className="mb-4">
+          <FiltreSociete companies={meta?.companies} value={societe} onChange={setSociete} />
+        </div>
+      )}
+      {message && (
+        <div className="mb-4">
+          <Notice tone="ok">{message}</Notice>
+        </div>
+      )}
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       <Card padded={false}>
         {!data ? (
@@ -46,6 +64,7 @@ export function ListePaies() {
             onRowClick={(p) => router.push(`/rh/paie/${p.id}`)}
             columns={[
               { key: "month", label: "Mois", render: (p) => <span className="font-medium capitalize text-ink">{moisLong(p.month)}</span>, sortValue: (p) => p.month },
+              ...(plusieurs ? [{ key: "company", label: "Société", render: (p: PayrollRow) => <PastilleSociete company={p.company} />, sortValue: (p: PayrollRow) => p.company.name }] : []),
               { key: "headcount", label: "Bulletins", align: "right", render: (p) => String(p.totals.headcount) },
               { key: "gross", label: "Brut", align: "right", render: (p) => fmtGNF(p.totals.gross) },
               { key: "net", label: "Net à payer", align: "right", render: (p) => fmtGNF(p.totals.net) },
@@ -64,7 +83,10 @@ export function ListePaies() {
           onDone={(p) => {
             setCreation(false);
             void mutate();
-            router.push(`/rh/paie/${p.id}`);
+            const crees = p.created ?? [p.id];
+            // Une seule société préparée : on ouvre sa paie ; plusieurs : la liste les montre.
+            if (crees.length <= 1) router.push(`/rh/paie/${p.id}`);
+            else setMessage(`Paie de ${moisLong(p.month)} préparée pour ${crees.length} sociétés : ouvrez chacune pour la contrôler et la valider.`);
           }}
         />
       )}
@@ -101,7 +123,7 @@ function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; o
       <div className="space-y-3 text-sm">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <p className="text-ink-2">
-          Tous les salariés présents dans le mois reçoivent un bulletin : salaire de base et éléments fixes au prorata de la présence, absences non rémunérées retenues, échéances d&apos;avances et de prêts, primes de rotation des chauffeurs. Les éléments du mois se saisissent ensuite sur chaque bulletin.
+          La paie du mois est préparée pour chaque société qui a du personnel (chacune reste l&apos;employeur légal et a sa propre paie). Tous les salariés présents dans le mois reçoivent un bulletin : salaire de base et éléments fixes au prorata de la présence, absences non rémunérées retenues, échéances d&apos;avances et de prêts, primes de rotation des chauffeurs. Les éléments du mois se saisissent ensuite sur chaque bulletin.
         </p>
         <Field label="Mois de paie">
           <Input type="month" value={mois} onChange={(e) => setMois(e.target.value)} />
@@ -150,9 +172,10 @@ export function DetailPaie({ id }: { id: string }) {
         <ChevronLeft className="h-4 w-4" /> Paies
       </Link>
       <PageHeader
-        title={`Paie de ${moisLong(p.month)}`}
+        title={`Paie de ${moisLong(p.month)}, ${p.company.name}`}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
+            <PastilleSociete company={p.company} />
             <EtatPaie state={p.state} />
             {p.validated_by && <span>Validée par {p.validated_by}, {fmtDateTime(p.validated_at)}</span>}
             {p.move && (
@@ -164,7 +187,7 @@ export function DetailPaie({ id }: { id: string }) {
         }
         actions={
           <>
-            <Button onClick={() => void apiDownload(`/rh/payrolls/${id}/export.xlsx`, `paie_${p.month.slice(0, 7)}.xlsx`)}>
+            <Button onClick={() => void apiDownload(`/rh/payrolls/${id}/export.xlsx`, `paie_${p.month.slice(0, 7)}_${p.company.entity ?? p.company.id}.xlsx`)}>
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
             {ecrit && p.state === "draft" && (

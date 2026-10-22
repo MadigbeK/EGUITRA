@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Field, Input, Modal, Notice, Select, Tabs, Textarea } from "@/components/ui";
 import { apiSend } from "@/lib/api-client";
 import type { Employee, EmployeeInput, Meta } from "@/lib/rh-types";
-import { ChampMontant, messageErreur, nombre } from "./commun";
+import { ChampMontant, PastilleSociete, libelleSalarie, messageErreur, nombre, nomCourt, useSocieteDeTravail } from "./commun";
 
 type Section = "poste" | "identite" | "paiement" | "lien";
 
@@ -14,11 +14,15 @@ const texte = (v: string | number | null | undefined) => (v === null || v === un
 /**
  * Création ou modification d'un dossier salarié, en quatre sections : poste et contrat, identité,
  * paiement, liens (compte NIMOVA, chauffeur, solde de reprise). Seuls le nom et la date d'embauche
- * sont exigés : le reste se complète plus tard, l'échéancier rappelle ce qui manque.
+ * sont exigés : le reste se complète plus tard, l'échéancier rappelle ce qui manque. L'employeur se
+ * choisit à la création (défaut : la société de travail) et ne change plus ensuite ; les listes de
+ * choix (départements, activités, chauffeurs, comptes) suivent l'employeur.
  */
 export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: Meta; employee?: Employee; onClose: () => void; onDone: (e: Employee) => void }) {
   const [section, setSection] = useState<Section>("poste");
+  const travail = useSocieteDeTravail();
   const [f, setF] = useState({
+    company_id: employee ? String(employee.company.id) : meta.companies.length === 1 ? String(meta.companies[0]!.id) : "",
     name: employee?.name ?? "",
     job_title: employee?.job_title ?? "",
     department_id: texte(employee?.department?.id),
@@ -58,14 +62,38 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const salaireChange = employee !== undefined && nombre(f.base_salary) !== employee.base_salary;
-  // Le compte déjà lié reste proposé (la liste du noyau ne donne que les comptes libres).
-  const comptes = [...(employee?.user ? [employee.user] : []), ...meta.users.filter((u) => u.id !== employee?.user?.id)];
+  const employeur = Number(f.company_id) || null;
+  // Création : la société de travail est proposée dès que la session est lue.
+  useEffect(() => {
+    if (employee || f.company_id || !travail) return;
+    const proposee = meta.companies.find((c) => c.id === travail) ?? meta.companies[0];
+    if (proposee) setF((x) => ({ ...x, company_id: String(proposee.id) }));
+  }, [employee, f.company_id, travail, meta.companies]);
+  const departements = meta.departments.filter((d) => d.active && (!d.company || d.company.id === employeur));
+  const activites = meta.activities.filter((a) => !a.company_id || a.company_id === employeur);
+  const chauffeurs = meta.drivers.filter((d) => d.company_id === employeur);
+  // Le compte déjà lié reste proposé ; sinon, les comptes ouverts à l'employeur.
+  const comptes = [...(employee?.user ? [employee.user] : []), ...meta.users.filter((u) => u.id !== employee?.user?.id && employeur !== null && u.company_ids.includes(employeur))];
+
+  /** Changer d'employeur retire les choix qui ne lui appartiennent pas. */
+  function changerEmployeur(id: string) {
+    const n = Number(id) || null;
+    setF((x) => ({
+      ...x,
+      company_id: id,
+      department_id: meta.departments.some((d) => String(d.id) === x.department_id && (!d.company || d.company.id === n)) ? x.department_id : "",
+      activity_id: meta.activities.some((a) => String(a.id) === x.activity_id && (!a.company_id || a.company_id === n)) ? x.activity_id : "",
+      driver_id: meta.drivers.some((d) => String(d.id) === x.driver_id && d.company_id === n) ? x.driver_id : "",
+      user_id: meta.users.some((u) => String(u.id) === x.user_id && n !== null && u.company_ids.includes(n)) ? x.user_id : "",
+    }));
+  }
 
   async function enregistrer() {
     setBusy(true);
     setErreur(null);
     const id = (v: string) => (v ? Number(v) : null);
     const body: EmployeeInput = {
+      ...(employee ? {} : { company_id: employeur ?? undefined }),
       name: f.name.trim(),
       job_title: vide(f.job_title),
       department_id: id(f.department_id),
@@ -111,7 +139,7 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
     }
   }
 
-  const valide = f.name.trim() && f.hire_date && (f.contract_type !== "cdd" || f.contract_end) && (!salaireChange || f.salary_reason.trim());
+  const valide = employeur && f.name.trim() && f.hire_date && (f.contract_type !== "cdd" || f.contract_end) && (!salaireChange || f.salary_reason.trim());
   return (
     <Modal
       open
@@ -147,14 +175,25 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
           <Field label="Nom et prénoms" className="sm:col-span-2">
             <Input value={f.name} onChange={set("name")} autoFocus />
           </Field>
+          {employee ? (
+            <Field label="Employeur" hint="L'employeur ne change pas : une mutation se fait par une sortie et une nouvelle embauche" className="sm:col-span-2">
+              <div className="flex min-h-9 items-center">
+                <PastilleSociete company={employee.company} />
+              </div>
+            </Field>
+          ) : (
+            <Field label="Employeur" hint="Société qui emploie, paie et déclare le salarié" className="sm:col-span-2">
+              <Select value={f.company_id} onChange={(e) => changerEmployeur(e.target.value)} placeholder="Choisir la société" options={meta.companies.map((c) => ({ value: c.id, label: c.name }))} />
+            </Field>
+          )}
           <Field label="Fonction">
             <Input value={f.job_title} onChange={set("job_title")} placeholder="Comptable, chauffeur…" />
           </Field>
           <Field label="Département">
-            <Select value={f.department_id} onChange={set("department_id")} placeholder="Aucun" options={meta.departments.filter((d) => d.active).map((d) => ({ value: d.id, label: d.name }))} />
+            <Select value={f.department_id} onChange={set("department_id")} placeholder="Aucun" options={departements.map((d) => ({ value: d.id, label: d.company ? `${d.name} (${nomCourt(d.company)})` : d.name }))} />
           </Field>
           <Field label="Responsable hiérarchique" hint="Il approuve les absences de ce salarié">
-            <Select value={f.manager_id} onChange={set("manager_id")} placeholder="Aucun" options={meta.employees.filter((e) => e.id !== employee?.id).map((e) => ({ value: e.id, label: `${e.name} (${e.matricule})` }))} />
+            <Select value={f.manager_id} onChange={set("manager_id")} placeholder="Aucun" options={meta.employees.filter((e) => e.id !== employee?.id).map((e) => ({ value: e.id, label: libelleSalarie(meta, e) }))} />
           </Field>
           <Field label="Catégorie">
             <Select value={f.category} onChange={set("category")} placeholder="Non précisée" options={meta.categories.map((c) => ({ value: c.code, label: c.label }))} />
@@ -175,7 +214,7 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
             <ChampMontant value={f.base_salary} onChange={(v) => setF({ ...f, base_salary: v })} />
           </Field>
           <Field label="Activité (imputation de la masse salariale)">
-            <Select value={f.activity_id} onChange={set("activity_id")} placeholder="Non imputée" options={meta.activities.map((a) => ({ value: a.id, label: a.name }))} />
+            <Select value={f.activity_id} onChange={set("activity_id")} placeholder="Non imputée" options={activites.map((a) => ({ value: a.id, label: a.name }))} />
           </Field>
           {salaireChange && (
             <Field label="Motif du changement de salaire" className="sm:col-span-2" hint="Conservé dans l'historique du salaire">
@@ -255,9 +294,9 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
           <Field label="Compte NIMOVA du salarié" hint="Ouvre son espace : congés, bulletins, équipe" className="sm:col-span-2">
             <Select value={f.user_id} onChange={set("user_id")} placeholder="Aucun compte lié" options={comptes.map((u) => ({ value: u.id, label: `${u.name} (${u.login})` }))} />
           </Field>
-          {meta.drivers.length > 0 && (
+          {chauffeurs.length > 0 && (
             <Field label="Chauffeur du transport" hint="Primes de rotation, si une prime par rotation est paramétrée" className="sm:col-span-2">
-              <Select value={f.driver_id} onChange={set("driver_id")} placeholder="Pas un chauffeur" options={meta.drivers.map((d) => ({ value: d.id, label: d.name }))} />
+              <Select value={f.driver_id} onChange={set("driver_id")} placeholder="Pas un chauffeur" options={chauffeurs.map((d) => ({ value: d.id, label: d.name }))} />
             </Field>
           )}
           <Field label="Solde de congés de reprise (jours)" hint="Jours acquis et non pris à la date ci-contre">

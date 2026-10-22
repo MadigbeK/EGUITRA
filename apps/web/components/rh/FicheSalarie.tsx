@@ -7,7 +7,7 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loa
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
-import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
+import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
 
@@ -35,6 +35,7 @@ export function FicheSalarie({ id }: { id: string }) {
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs">{e.matricule}</span>
+            <PastilleSociete company={e.company} />
             <span>{[e.job_title, e.department?.name].filter(Boolean).join(", ") || "Fonction à préciser"}</span>
             <EtatSalarie state={e.state} />
             {e.absent_today && <Badge tone="accent">Absent aujourd&apos;hui</Badge>}
@@ -143,6 +144,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
     <div className="grid gap-6 lg:grid-cols-12">
       <Card className="lg:col-span-5" title="Poste et contrat">
         <dl>
+          <Ligne label="Employeur">{e.company.name}</Ligne>
           <Ligne label="Fonction">{e.job_title ?? "–"}</Ligne>
           <Ligne label="Département">{e.department?.name ?? "–"}</Ligne>
           <Ligne label="Responsable">{e.manager ? <Link className="hover:underline" href={`/rh/salaries/${e.manager.id}`}>{e.manager.name}</Link> : "–"}</Ligne>

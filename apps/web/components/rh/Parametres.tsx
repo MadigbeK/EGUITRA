@@ -6,24 +6,40 @@ import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal,
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
-import { ChampMontant, messageErreur, nombre, useMeta } from "./commun";
+import { ChampMontant, PastilleSociete, avecSociete, messageErreur, nombre, nomCourt, useMeta } from "./commun";
 
 type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "feries" | "departements";
 
-/** Paramètres RH de la société de travail : paie, alertes, comptes, rubriques, absences, fériés, départements. */
+/**
+ * Paramètres RH : paie, alertes, comptes, rubriques, absences, fériés, départements. Les règles sont
+ * communes aux deux sociétés ; numéro d'employeur CNSS, taxe de formation et journal sont propres à
+ * chacune (société choisie en tête, défaut : la société de travail).
+ */
 export function ParametresRh() {
   const { data: meta, mutate: rafraichirMeta } = useMeta();
-  const { data: settings, error, mutate } = useApi<Settings>("/rh/settings");
+  const [societe, setSociete] = useState<number | null>(null);
+  const { data: settings, error, mutate } = useApi<Settings>(avecSociete("/rh/settings", societe));
   const [onglet, setOnglet] = useState<Onglet>("paie");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!settings || !meta) return <Loading label="Chargement des paramètres…" />;
   const ecrit = meta.can_write;
   return (
     <div>
-      <PageHeader title="Paramètres RH" subtitle="Règles de paie, alertes, comptes de l'écriture de paie, rubriques, types d'absence, jours fériés et départements de la société de travail." />
+      <PageHeader title="Paramètres RH" subtitle="Règles de paie, alertes, comptes de l'écriture de paie, rubriques, types d'absence, jours fériés et départements." />
+      <div className="mb-3">
+        <Notice tone="accent">Taux, barème, congés, heures, alertes et comptes sont communs aux deux sociétés ; numéro d&apos;employeur CNSS, taxe de formation et journal sont propres à chaque société.</Notice>
+      </div>
       <div className="mb-5">
         <Notice tone="warn">Les taux, le barème de la RTS, le plafond de la CNSS et les comptes sont pré-remplis avec les valeurs légales connues (Code général des impôts, pratique CNSS). Faites-les valider par l&apos;expert-comptable avant la première paie réelle.</Notice>
       </div>
+      {meta.companies.length > 1 && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-ink-2">
+          <span>Partie propre à la société :</span>
+          <div className="w-60">
+            <Select aria-label="Société" value={settings.company.id} onChange={(e) => setSociete(Number(e.target.value))} options={meta.companies.map((c) => ({ value: c.id, label: c.name }))} />
+          </div>
+        </div>
+      )}
       <Tabs
         value={onglet}
         onChange={setOnglet}
@@ -37,7 +53,7 @@ export function ParametresRh() {
           { key: "departements", label: "Départements", count: meta.departments.length },
         ]}
       />
-      {(onglet === "paie" || onglet === "alertes" || onglet === "comptes") && <FormulaireParametres key={onglet} onglet={onglet} settings={settings} ecrit={ecrit} onSaved={(s) => void mutate(s, { revalidate: false })} />}
+      {(onglet === "paie" || onglet === "alertes" || onglet === "comptes") && <FormulaireParametres key={`${onglet}-${settings.company.id}`} onglet={onglet} settings={settings} ecrit={ecrit} onSaved={(s) => void mutate(s, { revalidate: false })} />}
       {onglet === "rubriques" && <Rubriques meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
       {onglet === "absences" && <TypesAbsence meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
       {onglet === "feries" && <Feries ecrit={ecrit} />}
@@ -112,7 +128,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
       body = { accounts: comptes };
     }
     try {
-      onSaved(await apiSend<Settings>("PATCH", "/rh/settings", body));
+      onSaved(await apiSend<Settings>("PATCH", avecSociete("/rh/settings", settings.company.id), body));
       setOk(true);
     } catch (e) {
       setErreur(messageErreur(e));
@@ -154,7 +170,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
       <Card title="Comptes de l'écriture de paie">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <p className="mb-4 text-sm text-ink-2">
-          Code ou racine du plan SYSCOHADA : le compte est cherché par son code exact, puis par sa racine. Journal des salaires : {settings.journal ? settings.journal.name : "créé à la première comptabilisation (code SAL)"}.
+          Comptes communs aux deux sociétés (même plan SYSCOHADA). Code ou racine : le compte est cherché par son code exact, puis par sa racine. Journal des salaires de {settings.company.name} : {settings.journal ? settings.journal.name : "créé à la première comptabilisation (code SAL)"}.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {COMPTES.map((c) => (
@@ -169,7 +185,8 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
-      <Card className="xl:col-span-7" title="Cotisations et taxes">
+      <div className="space-y-6 xl:col-span-7">
+      <Card title="Cotisations et taxes (communes aux deux sociétés)">
         {erreur && (
           <div className="mb-3">
             <Notice tone="danger">{erreur}</Notice>
@@ -194,15 +211,6 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           <Field label="Versement forfaitaire (%)" hint="CGI, art. 201 : 6 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.vf_rate} onChange={set("vf_rate")} />
           </Field>
-          <Field label="Taxe de formation (%)" hint="2 % (apprentissage, moins de 30 salariés) ou 1,5 %">
-            <Input inputMode="decimal" disabled={!ecrit} value={f.training_tax_rate} onChange={set("training_tax_rate")} />
-          </Field>
-          <Field label="Libellé de la taxe de formation">
-            <Input disabled={!ecrit} value={f.training_tax_label} onChange={set("training_tax_label")} />
-          </Field>
-          <Field label="Numéro employeur CNSS" hint="Imprimé sur les bulletins">
-            <Input className="font-mono" disabled={!ecrit} value={f.cnss_employer_number} onChange={set("cnss_employer_number")} />
-          </Field>
           <Field label="Congés acquis par mois (jours ouvrables)">
             <Input inputMode="decimal" disabled={!ecrit} value={f.leave_days_per_month} onChange={set("leave_days_per_month")} />
           </Field>
@@ -213,8 +221,22 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
             <ChampMontant disabled={!ecrit} value={f.rotation_bonus} onChange={(v) => setF({ ...f, rotation_bonus: v })} />
           </Field>
         </div>
+      </Card>
+      <Card title={<span className="flex flex-wrap items-center gap-2">Propre à <PastilleSociete company={settings.company} /></span>}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Taxe de formation (%)" hint="2 % (apprentissage, moins de 30 salariés) ou 1,5 %">
+            <Input inputMode="decimal" disabled={!ecrit} value={f.training_tax_rate} onChange={set("training_tax_rate")} />
+          </Field>
+          <Field label="Libellé de la taxe de formation">
+            <Input disabled={!ecrit} value={f.training_tax_label} onChange={set("training_tax_label")} />
+          </Field>
+          <Field label="Numéro employeur CNSS" hint="Imprimé sur les bulletins de cette société" className="sm:col-span-2">
+            <Input className="font-mono" disabled={!ecrit} value={f.cnss_employer_number} onChange={set("cnss_employer_number")} />
+          </Field>
+        </div>
         {pied}
       </Card>
+      </div>
       <Card className="xl:col-span-5" title="Barème mensuel de la RTS">
         <p className="mb-3 text-[13px] text-ink-2">Chaque tranche s&apos;applique à la part du revenu imposable au-delà de son seuil (CGI, art. 63). Base : brut imposable moins la CNSS salariale.</p>
         <table className="w-full text-sm">
@@ -624,6 +646,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
         empty="Aucun département."
         columns={[
           { key: "name", label: "Département", render: (d) => d.name, sortValue: (d) => d.name },
+          { key: "company", label: "Société", render: (d) => (d.company ? <PastilleSociete company={d.company} /> : <span className="text-[12.5px] text-muted">Les deux sociétés</span>), sortValue: (d) => d.company?.name ?? "" },
           { key: "manager", label: "Responsable", render: (d) => d.manager?.name ?? "–" },
           { key: "headcount", label: "Effectif", align: "right", render: (d) => String(d.headcount), sortValue: (d) => d.headcount },
           { key: "active", label: "", render: (d) => (!d.active ? <Badge>Archivé</Badge> : null) },
@@ -658,13 +681,14 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
 function EditionDepartement({ meta, departement, onClose, onDone }: { meta: Meta; departement: Department | null; onClose: () => void; onDone: () => void }) {
   const [nom, setNom] = useState(departement?.name ?? "");
   const [responsable, setResponsable] = useState(departement?.manager ? String(departement.manager.id) : "");
+  const [societe, setSociete] = useState(departement?.company ? String(departement.company.id) : "");
   const [actif, setActif] = useState(departement?.active ?? true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function enregistrer() {
     setBusy(true);
     setErreur(null);
-    const body = { name: nom.trim(), manager_id: responsable ? Number(responsable) : null, active: actif };
+    const body = { name: nom.trim(), company_id: societe ? Number(societe) : null, manager_id: responsable ? Number(responsable) : null, active: actif };
     try {
       if (departement) await apiSend("PATCH", `/rh/departments/${departement.id}`, body);
       else await apiSend("POST", "/rh/departments", body);
@@ -691,8 +715,13 @@ function EditionDepartement({ meta, departement, onClose, onDone }: { meta: Meta
         <Field label="Nom">
           <Input value={nom} onChange={(e) => setNom(e.target.value)} />
         </Field>
+        {meta.companies.length > 1 && (
+          <Field label="Société" hint="Un département commun regroupe le personnel des deux sociétés">
+            <Select value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Les deux sociétés" options={meta.companies.map((c) => ({ value: c.id, label: nomCourt(c) }))} />
+          </Field>
+        )}
         <Field label="Responsable">
-          <Select value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Aucun" options={meta.employees.map((e) => ({ value: e.id, label: `${e.name} (${e.matricule})` }))} />
+          <Select value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Aucun" options={meta.employees.filter((e) => !societe || e.company_id === Number(societe)).map((e) => ({ value: e.id, label: `${e.name} (${e.matricule})` }))} />
         </Field>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={actif} onChange={(e) => setActif(e.target.checked)} /> Département actif

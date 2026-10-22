@@ -7,9 +7,17 @@ demandée par le gérant.
 
 ## 1. Principes
 
-- **Les deux sociétés.** Chaque société a son personnel, sa paie et ses paramètres. L'espace RH
-  travaille dans la société de travail choisie à l'écran (comme Finance). Un salarié appartient à une
-  seule société.
+- **Gestion commune aux deux sociétés** (décision du gérant, 22 octobre 2026), comme la finance : un
+  seul service RH gère, dans les mêmes listes et le même tableau de bord, le personnel de toutes les
+  sociétés auxquelles son compte est ouvert (filtre « Société » facultatif, paramètre `company_id`
+  des routes). Chaque société reste l'employeur légal : un salarié a un employeur, choisi à son
+  embauche ; une paie, une déclaration CNSS, une déclaration fiscale et une écriture de paie par
+  société et par mois (préparées ensemble en un geste). Départements communs ou propres à une
+  société ; le responsable hiérarchique peut être de l'autre société. Taux, barème, congés, heures,
+  alertes et comptes sont communs aux deux sociétés ; numéro d'employeur CNSS, taxe de formation
+  (selon l'effectif de chaque société) et journal des salaires sont propres à chacune.
+- **Code sans module.** L'application `rh` n'est accordée à un compte que là où le module
+  `eguitra_rh` est installé : la production peut recevoir le code sans l'installer.
 - **Profils.** Nouveau profil `rh` (« Ressources humaines »), commun aux deux sociétés : tout l'espace
   RH. La direction lit tout, approuve les absences ; l'administration a tous les droits. La finance
   n'ouvre pas l'espace RH : elle reçoit l'écriture de paie en brouillon dans ses journaux.
@@ -79,7 +87,7 @@ des réponses sont dans `apps/web/lib/rh-types.ts`.
 | GET `/rh/leaves/days?date_from=&date_to=&half_day=` | tout compte | `{days}` (jours ouvrables) |
 | GET `/rh/advances?state=` ; POST `/rh/advances` ; POST `/rh/advances/<id>/cancel` | READ ; WRITE | `Advance[]` ; `{employee_id, kind, date, amount, installment, first_month, note}` |
 | GET `/rh/payrolls` | READ | `PayrollRow[]` (plus récent d'abord) |
-| POST `/rh/payrolls` | WRITE | `{month}` : crée la paie du mois et calcule les bulletins ; `Payroll` |
+| POST `/rh/payrolls` | WRITE | `{month, company_id?}` : crée et calcule la paie du mois de la société, ou sans `company_id` celle de chaque société qui a du personnel ; `Payroll` (la première) avec `created` |
 | GET `/rh/payrolls/<id>` | READ | `Payroll` |
 | POST `/rh/payrolls/<id>/compute` | WRITE | recalcule (éléments saisis conservés, nouveaux salariés ajoutés) ; `Payroll` |
 | POST `/rh/payrolls/<id>/validate` | WRITE | bulletins figés ; refus 422 si un net est négatif ; `Payroll` |

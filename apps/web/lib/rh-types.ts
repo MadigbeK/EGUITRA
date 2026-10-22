@@ -2,9 +2,17 @@
  * NIMOVA · RH : contrat entre l'API du noyau (addons/eguitra_rh, routes /api/v1/rh/...) et les écrans.
  * Montants en GNF entiers, dates au format AAAA-MM-JJ, mois au format AAAA-MM-01.
  * Spécification des routes : docs/projet/rh/specification.md.
+ *
+ * Gestion commune aux deux sociétés (décision du gérant, 22 octobre 2026), comme la finance : un seul
+ * service RH voit et gère le personnel des sociétés auxquelles son compte est ouvert, dans les mêmes
+ * listes. Chaque société reste l'employeur légal (paie, CNSS, impôts et comptabilité séparés). Les
+ * listes acceptent un filtre facultatif `company_id` ; sans lui, elles couvrent toutes ces sociétés.
  */
 
 export type Ref = { id: number; name: string };
+
+/** Société employeur (entity : groupe = EGUITRA GROUP, cabinet = MB AxisPro). */
+export type CompanyRef = { id: number; name: string; entity: "groupe" | "cabinet" | null };
 
 export type Gender = "homme" | "femme";
 export type MaritalStatus = "celibataire" | "marie" | "divorce" | "veuf";
@@ -70,9 +78,14 @@ export interface LeaveType {
   active: boolean;
 }
 
-export interface Department { id: number; name: string; manager: Ref | null; headcount: number; active: boolean }
+/** company null : département commun aux deux sociétés. */
+export interface Department { id: number; name: string; company: CompanyRef | null; manager: Ref | null; headcount: number; active: boolean }
 
 export interface Meta {
+  /** Sociétés gérées par le compte (employeurs possibles). */
+  companies: CompanyRef[];
+  /** Société de travail du compte (employeur proposé par défaut à l'embauche). */
+  work_company_id: number;
   departments: Department[];
   rubrics: Rubric[];
   leave_types: LeaveType[];
@@ -82,14 +95,14 @@ export interface Meta {
   payment_methods: Option<PaymentMethod>[];
   exit_reasons: Option<ExitReason>[];
   document_kinds: Option<DocumentKind>[];
-  /** Salariés actifs (choix du responsable hiérarchique). */
-  employees: Array<Ref & { matricule: string }>;
-  /** Comptes NIMOVA internes sans fiche salarié dans la société (lien libre-service). */
-  users: Array<Ref & { login: string }>;
-  /** Chauffeurs du transport (EGUITRA GROUP seulement ; vide ailleurs). */
-  drivers: Ref[];
-  /** Comptes analytiques de l'axe « Activité » (imputation de la masse salariale). */
-  activities: Ref[];
+  /** Salariés actifs des deux sociétés (choix du responsable hiérarchique, qui peut être de l'autre société). */
+  employees: Array<Ref & { matricule: string; company_id: number }>;
+  /** Comptes NIMOVA internes ; company_ids : sociétés auxquelles chacun est ouvert (un compte se lie à un salarié d'une de ces sociétés). */
+  users: Array<Ref & { login: string; company_ids: number[] }>;
+  /** Chauffeurs du transport, avec leur société (seulement pour un salarié de cette société). */
+  drivers: Array<Ref & { company_id: number }>;
+  /** Comptes analytiques de l'axe « Activité » ; company_id null : commun aux deux sociétés. */
+  activities: Array<Ref & { company_id: number | null }>;
   /** Le compte peut-il écrire (profil administration ou RH) ? La direction lit et approuve. */
   can_write: boolean;
 }
@@ -100,6 +113,8 @@ export interface EmployeeRow {
   id: number;
   matricule: string;
   name: string;
+  /** Employeur. */
+  company: CompanyRef;
   job_title: string | null;
   department: Ref | null;
   manager: Ref | null;
@@ -178,6 +193,8 @@ export interface Employee extends EmployeeRow {
 /** Corps de POST /rh/employees et PATCH /rh/employees/<id> (champs partiels en PATCH). */
 export interface EmployeeInput {
   name: string;
+  /** Employeur, à la création seulement (défaut : société de travail). */
+  company_id?: number;
   job_title?: string | null;
   department_id?: number | null;
   manager_id?: number | null;
@@ -275,6 +292,8 @@ export interface PayrollTotals {
 export interface PayrollRow {
   id: number;
   name: string;
+  /** Une paie par société et par mois : chaque société déclare et comptabilise la sienne. */
+  company: CompanyRef;
   month: string;
   state: PayrollState;
   totals: PayrollTotals;
@@ -305,6 +324,8 @@ export interface PayslipRow {
 }
 
 export interface Payroll extends PayrollRow {
+  /** POST /rh/payrolls sans company_id prépare le mois pour chaque société : identifiants créés. */
+  created?: number[];
   payslips: PayslipRow[];
   /** Répartition de la masse salariale par activité et par département. */
   by_activity: Array<{ name: string; gross: number; employer_cost: number }>;
@@ -396,7 +417,13 @@ export interface Simulation {
 
 export interface TaxBracket { from: number; rate: number }
 
+/**
+ * Paramètres : taux, barème, congés, heures, alertes et comptes sont communs aux deux sociétés (une
+ * modification s'applique aux deux) ; numéro d'employeur CNSS, taxe de formation et journal sont
+ * propres à chaque société (GET/PATCH /rh/settings?company_id=, défaut : société de travail).
+ */
 export interface Settings {
+  company: CompanyRef;
   cnss_employee_rate: number;
   cnss_employer_rate: number;
   cnss_ceiling: number;
@@ -442,6 +469,10 @@ export interface RhAlert {
 }
 
 export interface Summary {
+  /** Sociétés couvertes (toutes celles du compte, ou celle du filtre company_id). */
+  companies: CompanyRef[];
+  /** Effectif et masse salariale par société. */
+  by_company: Array<{ company: CompanyRef; headcount: number; monthly_payroll_estimate: number }>;
   headcount: number;
   headcount_trial: number;
   hires_year: number;
@@ -464,7 +495,8 @@ export interface Summary {
   payroll_trend: Array<{ month: string; gross: number; net: number; employer_cost: number; headcount: number }>;
   upcoming_leaves: Leave[];
   alerts: RhAlert[];
-  current_payroll: PayrollRow | null;
+  /** Dernière paie de chaque société. */
+  current_payrolls: PayrollRow[];
 }
 
 /* ─── Libre-service : GET /rh/me ──────────────────────────────────────── */

@@ -8,20 +8,23 @@ import { Badge, Button, Card, DataTable, ErrorBox, Input, Loading, PageHeader, S
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type EmployeeRow } from "@/lib/rh-types";
-import { EtatSalarie, jours, useMeta } from "./commun";
+import { EtatSalarie, FiltreSociete, PastilleSociete, avecSociete, jours, useMeta } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 
 type Filtre = "active" | "sorti" | "all";
 
-/** Liste du personnel de la société de travail : recherche, département, état, points à compléter. */
+/** Liste du personnel des sociétés du compte : société, recherche, département, état, points à compléter. */
 export function ListeSalaries() {
   const router = useRouter();
   const [filtre, setFiltre] = useState<Filtre>("active");
   const [departement, setDepartement] = useState("");
+  const [societe, setSociete] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [creation, setCreation] = useState(false);
   const { data: meta } = useMeta();
-  const { data, error, mutate } = useApi<EmployeeRow[]>(`/rh/employees?state=${filtre}${departement ? `&department_id=${departement}` : ""}`);
+  const { data, error, mutate } = useApi<EmployeeRow[]>(avecSociete(`/rh/employees?state=${filtre}${departement ? `&department_id=${departement}` : ""}`, societe));
+  const plusieurs = (meta?.companies.length ?? 0) > 1;
+  const departements = (meta?.departments ?? []).filter((d) => !societe || !d.company || d.company.id === societe);
 
   const lignes = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -34,7 +37,7 @@ export function ListeSalaries() {
     <div>
       <PageHeader
         title="Salariés"
-        subtitle="Dossiers du personnel de la société de travail : poste, contrat, rémunération, congés, documents."
+        subtitle="Dossiers du personnel des deux sociétés, chacune restant l'employeur légal : poste, contrat, rémunération, congés, documents."
         actions={
           meta?.can_write && (
             <Button variant="primary" onClick={() => setCreation(true)}>
@@ -54,8 +57,16 @@ export function ListeSalaries() {
             { key: "all", label: "Tous" },
           ]}
         />
+        <FiltreSociete
+          companies={meta?.companies}
+          value={societe}
+          onChange={(id) => {
+            setSociete(id);
+            setDepartement("");
+          }}
+        />
         <div className="w-56">
-          <Select value={departement} onChange={(e) => setDepartement(e.target.value)} placeholder="Tous les départements" options={(meta?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} />
+          <Select value={departement} onChange={(e) => setDepartement(e.target.value)} placeholder="Tous les départements" options={departements.map((d) => ({ value: d.id, label: d.name }))} />
         </div>
         <div className="relative w-full max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -90,6 +101,7 @@ export function ListeSalaries() {
                   </Link>
                 ),
               },
+              ...(plusieurs ? [{ key: "company", label: "Société", render: (e: EmployeeRow) => <PastilleSociete company={e.company} />, sortValue: (e: EmployeeRow) => e.company.name }] : []),
               { key: "contract_type", label: "Contrat", render: (e) => CONTRACT_LABELS[e.contract_type], sortValue: (e) => e.contract_type },
               { key: "hire_date", label: "Embauche", render: (e) => fmtDate(e.hire_date), sortValue: (e) => e.hire_date },
               { key: "monthly_gross", label: "Brut mensuel", align: "right", render: (e) => fmtGNF(e.monthly_gross), sortValue: (e) => e.monthly_gross },

@@ -7,16 +7,20 @@ import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal,
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
-import { ChoixSalarie, DecisionAbsence, EtatAbsence, jours, messageErreur, moisCourant, periode, useJoursOuvrables, useMeta } from "./commun";
+import { ChoixSalarie, DecisionAbsence, EtatAbsence, FiltreSociete, avecSociete, jours, messageErreur, moisCourant, periode, useJoursOuvrables, useMeta } from "./commun";
 
 type Onglet = "valider" | "planning" | "absences" | "soldes";
 
-/** Absences et congés : demandes à valider, planning du mois, toutes les absences, soldes. */
+/**
+ * Absences et congés du personnel des sociétés du compte (filtre « Société » facultatif) : demandes
+ * à valider, planning du mois, toutes les absences, soldes.
+ */
 export function GestionConges() {
   const { data: meta } = useMeta();
   const [onglet, setOnglet] = useState<Onglet>("valider");
   const [saisie, setSaisie] = useState(false);
-  const { data: attente, mutate: rafraichirAttente } = useApi<Leave[]>("/rh/leaves?state=submitted");
+  const [societe, setSociete] = useState<number | null>(null);
+  const { data: attente, mutate: rafraichirAttente } = useApi<Leave[]>(avecSociete("/rh/leaves?state=submitted", societe));
   const [version, setVersion] = useState(0);
   const rafraichir = () => {
     void rafraichirAttente();
@@ -35,6 +39,9 @@ export function GestionConges() {
           )
         }
       />
+      <div className="mb-3">
+        <FiltreSociete companies={meta?.companies} value={societe} onChange={setSociete} />
+      </div>
       <Tabs
         value={onglet}
         onChange={setOnglet}
@@ -46,9 +53,9 @@ export function GestionConges() {
         ]}
       />
       {onglet === "valider" && <AValider leaves={attente} meta={meta} onChanged={rafraichir} />}
-      {onglet === "planning" && <Planning key={version} meta={meta} />}
-      {onglet === "absences" && <Absences key={version} meta={meta} onChanged={rafraichir} />}
-      {onglet === "soldes" && <Soldes key={version} />}
+      {onglet === "planning" && <Planning key={version} meta={meta} societe={societe} />}
+      {onglet === "absences" && <Absences key={version} meta={meta} societe={societe} onChanged={rafraichir} />}
+      {onglet === "soldes" && <Soldes key={version} societe={societe} />}
       {saisie && meta && (
         <SaisieAbsence
           meta={meta}
@@ -109,12 +116,12 @@ function iso(d: Date) {
 }
 
 /** Grille salariés × jours du mois : absences colorées par type, dimanches et jours fériés grisés. */
-function Planning({ meta }: { meta: Meta | undefined }) {
+function Planning({ meta, societe }: { meta: Meta | undefined; societe: number | null }) {
   const [mois, setMois] = useState(moisCourant());
   const debut = new Date(`${mois}T00:00:00`);
   const nbJours = new Date(debut.getFullYear(), debut.getMonth() + 1, 0).getDate();
   const fin = `${mois.slice(0, 8)}${String(nbJours).padStart(2, "0")}`;
-  const { data: leaves } = useApi<Leave[]>(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`);
+  const { data: leaves } = useApi<Leave[]>(avecSociete(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`, societe));
   const { data: feries } = useApi<Holiday[]>(`/rh/holidays?year=${debut.getFullYear()}`);
   const types = meta?.leave_types ?? [];
   const couleur = (typeId: number) => GAMME[Math.max(0, types.findIndex((t) => t.id === typeId)) % GAMME.length]!;
@@ -123,10 +130,10 @@ function Planning({ meta }: { meta: Meta | undefined }) {
   const salaries = useMemo(() => {
     const absents = new Map<number, string>();
     for (const l of leaves ?? []) absents.set(l.employee.id, l.employee.name);
-    const liste = (meta?.employees ?? []).map((e) => ({ id: e.id, name: e.name }));
+    const liste = (meta?.employees ?? []).filter((e) => !societe || e.company_id === societe).map((e) => ({ id: e.id, name: e.name }));
     for (const [id, name] of absents) if (!liste.some((e) => e.id === id)) liste.push({ id, name });
     return liste.sort((a, b) => Number(absents.has(b.id)) - Number(absents.has(a.id)) || a.name.localeCompare(b.name));
-  }, [leaves, meta]);
+  }, [leaves, meta, societe]);
 
   function absenceDu(employeeId: number, jour: string) {
     return (leaves ?? []).find((l) => l.employee.id === employeeId && l.date_from <= jour && jour <= l.date_to && l.state !== "refused" && l.state !== "cancelled");
@@ -221,7 +228,7 @@ function Planning({ meta }: { meta: Meta | undefined }) {
   );
 }
 
-function Absences({ meta, onChanged }: { meta: Meta | undefined; onChanged: () => void }) {
+function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societe: number | null; onChanged: () => void }) {
   const [etat, setEtat] = useState<LeaveState | "">("");
   const [salarie, setSalarie] = useState<number | null>(null);
   const [du, setDu] = useState("");
@@ -231,6 +238,7 @@ function Absences({ meta, onChanged }: { meta: Meta | undefined; onChanged: () =
   if (salarie) params.set("employee_id", String(salarie));
   if (du) params.set("date_from", du);
   if (au) params.set("date_to", au);
+  if (societe) params.set("company_id", String(societe));
   const requete = params.toString();
   const { data, error, mutate } = useApi<Leave[]>(`/rh/leaves${requete ? `?${requete}` : ""}`);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -300,8 +308,8 @@ function Absences({ meta, onChanged }: { meta: Meta | undefined; onChanged: () =
   );
 }
 
-function Soldes() {
-  const { data, error } = useApi<BalanceRow[]>("/rh/leaves/balances");
+function Soldes({ societe }: { societe: number | null }) {
+  const { data, error } = useApi<BalanceRow[]>(avecSociete("/rh/leaves/balances", societe));
   if (error) return <ErrorBox error={error} />;
   return (
     <Card padded={false}>

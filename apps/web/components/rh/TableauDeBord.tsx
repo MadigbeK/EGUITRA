@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { AlertTriangle, ArrowRight, Calendar, Info, ShieldAlert, Users, Wallet } from "@/components/icons";
 import { AreaChart, Badge, Button, Card, Empty, ErrorBox, Kpi, RankBars, Repartition, Squelette, GAMME, type Tone } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort } from "@/lib/format";
 import type { AlertSeverity, RhAlert, Summary } from "@/lib/rh-types";
-import { EtatPaie, moisLong, periode } from "./commun";
+import { EtatPaie, FiltreSociete, PastilleSociete, avecSociete, moisLong, nomCourt, periode, useMeta } from "./commun";
 
 const TON_ALERTE: Record<AlertSeverity, Tone> = { danger: "danger", warn: "warn", info: "accent" };
 const RANG: Record<AlertSeverity, number> = { danger: 0, warn: 1, info: 2 };
@@ -17,9 +18,28 @@ function IconeAlerte({ severity }: { severity: AlertSeverity }) {
   return <I className={`mt-0.5 h-4 w-4 flex-none ${couleur}`} />;
 }
 
-/** Tableau de bord RH : effectif, échéances, absences, masse salariale, paie du mois. */
+/**
+ * Tableau de bord RH, consolidé sur les sociétés du compte (ou l'une d'elles, par le filtre) :
+ * effectif, échéances, absences, masse salariale, paie du mois de chaque société.
+ */
 export function TableauDeBordRh() {
-  const { data, error, mutate } = useApi<Summary>("/rh/summary");
+  const { data: meta } = useMeta();
+  const [societe, setSociete] = useState<number | null>(null);
+  const filtre = (meta?.companies.length ?? 0) > 1 && (
+    <div className="mb-5">
+      <FiltreSociete companies={meta?.companies} value={societe} onChange={setSociete} />
+    </div>
+  );
+  return (
+    <div>
+      {filtre}
+      <Contenu societe={societe} />
+    </div>
+  );
+}
+
+function Contenu({ societe }: { societe: number | null }) {
+  const { data, error, mutate } = useApi<Summary>(avecSociete("/rh/summary", societe));
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!data)
     return (
@@ -61,25 +81,30 @@ export function TableauDeBordRh() {
         </Card>
 
         <div className="space-y-6 xl:col-span-5">
-          <Card title="Paie du mois" actions={data.current_payroll ? <EtatPaie state={data.current_payroll.state} /> : null}>
-            {data.current_payroll ? (
-              <div className="space-y-3">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-sm text-ink-2">{moisLong(data.current_payroll.month)}</span>
-                  <span className="font-display text-[22px] font-[650] tabular text-ink">{fmtGNF(data.current_payroll.totals.net)}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[13px] text-muted">
-                  <span>Brut : {fmtGNF(data.current_payroll.totals.gross)}</span>
-                  <span>Coût employeur : {fmtGNF(data.current_payroll.totals.employer_cost)}</span>
-                  <span>{data.current_payroll.totals.headcount} bulletin(s)</span>
-                  <span className={data.current_payroll.anomalies ? "text-warn" : ""}>{data.current_payroll.anomalies} anomalie(s)</span>
-                </div>
-                <Link href={`/rh/paie/${data.current_payroll.id}`}>
-                  <Button variant="primary" className="w-full">
-                    <Wallet className="h-4 w-4" /> Ouvrir la paie
-                  </Button>
-                </Link>
-              </div>
+          <Card title="Paie du mois" actions={<Link className="text-[13px] font-semibold text-accent hover:underline" href="/rh/paie">Toutes les paies</Link>}>
+            {data.current_payrolls.length > 0 ? (
+              <ul className="-mx-2 divide-y divide-line/70">
+                {data.current_payrolls.map((p) => (
+                  <li key={p.id}>
+                    <Link href={`/rh/paie/${p.id}`} className="block rounded-xl px-2 py-3 transition-colors hover:bg-panel-2">
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <PastilleSociete company={p.company} />
+                        <EtatPaie state={p.state} />
+                      </span>
+                      <span className="mt-2 flex items-baseline justify-between gap-3">
+                        <span className="text-sm capitalize text-ink-2">{moisLong(p.month)}</span>
+                        <span className="font-display text-[20px] font-[650] tabular text-ink">{fmtGNF(p.totals.net)}</span>
+                      </span>
+                      <span className="mt-1 flex flex-wrap justify-between gap-x-3 text-[12.5px] text-muted">
+                        <span>
+                          {p.totals.headcount} bulletin(s), coût employeur {fmtShort(p.totals.employer_cost)}
+                        </span>
+                        <span className={p.anomalies ? "text-warn" : ""}>{p.anomalies} anomalie(s)</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <div className="space-y-3 text-sm text-ink-2">
                 <p>La paie du mois n&apos;est pas encore préparée.</p>
@@ -146,6 +171,27 @@ export function TableauDeBordRh() {
           )}
         </Card>
       </div>
+
+      {data.by_company.length > 1 && (
+        <Card title="Par société">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ul className="space-y-3">
+              {data.by_company.map((c) => (
+                <li key={c.company.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-panel-2 px-4 py-3">
+                  <PastilleSociete company={c.company} />
+                  <span className="text-sm text-ink-2">
+                    <b className="tabular text-ink">{c.headcount}</b> salarié(s), masse salariale <b className="tabular text-ink">{fmtShort(c.monthly_payroll_estimate)}</b> par mois
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div>
+              <div className="mb-2 text-[12.5px] font-semibold uppercase tracking-wide text-muted">Masse salariale mensuelle</div>
+              <Repartition parts={data.by_company.map((c, i) => ({ key: String(c.company.id), label: nomCourt(c.company), value: c.monthly_payroll_estimate, color: GAMME[i % GAMME.length]! }))} format={(v) => fmtShort(v)} />
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Effectif par département">

@@ -15,11 +15,31 @@ def today():
     return fields.Date.context_today(request.env.user)
 
 
+def scope(kw=None):
+    """Sociétés gérées : toutes celles du compte (gestion RH commune aux deux sociétés, comme la
+    finance), ou celle du filtre company_id."""
+    companies = request.env.companies
+    wanted = (kw or {}).get("company_id")
+    if wanted not in (None, "", "all"):
+        try:
+            wanted = int(wanted)
+        except (TypeError, ValueError) as e:
+            raise ApiError(400, "invalid_parameter", "Société invalide.") from e
+        if wanted not in companies.ids:
+            raise ApiError(403, "company_forbidden", "Société non autorisée.")
+        return companies.browse(wanted)
+    return companies
+
+
+def company_ref(company):
+    return {"id": company.id, "name": company.name, "entity": company.eguitra_entity or None} if company else None
+
+
 def get(model, record_id, label):
-    """Enregistrement de la société de travail (les règles d'accès bornent déjà aux sociétés du compte)."""
+    """Enregistrement d'une des sociétés du compte (sinon 404, sans révéler son existence)."""
     probe = request.env[model].sudo().browse(record_id).exists()
-    if not probe or ("company_id" in probe._fields and probe.company_id and probe.company_id != request.env.company):
-        raise ApiError(404, "not_found", f"{label} introuvable dans cette société.")
+    if not probe or ("company_id" in probe._fields and probe.company_id and probe.company_id not in request.env.companies):
+        raise ApiError(404, "not_found", f"{label} introuvable.")
     return request.env[model].browse(probe.id)
 
 
@@ -88,7 +108,8 @@ def leave_type_row(t):
 def department_row(d):
     headcount = request.env["eguitra.rh.employee"].sudo().search_count([
         ("department_id", "=", d.id), "|", ("exit_date", "=", False), ("exit_date", ">=", today())])
-    return {"id": d.id, "name": d.name, "manager": ref(d.manager_id), "headcount": headcount, "active": d.active}
+    return {"id": d.id, "name": d.name, "company": company_ref(d.company_id), "manager": ref(d.manager_id),
+            "headcount": headcount, "active": d.active}
 
 
 def can_decide(leave, user=None):
@@ -129,7 +150,8 @@ def advance_row(adv):
 def employee_row(emp, day=None):
     day = day or today()
     return {
-        "id": emp.id, "matricule": emp.matricule, "name": emp.name, "job_title": emp.job_title or None,
+        "id": emp.id, "matricule": emp.matricule, "name": emp.name, "company": company_ref(emp.company_id),
+        "job_title": emp.job_title or None,
         "department": ref(emp.department_id), "manager": ref(emp.manager_id), "category": emp.category or None,
         "contract_type": emp.contract_type, "hire_date": emp.hire_date, "contract_end": emp.contract_end or None,
         "trial_end": emp.trial_end or None, "exit_date": emp.exit_date or None, "state": emp._state(day),

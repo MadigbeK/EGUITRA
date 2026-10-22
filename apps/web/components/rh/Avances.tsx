@@ -7,7 +7,7 @@ import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, M
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 import type { Advance, AdvanceState, Meta } from "@/lib/rh-types";
-import { ChampMontant, ChoixSalarie, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { ChampMontant, ChoixSalarie, FiltreSociete, avecSociete, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const ETAT: Record<AdvanceState, { label: string; tone: "warn" | "ok" | "neutral" }> = {
   open: { label: "En cours", tone: "warn" },
@@ -22,7 +22,8 @@ const ETAT: Record<AdvanceState, { label: string; tone: "warn" | "ok" | "neutral
 export function AvancesPrets() {
   const { data: meta } = useMeta();
   const [filtre, setFiltre] = useState<"open" | "all">("open");
-  const { data, error, mutate } = useApi<Advance[]>(`/rh/advances${filtre === "open" ? "?state=open" : ""}`);
+  const [societe, setSociete] = useState<number | null>(null);
+  const { data, error, mutate } = useApi<Advance[]>(avecSociete(`/rh/advances${filtre === "open" ? "?state=open" : ""}`, societe));
   const [creation, setCreation] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const encours = (data ?? []).filter((a) => a.state === "open");
@@ -55,8 +56,9 @@ export function AvancesPrets() {
         <Kpi label="Reste dû" value={fmtShort(encours.reduce((s, a) => s + a.remaining, 0))} hint="Ensemble des salariés" />
         <Kpi label="Retenues mensuelles" value={fmtShort(encours.reduce((s, a) => s + Math.min(a.installment, a.remaining), 0))} hint="Sur la prochaine paie" />
       </div>
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <Segmented value={filtre} onChange={setFiltre} options={[{ key: "open", label: "En cours" }, { key: "all", label: "Toutes" }]} />
+        <FiltreSociete companies={meta?.companies} value={societe} onChange={setSociete} />
       </div>
       {erreur && (
         <div className="mb-4">

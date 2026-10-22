@@ -6,8 +6,11 @@ Vous tenez le dossier de chaque salarié, vous suivez les absences et les congé
 et les prêts, et vous préparez la paie du mois jusqu'au bulletin et à l'écriture de paie. La finance
 reçoit cette écriture en brouillon : elle la relit, la comptabilise et règle les salaires.
 
-NIMOVA · RH sert les deux sociétés, chacune avec son personnel et sa paie. Si votre compte est ouvert
-aux deux, choisissez d'abord la société de travail dans le sélecteur en haut de l'écran.
+La gestion RH est commune aux deux sociétés, comme la finance : vous voyez et gérez le personnel
+d'EGUITRA GROUP SARLU et de MB AxisPro dans les mêmes listes et le même tableau de bord (le filtre
+« Société » restreint l'affichage à l'une d'elles). Chaque société reste l'employeur légal de ses
+salariés : l'employeur se choisit à l'embauche, et chaque société a sa paie, sa déclaration CNSS, ses
+impôts sur salaires et son écriture de paie, préparées ensemble chaque mois.
 
 ## Vos écrans (NIMOVA · RH)
 
@@ -74,9 +77,9 @@ le reste dû soit nul.
 
 ## La paie du mois
 
-1. **Créer la paie du mois** : un bulletin pour chaque salarié sous contrat ce mois-là, avec le prorata
-   des entrées et des sorties, les absences non rémunérées, les échéances d'avances et de prêts, les
-   primes de rotation et les éléments fixes.
+1. **Préparer la paie du mois** : une paie par société, préparées ensemble, avec un bulletin pour chaque
+   salarié sous contrat ce mois-là, le prorata des entrées et des sorties, les absences non
+   rémunérées, les échéances d'avances et de prêts, les primes de rotation et les éléments fixes.
 2. **Saisir les éléments variables** du mois sur les bulletins concernés : heures supplémentaires (en
    heures, payées au taux horaire majoré), primes, acomptes, retenues diverses. Chaque saisie recalcule
    le bulletin. « Recalculer » reprend tout, sans perdre vos saisies, et ajoute un salarié embauché
@@ -105,7 +108,8 @@ l'écriture (une écriture encore en brouillon est supprimée et refaite à la c
 | Taxe de formation | Taxe d'apprentissage de 2 % pour une entreprise de moins de 30 salariés ; au-delà, la contribution de 1,5 % à la formation professionnelle : taux et libellé à régler dans les paramètres. |
 | Heures supplémentaires | Taux horaire = salaire de base / 173,33 h, majoré de 30 %, 60 % ou 100 % selon la rubrique. |
 
-Ces valeurs sont des paramètres de chaque société. **Faites-les valider par l'expert-comptable et
+Ces valeurs sont communes aux deux sociétés ; le numéro d'employeur CNSS, la taxe de formation et
+le journal des salaires sont propres à chacune. **Faites-les valider par l'expert-comptable et
 confirmer par la CNSS avant la première paie réelle.**
 
 ## Mon espace (tous les salariés)

@@ -154,8 +154,9 @@ class EguitraRhDepartment(models.Model):
     _order = "name"
 
     name = fields.Char("Département", required=True)
-    company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
-    manager_id = fields.Many2one("eguitra.rh.employee", "Responsable", check_company=True)
+    company_id = fields.Many2one("res.company", "Société", index=True,
+                                 help="Vide : département commun aux deux sociétés (gestion RH commune).")
+    manager_id = fields.Many2one("eguitra.rh.employee", "Responsable")
     active = fields.Boolean(default=True)
 
 

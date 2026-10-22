@@ -11,7 +11,7 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from ..engine import Item, base_for_net, compute
 from ..models.employee import CONTRACTS, PAYMENT_METHODS, month_bounds
 from ..models.payroll import month_label
-from .common import READ, WRITE, can_write, date_value, get, int_or_false, number, payslip_row, text
+from .common import READ, WRITE, can_write, date_value, get, int_or_false, number, payslip_row, scope, text
 from .rh import _payroll_row
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -66,16 +66,33 @@ def payslip_detail(slip):
 
 class EguitraRhPaie(http.Controller):
     @api_route("/rh/payrolls", profiles=READ)
-    def payrolls(self, **_kw):
-        payrolls = request.env["eguitra.rh.payroll"].search([("company_id", "=", request.env.company.id)])
+    def payrolls(self, **kw):
+        payrolls = request.env["eguitra.rh.payroll"].search([("company_id", "in", scope(kw).ids)])
         return [_payroll_row(p) for p in payrolls]
 
     @api_route("/rh/payrolls", methods=("POST",), profiles=WRITE)
     def create_payroll(self, **_kw):
+        """Paie du mois. Avec company_id : celle de cette société. Sans : celle de chaque société qui a du
+        personnel ce mois-là et pas encore de paie (une paie, une déclaration et une écriture par société)."""
         data = read_json()
         require(data, "month")
-        payroll = request.env["eguitra.rh.payroll"].prepare(request.env.company, date_value(data, "month"))
-        return payroll_detail(payroll)
+        month = date_value(data, "month").replace(day=1)
+        Payroll = request.env["eguitra.rh.payroll"]
+        if data.get("company_id"):
+            payroll = Payroll.prepare(scope({"company_id": data["company_id"]}), month)
+            return dict(payroll_detail(payroll), created=[payroll.id])
+        start, end = month_bounds(month)
+        companies = request.env.companies.sorted(lambda c: c != request.env.company)
+        created = Payroll
+        for company in companies:
+            exists = Payroll.search_count([("company_id", "=", company.id), ("month", "=", month)])
+            staff = request.env["eguitra.rh.employee"]._active_in(company, start, end)
+            if not exists and staff:
+                created |= Payroll.prepare(company, month)
+        if not created:
+            raise ApiError(422, "business_rule", f"La paie de {month_label(month)} est déjà préparée pour chaque "
+                                                 "société qui a du personnel ce mois-là.")
+        return dict(payroll_detail(created[0]), created=created.ids)
 
     @api_route("/rh/payrolls/<int:payroll_id>", profiles=READ)
     def payroll(self, payroll_id, **_kw):

@@ -22,6 +22,7 @@ from .common import (
     advance_row,
     can_decide,
     can_write,
+    company_ref,
     date_value,
     department_row,
     document_row,
@@ -35,6 +36,7 @@ from .common import (
     number,
     ref,
     rubric_row,
+    scope,
     text,
     today,
 )
@@ -50,18 +52,18 @@ def options(pairs):
     return [{"code": code, "label": label} for code, label in pairs]
 
 
-def _check_reference(key, record_id):
-    """Chaque identifiant écrit dans un dossier salarié appartient à la société de travail (mêmes listes
-    que /rh/meta) : département, responsable et chauffeur de la société, activité commune ou de la
-    société, compte interne ouvert à la société."""
+def _check_reference(key, record_id, company):
+    """Chaque identifiant écrit dans un dossier salarié est cohérent avec son employeur (mêmes listes que
+    /rh/meta) : département commun ou de l'employeur, responsable d'une des sociétés du compte (la
+    gestion RH est commune), chauffeur et activité de l'employeur (ou activité commune), compte
+    interne ouvert à l'employeur."""
     env = request.env
-    company = env.company
     if key == "department_id":
         record = env["eguitra.rh.department"].sudo().browse(record_id).exists()
-        valid = record and record.company_id == company
+        valid = record and record.company_id in (company, env["res.company"])
     elif key == "manager_id":
         record = env["eguitra.rh.employee"].sudo().browse(record_id).exists()
-        valid = record and record.company_id == company
+        valid = record and record.company_id in env.companies
     elif key == "driver_id":
         record = env["eguitra.transport.driver"].sudo().browse(record_id).exists()
         valid = record and record.company_id == company
@@ -87,13 +89,13 @@ class EguitraRh(http.Controller):
     # ─── Tableau de bord ─────────────────────────────────────────────────
 
     @api_route("/rh/summary", profiles=READ)
-    def summary(self, **_kw):
+    def summary(self, **kw):
         env = request.env
-        company = env.company
+        companies = scope(kw)
         day = today()
-        settings = env["eguitra.rh.settings"]._get(company)
+        settings = env["eguitra.rh.settings"]._get(env.company if env.company in companies else companies[0])
         Employee = env["eguitra.rh.employee"]
-        everyone = Employee.with_context(active_test=False).search([("company_id", "=", company.id)])
+        everyone = Employee.with_context(active_test=False).search([("company_id", "in", companies.ids)])
         current = everyone.filtered(lambda e: e.active and e._state(day) in ("essai", "actif"))
         year_start = day.replace(month=1, day=1)
         hires = everyone.filtered(lambda e: e.hire_date >= year_start and e.hire_date <= day)
@@ -106,16 +108,17 @@ class EguitraRh(http.Controller):
         # Taux d'absence sur 30 jours, hors congés payés : jours d'absence / jours ouvrables attendus.
         since = day - timedelta(days=30)
         Holiday = env["eguitra.rh.holiday"]
-        expected = Holiday._working_days(company, since, day) * headcount
-        absences = Leave.search([("company_id", "=", company.id), ("state", "=", "approved"),
+        expected = sum(Holiday._working_days(c, since, day) * len(current.filtered(lambda e, c=c: e.company_id == c))
+                       for c in companies)
+        absences = Leave.search([("company_id", "in", companies.ids), ("state", "=", "approved"),
                                  ("type_id.deducts_balance", "=", False), ("date_from", "<=", day),
                                  ("date_to", ">=", since)])
-        absent_days = sum(Holiday._working_days(company, max(leave.date_from, since), min(leave.date_to, day))
+        absent_days = sum(Holiday._working_days(leave.company_id, max(leave.date_from, since), min(leave.date_to, day))
                           for leave in absences)
 
-        today_leaves = Leave.search([("company_id", "=", company.id), ("state", "=", "approved"),
+        today_leaves = Leave.search([("company_id", "in", companies.ids), ("state", "=", "approved"),
                                      ("date_from", "<=", day), ("date_to", ">=", day)])
-        upcoming = Leave.search([("company_id", "=", company.id), ("state", "in", ("approved", "submitted")),
+        upcoming = Leave.search([("company_id", "in", companies.ids), ("state", "in", ("approved", "submitted")),
                                  ("date_from", ">", day), ("date_from", "<=", day + timedelta(days=14))],
                                 order="date_from")
 
@@ -131,12 +134,25 @@ class EguitraRh(http.Controller):
         for emp in current:
             name = emp.department_id.name or "Sans département"
             departments[name] = departments.get(name, 0) + 1
-        payrolls = env["eguitra.rh.payroll"].search([("company_id", "=", company.id), ("state", "!=", "draft")],
-                                                    order="month desc", limit=12)
-        current_payroll = env["eguitra.rh.payroll"].search([("company_id", "=", company.id)], order="month desc", limit=1)
+        Payroll = env["eguitra.rh.payroll"]
+        trend = {}
+        for payroll in Payroll.search([("company_id", "in", companies.ids), ("state", "!=", "draft")],
+                                      order="month desc", limit=12 * len(companies)):
+            totals = payroll._totals()
+            month = trend.setdefault(payroll.month, {"month": payroll.month, "gross": 0, "net": 0, "employer_cost": 0,
+                                                     "headcount": 0})
+            for key in ("gross", "net", "employer_cost", "headcount"):
+                month[key] += totals[key]
+        current_payrolls = [Payroll.search([("company_id", "=", c.id)], order="month desc", limit=1) for c in companies]
         ages = [a for a in (e._age(day) for e in current) if a is not None]
         known_gender = current.filtered("gender")
         return {
+            "companies": [company_ref(c) for c in companies],
+            "by_company": [{"company": company_ref(c),
+                            "headcount": len(current.filtered(lambda e, c=c: e.company_id == c)),
+                            "monthly_payroll_estimate": round(sum(e._monthly_gross() for e in current
+                                                                  if e.company_id == c))}
+                           for c in companies],
             "headcount": headcount,
             "headcount_trial": len(current.filtered(lambda e: e._state(day) == "essai")),
             "hires_year": len(hires), "exits_year": len(exits),
@@ -148,20 +164,18 @@ class EguitraRh(http.Controller):
             "monthly_payroll_estimate": round(sum(e._monthly_gross() for e in current)),
             "absent_today": [{"employee": ref(leave.employee_id), "type": leave.type_id.name, "date_to": leave.date_to}
                              for leave in today_leaves],
-            "pending_leaves": Leave.search_count([("company_id", "=", company.id), ("state", "=", "submitted")]),
+            "pending_leaves": Leave.search_count([("company_id", "in", companies.ids), ("state", "=", "submitted")]),
             "absenteeism_rate": round(absent_days / expected * 100, 1) if expected else None,
             "by_department": [{"name": k, "headcount": v} for k, v in sorted(departments.items(), key=lambda kv: -kv[1])],
             "by_contract": split("contract_type", dict(CONTRACTS)),
             "by_category": split("category", dict(CATEGORIES)),
-            "payroll_trend": [dict(month=p.month, **{k: p._totals()[k] for k in ("gross", "net", "employer_cost",
-                                                                                 "headcount")})
-                              for p in reversed(payrolls)],
+            "payroll_trend": [trend[m] for m in sorted(trend)][-12:],
             "upcoming_leaves": [leave_row(leave) for leave in upcoming],
-            "alerts": self._alerts(company, settings, everyone, current, day),
-            "current_payroll": _payroll_row(current_payroll) if current_payroll else None,
+            "alerts": self._alerts(companies, settings, current, day),
+            "current_payrolls": [_payroll_row(p) for p in current_payrolls if p],
         }
 
-    def _alerts(self, company, settings, everyone, current, day):
+    def _alerts(self, companies, settings, current, day):
         alerts = []
 
         def add(kind, severity, date, emp, message, href):
@@ -205,10 +219,11 @@ class EguitraRh(http.Controller):
                         href)
         previous = (day.replace(day=1) - relativedelta(months=1))
         Payroll = request.env["eguitra.rh.payroll"]
-        last = Payroll.search([("company_id", "=", company.id), ("month", "=", previous)], limit=1)
-        if current and (not last or last.state == "draft"):
-            add("payroll", "warn", None, None, f"La paie de {month_label(previous)} n'est pas validée.",
-                f"/rh/paie/{last.id}" if last else "/rh/paie")
+        for company in companies:
+            last = Payroll.search([("company_id", "=", company.id), ("month", "=", previous)], limit=1)
+            if current.filtered(lambda e, c=company: e.company_id == c) and (not last or last.state == "draft"):
+                add("payroll", "warn", None, None, f"La paie de {month_label(previous)} de {company.name} n'est pas "
+                    "validée.", f"/rh/paie/{last.id}" if last else "/rh/paie")
         order = {"danger": 0, "warn": 1, "info": 2}
         alerts.sort(key=lambda a: (order[a["severity"]], str(a["date"] or "9999")))
         return alerts
@@ -218,32 +233,32 @@ class EguitraRh(http.Controller):
     @api_route("/rh/meta", profiles=READ)
     def meta(self, **_kw):
         env = request.env
-        company = env.company
+        companies = env.companies
         Employee = env["eguitra.rh.employee"]
         day = today()
-        actives = Employee.search([("company_id", "=", company.id), "|", ("exit_date", "=", False),
+        actives = Employee.search([("company_id", "in", companies.ids), "|", ("exit_date", "=", False),
                                    ("exit_date", ">=", day)])
-        linked = Employee.sudo().with_context(active_test=False).search(
-            [("company_id", "=", company.id), ("user_id", "!=", False)]).user_id
-        users = env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", company.ids),
-                                                ("id", "not in", linked.ids)], order="name")
-        drivers = env["eguitra.transport.driver"].sudo().search([("company_id", "=", company.id)], order="name") \
-            if company.eguitra_entity == "groupe" else env["eguitra.transport.driver"]
+        users = env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", companies.ids)],
+                                               order="name")
+        drivers = env["eguitra.transport.driver"].sudo().search([("company_id", "in", companies.ids)], order="name")
         plan = env.ref("eguitra_base.analytic_plan_activite")
         activities = env["account.analytic.account"].sudo().search(
-            [("plan_id", "=", plan.id), ("company_id", "in", [False, company.id])], order="name")
+            [("plan_id", "=", plan.id), ("company_id", "in", [False] + companies.ids)], order="name")
         return {
+            "companies": [company_ref(c) for c in companies],
+            "work_company_id": env.company.id,
             "departments": [department_row(d) for d in env["eguitra.rh.department"].with_context(active_test=False).search(
-                [("company_id", "=", company.id)])],
+                ["|", ("company_id", "=", False), ("company_id", "in", companies.ids)])],
             "rubrics": [rubric_row(r) for r in env["eguitra.rh.rubric"].with_context(active_test=False).search([])],
             "leave_types": [leave_type_row(t) for t in env["eguitra.rh.leave.type"].with_context(active_test=False).search([])],
             "categories": options(CATEGORIES), "contract_types": options(CONTRACTS),
             "marital_statuses": options(MARITAL), "payment_methods": options(PAYMENT_METHODS),
             "exit_reasons": options(EXIT_REASONS), "document_kinds": options(DOCUMENT_KINDS),
-            "employees": [emp_ref(e) for e in actives],
-            "users": [{"id": u.id, "name": u.name, "login": u.login} for u in users],
-            "drivers": [{"id": d.id, "name": d.name} for d in drivers],
-            "activities": [{"id": a.id, "name": a.name} for a in activities],
+            "employees": [dict(emp_ref(e), company_id=e.company_id.id) for e in actives],
+            "users": [{"id": u.id, "name": u.name, "login": u.login,
+                       "company_ids": [c for c in u.company_ids.ids if c in companies.ids]} for u in users],
+            "drivers": [{"id": d.id, "name": d.name, "company_id": d.company_id.id} for d in drivers],
+            "activities": [{"id": a.id, "name": a.name, "company_id": a.company_id.id or None} for a in activities],
             "can_write": can_write(),
         }
 
@@ -251,7 +266,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/employees", profiles=READ)
     def employees(self, **kw):
-        domain = [("company_id", "=", request.env.company.id)]
+        domain = [("company_id", "in", scope(kw).ids)]
         day = today()
         state = kw.get("state") or "active"
         if state == "active":
@@ -266,7 +281,7 @@ class EguitraRh(http.Controller):
                        ("phone", "ilike", q)]
         return [employee_row(e, day) for e in request.env["eguitra.rh.employee"].search(domain)]
 
-    def _employee_values(self, data, creating=False):
+    def _employee_values(self, data, company, creating=False):
         values = {k: text(data, k) for k in EMPLOYEE_TEXT if k in data}
         if "name" in data:
             if not text(data, "name"):
@@ -293,7 +308,7 @@ class EguitraRh(http.Controller):
             if key in data:
                 values[field] = int_or_false(data, key)
                 if values[field]:
-                    _check_reference(key, values[field])
+                    _check_reference(key, values[field], company)
         if "fixed_lines" in data:
             lines = []
             for line in data.get("fixed_lines") or []:
@@ -309,8 +324,9 @@ class EguitraRh(http.Controller):
     def create_employee(self, **_kw):
         data = read_json()
         require(data, "name", "hire_date")
-        values = self._employee_values(data, creating=True)
-        values["company_id"] = request.env.company.id
+        company = scope({"company_id": data.get("company_id")}) if data.get("company_id") else request.env.company
+        values = self._employee_values(data, company, creating=True)
+        values["company_id"] = company.id
         emp = request.env["eguitra.rh.employee"].create(values)
         return employee_detail(emp)
 
@@ -322,7 +338,7 @@ class EguitraRh(http.Controller):
     def update_employee(self, employee_id, **_kw):
         emp = get("eguitra.rh.employee", employee_id, "Salarié")
         data = read_json()
-        emp.with_context(salary_reason=text(data, "salary_reason")).write(self._employee_values(data))
+        emp.with_context(salary_reason=text(data, "salary_reason")).write(self._employee_values(data, emp.company_id))
         return employee_detail(emp)
 
     @api_route("/rh/employees/<int:employee_id>/exit", methods=("POST",), profiles=WRITE)
@@ -385,10 +401,12 @@ class EguitraRh(http.Controller):
         values = {}
         if "name" in data:
             values["name"] = text(data, "name")
+        if "company_id" in data:
+            values["company_id"] = scope({"company_id": data["company_id"]}).id if data.get("company_id") else False
         if "manager_id" in data:
             values["manager_id"] = int_or_false(data, "manager_id")
             if values["manager_id"]:
-                _check_reference("manager_id", values["manager_id"])
+                _check_reference("manager_id", values["manager_id"], request.env.company)
         if "active" in data:
             values["active"] = bool(data["active"])
         return values
@@ -397,8 +415,7 @@ class EguitraRh(http.Controller):
     def create_department(self, **_kw):
         data = read_json()
         require(data, "name")
-        return department_row(request.env["eguitra.rh.department"].create(
-            dict(self._department_values(data), company_id=request.env.company.id)))
+        return department_row(request.env["eguitra.rh.department"].create(self._department_values(data)))
 
     @api_route("/rh/departments/<int:department_id>", methods=("PATCH",), profiles=WRITE)
     def update_department(self, department_id, **_kw):
@@ -466,26 +483,33 @@ class EguitraRh(http.Controller):
     # ─── Paramètres et jours fériés ──────────────────────────────────────
 
     @api_route("/rh/settings", profiles=READ)
-    def settings(self, **_kw):
-        return _settings_row(request.env["eguitra.rh.settings"]._get(request.env.company))
+    def settings(self, **kw):
+        company = scope(kw) if kw.get("company_id") else request.env.company
+        return _settings_row(request.env["eguitra.rh.settings"]._get(company))
 
     @api_route("/rh/settings", methods=("PATCH",), profiles=WRITE)
-    def update_settings(self, **_kw):
-        settings = request.env["eguitra.rh.settings"]._get(request.env.company)
+    def update_settings(self, **kw):
+        """Taux, barème, congés, heures, alertes et comptes : communs aux deux sociétés (écrits pour
+        chacune). Numéro d'employeur CNSS, taxe de formation et journal : propres à la société visée."""
         data = read_json()
-        values = {}
+        wanted = kw.get("company_id") or data.get("company_id")
+        company = scope({"company_id": wanted}) if wanted else request.env.company
+        Settings = request.env["eguitra.rh.settings"]
+        settings = Settings._get(company)
+        values, own = {}, {}
         for key in ("cnss_employee_rate", "cnss_employer_rate", "cnss_ceiling", "smig", "allowance_exempt_cap",
                     "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours", "rotation_bonus"):
             if key in data:
-                values[key] = number(data, key)
-                if values[key] < 0:
+                target = own if key == "training_tax_rate" else values
+                target[key] = number(data, key)
+                if target[key] < 0:
                     raise ApiError(422, "business_rule", "Les taux et montants des paramètres sont positifs.")
         for key in ("trial_alert_days", "contract_alert_days", "document_alert_days"):
             if key in data:
                 values[key] = int(number(data, key))
         for key in ("training_tax_label", "cnss_employer_number"):
             if key in data:
-                values[key] = text(data, key)
+                own[key] = text(data, key)
         for key, field in (("salary", "account_salary"), ("social_charges", "account_social_charges"),
                            ("payroll_taxes", "account_payroll_taxes"), ("training_tax", "account_training_tax"),
                            ("cnss", "account_cnss"), ("rts", "account_rts"),
@@ -500,10 +524,15 @@ class EguitraRh(http.Controller):
             if len({b[0] for b in brackets}) != len(brackets):
                 raise ApiError(422, "business_rule", "Deux tranches du barème ont le même seuil.")
             values["bracket_ids"] = [Command.clear()] + [Command.create({"threshold": t, "rate": r}) for t, r in brackets]
-        settings.sudo().write(values)
+        if values:
+            for other in request.env.companies:
+                record = Settings._get(other).sudo()
+                # Le barème est recréé pour chaque société (une tranche n'appartient qu'à une fiche).
+                record.write(values)
+        settings.sudo().write(own)
         if "journal_id" in data:
             journal = request.env["account.journal"].sudo().browse(int_or_false(data, "journal_id")).exists()
-            settings.sudo().journal_id = journal.id if journal and journal.company_id == request.env.company else False
+            settings.sudo().journal_id = journal.id if journal and journal.company_id == company else False
         return _settings_row(settings)
 
     @api_route("/rh/holidays", profiles=None)
@@ -511,7 +540,7 @@ class EguitraRh(http.Controller):
         year = int_arg(kw, "year", today().year, 2000, 2100)
         holidays = request.env["eguitra.rh.holiday"].sudo().search([
             ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"),
-            ("company_id", "in", [False, request.env.company.id])])
+            ("company_id", "in", [False] + request.env.companies.ids)])
         return [{"id": h.id, "date": h.date, "name": h.name} for h in holidays]
 
     @api_route("/rh/holidays", methods=("POST",), profiles=WRITE)
@@ -543,7 +572,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/leaves", profiles=READ)
     def leaves(self, **kw):
-        domain = [("company_id", "=", request.env.company.id)]
+        domain = [("company_id", "in", scope(kw).ids)]
         if kw.get("state"):
             domain.append(("state", "in", str(kw["state"]).split(",")))
         if kw.get("employee_id"):
@@ -601,19 +630,20 @@ class EguitraRh(http.Controller):
         return leave_row(leave)
 
     @api_route("/rh/leaves/balances", profiles=READ)
-    def balances(self, **_kw):
+    def balances(self, **kw):
         day = today()
         employees = request.env["eguitra.rh.employee"].search([
-            ("company_id", "=", request.env.company.id), ("hire_date", "<=", day),
+            ("company_id", "in", scope(kw).ids), ("hire_date", "<=", day),
             "|", ("exit_date", "=", False), ("exit_date", ">=", day)])
-        return [{"employee": emp_ref(e), "department": ref(e.department_id), "balance": e._leave_balance(day)}
+        return [{"employee": dict(emp_ref(e), company_id=e.company_id.id), "department": ref(e.department_id),
+                 "balance": e._leave_balance(day)}
                 for e in employees]
 
     # ─── Avances et prêts ────────────────────────────────────────────────
 
     @api_route("/rh/advances", profiles=READ)
     def advances(self, **kw):
-        domain = [("company_id", "=", request.env.company.id)]
+        domain = [("company_id", "in", scope(kw).ids)]
         if kw.get("state"):
             domain.append(("state", "in", str(kw["state"]).split(",")))
         return [advance_row(a) for a in request.env["eguitra.rh.advance"].search(domain)]
@@ -643,6 +673,7 @@ class EguitraRh(http.Controller):
 
 def _settings_row(s):
     return {
+        "company": company_ref(s.company_id),
         "cnss_employee_rate": s.cnss_employee_rate, "cnss_employer_rate": s.cnss_employer_rate,
         "cnss_ceiling": s.cnss_ceiling, "smig": s.smig, "allowance_exempt_cap": s.allowance_exempt_cap,
         "rts_brackets": [{"from": b.threshold, "rate": b.rate} for b in s.bracket_ids],
@@ -664,7 +695,7 @@ def _payroll_row(p):
     move = p.move_id.sudo()
     slips = p.payslip_ids
     return {
-        "id": p.id, "name": p.name, "month": p.month, "state": p.state, "totals": p._totals(),
+        "id": p.id, "name": p.name, "company": company_ref(p.company_id), "month": p.month, "state": p.state, "totals": p._totals(),
         "anomalies": sum(len(s._anomalies()) for s in slips),
         "move": {"id": move.id, "name": move.name, "state": move.state} if move.exists() else None,
     }

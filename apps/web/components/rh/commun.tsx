@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
+import { LogoSociete } from "@/components/brand";
 import { Check, X } from "@/components/icons";
 import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, type Tone } from "@/components/ui";
 import { ApiError, apiGet, apiSend, useApi } from "@/lib/api-client";
@@ -15,6 +16,7 @@ import {
   LEAVE_STATE_LABELS,
   PAYROLL_STATE_LABELS,
   STATE_LABELS,
+  type CompanyRef,
   type EmployeeState,
   type Leave,
   type LeaveState,
@@ -26,6 +28,53 @@ import {
 /** Référentiels de l'espace RH (départements, rubriques, types d'absence, listes de choix). */
 export function useMeta() {
   return useApi<Meta>("/rh/meta");
+}
+
+/** Nom court d'une société dans les listes : « EGUITRA GROUP », « MB AxisPro ». */
+export function nomCourt(c: CompanyRef): string {
+  return c.entity === "groupe" ? "EGUITRA GROUP" : c.entity === "cabinet" ? "MB AxisPro" : c.name;
+}
+
+/** Employeur d'un salarié ou société d'une paie : emblème et nom court. */
+export function PastilleSociete({ company }: { company: CompanyRef }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium text-ink-2" title={company.name}>
+      {company.entity && <LogoSociete entite={company.entity} decoratif className="h-4" />}
+      {nomCourt(company)}
+    </span>
+  );
+}
+
+/**
+ * Filtre « Société » des listes : toutes les sociétés du compte, ou l'une d'elles. Absent quand le
+ * compte n'en gère qu'une.
+ */
+export function FiltreSociete({ companies, value, onChange, className = "w-52" }: { companies: CompanyRef[] | undefined; value: number | null; onChange: (id: number | null) => void; className?: string }) {
+  if (!companies || companies.length < 2) return null;
+  return (
+    <div className={className}>
+      <Select
+        aria-label="Société"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        placeholder="Toutes les sociétés"
+        options={companies.map((c) => ({ value: c.id, label: nomCourt(c) }))}
+      />
+    </div>
+  );
+}
+
+/** Ajoute le filtre company_id à une route GET (sans filtre : toutes les sociétés du compte). */
+export function avecSociete(path: string, companyId: number | null): string {
+  if (!companyId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}company_id=${companyId}`;
+}
+
+/** Société de travail de la session (employeur proposé par défaut à la création d'un salarié). */
+export function useSocieteDeTravail(): number | null {
+  // /auth/me n'est pas relayée par la passerelle : la société de travail vient de /rh/meta.
+  const { data } = useApi<Meta>("/rh/meta");
+  return data?.work_company_id ?? null;
 }
 
 /** Message d'une erreur d'appel, tel que le noyau l'a rédigé. */
@@ -91,14 +140,20 @@ export function moisCourant(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Choix d'un salarié actif parmi les référentiels. */
+/** « Nom (matricule) », suivi de la société quand le compte en gère plusieurs. */
+export function libelleSalarie(meta: Meta | undefined, e: { name: string; matricule: string; company_id: number }): string {
+  const c = meta && meta.companies.length > 1 ? meta.companies.find((x) => x.id === e.company_id) : undefined;
+  return `${e.name} (${e.matricule}${c ? `, ${nomCourt(c)}` : ""})`;
+}
+
+/** Choix d'un salarié actif parmi les référentiels (les deux sociétés). */
 export function ChoixSalarie({ meta, value, onChange, placeholder = "Choisir un salarié" }: { meta: Meta | undefined; value: number | null; onChange: (id: number | null) => void; placeholder?: string }) {
   return (
     <Select
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
       placeholder={placeholder}
-      options={(meta?.employees ?? []).map((e) => ({ value: e.id, label: `${e.name} (${e.matricule})` }))}
+      options={(meta?.employees ?? []).map((e) => ({ value: e.id, label: libelleSalarie(meta, e) }))}
     />
   );
 }
