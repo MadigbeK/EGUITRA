@@ -65,10 +65,14 @@ class EguitraSetup(models.AbstractModel):
     @api.model
     def ensure_document_settings(self):
         """Documents imprimés en français : l'identifiant fiscal de Guinée s'intitule « NIF »
-        (sinon les factures afficheraient « Tax ID »)."""
+        (sinon les factures afficheraient « Tax ID ») ; le franc guinéen s'écrit « GNF » après le
+        montant, comme dans les applications (le noyau écrit « FG »)."""
         guinea = self.env.ref("base.gn").sudo()
         if not guinea.vat_label:
             guinea.vat_label = "NIF"
+        gnf = self.env.ref("base.GNF").sudo()
+        if (gnf.symbol, gnf.position) != ("GNF", "after"):
+            gnf.write({"symbol": "GNF", "position": "after"})
 
     @api.model
     def ensure_cabinet_company(self):

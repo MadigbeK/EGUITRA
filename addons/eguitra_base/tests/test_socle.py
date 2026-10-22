@@ -8,6 +8,8 @@ class TestSocle(TransactionCase):
         self.assertEqual(groupe.name, "EGUITRA GROUP SARLU")
         self.assertEqual(groupe.eguitra_entity, "groupe")
         self.assertEqual(groupe.currency_id.name, "GNF")
+        self.assertEqual((groupe.currency_id.symbol, groupe.currency_id.position), ("GNF", "after"),
+                         "« GNF » après le montant sur les documents, comme dans les applications")
 
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")])
         self.assertEqual(len(cabinet), 1)
