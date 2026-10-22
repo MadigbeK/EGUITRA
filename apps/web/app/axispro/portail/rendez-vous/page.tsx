@@ -6,7 +6,7 @@ import { Calendar, CheckCircle2, Clock, Link2, MapPin, Plus, XCircle } from "@/c
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import { Intitule, LectureSeule, RESERVE_CABINET, Recherche, correspond, majuscule, messageErreur, pluriel, useEcriture, useMonId, useRetour } from "@/components/portail/cabinet/outils";
 import { ajouterAuCalendrier, dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
-import { Badge, Button, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { Cibles, MeetingMode, MeetingRow, MeetingState } from "@/lib/portail-types";
 
@@ -163,7 +163,7 @@ function Colonne({ titre, compte, detail, vide, children }: { titre: string; com
 function Carte({ m, alerte, children }: { m: MeetingRow; alerte?: string; children?: ReactNode }) {
   const [ouvert, setOuvert] = useState(false);
   return (
-    <li className="rounded-2xl bg-panel p-4 shadow-[var(--ombre-feuille)]">
+    <li className={cx(FEUILLE, "p-4")}>
       <div className="flex items-start justify-between gap-2">
         <h3 className="min-w-0 font-semibold leading-snug text-ink">{m.subject}</h3>
         <Badge tone={ETAT[m.state]}>{m.state_label}</Badge>

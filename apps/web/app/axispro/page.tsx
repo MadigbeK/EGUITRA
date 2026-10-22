@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { AlertTriangle, CheckCircle2, FileText, FolderKanban, Plus, ShieldAlert, XCircle } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Donut, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Donut, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
@@ -212,7 +212,7 @@ function Tableau({ etapes, rows, rang }: { etapes: Gate[]; rows: DossierSummary[
 function CarteDossier({ d }: { d: DossierSummary }) {
   const evalue = (d.progress.assessed / Math.max(1, d.progress.criteria)) * 100;
   return (
-    <Link href={`/axispro/dossiers/${d.id}`} className="n-levable block rounded-xl border border-line bg-panel p-3.5 shadow-[var(--ombre-carte)]">
+    <Link href={`/axispro/dossiers/${d.id}`} className={cx(FEUILLE, "n-levable block p-3.5")}>
       <div className="flex items-center justify-between gap-2">
         <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
         <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.progress.assessed ? d.readiness : null))} title="Project Readiness Score">{d.progress.assessed ? `${note(d.readiness)} / 100` : "Non noté"}</span>

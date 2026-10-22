@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale, Undo2, Wallet } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
@@ -110,8 +110,8 @@ export default function TreasuryPage() {
                   onClick={() => setJournalId(a.journal_id)}
                   aria-pressed={choisi}
                   className={cx(
-                    "n-kpi n-levable relative min-w-0 overflow-hidden rounded-2xl border p-4 text-left",
-                    choisi ? "n-degrade border-transparent text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : "border-line bg-panel shadow-[var(--ombre-carte)]",
+                    "n-kpi n-levable relative min-w-0 overflow-hidden rounded-[20px] p-4 text-left",
+                    choisi ? "n-degrade text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : FEUILLE,
                   )}
                 >
                   <div className="relative flex items-center justify-between gap-2">

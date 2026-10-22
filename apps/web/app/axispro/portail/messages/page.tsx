@@ -7,12 +7,12 @@ import { ArrowUpRight, ChevronLeft, Lock, Paperclip, Send, X } from "@/component
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import { Coche, LectureSeule, RESERVE_CABINET, Recherche, correspond, messageErreur, useEcriture } from "@/components/portail/cabinet/outils";
 import { FORMATS, FORMATS_TEXTE, dateLongue, heure, quand, taille } from "@/components/portail/commun";
-import { Badge, Button, classesBouton, Empty, ErrorBox, Loading, Notice, PageHeader, Segmented, Textarea, cx } from "@/components/ui";
+import { Badge, Button, classesBouton, Empty, ErrorBox, FEUILLE, Loading, Notice, PageHeader, Segmented, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiUpload, useApi } from "@/lib/api-client";
 import type { Attachment, Conversation, ConversationRow, MessageRow } from "@/lib/portail-types";
 
 const CHEMIN = "/axispro/portail/messages";
-const PANNEAU = "flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)] lg:h-[min(78vh,840px)]";
+const PANNEAU = cx(FEUILLE, "flex min-w-0 flex-col overflow-hidden lg:h-[min(78vh,840px)]");
 
 export default function MessagesPortailPage() {
   return (

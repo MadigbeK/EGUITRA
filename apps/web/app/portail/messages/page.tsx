@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Download, FileText, Lock, Mail, Paperclip, Send, Smartphone, X } from "@/components/icons";
-import { Button, ErrorBox, Loading, Notice, Textarea, cx } from "@/components/ui";
+import { Button, ErrorBox, FEUILLE, Loading, Notice, Textarea, cx } from "@/components/ui";
 import { EnTete, FORMATS, FORMATS_TEXTE, heure, taille } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { Avatar, LienBouton, PasDeDossier, cleJour, libelleJour, messageErreur, telechargerPiece, verifierFichier } from "@/components/portail/projet/outils";
@@ -207,7 +207,7 @@ export default function Messagerie() {
 
       <section
         aria-label="Messagerie avec le cabinet"
-        className="flex h-[calc(100dvh-18.5rem)] min-h-[440px] flex-col overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)] lg:h-[calc(100dvh-15rem)]"
+        className={cx(FEUILLE, "flex h-[calc(100dvh-18.5rem)] min-h-[440px] flex-col overflow-hidden lg:h-[calc(100dvh-15rem)]")}
       >
         {/* Interlocuteur */}
         <header className="flex items-center gap-3 border-b border-line px-4 py-3 sm:px-5">

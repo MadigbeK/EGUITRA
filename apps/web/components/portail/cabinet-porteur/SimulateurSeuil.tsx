@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, Notice, Segmented, cx } from "@/components/ui";
+import { Card, FEUILLE, Notice, Segmented, cx } from "@/components/ui";
 import { fmtGNF, fmtShort } from "@/lib/format";
 import { ChampMontant, ChampNombre, Ligne } from "./champs";
 import { calculerSeuil, decimal, type ParamsSeuil } from "./calculs";
@@ -129,12 +129,12 @@ export function SimulateurSeuil({ params, onChange }: { params: ParamsSeuil; onC
 
       <div className="min-w-0 space-y-6">
         <section aria-label="Seuil de rentabilité" className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[20px] bg-panel p-5 shadow-[var(--ombre-feuille)]">
+          <div className={cx(FEUILLE, "p-5")}>
             <div className="text-[12.5px] font-medium text-ink-2">Seuil de rentabilité</div>
             <div aria-live="polite" className="mt-1.5 font-display text-[22px] font-bold leading-tight tabular text-ink">{s.seuil === null ? "Inatteignable" : fmtGNF(s.seuil)}</div>
             <div className="mt-1 text-[12px] text-muted">de chiffre d'affaires par an</div>
           </div>
-          <div className="rounded-[20px] bg-panel p-5 shadow-[var(--ombre-feuille)]">
+          <div className={cx(FEUILLE, "p-5")}>
             <div className="text-[12.5px] font-medium text-ink-2">Point mort</div>
             <div className="mt-1.5 font-display text-[22px] font-bold leading-tight tabular text-ink">
               {s.moisPointMort === null ? "–" : `${decimal(s.moisPointMort, 1)} mois`}

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { voisine } from "@/components/accueil/tuiles";
 import { ChevronDown } from "@/components/icons";
-import { cx } from "@/components/ui";
+import { PANNEAU, cx } from "@/components/ui";
 import type { NavBadge, NavItem, NavSection } from "@/lib/nav";
 
 export type Pastilles = Partial<Record<NavBadge, { count: number; severe: boolean }>>;
@@ -228,7 +228,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
       }}
     >
       <nav aria-label="Rubriques" className="relative flex items-center gap-0.5">
-        <span aria-hidden className="menus-survol pointer-events-none absolute inset-y-1.5 left-0 rounded-[11px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_6px_16px_-8px_rgb(16_36_31/0.25)]" style={{ transform: `translateX(${survol?.x ?? fil?.x ?? 0}px)`, width: survol?.w ?? 0, opacity: survol ? 1 : 0 }} />
+        <span aria-hidden className="menus-survol pointer-events-none absolute inset-y-1.5 left-0 rounded-[11px] bg-panel shadow-[0_1px_2px_rgb(16_36_31/0.08),0_6px_16px_-8px_rgb(16_36_31/0.25)]" style={{ transform: `translateX(${survol?.x ?? fil?.x ?? 0}px)`, width: survol?.w ?? 0, opacity: survol ? 1 : 0 }} />
         {fil && <span aria-hidden className="menus-fil pointer-events-none absolute -bottom-[13px] left-0 h-[2.5px] rounded-full bg-[linear-gradient(90deg,#b8893a,#e6c47e,#b8893a)]" style={{ transform: `translateX(${fil.x + 12}px)`, width: Math.max(0, fil.w - 24) }} />}
         {sections.map((s) => {
           const dedans = s.label === active;
@@ -281,7 +281,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
           aria-label={section.label}
           onKeyDown={clavierPanneau}
           key={section.label}
-          className="menus-panneau absolute top-[calc(100%+14px)] z-50 rounded-[22px] border border-line bg-white p-2.5 shadow-[var(--ombre-flottante)]"
+          className={cx(PANNEAU, "menus-panneau absolute top-[calc(100%+14px)] z-50 p-1.5")}
           style={{ left: place.left, width: place.width }}
         >
           <ul className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${section.items.length <= 3 ? section.items.length : section.items.length <= 8 ? 2 : 3}, minmax(0, 1fr))` }}>
@@ -295,7 +295,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
                     href={item.href}
                     aria-current={actif ? "page" : undefined}
                     onClick={() => setOuvert(null)}
-                    className={cx("tuile group flex items-start gap-3 rounded-2xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux" : "hover:bg-[#f2f6f3] focus-visible:bg-[#f2f6f3]", joue && "joue")}
+                    className={cx("tuile group flex items-start gap-3 rounded-xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux" : "hover:bg-panel-2 focus-visible:bg-panel-2", joue && "joue")}
                     style={{ "--d-intro": `${90 + n * 30}ms` } as CSSProperties}
                   >
                     <IconeModule cle={item.href} className="h-10 w-10 flex-none transition-transform duration-300 ease-[var(--ease-ressort)] group-hover:scale-110" />

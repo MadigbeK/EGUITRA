@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
 import { AlertTriangle, BadgeCheck, Calendar, CheckCircle2, ChevronDown, Clock, Link2, MapPin, Users } from "@/components/icons";
-import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, Notice, ProgressBar, Tabs, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, ProgressBar, Tabs, Textarea, cx, type Tone } from "@/components/ui";
 import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, heure, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { BOUTON_PRINCIPAL, BlocDate, dateSimple, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
@@ -74,7 +74,7 @@ function CarteEvenement({ e, eclaire, message, onInscrire, onDesinscrire }: { e:
     <article
       id={`evenement-${e.id}`}
       className={cx(
-        "relative scroll-mt-24 overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)] transition-shadow duration-500",
+        FEUILLE, "relative scroll-mt-24 overflow-hidden transition-shadow duration-500",
         eclaire && "ring-2 ring-accent-vif ring-offset-2 ring-offset-bg",
       )}
     >

@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { ArrowRight, BookOpen, CheckCircle2, ChevronDown, FileCheck2, FileSpreadsheet, FileText, Info, Paperclip, type Icon } from "@/components/icons";
-import { cx } from "@/components/ui";
+import { FEUILLE, cx } from "@/components/ui";
 import { COULEUR } from "@/components/portail/commun";
 import type { ArticleKind, ArticleRow, CategoryRow } from "@/lib/portail-types";
 import { Lecture, Signet } from "./pictos";
@@ -29,7 +29,7 @@ export function CarteRessource({ a, rubrique, accent }: { a: ArticleRow; rubriqu
   return (
     <Link
       href={`/portail/ressources/${a.id}`}
-      className="group relative flex h-full flex-col overflow-hidden rounded-[18px] bg-panel p-5 shadow-[var(--ombre-feuille)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--ombre-levee)]"
+      className="group relative flex h-full flex-col overflow-hidden rounded-[20px] bg-panel p-5 shadow-[var(--ombre-feuille)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--ombre-levee)]"
     >
       <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: couleur?.vif ?? "var(--accent-vif)" }} />
       <span className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.08em]" style={{ color: couleur?.vif ?? "var(--accent)" }}>
@@ -63,7 +63,7 @@ export function QuestionsFrequentes({ items }: { items: ArticleRow[] }) {
   const [ouvert, setOuvert] = useState<number | null>(null);
   const base = useId();
   return (
-    <div className="divide-y divide-line overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]">
+    <div className={cx(FEUILLE, "divide-y divide-line overflow-hidden")}>
       {items.map((a) => {
         const open = ouvert === a.id;
         const zone = `${base}-q${a.id}`;

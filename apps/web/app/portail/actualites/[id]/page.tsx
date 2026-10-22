@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Flag, ShieldCheck } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, Loading, cx } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, FEUILLE, Loading, cx } from "@/components/ui";
 import { TexteRiche, dateLongue, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { LienAction, NATURE, Retour, dateSimple, natureLien } from "@/components/portail/cabinet-porteur/briques";
@@ -67,7 +67,7 @@ export default function Actualite() {
       <Retour href="/portail/actualites">Toutes les actualités</Retour>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <article className="min-w-0 overflow-hidden rounded-[22px] bg-panel shadow-[var(--ombre-feuille)]">
+        <article className={cx(FEUILLE, "min-w-0 overflow-hidden")}>
           <div aria-hidden className="h-1.5" style={{ background: n.trait }} />
           <div className="px-5 pb-8 pt-6 sm:px-10 sm:pt-9">
             <div className="flex flex-wrap items-center gap-2">

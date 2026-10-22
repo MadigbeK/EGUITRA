@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RotateCcw, Sparkles } from "@/components/icons";
-import { Anneau, Button, Card, ErrorBox, Valeur, cx } from "@/components/ui";
+import { Anneau, Button, Card, ErrorBox, FEUILLE, Valeur, cx } from "@/components/ui";
 import { Cascade, Eventail } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, moisCourt, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
@@ -96,7 +96,7 @@ function Atterrissage({ titre, cible }: { titre: string; cible: Landing }) {
   const ecart = cible.budget ? ((cible.estimate - cible.budget) / cible.budget) * 100 : null;
   const p = cible.probability_pct === null ? null : Math.round(cible.probability_pct);
   return (
-    <div className="an-carte flex items-center gap-4 rounded-2xl border border-line bg-panel px-4 py-3.5 shadow-[var(--ombre-carte)]">
+    <div className={cx(FEUILLE, "an-carte flex items-center gap-4 px-4 py-3.5")}>
       {p !== null ? <Anneau value={p} taille={84} epaisseur={9} couleur={p >= 60 ? "var(--g-jade)" : p >= 35 ? "var(--warn-vif)" : "var(--danger-vif)"} sous="budget" /> : <Anneau value={null} taille={84} epaisseur={9} centre="–" sous="budget" />}
       <div className="min-w-0">
         <div className="text-[12.5px] font-medium text-muted">{titre} : atterrissage</div>

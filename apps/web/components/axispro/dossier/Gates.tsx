@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, FileCheck2, Flag, ShieldAlert } from "@/components/icons";
-import { Badge, Button, Card, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, FEUILLE, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend } from "@/lib/api-client";
 import { pluriel } from "@/lib/format";
 import { GATE_DECISION, HYPOTHESES, YES_NO, type DossierDetail } from "@/lib/axispro-types";
@@ -67,7 +67,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
           const dec = GATE_DECISION[g.decision];
           const hyp = HYPOTHESES.filter((h) => h.gate === g.code);
           return (
-            <section key={g.code} className={cx("rounded-2xl border bg-panel p-4 shadow-[var(--ombre-carte)]", i === courant ? "border-accent/50 ring-2 ring-accent/15" : "border-line")}>
+            <section key={g.code} className={cx(FEUILLE, "p-4", i === courant && "ring-2 ring-accent/40")}>
               <header className="flex flex-wrap items-center gap-2">
                 <span className="n-degrade grid h-8 min-w-8 place-items-center rounded-full px-2 text-[12.5px] font-bold text-white">{g.code}</span>
                 <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{g.name}</h3>

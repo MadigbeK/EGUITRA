@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Building2, Calendar, ChevronDown, Clock, MapPin, Plus, Smartphone, Trash2, Users, Wifi, type Icon } from "@/components/icons";
-import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
 import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { LienBouton, PasDeDossier, majuscule, messageErreur, useRetour } from "@/components/portail/projet/outils";
@@ -48,7 +48,7 @@ function CarteAVenir({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean; o
   const d = new Date(m.start!);
   const I = ICONE_MODE[m.mode];
   return (
-    <article className="overflow-hidden rounded-2xl border border-line bg-panel shadow-[var(--ombre-feuille)]">
+    <article className={cx(FEUILLE, "overflow-hidden")}>
       <div className="flex flex-col sm:flex-row">
         <div className="n-degrade flex items-center gap-4 px-5 py-4 text-white sm:w-44 sm:flex-none sm:flex-col sm:justify-center sm:gap-1 sm:py-6 sm:text-center">
           <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80">{d.toLocaleDateString("fr-FR", { weekday: "long" })}</span>

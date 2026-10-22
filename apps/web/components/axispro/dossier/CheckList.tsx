@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, Users, X } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, FEUILLE, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -187,7 +187,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
         const ferme = fermes.has(dom.domain_id);
         const tete = rows[0];
         return (
-          <section key={dom.domain_id} className="rounded-2xl border border-line bg-panel shadow-[var(--ombre-carte)]">
+          <section key={dom.domain_id} className={FEUILLE}>
             <button
               type="button"
               aria-expanded={!ferme}

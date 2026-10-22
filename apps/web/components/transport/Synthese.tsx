@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, Droplet, Percent, Receipt, Smartphone, TrendingUp, TriangleAlert } from "@/components/icons";
-import { Card, Compteur, Etat, IconTile, Kpi, Repartition } from "@/components/ui";
+import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
@@ -15,7 +15,7 @@ export function Synthese() {
       {!summary ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
           {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne ; l'état de la flotte dessous. */}
-          <section className="min-w-0 rounded-2xl border border-line bg-panel p-6 shadow-[var(--ombre-carte)] xl:col-span-5">
+          <section className={cx(FEUILLE, "min-w-0 p-6 xl:col-span-5")}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-[16.5px] font-semibold text-ink">Volume livré ce mois</h2>

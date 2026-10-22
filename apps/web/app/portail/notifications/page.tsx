@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Bell, CheckCheck, ChevronRight } from "@/components/icons";
-import { Button, Card, Empty, ErrorBox, Loading, Segmented, cx } from "@/components/ui";
+import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx } from "@/components/ui";
 import { EnTete, KIND_ICON, heure } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { cleDate, depuisCle, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
@@ -112,7 +112,7 @@ export default function NotificationsPage() {
           {groupes.map((g) => (
             <section key={g.cle} aria-labelledby={`jour-${g.cle}`}>
               <h2 id={`jour-${g.cle}`} className="mb-2 px-1 text-[12.5px] font-bold uppercase tracking-[0.1em] text-muted">{titreJour(g.cle)}</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]">
+              <ul className={cx(FEUILLE, "divide-y divide-line overflow-hidden")}>
                 {g.items.map((n) => {
                   const I = KIND_ICON[n.kind] ?? Bell;
                   return (

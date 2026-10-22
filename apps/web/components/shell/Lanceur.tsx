@@ -6,7 +6,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { rayonsDe, voisine } from "@/components/accueil/tuiles";
 import { ChevronRight } from "@/components/icons";
-import { cx, useMouvementReduit } from "@/components/ui";
+import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import type { AppCode } from "@/lib/config";
 import type { Me } from "@/lib/types";
 
@@ -176,7 +176,8 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
           aria-label="Applications NIMOVA"
           onKeyDown={naviguer}
           className={cx(
-            "lanceur fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-84px)] flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-[var(--ombre-flottante)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[372px]",
+            PANNEAU,
+            "lanceur fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-84px)] flex-col overflow-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[372px]",
             etat === "sortie" && "lanceur-sortie",
           )}
         >
@@ -199,7 +200,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
                           onClick={() => fermer(false)}
                           className={cx(
                             "tuile group relative flex flex-col items-center gap-1.5 rounded-xl px-1 pb-2.5 pt-3 text-center outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent",
-                            actif ? "bg-accent-doux" : "hover:bg-[#f1f6f3] focus-visible:bg-[#f1f6f3]",
+                            actif ? "bg-accent-doux" : "hover:bg-panel-2 focus-visible:bg-panel-2",
                             joue && "joue",
                           )}
                           style={{ "--d-intro": `${140 + n * 26}ms` } as CSSProperties}
@@ -215,8 +216,8 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
               </section>
             ))}
           </div>
-          <div className="lanceur-pied border-t border-line bg-[#fafcfa] p-2">
-            <Link href="/accueil" onClick={versAccueil} className="group flex items-center gap-3 rounded-xl px-2.5 py-2 outline-none transition-colors hover:bg-[#f1f6f3] focus-visible:ring-2 focus-visible:ring-accent">
+          <div className="lanceur-pied border-t border-line bg-panel-2 p-2">
+            <Link href="/accueil" onClick={versAccueil} className="group flex items-center gap-3 rounded-xl px-2.5 py-2 outline-none transition-colors hover:bg-panel-3 focus-visible:ring-2 focus-visible:ring-accent">
               <span className="gaufre grid h-9 w-9 flex-none place-items-center rounded-[10px] border border-line bg-[linear-gradient(135deg,#eaf4ef,#f8f4ea)] text-accent">
                 <Gaufre className="h-4 w-4" />
               </span>

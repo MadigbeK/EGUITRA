@@ -200,11 +200,21 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-/** Feuille blanche posée sur le fond : un liseré à peine visible et une ombre portée basse. */
+/**
+ * Feuille : la surface commune des blocs posés sur le fond, rayon 20 px, liseré à peine visible et
+ * ombre portée basse (le liseré est dans l'ombre, sans bordure). Card la porte ; un bloc qui n'est
+ * pas une carte (lien, tuile, colonne) prend ces classes.
+ */
+export const FEUILLE = "rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]";
+
+/** Panneau flottant : menus, sélecteurs, notifications et fenêtres posés au-dessus de la page. */
+export const PANNEAU = "rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)]";
+
+/** Feuille posée sur le fond, avec un titre et des actions facultatifs. */
 export function Card({ title, actions, children, className, padded = true }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; padded?: boolean }) {
   const head = Boolean(title || actions);
   return (
-    <section className={cx("min-w-0 rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]", className)}>
+    <section className={cx("min-w-0", FEUILLE, className)}>
       {head && (
         <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-6 pb-1 pt-5">
           {title && <h2 className="font-display text-[17px] font-[620] leading-snug tracking-[-0.01em] text-ink">{title}</h2>}
@@ -263,7 +273,7 @@ function Sceau({ tone }: { tone: Tone }) {
  */
 export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; icon?: Icon; teinte?: Teinte; delta?: number | null; inverse?: boolean }) {
   return (
-    <div className="n-kpi kpi relative isolate min-w-0 overflow-hidden rounded-[20px] bg-panel px-5 pb-4 pt-4 shadow-[var(--ombre-feuille)]">
+    <div className={cx(FEUILLE, "n-kpi kpi relative isolate min-w-0 overflow-hidden px-5 pb-4 pt-4")}>
       <Ondes graine={label} className={cx("kpi-ondes pointer-events-none absolute -bottom-2 right-0 -z-10 h-[74px] w-[78%] max-w-[300px]", ENCRE[tone])} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 text-[13px] font-medium leading-snug text-ink-2">{label}</div>
@@ -755,7 +765,7 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
   if (!open) return null;
   return (
     <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
-      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx("n-surgir w-full rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)] outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
+      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
           <h2 id={titreId} className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="-mr-1 grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-panel-3 hover:text-ink" aria-label="Fermer">

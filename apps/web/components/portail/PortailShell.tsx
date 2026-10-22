@@ -8,7 +8,7 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
-import { ErrorBox, cx } from "@/components/ui";
+import { ErrorBox, FEUILLE, PANNEAU, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
@@ -150,7 +150,7 @@ function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined
         type="button"
         onClick={() => plusieurs && setOpen((v) => !v)}
         aria-expanded={plusieurs ? open : undefined}
-        className={cx("w-full rounded-2xl border border-line bg-panel p-3 text-left shadow-[var(--ombre-feuille)]", plusieurs && "hover:border-line-strong")}
+        className={cx(FEUILLE, "w-full p-3 text-left", plusieurs && "hover:ring-1 hover:ring-line-strong")}
       >
         <div className="flex items-center gap-2">
           <span className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">{dossier.reference}</span>
@@ -161,7 +161,7 @@ function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined
         {dossier.current_gate && <div className="mt-0.5 truncate text-[12px] text-muted">{dossier.current_gate.name}</div>}
       </button>
       {open && plusieurs && (
-        <ul className="n-surgir absolute inset-x-0 top-full z-40 mt-2 space-y-0.5 rounded-2xl border border-line bg-panel p-1.5 shadow-[var(--ombre-flottante)]">
+        <ul className={cx(PANNEAU, "n-surgir absolute inset-x-0 top-full z-40 mt-2 space-y-0.5 p-1.5")}>
           {espace!.dossiers.map((d) => (
             <li key={d.id}>
               <button type="button" onClick={() => { choisir(d.id); setOpen(false); }} className={cx("flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left hover:bg-panel-2", d.id === dossier.id && "bg-panel-2")}>
@@ -234,7 +234,7 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
         {count > 0 && <span className="absolute right-1.5 top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[10.5px] font-bold text-white ring-2 ring-bg">{count > 9 ? "9+" : count}</span>}
       </button>
       {open && (
-        <div id={id} className="n-surgir absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)] rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)]">
+        <div id={id} className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)]")}>
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-sm font-semibold">Notifications</span>
             {count > 0 && <button type="button" onClick={() => lire()} className="text-[12.5px] font-semibold text-accent hover:underline">Tout marquer comme lu</button>}
@@ -305,7 +305,7 @@ function Compte({ me, entreprise, onLogout }: { me: Me; entreprise: string | nul
         <span className="sr-only">Compte de {me.name}</span>
       </button>
       {open && (
-        <div className="n-surgir absolute right-0 top-full z-50 mt-2 w-60 rounded-2xl border border-line bg-panel p-1.5 shadow-[var(--ombre-flottante)]">
+        <div className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-60 p-1.5")}>
           <div className="px-3 pb-2 pt-1.5">
             <div className="truncate text-sm font-semibold">{me.name}</div>
             <div className="truncate text-[12px] text-muted">{me.login}</div>

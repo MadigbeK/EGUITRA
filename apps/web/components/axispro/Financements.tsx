@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Calendar, Coins, HandCoins, Landmark, Plus, Target, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { FUNDING_STATE, INSTRUMENTS, type Funding, type FundingState } from "@/lib/axispro-types";
@@ -118,7 +118,7 @@ function Pipeline({ data }: { data: Funding[] }) {
               </header>
               <div className="space-y-2">
                 {items.map((f) => (
-                  <Link key={f.id} href={f.dossier ? `/axispro/dossiers/${f.dossier.id}` : "#"} className="n-levable block rounded-xl border border-line bg-panel p-2.5 text-[12.5px] shadow-[var(--ombre-carte)]">
+                  <Link key={f.id} href={f.dossier ? `/axispro/dossiers/${f.dossier.id}` : "#"} className={cx(FEUILLE, "n-levable block p-2.5 text-[12.5px]")}>
                     <div className="font-semibold text-ink">{f.funder.name}</div>
                     <div className="truncate text-muted">{f.dossier ? `${f.dossier.reference} ${f.dossier.name}` : ""}</div>
                     <div className="mt-1 flex justify-between tabular">

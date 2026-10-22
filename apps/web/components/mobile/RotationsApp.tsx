@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monogramme } from "@/components/brand";
 import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
-import { Badge, Button, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
 import { fmtDate, fmtDec, pluriel } from "@/lib/format";
@@ -339,7 +339,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           refs === null ? <Notice tone="warn">Les listes (camions, clients, routes) ne sont pas encore sur ce téléphone. Ouvrez l&apos;application une première fois avec du réseau.</Notice> : (
             <div className="space-y-4">
               {form.uuid && <Notice tone="accent">Correction d&apos;une saisie en attente.</Notice>}
-              <section className="space-y-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+              <section className={cx(FEUILLE, "space-y-4 p-4")}>
                 <Field label="Date de chargement"><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
                 <Field label="Ensemble routier">
                   <Select className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
@@ -356,7 +356,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 </div>
               </section>
 
-              <section className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+              <section className={cx(FEUILLE, "grid grid-cols-2 gap-3 p-4")}>
                 <Field label="Volume chargé (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide" inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
                 <Field label="Volume livré (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide placeholder:font-sans placeholder:text-sm placeholder:font-normal" inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
                 {(refs.measures ?? []).map((m) => (
@@ -364,7 +364,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 ))}
               </section>
 
-              <section className="rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+              <section className={cx(FEUILLE, "p-4")}>
                 <button type="button" aria-expanded={showCosts} className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px] font-medium text-ink" onClick={() => setShowCosts(!showCosts)}>
                   Frais de route
                   <span className="text-right text-[13px] font-normal text-muted">{showCosts ? "Masquer" : "Carburant, péages, frais de route…"}</span>
@@ -395,7 +395,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
             </div>
             {mine.length === 0 && <p className="py-8 text-center text-sm text-muted">Toutes vos saisies ont été transmises.</p>}
             {mine.map((item) => (
-              <div key={item.client_uuid} className={cx("n-surgir rounded-2xl border bg-panel p-4 text-sm shadow-[var(--ombre-carte)]", item.status === "error" ? "border-danger/40" : "border-line")}>
+              <div key={item.client_uuid} className={cx(FEUILLE, "n-surgir p-4 text-sm", item.status === "error" && "ring-1 ring-danger/40")}>
                 <div className="flex items-start justify-between gap-3">
                   <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
                     <Truck className="h-5 w-5" />
@@ -422,7 +422,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           <div className="space-y-2">
             {!online && <Notice tone="warn">Hors réseau : dernière liste connue.</Notice>}
             {sent === null ? <p role="status" className="py-8 text-center text-sm text-muted">Chargement des rotations…</p> : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : (
-              <ul className="divide-y divide-line rounded-2xl border border-line bg-panel px-4 shadow-[var(--ombre-carte)]">
+              <ul className={cx(FEUILLE, "divide-y divide-line px-4")}>
                 {sent.map((r) => (
                   <li key={r.id} className="flex items-start justify-between gap-3 py-3.5 text-sm">
                     <div className="min-w-0">

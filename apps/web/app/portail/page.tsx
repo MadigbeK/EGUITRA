@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Calculator, Clock, FileUp, HandCoins, Mail, Sparkles } from "@/components/icons";
-import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, Loading, cx, type Tone } from "@/components/ui";
+import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, type Tone } from "@/components/ui";
 import { KIND_ICON, dateLongue, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { useApi } from "@/lib/api-client";
@@ -89,7 +89,7 @@ export default function AccueilPortail() {
         {raccourcis.map((r) => {
           const I = r.icon;
           return (
-            <Link key={r.href} href={r.href} className="group flex items-center gap-3 rounded-2xl border border-line bg-panel px-4 py-3.5 shadow-[var(--ombre-feuille)] transition-[transform,border-color] hover:-translate-y-0.5 hover:border-accent-vif/40">
+            <Link key={r.href} href={r.href} className={cx(FEUILLE, "group flex items-center gap-3 px-4 py-3.5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:ring-1 hover:ring-accent-vif/40")}>
               <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent transition-colors group-hover:bg-accent group-hover:text-white"><I className="h-5 w-5" /></span>
               <span className="text-[13.5px] font-semibold leading-snug text-ink">{r.label}</span>
             </Link>

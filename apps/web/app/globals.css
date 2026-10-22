@@ -1251,10 +1251,10 @@ input[type="radio"] {
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.97);
-    clip-path: inset(0 0 60% 0 round 22px);
+    clip-path: inset(0 0 60% 0 round 18px);
   }
   to {
-    clip-path: inset(0 0 0 0 round 22px);
+    clip-path: inset(0 0 0 0 round 18px);
   }
 }
 .menus-item {

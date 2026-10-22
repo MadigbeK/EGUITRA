@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Gavel, Lock } from "@/components/icons";
-import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, Loading, PageHeader, cx } from "@/components/ui";
+import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, FEUILLE, Loading, PageHeader, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { RECO, type DossierSummary, type Review } from "@/lib/axispro-types";
 import { couleurScore, note } from "@/components/axispro/dossier/commun";
@@ -27,7 +27,7 @@ export default function ComitesPage() {
           ) : (
             <div className="n-cascade grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               {agenda.map((d) => (
-                <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className="n-levable flex items-center gap-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+                <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className={cx(FEUILLE, "n-levable flex items-center gap-4 p-4")}>
                   <Anneau value={d.progress.assessed ? note(d.readiness) : null} taille={72} epaisseur={10} couleur={couleurScore(d.readiness)} sous="Readiness" />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">

@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, TriangleAlert, type Icon } from "@/components/icons";
-import { Badge, Button, Delta, Empty, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
+import { Badge, Button, Delta, Empty, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import type { EntiteSociete } from "@/lib/config";
@@ -559,7 +559,7 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
   const metric = insight.metric && insight.metric.value !== null ? insight.metric : null;
   const impact = nombre(insight.impact_gnf);
   return (
-    <article className={cx("an-carte n-levable relative flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]", compact ? "p-4" : "p-5")} style={{ "--i": rang ?? 0 } as CSSProperties}>
+    <article className={cx(FEUILLE, "an-carte n-levable relative flex min-w-0 flex-col overflow-hidden", compact ? "p-4" : "p-5")} style={{ "--i": rang ?? 0 } as CSSProperties}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={g.tone}>{g.label}</Badge>
@@ -667,7 +667,7 @@ export function KpiContrat({ kpi, icon, teinte }: { kpi: Kpi; icon?: Icon; teint
   const tendance = nombres(kpi.trend);
   const statut = STATUT[kpi.status] ?? "neutral";
   return (
-    <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && "kpi-avec-tendance overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]")}>
+    <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
       <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} icon={icon} teinte={teinte} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
         <div className="px-5 pb-3">
