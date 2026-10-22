@@ -57,7 +57,8 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const { agir, bandeau } = useRetour();
   // Évaluation figée : décision verrouillée, ou profil sans écriture (PATCH /axispro/evaluations/<id>,
   // preuves, import de fiche et validité des pièces : profil cabinet seul ; la direction et
-  // l'administration lisent).
+  // l'administration lisent). Ligne par ligne, s'y ajoute le compartiment confié à un autre consultant
+  // (editable_by_me de GET /axispro/dossiers/<id>/criteria) : la ligne est alors figée et le dit.
   const verrou = d.locked || !cabinet;
   const gateIndex = new Map(d.gates.map((g, i) => [g.code, i]));
   const courant = d.current_gate ? (gateIndex.get(d.current_gate.code) ?? 0) : 0;
@@ -221,7 +222,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
             {!ferme && (
               <ul className="divide-y divide-line border-t border-line">
                 {rows.map((c) => (
-                  <Critere key={c.id} c={c} files={files} verrou={verrou} ouvert={ouvert === c.id} onToggle={() => setOuvert(ouvert === c.id ? null : c.id)} onSave={(p) => save(c, p)} onDeposer={(f, v) => deposer(c, f, v)} onValidite={async (docId, v) => { await agir(() => apiSend("PATCH", `/axispro/documents/${docId}`, { validity_date: v || null })); void mutate(); onChanged(); }} />
+                  <Critere key={c.id} c={c} files={files} verrou={verrou || !c.editable_by_me} ouvert={ouvert === c.id} onToggle={() => setOuvert(ouvert === c.id ? null : c.id)} onSave={(p) => save(c, p)} onDeposer={(f, v) => deposer(c, f, v)} onValidite={async (docId, v) => { await agir(() => apiSend("PATCH", `/axispro/documents/${docId}`, { validity_date: v || null })); void mutate(); onChanged(); }} />
                 ))}
               </ul>
             )}
@@ -295,6 +296,12 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
             {c.documents.length > 0 && <Badge tone="ok">{c.documents.length} preuve{c.documents.length > 1 ? "s" : ""}</Badge>}
             {c.priority !== null && <span className="text-[11.5px] font-semibold text-muted">priorité {arrondi(c.priority, 2)}</span>}
           </div>
+          {/* Ligne figée : seul le consultant à qui le compartiment est confié (ou le responsable du dossier) l'évalue. */}
+          {!c.editable_by_me && c.owner && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-panel-2 px-2.5 py-1 text-[12px] text-muted">
+              <Users className="h-3.5 w-3.5" /> Compartiment confié à {c.owner}
+            </div>
+          )}
         </div>
         <div role="group" aria-label={`Statut du critère ${c.code}`} className="flex flex-wrap gap-1.5">
           {ORDRE.map((value) => {

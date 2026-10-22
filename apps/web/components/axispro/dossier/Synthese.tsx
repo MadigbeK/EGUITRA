@@ -190,13 +190,16 @@ function initiales(nom: string) {
 /**
  * Suivi par compartiment : chaque bloc d'expertise de la grille (domaines regroupés) avec son score sur
  * 100, ses manques à traiter, ses études renseignées, ses knock-outs actifs et le consultant à qui il est
- * confié. Le cabinet affecte ou retire un consultant sur place ; la direction et l'administration lisent.
+ * confié. Le responsable du dossier (can_assign) affecte, reprend ou retire un consultant sur place ; un
+ * autre consultant du cabinet ne peut que prendre en charge un compartiment libre (POST
+ * /axispro/dossiers/<id>/assignments avec son propre identifiant) ; la direction et l'administration lisent.
  * Rien ne s'affiche pour une grille sans compartiments.
  */
 function SuiviCompartiments({ d }: { d: DossierDetail }) {
   const compartiments = d.scoring.compartments ?? [];
-  const { cabinet } = useCabinet();
-  const { data: consultants } = useApi<UserRef[]>(cabinet && compartiments.length ? "/axispro/consultants" : null);
+  const { cabinet, moi } = useCabinet();
+  const affecte = cabinet && d.can_assign;
+  const { data: consultants } = useApi<UserRef[]>(affecte && compartiments.length ? "/axispro/consultants" : null);
   const { mutate } = useSWRConfig();
   const { agir, bandeau } = useRetour();
   const [enCours, setEnCours] = useState<number | null>(null);
@@ -205,11 +208,11 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
 
   async function confier(c: CompartmentScore, valeur: string) {
     const userId = valeur ? Number(valeur) : null;
-    const nom = consultants?.find((u) => u.id === userId)?.name;
+    const nom = userId === moi?.id ? moi.name : consultants?.find((u) => u.id === userId)?.name;
     setEnCours(c.compartment_id);
     const r = await agir(
       () => apiSend<{ status: string; compartments: CompartmentScore[] }>("POST", `/axispro/dossiers/${d.id}/assignments`, { compartment_id: c.compartment_id, user_id: userId }),
-      userId ? `Compartiment ${c.code} confié à ${nom ?? "ce consultant"}.` : `Compartiment ${c.code} sans consultant affecté.`,
+      userId ? (affecte ? `Compartiment ${c.code} confié à ${nom ?? "ce consultant"}.` : `Compartiment ${c.code} pris en charge : vous en évaluez les critères.`) : `Compartiment ${c.code} sans consultant affecté.`,
     );
     setEnCours(null);
     // Le dossier en cache prend la nouvelle équipe sans être rechargé : seule l'affectation change.
@@ -251,7 +254,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
                 <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "bg-accent text-white" : "border border-dashed border-line-strong text-muted")}>
                   {c.owner ? initiales(c.owner.name) : "?"}
                 </span>
-                {cabinet ? (
+                {affecte ? (
                   <Select
                     aria-label={`Consultant du compartiment ${c.code}`}
                     className="min-h-8 min-w-0 flex-1 py-1 pl-2 text-[12.5px]"
@@ -262,7 +265,14 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
                     options={options.map((u) => ({ value: u.id, label: u.name }))}
                   />
                 ) : (
-                  <span className={cx("min-w-0 truncate text-[12.5px]", c.owner ? "font-medium text-ink" : "italic text-muted")}>{c.owner?.name ?? "Non affecté"}</span>
+                  <>
+                    <span className={cx("min-w-0 flex-1 truncate text-[12.5px]", c.owner ? "font-medium text-ink" : "italic text-muted")}>{c.owner?.name ?? "Non affecté"}</span>
+                    {cabinet && moi && !c.owner && (
+                      <Button size="sm" loading={enCours === c.compartment_id} onClick={() => void confier(c, String(moi.id))}>
+                        Prendre en charge
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </li>

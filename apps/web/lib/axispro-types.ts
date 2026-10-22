@@ -81,7 +81,11 @@ export interface DossierSummary {
   name: string;
   state: "open" | "on_hold" | "closed";
   promoter: { id: number; name: string };
+  /** Responsable du dossier : il confie, reprend ou retire les compartiments. */
   consultant: string | null;
+  consultant_id: number | null;
+  /** L'utilisateur confie les compartiments à un autre consultant ; sinon il ne peut que s'attribuer un compartiment libre. */
+  can_assign: boolean;
   sector: string | null;
   location: string | null;
   investment: number;
@@ -263,6 +267,9 @@ export interface CriterionEval {
   compartment_name: string | null;
   /** Consultant à qui le compartiment est confié dans ce dossier. */
   owner: string | null;
+  /** L'utilisateur peut évaluer ce critère au regard des compartiments (consultant affecté, compartiment
+   * libre ou responsable du dossier) ; le verrou du comité se lit dans `locked` du dossier. */
+  editable_by_me: boolean;
   gate_id: number;
   gate: string;
   weight: number;
