@@ -48,6 +48,7 @@ COMPTES = [
     ("test.dg", "Test - Direction générale", ["direction"], ["groupe", "cabinet"]),
     ("test.daf", "Test - Responsable financier", ["finance"], ["groupe", "cabinet"]),
     ("test.comptable", "Test - Comptable", ["finance"], ["groupe", "cabinet"]),
+    ("test.achats", "Test - Acheteur", ["achats"], ["groupe", "cabinet"]),
     ("test.exploitation", "Test - Responsable exploitation transport", ["exploitation"], ["groupe"]),
     ("test.parc", "Test - Agent de parc", ["exploitation"], ["groupe"]),
     ("test.chantiers", "Test - Conducteur de travaux", ["chantiers"], ["groupe"]),
