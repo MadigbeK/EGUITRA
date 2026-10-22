@@ -14,7 +14,7 @@ export default async function Page() {
   if (accueil !== "/rh") redirect(accueil);
   return (
     <div>
-      <PageHeader title="Ressources humaines" subtitle="Effectif, échéances à traiter, absences, masse salariale et paie du mois de la société de travail." />
+      <PageHeader title="Ressources humaines" subtitle="Effectif, échéances à traiter, absences, masse salariale et paie du mois des deux sociétés." />
       <TableauDeBordRh />
     </div>
   );
