@@ -277,7 +277,12 @@ AA), cohérence visuelle, revue des écrans sur la maquette. Corrigé :
   rien ne la faisait apparaître), noms d'étape de l'entonnoir AxisPro sur deux lignes, constats de
   l'Analyse en feuille (sans liseré, pastille ni étincelle), libellés en casse normale, page
   d'erreur en « Erreur » avec le bouton commun.
-- Code mort : quatre animations et douze icônes inutilisées.
+- Code mort : quatre animations et douze icônes inutilisées. À la fusion (cd92bc2 sur
+  `claude/bold-shannon-gpg2hv`), la session fonctionnelle a gardé les icônes, dont la nouvelle
+  application Transport a besoin, et reporté les retouches sur les écrans qu'elle a restructurés
+  (`components/finance/TableauDeBord.tsx`, `components/transport/Rotations.tsx` et `Synthese.tsx`).
+  Le portail réécrit et le plan d'actions AxisPro reçoivent les leurs de leurs sessions. Recette en
+  cours de reconstruction ; production sur confirmation du gérant.
 - `CHARTE.md` mise à jour (logo le pli, Funnel, page de connexion, arbitrages en attente).
 
 ## Reste à faire
