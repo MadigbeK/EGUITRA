@@ -40,7 +40,8 @@ LOG=$(mktemp)
 # modèles suivis au moment où leurs règles sont posées ; installés et testés dans le même processus,
 # les surcharges des modules chargés ensuite seraient court-circuitées. En production, le noyau est
 # redémarré après chaque installation (infra/README.md) ; les tests reproduisent cet état.
-"${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -i "$MODS" --stop-after-init --workers 0 \
+# -u en plus de -i : la liste des modules est relue, un module nouveau (absent de la base modèle) s'installe.
+"${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -i "$MODS" -u "$MODS" --stop-after-init --workers 0 \
   --log-level=info > "$LOG" 2>&1 || true
 "${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -u "$MODS" --test-enable --test-tags "${TAGS%,}" \
   --stop-after-init --workers 0 --log-level=test 2>&1 | tee -a "$LOG" | grep -E " (ERROR|CRITICAL) |FAIL|Ran |tests? in " || true
