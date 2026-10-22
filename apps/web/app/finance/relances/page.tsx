@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Mail, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Kpi, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
 interface Reminder {
@@ -109,7 +109,7 @@ function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailS
       footer={data?.state === "to_send" && (
         <>
           <Button variant="ghost" onClick={() => act(`/finance/reminders/${id}/cancel`)}>Annuler la relance</Button>
-          <Button onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimer</Button>
+          <Button onClick={() => void apiDownload(`/finance/reminders/${id}/pdf`, `Relance-${data.partner.name}.pdf`)}><Printer className="h-4 w-4" /> Lettre en PDF</Button>
           <Button onClick={() => act(`/finance/reminders/${id}/send`, { channel: "letter" })}>Marquer remise par courrier</Button>
           {mailServer && data.email && <Button variant="primary" onClick={() => act(`/finance/reminders/${id}/send`, { channel: "email" })}><Mail className="h-4 w-4" /> Envoyer à {data.email}</Button>}
         </>

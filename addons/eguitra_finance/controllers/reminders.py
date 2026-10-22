@@ -1,7 +1,7 @@
 """Relances des clients : file d'envoi, lettres, envoi par courriel ou courrier."""
 
 from odoo import http
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json
 
@@ -44,6 +44,16 @@ class EguitraFinanceReminders(http.Controller):
     def letter(self, reminder_id, **_kw):
         reminder = _reminder(reminder_id)
         return dict(_row(reminder), letter=reminder.letter())
+
+    @api_route("/finance/reminders/<int:reminder_id>/pdf", profiles=FIN_READ)
+    def letter_pdf(self, reminder_id, **_kw):
+        """Lettre de relance en PDF, à la mise en page de la société, pour l'envoi par courrier."""
+        reminder = _reminder(reminder_id)
+        return request.make_response(reminder.pdf(), headers=[
+            ("Content-Type", "application/pdf"),
+            ("Content-Disposition", content_disposition(f"Relance-{reminder.partner_id.name}-{reminder.date:%Y-%m-%d}.pdf")),
+            ("Cache-Control", "no-store"),
+        ])
 
     @api_route("/finance/reminders/<int:reminder_id>/send", methods=("POST",), profiles=FIN_WRITE)
     def send(self, reminder_id, **_kw):

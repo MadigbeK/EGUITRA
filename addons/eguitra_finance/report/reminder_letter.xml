@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Lettre de relance : mise en page de la société (logo, couleurs du document, coordonnées), la même
+         qu'aux factures ; jointe au courriel de relance et téléchargée pour l'envoi par courrier. -->
+    <record id="action_report_reminder" model="ir.actions.report">
+        <field name="name">Lettre de relance</field>
+        <field name="model">eguitra.reminder</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_finance.report_reminder</field>
+        <field name="report_file">eguitra_finance.report_reminder</field>
+        <field name="print_report_name">'Relance %s %s' % (object.partner_id.name, object.date.strftime('%d-%m-%Y'))</field>
+    </record>
+
+    <template id="report_reminder">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <t t-set="lettre" t-value="o.letter()"/>
+                    <t t-set="couleur" t-value="o.company_id.primary_color or '#373737'"/>
+                    <div class="page">
+                        <p class="text-end">Conakry, le <t t-esc="lettre['date'].strftime('%d/%m/%Y')"/></p>
+                        <p class="text-end mb-4"><strong t-esc="lettre['partner']"/></p>
+                        <p><strong>Objet : <t t-esc="lettre['subject']"/></strong></p>
+                        <p>Madame, Monsieur,</p>
+                        <p t-esc="lettre['intro']"/>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr t-attf-style="background-color: {{couleur}}; color: #ffffff;">
+                                    <th>Facture</th><th>Date</th><th>Échéance</th>
+                                    <th class="text-end">Montant TTC</th><th class="text-end">Reste dû</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="lettre['invoices']" t-as="f">
+                                    <td t-esc="f['name']"/>
+                                    <td t-esc="f['date'] and f['date'].strftime('%d/%m/%Y') or ''"/>
+                                    <td t-esc="f['due'] and f['due'].strftime('%d/%m/%Y') or ''"/>
+                                    <td class="text-end" t-esc="o._montant(f['total'])"/>
+                                    <td class="text-end" t-esc="o._montant(f['residual'])"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p>Total échu : <strong t-attf-style="color: {{couleur}};" t-esc="o._montant(lettre['amount_due'])"/></p>
+                        <p t-esc="lettre['closing']"/>
+                        <p>Veuillez agréer, Madame, Monsieur, nos salutations distinguées.</p>
+                        <p class="mt-5">La Direction financière<br/><t t-esc="lettre['company']"/></p>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

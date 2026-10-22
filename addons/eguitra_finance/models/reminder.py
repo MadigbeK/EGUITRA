@@ -8,6 +8,8 @@ Les deux premiers niveaux partent seuls par courriel si le client a une adresse 
 d'envoi est paramétré ; la mise en demeure attend toujours la décision de la finance.
 """
 
+import base64
+
 from markupsafe import Markup, escape
 
 from odoo import api, fields, models
@@ -118,6 +120,17 @@ class EguitraReminder(models.Model):
             for reminder in reminders.filtered(lambda r: r.level in AUTO_SEND_LEVELS and r.partner_id.email):
                 reminder.action_send("email")
 
+    def _montant(self, amount):
+        """Montant en GNF, pour la lettre en PDF."""
+        return _gnf(amount)
+
+    def pdf(self):
+        """Lettre de relance en PDF, à la mise en page de la société (logo et couleurs de ses documents)."""
+        self.ensure_one()
+        content, _type = self.env["ir.actions.report"].sudo()._render_qweb_pdf(
+            "eguitra_finance.action_report_reminder", self.ids)
+        return content
+
     def letter(self):
         """Texte de la lettre de relance (repris par l'impression et le courriel)."""
         self.ensure_one()
@@ -163,19 +176,37 @@ class EguitraReminder(models.Model):
                 if not self.env["ir.mail_server"].sudo().search_count([]):
                     raise UserError("Aucun serveur d'envoi de courriel n'est paramétré : imprimez la lettre.")
                 data = reminder.letter()
+                # Couleur des documents de la société (charte d'EGUITRA GROUP : vert empire) ; la lettre
+                # en PDF, jointe, porte le logo (les images d'un courriel sont souvent bloquées).
+                couleur = reminder.company_id.primary_color or "#373737"
                 rows = Markup("").join(
-                    Markup("<tr><td>{}</td><td>{}</td><td style='text-align:right'>{}</td></tr>").format(
+                    Markup("<tr><td style='padding:6px;border-bottom:1px solid #dddddd'>{}</td>"
+                           "<td style='padding:6px;border-bottom:1px solid #dddddd'>{}</td>"
+                           "<td style='padding:6px;border-bottom:1px solid #dddddd;text-align:right'>{}</td></tr>").format(
                         i["name"], i["due"].strftime("%d/%m/%Y") if i["due"] else "", _gnf(i["residual"]))
                     for i in data["invoices"]
                 )
+                entete = Markup("<th style='padding:6px;text-align:{};background:{};color:#ffffff'>{}</th>")
                 body = Markup(
-                    "<p>Madame, Monsieur,</p><p>{}</p><table border='1' cellpadding='4' style='border-collapse:collapse'>"
-                    "<tr><th>Facture</th><th>Échéance</th><th>Reste dû</th></tr>{}</table>"
-                    "<p>Total échu : <b>{}</b></p><p>{}</p><p>{}</p>"
-                ).format(data["intro"], rows, _gnf(data["amount_due"]), data["closing"], escape(data["company"]))
+                    "<div style='font-family:Arial,sans-serif;color:#373737;max-width:640px'>"
+                    "<div style='background:{};color:#ffffff;padding:14px 18px;font-size:16px;font-weight:bold'>{}</div>"
+                    "<div style='padding:18px'><p>Madame, Monsieur,</p><p>{}</p>"
+                    "<table style='border-collapse:collapse;width:100%'><tr>{}{}{}</tr>{}</table>"
+                    "<p>Total échu : <b style='color:{}'>{}</b></p><p>{}</p>"
+                    "<p>La lettre de relance est jointe en PDF.</p><p>La Direction financière<br/>{}</p></div></div>"
+                ).format(couleur, escape(data["company"]), data["intro"],
+                         entete.format("left", couleur, "Facture"), entete.format("left", couleur, "Échéance"),
+                         entete.format("right", couleur, "Reste dû"), rows, couleur, _gnf(data["amount_due"]),
+                         data["closing"], escape(data["company"]))
+                piece = self.env["ir.attachment"].sudo().create({
+                    "name": f"Relance {reminder.partner_id.name} {reminder.date:%d-%m-%Y}.pdf", "type": "binary",
+                    "datas": base64.b64encode(reminder.pdf()), "mimetype": "application/pdf",
+                    "res_model": reminder._name, "res_id": reminder.id,
+                })
                 self.env["mail.mail"].sudo().create({
                     "subject": data["subject"], "body_html": body, "email_to": reminder.partner_id.email,
                     "email_from": reminder.company_id.email or False, "auto_delete": False,
+                    "attachment_ids": [(6, 0, piece.ids)],
                 }).send()
             reminder.write({"state": "sent", "channel": channel, "sent_at": fields.Datetime.now(),
                             "sent_by": self.env.user.id})

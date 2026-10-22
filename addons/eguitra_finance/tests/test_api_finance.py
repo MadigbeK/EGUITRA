@@ -266,5 +266,8 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, body = self.call("GET", f"/finance/reminders/{mine.id}", token=token)
         self.assertEqual(status, 200, body)
         self.assertIn("mettons en demeure", body["letter"]["intro"])
+        status, pdf = self.call("GET", f"/finance/reminders/{mine.id}/pdf", token=token)
+        self.assertEqual(status, 200)
+        self.assertTrue(str(pdf).startswith("%PDF"), "Lettre de relance en PDF, à la mise en page de la société")
         status, body = self.call("POST", f"/finance/reminders/{mine.id}/send", {"channel": "letter"}, token=token)
         self.assertEqual((status, body["state"]), (200, "sent"))
