@@ -19,9 +19,9 @@ const A = "#2f86e6"; // azur
 const S = "#62c6f5"; // ciel
 const P = "#b7428f"; // prune
 const T = "#17c3b2"; // lagon
-const V = "#7c5ce6"; // violet (Analyse)
-const VC = "#c9b9ff"; // violet clair
-const VF = "#4a2f9c"; // violet foncé
+const V = "#b8872e"; // or bronze (Analyse)
+const VC = "#e6c47e"; // or clair
+const VF = "#6e4e15"; // bronze foncé
 const B = "#ffffff";
 
 /** Rang dans la chorégraphie, et point fixe (en unités de la grille) pour les rotations. */

@@ -16,7 +16,7 @@ type ActionArticle = "publier" | "brouillon" | "archiver" | "supprimer";
 
 const ICONES_PROPOSEES = ["BookOpen", "Landmark", "TrendingUp", "HandCoins", "Scale", "Building2", "FileCheck2", "FileText", "ListChecks", "Calculator", "Wallet", "Target", "Users", "Calendar", "Gavel", "Layers", "Info", "FolderOpen"];
 
-const NOM_COULEUR: Record<CategoryColor, string> = { azur: "Azur", lagon: "Lagon", or: "Or", jade: "Jade", corail: "Corail", violet: "Violet" };
+const NOM_COULEUR: Record<CategoryColor, string> = { azur: "Azur", lagon: "Lagon", or: "Or", jade: "Jade", corail: "Corail", violet: "Rose" };
 
 export default function RessourcesPage() {
   const ecriture = useEcriture();

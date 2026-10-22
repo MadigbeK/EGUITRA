@@ -21,8 +21,8 @@ const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = 
   ["plus_90", "Échu depuis plus de 90 jours", ETATS.critique],
 ];
 
-/** Barres des comptes sur le billet : menthe, or, ciel, en clair sur le fond forêt. */
-const BILLET = ["#7fdcb4", "#e6c47e", "#8fd0f5", "#c9b9ff", "#ffb48f"];
+/** Barres des comptes sur le billet : menthe, or, ciel, rose, pêche, en clair sur le fond forêt. */
+const BILLET = ["#7fdcb4", "#e6c47e", "#8fd0f5", "#f3a9c9", "#ffb48f"];
 
 const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 

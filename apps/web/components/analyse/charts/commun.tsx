@@ -131,7 +131,7 @@ export function divergente(t: number): string {
   return teinte(COULEUR.bon, (v - 0.5) * 2 * 0.92 + 0.08);
 }
 
-/** Échelle séquentielle : du fond au violet de l'Analyse (ou à la couleur donnée). */
+/** Échelle séquentielle : du fond à l'accent de l'Analyse, son or bronze (ou à la couleur donnée). */
 export function sequentielle(t: number, couleur = COULEUR.accent): string {
   return teinte(couleur, Math.max(0.06, Math.min(1, t)));
 }

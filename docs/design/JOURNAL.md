@@ -250,6 +250,20 @@ même branche, sans toucher à la logique des écrans :
 - Portail des porteurs de projets : marque MB AxisPro Consulting, NIMOVA restant une marque interne.
 - Nom de domaine : nimovagroup.com (voir `demandes-fonctionnelles.md`).
 
+## Décisions du gérant (22 octobre 2026)
+
+Carte blanche donnée à la session design pour les arbitrages de l'audit (« TU AS CARTE BLANCHE,
+PILOTE CA »), appliquée sur la branche `claude/harmonisation-composants`.
+- Analyse en or bronze au lieu du violet, rappel de la diagonale d'or du logo. Une couleur par
+  application : Finance vert, AxisPro et portail bleu, Transport ambre, Rotations latérite, RH
+  prune, Analyse or bronze. Jetons de `[data-app="analyse"]` : accent #86601c (5,67:1 sur le blanc,
+  5,02 sur le fond), fort #6e4e15, haut #94691f (texte blanc 4,88:1), vif #b8872e (décor, 3,2:1),
+  doux #f6eedd (texte accent 4,91:1) ; mode nuit : accent #e2bf74 et encre #1a1408 (10,4:1). Les
+  violets écrits en dur partent aussi : icône de l'Analyse à l'accueil, teinte de l'application dans
+  la coque, barre rose clair (#f3a9c9) au lieu du lilas sur le billet, événements de l'agenda du
+  portail en rose. La rubrique de teinte « violet » du portail s'affiche en rose sous le nom
+  « Rose » ; sa clé `violet` reste, c'est la valeur enregistrée par le noyau.
+
 ## Partis pris de la session design
 
 - Icônes : un jeu dessiné pour NIMOVA, sans dépendance ; `lucide-react` retiré. C'est le seul écart
@@ -257,8 +271,9 @@ même branche, sans toucher à la logique des écrans :
 - Caractères : Funnel Display et Funnel Sans (licence OFL), choix du gérant pour la seconde
   version (la première utilisait Barlow).
 - Logo : le N du DG redessiné, carré et verts conservés, diagonale dorée.
-- Couleurs : une par application (jade Finance, azur AxisPro et portail, violet Analyse, corail
-  Rotations) ; la société de travail se reconnaît à son logo dans la barre du haut.
+- Couleurs : une par application (jade Finance, azur AxisPro et portail, or bronze Analyse depuis
+  le 22 octobre, corail Rotations) ; la société de travail se reconnaît à son logo dans la barre du
+  haut.
 - Signature : les guillochis (gravures des billets), une seule pièce maîtresse par écran (le
   billet de trésorerie au tableau de bord), tout le reste calme.
 - Les valeurs absentes s'affichent « – » (tiret demi-cadratin) au lieu du tiret cadratin.
@@ -331,10 +346,10 @@ espace » sans fin.
 
 ## Reste à faire
 
-- Arbitrages du gérant (audit du 22 octobre) : accent violet de l'Analyse (proscrit par son guide) ;
-  dégradés des boutons principaux, avatars et bandeaux (aplat proposé, dégradé gardé pour le seul
-  billet) ; jargon anglais du cabinet (Readiness, Bankability, Data room, Pipeline) ; icônes en tête
-  des boutons texte.
+- Arbitrages du gérant (audit du 22 octobre) : dégradés des boutons principaux, avatars et
+  bandeaux (aplat proposé, dégradé gardé pour le seul billet) ; jargon anglais du cabinet
+  (Readiness, Bankability, Data room, Pipeline) ; icônes en tête des boutons texte. L'accent de
+  l'Analyse est tranché (or bronze, voir les décisions du 22 octobre).
 - Harmonisation des composants : faite le 22 octobre (section ci-dessus), sauf l'échelle des
   titres et des tailles de texte. Restent aussi les sceaux d'icône (`TUILE`) et les couleurs des
   types d'événements du portail, encore en hexadécimal, et les listes « Chargement des listes » et
