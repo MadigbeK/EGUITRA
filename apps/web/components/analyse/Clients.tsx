@@ -2,6 +2,7 @@
 
 import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, ErrorBox, cx, type Tone } from "@/components/ui";
+import { ECHELLE, ETATS } from "@/lib/couleurs";
 import { Bulles, Lorenz, PetitsMultiples } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
@@ -9,14 +10,14 @@ import type { ClientSegment, GroupeClients } from "@/lib/analyse-types";
 import { fmtGNF, fmtInt } from "@/lib/format";
 
 const SEGMENT: Record<ClientSegment, { label: string; couleur: string; tone: Tone; lecture: string }> = {
-  strategiques: { label: "Stratégiques", couleur: "#12956a", tone: "ok", lecture: "Rentables et ponctuels : à fidéliser." },
-  a_securiser: { label: "À sécuriser", couleur: "#df8f17", tone: "warn", lecture: "Rentables mais payent tard : encadrer l'encours." },
-  a_developper: { label: "À développer", couleur: "#2d82dc", tone: "accent", lecture: "Ponctuels mais petits : faire grandir." },
-  a_surveiller: { label: "À surveiller", couleur: "#e25f35", tone: "danger", lecture: "Peu rentables et en retard : limiter l'exposition." },
+  strategiques: { label: "Stratégiques", couleur: ETATS.bon, tone: "ok", lecture: "Rentables et ponctuels : à fidéliser." },
+  a_securiser: { label: "À sécuriser", couleur: ETATS.attention, tone: "warn", lecture: "Rentables mais payent tard : encadrer l'encours." },
+  a_developper: { label: "À développer", couleur: ETATS.information, tone: "accent", lecture: "Ponctuels mais petits : faire grandir." },
+  a_surveiller: { label: "À surveiller", couleur: ETATS.risque, tone: "danger", lecture: "Peu rentables et en retard : limiter l'exposition." },
 };
-const segmentDe = (s: ClientSegment | string) => SEGMENT[s as ClientSegment] ?? { label: s, couleur: "#9aa9a2", tone: "neutral" as Tone, lecture: "" };
+const segmentDe = (s: ClientSegment | string) => SEGMENT[s as ClientSegment] ?? { label: s, couleur: ETATS.neutre, tone: "neutral" as Tone, lecture: "" };
 
-const COULEURS_HISTO = ["#12956a", "#8fbf2a", "#df8f17", "#e25f35", "#c0302d", "#7a1f1c"];
+const COULEURS_HISTO = ECHELLE;
 
 /** Valeur et risque du portefeuille clients : concentration, segments, comportement de paiement, tendances. */
 export function Clients() {

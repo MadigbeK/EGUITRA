@@ -129,8 +129,8 @@ export function Valeur({ value }: { value: ReactNode }) {
 
 /* ─── Couleurs ─────────────────────────────────────────────────────────── */
 
-/** Gamme des graphiques, dans son ordre fixe (contrôlée pour les daltoniens). */
-export const GAMME = ["#12956a", "#2d82dc", "#df8f17", "#c4417a", "#0f9fa0", "#e25f35"] as const;
+/** Couleurs des graphiques et des repères d'état : une seule gamme, sur les jetons (lib/couleurs.ts). */
+export { ETATS, SERIES } from "@/lib/couleurs";
 
 export type Tone = "neutral" | "ok" | "warn" | "danger" | "accent";
 
@@ -242,7 +242,7 @@ const SCEAU: Record<Tone, string> = {
   ok: "text-ok",
   warn: "text-warn",
   danger: "text-danger",
-  accent: "text-[#a87d2e]",
+  accent: "text-or-fonce",
 };
 
 /** L'état du sceau en toutes lettres, pour qui ne voit pas sa couleur. */
@@ -1153,7 +1153,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
             const h = (Math.abs(d.value) / span) * 100;
             const negative = d.value < 0;
             const couleur = negative ? "var(--danger-vif)" : d.tone === "accent" ? "var(--n-or)" : "var(--accent-vif)";
-            const fonce = negative ? "var(--danger)" : d.tone === "accent" ? "#b48a35" : "var(--accent)";
+            const fonce = negative ? "var(--danger)" : d.tone === "accent" ? "var(--or-fonce)" : "var(--accent)";
             return (
               <div
                 key={`${d.label}-${i}`}

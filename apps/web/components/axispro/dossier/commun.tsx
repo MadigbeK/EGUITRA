@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Notice, cx } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { useMoi, type MoiAxispro } from "@/components/axispro/moi";
 import { ApiError } from "@/lib/api-client";
 import { fmtShort } from "@/lib/format";
@@ -23,7 +24,7 @@ export const RULE_LABELS: Record<string, string> = {
 /** Couleur d'un score selon les classes de la méthode (65, 50, 30), comme le prototype. */
 export function couleurScore(v: number | null | undefined) {
   if (v === null || v === undefined) return "var(--line-strong)";
-  return v >= 65 ? "var(--g-jade)" : v >= 50 ? "var(--warn-vif)" : v >= 30 ? "#e25f35" : "var(--danger-vif)";
+  return v >= 65 ? ETATS.bon : v >= 50 ? "var(--warn-vif)" : v >= 30 ? ETATS.risque : ETATS.alerte;
 }
 
 export const PRIORITE_TON: Record<string, "danger" | "warn" | "neutral" | "ok"> = {

@@ -3,20 +3,14 @@
 import Link from "next/link";
 import { AlertTriangle, Calendar, Clock, HandCoins, ShieldAlert, Users } from "@/components/icons";
 import { Badge, Card, RankBars, Repartition, cx } from "@/components/ui";
+import { COULEUR_FINANCEMENT, ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
 import { FUNDING_STATE, RISK_LEVEL, type FundingState, type Portfolio } from "@/lib/axispro-types";
 import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { ratio } from "./cellules";
 import { note } from "./dossier/commun";
 
-const COULEUR_ETAPE: Partial<Record<FundingState, string>> = {
-  identified: "#9aa9a2",
-  submitted: "#2d82dc",
-  review: "#0f9fa0",
-  agreed: "#df8f17",
-  signed: "#12956a",
-  disbursed: "#0b6e4f",
-};
+const COULEUR_ETAPE: Partial<Record<FundingState, string>> = COULEUR_FINANCEMENT;
 
 /**
  * Pilotage du portefeuille du cabinet : financements obtenus et en cours, actions en retard,
@@ -44,7 +38,7 @@ export function Portefeuille() {
             <div className="mt-4">
               <Repartition
                 format={(v) => `${fmtShort(v)} GNF`}
-                parts={enCours.map((p) => ({ key: p.state, label: `${FUNDING_STATE[p.state].label} (${p.count})`, value: ["signed", "disbursed"].includes(p.state) ? p.granted : p.requested, color: COULEUR_ETAPE[p.state] ?? "#9aa9a2" }))}
+                parts={enCours.map((p) => ({ key: p.state, label: `${FUNDING_STATE[p.state].label} (${p.count})`, value: ["signed", "disbursed"].includes(p.state) ? p.granted : p.requested, color: COULEUR_ETAPE[p.state] ?? ETATS.neutre }))}
               />
             </div>
           ) : (

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { type CSSProperties } from "react";
 import { Calculator, Clock, Coins, FolderKanban, HandCoins, Landmark, PieChart, Receipt, Target, TrendingUp, Truck, Users } from "@/components/icons";
-import { AreaChart, Card, ErrorBox, GAMME, cx, type Teinte } from "@/components/ui";
+import { AreaChart, Card, ErrorBox, SERIES, cx, type Teinte } from "@/components/ui";
+import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
 import { AttenteSection, Constats, EnTeteSection, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
@@ -174,7 +175,7 @@ function CockpitGroupe() {
                         </span>
                       </div>
                       <div className="mt-2 h-2 overflow-hidden rounded-full bg-panel-3">
-                        <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(2, caTotal ? (Math.max(0, a.revenue) / caTotal) * 100 : 0)}%`, background: a.id === null ? "var(--line-strong)" : GAMME[i % GAMME.length], "--i": i } as CSSProperties} />
+                        <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(2, caTotal ? (Math.max(0, a.revenue) / caTotal) * 100 : 0)}%`, background: a.id === null ? "var(--line-strong)" : SERIES[i % SERIES.length], "--i": i } as CSSProperties} />
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px] text-muted">
                         <span>{pctOu(a.share_pct, 0)} du chiffre d&apos;affaires</span>
@@ -205,7 +206,7 @@ function CockpitGroupe() {
                   <AreaChart
                     label="Chiffre d'affaires, EBE et trésorerie sur 24 mois"
                     labels={mensuel.months.map((m) => moisCourt(m, true))}
-                    series={mensuel.series.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: [GAMME[0], GAMME[2], GAMME[1]][i] ?? GAMME[i % GAMME.length]! }))}
+                    series={mensuel.series.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: [SERIES[0], SERIES[2], SERIES[1]][i] ?? SERIES[i % SERIES.length]! }))}
                     height={170}
                     format={(v) => `${fmtShort(v)} GNF`}
                   />
@@ -235,13 +236,13 @@ const ICONES_CABINET: Record<string, [Icon, Teinte]> = {
 };
 
 const RECO: Record<Recommendation, { label: string; couleur: string }> = {
-  bankable: { label: "Bankable", couleur: "#0b7a55" },
-  apd_ready: { label: "APD Ready", couleur: "#12956a" },
-  go: { label: "GO", couleur: "#3fb68b" },
-  conditional: { label: "GO sous conditions", couleur: "#df8f17" },
-  hold: { label: "HOLD", couleur: "#e25f35" },
-  no_go: { label: "NO-GO", couleur: "#ec4f49" },
-  pending: { label: "À compléter", couleur: "#9aa9a2" },
+  bankable: { label: "Bankable", couleur: COULEUR_VERDICT.bankable! },
+  apd_ready: { label: "APD Ready", couleur: COULEUR_VERDICT.apd_ready! },
+  go: { label: "GO", couleur: COULEUR_VERDICT.go! },
+  conditional: { label: "GO sous conditions", couleur: COULEUR_VERDICT.conditional! },
+  hold: { label: "HOLD", couleur: COULEUR_VERDICT.hold! },
+  no_go: { label: "NO-GO", couleur: COULEUR_VERDICT.no_go! },
+  pending: { label: "À compléter", couleur: COULEUR_VERDICT.pending! },
 };
 
 const SECTIONS_CABINET: Record<string, string> = { portefeuille: "Projets et pipeline", diagnostic: "Diagnostic", comites: "Décisions", financements: "Financements", activite: "Activité", risques: "Risques" };

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { scaleLinear } from "d3-scale";
 import { cx } from "@/lib/cx";
+import { SERIES } from "@/lib/couleurs";
 import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, MONTHS_FR } from "@/lib/format";
 import type { Unit } from "@/lib/analyse-types";
 
@@ -97,8 +98,8 @@ export function graduations(min: number, max: number, nombre = 4): number[] {
 
 /* ─── Couleurs ─────────────────────────────────────────────────────────── */
 
-/** Gamme des séries (ordre fixe, contrôlée pour les daltoniens), sur les jetons. */
-export const SERIES = ["var(--g-jade)", "var(--g-azur)", "var(--g-ambre)", "var(--g-rose)", "var(--g-lagon)", "var(--g-corail)", "var(--g-anis)"] as const;
+/** Gamme des séries : la seule de l'application, tenue dans lib/couleurs.ts. */
+export { SERIES };
 
 export const COULEUR = {
   accent: "var(--accent-vif)",

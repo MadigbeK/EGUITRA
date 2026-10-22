@@ -1,11 +1,12 @@
 "use client";
 
 import { Card, Notice } from "@/components/ui";
+import { SERIES } from "@/lib/couleurs";
 import { fmtGNF, fmtShort } from "@/lib/format";
 import { ChampMontant, ChampNombre, Ligne } from "./champs";
 import { ANNEE_JOURS, calculerBfr, type ParamsBfr } from "./calculs";
 
-const COULEURS = { stocks: "#df8f17", creances: "#2d82dc", fournisseurs: "#12956a", bfr: "#e25f35" };
+const COULEURS = { stocks: SERIES[2], creances: SERIES[1], fournisseurs: SERIES[0], bfr: SERIES[5] };
 
 function Barre({ titre, parts, echelle }: { titre: string; parts: Array<{ label: string; valeur: number; couleur: string }>; echelle: number }) {
   return (

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Calculator, Coins, Download, Landmark, Percent, Plus, Scale, Target, Trash2, TrendingUp } from "@/components/icons";
-import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, GAMME, Kpi, Loading, Notice, Segmented, Textarea, cx, demanderConfirmation } from "@/components/ui";
+import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, SERIES, Kpi, Loading, Notice, Segmented, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { LineKind, ModelRow, PlanLine, PlanPayload, Stress } from "@/lib/axispro-types";
 import { fmtPct, fmtShort } from "@/lib/format";
@@ -163,9 +163,9 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
                 format={(v) => `${millions(v)} M`}
                 formatAxis={(v) => fmtShort(v)}
                 series={[
-                  { key: "ca", label: "Chiffre d'affaires", values: nombres(ligne(a.statements, "revenue")), color: GAMME[1] },
-                  { key: "ebe", label: "EBE", values: nombres(ligne(a.statements, "ebitda")), color: GAMME[0] },
-                  { key: "treso", label: "Trésorerie cumulée", values: nombres(ligne(a.flows, "cash_cumulative")), color: GAMME[2] },
+                  { key: "ca", label: "Chiffre d'affaires", values: nombres(ligne(a.statements, "revenue")), color: SERIES[1] },
+                  { key: "ebe", label: "EBE", values: nombres(ligne(a.statements, "ebitda")), color: SERIES[0] },
+                  { key: "treso", label: "Trésorerie cumulée", values: nombres(ligne(a.flows, "cash_cumulative")), color: SERIES[2] },
                 ]}
               />
             </Card>

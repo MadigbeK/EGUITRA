@@ -2,6 +2,7 @@
 
 import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, ErrorBox } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { CarteChaleur, PetitsMultiples } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
@@ -25,7 +26,7 @@ const PRIORITE: Record<string, string> = { high: "Priorité haute", medium: "Pri
 /** Couleur d'un score sur 100, aux seuils de priorité de la méthode (30, 50, 65). */
 function teinte(score: number | null) {
   if (score === null) return "var(--color-line)";
-  return score < 30 ? "#c0302d" : score < 50 ? "#e25f35" : score < 65 ? "#df8f17" : "#8fbf2a";
+  return score < 30 ? ETATS.critique : score < 50 ? ETATS.risque : score < 65 ? ETATS.attention : ETATS.passable;
 }
 
 /** Suivi par compartiment : retard et charge de chaque bloc d'expertise sur le portefeuille, consultants affectés. */
@@ -243,13 +244,13 @@ function Corps() {
                         <div className="mb-1.5 text-[12px] font-semibold text-ink-2">Âge des pièces manquantes</div>
                         <div className="flex h-3 gap-[2px]">
                           {ev.missing_by_age.map((a, i) => (
-                            <span key={a.bucket} className="n-pousser-x h-full rounded-[3px]" style={{ width: `${(a.count / Math.max(1, ev.missing)) * 100}%`, background: ["#8fbf2a", "#df8f17", "#e25f35", "#c0302d"][i % 4], minWidth: a.count ? 3 : 0, "--i": i } as CSSProperties} title={`${a.label} : ${a.count}`} />
+                            <span key={a.bucket} className="n-pousser-x h-full rounded-[3px]" style={{ width: `${(a.count / Math.max(1, ev.missing)) * 100}%`, background: [ETATS.passable, ETATS.attention, ETATS.risque, ETATS.critique][i % 4], minWidth: a.count ? 3 : 0, "--i": i } as CSSProperties} title={`${a.label} : ${a.count}`} />
                           ))}
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
                           {ev.missing_by_age.map((a, i) => (
                             <span key={a.bucket} className="inline-flex items-center gap-1">
-                              <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ background: ["#8fbf2a", "#df8f17", "#e25f35", "#c0302d"][i % 4] }} />
+                              <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ background: [ETATS.passable, ETATS.attention, ETATS.risque, ETATS.critique][i % 4] }} />
                               {a.label} : {a.count}
                             </span>
                           ))}

@@ -1,3 +1,5 @@
+import { ETATS } from "./couleurs";
+
 export type Recommendation = "bankable" | "apd_ready" | "go" | "conditional" | "hold" | "no_go" | "pending" | "postponed";
 export type Decision = "go" | "conditional" | "hold" | "no_go" | "postponed";
 type Tone = "ok" | "warn" | "danger" | "neutral" | "accent";
@@ -498,10 +500,10 @@ export interface Risk {
 type Ton = Tone;
 
 export const RISK_LEVEL: Record<RiskLevel, { label: string; tone: Ton; color: string }> = {
-  critical: { label: "Critique", tone: "danger", color: "#ec4f49" },
-  high: { label: "Élevé", tone: "warn", color: "#e25f35" },
-  moderate: { label: "Modéré", tone: "neutral", color: "#df8f17" },
-  low: { label: "Faible", tone: "ok", color: "#12956a" },
+  critical: { label: "Critique", tone: "danger", color: ETATS.alerte },
+  high: { label: "Élevé", tone: "warn", color: ETATS.risque },
+  moderate: { label: "Modéré", tone: "neutral", color: ETATS.attention },
+  low: { label: "Faible", tone: "ok", color: ETATS.bon },
 };
 
 export const RISK_STATE: Record<Risk["state"], string> = { open: "Ouvert", mitigating: "En traitement", closed: "Maîtrisé" };

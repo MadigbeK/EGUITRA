@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState, type CSSProperties } from "react";
 import { ArrowUpRight, Calculator, Coins, HandCoins, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
 import { Ondes, Rosace } from "@/components/guilloche";
-import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, Field, SERIES, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
@@ -13,11 +14,11 @@ import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort, pluriel } from "@/
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
 const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = [
-  ["non_echu", "Non échu", "#12956a"],
-  ["1_30", "Échu de 1 à 30 jours", "#e6b54a"],
-  ["31_60", "Échu de 31 à 60 jours", "#e8843a"],
-  ["61_90", "Échu de 61 à 90 jours", "#d9503a"],
-  ["plus_90", "Échu depuis plus de 90 jours", "#9c2b25"],
+  ["non_echu", "Non échu", ETATS.bon],
+  ["1_30", "Échu de 1 à 30 jours", ETATS.attention],
+  ["31_60", "Échu de 31 à 60 jours", ETATS.risque],
+  ["61_90", "Échu de 61 à 90 jours", ETATS.alerte],
+  ["plus_90", "Échu depuis plus de 90 jours", ETATS.critique],
 ];
 
 /** Barres des comptes sur le billet : menthe, or, ciel, en clair sur le fond forêt. */
@@ -225,8 +226,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
               label="Chiffre d'affaires et résultat par mois"
               labels={mois.map((m) => fmtMonth(m).split(" ")[0] ?? m)}
               series={[
-                { key: "ca", label: "Chiffre d'affaires", color: "#12956a", values: d.revenue_by_month.map((m) => m.amount) },
-                { key: "resultat", label: "Résultat", color: "#2d82dc", values: mois.map((m) => resultats.get(m) ?? 0) },
+                { key: "ca", label: "Chiffre d'affaires", color: SERIES[0], values: d.revenue_by_month.map((m) => m.amount) },
+                { key: "resultat", label: "Résultat", color: SERIES[1], values: mois.map((m) => resultats.get(m) ?? 0) },
               ]}
               height={210}
               format={(v) => fmtGNF(v)}
@@ -265,7 +266,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
           {parts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted">Imputez les factures sur l&apos;axe Activité pour voir cette répartition.</p>
           ) : (
-            <Donut parts={parts.slice(0, 6).map((a, i) => ({ key: String(a.analytic_account_id), label: a.name, value: a.income, color: GAMME[i % GAMME.length]! }))} format={(v) => fmtShort(v)} centre={{ titre: "Produits", valeur: fmtShort(parts.reduce((s, a) => s + a.income, 0)) }} />
+            <Donut parts={parts.slice(0, 6).map((a, i) => ({ key: String(a.analytic_account_id), label: a.name, value: a.income, color: SERIES[i % SERIES.length]! }))} format={(v) => fmtShort(v)} centre={{ titre: "Produits", valeur: fmtShort(parts.reduce((s, a) => s + a.income, 0)) }} />
           )}
         </Card>
       </div>
@@ -289,11 +290,11 @@ function DashboardBody({ d }: { d: Dashboard }) {
             zones={
               dscrMin
                 ? [
-                    { jusqua: 1, couleur: "#ec4f49", label: "Insuffisante" },
-                    { jusqua: dscrMin, couleur: "#df8f17", label: "Sous le minimum" },
-                    { jusqua: maxDscr, couleur: "#12956a", label: "Confortable" },
+                    { jusqua: 1, couleur: ETATS.alerte, label: "Insuffisante" },
+                    { jusqua: dscrMin, couleur: ETATS.attention, label: "Sous le minimum" },
+                    { jusqua: maxDscr, couleur: ETATS.bon, label: "Confortable" },
                   ]
-                : [{ jusqua: maxDscr, couleur: "#9aa3b5", label: "Seuil non fixé" }]
+                : [{ jusqua: maxDscr, couleur: ETATS.neutre, label: "Seuil non fixé" }]
             }
             sousTitre={`DSCR sur 12 mois : EBE divisé par le service de la dette, ${dscrMin ? `${ratio(dscrMin)} au moins (seuil fixé)` : "minimum non fixé (Administration > Seuils et taux)"}`}
             vide="Aucun service de dette sur 12 mois"

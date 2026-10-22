@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "@/components/icons";
-import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, GAMME, cx, demanderConfirmation } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, SERIES, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
@@ -129,7 +129,7 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
   const { data: leaves, error, mutate } = useApi<Leave[]>(avecSociete(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`, societe));
   const { data: feries } = useApi<Holiday[]>(`/rh/holidays?year=${debut.getFullYear()}`);
   const types = meta?.leave_types ?? [];
-  const couleur = (typeId: number) => GAMME[Math.max(0, types.findIndex((t) => t.id === typeId)) % GAMME.length]!;
+  const couleur = (typeId: number) => SERIES[Math.max(0, types.findIndex((t) => t.id === typeId)) % SERIES.length]!;
   const jourListe = Array.from({ length: nbJours }, (_, i) => new Date(debut.getFullYear(), debut.getMonth(), i + 1));
   const ferieDe = new Map((feries ?? []).map((h) => [h.date, h.name]));
   const salaries = useMemo(() => {

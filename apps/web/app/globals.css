@@ -48,6 +48,7 @@
   --color-pin: var(--n-pin);
   --color-menthe: var(--n-menthe);
   --color-or: var(--n-or);
+  --color-or-fonce: var(--or-fonce);
   --color-creme: var(--n-creme);
   --color-nuit: var(--n-nuit);
   --color-jade: var(--g-jade);
@@ -102,6 +103,15 @@
   --g-lagon: #0f9fa0;
   --g-corail: #e25f35;
   --g-anis: #8fbf2a;
+  /* Repères d'état des graphiques (lib/couleurs.ts) : nuances du jade, rouges de l'échelle des
+     retards, gris d'une valeur sans état. */
+  --g-jade-fonce: #0b7a55;
+  --g-jade-clair: #3fb68b;
+  --g-rouge: #c0302d;
+  --g-bordeaux: #7a1f1c;
+  --g-gris: #9aa9a2;
+  /* Or foncé : repère doré sur le blanc (3:1 au moins), bas des colonnes dorées. */
+  --or-fonce: #a87d2e;
 
   /* Neutres teintés de vert */
   --bg: #eef2ef;

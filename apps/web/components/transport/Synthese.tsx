@@ -2,6 +2,7 @@
 
 import { CheckCircle2, Droplet, Percent, Receipt, Smartphone, TrendingUp, TriangleAlert } from "@/components/icons";
 import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
@@ -39,9 +40,9 @@ export function Synthese() {
               </div>
               <Repartition
                 parts={[
-                  { key: "service", label: "En service", value: summary.fleet.service ?? 0, color: "#12956a" },
-                  { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: "#df8f17" },
-                  { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: "#ec4f49" },
+                  { key: "service", label: "En service", value: summary.fleet.service ?? 0, color: ETATS.bon },
+                  { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: ETATS.attention },
+                  { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: ETATS.alerte },
                 ]}
                 format={(v) => `${v}`}
               />

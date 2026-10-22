@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { AlertTriangle, CheckCircle2, FileText, FolderKanban, Plus, ShieldAlert, XCircle } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Donut, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
@@ -14,16 +15,7 @@ import { note } from "@/components/axispro/dossier/commun";
 
 type Vue = "tableau" | "liste";
 
-const COULEUR_RECO: Record<Recommendation, string> = {
-  bankable: "#0b7a55",
-  apd_ready: "#12956a",
-  go: "#3fb68b",
-  conditional: "#df8f17",
-  hold: "#e25f35",
-  no_go: "#ec4f49",
-  pending: "#9aa9a2",
-  postponed: "#2d82dc",
-};
+const COULEUR_RECO: Record<Recommendation, string> = COULEUR_VERDICT;
 
 /** Couleur d'un score selon les classes de la méthode (65 APD READY, 50 CONDITIONAL GO, 30 HOLD). */
 function teinteScore(score: number | null) {
@@ -171,7 +163,7 @@ function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
               <div className="relative mt-3 flex h-[120px] items-center">
                 <div
                   className="n-pousser-y w-full rounded-xl"
-                  style={{ height: `${h}%`, background: `linear-gradient(180deg, color-mix(in oklab, #2d82dc ${100 - i * 9}%, #0f9fa0), color-mix(in oklab, #2d82dc ${70 - i * 7}%, #0f9fa0))`, opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
+                  style={{ height: `${h}%`, background: `linear-gradient(180deg, color-mix(in oklab, var(--g-azur) ${100 - i * 9}%, var(--g-lagon)), color-mix(in oklab, var(--g-azur) ${70 - i * 7}%, var(--g-lagon)))`, opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
                 />
               </div>
               <div className="mt-2 text-center text-[12px] font-semibold tabular text-muted">{Math.round((n / total) * 100)} %</div>
