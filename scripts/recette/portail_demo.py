@@ -106,8 +106,8 @@ for dossier in dossiers:
                         "location": "Locaux de MB AxisPro, Kaloum"}).confirm(at(4, 10))
         done = Meeting.create({"dossier_id": dossier.id, "requested_by": porteur.id, "consultant_id": consultant.id,
                                "subject": "Lancement de l'accompagnement (démo)", "mode": "video", "duration": 45,
-                               "slot_1": at(-20, 10)})
-        done.confirm(at(-20, 10), online_url="https://meet.example.com/lancement-demo")
+                               "slot_1": at(-5, 10)})
+        done.confirm(at(-5, 10), online_url="https://meet.example.com/lancement-demo")
         done.mark_done("# Points retenus\n- Calendrier de constitution du dossier validé\n- Pièces juridiques à déposer sous quinze jours\n\n"
                        "> Prochain point : revue des devis.")
         Meeting.create({"dossier_id": dossier.id, "requested_by": porteur.id, "consultant_id": consultant.id,
