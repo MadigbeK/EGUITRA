@@ -4,9 +4,14 @@ import { useState } from "react";
 import { FileCheck2, Plus, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { PAYMENT_STATES, type MoveSummary } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import type { Profile } from "@/lib/types";
+
+// Profils d'écriture du noyau (addons/eguitra_immobilier/controllers/immobilier.py, WRITE) : biens, baux,
+// fin de bail et émission des loyers. La direction lit seulement.
+const GESTION: Profile[] = ["admin", "finance", "immobilier"];
 
 interface Lease { id: number; name: string; property: { id: number; name: string }; tenant: { id: number; name: string }; date_start: string; date_end: string | null; rent: number; charges: number; periodicity: string; vat: boolean; deposit_amount: number; state: "draft" | "active" | "terminated"; next_invoice_date: string | null }
 interface Property { id: number; name: string; kind: string; address: string | null; city: string | null; area_m2: number; acquisition_value: number; current_value: number; valuation_date: string | null; occupied: boolean; lease: Lease | null }
@@ -17,6 +22,7 @@ export default function RealEstatePage() {
   const [tab, setTab] = useState<"biens" | "loyers" | "impayes">("biens");
   const { data: summary, mutate: refreshSummary } = useApi<Summary>("/immobilier/summary");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  const gestion = useAutorise(GESTION);
   async function generate() {
     try {
       const res = await apiSend<{ invoices: MoveSummary[] }>("POST", "/immobilier/rents/generate", {});
@@ -28,7 +34,7 @@ export default function RealEstatePage() {
   }
   return (
     <div>
-      <PageHeader title="Immobilier" subtitle="Biens, baux, loyers et quittancement automatique, relances, valorisation du patrimoine." actions={<Button variant="primary" onClick={generate}><RefreshCw className="h-4 w-4" /> Émettre les loyers échus</Button>} />
+      <PageHeader title="Immobilier" subtitle="Biens, baux, loyers et quittancement automatique, relances, valorisation du patrimoine." actions={gestion ? <Button variant="primary" onClick={generate}><RefreshCw className="h-4 w-4" /> Émettre les loyers échus</Button> : undefined} />
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       {summary && (
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -40,14 +46,15 @@ export default function RealEstatePage() {
         </div>
       )}
       <Tabs tabs={[{ key: "biens", label: "Biens et baux" }, { key: "loyers", label: "Loyers émis" }, { key: "impayes", label: "Impayés et relances" }]} value={tab} onChange={setTab} />
-      {tab === "biens" && <Properties onChanged={() => refreshSummary()} />}
+      {tab === "biens" && <Properties gestion={gestion} onChanged={() => refreshSummary()} />}
       {tab === "loyers" && <Rents />}
       {tab === "impayes" && <Unpaid />}
     </div>
   );
 }
 
-function Properties({ onChanged }: { onChanged: () => void }) {
+/** Biens et baux : créés, modifiés, loués et libérés par les profils de gestion ; lus par la direction. */
+function Properties({ gestion, onChanged }: { gestion: boolean; onChanged: () => void }) {
   const { data, error, mutate } = useApi<{ items: Property[]; kinds: Array<{ code: string; label: string }> }>("/immobilier/properties");
   const [creating, setCreating] = useState(false);
   const [leasing, setLeasing] = useState<Property | null>(null);
@@ -55,22 +62,22 @@ function Properties({ onChanged }: { onChanged: () => void }) {
   const [editing, setEditing] = useState<Property | null>(null);
   return (
     <>
-      <div className="mb-3 flex justify-end"><Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button></div>
+      {gestion && <div className="mb-3 flex justify-end"><Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button></div>}
       <Card padded={false}>
         {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data.items} rowKey={(p) => p.id} empty="Aucun bien." columns={[
-            { key: "name", label: "Bien", render: (p) => (
+            { key: "name", label: "Bien", render: (p) => (gestion ? (
               <button type="button" className="text-left font-medium text-ink underline-offset-2 hover:underline" title="Modifier le bien" onClick={() => setEditing(p)}>
                 {p.name}
               </button>
-            ) },
+            ) : <span className="font-medium text-ink">{p.name}</span>) },
             { key: "kind", label: "Nature", render: (p) => data.kinds.find((k) => k.code === p.kind)?.label ?? p.kind },
             { key: "area_m2", label: "Surface", align: "right", render: (p) => (p.area_m2 ? `${p.area_m2} m²` : "–") },
             { key: "current_value", label: "Valeur", align: "right", render: (p) => <span title={p.valuation_date ? `Évaluée le ${fmtDate(p.valuation_date)}` : "Valeur d'acquisition"}>{fmtGNF(p.current_value || p.acquisition_value)}</span> },
             { key: "lease", label: "Locataire", render: (p) => p.lease ? `${p.lease.tenant.name}, ${fmtGNF(p.lease.rent)} / ${p.lease.periodicity === "monthly" ? "mois" : p.lease.periodicity === "quarterly" ? "trimestre" : "an"}` : "–" },
             { key: "occupied", label: "", render: (p) => p.occupied ? (
-              <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{p.lease && <Button size="sm" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
-            ) : <Button size="sm" onClick={() => setLeasing(p)}>Louer</Button> },
+              <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{gestion && p.lease && <Button size="sm" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
+            ) : gestion ? <Button size="sm" onClick={() => setLeasing(p)}>Louer</Button> : <Badge>Libre</Badge> },
           ]} />
         )}
       </Card>
