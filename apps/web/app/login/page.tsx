@@ -90,17 +90,21 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 /**
  * Scène de la marque NIMOVA : une équipe en salle de réunion (photo Pexels 9301288, licence
  * gratuite), assombrie pour la lecture ; le grand N du pli se trace par-dessus, le nom et la
- * signature entrent. La photo est servie en WebP à la taille de l'écran, `public/scenes/`.
+ * signature entrent. La photo est servie en WebP à la taille de l'écran (`public/scenes/`, cache
+ * d'un an : une autre photo change de nom) ; son aperçu flou, inscrit dans la page, s'affiche dès
+ * le premier rendu, avant toute requête.
  */
+const APERCU_SCENE = "data:image/webp;base64,UklGRpAAAABXRUJQVlA4IIQAAACQBACdASoYABAAPt1apkyopSOiMAgBEBuJZQC7ACIQf94L37CJJ+ZPDyzIrIAA/tQso9AGPnhC1gQ4MIbZHCt5nCj3nRxv76TTsY0iTWfGalIDgDw+i82eC6mIzPPwr3CjfrFur1XOUc6ebeUQ+qn+VUw8x3Kyt4pr0ZL3j1FkV48AAAA=";
+
 function SceneNimova() {
   const today = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeZone: "Africa/Conakry" }).format(new Date());
   return (
     <aside className="sur-dos relative order-first overflow-hidden bg-foret text-white lg:order-2 lg:min-h-screen">
-      <picture aria-hidden className="pointer-events-none absolute inset-0">
-        <source type="image/webp" media="(min-width: 1024px)" srcSet="/scenes/connexion-1400.webp 1400w, /scenes/connexion-2200.webp 2200w" sizes="58vw" />
-        <source type="image/webp" srcSet="/scenes/connexion-mobile-900.webp 900w, /scenes/connexion-mobile-1600.webp 1600w" sizes="100vw" />
+      <picture aria-hidden className="scene-photo pointer-events-none absolute inset-0 bg-cover bg-[50%_40%]" style={{ backgroundImage: `url(${APERCU_SCENE})` }}>
+        <source type="image/webp" media="(min-width: 1024px)" srcSet="/scenes/connexion-9301288-1000.webp 1000w, /scenes/connexion-9301288-1400.webp 1400w, /scenes/connexion-9301288-2200.webp 2200w" sizes="58vw" />
+        <source type="image/webp" srcSet="/scenes/connexion-9301288-mobile-900.webp 900w, /scenes/connexion-9301288-mobile-1600.webp 1600w" sizes="100vw" />
         {/* eslint-disable-next-line @next/next/no-img-element -- image décorative déjà optimisée, servie telle quelle */}
-        <img src="/scenes/connexion-1400.jpg" alt="" fetchPriority="high" decoding="async" className="scene-photo h-full w-full object-cover object-[50%_40%]" />
+        <img src="/scenes/connexion-9301288-1400.jpg" alt="" fetchPriority="high" className="h-full w-full object-cover object-[50%_40%]" />
       </picture>
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(13_34_29/0.82)_0%,rgb(13_34_29/0.35)_42%,rgb(13_34_29/0.55)_70%,rgb(13_34_29/0.9)_100%)]" />
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(13_34_29/0.75)_0%,rgb(13_34_29/0.2)_60%,transparent_100%)]" />

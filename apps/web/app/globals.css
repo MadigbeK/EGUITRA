@@ -1237,15 +1237,15 @@ input[type="radio"] {
   break-inside: avoid;
 }
 
-/* Photo de la page de connexion : elle apparaît en se posant (léger recul), une seule fois. */
+/* Photo de la page de connexion : visible dès le premier rendu (aperçu flou, puis la photo), elle
+   se pose par un léger recul. Aucun fondu : rien n'attend l'animation pour apparaître. */
 @keyframes scene-photo {
   from {
-    opacity: 0;
-    transform: scale(1.06);
+    transform: scale(1.04);
   }
 }
 .scene-photo {
-  animation: scene-photo 1800ms var(--ease-sortie) backwards;
+  animation: scene-photo 1400ms var(--ease-sortie) backwards;
 }
 
 /* ─── Barre des rubriques (menus du haut) ─────────────────────────────── */

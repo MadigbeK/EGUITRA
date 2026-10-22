@@ -38,7 +38,12 @@ const config: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Photos des scènes : leur nom porte le numéro de la photo, elles ne changent jamais sous le
+      // même nom ; le navigateur les garde un an sans redemander.
+      { source: "/scenes/:fichier*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+    ];
   },
 };
 

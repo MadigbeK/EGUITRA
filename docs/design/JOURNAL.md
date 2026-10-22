@@ -230,6 +230,12 @@ même branche, sans toucher à la logique des écrans :
   Pexels gratuite, sans attribution obligatoire), assombrie pour la lecture, le grand N du pli
   toujours tracé par-dessus. Fichiers `public/scenes/` : WebP de 23 à 100 Ko selon l'écran
   (recadrage carré pour le grand écran, panoramique pour le téléphone), JPEG de secours de 112 Ko.
+- Photo de connexion instantanée (22 octobre, le gérant la trouvait lente) : un aperçu flou de
+  152 octets est inscrit dans la page et s'affiche au premier rendu, la photo nette le recouvre dès
+  qu'elle arrive ; le fondu d'entrée (1,8 s) est supprimé, seul reste un léger recul. Fichiers
+  renommés au numéro de la photo (`connexion-9301288-*`) et servis avec un cache d'un an
+  (`next.config.ts`, `/scenes/*`, immuable) : aux visites suivantes, aucune requête. Taille de
+  1000 px ajoutée (33 Ko) pour les écrans courants.
 - `docs/design/CHARTE.md` et la planche décrivent la première version : à refaire sur la
   seconde si le gérant la valide.
 
