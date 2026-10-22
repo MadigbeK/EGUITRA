@@ -173,11 +173,13 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
         <table className="w-full text-sm">
           <thead className="text-[12.5px] font-medium text-muted">
             <tr>
-              <th className="px-2 py-1 text-left">Compte</th>
-              <th className="px-2 py-1 text-left">Libellé</th>
-              <th className="w-40 px-2 py-1 text-right">Débit</th>
-              <th className="w-40 px-2 py-1 text-right">Crédit</th>
-              <th className="w-8" />
+              <th scope="col" className="px-2 py-1 text-left">Compte</th>
+              <th scope="col" className="px-2 py-1 text-left">Libellé</th>
+              <th scope="col" className="w-40 px-2 py-1 text-right">Débit</th>
+              <th scope="col" className="w-40 px-2 py-1 text-right">Crédit</th>
+              <th scope="col" className="w-8">
+                <span className="sr-only">Supprimer</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -185,20 +187,20 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
               <Fragment key={i}>
               <tr>
                 <td className="px-2 py-1">
-                  <Select value={l.account_id} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, account_id: e.target.value } : x)))} placeholder="Compte…" options={accountOptions} />
+                  <Select value={l.account_id} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, account_id: e.target.value } : x)))} placeholder="Compte…" options={accountOptions} aria-label={`Compte, ligne ${i + 1}`} />
                 </td>
                 <td className="px-2 py-1">
-                  <Input value={l.name} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                  <Input value={l.name} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} aria-label={`Libellé, ligne ${i + 1}`} />
                 </td>
                 <td className="px-2 py-1">
-                  <Input className="text-right font-mono" inputMode="numeric" value={l.debit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, debit: e.target.value, credit: "" } : x)))} />
+                  <Input className="text-right font-mono" inputMode="numeric" value={l.debit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, debit: e.target.value, credit: "" } : x)))} aria-label={`Débit, ligne ${i + 1}`} />
                 </td>
                 <td className="px-2 py-1">
-                  <Input className="text-right font-mono" inputMode="numeric" value={l.credit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, credit: e.target.value, debit: "" } : x)))} />
+                  <Input className="text-right font-mono" inputMode="numeric" value={l.credit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, credit: e.target.value, debit: "" } : x)))} aria-label={`Crédit, ligne ${i + 1}`} />
                 </td>
                 <td>
                   {lines.length > 2 && (
-                    <button type="button" className="text-muted hover:text-danger" onClick={() => setLines(lines.filter((_, j) => j !== i))} aria-label="Supprimer">
+                    <button type="button" className="text-muted hover:text-danger" onClick={() => setLines(lines.filter((_, j) => j !== i))} aria-label={`Supprimer la ligne ${i + 1}`}>
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}

@@ -623,7 +623,7 @@ function Requirements() {
               align: "right",
               render: (r) =>
                 r.company ? (
-                  <button type="button" className="text-muted hover:text-danger" aria-label="Retirer" onClick={() => act(() => apiSend("DELETE", `/finance/analytic-requirements/${r.id}`), "Obligation retirée.")}>
+                  <button type="button" className="text-muted hover:text-danger" aria-label={`Retirer l'obligation ${r.plan}, comptes ${r.prefix}`} onClick={() => act(() => apiSend("DELETE", `/finance/analytic-requirements/${r.id}`), "Obligation retirée.")}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 ) : (

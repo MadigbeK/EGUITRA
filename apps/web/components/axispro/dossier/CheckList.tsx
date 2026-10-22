@@ -138,7 +138,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           />
           <div className="relative min-w-[200px] flex-1">
             <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <Input className="pl-9" placeholder="Rechercher un critère, une observation" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input className="pl-9" placeholder="Rechercher un critère, une observation" aria-label="Rechercher un critère ou une observation" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/evaluation.xlsx`, `${d.reference}_fiche_evaluation.xlsx`)}>
             <Download className="h-4 w-4" /> Fiche d&apos;évaluation
@@ -146,9 +146,9 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           {!verrou && <FileButton label="Importer une fiche" accept=".xlsx,.csv,.json" onFile={previsualiser} />}
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Select value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Tous les domaines" options={d.scoring.domains.map((x) => ({ value: x.domain_id, label: `${x.code} ${x.name}` }))} />
-          <Select value={gate} onChange={(e) => setGate(e.target.value)} placeholder="Tous les gates" options={d.gates.map((g) => ({ value: g.code, label: `${g.code} ${g.name}` }))} />
-          <Select value={focus} onChange={(e) => setFocus(e.target.value as Focus)} options={FOCUS} />
+          <Select value={domain} onChange={(e) => setDomain(e.target.value)} aria-label="Filtrer par domaine" placeholder="Tous les domaines" options={d.scoring.domains.map((x) => ({ value: x.domain_id, label: `${x.code} ${x.name}` }))} />
+          <Select value={gate} onChange={(e) => setGate(e.target.value)} aria-label="Filtrer par gate" placeholder="Tous les gates" options={d.gates.map((g) => ({ value: g.code, label: `${g.code} ${g.name}` }))} />
+          <Select value={focus} onChange={(e) => setFocus(e.target.value as Focus)} aria-label="Filtrer par nature de critère" options={FOCUS} />
         </div>
         <p className="mt-2 text-[12.5px] text-muted">
           {pluriel(lignes.length, "critère affiché", "critères affichés")} sur {criteria.length}. Un critère non évalué compte comme non disponible dans les scores ; un critère exigeant une preuve, déclaré disponible sans pièce, est retenu « incomplet » sans que la saisie change.

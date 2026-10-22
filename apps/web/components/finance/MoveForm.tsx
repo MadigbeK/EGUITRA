@@ -233,7 +233,7 @@ export function MoveForm({
             <label className="flex items-center gap-2 pt-6 text-sm">
               <input type="checkbox" checked={dispute} onChange={(e) => setDispute(e.target.checked)} /> Pièce en litige (exclue des relances)
             </label>
-            {dispute && <Input value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Motif du litige" />}
+            {dispute && <Input value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Motif du litige" aria-label="Motif du litige" />}
           </div>
         </div>
         {exempt && <Notice tone="accent">Client non assujetti à la TVA : la facture est émise en exonération.</Notice>}
@@ -247,14 +247,16 @@ export function MoveForm({
           <table className="w-full text-sm">
             <thead className="bg-panel-2 text-[12.5px] font-medium text-muted">
               <tr>
-                <th className="px-2 py-2 text-left">Libellé</th>
-                {!sale && <th className="w-48 px-2 py-2 text-left">Catégorie</th>}
-                <th className="w-20 px-2 py-2 text-right">Qté</th>
-                <th className="w-36 px-2 py-2 text-right">Prix unitaire HT</th>
-                <th className="w-56 px-2 py-2 text-left">Compte</th>
-                <th className="w-28 px-2 py-2 text-left">TVA</th>
-                {withholdings.length > 0 && <th className="w-40 px-2 py-2 text-left">Retenue</th>}
-                <th className="w-8" />
+                <th scope="col" className="px-2 py-2 text-left">Libellé</th>
+                {!sale && <th scope="col" className="w-48 px-2 py-2 text-left">Catégorie</th>}
+                <th scope="col" className="w-20 px-2 py-2 text-right">Qté</th>
+                <th scope="col" className="w-36 px-2 py-2 text-right">Prix unitaire HT</th>
+                <th scope="col" className="w-56 px-2 py-2 text-left">Compte</th>
+                <th scope="col" className="w-28 px-2 py-2 text-left">TVA</th>
+                {withholdings.length > 0 && <th scope="col" className="w-40 px-2 py-2 text-left">Retenue</th>}
+                <th scope="col" className="w-8">
+                  <span className="sr-only">Supprimer</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -262,22 +264,22 @@ export function MoveForm({
                 <Fragment key={i}>
                   <tr className="border-t border-line">
                     <td className="px-2 pt-1.5">
-                      <Input value={l.name} onChange={(e) => update(i, { name: e.target.value })} placeholder={sale ? "Transport Conakry - Siguiri, 40 000 L" : "Désignation"} />
+                      <Input value={l.name} onChange={(e) => update(i, { name: e.target.value })} placeholder={sale ? "Transport Conakry - Siguiri, 40 000 L" : "Désignation"} aria-label={`Libellé, ligne ${i + 1}`} />
                     </td>
                     {!sale && (
                       <td className="px-2 pt-1.5">
-                        <Select value={l.category_id} onChange={(e) => update(i, { category_id: e.target.value, tax_id: "" })} placeholder="Choisir…" options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} />
+                        <Select value={l.category_id} onChange={(e) => update(i, { category_id: e.target.value, tax_id: "" })} placeholder="Choisir…" options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} aria-label={`Catégorie, ligne ${i + 1}`} />
                       </td>
                     )}
                     <td className="px-2 pt-1.5">
-                      <Input className="text-right" inputMode="decimal" value={l.quantity} onChange={(e) => update(i, { quantity: e.target.value })} />
+                      <Input className="text-right" inputMode="decimal" value={l.quantity} onChange={(e) => update(i, { quantity: e.target.value })} aria-label={`Quantité, ligne ${i + 1}`} />
                     </td>
                     <td className="px-2 pt-1.5">
-                      <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" />
+                      <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" aria-label={`Prix unitaire HT, ligne ${i + 1}`} />
                     </td>
                     <td className="px-2 pt-1.5">
                       {libre ? (
-                        <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+                        <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} aria-label={`Compte, ligne ${i + 1}`} />
                       ) : (
                         <span className="block truncate px-1 py-2 text-[12.5px] text-muted" title="Choix du compte : droit « Saisie libre des comptes »">
                           {accountPlaceholder(l)}
@@ -285,13 +287,14 @@ export function MoveForm({
                       )}
                     </td>
                     <td className="px-2 pt-1.5">
-                      <Select value={effectiveTax(l)} disabled={exempt} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} />
+                      <Select value={effectiveTax(l)} disabled={exempt} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} aria-label={`TVA, ligne ${i + 1}`} />
                     </td>
                     {withholdings.length > 0 && (
                       <td className="px-2 pt-1.5">
                         <Select
                           value={l.withholding}
                           onChange={(e) => update(i, { withholding: e.target.value })}
+                          aria-label={`Retenue, ligne ${i + 1}`}
                           options={[
                             { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => `${Math.abs(t.amount)} %`).join(", ")})` : "Aucune (tiers)" },
                             { value: "none", label: "Aucune" },
@@ -302,7 +305,7 @@ export function MoveForm({
                     )}
                     <td className="px-1 pt-1.5">
                       {lines.length > 1 && (
-                        <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label="Supprimer la ligne">
+                        <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label={`Supprimer la ligne ${i + 1}`}>
                           <Trash2 className="h-4 w-4" />
                         </button>
                       )}
