@@ -263,15 +263,35 @@ même branche, sans toucher à la logique des écrans :
   billet de trésorerie au tableau de bord), tout le reste calme.
 - Les valeurs absentes s'affichent « – » (tiret demi-cadratin) au lieu du tiret cadratin.
 
+## Audit du design (22 octobre 2026)
+
+Demandé par le gérant après la mise en production du logo. Trois passes : accessibilité (WCAG 2.2
+AA), cohérence visuelle, revue des écrans sur la maquette. Corrigé :
+- Accessibilité : contour de focus et jauges sur l'accent (contraste suffisant), bordure de champ
+  `--line-champ` (3:1), placeholders lisibles, dégradé partant de l'accent sous le texte blanc,
+  fenêtres au clavier (focus à l'ouverture, Tab maintenu, retour au déclencheur), sceaux d'état lus
+  en toutes lettres, messages annoncés (`role="status"`), lien « Aller au contenu », marge de
+  défilement sous la barre collante, trente champs nommés, un titre d'onglet par écran Finance et
+  AxisPro, titres h1 de l'accueil et de Rotations, texte de connexion lisible sur toute la photo.
+- Écrans : pluriels accordés (plus de « (s) »), recherche de l'accueil toujours visible (au toucher,
+  rien ne la faisait apparaître), noms d'étape de l'entonnoir AxisPro sur deux lignes, constats de
+  l'Analyse en feuille (sans liseré, pastille ni étincelle), libellés en casse normale, page
+  d'erreur en « Erreur » avec le bouton commun.
+- Code mort : quatre animations et douze icônes inutilisées.
+- `CHARTE.md` mise à jour (logo le pli, Funnel, page de connexion, arbitrages en attente).
+
 ## Reste à faire
 
-- Validation de l'ensemble par le gérant, sur la recette (http://localhost:3200 avec le tunnel)
-  ou sur la planche ; ajustements éventuels dans cette branche.
-- Logo NIMOVA : choix d'une piste par le gérant (`docs/design/logos/propositions.html`), puis
-  déclinaison (monogramme de l'application, icônes d'onglet et d'installation, écran de connexion).
-- Logos repris des sites des deux sociétés : à faire confirmer par le client (fichiers vectoriels
-  officiels si disponibles) ; l'icône d'onglet du portail (`public/icons/portail.svg`) reste
-  typographique.
+- Arbitrages du gérant (audit du 22 octobre) : accent violet de l'Analyse (proscrit par son guide) ;
+  dégradés des boutons principaux, avatars et bandeaux (aplat proposé, dégradé gardé pour le seul
+  billet) ; jargon anglais du cabinet (Readiness, Bankability, Data room, Pipeline) ; icônes en tête
+  des boutons texte.
+- Harmonisation des composants relevée par l'audit : état commun chargement, erreur et vide (112
+  appels d'API n'affichent pas leur erreur et restent sur « Chargement »), tailles de `Button`,
+  un seul panneau flottant, une seule feuille, échelle des titres et des tailles de texte,
+  confirmations en fenêtre au lieu de `window.confirm`, couleurs des graphiques sur jetons.
+- Charte d'EGUITRA GROUP (PDF confié le 21 octobre, disque E:) : à confronter aux choix faits,
+  dont les logos des deux sociétés repris de leurs sites, à faire confirmer par le client.
 
 ## Pour la session fonctionnelle
 
