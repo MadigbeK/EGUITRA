@@ -12,7 +12,7 @@ import { type ReactNode } from "react";
 import { AlertTriangle, ChevronRight, Info, ShieldAlert, TriangleAlert, type Icon } from "@/components/icons";
 import { Badge, DataTable, IconTile, cx, type Teinte, type Tone } from "@/components/ui";
 import type { Alert, AlertUnit, CashForecast, MonthStatus, MonthlyCash, Question, Severity, Thresholds, Verdict, WorkingCapital } from "@/lib/finance-types";
-import { MONTHS_FR, fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { MONTHS_FR, fmtAxe, fmtGNF, fmtInt, fmtJours, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
 
 /* ─── Gravités et valeurs ──────────────────────────────────────────────── */
 
@@ -35,58 +35,76 @@ export function gravite(s: string) {
   return GRAVITE[s as Severity] ?? GRAVITE.info;
 }
 
-/** Valeur d'une règle selon son unité : montant court, taux, jours, ratio, nombre. */
+/** Valeur d'une règle selon son unité : montant court, taux, jours (une décimale), ratio (deux), nombre. */
 export function fmtValeur(value: number | null | undefined, unit: AlertUnit): string {
   if (value === null || value === undefined || unit === "none") return "–";
   switch (unit) {
     case "gnf":
-      return `${fmtShort(value)} GNF`;
+      return `${fmtShort(value)} GNF`;
     case "pct":
       return fmtPct(value);
     case "days":
-      return `${fmtDec(Math.round(value * 10) / 10)} j`;
+      return fmtJours(value);
     case "ratio":
-      return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return fmtRatio(value);
     default:
       return fmtInt(value);
   }
 }
 
-/** « 420 M GNF · seuil 1,5 Mds GNF » */
+/** Valeur constatée et seuil d'une alerte, chacun écrit dans son unité ; null quand la règle n'en a pas. */
+function chiffresAlerte(a: Alert): { valeur: string | null; seuil: string | null } {
+  return {
+    valeur: a.value === null ? null : fmtValeur(a.value, a.unit),
+    seuil: a.threshold_unit === "none" || (!a.threshold && a.threshold_unit !== "gnf" && a.threshold_unit !== "count") ? null : fmtValeur(a.threshold, a.threshold_unit),
+  };
+}
+
+/** « 420 M GNF · seuil 1,50 Md GNF » */
 export function valeurEtSeuil(a: Alert): string | null {
-  const valeur = a.value === null ? null : fmtValeur(a.value, a.unit);
-  const seuil = a.threshold_unit === "none" || (!a.threshold && a.threshold_unit !== "gnf" && a.threshold_unit !== "count") ? null : fmtValeur(a.threshold, a.threshold_unit);
+  const { valeur, seuil } = chiffresAlerte(a);
   if (!valeur && !seuil) return null;
   return [valeur, seuil && `seuil ${seuil}`].filter(Boolean).join(" · ");
 }
 
-/** Une alerte : gravité, domaine, constat, valeur face au seuil, action recommandée, écran où agir. */
+/**
+ * Une alerte, en trois colonnes : le constat (titre, domaine et message, action recommandée), le
+ * montant en jeu lisible avec son seuil dessous, la gravité. Au téléphone, montant et gravité
+ * passent sous le constat. Le lien mène à l'écran où agir.
+ */
 export function AlerteLigne({ a, groupe }: { a: Alert; groupe?: boolean }) {
   const g = gravite(a.severity);
   const ok = a.status !== "alert";
-  const chiffres = valeurEtSeuil(a);
+  const { valeur: brute, seuil } = chiffresAlerte(a);
+  const valeur = brute === "–" ? null : brute;
   const corps = (
     <div className={cx("flex items-start gap-3 rounded-xl px-2 py-2.5 transition-colors", a.link && "group-hover:bg-panel-2")}>
       <IconTile icon={g.icon} teinte={ok ? "jade" : g.teinte} className="h-9 w-9 rounded-[10px]" />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <span className="text-[13.5px] font-semibold text-ink">{a.title}</span>
-          <span className="flex flex-none items-center gap-1.5">
-            <span className="rounded-md bg-panel-3 px-1.5 py-px text-[11.5px] font-medium text-ink-2">{a.domain}</span>
-            {ok ? <Badge tone={a.status === "na" ? "neutral" : "ok"}>{a.status === "na" ? "Sans objet" : "Conforme"}</Badge> : <Badge tone={g.tone}>{g.label}</Badge>}
-          </span>
-        </div>
-        <div className="mt-0.5 text-[12.5px] leading-snug text-muted">
-          {groupe && `${a.company}, `}
-          {a.message}
-          {chiffres && <span className="ml-1 whitespace-nowrap font-mono text-[12px] text-ink-2">({chiffres})</span>}
-        </div>
-        {!ok && a.action && (
-          <div className="mt-1 text-[12.5px] leading-snug text-ink-2">
-            <span className="font-semibold">Action : </span>
-            {a.action}
+      <div className="grid min-w-0 flex-1 gap-x-4 gap-y-1.5 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0">
+          <div className="text-[13.5px] font-semibold leading-snug text-ink">{a.title}</div>
+          <div className="mt-0.5 text-[12.5px] leading-snug text-muted">
+            <span className="font-medium text-ink-2">{a.domain}</span>
+            {" · "}
+            {groupe && `${a.company}, `}
+            {a.message}
           </div>
-        )}
+          {!ok && a.action && (
+            <div className="mt-1 text-[12.5px] leading-snug text-ink-2">
+              <span className="font-semibold">Action : </span>
+              {a.action}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:flex-nowrap sm:items-start">
+          {(valeur || seuil) && (
+            <div className="tabular sm:text-right">
+              {valeur && <div className="whitespace-nowrap font-display text-[15px] font-semibold leading-tight text-ink">{valeur}</div>}
+              {seuil && <div className="whitespace-nowrap text-[12px] leading-snug text-muted">seuil {seuil}</div>}
+            </div>
+          )}
+          <span className="sm:mt-px">{ok ? <Badge tone={a.status === "na" ? "neutral" : "ok"}>{a.status === "na" ? "Sans objet" : "Conforme"}</Badge> : <Badge tone={g.tone}>{g.label}</Badge>}</span>
+        </div>
       </div>
       {a.link && <ChevronRight className="no-print mt-2 h-4 w-4 flex-none text-line-strong transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />}
     </div>
@@ -136,8 +154,9 @@ export function QuestionsDirigeant({ questions }: { questions: Question[] }) {
             </span>
             <span className="text-[13.5px] font-semibold leading-snug text-ink">{q.question}</span>
           </div>
-          <div className="flex items-center gap-2.5 pl-9 md:flex-col md:items-end md:pl-0">
-            <span className="whitespace-nowrap font-display text-[17px] font-bold tabular text-ink">{q.answer}</span>
+          {/* Au téléphone, la réponse passe à la ligne au lieu d'être coupée au bord (« Conform »). */}
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-9 md:flex-col md:flex-nowrap md:items-end md:pl-0">
+            <span className="font-display text-[17px] font-bold tabular text-ink md:whitespace-nowrap">{q.answer}</span>
             <Badge tone={VERDICT[q.verdict].tone}>{q.threshold_unset ? "Seuil non fixé" : VERDICT[q.verdict].label}</Badge>
           </div>
           <p className="pl-9 text-[12.5px] leading-relaxed text-muted md:pl-0">{q.reading}</p>
@@ -204,28 +223,28 @@ export function CourbeTresorerie({ data, forecast }: { data: MonthlyCash; foreca
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
-        <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-5 rounded bg-azur" />Solde de fin de mois</span>
-        {prevision.length > 0 && <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0 w-5 border-t-2 border-dashed border-azur" />Prévision (échéances)</span>}
+        <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-5 rounded bg-accent" />Solde de fin de mois</span>
+        {prevision.length > 0 && <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0 w-5 border-t-2 border-dashed border-accent" />Prévision (échéances)</span>}
         {seuil ? <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0 w-5 border-t-2 border-dashed border-danger-vif" />Seuil de sécurité</span> : null}
       </div>
       <div className="flex gap-2">
         <div aria-hidden className="relative w-14 flex-none text-right text-[11px] tabular text-muted" style={{ height: H }}>
           {[hi - marge, (hi + lo) / 2, lo + marge].map((t, k) => (
-            <span key={k} className="absolute right-0 -translate-y-1/2" style={{ top: `${y(t)}%` }}>{fmtShort(t)}</span>
+            <span key={k} className="absolute right-0 -translate-y-1/2" style={{ top: `${y(t)}%` }}>{fmtAxe(t)}</span>
           ))}
         </div>
         <div role="img" aria-label={resume} className="relative min-w-0 flex-1" style={{ height: H }}>
           <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden focusable="false">
             <line x1="0" x2="1000" y1={(y(0) / 100) * H} y2={(y(0) / 100) * H} stroke="var(--line-strong)" vectorEffect="non-scaling-stroke" />
             {seuil ? <line x1="0" x2="1000" y1={(y(seuil) / 100) * H} y2={(y(seuil) / 100) * H} stroke="var(--danger-vif)" strokeDasharray="6 5" strokeWidth="1.5" vectorEffect="non-scaling-stroke" /> : null}
-            {pts.length > 0 && <path d={trace(pts)} fill="none" stroke="var(--g-azur)" strokeWidth="2.25" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
-            {prevision.length > 0 && <path d={trace([...debutPrev, ...prevision])} fill="none" stroke="var(--g-azur)" strokeWidth="2" strokeDasharray="7 6" vectorEffect="non-scaling-stroke" />}
+            {pts.length > 0 && <path d={trace(pts)} fill="none" stroke="var(--accent)" strokeWidth="2.25" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+            {prevision.length > 0 && <path d={trace([...debutPrev, ...prevision])} fill="none" stroke="var(--accent)" strokeWidth="2" strokeDasharray="7 6" vectorEffect="non-scaling-stroke" />}
           </svg>
           {pts.map((p) => (
-            <span key={`r${p.i}`} aria-hidden title={`${p.label} : ${fmtGNF(p.v)}`} className={cx("absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel", seuil && p.v < seuil ? "bg-danger-vif" : "bg-azur")} style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
+            <span key={`r${p.i}`} aria-hidden title={`${p.label} : ${fmtGNF(p.v)}`} className={cx("absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel", seuil && p.v < seuil ? "bg-danger-vif" : "bg-accent")} style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
           ))}
           {prevision.map((p) => (
-            <span key={`p${p.i}`} aria-hidden title={`Prévision fin ${p.label} : ${fmtGNF(p.v)}`} className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-azur bg-panel" style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
+            <span key={`p${p.i}`} aria-hidden title={`Prévision fin ${p.label} : ${fmtGNF(p.v)}`} className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent bg-panel" style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
           ))}
           {lowPt && (
             <span aria-hidden className="absolute -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-[10.5px] font-semibold text-white" style={{ left: `${Math.min(92, Math.max(8, x(lowPt.i)))}%`, top: `calc(${y(lowPt.v)}% + 9px)` }}>
@@ -319,12 +338,10 @@ function Chiffre({ label, value, hint, tone }: { label: string; value: ReactNode
     <div className="min-w-0 rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
       <div className="text-[12px] font-medium text-muted">{label}</div>
       <div className={cx("mt-1 font-display text-[19px] font-bold tabular leading-tight", tone === "danger" ? "text-danger" : tone === "warn" ? "text-warn" : "text-ink")}>{value}</div>
-      {hint && <div className="mt-0.5 truncate text-[11.5px] text-muted">{hint}</div>}
+      {hint && <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-muted">{hint}</div>}
     </div>
   );
 }
-
-const jours = (v: number | null) => (v === null ? "–" : `${fmtDec(Math.round(v * 10) / 10)} j`);
 
 /**
  * BFR et délais : DSO face à la cible, DPO, DIO, cycle, part échue, concentration. Un seuil null (laissé
@@ -337,10 +354,10 @@ export function CarteBfr({ wc, thresholds }: { wc: WorkingCapital; thresholds: T
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       <Chiffre label="BFR" value={`${fmtShort(wc.bfr)}`} hint={`SYSCOHADA : ${fmtShort(wc.bfr_syscohada)}`} />
-      <Chiffre label="Cycle d'exploitation" value={jours(wc.cycle)} hint="DSO + DIO - DPO" />
-      <Chiffre label="DSO (recouvrement)" value={jours(wc.dso)} hint={cible ? `Cible ${fmtInt(cible)} j · 12 mois ${jours(wc.dso_12m)}` : `12 mois glissants ${jours(wc.dso_12m)}`} tone={wc.dso !== null && cible ? (wc.dso > cible ? "danger" : "ok") : undefined} />
-      <Chiffre label="DPO (fournisseurs)" value={jours(wc.dpo)} hint={wc.dio !== null && wc.stocks ? `DIO ${jours(wc.dio)}` : "Sans stock"} />
-      <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} GNF sur ${fmtShort(wc.receivables)} GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
+      <Chiffre label="Cycle d'exploitation" value={fmtJours(wc.cycle)} hint="DSO + DIO - DPO" />
+      <Chiffre label="DSO (recouvrement)" value={fmtJours(wc.dso)} hint={cible ? `Cible ${fmtJours(cible)} · 12 mois ${fmtJours(wc.dso_12m)}` : `12 mois glissants ${fmtJours(wc.dso_12m)}`} tone={wc.dso !== null && cible ? (wc.dso > cible ? "danger" : "ok") : undefined} />
+      <Chiffre label="DPO (fournisseurs)" value={fmtJours(wc.dpo)} hint={wc.dio !== null && wc.stocks ? `DIO ${fmtJours(wc.dio)}` : "Sans stock"} />
+      <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} sur ${fmtShort(wc.receivables)} GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
       <Chiffre label="Dettes fournisseurs échues" value={`${fmtShort(wc.payables_overdue)}`} hint={`sur ${fmtShort(wc.payables)} GNF`} tone={wc.payables_overdue > 0.5 ? "warn" : undefined} />
       <Chiffre label="Premier client" value={fmtPct(wc.concentration.pct)} hint={`${wc.concentration.partner ?? "du chiffre d'affaires"} · ${concMax ? `seuil ${fmtPct(concMax, 0)}` : "seuil non fixé"}`} tone={wc.concentration.pct !== null && concMax && wc.concentration.pct > concMax ? "warn" : undefined} />
       <Chiffre label="Douteux (+ de 90 j)" value={`${fmtShort(wc.receivables_doubtful)}`} hint={pluriel(wc.receivables_aging_count.plus_90, "pièce")} tone={wc.receivables_doubtful > 0 ? "danger" : undefined} />

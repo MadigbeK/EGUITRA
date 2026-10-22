@@ -56,8 +56,27 @@ const cle = (c: Candidate) => `${c.kind ?? "move_line"}-${c.id}`;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * Position de trésorerie : les comptes des journaux de banque et de caisse et leur somme. cash_min
+ * (seuil de sécurité) n'est pas encore servi par /finance/treasury (demande au noyau) : tant qu'il
+ * manque, le total ne porte un sceau que s'il est négatif.
+ */
+interface Position {
+  accounts: CashAccount[];
+  total: number;
+  as_of: string;
+  cash_min?: number | null;
+}
+
+/** Sceau du total, calculé et jamais fixe : alerte sous zéro ou sous le seuil de sécurité, conforme au-dessus d'un seuil fixé. */
+function tonTotal(p: Position): "danger" | "ok" | "neutral" {
+  const seuil = p.cash_min ?? null;
+  if (p.total < 0 || (seuil && p.total < seuil)) return "danger";
+  return seuil ? "ok" : "neutral";
+}
+
 export default function TreasuryPage() {
-  const { data: position, error, mutate: refreshPosition } = useApi<{ accounts: CashAccount[]; total: number; as_of: string }>("/finance/treasury");
+  const { data: position, error, mutate: refreshPosition } = useApi<Position>("/finance/treasury");
   const [journalId, setJournalId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"unreconciled" | "all">("unreconciled");
   const current = position?.accounts.find((a) => a.journal_id === journalId) ?? position?.accounts[0] ?? null;
@@ -99,7 +118,13 @@ export default function TreasuryPage() {
       {position && (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} tone="ok" />
+            {/* Somme des comptes de banque et de caisse : la trésorerie nette du tableau de bord y ajoute les autres comptes de la classe 5. */}
+            <Kpi
+              label="Banques et caisses"
+              value={fmtShort(position.total)}
+              hint={`${pluriel(position.accounts.length, "compte")} au ${fmtDate(position.as_of)}, hors autres comptes de trésorerie (classe 5)`}
+              tone={tonTotal(position)}
+            />
             {position.accounts.map((a) => {
               const choisi = current?.journal_id === a.journal_id;
               const I = a.type === "cash" ? Wallet : Landmark;
