@@ -1,7 +1,7 @@
 """Modèle financier du projet : hypothèses saisies par le cabinet et analyse par le moteur
 (`engine.py`). Un modèle par dossier ; ses indicateurs alimentent la synthèse, les suggestions
 d'évaluation des critères adossés à un indicateur et l'instantané des revues de comité. Qui le
-modifie rejoint les auteurs des données de décision du dossier (quatre yeux)."""
+modifie rejoint les auteurs de la révision en cours du dossier (quatre yeux)."""
 
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError

@@ -8,10 +8,11 @@ knock-outs, classification en cinq classes, règles de passage des huit gates et
 voir scoring.py. Un dossier dont la décision de comité est verrouillée est figé jusqu'à l'ouverture
 d'une nouvelle révision.
 
-Quatre yeux (décision du gérant) : un compte qui a évalué un critère du dossier, ou modifié ses
-données de décision dans la révision en cours (fiche et hypothèses, modèle financier, pièces de la
-data room), ne verrouille pas la décision du comité et ne force pas un gate ; celui qui a verrouillé
-la décision n'ouvre pas la révision qui la défait. Un consultant n'écrit l'évaluation que des
+Quatre yeux (décision du gérant) : une décision du comité engage au moins deux personnes. Le verrou
+de la décision et le passage forcé d'un gate sont refusés quand aucun autre compte que celui qui
+agit n'a contribué à la révision en cours (évaluation des critères, fiche et hypothèses, modèle
+financier, pièces de la data room) ; celui qui a verrouillé la décision n'ouvre pas la révision qui
+la défait. Un consultant n'écrit l'évaluation que des
 compartiments qui lui sont confiés ; un compartiment sans consultant reste ouvert à tout le cabinet
 et le responsable du dossier évalue tous les compartiments. La lecture reste ouverte à toute
 l'équipe.
@@ -49,13 +50,12 @@ FROZEN_FIELDS = {
     "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed", "consultant_id",
 }
 HYPOTHESES = ("dd_red_flag", "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed")
-# Fiche et hypothèses du dossier qui entrent dans le score ou le contenu scellé : leur auteur rejoint
-# les auteurs des données de décision de la révision (sauf le consultant responsable : ni score ni sceau).
+# Ce qui entre dans le score ou le contenu scellé : qui l'écrit rejoint les auteurs de la révision en
+# cours (decision_inputs_by). Fiche et hypothèses du dossier (sauf le consultant responsable : ni score
+# ni sceau) ; pièce de la data room (nom, version, état, validité, fichier, rattachements) ; évaluation
+# d'un critère, que seuls les consultants admis sur son compartiment écrivent.
 DECISION_FIELDS = FROZEN_FIELDS - {"consultant_id"}
-# Pièce de la data room : ce que scelle la décision (nom, version, état, validité, fichier, rattachements).
 DOCUMENT_INPUT_FIELDS = {"name", "document_type_id", "attachment_id", "state", "validity_date", "evaluation_ids"}
-# Évaluation d'un critère : tout ce qui entre dans le score ou dans le contenu scellé par le comité.
-# Leur auteur est retenu (evaluated_by) et seuls les consultants admis sur le compartiment les écrivent.
 EVALUATION_FIELDS = {"status", "comment", "deliverable", "responsible", "due_date", "document_ids"}
 
 
@@ -67,7 +67,7 @@ def _system(env):
 
 
 def _input_author(env):
-    """Compte à inscrire parmi les auteurs des données de décision : compte interne hors système (un
+    """Compte à inscrire parmi les auteurs de la révision : compte interne hors système (un
     porteur qui dépose une pièce par le portail ne verrouille jamais un comité)."""
     return not _system(env) and not env.user.share
 
@@ -127,10 +127,10 @@ class AxisproDossier(models.Model):
     assignment_ids = fields.One2many("axispro.assignment", "dossier_id", "Consultants par compartiment")
     decision_inputs_by = fields.Many2many(
         "res.users", "axispro_dossier_decision_input_rel", "dossier_id", "user_id",
-        "Auteurs des données de décision de la révision", readonly=True, copy=False,
-        help="Comptes du cabinet qui ont créé ou modifié, dans la révision en cours, la fiche et les hypothèses "
-             "du dossier, le modèle financier ou les pièces de la data room (quatre yeux). Remis à zéro à "
-             "chaque nouvelle révision.")
+        "Auteurs de la révision en cours", readonly=True, copy=False,
+        help="Comptes du cabinet qui ont, depuis l'ouverture de la révision, évalué un critère, créé ou modifié "
+             "la fiche et les hypothèses du dossier, le modèle financier ou les pièces de la data room (quatre "
+             "yeux). Remis à zéro à chaque nouvelle révision.")
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -167,8 +167,8 @@ class AxisproDossier(models.Model):
         return super().write(vals)
 
     def _note_decision_input(self):
-        """Inscrit l'utilisateur parmi les auteurs des données de décision de la révision en cours
-        (fiche et hypothèses, modèle financier, pièces de la data room) : quatre yeux."""
+        """Inscrit l'utilisateur parmi les auteurs de la révision en cours (évaluation des critères,
+        fiche et hypothèses, modèle financier, pièces de la data room) : quatre yeux."""
         if not _input_author(self.env):
             return
         uid = self.env.uid
@@ -183,35 +183,33 @@ class AxisproDossier(models.Model):
                                 f"{dossier.revision}) : ouvrez une nouvelle révision pour le modifier.")
 
     def evaluators(self):
-        """Comptes auteurs de ce que la décision du comité scelle :
-        - évaluation en vigueur : pour chaque critère, le dernier compte qui a écrit son évaluation
-          (evaluated_by) et le dernier qui a fixé son statut (assessed_by, seul renseigné avant la
-          version 19.0.1.4.0) ; un critère repris d'une révision précédente sans changement garde
-          ses auteurs, leur évaluation entrant dans la décision ;
-        - données de décision de la révision en cours (decision_inputs_by) : fiche et hypothèses,
-          modèle financier, pièces de la data room.
-        Compte système et porteurs exclus."""
+        """Comptes auteurs de la révision en cours (decision_inputs_by) : ceux qui, depuis son
+        ouverture, ont évalué un critère, créé ou modifié la fiche et les hypothèses, le modèle
+        financier ou les pièces de la data room. Compte système et porteurs exclus."""
         self.ensure_one()
-        dossier = self.sudo()
-        evaluations = dossier.evaluation_ids
-        authors = evaluations.evaluated_by | evaluations.assessed_by | dossier.decision_inputs_by
+        authors = self.sudo().decision_inputs_by
         return authors.filtered(lambda u: u.id != SUPERUSER_ID and not u.share).with_env(self.env)
 
     def _check_four_eyes(self, action):
-        """Quatre yeux : `action` (verrouiller la décision du comité, forcer un gate) est refusée au
-        compte qui a évalué un critère du dossier ou modifié ses données de décision."""
+        """Quatre yeux : une décision du comité engage au moins deux personnes. `action` (verrouiller
+        la décision, forcer un gate) est refusée quand aucun autre compte que celui qui agit ne figure
+        parmi les auteurs de la révision en cours : seul auteur, ou révision sans autre contribution."""
         for dossier in self:
             if _system(dossier.env):
                 continue
+            me = dossier.env.user
             authors = dossier.evaluators()
-            if dossier.env.user in authors:
-                names = ", ".join(sorted(authors.sudo().mapped("name")))
-                raise AccessError(
-                    f"Principe des quatre yeux : vous avez évalué le dossier {dossier.reference} ou modifié ses "
-                    f"données de décision (révision {dossier.revision}), vous ne pouvez donc pas {action}. "
-                    f"Auteurs de l'évaluation et des données de décision : {names}. Un autre consultant du cabinet "
-                    "doit s'en charger."
-                )
+            if authors - me:
+                continue
+            situation = (f"vous êtes le seul auteur de la révision {dossier.revision} du dossier {dossier.reference}"
+                         if me in authors else
+                         f"aucun autre consultant n'a contribué à la révision {dossier.revision} du dossier "
+                         f"{dossier.reference}")
+            raise AccessError(
+                f"Principe des quatre yeux : une décision du comité engage au moins deux personnes. Or {situation} "
+                "(évaluation des critères, fiche et hypothèses, modèle financier, pièces) : vous ne pouvez donc "
+                f"pas {action} seul. Un autre consultant du cabinet doit contribuer à cette révision ou s'en charger."
+            )
 
     def _evaluation_refusal(self, compartment, user=None):
         """Motif du refus d'écrire l'évaluation d'un critère de `compartment` pour `user` (par défaut
@@ -474,8 +472,8 @@ class AxisproDossier(models.Model):
 
     def action_advance_gate(self, force_reason=None):
         """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant ; sinon refus motivé,
-        sauf passage forcé par le cabinet avec un motif inscrit au journal, par un autre compte que
-        les auteurs de l'évaluation (quatre yeux)."""
+        sauf passage forcé par le cabinet avec un motif inscrit au journal, jamais par une seule
+        personne : un autre compte doit avoir contribué à la révision (quatre yeux)."""
         self.ensure_one()
         self._check_unlocked()
         gates = self.policy_id.gate_ids.sorted("sequence")
@@ -508,7 +506,7 @@ class AxisproDossier(models.Model):
                 f"(révision {self.revision}), vous ne pouvez donc pas ouvrir la nouvelle révision qui la défait. "
                 "Un autre consultant du cabinet doit l'ouvrir."
             )
-        # Les auteurs des données de décision se comptent par révision : la nouvelle repart à vide.
+        # Les auteurs se comptent par révision : la nouvelle repart à vide.
         self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False,
                                                         "decision_inputs_by": [Command.clear()]})
         self.log("revision", note=f"Révision {self.revision} ouverte après la décision du {previous.date:%d/%m/%Y} "
@@ -532,9 +530,6 @@ class AxisproEvaluation(models.Model):
     due_date = fields.Date("Échéance")
     assessed_by = fields.Many2one("res.users", readonly=True)
     assessed_at = fields.Datetime(readonly=True)
-    evaluated_by = fields.Many2one("res.users", "Dernier auteur de l'évaluation", readonly=True,
-                                   help="Dernier compte qui a écrit le statut, l'observation, le livrable, le "
-                                        "responsable, l'échéance ou les preuves du critère (quatre yeux).")
 
     _unique = models.Constraint("unique(dossier_id, criterion_id)", "Un critère n'est évalué qu'une fois par dossier.")
 
@@ -550,7 +545,7 @@ class AxisproEvaluation(models.Model):
             self.dossier_id._check_unlocked()
         if EVALUATION_FIELDS & set(vals):
             self._check_evaluator()
-            vals = dict(vals, evaluated_by=self.env.user.id)
+            self.dossier_id._note_decision_input()
         if "status" in vals:
             labels = dict(STATUSES)
             changed = self.filtered(lambda e: e.status != vals["status"])
@@ -606,7 +601,7 @@ class AxisproDocument(models.Model):
         """Une pièce antérieure à la décision verrouillée entre dans le score scellé : son état et sa
         validité ne changent plus avant une nouvelle révision. Une pièce reçue après la décision se
         traite librement. Tout changement de validité est inscrit au journal du dossier. L'auteur
-        d'un changement scellé rejoint les auteurs des données de décision (quatre yeux)."""
+        d'un changement scellé rejoint les auteurs de la révision (quatre yeux)."""
         if {"state", "validity_date", "evaluation_ids"} & set(vals) and not self.env.context.get("axispro_unlocked"):
             self.filtered(lambda d: not d.after_lock).dossier_id._check_unlocked()
         if DOCUMENT_INPUT_FIELDS & set(vals):
