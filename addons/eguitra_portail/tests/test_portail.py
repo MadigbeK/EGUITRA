@@ -222,5 +222,10 @@ class TestPortail(ApiCase):
         _s, profil = self.call("PATCH", "/portail/profil", {"user": {"phone": "+224 620 00 00 00"},
                                                             "entreprise": {"city": "Kindia", "website": "briques.gn"}},
                                token=self.porteur)
-        self.assertEqual((profil["user"]["phone"], profil["entreprise"]["city"], profil["entreprise"]["website"]),
-                         ("+224 620 00 00 00", "Kindia", "https://briques.gn"))
+        self.assertEqual(profil["user"]["phone"], "+224 620 00 00 00", "Ses propres coordonnées changent")
+        self.assertTrue(profil["request_sent"])
+        self.assertFalse(profil["entreprise"]["city"], "La fiche de l'entreprise ne change pas sans le cabinet")
+        demande = self.dossier_a.message_ids.filtered(lambda m: m.body.startswith("Demande de mise à jour"))
+        self.assertIn("Ville : Kindia", demande.body)
+        self.assertIn("Site internet : https://briques.gn", demande.body)
+        self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))

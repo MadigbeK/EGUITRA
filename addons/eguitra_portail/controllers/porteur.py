@@ -23,6 +23,8 @@ MAX_OPEN_MEETING_REQUESTS = 3
 PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
                         "state", "version")
 PROFILE_FIELDS = ("phone", "email", "street", "city", "website")
+PROFILE_LABELS = {"phone": "Téléphone", "email": "Courriel", "street": "Adresse", "city": "Ville",
+                  "website": "Site internet"}
 
 
 def _me():
@@ -563,25 +565,37 @@ class EguitraPortailPorteur(http.Controller):
 
     @api_route("/portail/profil", methods=("PATCH",), profiles=PORTEUR)
     def modifier_profil(self, **_kw):
-        data = read_json()
+        """Le porteur tient à jour ses propres coordonnées. La fiche de son entreprise (tiers du cabinet,
+        adresse de facturation comprise) ne change pas d'ici : sa demande part au consultant, qui la
+        reporte après contrôle."""
+        me, data, dossiers = _me(), read_json(), _dossiers()
 
         def clean(value, size=120):
             return " ".join(str(value or "").split())[:size] or False
 
         contact = {f: clean(data["user"][f]) for f in ("phone", "email") if f in (data.get("user") or {})}
-        if contact.get("email") and "@" not in contact["email"]:
-            raise ApiError(422, "business_rule", "Adresse électronique invalide.")
-        if contact:
-            _me().partner_id.sudo().write(contact)
-        promoter = _dossiers()[:1].promoter_id
         company = {f: clean(data["entreprise"][f]) for f in PROFILE_FIELDS if f in (data.get("entreprise") or {})}
+        for values, label in ((contact, ""), (company, " de l'entreprise")):
+            if values.get("email") and "@" not in values["email"]:
+                raise ApiError(422, "business_rule", f"Adresse électronique{label} invalide.")
         if company.get("website") and not company["website"].startswith(("https://", "http://")):
             company["website"] = f"https://{company['website']}"
-        if company.get("email") and "@" not in company["email"]:
-            raise ApiError(422, "business_rule", "Adresse électronique de l'entreprise invalide.")
-        if company and promoter:
-            promoter.sudo().write(company)
-        return self._profile()
+        if contact and me.partner_id in dossiers.promoter_id:
+            # Compte rattaché à la fiche même de l'entreprise : même circuit que l'entreprise.
+            company.update(contact)
+            contact = {}
+        if contact:
+            me.partner_id.sudo().write(contact)
+        promoter = dossiers[:1].promoter_id
+        changes = [f"- {PROFILE_LABELS[f]} : {company[f] or '(à effacer)'}" for f in PROFILE_FIELDS
+                   if f in company and (promoter[f] or False) != company[f]] if promoter else []
+        if changes:
+            dossier = dossiers.filtered(lambda d: d.promoter_id == promoter)[:1]
+            request.env["axispro.message"].sudo().create({
+                "dossier_id": dossier.id, "author_id": me.id, "internal": False,
+                "body": "\n".join([f"Demande de mise à jour de la fiche de {promoter.name} :", *changes]),
+            })
+        return dict(self._profile(), request_sent=bool(changes))
 
     @api_route("/portail/avis", profiles=PORTEUR)
     def avis(self, **_kw):
