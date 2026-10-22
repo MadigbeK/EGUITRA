@@ -266,8 +266,11 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, body = self.call("GET", f"/finance/reminders/{mine.id}", token=token)
         self.assertEqual(status, 200, body)
         self.assertIn("mettons en demeure", body["letter"]["intro"])
-        status, pdf = self.call("GET", f"/finance/reminders/{mine.id}/pdf", token=token)
-        self.assertEqual(status, 200)
-        self.assertTrue(str(pdf).startswith("%PDF"), "Lettre de relance en PDF, à la mise en page de la société")
+        # En test, Odoo rend le rapport en HTML au lieu du PDF : on vérifie l'envoi et le contenu de la lettre.
+        response = self.url_open(f"/api/v1/finance/reminders/{mine.id}/pdf",
+                                 headers={"Authorization": f"Bearer {token}", "X-Eguitra-App": "test"}, timeout=60)
+        self.assertEqual(response.status_code, 200, "Lettre de relance à la mise en page de la société")
+        self.assertEqual(response.headers["Content-Type"], "application/pdf")
+        self.assertIn("mettons en demeure", response.content.decode("utf-8", "replace"))
         status, body = self.call("POST", f"/finance/reminders/{mine.id}/send", {"channel": "letter"}, token=token)
         self.assertEqual((status, body["state"]), (200, "sent"))
