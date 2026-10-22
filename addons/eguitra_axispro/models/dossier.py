@@ -7,10 +7,19 @@ disponible. Trois scores (Project Readiness, APD Readiness, Bankability), score 
 knock-outs, classification en cinq classes, règles de passage des huit gates et recommandation :
 voir scoring.py. Un dossier dont la décision de comité est verrouillée est figé jusqu'à l'ouverture
 d'une nouvelle révision.
+
+Quatre yeux (décision du gérant) : une décision du comité engage au moins deux personnes. Le verrou
+de la décision et le passage forcé d'un gate sont refusés quand aucun autre compte que celui qui
+agit n'a contribué à la révision en cours (évaluation des critères, fiche et hypothèses, modèle
+financier, pièces de la data room) ; celui qui a verrouillé la décision n'ouvre pas la révision qui
+la défait. Un consultant n'écrit l'évaluation que des
+compartiments qui lui sont confiés ; un compartiment sans consultant reste ouvert à tout le cabinet
+et le responsable du dossier évalue tous les compartiments. La lecture reste ouverte à toute
+l'équipe.
 """
 
-from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo import SUPERUSER_ID, Command, api, fields, models
+from odoo.exceptions import AccessError, UserError
 
 from .. import scoring as method
 
@@ -41,6 +50,33 @@ FROZEN_FIELDS = {
     "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed", "consultant_id",
 }
 HYPOTHESES = ("dd_red_flag", "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed")
+# Ce qui entre dans le score ou le contenu scellé : qui l'écrit rejoint les auteurs de la révision en
+# cours (decision_inputs_by). Fiche et hypothèses du dossier (sauf le consultant responsable : ni score
+# ni sceau) ; pièce de la data room (nom, version, état, validité, fichier, rattachements) ; évaluation
+# d'un critère, que seuls les consultants admis sur son compartiment écrivent.
+DECISION_FIELDS = FROZEN_FIELDS - {"consultant_id"}
+DOCUMENT_INPUT_FIELDS = {"name", "document_type_id", "attachment_id", "state", "validity_date", "evaluation_ids"}
+EVALUATION_FIELDS = {"status", "comment", "deliverable", "responsible", "due_date", "document_ids"}
+
+
+def _system(env):
+    """Compte système (installation, migrations, scripts, jeux d'essai) : hors des contrôles de
+    personne (quatre yeux, compartiments), qui portent sur les comptes du cabinet. Un appel de
+    l'API s'exécute toujours sous l'identité de l'utilisateur, même en sudo()."""
+    return env.uid == SUPERUSER_ID
+
+
+def _input_author(env):
+    """Compte à inscrire parmi les auteurs de la révision : compte interne hors système (un
+    porteur qui dépose une pièce par le portail ne verrouille jamais un comité)."""
+    return not _system(env) and not env.user.share
+
+
+def _lead_label(dossier):
+    """« le responsable du dossier (Nom) » pour un message de refus ; sans nom si le dossier n'a pas
+    de responsable désigné (dossier créé par le compte système)."""
+    lead = dossier.sudo().consultant_id.filtered(lambda u: u.id != SUPERUSER_ID)
+    return f"le responsable du dossier ({lead.name})" if lead else "le responsable du dossier"
 
 
 class AxisproDossier(models.Model):
@@ -89,6 +125,12 @@ class AxisproDossier(models.Model):
     message_ids = fields.One2many("axispro.message", "dossier_id", "Échanges")
     journal_ids = fields.One2many("axispro.journal", "dossier_id", "Journal")
     assignment_ids = fields.One2many("axispro.assignment", "dossier_id", "Consultants par compartiment")
+    decision_inputs_by = fields.Many2many(
+        "res.users", "axispro_dossier_decision_input_rel", "dossier_id", "user_id",
+        "Auteurs de la révision en cours", readonly=True, copy=False,
+        help="Comptes du cabinet qui ont, depuis l'ouverture de la révision, évalué un critère, créé ou modifié "
+             "la fiche et les hypothèses du dossier, le modèle financier ou les pièces de la data room (quatre "
+             "yeux). Remis à zéro à chaque nouvelle révision.")
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -114,18 +156,77 @@ class AxisproDossier(models.Model):
             self.env["axispro.evaluation"].create([
                 {"dossier_id": dossier.id, "criterion_id": c.id} for c in dossier.policy_id.criterion_ids
             ])
+        records._note_decision_input()
         return records
 
     def write(self, vals):
         if FROZEN_FIELDS & set(vals) and not self.env.context.get("axispro_unlocked"):
             self._check_unlocked()
+        if DECISION_FIELDS & set(vals) and _input_author(self.env):
+            vals = dict(vals, decision_inputs_by=[Command.link(self.env.uid)])
         return super().write(vals)
+
+    def _note_decision_input(self):
+        """Inscrit l'utilisateur parmi les auteurs de la révision en cours (évaluation des critères,
+        fiche et hypothèses, modèle financier, pièces de la data room) : quatre yeux."""
+        if not _input_author(self.env):
+            return
+        uid = self.env.uid
+        todo = self.sudo().filtered(lambda d: uid not in d.decision_inputs_by.ids)
+        if todo:
+            todo.write({"decision_inputs_by": [Command.link(uid)]})
 
     def _check_unlocked(self):
         for dossier in self:
             if dossier.locked_review_id:
                 raise UserError(f"Dossier {dossier.reference} verrouillé par la décision du comité (révision "
                                 f"{dossier.revision}) : ouvrez une nouvelle révision pour le modifier.")
+
+    def evaluators(self):
+        """Comptes auteurs de la révision en cours (decision_inputs_by) : ceux qui, depuis son
+        ouverture, ont évalué un critère, créé ou modifié la fiche et les hypothèses, le modèle
+        financier ou les pièces de la data room. Compte système et porteurs exclus."""
+        self.ensure_one()
+        authors = self.sudo().decision_inputs_by
+        return authors.filtered(lambda u: u.id != SUPERUSER_ID and not u.share).with_env(self.env)
+
+    def _check_four_eyes(self, action):
+        """Quatre yeux : une décision du comité engage au moins deux personnes. `action` (verrouiller
+        la décision, forcer un gate) est refusée quand aucun autre compte que celui qui agit ne figure
+        parmi les auteurs de la révision en cours : seul auteur, ou révision sans autre contribution."""
+        for dossier in self:
+            if _system(dossier.env):
+                continue
+            me = dossier.env.user
+            authors = dossier.evaluators()
+            if authors - me:
+                continue
+            situation = (f"vous êtes le seul auteur de la révision {dossier.revision} du dossier {dossier.reference}"
+                         if me in authors else
+                         f"aucun autre consultant n'a contribué à la révision {dossier.revision} du dossier "
+                         f"{dossier.reference}")
+            raise AccessError(
+                f"Principe des quatre yeux : une décision du comité engage au moins deux personnes. Or {situation} "
+                "(évaluation des critères, fiche et hypothèses, modèle financier, pièces) : vous ne pouvez donc "
+                f"pas {action} seul. Un autre consultant du cabinet doit contribuer à cette révision ou s'en charger."
+            )
+
+    def _evaluation_refusal(self, compartment, user=None):
+        """Motif du refus d'écrire l'évaluation d'un critère de `compartment` pour `user` (par défaut
+        l'utilisateur), ou None si le compte peut l'écrire. Un consultant n'évalue que les compartiments
+        qui lui sont confiés ; un compartiment sans consultant, ou un critère hors compartiment, reste
+        ouvert à tout le cabinet ; le responsable du dossier (consultant_id) évalue tous les
+        compartiments. La lecture n'est pas concernée."""
+        self.ensure_one()
+        user = user or self.env.user
+        if not compartment or user.id == SUPERUSER_ID:
+            return None
+        dossier = self.sudo()
+        owner = dossier.assignment_ids.filtered(lambda a: a.compartment_id == compartment).user_id
+        if not owner or user in (owner | dossier.consultant_id):
+            return None
+        return (f"compartiment {compartment.code} {compartment.name} confié à {owner.name} ; seuls ce consultant "
+                f"et {_lead_label(dossier)} en écrivent l'évaluation.")
 
     def log(self, kind, note=None, criterion=None, before=None, after=None):
         """Inscription au journal du dossier (auteur authentifié, horodatage du serveur)."""
@@ -333,12 +434,34 @@ class AxisproDossier(models.Model):
             })
         return out
 
+    def can_assign(self):
+        """Le compte confie, reprend ou retire les compartiments du dossier : responsable du dossier
+        (consultant_id) ou compte système. Un autre consultant ne fait que s'attribuer un
+        compartiment libre."""
+        self.ensure_one()
+        return _system(self.env) or self.env.user == self.consultant_id
+
     def assign(self, compartment, user):
-        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation)."""
+        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation).
+        L'évaluation étant réservée au consultant affecté, seuls le responsable du dossier
+        (consultant_id) et le compte système confient un compartiment à quelqu'un d'autre, le
+        reprennent ou retirent l'affectation ; un consultant de l'équipe peut seulement s'attribuer
+        un compartiment encore libre, prise inscrite au journal du dossier. Refus 403 sinon."""
         self.ensure_one()
         if compartment.policy_id != self.policy_id:
             raise UserError("Ce compartiment n'appartient pas à la grille du dossier.")
         current = self.assignment_ids.filtered(lambda a: a.compartment_id == compartment)
+        me = self.env.user
+        self_take = False
+        if current.user_id != user and not self.can_assign():
+            label = f"Compartiment {compartment.code} {compartment.name}"
+            if current:
+                raise AccessError(f"{label} confié à {current.user_id.sudo().name} : seul {_lead_label(self)} "
+                                  "change ou retire cette affectation.")
+            if user != me:
+                raise AccessError(f"{label} libre : vous pouvez vous l'attribuer, mais seul {_lead_label(self)} "
+                                  "le confie à un autre consultant.")
+            self_take = True
         before = current.user_id.name or None
         if not user:
             current.unlink()
@@ -348,13 +471,16 @@ class AxisproDossier(models.Model):
             self.env["axispro.assignment"].create({"dossier_id": self.id, "compartment_id": compartment.id,
                                                    "user_id": user.id})
         if (user.name if user else None) != before:
-            self.log("assignment", note=f"Compartiment {compartment.code} {compartment.name}",
-                     before=before or "Non affecté", after=user.name if user else "Non affecté")
+            note = f"Compartiment {compartment.code} {compartment.name}"
+            if self_take:
+                note += " : pris en charge par le consultant lui-même"
+            self.log("assignment", note=note, before=before or "Non affecté", after=user.name if user else "Non affecté")
         return True
 
     def action_advance_gate(self, force_reason=None):
         """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant ; sinon refus motivé,
-        sauf passage forcé par le cabinet avec un motif inscrit au journal."""
+        sauf passage forcé par le cabinet avec un motif inscrit au journal, jamais par une seule
+        personne : un autre compte doit avoir contribué à la révision (quatre yeux)."""
         self.ensure_one()
         self._check_unlocked()
         gates = self.policy_id.gate_ids.sorted("sequence")
@@ -366,6 +492,7 @@ class AxisproDossier(models.Model):
         if decision and decision["decision"] not in ("go", "conditional"):
             if not force_reason:
                 raise UserError(f"Gate {gate.code} : {method.DECISIONS[decision['decision']]}. " + " ".join(decision["motifs"]))
+            self._check_four_eyes(f"forcer le passage du gate {gate.code}")
             self.log("gate", note=f"Passage forcé de {gate.code} à {following.code} ({method.DECISIONS[decision['decision']]}) : "
                                   f"{force_reason}")
         else:
@@ -374,12 +501,21 @@ class AxisproDossier(models.Model):
         return True
 
     def action_new_revision(self):
-        """Nouvelle révision après une décision verrouillée : le dossier redevient modifiable."""
+        """Nouvelle révision après une décision verrouillée : le dossier redevient modifiable. Elle
+        défait le verrou : un autre compte que celui qui a verrouillé l'ouvre (quatre yeux)."""
         self.ensure_one()
         if not self.locked_review_id:
             raise UserError("Aucune décision verrouillée : le dossier est déjà modifiable.")
         previous = self.locked_review_id
-        self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False})
+        if not _system(self.env) and previous.locked_by == self.env.user:
+            raise AccessError(
+                f"Principe des quatre yeux : vous avez verrouillé la décision en vigueur du dossier {self.reference} "
+                f"(révision {self.revision}), vous ne pouvez donc pas ouvrir la nouvelle révision qui la défait. "
+                "Un autre consultant du cabinet doit l'ouvrir."
+            )
+        # Les auteurs se comptent par révision : la nouvelle repart à vide.
+        self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False,
+                                                        "decision_inputs_by": [Command.clear()]})
         self.log("revision", note=f"Révision {self.revision} ouverte après la décision du {previous.date:%d/%m/%Y} "
                                   f"({method.DECISIONS.get(previous.decision, previous.decision)}).")
         return True
@@ -404,9 +540,19 @@ class AxisproEvaluation(models.Model):
 
     _unique = models.Constraint("unique(dossier_id, criterion_id)", "Un critère n'est évalué qu'une fois par dossier.")
 
+    def _check_evaluator(self):
+        """Refus (403) d'écrire l'évaluation d'un critère hors des compartiments ouverts au compte."""
+        for e in self:
+            refusal = e.dossier_id._evaluation_refusal(e.criterion_id.domain_id.compartment_id)
+            if refusal:
+                raise AccessError(f"Critère {e.criterion_id.code} : {refusal}")
+
     def write(self, vals):
         if not self.env.context.get("axispro_unlocked"):
             self.dossier_id._check_unlocked()
+        if EVALUATION_FIELDS & set(vals):
+            self._check_evaluator()
+            self.dossier_id._note_decision_input()
         if "status" in vals:
             labels = dict(STATUSES)
             changed = self.filtered(lambda e: e.status != vals["status"])
@@ -454,14 +600,19 @@ class AxisproDocument(models.Model):
         for doc in records:
             doc.dossier_id.log("document", note=f"Pièce déposée : {doc.name} (version {doc.version})"
                                                 + (", après la décision verrouillée" if doc.after_lock else "") + ".")
+        # Quatre yeux : la pièce entre dans le score et le contenu scellé.
+        records.dossier_id._note_decision_input()
         return records
 
     def write(self, vals):
         """Une pièce antérieure à la décision verrouillée entre dans le score scellé : son état et sa
         validité ne changent plus avant une nouvelle révision. Une pièce reçue après la décision se
-        traite librement. Tout changement de validité est inscrit au journal du dossier."""
+        traite librement. Tout changement de validité est inscrit au journal du dossier. L'auteur
+        d'un changement scellé rejoint les auteurs de la révision (quatre yeux)."""
         if {"state", "validity_date", "evaluation_ids"} & set(vals) and not self.env.context.get("axispro_unlocked"):
             self.filtered(lambda d: not d.after_lock).dossier_id._check_unlocked()
+        if DOCUMENT_INPUT_FIELDS & set(vals):
+            self.dossier_id._note_decision_input()
         before = {d.id: d.validity_date for d in self} if "validity_date" in vals else {}
         result = super().write(vals)
         for doc in self.filtered(lambda d: d.id in before and before[d.id] != d.validity_date):
@@ -470,6 +621,10 @@ class AxisproDocument(models.Model):
                                                 f"{f'{old:%d/%m/%Y}' if old else 'sans date'} → "
                                                 f"{f'{new:%d/%m/%Y}' if new else 'sans date'}.")
         return result
+
+    def unlink(self):
+        self.dossier_id._note_decision_input()
+        return super().unlink()
 
 
 class AxisproMessage(models.Model):

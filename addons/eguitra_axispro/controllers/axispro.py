@@ -343,7 +343,9 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/assignments", methods=("POST",), profiles=WRITE)
     def assign(self, dossier_id, **_kw):
         """Confie un compartiment du dossier à un consultant : {compartment_id, user_id} (user_id vide :
-        retire l'affectation)."""
+        retire l'affectation). Seul le responsable du dossier confie un compartiment à un autre, le
+        reprend ou retire l'affectation ; un consultant peut seulement s'attribuer un compartiment
+        libre (refus 403 sinon)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (compartment_id,) = require(data, "compartment_id")
@@ -363,7 +365,10 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/portal-access", methods=("POST",), profiles=WRITE)
     def portal_access(self, dossier_id, **_kw):
-        """Ouvre le portail au porteur : compte porteur créé au besoin, mot de passe provisoire."""
+        """Ouvre le portail au porteur : compte porteur créé au besoin, mot de passe provisoire. Un
+        compte porteur existant n'est rattaché que s'il ne suit aucun dossier d'un autre promoteur
+        (même partenaire, ou même société pour un contact) : une erreur de saisie ne lui ouvre pas
+        le dossier d'un autre."""
         dossier = _dossier(dossier_id)
         data = read_json()
         login, name, password = require(data, "login", "name", "password")
@@ -371,6 +376,17 @@ class EguitraAxispro(http.Controller):
         user = Users.with_context(active_test=False).search([("login", "=", str(login).strip().lower())], limit=1)
         if user and not user.share:
             raise ApiError(409, "conflict", "Cet identifiant appartient à un utilisateur interne.")
+        if user:
+            promoter = dossier.promoter_id.commercial_partner_id
+            others = request.env["axispro.dossier"].sudo().search([("portal_user_ids", "in", user.id)]).filtered(
+                lambda d: d.promoter_id.commercial_partner_id != promoter)
+            if others:
+                raise ApiError(
+                    409, "conflict",
+                    f"Le compte porteur « {user.login} » suit déjà le dossier {', '.join(others.mapped('reference'))} "
+                    f"d'un autre promoteur ({', '.join(sorted(set(others.mapped('promoter_id.name'))))}) : un compte "
+                    "porteur ne sert qu'un promoteur. Vérifiez l'identifiant ou choisissez-en un autre pour ce porteur.",
+                )
         if not user:
             user = Users.create({
                 "name": name, "login": str(login).strip().lower(), "password": password,
@@ -387,7 +403,10 @@ class EguitraAxispro(http.Controller):
     def criteria(self, dossier_id, **kw):
         """Critères du dossier : statut saisi et statut retenu par la méthode (requalification),
         alertes, priorité de l'écart, preuves et leur validité, livrable, responsable, échéance.
-        Filtres : gate_id, compartment_id, mine=1 (compartiments confiés à l'utilisateur)."""
+        owner : consultant à qui le compartiment est confié ; editable_by_me : l'utilisateur peut
+        écrire l'évaluation du critère au regard des compartiments (le verrou du comité, lui, se lit
+        dans `locked` du dossier). Filtres : gate_id, compartment_id, mine=1 (compartiments confiés
+        à l'utilisateur)."""
         dossier = _dossier(dossier_id)
         result = dossier.evaluate()
         lines = {x["id"]: x for x in result["lines"]}
@@ -408,9 +427,13 @@ class EguitraAxispro(http.Controller):
             mine = {k for k, u in owners.items() if u == request.env.user}
             evaluations = evaluations.filtered(lambda e: e.criterion_id.domain_id.compartment_id.id in mine)
         rows = []
+        editable = {}
         for e in evaluations.sorted(lambda e: (e.criterion_id.sequence, e.criterion_id.id)):
             c = e.criterion_id
             line = lines.get(c.id, {})
+            compartment = c.domain_id.compartment_id
+            if compartment.id not in editable:
+                editable[compartment.id] = not dossier._evaluation_refusal(compartment)
             rows.append({
                 "id": e.id, "criterion_id": c.id, "code": c.code, "name": c.name, "domain": c.domain_id.name,
                 "domain_id": c.domain_id.id, "domain_code": c.domain_id.code, "gate_id": c.gate_id.id,
@@ -418,6 +441,7 @@ class EguitraAxispro(http.Controller):
                 "compartment": c.domain_id.compartment_id.code or None,
                 "compartment_name": c.domain_id.compartment_id.name or None,
                 "owner": owners[c.domain_id.compartment_id.id].name if c.domain_id.compartment_id.id in owners else None,
+                "editable_by_me": editable[compartment.id],
                 "gate": c.gate_id.code, "weight": c.weight, "critical": c.critical, "knockout": c.knockout,
                 "evidence_required": c.evidence_required, "requirement": c.requirement_type,
                 "bankability": c.bankability, "guidance": c.guidance or None,
@@ -439,6 +463,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/evaluations/<int:evaluation_id>", methods=("PATCH",), profiles=WRITE)
     def evaluate(self, evaluation_id, **_kw):
+        """Évaluation d'un critère ; refus 403 hors des compartiments ouverts à l'utilisateur
+        (compartiment confié à un autre consultant, nommé dans le message)."""
         evaluation = self._evaluation(evaluation_id)
         data = read_json()
         values = {}
@@ -466,6 +492,7 @@ class EguitraAxispro(http.Controller):
         evaluation = self._evaluation(evaluation_id)
         dossier = evaluation.dossier_id
         dossier._check_unlocked()
+        evaluation._check_evaluator()
         form = request.httprequest.form
         type_id = form.get("document_type_id")
         if not type_id:
@@ -478,7 +505,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/advance-gate", methods=("POST",), profiles=WRITE)
     def advance(self, dossier_id, **_kw):
-        """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal."""
+        """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal, et
+        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403)."""
         dossier = _dossier(dossier_id)
         reason = (read_json().get("force_reason") or "").strip()
         if reason and len(reason) < MIN_FORCE_REASON:
@@ -502,6 +530,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/new-revision", methods=("POST",), profiles=WRITE)
     def new_revision(self, dossier_id, **_kw):
+        """Nouvelle révision : défait le verrou, donc ouverte par un autre compte que celui qui a
+        verrouillé la décision (quatre yeux, refus 403)."""
         dossier = _dossier(dossier_id)
         dossier.action_new_revision()
         return dossier_detail(dossier)
@@ -552,7 +582,9 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/dossiers/<int:dossier_id>/reviews", methods=("POST",), profiles=WRITE)
     def create_review(self, dossier_id, **_kw):
-        """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier."""
+        """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier.
+        La création d'une revue non verrouillée est libre ; le verrou (lock) exige qu'un autre compte
+        ait contribué à la révision (quatre yeux, refus 403, rien n'est créé)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (decision,) = require(data, "decision")
@@ -604,6 +636,8 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=WRITE)
     def lock_review(self, review_id, **_kw):
+        """Verrouillage d'une revue : refusé si aucun autre compte n'a contribué à la révision (quatre
+        yeux, 403)."""
         review = _record("axispro.review", review_id, "Revue")
         if review.decision in ("hold", "no_go") and not (review.motive or "").strip():
             raise ApiError(400, "missing_fields", "Motivez une décision HOLD ou NO-GO avant de la verrouiller.",
@@ -669,8 +703,9 @@ class EguitraAxispro(http.Controller):
         })
         return {"id": sheet.id}
 
-    @api_route("/axispro/dossiers/<int:dossier_id>/invoice", methods=("POST",), profiles=("cabinet", "admin"))
+    @api_route("/axispro/dossiers/<int:dossier_id>/invoice", methods=("POST",), profiles=WRITE)
     def invoice(self, dossier_id, **_kw):
+        """Facture d'honoraires du dossier : seul le cabinet facture (les temps sont fermés à l'admin)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         sheets = request.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)])
