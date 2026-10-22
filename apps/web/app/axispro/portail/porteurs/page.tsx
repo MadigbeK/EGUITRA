@@ -7,6 +7,7 @@ import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import { Recherche, correspond, pluriel, telechargerCsv } from "@/components/portail/cabinet/outils";
 import { quand } from "@/components/portail/commun";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Kpi, Loading, PageHeader, Repartition, Segmented, Tabs, cx, type Column, type Tone } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { FeedbackRow, FeedbackTopic, PorteurRow } from "@/lib/portail-types";
@@ -293,9 +294,9 @@ function Avis({ avis }: { avis: FeedbackRow[] }) {
           <Card title="Promoteurs et détracteurs">
             <Repartition
               parts={[
-                { key: "promoteurs", label: "Promoteurs (9 ou 10)", value: indice.promoteurs, color: "#12956a" },
-                { key: "passifs", label: "Passifs (7 ou 8)", value: indice.passifs, color: "#9aa9a2" },
-                { key: "detracteurs", label: "Détracteurs (0 à 6)", value: indice.detracteurs, color: "#e25f35" },
+                { key: "promoteurs", label: "Promoteurs (9 ou 10)", value: indice.promoteurs, color: ETATS.bon },
+                { key: "passifs", label: "Passifs (7 ou 8)", value: indice.passifs, color: ETATS.neutre },
+                { key: "detracteurs", label: "Détracteurs (0 à 6)", value: indice.detracteurs, color: ETATS.risque },
               ]}
             />
             <p className="mt-3 text-[12px] leading-snug text-muted">NPS : part des promoteurs moins part des détracteurs, sur les avis qui donnent une recommandation de 0 à 10.</p>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Printer, ScrollText } from "@/components/icons";
 import { CachetDocument } from "@/components/brand";
-import { Badge, Button, Card, DataTable, Loading, Segmented } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Segmented } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import { ACTION_STATE, FUNDING_STATE, GATE_DECISION, INSTRUMENTS, RECO, RISK_LEVEL, STATUS_LABELS, type ActionState, type DossierDetail, type FundingState, type Indicators, type JournalEntry, type RiskLevel, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort } from "@/lib/format";
@@ -13,8 +13,8 @@ import { PuceCompartiment, arrondi, montant } from "./commun";
 /** Journal du dossier : statuts des critères, dépôts, passages de gate, décisions, révisions, imports. */
 export function Journal({ d }: { d: DossierDetail }) {
   const [kind, setKind] = useState<"" | JournalEntry["kind"]>("");
-  const { data } = useApi<JournalEntry[]>(`/axispro/dossiers/${d.id}/journal?limit=500`);
-  if (!data) return <Loading />;
+  const { data, error, mutate } = useApi<JournalEntry[]>(`/axispro/dossiers/${d.id}/journal?limit=500`);
+  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
   const rows = kind ? data.filter((j) => j.kind === kind) : data;
   return (
     <Card
@@ -57,8 +57,8 @@ interface ReportData {
 /** Rapport de décision : PDF scellé, classeur au plan du modèle du cabinet, fiche d'évaluation,
  * export JSON, data room compressée et liste des pièces à fournir ; aperçu à l'écran. */
 export function Rapport({ d }: { d: DossierDetail }) {
-  const { data } = useApi<ReportData>(`/axispro/dossiers/${d.id}/report`);
-  if (!data) return <Loading />;
+  const { data, error, mutate } = useApi<ReportData>(`/axispro/dossiers/${d.id}/report`);
+  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
   const s = d.scoring;
   const ref = d.reference.replace(/\//g, "-");
   const missing = data.documents.filter((x) => x.required && x.due && !x.available);

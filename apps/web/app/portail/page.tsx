@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Calculator, Clock, FileUp, HandCoins, Mail, Sparkles } from "@/components/icons";
-import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, Loading, cx, type Tone } from "@/components/ui";
+import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, type Tone } from "@/components/ui";
 import { KIND_ICON, dateLongue, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { useApi } from "@/lib/api-client";
@@ -47,7 +47,7 @@ export default function AccueilPortail() {
   return (
     <div className="space-y-6">
       {/* Bandeau : le projet, son étape, sa préparation */}
-      <section className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(125deg,#16304e_0%,#1f4a7a_48%,#137c86_100%)] p-6 text-white shadow-[0_30px_60px_-36px_rgb(16_40_70/0.7)] sm:p-8">
+      <section className="relative overflow-hidden rounded-[26px] bg-accent-strong p-6 text-white shadow-[0_30px_60px_-36px_rgb(16_40_70/0.7)] sm:p-8">
         <svg aria-hidden viewBox="0 0 400 400" className="pointer-events-none absolute -right-24 -top-28 h-[420px] w-[420px] opacity-[0.13]">
           {[60, 100, 140, 180].map((r) => <circle key={r} cx="200" cy="200" r={r} fill="none" stroke="white" strokeWidth="1.2" />)}
           <path d="M40 300 C 140 220, 260 300, 360 140" fill="none" stroke="white" strokeWidth="2" />
@@ -69,7 +69,7 @@ export default function AccueilPortail() {
               </div>
             )}
             <div className="mt-6 rounded-2xl bg-white/[0.07] p-4 ring-1 ring-white/10 [&_*]:!text-white/90">
-              <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] !text-white/60">Parcours du dossier</div>
+              <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] !text-white/75">Parcours du dossier</div>
               <Etapes steps={d.gates.map((g) => ({ key: g.code, label: g.name, state: g.current ? "current" : g.reached ? "done" : "todo" }))} />
             </div>
           </div>
@@ -89,7 +89,7 @@ export default function AccueilPortail() {
         {raccourcis.map((r) => {
           const I = r.icon;
           return (
-            <Link key={r.href} href={r.href} className="group flex items-center gap-3 rounded-2xl border border-line bg-panel px-4 py-3.5 shadow-[var(--ombre-feuille)] transition-[transform,border-color] hover:-translate-y-0.5 hover:border-accent-vif/40">
+            <Link key={r.href} href={r.href} className={cx(FEUILLE, "group flex items-center gap-3 px-4 py-3.5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:ring-1 hover:ring-accent-vif/40")}>
               <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent transition-colors group-hover:bg-accent group-hover:text-white"><I className="h-5 w-5" /></span>
               <span className="text-[13.5px] font-semibold leading-snug text-ink">{r.label}</span>
             </Link>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Calendar, FileText, Plus, Users } from "@/components/icons";
-import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Textarea } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Leave, type LeaveType, type MySpace } from "@/lib/rh-types";
@@ -34,7 +34,7 @@ export function MonEspace() {
   }
 
   async function annuler(l: Leave) {
-    if (!window.confirm(`Annuler votre demande (${l.type.name}, ${periode(l.date_from, l.date_to, l.half_day)}) ?`)) return;
+    if (!(await demanderConfirmation(`Annuler votre demande (${l.type.name}, ${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler la demande", danger: true }))) return;
     setErreur(null);
     try {
       await apiSend("POST", `/rh/me/leaves/${l.id}/cancel`);
@@ -104,7 +104,7 @@ export function MonEspace() {
                   <span className="flex items-center gap-2">
                     <EtatAbsence state={l.state} />
                     {(l.state === "submitted" || (l.state === "approved" && l.date_from > aujourdhui)) && (
-                      <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => void annuler(l)}>
+                      <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
                         Annuler
                       </Button>
                     )}
@@ -132,7 +132,7 @@ export function MonEspace() {
                     align: "right",
                     render: (p) => (
                       <Link href={`/rh/moi/bulletins/${p.id}`}>
-                        <Button className="min-h-0 px-2 py-1 text-xs">Ouvrir</Button>
+                        <Button size="sm">Ouvrir</Button>
                       </Link>
                     ),
                   },

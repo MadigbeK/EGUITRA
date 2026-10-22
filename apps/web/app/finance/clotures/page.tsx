@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { MONTHS_FR, fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
 
@@ -316,7 +316,7 @@ interface Reprise { loaded: boolean; date_from?: string; date_to?: string; sourc
 /** Validation de la reprise : valeurs du classeur de référence face aux valeurs recalculées par la
  * plateforme (offre, chapitre 6.3), à annexer au procès-verbal de bascule. */
 function RepriseValidation() {
-  const { data, mutate } = useApi<Reprise>("/finance/reprise/validation");
+  const { data, error, mutate } = useApi<Reprise>("/finance/reprise/validation");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const fmt = (r: RepriseRow, v: number | null) => (v === null ? "n.d." : r.unit === "gnf" ? fmtGNF(v) : v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }));
   async function charger(file: File) {
@@ -345,7 +345,7 @@ function RepriseValidation() {
     >
       <div className="px-4 py-3">
         {message && <Notice tone={message.tone}>{message.text}</Notice>}
-        {!data ? <Loading /> : !data.loaded ? (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : !data.loaded ? (
           <p className="text-sm text-muted">Après la reprise, chargez le fichier des valeurs du classeur de référence (scripts/reprise, extraire_reference.py) : la plateforme les recalcule et signale chaque écart au-delà de la tolérance.</p>
         ) : (
           <p className="text-[12.5px] text-muted">Du {fmtDate(data.date_from)} au {fmtDate(data.date_to)}{data.source ? `, source : ${data.source}` : ""} ; définitions du classeur (produits = classe 7, charges d&apos;exploitation = classe 6 hors 67 et 68, capitaux propres = 101 + 106 + 110 + résultat), distinctes des rubriques SYSCOHADA.</p>

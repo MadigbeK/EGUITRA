@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { useSWRConfig } from "swr";
-import { AlertTriangle, Coins, FileCheck2, FileText, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
+import { AlertTriangle, Coins, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
 import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type Currency, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
@@ -68,10 +68,10 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} icon={ShieldAlert} teinte={s.knockouts.length ? "danger" : "jade"} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${s.knockouts_pending} non évalué${s.knockouts_pending > 1 ? "s" : ""})` : ""}` : "Aucun"} />
-        <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} icon={AlertTriangle} teinte="ambre" tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${pluriel(s.critical_open.length, "critique")} au total`} />
-        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} icon={FileText} teinte="lagon" hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${s.criteria}, ${pluriel(s.proofs, "preuve")}`} />
-        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} icon={FileCheck2} teinte="azur" hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
+        <Kpi label="Knock-outs actifs" value={String(s.knockouts.length)} tone={s.knockouts.length ? "danger" : "ok"} hint={s.knockouts.length ? `${s.knockouts.map((k) => k.code).join(", ")}${s.knockouts_pending ? ` (dont ${s.knockouts_pending} non évalué${s.knockouts_pending > 1 ? "s" : ""})` : ""}` : "Aucun"} />
+        <Kpi label="Critiques manquants hors KO" value={String(s.critical_missing_excl_ko)} tone={s.critical_missing_excl_ko ? "warn" : "ok"} hint={`${pluriel(s.critical_open.length, "critique")} au total`} />
+        <Kpi label="Complétude documentaire" value={`${arrondi(s.completeness)} %`} hint={`${pluriel(s.assessed, "critère évalué", "critères évalués")} sur ${s.criteria}, ${pluriel(s.proofs, "preuve")}`} />
+        <Kpi label="Complétude de la data room" value={`${arrondi(s.dataroom_completeness)} %`} hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
       </div>
 
       <SuiviCompartiments d={d} />
@@ -83,7 +83,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
               {d.gaps.map((g, i) => (
                 <li key={g.criterion_id} className={cx("rounded-xl border bg-panel px-3.5 py-3 text-sm", g.knockout ? "border-danger/30 bg-danger-doux/40" : "border-line")}>
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <span className="n-degrade grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
+                    <span className="bg-accent grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
                     {g.compartment && <PuceCompartiment code={g.compartment} nom={g.compartment_name} />}
                     <span className="font-medium">{g.code} {g.name}</span>
                     {g.knockout && <Badge tone="danger">Knock-out</Badge>}
@@ -244,7 +244,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
                 <Chiffre titre="Knock-outs actifs" court="KO" valeur={c.knockouts} ton={c.knockouts ? "text-danger" : undefined} />
               </dl>
               <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
-                <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "n-degrade text-white" : "border border-dashed border-line-strong text-muted")}>
+                <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "bg-accent text-white" : "border border-dashed border-line-strong text-muted")}>
                   {c.owner ? initiales(c.owner.name) : "?"}
                 </span>
                 {cabinet ? (

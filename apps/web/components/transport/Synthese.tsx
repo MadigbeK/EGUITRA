@@ -1,21 +1,22 @@
 "use client";
 
-import { CheckCircle2, Droplet, Percent, Receipt, Smartphone, TrendingUp, TriangleAlert } from "@/components/icons";
-import { Card, Compteur, IconTile, Kpi, Loading, Repartition } from "@/components/ui";
+import { CheckCircle2, Droplet, TriangleAlert } from "@/components/icons";
+import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 /** Chiffres du mois : volume livré au compteur, état de la flotte, chiffre d'affaires, marge, à facturer, saisies. */
 export function Synthese() {
   // margin_min : marge minimale de la règle d'alerte (30 % par défaut) ; null : seuil à 0, la marge n'est pas jugée.
-  const { data: summary } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; margin_min: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
+  const { data: summary, error, mutate } = useApi<{ rotations: number; volume: number; revenue: number; margin: number; margin_rate: number | null; margin_min: number | null; to_invoice: { count: number; amount: number }; shortage_excess: { count: number; volume: number; value: number }; drafts: number; fleet: Record<string, number> }>("/transport/summary");
   const sousMinimum = Boolean(summary && summary.margin_rate !== null && summary.margin_min !== null && summary.margin_rate < summary.margin_min);
   return (
     <>
-      {!summary ? <Loading /> : (
+      {!summary ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="mb-7 grid grid-cols-1 gap-5 xl:grid-cols-12">
           {/* Le chiffre de l'écran : le volume livré, au compteur, comme sur la citerne ; l'état de la flotte dessous. */}
-          <section className="min-w-0 rounded-2xl border border-line bg-panel p-6 shadow-[var(--ombre-carte)] xl:col-span-5">
+          <section className={cx(FEUILLE, "min-w-0 p-6 xl:col-span-5")}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-[16.5px] font-semibold text-ink">Volume livré ce mois</h2>
@@ -39,26 +40,26 @@ export function Synthese() {
               </div>
               <Repartition
                 parts={[
-                  { key: "service", label: "En service", value: summary.fleet.service ?? 0, color: "#12956a" },
-                  { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: "#df8f17" },
-                  { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: "#ec4f49" },
+                  { key: "service", label: "En service", value: summary.fleet.service ?? 0, color: ETATS.bon },
+                  { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: ETATS.attention },
+                  { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: ETATS.alerte },
                 ]}
                 format={(v) => `${v}`}
               />
             </div>
           </section>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
-            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} icon={TrendingUp} teinte="jade" hint="Rotations validées et facturées" />
+            <Kpi label="Chiffre d'affaires du mois" value={fmtShort(summary.revenue)} hint="Rotations validées et facturées" />
             <Kpi
               label="Marge du mois"
               value={fmtShort(summary.margin)}
-              icon={Percent}
-              teinte={sousMinimum ? "ambre" : "jade"}
+             
+             
               tone={summary.margin_rate === null || summary.margin_min === null ? "neutral" : sousMinimum ? "warn" : "ok"}
               hint={`Taux de marge ${fmtPct(summary.margin_rate)}, ${summary.margin_min !== null ? `minimum ${fmtPct(summary.margin_min, 0)}` : "seuil non fixé"}`}
             />
-            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} icon={Receipt} teinte="or" tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
-            <Kpi label="Saisies à valider" value={String(summary.drafts)} icon={Smartphone} teinte="corail" tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
+            <Kpi label="Saisies à valider" value={String(summary.drafts)} tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>
         </div>
       )}
@@ -70,10 +71,10 @@ interface Controle { code: string; label: string; ok: boolean; count: number; it
 
 /** Contrôles permanents de la flotte et des rotations (vigilance, non bloquants). */
 export function Controles() {
-  const { data } = useApi<Controle[]>("/transport/controls");
+  const { data, error, mutate } = useApi<Controle[]>("/transport/controls");
   return (
     <Card title="Contrôles de la flotte et des rotations">
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <ul className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
           {data.map((c) => (
             <li key={c.code} className="flex items-start gap-3 border-b border-line py-2.5">

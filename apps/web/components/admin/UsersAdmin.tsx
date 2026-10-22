@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { KeyRound, Plus, ShieldOff } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tag } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Company, Me } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -44,10 +44,9 @@ export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]
           </Button>
         }
       />
-      {error && <ErrorBox error={error} />}
       <Card padded={false}>
         {!users ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={users}

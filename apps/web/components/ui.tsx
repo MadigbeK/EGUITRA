@@ -17,6 +17,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { createRoot } from "react-dom/client";
 import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
@@ -128,8 +129,8 @@ export function Valeur({ value }: { value: ReactNode }) {
 
 /* ─── Couleurs ─────────────────────────────────────────────────────────── */
 
-/** Gamme des graphiques, dans son ordre fixe (contrôlée pour les daltoniens). */
-export const GAMME = ["#12956a", "#2d82dc", "#df8f17", "#c4417a", "#0f9fa0", "#e25f35"] as const;
+/** Couleurs des graphiques et des repères d'état : une seule gamme, sur les jetons (lib/couleurs.ts). */
+export { ETATS, SERIES } from "@/lib/couleurs";
 
 export type Tone = "neutral" | "ok" | "warn" | "danger" | "accent";
 
@@ -200,11 +201,21 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-/** Feuille blanche posée sur le fond : un liseré à peine visible et une ombre portée basse. */
+/**
+ * Feuille : la surface commune des blocs posés sur le fond, rayon 20 px, liseré à peine visible et
+ * ombre portée basse (le liseré est dans l'ombre, sans bordure). Card la porte ; un bloc qui n'est
+ * pas une carte (lien, tuile, colonne) prend ces classes.
+ */
+export const FEUILLE = "rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]";
+
+/** Panneau flottant : menus, sélecteurs, notifications et fenêtres posés au-dessus de la page. */
+export const PANNEAU = "rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)]";
+
+/** Feuille posée sur le fond, avec un titre et des actions facultatifs. */
 export function Card({ title, actions, children, className, padded = true }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; padded?: boolean }) {
   const head = Boolean(title || actions);
   return (
-    <section className={cx("min-w-0 rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]", className)}>
+    <section className={cx("min-w-0", FEUILLE, className)}>
       {head && (
         <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-6 pb-1 pt-5">
           {title && <h2 className="font-display text-[17px] font-[620] leading-snug tracking-[-0.01em] text-ink">{title}</h2>}
@@ -231,7 +242,7 @@ const SCEAU: Record<Tone, string> = {
   ok: "text-ok",
   warn: "text-warn",
   danger: "text-danger",
-  accent: "text-[#a87d2e]",
+  accent: "text-or-fonce",
 };
 
 /** L'état du sceau en toutes lettres, pour qui ne voit pas sa couleur. */
@@ -261,9 +272,9 @@ function Sceau({ tone }: { tone: Tone }) {
  * Un faisceau guilloché propre à chaque libellé court au pied, dans l'encre de l'état ; le sceau
  * dit l'état, le libellé ou la précision le disent aussi en toutes lettres.
  */
-export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; icon?: Icon; teinte?: Teinte; delta?: number | null; inverse?: boolean }) {
+export function Kpi({ label, value, hint, tone = "neutral", delta, inverse }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; delta?: number | null; inverse?: boolean }) {
   return (
-    <div className="n-kpi kpi relative isolate min-w-0 overflow-hidden rounded-[20px] bg-panel px-5 pb-4 pt-4 shadow-[var(--ombre-feuille)]">
+    <div className={cx(FEUILLE, "n-kpi kpi relative isolate min-w-0 overflow-hidden px-5 pb-4 pt-4")}>
       <Ondes graine={label} className={cx("kpi-ondes pointer-events-none absolute -bottom-2 right-0 -z-10 h-[74px] w-[78%] max-w-[300px]", ENCRE[tone])} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 text-[13px] font-medium leading-snug text-ink-2">{label}</div>
@@ -320,31 +331,40 @@ function ajuste(base: string, extra?: string): string {
   return [...garde, ...ajout].join(" ");
 }
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON: Record<ButtonVariant, string> = {
-  primary: "n-degrade text-accent-ink shadow-[0_8px_18px_-10px_var(--accent-lueur)] hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)] hover:brightness-[1.07]",
+  primary: "bg-accent text-accent-ink shadow-[0_8px_18px_-10px_var(--accent-lueur)] hover:bg-accent-strong hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)]",
   secondary: "border border-line bg-panel text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] hover:border-line-strong hover:bg-panel-2",
   ghost: "text-ink-2 hover:bg-panel-3 hover:text-ink",
   danger: "border border-danger/30 bg-panel text-danger hover:border-danger hover:bg-danger hover:text-white",
 };
 
-export function Button({ variant = "secondary", loading, className, children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; loading?: boolean }) {
+export type ButtonSize = "sm" | "md" | "lg";
+
+/** Tailles : 32 px dans une ligne de tableau ou une barre d'outils, 36 px par défaut, 44 px au toucher. */
+const TAILLE: Record<ButtonSize, string> = {
+  sm: "min-h-8 gap-1.5 px-2.5 py-1 text-[13px]",
+  md: "min-h-9 gap-2 px-3.5 py-1.5 text-sm",
+  lg: "min-h-11 gap-2 px-4 py-2 text-[15px]",
+};
+
+/** Classes d'un bouton, pour un lien qui doit en avoir l'allure (page d'erreur, raccourcis). */
+export function classesBouton(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string): string {
+  return ajuste(
+    cx(
+      "inline-flex items-center justify-center whitespace-nowrap rounded-[10px] font-semibold transition-[transform,box-shadow,background-color,border-color,color,filter] duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:active:scale-100",
+      TAILLE[size],
+      BUTTON[variant],
+    ),
+    className,
+  );
+}
+
+export function Button({ variant = "secondary", size = "md", loading, className, children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; loading?: boolean }) {
   return (
-    <button
-      type="button"
-      {...props}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      className={ajuste(
-        cx(
-          "inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-[transform,box-shadow,background-color,border-color,color,filter] duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:active:scale-100",
-          BUTTON[variant],
-        ),
-        className,
-      )}
-    >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+    <button type="button" {...props} disabled={disabled || loading} aria-busy={loading || undefined} className={classesBouton(variant, size, className)}>
+      {loading && <Loader2 className={size === "sm" ? "h-3.5 w-3.5 animate-spin" : "h-4 w-4 animate-spin"} />}
       {children}
     </button>
   );
@@ -453,11 +473,35 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
       <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
       <div className="flex-1">{message}</div>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="font-semibold underline underline-offset-2">
+        <button type="button" onClick={() => onRetry()} className="font-semibold underline underline-offset-2">
           Réessayer
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * État d'un appel d'API : chargement tant que `data` n'est pas arrivé, erreur avec « Réessayer »
+ * si l'appel a échoué, état vide pour une liste sans ligne, sinon le contenu. Sans enfant, il tient
+ * lieu de retour anticipé : `if (!data) return <Etat error={error} onRetry={() => mutate()} />`.
+ */
+export function Etat<T>({ data, error, onRetry, label, vide, children }: { data?: T; error?: unknown; onRetry?: () => void; label?: string; vide?: string | { title: string; hint?: string }; children?: ReactNode | ((data: T) => ReactNode) }) {
+  if (data === undefined) return error ? <ErrorBox error={error} onRetry={onRetry} /> : <Loading label={label} />;
+  if (vide && Array.isArray(data) && data.length === 0) {
+    const v = typeof vide === "string" ? { title: vide } : vide;
+    return <Empty title={v.title} hint={v.hint} />;
+  }
+  const contenu = typeof children === "function" ? children(data) : children;
+  // Données déjà là mais rechargement en échec : l'erreur s'affiche au-dessus des dernières valeurs.
+  if (!error) return <>{contenu}</>;
+  return (
+    <>
+      <div className="mb-4">
+        <ErrorBox error={error} onRetry={onRetry} />
+      </div>
+      {contenu}
+    </>
   );
 }
 
@@ -605,7 +649,7 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
             <span
               className={cx(
                 "grid h-8 w-8 flex-none place-items-center rounded-full text-[13px] font-bold tabular",
-                s.state === "done" ? "n-degrade text-accent-ink shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : s.state === "current" ? "n-pouls bg-or text-foret" : "border-2 border-line-strong/70 bg-panel text-muted",
+                s.state === "done" ? "bg-accent text-accent-ink shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : s.state === "current" ? "n-pouls bg-or text-foret" : "border-2 border-line-strong/70 bg-panel text-muted",
               )}
               style={s.state === "current" ? ({ "--pouls": "rgb(211 170 91 / 0.55)" } as CSSProperties) : undefined}
             >
@@ -631,7 +675,7 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
 /** Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire. */
 export function FileButton({ label, accept, onFile, small }: { label: string; accept?: string; onFile: (file: File) => void; small?: boolean }) {
   return (
-    <label className={cx("relative inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif", small ? "px-2.5 py-1 text-[12.5px]" : "min-h-9 px-3.5 py-1.5 text-sm")}>
+    <label className={classesBouton("secondary", small ? "sm" : "md", "relative cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif")}>
       <FileUpIcon className={small ? "h-3.5 w-3.5" : "h-4 w-4"} />
       {label}
       <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
@@ -682,7 +726,10 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
   );
 }
 
-export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/** Fenêtres ouvertes, de la plus ancienne à la plus récente : seule la dernière répond à Échap. */
+const PILE: string[] = [];
+
+export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const fenetre = useRef<HTMLDivElement>(null);
   const titreId = useId();
   // onClose change à chaque rendu de l'écran : lu par référence, il ne relance pas l'effet (qui
@@ -698,7 +745,10 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     // Le premier champ prend le focus ; à défaut, la fenêtre elle-même.
     const premier = boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
     (premier ?? boite)?.focus();
+    PILE.push(titreId);
     const onKey = (e: globalThis.KeyboardEvent) => {
+      // Une confirmation ouverte par-dessus une fenêtre garde les touches pour elle.
+      if (PILE[PILE.length - 1] !== titreId) return;
       if (e.key === "Escape") fermer.current();
       if (e.key !== "Tab" || !boite) return;
       const cibles = [...boite.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
@@ -716,24 +766,87 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      PILE.splice(PILE.indexOf(titreId), 1);
       if (avant?.isConnected) avant.focus();
     };
-  }, [open]);
+  }, [open, titreId]);
   if (!open) return null;
   return (
     <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
-      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx("n-surgir w-full rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)] outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
+      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
           <h2 id={titreId} className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="-mr-1 grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-panel-3 hover:text-ink" aria-label="Fermer">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        {children != null && children !== false && <div className="p-5">{children}</div>}
         {footer && <div className="flex flex-wrap justify-end gap-2 rounded-b-2xl border-t border-line bg-panel-2 px-5 py-3.5">{footer}</div>}
       </div>
     </div>
   );
+}
+
+export interface OptionsConfirmation {
+  /** Titre de la fenêtre ; à défaut, la question jusqu'à son premier point d'interrogation. */
+  titre?: string;
+  /** Libellé du bouton qui confirme (« Supprimer », « Publier ») ; « Confirmer » à défaut. */
+  action?: string;
+  /** Action destructrice ou irréversible : le bouton passe en rouge. */
+  danger?: boolean;
+}
+
+/** Fenêtre de confirmation : la question, « Annuler » et le bouton de l'action. */
+export function Confirmation({ open, question, titre, action = "Confirmer", danger, onConfirm, onCancel }: OptionsConfirmation & { open: boolean; question: string; onConfirm: () => void; onCancel: () => void }) {
+  const fin = question.indexOf("?");
+  const entete = titre ?? (fin >= 0 ? question.slice(0, fin + 1) : question);
+  const corps = titre ? question : fin >= 0 ? question.slice(fin + 1).trim() : "";
+  return (
+    <Modal
+      open={open}
+      title={entete}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button onClick={onCancel}>Annuler</Button>
+          <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
+            {action}
+          </Button>
+        </>
+      }
+    >
+      {corps ? <p className="text-sm leading-relaxed text-ink-2">{corps}</p> : undefined}
+    </Modal>
+  );
+}
+
+/**
+ * Demande une confirmation dans une fenêtre NIMOVA, à la place de `window.confirm`, et rend la
+ * réponse. La fenêtre prend l'application et le thème de l'élément qui a déclenché la demande.
+ */
+export function demanderConfirmation(question: string, options: OptionsConfirmation = {}): Promise<boolean> {
+  return new Promise((resolve) => {
+    const origine = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+    const hote = document.createElement("div");
+    const app = origine.closest("[data-app]")?.getAttribute("data-app");
+    const theme = origine.closest("[data-theme]")?.getAttribute("data-theme");
+    if (app) hote.dataset.app = app;
+    if (theme) hote.dataset.theme = theme;
+    document.body.appendChild(hote);
+    const racine = createRoot(hote);
+    let repondu = false;
+    const repondre = (oui: boolean) => {
+      if (repondu) return;
+      repondu = true;
+      resolve(oui);
+      // Démontée après l'événement en cours : React ne retire pas une racine pendant qu'il la traite.
+      setTimeout(() => {
+        racine.unmount();
+        hote.remove();
+      });
+    };
+    racine.render(<Confirmation open question={question} {...options} onConfirm={() => repondre(true)} onCancel={() => repondre(false)} />);
+  });
 }
 
 /* ─── Chiffres et graphiques (SVG et HTML, sans dépendance) ─────────────── */
@@ -1010,7 +1123,7 @@ export function AreaChart({ labels, series, height = 220, format, formatAxis, la
 }
 
 /**
- * Colonnes d'une série : barres en dégradé de la couleur de l'application, extrémité arrondie,
+ * Colonnes d'une série : barres pleines de la couleur de l'application, extrémité arrondie,
  * valeurs négatives sous la ligne de base, poussée animée, info-bulle au survol et au clavier.
  */
 export function BarChart({ data, height = 190, format }: { data: Array<{ label: string; value: number; tone?: Tone }>; height?: number; format?: (v: number) => string }) {
@@ -1039,8 +1152,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
           {data.map((d, i) => {
             const h = (Math.abs(d.value) / span) * 100;
             const negative = d.value < 0;
-            const couleur = negative ? "var(--danger-vif)" : d.tone === "accent" ? "var(--n-or)" : "var(--accent-vif)";
-            const fonce = negative ? "var(--danger)" : d.tone === "accent" ? "#b48a35" : "var(--accent)";
+            const couleur = negative ? "var(--danger)" : d.tone === "accent" ? "var(--or-fonce)" : "var(--accent)";
             return (
               <div
                 key={`${d.label}-${i}`}
@@ -1060,7 +1172,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
                       top: negative ? `${base}%` : undefined,
                       bottom: negative ? undefined : `${100 - base}%`,
                       height: `${Math.max(h, 0.8)}%`,
-                      background: `linear-gradient(${negative ? "0deg" : "180deg"}, ${couleur}, ${fonce})`,
+                      background: couleur,
                       "--i": i,
                     } as CSSProperties
                   }
@@ -1289,7 +1401,7 @@ export function Gauge({ value, max, zones, format, sousTitre, vide }: { value: n
 }
 
 /**
- * Classement horizontal (cinq premiers, marges par activité) : rang, libellé, barre en dégradé
+ * Classement horizontal (cinq premiers, marges par activité) : rang, libellé, barre pleine
  * texturée qui s'allonge à l'affichage, montant au bout. Une valeur négative passe au rouge.
  */
 export function RankBars({ items, format, couleur = "var(--accent-vif)" }: { items: Array<{ key: string | number; label: string; value: number; detail?: string }>; format?: (v: number) => string; couleur?: string }) {

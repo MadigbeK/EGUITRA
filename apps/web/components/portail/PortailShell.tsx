@@ -8,7 +8,7 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
-import { cx } from "@/components/ui";
+import { ErrorBox, FEUILLE, PANNEAU, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
@@ -150,7 +150,7 @@ function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined
         type="button"
         onClick={() => plusieurs && setOpen((v) => !v)}
         aria-expanded={plusieurs ? open : undefined}
-        className={cx("w-full rounded-2xl border border-line bg-panel p-3 text-left shadow-[var(--ombre-feuille)]", plusieurs && "hover:border-line-strong")}
+        className={cx(FEUILLE, "w-full p-3 text-left", plusieurs && "hover:ring-1 hover:ring-line-strong")}
       >
         <div className="flex items-center gap-2">
           <span className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">{dossier.reference}</span>
@@ -161,7 +161,7 @@ function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined
         {dossier.current_gate && <div className="mt-0.5 truncate text-[12px] text-muted">{dossier.current_gate.name}</div>}
       </button>
       {open && plusieurs && (
-        <ul className="n-surgir absolute inset-x-0 top-full z-40 mt-2 space-y-0.5 rounded-2xl border border-line bg-panel p-1.5 shadow-[var(--ombre-flottante)]">
+        <ul className={cx(PANNEAU, "n-surgir absolute inset-x-0 top-full z-40 mt-2 space-y-0.5 p-1.5")}>
           {espace!.dossiers.map((d) => (
             <li key={d.id}>
               <button type="button" onClick={() => { choisir(d.id); setOpen(false); }} className={cx("flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left hover:bg-panel-2", d.id === dossier.id && "bg-panel-2")}>
@@ -184,8 +184,8 @@ function Consultant({ dossier }: { dossier: PortailContext["dossier"] }) {
   const c = dossier?.consultant;
   if (!c) return null;
   return (
-    <div className="rounded-2xl bg-[linear-gradient(135deg,#1f3a5c,#23364b_55%,#174b5e)] p-4 text-white">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/60">Votre consultant</div>
+    <div className="rounded-2xl bg-accent-strong p-4 text-white">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/75">Votre consultant</div>
       <div className="mt-2 flex items-center gap-3">
         <span aria-hidden className="grid h-10 w-10 flex-none place-items-center rounded-full bg-white/15 font-display text-[13px] font-bold">{initiales(c.name)}</span>
         <div className="min-w-0">
@@ -208,7 +208,7 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
   const router = useRouter();
-  const { data, mutate } = useApi<Notifications>(open ? "/portail/notifications" : null);
+  const { data, error, mutate } = useApi<Notifications>(open ? "/portail/notifications" : null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -234,13 +234,20 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
         {count > 0 && <span className="absolute right-1.5 top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[10.5px] font-bold text-white ring-2 ring-bg">{count > 9 ? "9+" : count}</span>}
       </button>
       {open && (
-        <div id={id} className="n-surgir absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)] rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)]">
+        <div id={id} className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)]")}>
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-sm font-semibold">Notifications</span>
             {count > 0 && <button type="button" onClick={() => lire()} className="text-[12.5px] font-semibold text-accent hover:underline">Tout marquer comme lu</button>}
           </div>
           <ul className="max-h-[420px] overflow-y-auto p-1.5">
-            {!data && <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>}
+            {!data &&
+              (error ? (
+                <li className="p-1.5">
+                  <ErrorBox error={error} onRetry={() => mutate()} />
+                </li>
+              ) : (
+                <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>
+              ))}
             {data?.items.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Aucune notification.</li>}
             {data?.items.slice(0, 12).map((n) => {
               const I = KIND_ICON[n.kind] ?? Bell;
@@ -289,7 +296,7 @@ function Compte({ me, entreprise, onLogout }: { me: Me; entreprise: string | nul
   return (
     <div ref={box} className="relative">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-2.5 rounded-full p-0.5 pr-2 hover:bg-panel-3">
-        <span aria-hidden className="n-degrade grid h-9 w-9 place-items-center rounded-full font-display text-[13px] font-bold text-white">{initiales(me.name)}</span>
+        <span aria-hidden className="bg-accent grid h-9 w-9 place-items-center rounded-full font-display text-[13px] font-bold text-white">{initiales(me.name)}</span>
         <span className="hidden max-w-[160px] text-left leading-tight md:block">
           <span className="block truncate text-[13px] font-semibold text-ink">{me.name}</span>
           {entreprise && <span className="block truncate text-[11.5px] text-muted">{entreprise}</span>}
@@ -298,7 +305,7 @@ function Compte({ me, entreprise, onLogout }: { me: Me; entreprise: string | nul
         <span className="sr-only">Compte de {me.name}</span>
       </button>
       {open && (
-        <div className="n-surgir absolute right-0 top-full z-50 mt-2 w-60 rounded-2xl border border-line bg-panel p-1.5 shadow-[var(--ombre-flottante)]">
+        <div className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-60 p-1.5")}>
           <div className="px-3 pb-2 pt-1.5">
             <div className="truncate text-sm font-semibold">{me.name}</div>
             <div className="truncate text-[12px] text-muted">{me.login}</div>
@@ -331,7 +338,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   const params = useSearchParams();
   const router = useRouter();
   const [tiroir, setTiroir] = useState(false);
-  const { data: espace, mutate } = useApi<Espace>("/portail/espace", { refreshInterval: 60_000 });
+  const { data: espace, error: erreurEspace, mutate } = useApi<Espace>("/portail/espace", { refreshInterval: 60_000 });
   const [choisi, setChoisi] = useState<number | null>(null);
 
   useEffect(() => {
@@ -424,7 +431,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
                 <Compte me={me} entreprise={espace?.user.company ?? null} onLogout={deconnexion} />
               </div>
             </div>
-            <div aria-hidden className="h-[3px] bg-[linear-gradient(90deg,#1f73d6,#2d82dc_40%,#0f9fa0)]" />
+            <div aria-hidden className="h-[3px] bg-accent" />
           </header>
           {me.password_change_required && (
             <div className="flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink lg:px-10">
@@ -436,7 +443,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
             </div>
           )}
           <main key={pathname} className="n-page mx-auto min-w-0 max-w-[1240px] px-4 pb-28 pt-6 sm:px-6 md:pt-8 lg:px-10 lg:pb-12">
-            {children}
+            {erreurEspace && !espace ? <ErrorBox error={erreurEspace} onRetry={rafraichir} /> : children}
           </main>
         </div>
 

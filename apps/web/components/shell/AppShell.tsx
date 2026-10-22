@@ -11,7 +11,7 @@ import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
 import { APPS, ESPACES, type AppCode } from "@/lib/config";
 import { accueilFinance, accueilRh, navFor, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
-import { cx } from "@/components/ui";
+import { PANNEAU, cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
 
@@ -28,7 +28,7 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
 
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#7c5ce6", rh: "#c4417a" };
+const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a" };
 
 /**
  * Coque des applications, sans colonne latérale : une barre du haut à la manière d'Odoo (marque et
@@ -130,7 +130,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
             </Link>
             <CompteMenu app={app} me={me} onLogout={logout} placement="bas" />
           </div>
-          <div aria-hidden className="h-[3px] bg-[linear-gradient(90deg,#1f73d6,#2d82dc_40%,#0f9fa0)]" />
+          <div aria-hidden className="h-[3px] bg-accent" />
         </header>
         {passwordBanner}
         <main id="contenu" tabIndex={-1} key={pathname} className="outline-none n-page mx-auto min-w-0 max-w-6xl px-5 py-8 md:px-8 md:py-10">
@@ -182,7 +182,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
             <button
               type="button"
               onClick={() => setRecherche(true)}
-              className="flex h-10 items-center gap-2.5 whitespace-nowrap rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-white/80 hover:text-ink xl:w-60 xl:border xl:border-line xl:bg-panel xl:px-3"
+              className="flex h-10 items-center gap-2.5 whitespace-nowrap rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-panel/80 hover:text-ink xl:w-60 xl:border xl:border-line xl:bg-panel xl:px-3"
               aria-label="Rechercher un écran"
             >
               <Search className="h-[18px] w-[18px] flex-none" />
@@ -251,19 +251,19 @@ function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
   }
   return (
     <div ref={box} className="relative min-w-0">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls={panelId} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 transition-colors hover:bg-white/80">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls={panelId} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 transition-colors hover:bg-panel/80">
         {marque}
         <span className="sr-only">Changer d&apos;espace</span>
       </button>
       {open && (
-        <div id={panelId} className="n-surgir absolute left-0 top-full z-50 mt-2 w-[310px] rounded-[22px] border border-line bg-white p-2 shadow-[var(--ombre-flottante)]">
+        <div id={panelId} className={cx(PANNEAU, "n-surgir absolute left-0 top-full z-50 mt-2 w-[310px] p-1.5")}>
           {espaces.map((a) => (
             <Link
               key={a}
               href={APPS[a].home}
               onClick={() => setOpen(false)}
               aria-current={a === app ? "true" : undefined}
-              className={cx("tuile group flex items-center gap-3 rounded-2xl p-2.5 transition-colors", a === app ? "bg-accent-doux" : "hover:bg-[#f2f6f3]")}
+              className={cx("tuile group flex items-center gap-3 rounded-xl p-2.5 transition-colors", a === app ? "bg-accent-doux" : "hover:bg-panel-2")}
             >
               <IconeModule cle={APPS[a].home} className="h-9 w-9 flex-none" />
               <span className="min-w-0 flex-1">
@@ -361,7 +361,7 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
         <span className="sr-only">Changer de société</span>
       </button>
       {open && (
-        <div id={panelId} role="group" aria-label="Société" className="n-surgir absolute right-0 top-full z-50 mt-2 w-[284px] rounded-[22px] border border-line bg-white p-2 shadow-[var(--ombre-flottante)]">
+        <div id={panelId} role="group" aria-label="Société" className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-[284px] p-1.5")}>
           <div className="px-3 pb-1.5 pt-1.5 text-[12.5px] font-semibold text-muted">Livres ouverts</div>
           {ouvertes.map((c) => {
             const actif = c.id === me.company_id;
@@ -374,7 +374,7 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
                   setOpen(false);
                   onCompany(c.id);
                 }}
-                className={cx("flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors", actif ? "bg-accent-doux" : "hover:bg-[#f2f6f3]")}
+                className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors", actif ? "bg-accent-doux" : "hover:bg-panel-2")}
               >
                 <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white shadow-[0_0_0_1px_rgb(16_36_31/0.08)]">
                   <LogoSociete entite={entityOf(c, app)} decoratif className="h-[18px]" />
@@ -410,7 +410,7 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
 
   const others = me.apps.filter((a) => a !== app && a !== "mobile");
   const avatar = (
-    <span aria-hidden className="n-degrade grid h-9 w-9 flex-none place-items-center rounded-full font-display text-[13px] font-bold tracking-[0.04em] text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]">
+    <span aria-hidden className="bg-accent grid h-9 w-9 flex-none place-items-center rounded-full font-display text-[13px] font-bold tracking-[0.04em] text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]">
       {initials(me.name)}
     </span>
   );
@@ -445,7 +445,8 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
         <div
           id={panelId}
           className={cx(
-            "n-surgir absolute z-50 w-64 rounded-2xl border border-line bg-panel p-1.5 text-ink shadow-[var(--ombre-flottante)]",
+            PANNEAU,
+            "n-surgir absolute z-50 w-64 p-1.5 text-ink",
             placement === "haut" ? (replie ? "bottom-0 left-full ml-3" : "bottom-full left-0 mb-2") : "right-0 top-full mt-2",
           )}
         >
@@ -535,7 +536,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="Rechercher un écran">
       <div className="n-apparaitre absolute inset-0 bg-foret/45" onClick={onClose} />
-      <div className="n-surgir relative w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-panel shadow-[var(--ombre-flottante)]">
+      <div className={cx(PANNEAU, "n-surgir relative w-full max-w-xl overflow-hidden")}>
         <div className="flex items-center gap-3 border-b border-line px-4">
           <Search className="h-5 w-5 flex-none text-accent" />
           <input
@@ -583,7 +584,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
                   onClick={() => c.aller()}
                   className={cx("flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors", i === actif ? "bg-accent-doux text-ink" : "text-ink-2")}
                 >
-                  <span className={cx("grid h-8 w-8 flex-none place-items-center rounded-lg transition-colors", i === actif ? "n-degrade text-white" : "bg-panel-3 text-muted")}>
+                  <span className={cx("grid h-8 w-8 flex-none place-items-center rounded-lg transition-colors", i === actif ? "bg-accent text-white" : "bg-panel-3 text-muted")}>
                     <I className="h-4 w-4" />
                   </span>
                   <span className="flex-1 font-medium">{c.libelle}</span>

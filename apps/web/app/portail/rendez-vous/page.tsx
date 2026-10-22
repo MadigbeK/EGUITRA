@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Building2, Calendar, ChevronDown, Clock, MapPin, Plus, Smartphone, Trash2, Users, Wifi, type Icon } from "@/components/icons";
-import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
 import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { LienBouton, PasDeDossier, majuscule, messageErreur, useRetour } from "@/components/portail/projet/outils";
@@ -48,9 +48,9 @@ function CarteAVenir({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean; o
   const d = new Date(m.start!);
   const I = ICONE_MODE[m.mode];
   return (
-    <article className="overflow-hidden rounded-2xl border border-line bg-panel shadow-[var(--ombre-feuille)]">
+    <article className={cx(FEUILLE, "overflow-hidden")}>
       <div className="flex flex-col sm:flex-row">
-        <div className="n-degrade flex items-center gap-4 px-5 py-4 text-white sm:w-44 sm:flex-none sm:flex-col sm:justify-center sm:gap-1 sm:py-6 sm:text-center">
+        <div className="bg-accent-strong flex items-center gap-4 px-5 py-4 text-white sm:w-44 sm:flex-none sm:flex-col sm:justify-center sm:gap-1 sm:py-6 sm:text-center">
           <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80">{d.toLocaleDateString("fr-FR", { weekday: "long" })}</span>
           <span className="font-display text-[44px] font-bold leading-none">{d.getDate()}</span>
           <span className="text-[13.5px] font-semibold">{d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
@@ -181,7 +181,7 @@ function CarteEnAttente({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean
       <p className="mt-3 text-[12.5px] text-muted">Le cabinet retient l'un de ces créneaux ou vous en propose un autre. Vous êtes prévenu dès sa réponse.</p>
       {!ferme && (
         <div className="mt-3">
-          <Button variant="danger" className="min-h-8 px-3 text-[13px]" onClick={() => onAnnuler(m)}>
+          <Button variant="danger" size="sm" className="px-3" onClick={() => onAnnuler(m)}>
             <Trash2 className="h-4 w-4" />
             Retirer la demande
           </Button>
@@ -212,7 +212,7 @@ function LigneHistorique({ m, ouvertParDefaut }: { m: MeetingRow; ouvertParDefau
           </div>
         </div>
         {m.minutes && (
-          <Button variant="ghost" className="min-h-8 px-2.5 text-[13px]" aria-expanded={ouvert} onClick={() => setOuvert((v) => !v)}>
+          <Button variant="ghost" size="sm" aria-expanded={ouvert} onClick={() => setOuvert((v) => !v)}>
             {ouvert ? "Masquer le compte rendu" : "Lire le compte rendu"}
             <ChevronDown className={cx("h-4 w-4 transition-transform", ouvert && "rotate-180")} />
           </Button>
@@ -360,7 +360,7 @@ function Demande({ chemin, onClose, onEnvoye }: { chemin: string; onClose: () =>
             ))}
           </ul>
           {creneaux.length < 3 && (
-            <Button variant="ghost" className="mt-2 min-h-8 px-2.5 text-[13px]" onClick={() => setCreneaux((l) => [...l, ""])}>
+            <Button variant="ghost" size="sm" className="mt-2" onClick={() => setCreneaux((l) => [...l, ""])}>
               <Plus className="h-4 w-4" />
               Proposer un autre créneau
             </Button>

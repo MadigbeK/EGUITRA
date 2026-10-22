@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "@/components/icons";
-import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, GAMME, cx } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, SERIES, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
@@ -16,11 +16,11 @@ type Onglet = "valider" | "planning" | "absences" | "soldes";
  * à valider, planning du mois, toutes les absences, soldes.
  */
 export function GestionConges() {
-  const { data: meta } = useMeta();
+  const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useMeta();
   const [onglet, setOnglet] = useState<Onglet>("valider");
   const [saisie, setSaisie] = useState(false);
   const [societe, setSociete] = useState<number | null>(null);
-  const { data: attente, mutate: rafraichirAttente } = useApi<Leave[]>(avecSociete("/rh/leaves?state=submitted", societe));
+  const { data: attente, error: erreurAttente, mutate: rafraichirAttente } = useApi<Leave[]>(avecSociete("/rh/leaves?state=submitted", societe));
   const [version, setVersion] = useState(0);
   const rafraichir = () => {
     void rafraichirAttente();
@@ -52,7 +52,12 @@ export function GestionConges() {
           { key: "soldes", label: "Soldes de congés" },
         ]}
       />
-      {onglet === "valider" && <AValider leaves={attente} meta={meta} onChanged={rafraichir} />}
+      {erreurMeta && !meta && (
+        <div className="mb-4">
+          <ErrorBox error={erreurMeta} onRetry={() => rafraichirMeta()} />
+        </div>
+      )}
+      {onglet === "valider" && <AValider leaves={attente} error={erreurAttente} onRetry={() => rafraichirAttente()} meta={meta} onChanged={rafraichir} />}
       {onglet === "planning" && <Planning key={version} meta={meta} societe={societe} />}
       {onglet === "absences" && <Absences key={version} meta={meta} societe={societe} onChanged={rafraichir} />}
       {onglet === "soldes" && <Soldes key={version} societe={societe} />}
@@ -70,8 +75,8 @@ export function GestionConges() {
   );
 }
 
-function AValider({ leaves, meta, onChanged }: { leaves: Leave[] | undefined; meta: Meta | undefined; onChanged: () => void }) {
-  if (!leaves) return <Loading />;
+function AValider({ leaves, error, onRetry, meta, onChanged }: { leaves: Leave[] | undefined; error?: unknown; onRetry?: () => void; meta: Meta | undefined; onChanged: () => void }) {
+  if (!leaves) return <Etat error={error} onRetry={onRetry} />;
   if (leaves.length === 0)
     return (
       <Card>
@@ -121,10 +126,10 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
   const debut = new Date(`${mois}T00:00:00`);
   const nbJours = new Date(debut.getFullYear(), debut.getMonth() + 1, 0).getDate();
   const fin = `${mois.slice(0, 8)}${String(nbJours).padStart(2, "0")}`;
-  const { data: leaves } = useApi<Leave[]>(avecSociete(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`, societe));
+  const { data: leaves, error, mutate } = useApi<Leave[]>(avecSociete(`/rh/leaves?state=approved,submitted&date_from=${mois}&date_to=${fin}`, societe));
   const { data: feries } = useApi<Holiday[]>(`/rh/holidays?year=${debut.getFullYear()}`);
   const types = meta?.leave_types ?? [];
-  const couleur = (typeId: number) => GAMME[Math.max(0, types.findIndex((t) => t.id === typeId)) % GAMME.length]!;
+  const couleur = (typeId: number) => SERIES[Math.max(0, types.findIndex((t) => t.id === typeId)) % SERIES.length]!;
   const jourListe = Array.from({ length: nbJours }, (_, i) => new Date(debut.getFullYear(), debut.getMonth(), i + 1));
   const ferieDe = new Map((feries ?? []).map((h) => [h.date, h.name]));
   const salaries = useMemo(() => {
@@ -148,7 +153,7 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
           <Button variant="ghost" aria-label="Mois précédent" onClick={() => setMois(decaler(mois, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setMois(moisCourant())}>
+          <Button size="sm" onClick={() => setMois(moisCourant())}>
             Ce mois
           </Button>
           <Button variant="ghost" aria-label="Mois suivant" onClick={() => setMois(decaler(mois, 1))}>
@@ -158,7 +163,7 @@ function Planning({ meta, societe }: { meta: Meta | undefined; societe: number |
       }
     >
       {!leaves || !meta ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : salaries.length === 0 ? (
         <Empty title="Aucun salarié" />
       ) : (
@@ -244,7 +249,7 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
   const [erreur, setErreur] = useState<string | null>(null);
 
   async function annuler(l: Leave) {
-    if (!window.confirm(`Annuler l'absence de ${l.employee.name} (${periode(l.date_from, l.date_to, l.half_day)}) ?`)) return;
+    if (!(await demanderConfirmation(`Annuler l'absence de ${l.employee.name} (${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler l'absence", danger: true }))) return;
     try {
       await apiSend("POST", `/rh/leaves/${l.id}/cancel`);
       void mutate();
@@ -271,10 +276,9 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
         </Field>
       </div>
       {erreur && <Notice tone="danger">{erreur}</Notice>}
-      {error && <ErrorBox error={error} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={data}
@@ -295,7 +299,7 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
                   l.state === "submitted" && l.can_decide ? (
                     <DecisionAbsence compact leave={l} peutForcer={Boolean(meta?.can_write)} onDone={() => { void mutate(); onChanged(); }} />
                   ) : meta?.can_write && (l.state === "submitted" || l.state === "approved") ? (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => void annuler(l)}>
+                    <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
                       Annuler
                     </Button>
                   ) : null,

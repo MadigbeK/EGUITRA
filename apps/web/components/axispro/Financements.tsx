@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Calendar, Coins, HandCoins, Landmark, Plus, Target, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx } from "@/components/ui";
+import { Calendar, Plus, Trash2 } from "@/components/icons";
+import { Badge, Button, Card, ErrorBox, FEUILLE, Field, Input, Kpi, Loading, Notice, ProgressBar, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { FUNDING_STATE, INSTRUMENTS, type Funding, type FundingState } from "@/lib/axispro-types";
@@ -42,13 +42,13 @@ export function Financements({ dossierId, besoin }: { dossierId?: number; besoin
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {besoin !== undefined ? (
-          <Kpi label="Besoin de financement" value={fmtShort(besoin)} icon={Target} teinte="azur" hint="Annoncé à l'ouverture du dossier" />
+          <Kpi label="Besoin de financement" value={fmtShort(besoin)} hint="Annoncé à l'ouverture du dossier" />
         ) : (
-          <Kpi label="Démarches en cours" value={String(data.filter((f) => EN_COURS.includes(f.state)).length)} icon={Target} teinte="azur" />
+          <Kpi label="Démarches en cours" value={String(data.filter((f) => EN_COURS.includes(f.state)).length)} />
         )}
-        <Kpi label="Montant sollicité" value={fmtShort(sollicite)} icon={HandCoins} teinte="ambre" hint={pluriel(actifs.length, "démarche active", "démarches actives")} />
-        <Kpi label="Montant obtenu" value={fmtShort(obtenu)} icon={Coins} teinte="jade" tone={obtenu > 0 ? "ok" : "neutral"} hint="Conventions signées et décaissements" />
-        <Kpi label={besoin !== undefined ? "Couverture du besoin" : "Taux d'obtention"} value={besoin ? fmtPct((obtenu / besoin) * 100, 0) : sollicite ? fmtPct((obtenu / sollicite) * 100, 0) : "–"} icon={Landmark} teinte="lagon" />
+        <Kpi label="Montant sollicité" value={fmtShort(sollicite)} hint={pluriel(actifs.length, "démarche active", "démarches actives")} />
+        <Kpi label="Montant obtenu" value={fmtShort(obtenu)} tone={obtenu > 0 ? "ok" : "neutral"} hint="Conventions signées et décaissements" />
+        <Kpi label={besoin !== undefined ? "Couverture du besoin" : "Taux d'obtention"} value={besoin ? fmtPct((obtenu / besoin) * 100, 0) : sollicite ? fmtPct((obtenu / sollicite) * 100, 0) : "–"} />
       </div>
       {besoin ? (
         <div>
@@ -118,7 +118,7 @@ function Pipeline({ data }: { data: Funding[] }) {
               </header>
               <div className="space-y-2">
                 {items.map((f) => (
-                  <Link key={f.id} href={f.dossier ? `/axispro/dossiers/${f.dossier.id}` : "#"} className="n-levable block rounded-xl border border-line bg-panel p-2.5 text-[12.5px] shadow-[var(--ombre-carte)]">
+                  <Link key={f.id} href={f.dossier ? `/axispro/dossiers/${f.dossier.id}` : "#"} className={cx(FEUILLE, "n-levable block p-2.5 text-[12.5px]")}>
                     <div className="font-semibold text-ink">{f.funder.name}</div>
                     <div className="truncate text-muted">{f.dossier ? `${f.dossier.reference} ${f.dossier.name}` : ""}</div>
                     <div className="mt-1 flex justify-between tabular">
@@ -163,7 +163,7 @@ function LigneFinancement({ f, global, agir }: { f: Funding; global: boolean; ag
         </div>
         <Select aria-label={`Étape, ${f.funder.name}`} className="min-h-8 w-48 py-1 text-[13px]" value={f.state} onChange={(e) => patch({ state: e.target.value })} options={(Object.keys(FUNDING_STATE) as FundingState[]).map((k) => ({ value: k, label: FUNDING_STATE[k].label }))} />
         {!global && (
-          <button type="button" aria-label={`Supprimer la démarche ${f.funder.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => window.confirm(`Supprimer la démarche auprès de ${f.funder.name} ?`) && agir(() => apiSend("DELETE", `/axispro/fundings/${f.id}`), "Démarche supprimée.")}>
+          <button type="button" aria-label={`Supprimer la démarche ${f.funder.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer la démarche auprès de ${f.funder.name} ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/fundings/${f.id}`), "Démarche supprimée.")}>
             <Trash2 className="h-4 w-4" />
           </button>
         )}

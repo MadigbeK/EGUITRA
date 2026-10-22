@@ -7,7 +7,7 @@ import {
   Coche, EditeurTexte, Intitule, LectureSeule, RESERVE_CABINET, Recherche, basculerCode, correspond, etatPublication, listeCodes, messageErreur, pluriel, useEcriture, useRetour,
 } from "@/components/portail/cabinet/outils";
 import { COULEUR, FORMATS, FORMATS_TEXTE, iconeRubrique, quand, taille } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, FileButton, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Tag, Textarea, cx, type Column } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, FileButton, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Tag, Textarea, cx, demanderConfirmation, type Column } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import type { ArticleAdmin, ArticleKind, CategoryColor, CategoryRow, Cibles, PublicationState } from "@/lib/portail-types";
 
@@ -16,7 +16,7 @@ type ActionArticle = "publier" | "brouillon" | "archiver" | "supprimer";
 
 const ICONES_PROPOSEES = ["BookOpen", "Landmark", "TrendingUp", "HandCoins", "Scale", "Building2", "FileCheck2", "FileText", "ListChecks", "Calculator", "Wallet", "Target", "Users", "Calendar", "Gavel", "Layers", "Info", "FolderOpen"];
 
-const NOM_COULEUR: Record<CategoryColor, string> = { azur: "Azur", lagon: "Lagon", or: "Or", jade: "Jade", corail: "Corail", violet: "Violet" };
+const NOM_COULEUR: Record<CategoryColor, string> = { azur: "Azur", lagon: "Lagon", or: "Or", jade: "Jade", corail: "Corail", violet: "Rose" };
 
 export default function RessourcesPage() {
   const ecriture = useEcriture();
@@ -53,7 +53,7 @@ export default function RessourcesPage() {
       supprimer: `Supprimer définitivement « ${a.title} » et ses fichiers ?`,
     };
     const question = questions[act];
-    if (question && !window.confirm(question)) return;
+    if (question && !(await demanderConfirmation(question, { action: { publier: "Publier", brouillon: "Repasser en brouillon", archiver: "Archiver", supprimer: "Supprimer" }[act], danger: act === "supprimer" }))) return;
     const ok: Record<ActionArticle, string> = { publier: "Contenu publié.", brouillon: "Contenu repassé en brouillon.", archiver: "Contenu archivé.", supprimer: "Contenu supprimé." };
     const r = await agir(() => apiSend("POST", `/axispro/portail/articles/${a.id}/${act}`), ok[act]);
     if (r !== undefined) await Promise.all([mutate(), majRubriques()]);
@@ -64,7 +64,6 @@ export default function RessourcesPage() {
     e.stopPropagation();
     fn();
   };
-  const petit = "min-h-8 px-2.5 py-1 text-[12.5px]";
 
   const colonnes: Column<ArticleAdmin>[] = [
     {
@@ -137,17 +136,17 @@ export default function RessourcesPage() {
       render: (a) => (
         <div className="flex items-center justify-end gap-1">
           {a.state !== "published" && (
-            <Button variant="primary" className={petit} disabled={!ecriture} title={blocage} onClick={stop(() => void action(a, "publier"))}>
+            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={stop(() => void action(a, "publier"))}>
               <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
           {a.state !== "draft" && (
-            <Button variant="ghost" className={petit} disabled={!ecriture} title={blocage ?? "Repasser en brouillon"} onClick={stop(() => void action(a, "brouillon"))}>
+            <Button variant="ghost" size="sm" disabled={!ecriture} title={blocage ?? "Repasser en brouillon"} onClick={stop(() => void action(a, "brouillon"))}>
               <RotateCcw className="h-3.5 w-3.5" /> Brouillon
             </Button>
           )}
           {a.state !== "archived" && (
-            <Button variant="ghost" className={petit} disabled={!ecriture} title={blocage ?? "Archiver"} onClick={stop(() => void action(a, "archiver"))}>
+            <Button variant="ghost" size="sm" disabled={!ecriture} title={blocage ?? "Archiver"} onClick={stop(() => void action(a, "archiver"))}>
               <Inbox className="h-3.5 w-3.5" /> Archiver
             </Button>
           )}
@@ -198,7 +197,7 @@ export default function RessourcesPage() {
               <span>
                 <b>{pluriel(brouillons, "contenu attend", "contenus attendent")} une relecture.</b> Les contenus proposés à l&apos;installation sont des brouillons : relisez-les, adaptez-les au cabinet, puis publiez-les.
               </span>
-              <Button className="min-h-8 px-2.5 py-1 text-[13px]" onClick={() => setEtat("draft")}>
+              <Button size="sm" onClick={() => setEtat("draft")}>
                 Afficher les brouillons
               </Button>
             </span>
@@ -440,7 +439,7 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
       setRetour({ tone: "danger", text: probleme });
       return;
     }
-    if (publier && etat !== "published" && !window.confirm("Publier ce contenu ? Les porteurs des dossiers en cours en seront prévenus.")) return;
+    if (publier && etat !== "published" && !(await demanderConfirmation("Publier ce contenu ? Les porteurs des dossiers en cours en seront prévenus.", { action: "Publier" }))) return;
     setEnvoi(publier ? "publier" : "brouillon");
     setRetour(null);
     const corps = {
@@ -495,7 +494,7 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
   }
 
   async function retirer(attId: number, nom: string) {
-    if (!article || !window.confirm(`Retirer le fichier « ${nom} » ?`)) return;
+    if (!article || !(await demanderConfirmation(`Retirer le fichier « ${nom} » ?`, { action: "Retirer", danger: true }))) return;
     setRetour(null);
     try {
       setArticle(await apiSend<ArticleAdmin>("DELETE", `/axispro/portail/articles/${article.id}/fichiers/${attId}`));

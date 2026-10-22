@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download } from "@/components/icons";
-import { Button, Card, DataTable, Field, Input, Loading, Notice } from "@/components/ui";
+import { Button, Card, DataTable, Etat, Field, Input, Notice } from "@/components/ui";
 import { ApiError, apiDownload, useApi } from "@/lib/api-client";
 import { fmtGNF, fmtShort } from "@/lib/format";
 
@@ -20,7 +20,7 @@ const monthLabel = (m: string) => new Date(`${m}-01T00:00:00`).toLocaleDateStrin
 export function Taxes() {
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const { data, error } = useApi<Statement>(`/transport/taxes/statement?date_from=${from}&date_to=${to}`);
+  const { data, error, mutate } = useApi<Statement>(`/transport/taxes/statement?date_from=${from}&date_to=${to}`);
   const [message, setMessage] = useState<string | null>(null);
   async function exporter() {
     setMessage(null);
@@ -42,9 +42,8 @@ export function Taxes() {
         <Button onClick={() => void exporter()}><Download className="h-4 w-4" /> Export XLSX</Button>
       </div>
       {message && <Notice tone="danger">{message}</Notice>}
-      {error && <Notice tone="danger">{error.message}</Notice>}
       <Card title="Taxes spécifiques par nature (rotations validées et facturées)" padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable dense rows={data.natures} rowKey={(r) => r.code} empty="Aucune taxe spécifique sur la période : paramétrez le barème dans l'onglet Paramètres." columns={[
             { key: "label", label: "Nature" },
             ...months.map((m) => ({ key: m, label: monthLabel(m), align: "right" as const, render: (r: NatureRow) => fmtShort(r.months[m]) })),

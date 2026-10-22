@@ -7,7 +7,7 @@ import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
 import { rayonsDe, sansAccents, voisine, type Tuile } from "@/components/accueil/tuiles";
-import { cx, useMouvementReduit } from "@/components/ui";
+import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import { APPS, appFromPath, type AppCode } from "@/lib/config";
 import type { Me } from "@/lib/types";
 
@@ -164,7 +164,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   }
 
   return (
-    <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#eaf4ef_0%,#f3f6f1_45%,#f8f4ea_100%)] text-ink">
+    <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-bg text-ink">
       {/* Rubans de lumière en diagonale, comme le fond de l'accueil d'Odoo ; ils dérivent et suivent le curseur. */}
       <div aria-hidden className="accueil-ruban pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_38%,rgb(255_255_255/0.62)_38%,rgb(255_255_255/0.62)_58%,transparent_58%)]" />
       <div aria-hidden className="accueil-ruban-2 pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_64%,rgb(165_230_194/0.2)_64%,rgb(165_230_194/0.2)_80%,transparent_80%)]" />
@@ -277,7 +277,7 @@ function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: T
         <span aria-hidden className="tuile-reflet pointer-events-none absolute inset-0 rounded-[15px]" />
         <IconeModule cle={t.cle} className="relative h-[42px] w-[42px]" />
       </span>
-      <span className="mt-2 line-clamp-2 text-[13px] leading-tight text-[#3a4842] transition-colors group-hover:text-ink">{t.libelle}</span>
+      <span className="mt-2 line-clamp-2 text-[13px] leading-tight text-ink-2 transition-colors group-hover:text-ink">{t.libelle}</span>
     </Link>
   );
 }
@@ -323,15 +323,15 @@ function Societe({ me, app }: { me: Me; app: AppCode }) {
   if (ouvertes.length < 2) return <span className="flex items-center gap-2 px-2 text-[13px] text-ink-2">{libelle}</span>;
   return (
     <div ref={box} className="relative">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-white/70 hover:text-ink">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-panel/70 hover:text-ink">
         {libelle}
         <ChevronDown className={cx("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
         <span className="sr-only">Changer de société</span>
       </button>
       {open && (
-        <div role="group" aria-label="Société" className="n-surgir absolute right-0 top-full z-50 mt-1.5 w-[260px] rounded-xl border border-line bg-white p-1.5 shadow-[var(--ombre-flottante)]">
+        <div role="group" aria-label="Société" className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-1.5 w-[260px] p-1.5")}>
           {ouvertes.map((c) => (
-            <button key={c.id} type="button" aria-pressed={c.id === me.company_id} onClick={() => changer(c.id)} className={cx("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left", c.id === me.company_id ? "bg-panel-2" : "hover:bg-panel-2")}>
+            <button key={c.id} type="button" aria-pressed={c.id === me.company_id} onClick={() => changer(c.id)} className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left", c.id === me.company_id ? "bg-accent-doux" : "hover:bg-panel-2")}>
               <span className="grid h-8 w-8 flex-none place-items-center rounded-md border border-line bg-white">
                 <LogoSociete entite={c.entity ?? "groupe"} decoratif className="h-4" />
               </span>
@@ -360,13 +360,13 @@ function Compte({ me, app }: { me: Me; app: AppCode }) {
         <span className="sr-only">Compte de {me.name}</span>
       </button>
       {open && (
-        <div className="n-surgir absolute right-0 top-full z-50 mt-1.5 w-60 rounded-xl border border-line bg-white p-1.5 shadow-[var(--ombre-flottante)]">
+        <div className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-1.5 w-60 p-1.5")}>
           <div className="px-3 pb-2 pt-1.5">
             <div className="truncate text-[13.5px] font-semibold">{me.name}</div>
             <div className="truncate text-[12px] text-muted">{me.login}</div>
           </div>
           <div className="border-t border-line pt-1">
-            <Link href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
+            <Link href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
               <KeyRound className="h-4 w-4 text-muted" /> Changer le mot de passe
             </Link>
             <button type="button" onClick={sortir} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-danger hover:bg-danger-doux">

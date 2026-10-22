@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronLeft, Download, FileText, LogOut, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
@@ -16,12 +16,12 @@ type Onglet = "identite" | "contrat" | "conges" | "documents" | "paie";
 /** Fiche d'un salarié : identité, contrat et rémunération, congés, documents, paie. */
 export function FicheSalarie({ id }: { id: string }) {
   const { data: e, error, mutate } = useApi<Employee>(`/rh/employees/${id}`);
-  const { data: meta } = useApi<Meta>("/rh/meta");
+  const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useApi<Meta>("/rh/meta");
   const [onglet, setOnglet] = useState<Onglet>("identite");
   const [edition, setEdition] = useState(false);
   const [sortie, setSortie] = useState(false);
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
-  if (!e || !meta) return <Loading label="Chargement du dossier…" />;
+  if (!e || !meta) return <Etat error={erreurMeta} onRetry={() => rafraichirMeta()} label="Chargement du dossier…" />;
   const ecrit = meta.can_write;
   const rafraichir = () => void mutate();
 
@@ -167,7 +167,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
           title="Rémunération mensuelle"
           actions={
             ecrit && (
-              <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition(true)}>
+              <Button size="sm" onClick={() => setEdition(true)}>
                 <Pencil className="h-3.5 w-3.5" /> Éléments fixes
               </Button>
             )
@@ -319,7 +319,7 @@ function CongesSalarie({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta;
         title="Absences"
         actions={
           ecrit && (
-            <Button className="px-2.5 py-1 text-xs" onClick={() => setSaisie(true)}>
+            <Button size="sm" onClick={() => setSaisie(true)}>
               <Plus className="h-3.5 w-3.5" /> Saisir une absence
             </Button>
           )
@@ -361,7 +361,7 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
   const [depot, setDepot] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   async function supprimer(d: EmployeeDocument) {
-    if (!window.confirm(`Supprimer le document « ${d.name} » ?`)) return;
+    if (!(await demanderConfirmation(`Supprimer le document « ${d.name} » ?`, { action: "Supprimer", danger: true }))) return;
     try {
       await apiSend("DELETE", `/rh/documents/${d.id}`);
       onChanged();
@@ -374,7 +374,7 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
       title="Documents du dossier"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setDepot(true)}>
+          <Button size="sm" onClick={() => setDepot(true)}>
             <Plus className="h-3.5 w-3.5" /> Ajouter un document
           </Button>
         )
@@ -416,12 +416,12 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
               render: (d) => (
                 <span className="flex justify-end gap-1.5">
                   {d.has_file && (
-                    <Button className="min-h-0 px-2 py-1 text-xs" onClick={() => void apiDownload(`/rh/documents/${d.id}/file`, d.name)}>
+                    <Button size="sm" onClick={() => void apiDownload(`/rh/documents/${d.id}/file`, d.name)}>
                       <Download className="h-3.5 w-3.5" /> Ouvrir
                     </Button>
                   )}
                   {ecrit && (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Supprimer" onClick={() => void supprimer(d)}>
+                    <Button variant="ghost" size="sm" aria-label="Supprimer" onClick={() => void supprimer(d)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
@@ -525,7 +525,7 @@ function PaieSalarie({ e }: { e: Employee }) {
                 align: "right",
                 render: (p) => (
                   <Link href={`/rh/paie/bulletins/${p.id}`}>
-                    <Button className="min-h-0 px-2 py-1 text-xs">
+                    <Button size="sm">
                       <FileText className="h-3.5 w-3.5" /> Bulletin
                     </Button>
                   </Link>

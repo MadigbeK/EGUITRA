@@ -147,7 +147,7 @@ export default function MonProjet() {
               {data.team.map((p, i) => (
                 <li key={`${p.id}-${p.role}`} className={cx("rounded-2xl border p-4", i === 0 ? "border-accent-vif/30 bg-accent-doux/40" : "border-line")}>
                   <div className="flex items-center gap-3">
-                    <Avatar nom={p.name} degrade={i === 0} taille={44} />
+                    <Avatar nom={p.name} plein={i === 0} taille={44} />
                     <div className="min-w-0">
                       <div className="truncate text-[14.5px] font-semibold text-ink">{p.name}</div>
                       <div className="truncate text-[12.5px] text-muted">{p.role}</div>

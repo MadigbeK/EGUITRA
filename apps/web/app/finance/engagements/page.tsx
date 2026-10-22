@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
 import type { ExpenseCategory } from "@/lib/finance-types";
@@ -58,14 +58,13 @@ export default function EngagementsPage() {
       />
       {tab === "open" && data && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Kpi label="Engagements en cours" value={String(engaged.length)} teinte="azur" />
-          <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} teinte="lagon" />
-          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} teinte="ambre" hint="Engagé moins pièces d'achat comptabilisées" />
+          <Kpi label="Engagements en cours" value={String(engaged.length)} />
+          <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} />
+          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} hint="Engagé moins pièces d'achat comptabilisées" />
         </div>
       )}
       <Tabs tabs={[{ key: "open", label: "En cours" }, { key: "pending", label: "À soumettre ou en approbation" }, { key: "all", label: "Tous" }]} value={tab} onChange={setTab} />
-      {error && <ErrorBox error={error} />}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <Card padded={false}>
           <DataTable rows={rows} rowKey={(c) => c.id} onRowClick={(c) => setSelected(c.id)} empty="Aucun engagement." columns={[
             { key: "name", label: "Engagement", render: (c) => <div className="min-w-[200px]"><b>{c.name}</b> {c.object}<div className="text-[12px] text-muted">{c.partner.name}{c.account ? ` · ${c.account.code}` : ""}</div></div> },
@@ -143,7 +142,7 @@ function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id:
 }
 
 function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: c, mutate } = useApi<Commitment>(`/finance/commitments/${id}`);
+  const { data: c, error, mutate } = useApi<Commitment>(`/finance/commitments/${id}`);
   // Solder un engagement : finance et direction (le noyau refuse les autres profils).
   const { data: me } = useApi<{ profiles: string[] }>("/auth/me");
   const soldeur = Boolean(me?.profiles.some((p) => p === "finance" || p === "direction"));
@@ -161,7 +160,7 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
   }
   return (
     <Modal open wide title={c ? `${c.name} · ${c.object}` : "Engagement"} onClose={onClose}>
-      {!c ? <Loading /> : (
+      {!c ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-4 text-sm">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -195,8 +194,8 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
           </Card>
           <div className="flex flex-wrap gap-2">
             {(c.state === "draft" || c.state === "rejected") && <Button variant="primary" onClick={() => run(() => apiSend("POST", `/finance/commitments/${c.id}/submit`), "Engagement soumis à l'approbation.")}>Soumettre à l&apos;approbation</Button>}
-            {c.state === "approved" && soldeur && <Button onClick={() => window.confirm("Solder l'engagement ? Plus aucune pièce ne pourra s'y rattacher.") && run(() => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé.")}>Solder</Button>}
-            {["draft", "submitted", "rejected", "approved"].includes(c.state) && <Button variant="danger" onClick={() => window.confirm("Annuler l'engagement ?") && run(() => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé.")}>Annuler</Button>}
+            {c.state === "approved" && soldeur && <Button onClick={async () => (await demanderConfirmation("Solder l'engagement ? Plus aucune pièce ne pourra s'y rattacher.", { action: "Solder" })) && run(() => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé.")}>Solder</Button>}
+            {["draft", "submitted", "rejected", "approved"].includes(c.state) && <Button variant="danger" onClick={async () => (await demanderConfirmation("Annuler l'engagement ?", { action: "Annuler l'engagement", danger: true })) && run(() => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé.")}>Annuler</Button>}
           </div>
         </div>
       )}

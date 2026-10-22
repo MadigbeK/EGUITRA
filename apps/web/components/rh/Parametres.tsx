@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
@@ -16,12 +16,12 @@ type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "ferie
  * chacune (société choisie en tête, défaut : la société de travail).
  */
 export function ParametresRh() {
-  const { data: meta, mutate: rafraichirMeta } = useMeta();
+  const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useMeta();
   const [societe, setSociete] = useState<number | null>(null);
   const { data: settings, error, mutate } = useApi<Settings>(avecSociete("/rh/settings", societe));
   const [onglet, setOnglet] = useState<Onglet>("paie");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
-  if (!settings || !meta) return <Loading label="Chargement des paramètres…" />;
+  if (!settings || !meta) return <Etat error={erreurMeta} onRetry={() => rafraichirMeta()} label="Chargement des paramètres…" />;
   const ecrit = meta.can_write;
   return (
     <div>
@@ -268,7 +268,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </tbody>
         </table>
         {ecrit && (
-          <Button className="mt-2 px-2.5 py-1 text-xs" onClick={() => setBareme([...bareme, { from: "", rate: "" }])}>
+          <Button size="sm" className="mt-2" onClick={() => setBareme([...bareme, { from: "", rate: "" }])}>
             <Plus className="h-3.5 w-3.5" /> Ajouter une tranche
           </Button>
         )}
@@ -288,7 +288,7 @@ function Rubriques({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; onC
       title="Rubriques de paie"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition("nouvelle")}>
+          <Button size="sm" onClick={() => setEdition("nouvelle")}>
             <Plus className="h-3.5 w-3.5" /> Nouvelle rubrique
           </Button>
         )
@@ -321,7 +321,7 @@ function Rubriques({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; onC
             align: "right",
             render: (r) =>
               ecrit && !r.system ? (
-                <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Modifier" onClick={() => setEdition(r)}>
+                <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(r)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               ) : null,
@@ -432,7 +432,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
       title="Types d'absence"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition("nouveau")}>
+          <Button size="sm" onClick={() => setEdition("nouveau")}>
             <Plus className="h-3.5 w-3.5" /> Nouveau type
           </Button>
         )
@@ -455,7 +455,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
             align: "right",
             render: (t) =>
               ecrit ? (
-                <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Modifier" onClick={() => setEdition(t)}>
+                <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(t)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               ) : null,
@@ -555,7 +555,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
     }
   }
   async function supprimer(h: Holiday) {
-    if (!window.confirm(`Retirer le jour férié « ${h.name} » du ${fmtDate(h.date)} ?`)) return;
+    if (!(await demanderConfirmation(`Retirer le jour férié « ${h.name} » du ${fmtDate(h.date)} ?`, { action: "Retirer", danger: true }))) return;
     try {
       await apiSend("DELETE", `/rh/holidays/${h.id}`);
       void mutate();
@@ -583,9 +583,8 @@ function Feries({ ecrit }: { ecrit: boolean }) {
           <Notice tone="danger">{erreur}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} />}
       {!data ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <DataTable
           dense
@@ -601,7 +600,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
               align: "right",
               render: (h) =>
                 ecrit ? (
-                  <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Retirer" onClick={() => void supprimer(h)}>
+                  <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void supprimer(h)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 ) : null,
@@ -634,7 +633,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
       title="Départements"
       actions={
         ecrit && (
-          <Button className="px-2.5 py-1 text-xs" onClick={() => setEdition("nouveau")}>
+          <Button size="sm" onClick={() => setEdition("nouveau")}>
             <Plus className="h-3.5 w-3.5" /> Nouveau département
           </Button>
         )
@@ -656,7 +655,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
             align: "right",
             render: (d) =>
               ecrit ? (
-                <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Modifier" onClick={() => setEdition(d)}>
+                <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(d)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               ) : null,

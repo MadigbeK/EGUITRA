@@ -18,10 +18,10 @@ const yearStart = () => `${new Date().getFullYear()}-01-01`;
 function ExportButtons({ kind, query }: { kind: string; query: string }) {
   return (
     <div className="no-print flex gap-2">
-      <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=xlsx&${query}`, `${kind}.xlsx`)}>
+      <Button size="sm" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=xlsx&${query}`, `${kind}.xlsx`)}>
         <Download className="h-3.5 w-3.5" /> XLSX
       </Button>
-      <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=csv&${query}`, `${kind}.csv`)}>
+      <Button size="sm" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=csv&${query}`, `${kind}.csv`)}>
         <Download className="h-3.5 w-3.5" /> CSV
       </Button>
     </div>
@@ -181,7 +181,7 @@ function CashFlow({ scope }: { scope: string }) {
         </Field>
         <div className="ml-auto flex flex-wrap gap-2">
           <ExportButtons kind="flux" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
-          <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/statements/export?kind=flux_mensuels&format=xlsx&date_from=${from}&date_to=${to}&scope=${scope}`, "flux_mensuels.xlsx")}>
+          <Button size="sm" onClick={() => apiDownload(`/finance/statements/export?kind=flux_mensuels&format=xlsx&date_from=${from}&date_to=${to}&scope=${scope}`, "flux_mensuels.xlsx")}>
             <Download className="h-3.5 w-3.5" /> Flux mensuels
           </Button>
         </div>
@@ -305,10 +305,10 @@ function ReportBuilder({ scope }: { scope: string }) {
           padded={false}
           actions={
             <div className="no-print flex gap-2">
-              <Button className="px-2 py-1 text-xs" onClick={() => exportFile("csv")}>
+              <Button size="sm" onClick={() => exportFile("csv")}>
                 <Download className="h-3.5 w-3.5" /> CSV
               </Button>
-              <Button className="px-2 py-1 text-xs" onClick={() => exportFile("xlsx")}>
+              <Button size="sm" onClick={() => exportFile("xlsx")}>
                 <Download className="h-3.5 w-3.5" /> XLSX
               </Button>
             </div>
@@ -379,7 +379,7 @@ function AuditExport({ scope }: { scope: string }) {
           <p className="mb-3 text-xs text-muted">
             Société de travail : en-tête (NIF, RCCM), comptes avec soldes d&apos;ouverture et de clôture, clients et fournisseurs avec leur compte, table des taxes, une transaction par pièce.
           </p>
-          <Button className="px-2 py-1 text-xs" disabled={scope === "group"} onClick={() => apiDownload(`/finance/exports/saft?date_from=${from}&date_to=${to}`, "SAF-T.xml")}>
+          <Button size="sm" disabled={scope === "group"} onClick={() => apiDownload(`/finance/exports/saft?date_from=${from}&date_to=${to}`, "SAF-T.xml")}>
             <Download className="h-3.5 w-3.5" /> SAF-T (XML)
           </Button>
           {scope === "group" && <span className="ml-2 text-xs text-muted">Un fichier par société : quittez la vue consolidée.</span>}

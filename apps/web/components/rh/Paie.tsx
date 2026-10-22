@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, BookOpen, Calculator, Check, ChevronLeft, FileSpreadsheet, FileText, Lock, Plus, RefreshCw, RotateCcw, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { Anomaly, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
@@ -51,10 +51,9 @@ export function ListePaies() {
           <Notice tone="ok">{message}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : data.length === 0 ? (
           <Empty title="Aucune paie" hint="Préparez la paie du mois : les bulletins de tous les salariés présents sont calculés d'un coup, avec leurs absences, avances et éléments fixes." />
         ) : (
@@ -243,10 +242,10 @@ export function DetailPaie({ id }: { id: string }) {
         title="Bulletins"
         actions={
           <span className="flex items-center gap-2">
-            <Button variant={filtre === "tous" ? "secondary" : "ghost"} className="min-h-0 px-2.5 py-1 text-xs" onClick={() => setFiltre("tous")}>
+            <Button variant={filtre === "tous" ? "secondary" : "ghost"} size="sm" onClick={() => setFiltre("tous")}>
               Tous ({p.payslips.length})
             </Button>
-            <Button variant={filtre === "anomalies" ? "secondary" : "ghost"} className="min-h-0 px-2.5 py-1 text-xs" onClick={() => setFiltre("anomalies")}>
+            <Button variant={filtre === "anomalies" ? "secondary" : "ghost"} size="sm" onClick={() => setFiltre("anomalies")}>
               <AlertTriangle className="h-3.5 w-3.5" /> Avec anomalie ({p.payslips.filter((s) => s.anomalies.length).length})
             </Button>
           </span>
@@ -311,12 +310,12 @@ export function DetailPaie({ id }: { id: string }) {
               render: (s) => (
                 <span className="flex justify-end gap-1.5">
                   {ecrit && p.state === "draft" && (
-                    <Button className="min-h-0 px-2 py-1 text-xs" onClick={() => setSaisie(s)}>
+                    <Button size="sm" onClick={() => setSaisie(s)}>
                       <Plus className="h-3.5 w-3.5" /> Éléments
                     </Button>
                   )}
                   <Link href={`/rh/paie/bulletins/${s.id}`}>
-                    <Button className="min-h-0 px-2 py-1 text-xs">
+                    <Button size="sm">
                       <FileText className="h-3.5 w-3.5" /> Bulletin
                     </Button>
                   </Link>
@@ -362,7 +361,7 @@ const SOURCE: Record<string, string> = { manual: "Saisi", fixed: "Élément fixe
 
 /** Éléments du mois d'un bulletin : primes, heures supplémentaires, retenues ; le bulletin se recalcule. */
 function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; meta: Meta; onClose: () => void }) {
-  const { data: b, mutate } = useApi<Payslip>(`/rh/payslips/${payslipId}`);
+  const { data: b, error, mutate } = useApi<Payslip>(`/rh/payslips/${payslipId}`);
   const rubriques = meta.rubrics.filter((r) => r.active && !r.system);
   const [rubriqueId, setRubriqueId] = useState<string>("");
   const [valeur, setValeur] = useState("");
@@ -399,7 +398,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
   return (
     <Modal open wide title={b ? `Éléments du mois, ${b.employee.name}` : "Éléments du mois"} onClose={onClose} footer={<Button onClick={onClose}>Fermer</Button>}>
       {!b ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <div className="space-y-4">
           {erreur && <Notice tone="danger">{erreur}</Notice>}
@@ -430,7 +429,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
                 align: "right",
                 render: (i) =>
                   i.source === "manual" ? (
-                    <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" aria-label="Retirer" onClick={() => void retirer(i.id)}>
+                    <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void retirer(i.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   ) : null,

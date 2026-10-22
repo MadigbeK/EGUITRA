@@ -9,7 +9,7 @@ import {
   useRetour, type PublicSaisi,
 } from "@/components/portail/cabinet/outils";
 import { dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, cx, type Tone } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { Cibles, EventAdmin, EventKind, RegistrationRow, RegistrationState } from "@/lib/portail-types";
@@ -55,7 +55,7 @@ export default function EvenementsPage() {
       annuler: `Annuler « ${e.name} » ? ${e.registered + e.waitlist > 0 ? `Les ${e.registered + e.waitlist} personnes inscrites ou en liste d'attente seront prévenues.` : "Personne n'est encore inscrit."}`,
       supprimer: `Supprimer définitivement le brouillon « ${e.name} » ?`,
     };
-    if (!window.confirm(questions[action])) return;
+    if (!(await demanderConfirmation(questions[action], { action: { publier: "Publier", annuler: "Annuler l'événement", supprimer: "Supprimer" }[action], danger: action !== "publier" }))) return;
     const ok = { publier: "Événement publié : les porteurs visés sont prévenus.", annuler: "Événement annulé : les inscrits sont prévenus.", supprimer: "Brouillon supprimé." };
     const r = await agir(() => apiSend("POST", `/axispro/portail/evenements/${e.id}/${action}`), ok[action]);
     if (r !== undefined) await mutate();
@@ -126,7 +126,6 @@ function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }
   const debut = new Date(e.start);
   const memeJour = debut.toDateString() === new Date(e.end).toDateString();
   const blocage = !ecriture ? RESERVE_CABINET : undefined;
-  const petit = "min-h-8 px-2.5 py-1 text-[13px]";
   return (
     <li className={cx("px-5 py-4 sm:px-6", e.state === "cancelled" && "opacity-70")}>
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
@@ -181,19 +180,19 @@ function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button variant="secondary" className={petit} onClick={onInscriptions}>
+          <Button variant="secondary" size="sm" onClick={onInscriptions}>
             <Users className="h-3.5 w-3.5" /> Inscriptions
           </Button>
-          <Button variant="ghost" className={petit} onClick={onEditer}>
+          <Button variant="ghost" size="sm" onClick={onEditer}>
             <Pencil className="h-3.5 w-3.5" /> {ecriture ? "Modifier" : "Voir"}
           </Button>
           {e.state === "draft" && (
-            <Button variant="primary" className={petit} disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
+            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
               <Send className="h-3.5 w-3.5" /> Publier
             </Button>
           )}
           {e.state === "published" && !passe && (
-            <Button variant="danger" className={petit} disabled={!ecriture} title={blocage} onClick={() => onEtat("annuler")}>
+            <Button variant="danger" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("annuler")}>
               <XCircle className="h-3.5 w-3.5" /> Annuler
             </Button>
           )}
@@ -287,7 +286,7 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
       setErreur(probleme);
       return;
     }
-    if (publier && etat === "draft" && !window.confirm("Publier cet événement ? Les porteurs visés seront prévenus et pourront s'inscrire.")) return;
+    if (publier && etat === "draft" && !(await demanderConfirmation("Publier cet événement ? Les porteurs visés seront prévenus et pourront s'inscrire.", { action: "Publier" }))) return;
     setEnvoi(publier ? "publier" : "brouillon");
     setErreur(null);
     const corps = {
@@ -407,7 +406,7 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
   const n = (s: RegistrationState) => (data ?? []).filter((r) => r.state === s).length;
 
   async function pointer(r: RegistrationRow, state: RegistrationState) {
-    if (state === "cancelled" && !window.confirm(`Désinscrire ${r.user} ? ${r.state === "registered" ? "La première personne en liste d'attente prendra la place." : ""}`)) return;
+    if (state === "cancelled" && !(await demanderConfirmation(`Désinscrire ${r.user} ? ${r.state === "registered" ? "La première personne en liste d'attente prendra la place." : ""}`, { action: "Désinscrire", danger: true }))) return;
     setErreur(null);
     setEnCours(r.id);
     try {
@@ -506,10 +505,10 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
                   render: (r) =>
                     r.state === "cancelled" ? null : r.state === "waitlist" ? (
                       <div className="flex justify-end gap-1">
-                        <Button className="min-h-8 px-2.5 py-1 text-[12.5px]" disabled={!ecriture || enCours === r.id} title={blocage ?? "Lui donner une place, au-delà de la limite au besoin"} onClick={() => void pointer(r, "registered")}>
+                        <Button size="sm" disabled={!ecriture || enCours === r.id} title={blocage ?? "Lui donner une place, au-delà de la limite au besoin"} onClick={() => void pointer(r, "registered")}>
                           Inscrire
                         </Button>
-                        <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[12.5px]" disabled={!ecriture || enCours === r.id} title={blocage} onClick={() => void pointer(r, "cancelled")}>
+                        <Button variant="ghost" size="sm" disabled={!ecriture || enCours === r.id} title={blocage} onClick={() => void pointer(r, "cancelled")}>
                           Retirer
                         </Button>
                       </div>

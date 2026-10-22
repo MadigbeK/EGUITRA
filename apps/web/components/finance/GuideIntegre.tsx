@@ -1,7 +1,7 @@
 "use client";
 
 import { Printer } from "@/components/icons";
-import { Button, Card, PageHeader } from "@/components/ui";
+import { Button, Card, FEUILLE, PageHeader } from "@/components/ui";
 import { Markdown, sections } from "@/components/Markdown";
 
 /** Guide intégré à Finance (source Markdown de docs/guides, recopiée par docs/guides/web.js) : texte et sommaire. */
@@ -23,7 +23,7 @@ export function GuideIntegre({ source, title, subtitle }: { source: string; titl
           <Markdown source={source} sansTitre />
         </Card>
         <nav aria-label="Sommaire du guide" className="no-print order-first lg:order-none">
-          <div className="sticky top-24 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+          <div className={`sticky top-24 p-4 ${FEUILLE}`}>
             <div className="mb-2 text-[12px] font-semibold text-muted">Sommaire</div>
             <ul className="space-y-1">
               {toc.map((s) => (

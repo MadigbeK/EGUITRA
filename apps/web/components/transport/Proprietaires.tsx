@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileSpreadsheet, FileText, HandCoins, Plus, RefreshCw, Scale, Trash2, TrendingUp, Undo2, Users } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Field, Input, Kpi, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Download, FileSpreadsheet, FileText, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
@@ -82,7 +82,6 @@ export function Proprietaires() {
   return (
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      {error && <Notice tone="danger">{error.message}</Notice>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Mois"><Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></Field>
@@ -102,14 +101,14 @@ export function Proprietaires() {
       )}
       {items.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Chiffre d'affaires des ensembles" value={fmtShort(data?.totals.revenue)} icon={TrendingUp} teinte="jade" hint={`${items.length} relevé(s)`} />
-          <Kpi label="Commissions" value={fmtShort(data?.totals.commissions)} icon={HandCoins} teinte="or" hint="Pourcentages du chiffre d'affaires brut" />
-          <Kpi label="Part des propriétaires" value={fmtShort(owners)} icon={Users} teinte={owners < 0 ? "corail" : "jade"} tone={owners < 0 ? "danger" : "neutral"} hint={owners < 0 ? "Négative : charges non couvertes" : "À reverser"} />
-          <Kpi label="Part de la société" value={fmtShort(data?.totals.operator_amount)} icon={Scale} teinte="jade" hint="Commissions perçues et résultat des ensembles propres" />
+          <Kpi label="Chiffre d'affaires des ensembles" value={fmtShort(data?.totals.revenue)} hint={`${items.length} relevé(s)`} />
+          <Kpi label="Commissions" value={fmtShort(data?.totals.commissions)} hint="Pourcentages du chiffre d'affaires brut" />
+          <Kpi label="Part des propriétaires" value={fmtShort(owners)} tone={owners < 0 ? "danger" : "neutral"} hint={owners < 0 ? "Négative : charges non couvertes" : "À reverser"} />
+          <Kpi label="Part de la société" value={fmtShort(data?.totals.operator_amount)} hint="Commissions perçues et résultat des ensembles propres" />
         </div>
       )}
       <Card title="Relevés du mois" padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={items} rowKey={(s) => s.id} onRowClick={(s) => setOpened(s.id)} empty="Aucun relevé établi pour ce mois." columns={[
             { key: "vehicle", label: "Ensemble", render: (s) => s.vehicle.name, sortValue: (s) => s.vehicle.name },
             { key: "owner", label: "Propriétaire", render: (s) => (s.ownership === "managed" ? s.owner?.name ?? "–" : <span className="text-muted">Propre</span>) },
@@ -131,7 +130,7 @@ export function Proprietaires() {
 
 /** Détail d'un relevé : compte de l'ensemble, répartition, rotations ; pièces, PDF et Excel. */
 function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: boolean; onClose: () => void; onChanged: () => void }) {
-  const { data: st, mutate } = useApi<Statement>(`/transport/owner-statements/${id}`);
+  const { data: st, error, mutate } = useApi<Statement>(`/transport/owner-statements/${id}`);
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState(false);
   async function run(action: "refresh" | "prepare" | "reset", ok: string) {
@@ -159,7 +158,7 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
         {canEdit && st.state === "posted" && <Button loading={busy} onClick={() => run("reset", "Pièces en brouillon supprimées, relevé rouvert.")}><Undo2 className="h-4 w-4" /> Rouvrir</Button>}
       </>
     )}>
-      {!st ? <Loading /> : (
+      {!st ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-5">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
@@ -238,7 +237,7 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
 
 /** Règles de répartition : pourcentage du chiffre d'affaires brut d'un ensemble ou d'une catégorie, par bénéficiaire. */
 function Regles({ canEdit }: { canEdit: boolean }) {
-  const { data: rules, mutate } = useApi<Rule[]>("/transport/share-rules");
+  const { data: rules, error, mutate } = useApi<Rule[]>("/transport/share-rules");
   const { data: vehicles } = useApi<Array<{ id: number; name: string; ownership: Ownership; owner: Ref | null }>>("/transport/vehicles");
   const [form, setForm] = useState<{ target: string; partner: Ref | null; rate: string; date_from: string; date_to: string; note: string }>({ target: "", partner: null, rate: "", date_from: "", date_to: "", note: "" });
   const [message, setMessage] = useState<Message>(null);
@@ -278,7 +277,7 @@ function Regles({ canEdit }: { canEdit: boolean }) {
         sur un ensemble géré est une règle à son nom.
       </p>
       {message && <div className="px-5 pt-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
-      {!rules ? <Loading /> : (
+      {!rules ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={rules} rowKey={(r) => r.id} empty="Aucune règle." columns={[
           { key: "target", label: "Porte sur", render: (r) => r.vehicle?.name ?? (r.ownership ? CATEGORY[r.ownership] : "–") },
           { key: "partner", label: "Bénéficiaire", render: (r) => <span>{r.partner.name}{r.is_company && <span className="ml-2"><Badge tone="accent">Société</Badge></span>}</span> },

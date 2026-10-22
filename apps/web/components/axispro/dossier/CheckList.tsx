@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, Users, X } from "@/components/icons";
-import { Badge, Button, Card, DataTable, FileButton, Input, Loading, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, FEUILLE, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -43,7 +43,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const compartiments = d.scoring.compartments ?? [];
   const [miens, setMiens] = useState(false);
   const { moi } = useCabinet();
-  const { data: criteria, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria${miens ? "?mine=1" : ""}`, { keepPreviousData: true });
+  const { data: criteria, error, mutate } = useApi<CriterionEval[]>(`/axispro/dossiers/${d.id}/criteria${miens ? "?mine=1" : ""}`, { keepPreviousData: true });
   const { data: room, mutate: mutateRoom } = useApi<{ files: DocFile[] }>(`/axispro/dossiers/${d.id}/documents`);
   const [mode, setMode] = useState<"guidee" | "complete">(d.progress.assessed < d.progress.criteria ? "guidee" : "complete");
   const [q, setQ] = useState("");
@@ -121,7 +121,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     }
   }
 
-  if (!criteria) return <Loading label="Chargement de la check-list…" />;
+  if (!criteria) return <Etat error={error} onRetry={() => mutate()} label="Chargement de la check-list…" />;
   const files = room?.files ?? [];
   const parDomaine = d.scoring.domains
     .map((dom) => ({ dom, rows: lignes.filter((c) => c.domain_id === dom.domain_id) }))
@@ -168,7 +168,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
               type="button"
               aria-pressed={miens}
               onClick={() => setMiens((v) => !v)}
-              className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-200", miens ? "n-degrade border-transparent text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : "border-line bg-panel text-ink-2 hover:border-line-strong hover:text-ink")}
+              className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-200", miens ? "bg-accent border-transparent text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : "border-line bg-panel text-ink-2 hover:border-line-strong hover:text-ink")}
             >
               <Users className="h-3.5 w-3.5" /> Mes compartiments
             </button>
@@ -187,7 +187,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
         const ferme = fermes.has(dom.domain_id);
         const tete = rows[0];
         return (
-          <section key={dom.domain_id} className="rounded-2xl border border-line bg-panel shadow-[var(--ombre-carte)]">
+          <section key={dom.domain_id} className={FEUILLE}>
             <button
               type="button"
               aria-expanded={!ferme}
@@ -408,7 +408,7 @@ function Suggestion({ c, verrou, onApply }: { c: CriterionEval; verrou: boolean;
           <span className="text-muted">Statut suggéré :</span>
           <b>{STATUS_LABELS[s.status]}</b>
           {c.status !== s.status && !verrou && (
-            <Button className="ml-auto min-h-7 px-2.5 py-0.5 text-[12px]" onClick={() => onApply(s.status!)}>
+            <Button size="sm" className="ml-auto" onClick={() => onApply(s.status!)}>
               <Target className="h-3.5 w-3.5" /> Appliquer
             </Button>
           )}

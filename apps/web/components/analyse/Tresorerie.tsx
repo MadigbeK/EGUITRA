@@ -2,7 +2,7 @@
 
 import { type CSSProperties } from "react";
 import { Landmark } from "@/components/icons";
-import { AreaChart, Badge, Card, Compteur, DataTable, ErrorBox, GAMME, IconTile, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, Compteur, DataTable, ErrorBox, SERIES, IconTile, cx } from "@/components/ui";
 import { CarteChaleur, Eventail } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, useContexte, usePeriode } from "@/components/analyse/commun";
 import { moisCourt } from "@/components/analyse/charts/commun";
@@ -90,7 +90,7 @@ function Corps() {
                         <span className={cx("whitespace-nowrap font-semibold tabular", a.balance < 0 ? "text-danger" : "text-ink")}>{a.currency !== "GNF" ? `${fmtDec(a.balance_currency)} ${a.currency}` : fmtGNF(a.balance)}</span>
                       </div>
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-panel-3">
-                        <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, Math.abs(a.share_pct)))}%`, background: GAMME[i % GAMME.length], "--i": i } as CSSProperties} />
+                        <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, Math.abs(a.share_pct)))}%`, background: SERIES[i % SERIES.length], "--i": i } as CSSProperties} />
                       </div>
                       {a.currency !== "GNF" && <div className="mt-0.5 text-right text-[11px] text-muted">soit {fmtGNF(a.balance)}</div>}
                     </li>
@@ -132,11 +132,11 @@ function Corps() {
             <Card title="Cycle de conversion" className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">DSO + DIO − DPO, en jours</span>}>
               {cycle.length && d.cycle.months.length ? (
                 <>
-                  <AreaChart label="DSO, DPO, DIO et cycle de conversion" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={cycle.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: GAMME[i % GAMME.length]! }))} height={210} format={(v) => `${fmtDec(Math.round(v * 10) / 10)} j`} formatAxis={(v) => `${Math.round(v)} j`} />
+                  <AreaChart label="DSO, DPO, DIO et cycle de conversion" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={cycle.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={210} format={(v) => `${fmtDec(Math.round(v * 10) / 10)} j`} formatAxis={(v) => `${Math.round(v)} j`} />
                   {bfr && (
                     <div className="mt-4 border-t border-line pt-3">
                       <div className="mb-2 text-[12.5px] font-semibold text-ink-2">Besoin en fonds de roulement</div>
-                      <AreaChart label="BFR mensuel" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={[{ key: "bfr", label: bfr.label, values: combler(bfr.values), color: GAMME[4]! }]} height={120} format={(v) => fmtGNF(v)} />
+                      <AreaChart label="BFR mensuel" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={[{ key: "bfr", label: bfr.label, values: combler(bfr.values), color: SERIES[4]! }]} height={120} format={(v) => fmtGNF(v)} />
                     </div>
                   )}
                   {d.cycle.definition && <p className="mt-2 text-[11.5px] leading-snug text-muted">{d.cycle.definition} Les mois sans donnée reprennent la valeur précédente.</p>}

@@ -204,8 +204,8 @@ export function CourbeTresorerie({ data, forecast }: { data: MonthlyCash; foreca
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
-        <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-5 rounded bg-[#2d82dc]" />Solde de fin de mois</span>
-        {prevision.length > 0 && <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0 w-5 border-t-2 border-dashed border-[#2d82dc]" />Prévision (échéances)</span>}
+        <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-5 rounded bg-azur" />Solde de fin de mois</span>
+        {prevision.length > 0 && <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0 w-5 border-t-2 border-dashed border-azur" />Prévision (échéances)</span>}
         {seuil ? <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-0 w-5 border-t-2 border-dashed border-danger-vif" />Seuil de sécurité</span> : null}
       </div>
       <div className="flex gap-2">
@@ -218,14 +218,14 @@ export function CourbeTresorerie({ data, forecast }: { data: MonthlyCash; foreca
           <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden focusable="false">
             <line x1="0" x2="1000" y1={(y(0) / 100) * H} y2={(y(0) / 100) * H} stroke="var(--line-strong)" vectorEffect="non-scaling-stroke" />
             {seuil ? <line x1="0" x2="1000" y1={(y(seuil) / 100) * H} y2={(y(seuil) / 100) * H} stroke="var(--danger-vif)" strokeDasharray="6 5" strokeWidth="1.5" vectorEffect="non-scaling-stroke" /> : null}
-            {pts.length > 0 && <path d={trace(pts)} fill="none" stroke="#2d82dc" strokeWidth="2.25" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
-            {prevision.length > 0 && <path d={trace([...debutPrev, ...prevision])} fill="none" stroke="#2d82dc" strokeWidth="2" strokeDasharray="7 6" vectorEffect="non-scaling-stroke" />}
+            {pts.length > 0 && <path d={trace(pts)} fill="none" stroke="var(--g-azur)" strokeWidth="2.25" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+            {prevision.length > 0 && <path d={trace([...debutPrev, ...prevision])} fill="none" stroke="var(--g-azur)" strokeWidth="2" strokeDasharray="7 6" vectorEffect="non-scaling-stroke" />}
           </svg>
           {pts.map((p) => (
-            <span key={`r${p.i}`} aria-hidden title={`${p.label} : ${fmtGNF(p.v)}`} className={cx("absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel", seuil && p.v < seuil ? "bg-danger-vif" : "bg-[#2d82dc]")} style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
+            <span key={`r${p.i}`} aria-hidden title={`${p.label} : ${fmtGNF(p.v)}`} className={cx("absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel", seuil && p.v < seuil ? "bg-danger-vif" : "bg-azur")} style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
           ))}
           {prevision.map((p) => (
-            <span key={`p${p.i}`} aria-hidden title={`Prévision fin ${p.label} : ${fmtGNF(p.v)}`} className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#2d82dc] bg-panel" style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
+            <span key={`p${p.i}`} aria-hidden title={`Prévision fin ${p.label} : ${fmtGNF(p.v)}`} className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-azur bg-panel" style={{ left: `${x(p.i)}%`, top: `${y(p.v)}%` }} />
           ))}
           {lowPt && (
             <span aria-hidden className="absolute -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-[10.5px] font-semibold text-white" style={{ left: `${Math.min(92, Math.max(8, x(lowPt.i)))}%`, top: `calc(${y(lowPt.v)}% + 9px)` }}>

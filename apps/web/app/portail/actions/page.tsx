@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { AlertTriangle, Calendar, CheckCircle2, Clock, Pencil, Send } from "@/components/icons";
-import { Anneau, Badge, Button, Card, Empty, ErrorBox, Loading, Modal, Notice, Textarea, cx } from "@/components/ui";
+import { Anneau, Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { EnTete, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { PasDeDossier, jour, messageErreur, useRetour } from "@/components/portail/projet/outils";
@@ -21,7 +21,7 @@ function CarteAction({ a, ferme, onCompteRendu }: { a: ActionRow; ferme: boolean
   const [ouvert, setOuvert] = useState(false);
   const longue = (a.description?.length ?? 0) > 180;
   return (
-    <article className={cx("rounded-2xl border bg-panel p-4 shadow-[var(--ombre-feuille)]", a.overdue ? "border-danger/35" : "border-transparent")}>
+    <article className={cx(FEUILLE, "p-4", a.overdue && "ring-1 ring-danger/35")}>
       {a.overdue && (
         <div className="mb-2">
           <Badge tone="danger">Échéance dépassée</Badge>

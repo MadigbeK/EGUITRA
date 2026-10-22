@@ -13,7 +13,7 @@ type Nature = AgendaItem["kind"];
 
 const NATURES: Record<Nature, { label: string; couleur: string; doux: string; icon: Icon }> = {
   meeting: { label: "Rendez-vous", couleur: "#2d82dc", doux: "#e6f0fc", icon: Clock },
-  event: { label: "Événement du cabinet", couleur: "#7c5ce6", doux: "#efeafd", icon: Users },
+  event: { label: "Événement du cabinet", couleur: "#c4417a", doux: "#fbe7f0", icon: Users },
   action: { label: "Échéance d'action", couleur: "#df8f17", doux: "#fdf1d9", icon: ListChecks },
   funding: { label: "Relance de financement", couleur: "#12956a", doux: "#e2f5ea", icon: HandCoins },
 };

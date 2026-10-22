@@ -90,7 +90,7 @@ export function SimulateurSalaire() {
                     </Button>
                   </div>
                 ))}
-                <Button className="px-2.5 py-1 text-xs" onClick={() => setLignes([...lignes, { rubric_id: "", valeur: "" }])}>
+                <Button size="sm" onClick={() => setLignes([...lignes, { rubric_id: "", valeur: "" }])}>
                   <Plus className="h-3.5 w-3.5" /> Ajouter une prime ou indemnité
                 </Button>
               </div>

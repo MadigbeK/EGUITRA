@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Mail, Printer, RefreshCw } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Kpi, Loading, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Kpi, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
@@ -68,9 +68,8 @@ export default function RemindersPage() {
         <Kpi label="Mises en demeure" value={String(rows.filter((r) => r.level === "3").length)} tone="danger" />
       </div>
       <Tabs tabs={[{ key: "to_send", label: "À envoyer" }, { key: "sent", label: "Envoyées" }]} value={state} onChange={setState} />
-      {error && <ErrorBox error={error} />}
       <Card padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={rows} rowKey={(r) => r.id} onRowClick={(r) => setSelected(r.id)} empty={state === "to_send" ? "Aucune relance en attente." : "Aucune relance envoyée."} columns={[
             { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
             { key: "partner", label: "Client", render: (r) => r.partner.name },
@@ -88,7 +87,7 @@ export default function RemindersPage() {
 }
 
 function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailServer: boolean; onClose: () => void; onChanged: () => void }) {
-  const { data, mutate } = useApi<Reminder & { letter: Letter }>(`/finance/reminders/${id}`);
+  const { data, error: erreurChargement, mutate } = useApi<Reminder & { letter: Letter }>(`/finance/reminders/${id}`);
   const [error, setError] = useState<string | null>(null);
   async function act(path: string, body?: unknown) {
     setError(null);
@@ -117,7 +116,7 @@ function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailS
       )}
     >
       {error && <Notice tone="danger">{error}</Notice>}
-      {!l ? <Loading /> : (
+      {!l ? <Etat error={erreurChargement} onRetry={() => mutate()} /> : (
         <article className="space-y-4 text-sm leading-relaxed">
           <div className="flex justify-between">
             <div className="font-semibold">{l.company}</div>

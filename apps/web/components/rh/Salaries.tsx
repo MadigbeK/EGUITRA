@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Plus, Search } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Input, Loading, PageHeader, Segmented, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Input, PageHeader, Segmented, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type EmployeeRow } from "@/lib/rh-types";
@@ -78,10 +78,9 @@ export function ListeSalaries() {
           </span>
         )}
       </div>
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       <Card padded={false}>
         {!data ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={lignes}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Copy, Download, FileUp } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { PuceCompartiment } from "@/components/axispro/dossier/commun";
 import type { Compartment, IndicatorInfo } from "@/lib/axispro-types";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
@@ -147,10 +147,10 @@ export default function GrillePage() {
 }
 
 function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () => void; onSelect: (id: number) => void }) {
-  const { data: p, mutate } = useApi<Policy>(`/axispro/policies/${id}`);
+  const { data: p, error, mutate } = useApi<Policy>(`/axispro/policies/${id}`);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const [vue, setVue] = useState<"criteres" | "compartiments" | "gates" | "pieces">("criteres");
-  if (!p) return <Loading />;
+  if (!p) return <Etat error={error} onRetry={() => mutate()} />;
   const editable = p.state === "draft";
   const gateCode = Object.fromEntries(p.gates.map((g) => [g.id, g.code]));
   const domainCode = Object.fromEntries(p.domains.map((d) => [d.id, d.code]));
@@ -191,7 +191,7 @@ function PolicyDetail({ id, onChanged, onSelect }: { id: number; onChanged: () =
         actions={
           <div className="flex flex-wrap gap-2">
             {editable && (
-              <Button variant="primary" onClick={() => window.confirm(`Mettre la version ${p.version} en vigueur ? La version actuelle sera archivée ; les dossiers ouverts gardent leur version.`) && act(() => apiSend("POST", `/axispro/policies/${p.id}/activate`), "Version mise en vigueur.")}>
+              <Button variant="primary" onClick={async () => (await demanderConfirmation(`Mettre la version ${p.version} en vigueur ? La version actuelle sera archivée ; les dossiers ouverts gardent leur version.`, { action: "Mettre en vigueur" })) && act(() => apiSend("POST", `/axispro/policies/${p.id}/activate`), "Version mise en vigueur.")}>
                 <CheckCircle2 className="h-4 w-4" /> Mettre en vigueur
               </Button>
             )}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { HardHat, Plus, Unlock } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
@@ -87,7 +87,7 @@ export default function ChantiersPage() {
 }
 
 function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: c, mutate } = useApi<Chantier>(`/chantiers/${id}`);
+  const { data: c, error, mutate } = useApi<Chantier>(`/chantiers/${id}`);
   const [mode, setMode] = useState<"amount" | "pct">("pct");
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
@@ -105,7 +105,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
   }
   return (
     <Modal open wide title={c ? `${c.name}, ${c.client.name}` : "Chantier"} onClose={onClose}>
-      {!c ? <Loading /> : (
+      {!c ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-5">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -121,7 +121,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
             { key: "cumulative_amount", label: "Cumul HT", align: "right", render: (s) => fmtGNF(s.cumulative_amount) },
             { key: "amount_period", label: "Période HT", align: "right", render: (s) => fmtGNF(s.amount_period) },
             { key: "retention_amount", label: `Retenue ${c.retention_rate} %`, align: "right", render: (s) => fmtGNF(s.retention_amount) },
-            { key: "state", label: "", render: (s) => s.state === "draft" ? <span className="flex justify-end gap-2"><Button className="px-2 py-1 text-xs" onClick={() => act(() => apiSend("POST", `/chantiers/situations/${s.id}/invoice`), "Situation facturée.")}>Facturer</Button><Button variant="danger" className="px-2 py-1 text-xs" onClick={() => { if (window.confirm("Annuler cette situation saisie ? Elle ne sera pas facturée.")) void act(() => apiSend("POST", `/chantiers/situations/${s.id}/cancel`), "Situation annulée."); }}>Annuler</Button></span> : s.invoice ? <Badge tone="ok">{s.invoice.name}</Badge> : <Badge>Annulée</Badge> },
+            { key: "state", label: "", render: (s) => s.state === "draft" ? <span className="flex justify-end gap-2"><Button size="sm" onClick={() => act(() => apiSend("POST", `/chantiers/situations/${s.id}/invoice`), "Situation facturée.")}>Facturer</Button><Button variant="danger" size="sm" onClick={async () => { if (await demanderConfirmation("Annuler cette situation saisie ? Elle ne sera pas facturée.", { action: "Annuler la situation", danger: true })) void act(() => apiSend("POST", `/chantiers/situations/${s.id}/cancel`), "Situation annulée."); }}>Annuler</Button></span> : s.invoice ? <Badge tone="ok">{s.invoice.name}</Badge> : <Badge>Annulée</Badge> },
           ]} />
           <Card title="Nouvelle situation">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-5">

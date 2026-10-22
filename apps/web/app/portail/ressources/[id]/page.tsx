@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, type CSSProperties } from "react";
 import { ArrowUpRight, Check, Download, FileText, Loader2, Mail, X } from "@/components/icons";
-import { Card, ErrorBox, Loading, cx } from "@/components/ui";
+import { Card, ErrorBox, FEUILLE, Loading, cx } from "@/components/ui";
 import { COULEUR, TexteRiche, iconeRubrique, taille } from "@/components/portail/commun";
 import { Retour, TitreSection, dateSimple, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { Lecture, Signet } from "@/components/portail/cabinet-porteur/pictos";
@@ -153,10 +153,10 @@ export default function LectureRessource() {
       <Retour href="/portail/ressources">Conseils et ressources</Retour>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <article className="min-w-0 overflow-hidden rounded-[22px] bg-panel shadow-[var(--ombre-feuille)]">
+        <article className={cx(FEUILLE, "min-w-0 overflow-hidden")}>
           <header
             className="relative px-5 pb-7 pt-7 sm:px-10 sm:pt-10"
-            style={{ background: couleur ? `linear-gradient(180deg, ${couleur.doux}, transparent)` : "linear-gradient(180deg, var(--accent-doux), transparent)" } as CSSProperties}
+            style={{ background: couleur ? couleur.doux : "var(--accent-doux)" } as CSSProperties}
           >
             <div className="mx-auto max-w-[70ch]">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12.5px] font-semibold">
@@ -192,7 +192,7 @@ export default function LectureRessource() {
                   href={video}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group mb-8 flex items-center gap-4 overflow-hidden rounded-2xl bg-[linear-gradient(125deg,#16304e,#1f4a7a_55%,#137c86)] p-5 text-white shadow-[0_24px_40px_-28px_rgb(16_40_70/0.8)]"
+                  className="group mb-8 flex items-center gap-4 overflow-hidden rounded-2xl bg-accent-strong p-5 text-white shadow-[0_24px_40px_-28px_rgb(16_40_70/0.8)]"
                 >
                   <span aria-hidden className="grid h-14 w-14 flex-none place-items-center rounded-full bg-white/15 transition-transform group-hover:scale-105">
                     <Lecture className="h-7 w-7" />

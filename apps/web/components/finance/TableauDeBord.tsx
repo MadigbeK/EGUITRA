@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState, type CSSProperties } from "react";
-import { ArrowUpRight, Calculator, Coins, HandCoins, PieChart, Printer, Receipt, Target, TrendingUp } from "@/components/icons";
+import { ArrowUpRight, Printer } from "@/components/icons";
 import { Ondes, Rosace } from "@/components/guilloche";
-import { AreaChart, Button, Card, Compteur, DataTable, Donut, ErrorBox, Field, GAMME, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, Field, SERIES, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { ETATS } from "@/lib/couleurs";
 import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
@@ -13,15 +14,15 @@ import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort, pluriel } from "@/
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
 const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = [
-  ["non_echu", "Non échu", "#12956a"],
-  ["1_30", "Échu de 1 à 30 jours", "#e6b54a"],
-  ["31_60", "Échu de 31 à 60 jours", "#e8843a"],
-  ["61_90", "Échu de 61 à 90 jours", "#d9503a"],
-  ["plus_90", "Échu depuis plus de 90 jours", "#9c2b25"],
+  ["non_echu", "Non échu", ETATS.bon],
+  ["1_30", "Échu de 1 à 30 jours", ETATS.attention],
+  ["31_60", "Échu de 31 à 60 jours", ETATS.risque],
+  ["61_90", "Échu de 61 à 90 jours", ETATS.alerte],
+  ["plus_90", "Échu depuis plus de 90 jours", ETATS.critique],
 ];
 
-/** Barres des comptes sur le billet : menthe, or, ciel, en clair sur le fond forêt. */
-const BILLET = ["#7fdcb4", "#e6c47e", "#8fd0f5", "#c9b9ff", "#ffb48f"];
+/** Barres des comptes sur le billet : menthe, or, ciel, rose, pêche, en clair sur le fond forêt. */
+const BILLET = ["#7fdcb4", "#e6c47e", "#8fd0f5", "#f3a9c9", "#ffb48f"];
 
 const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -146,30 +147,30 @@ function DashboardBody({ d }: { d: Dashboard }) {
         </section>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:col-span-7">
-          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(d.revenue_month)} icon={TrendingUp} teinte="azur" delta={variation} hint={variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent"} />
+          <Kpi label="Chiffre d'affaires du mois" value={fmtShort(d.revenue_month)} delta={variation} hint={variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent"} />
           <Kpi
             label="Chiffre d'affaires de l'exercice"
             value={fmtShort(d.margins.revenue)}
-            icon={Target}
-            teinte="jade"
+           
+           
             tone={budgetCa && (budgetCa.gap_pct ?? 0) < -(budget?.threshold_pct ?? 10) ? "warn" : "neutral"}
             hint={budgetCa ? `Budget ${fmtShort(budgetCa.budget)} · écart ${fmtPct(budgetCa.gap_pct)}` : "Aucun budget de produits"}
           />
-          <Kpi label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} icon={PieChart} teinte="or" tone={d.ebe_fy < 0 ? "danger" : "neutral"} hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`} />
-          <Kpi label="Résultat net de l'exercice" value={fmtShort(d.net_result_fy)} icon={Calculator} teinte={d.net_result_fy < 0 ? "danger" : "ambre"} tone={d.net_result_fy < 0 ? "danger" : "accent"} hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après IFRS 9 : ${fmtShort(d.net_result_fy - ecl)}`} />
+          <Kpi label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} tone={d.ebe_fy < 0 ? "danger" : "neutral"} hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`} />
+          <Kpi label="Résultat net de l'exercice" value={fmtShort(d.net_result_fy)} tone={d.net_result_fy < 0 ? "danger" : "accent"} hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après IFRS 9 : ${fmtShort(d.net_result_fy - ecl)}`} />
           <Kpi
             label="Délai de recouvrement (DSO)"
             value={wc.dso === null ? "–" : `${fmtDec(Math.round(wc.dso))} j`}
-            icon={Receipt}
-            teinte="rose"
+           
+           
             tone={wc.dso !== null && th.dso_target_days ? (wc.dso > th.dso_target_days ? "danger" : "ok") : "neutral"}
             hint={th.dso_target_days ? `Cible ${th.dso_target_days} jours · créances échues ${fmtPct(wc.overdue_share_pct)}` : "Cible de recouvrement non fixée"}
           />
           <Kpi
             label="Couverture de la dette (DSCR)"
             value={ratio(d.dscr)}
-            icon={HandCoins}
-            teinte="lagon"
+           
+           
             tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
             hint={dscrMin ? `Minimum fixé : ${ratio(dscrMin)}` : "Minimum : seuil non fixé"}
           />
@@ -180,8 +181,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
         <Kpi
           label={`Trésorerie prévue fin ${fin.label}`}
           value={fmtShort(fin.end)}
-          icon={Coins}
-          teinte="azur"
+         
+         
           tone={fin.end < 0 || (th.cash_min && fin.end < th.cash_min) ? "danger" : "ok"}
           hint={`+ ${fmtShort(fin.receivables)} clients, - ${fmtShort(fin.payables)} fournisseurs, - ${fmtShort(fin.loans)} emprunts`}
         />
@@ -189,20 +190,20 @@ function DashboardBody({ d }: { d: Dashboard }) {
           <Kpi
             label="Réalisé contre budget cumulé"
             value={fmtPct(budget.expenses.budget ? (budget.expenses.actual / budget.expenses.budget) * 100 : null)}
-            icon={Target}
-            teinte="or"
+           
+           
             tone={budget.overruns.length ? "warn" : "ok"}
             hint={`Charges ${fmtShort(budget.expenses.actual)} / ${fmtShort(budget.expenses.budget)} à fin ${fmtMonth(budget.through.slice(0, 7))}, ${pluriel(budget.overruns.length, "ligne")} hors tolérance`}
           />
         ) : (
-          <Kpi label="Réalisé contre budget cumulé" value="–" icon={Target} teinte="or" hint="Aucun budget pour l'exercice (Activités et budget)" />
+          <Kpi label="Réalisé contre budget cumulé" value="–" hint="Aucun budget pour l'exercice (Activités et budget)" />
         )}
-        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} icon={Coins} teinte="lagon" hint={`Cycle ${wc.cycle === null ? "–" : `${fmtDec(Math.round(wc.cycle))} j`} · DPO ${wc.dpo === null ? "–" : `${fmtDec(Math.round(wc.dpo))} j`}`} />
+        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} hint={`Cycle ${wc.cycle === null ? "–" : `${fmtDec(Math.round(wc.cycle))} j`} · DPO ${wc.dpo === null ? "–" : `${fmtDec(Math.round(wc.dpo))} j`}`} />
         <Kpi
           label="Dette financière"
           value={fmtShort(d.debt.accounting_outstanding ?? d.debt.outstanding)}
-          icon={HandCoins}
-          teinte="corail"
+         
+         
           tone={d.debt.overdue > 0 ? "danger" : Math.abs(d.debt.schedule_gap ?? 0) >= 1 ? "warn" : "neutral"}
           hint={`Dette nette ${fmtShort(d.debt.net_debt)} · gearing ${ratio(d.debt.gearing)}${Math.abs(d.debt.schedule_gap ?? 0) >= 1 ? ` · écart échéancier ${fmtShort(d.debt.schedule_gap)}` : ""}`}
         />
@@ -225,8 +226,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
               label="Chiffre d'affaires et résultat par mois"
               labels={mois.map((m) => fmtMonth(m).split(" ")[0] ?? m)}
               series={[
-                { key: "ca", label: "Chiffre d'affaires", color: "#12956a", values: d.revenue_by_month.map((m) => m.amount) },
-                { key: "resultat", label: "Résultat", color: "#2d82dc", values: mois.map((m) => resultats.get(m) ?? 0) },
+                { key: "ca", label: "Chiffre d'affaires", color: SERIES[0], values: d.revenue_by_month.map((m) => m.amount) },
+                { key: "resultat", label: "Résultat", color: SERIES[1], values: mois.map((m) => resultats.get(m) ?? 0) },
               ]}
               height={210}
               format={(v) => fmtGNF(v)}
@@ -265,7 +266,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
           {parts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted">Imputez les factures sur l&apos;axe Activité pour voir cette répartition.</p>
           ) : (
-            <Donut parts={parts.slice(0, 6).map((a, i) => ({ key: String(a.analytic_account_id), label: a.name, value: a.income, color: GAMME[i % GAMME.length]! }))} format={(v) => fmtShort(v)} centre={{ titre: "Produits", valeur: fmtShort(parts.reduce((s, a) => s + a.income, 0)) }} />
+            <Donut parts={parts.slice(0, 6).map((a, i) => ({ key: String(a.analytic_account_id), label: a.name, value: a.income, color: SERIES[i % SERIES.length]! }))} format={(v) => fmtShort(v)} centre={{ titre: "Produits", valeur: fmtShort(parts.reduce((s, a) => s + a.income, 0)) }} />
           )}
         </Card>
       </div>
@@ -289,11 +290,11 @@ function DashboardBody({ d }: { d: Dashboard }) {
             zones={
               dscrMin
                 ? [
-                    { jusqua: 1, couleur: "#ec4f49", label: "Insuffisante" },
-                    { jusqua: dscrMin, couleur: "#df8f17", label: "Sous le minimum" },
-                    { jusqua: maxDscr, couleur: "#12956a", label: "Confortable" },
+                    { jusqua: 1, couleur: ETATS.alerte, label: "Insuffisante" },
+                    { jusqua: dscrMin, couleur: ETATS.attention, label: "Sous le minimum" },
+                    { jusqua: maxDscr, couleur: ETATS.bon, label: "Confortable" },
                   ]
-                : [{ jusqua: maxDscr, couleur: "#9aa3b5", label: "Seuil non fixé" }]
+                : [{ jusqua: maxDscr, couleur: ETATS.neutre, label: "Seuil non fixé" }]
             }
             sousTitre={`DSCR sur 12 mois : EBE divisé par le service de la dette, ${dscrMin ? `${ratio(dscrMin)} au moins (seuil fixé)` : "minimum non fixé (Administration > Seuils et taux)"}`}
             vide="Aucun service de dette sur 12 mois"
@@ -354,8 +355,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
       </Card>
 
       <div className="no-print flex flex-wrap gap-2">
-        <Link href="/finance/alertes" className="inline-flex min-h-9 items-center rounded-[10px] border border-line bg-panel px-3.5 text-sm font-semibold text-ink hover:bg-panel-2">Toutes les alertes</Link>
-        <Link href="/finance/rapport" className="inline-flex min-h-9 items-center rounded-[10px] border border-line bg-panel px-3.5 text-sm font-semibold text-ink hover:bg-panel-2">Rapport mensuel</Link>
+        <Link href="/finance/alertes" className={classesBouton()}>Toutes les alertes</Link>
+        <Link href="/finance/rapport" className={classesBouton()}>Rapport mensuel</Link>
         <Button variant="primary" onClick={() => window.print()}>
           <Printer className="h-4 w-4" /> Imprimer ce tableau de bord
         </Button>

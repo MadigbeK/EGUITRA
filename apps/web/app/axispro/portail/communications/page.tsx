@@ -8,7 +8,7 @@ import {
   resumePublic, telechargerCsv, useEcriture, useRetour, type PublicSaisi,
 } from "@/components/portail/cabinet/outils";
 import { quand } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, IconTile, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Tag, cx, type Teinte } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, IconTile, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Tag, cx, demanderConfirmation, type Teinte } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { AnnouncementAdmin, AnnouncementKind, Cibles, PublicationState } from "@/lib/portail-types";
@@ -52,7 +52,7 @@ export default function CommunicationsPage() {
       archiver: `Archiver « ${a.title} » ? Elle disparaîtra du portail des porteurs.`,
       supprimer: `Supprimer définitivement le brouillon « ${a.title} » ?`,
     };
-    if (!window.confirm(questions[action])) return;
+    if (!(await demanderConfirmation(questions[action], { action: { publier: "Publier", archiver: "Archiver", supprimer: "Supprimer" }[action], danger: action === "supprimer" }))) return;
     const ok = { publier: "Communication publiée : les porteurs visés sont prévenus.", archiver: "Communication archivée.", supprimer: "Brouillon supprimé." };
     const r = await agir(() => apiSend("POST", `/axispro/portail/annonces/${a.id}/${action}`), ok[action]);
     if (r !== undefined) await mutate();
@@ -161,20 +161,20 @@ function LigneCommunication({ a, ecriture, onEditer, onLectures, onEtat }: { a: 
 
         <div className="flex flex-wrap items-center gap-1.5">
           {a.state !== "draft" && (
-            <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[13px]" onClick={onLectures}>
+            <Button variant="ghost" size="sm" onClick={onLectures}>
               <CheckCheck className="h-4 w-4" /> Lectures
             </Button>
           )}
-          <Button variant="secondary" className="min-h-8 px-2.5 py-1 text-[13px]" onClick={onEditer}>
+          <Button variant="secondary" size="sm" onClick={onEditer}>
             <Pencil className="h-3.5 w-3.5" /> {ecriture ? "Modifier" : "Voir"}
           </Button>
           {a.state !== "published" && (
-            <Button variant="primary" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
+            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
               <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
           {a.state === "published" && (
-            <Button variant="secondary" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={blocage} onClick={() => onEtat("archiver")}>
+            <Button variant="secondary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("archiver")}>
               <Inbox className="h-3.5 w-3.5" /> Archiver
             </Button>
           )}
@@ -258,7 +258,7 @@ function Editeur({ annonce, cibles, ecriture, onClose, onSaved }: { annonce: Ann
       setErreur(probleme);
       return;
     }
-    if (publier && etat !== "published" && !window.confirm("Publier cette communication ? Les porteurs visés seront prévenus sur leur portail.")) return;
+    if (publier && etat !== "published" && !(await demanderConfirmation("Publier cette communication ? Les porteurs visés seront prévenus sur leur portail.", { action: "Publier" }))) return;
     setEnvoi(publier ? "publier" : "brouillon");
     setErreur(null);
     const corps = {

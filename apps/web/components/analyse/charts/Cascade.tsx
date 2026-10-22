@@ -29,7 +29,7 @@ function lignes(label: string, largeur: number): string[] {
 
 /**
  * Cascade (pont) : du premier total au dernier, chaque étape ajoute ou retranche. Les totaux sont
- * pleins (violet de l'Analyse), les hausses en jade, les baisses en corail ; des connecteurs
+ * pleins (or bronze de l'Analyse), les hausses en jade, les baisses en corail ; des connecteurs
  * relient les marches. Survol et flèches du clavier lisent chaque étape et son cumul.
  */
 export function Cascade({ steps, hauteur = 300, label, format, formatAxe }: { steps: Array<WaterfallStep & { court?: string }>; hauteur?: number; label: string; format?: (v: number) => string; formatAxe?: (v: number) => string }) {

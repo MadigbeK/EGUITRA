@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, Pencil, Printer } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, cx } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { CashAccount } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
@@ -49,7 +49,7 @@ export function EtatRapprochement() {
   const [day, setDay] = useState(params.get("date") ?? todayIso());
   const current = journalId || String(position?.accounts.find((a) => a.type === "bank")?.journal_id ?? "");
   const { data, error, mutate } = useApi<Reconciliation>(current ? `/finance/treasury/${current}/reconciliation-statement?date=${day}` : null);
-  const { data: statements, mutate: refreshStatements } = useApi<BankStatement[]>(current ? `/finance/treasury/${current}/statements` : null);
+  const { data: statements, error: erreurReleves, mutate: refreshStatements } = useApi<BankStatement[]>(current ? `/finance/treasury/${current}/statements` : null);
   const [editing, setEditing] = useState<BankStatement | null>(null);
   const money = (v: number | null | undefined) => (v === null || v === undefined ? "–" : fmtGNF(v, data?.currency ?? "GNF"));
 
@@ -182,7 +182,7 @@ export function EtatRapprochement() {
 
           <Card title="Relevés importés" padded={false}>
             {!statements ? (
-              <Loading />
+              <Etat error={erreurReleves} onRetry={() => refreshStatements()} />
             ) : (
               <DataTable
                 dense

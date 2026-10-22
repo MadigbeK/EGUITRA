@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AlertTriangle, ArrowRight, Calendar, Info, ShieldAlert, Users, Wallet } from "@/components/icons";
-import { AreaChart, Badge, Button, Card, Empty, ErrorBox, Kpi, RankBars, Repartition, Squelette, GAMME, type Tone } from "@/components/ui";
+import { AreaChart, Badge, Button, Card, Empty, ErrorBox, Kpi, RankBars, Repartition, Squelette, SERIES, type Tone } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort } from "@/lib/format";
 import type { AlertSeverity, RhAlert, Summary } from "@/lib/rh-types";
@@ -149,9 +149,9 @@ function Contenu({ societe }: { societe: number | null }) {
               format={(v) => fmtGNF(v)}
               formatAxis={(v) => fmtShort(v)}
               series={[
-                { key: "cout", label: "Coût employeur", values: tendance.map((t) => t.employer_cost), color: GAMME[3] },
-                { key: "brut", label: "Brut", values: tendance.map((t) => t.gross), color: GAMME[1] },
-                { key: "net", label: "Net versé", values: tendance.map((t) => t.net), color: GAMME[0] },
+                { key: "cout", label: "Coût employeur", values: tendance.map((t) => t.employer_cost), color: SERIES[3] },
+                { key: "brut", label: "Brut", values: tendance.map((t) => t.gross), color: SERIES[1] },
+                { key: "net", label: "Net versé", values: tendance.map((t) => t.net), color: SERIES[0] },
               ]}
             />
           )}
@@ -166,7 +166,7 @@ function Contenu({ societe }: { societe: number | null }) {
           {data.by_contract.length > 0 && (
             <div className="mt-5">
               <div className="mb-2 text-[12.5px] font-semibold uppercase tracking-wide text-muted">Contrats</div>
-              <Repartition parts={data.by_contract.map((c, i) => ({ key: c.code, label: c.label, value: c.headcount, color: GAMME[i % GAMME.length]! }))} format={(v) => String(v)} />
+              <Repartition parts={data.by_contract.map((c, i) => ({ key: c.code, label: c.label, value: c.headcount, color: SERIES[i % SERIES.length]! }))} format={(v) => String(v)} />
             </div>
           )}
         </Card>
@@ -187,7 +187,7 @@ function Contenu({ societe }: { societe: number | null }) {
             </ul>
             <div>
               <div className="mb-2 text-[12.5px] font-semibold uppercase tracking-wide text-muted">Masse salariale mensuelle</div>
-              <Repartition parts={data.by_company.map((c, i) => ({ key: String(c.company.id), label: nomCourt(c.company), value: c.monthly_payroll_estimate, color: GAMME[i % GAMME.length]! }))} format={(v) => fmtShort(v)} />
+              <Repartition parts={data.by_company.map((c, i) => ({ key: String(c.company.id), label: nomCourt(c.company), value: c.monthly_payroll_estimate, color: SERIES[i % SERIES.length]! }))} format={(v) => fmtShort(v)} />
             </div>
           </div>
         </Card>

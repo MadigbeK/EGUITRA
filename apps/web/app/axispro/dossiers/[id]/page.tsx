@@ -44,7 +44,7 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
       <Link href="/axispro" className="mb-3 inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-muted hover:text-accent">
         <ChevronLeft className="h-4 w-4" /> Tous les dossiers
       </Link>
-      <section className="n-degrade relative mb-4 overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_50px_-28px_var(--accent-lueur)] sm:p-7">
+      <section className="bg-accent-strong relative mb-4 overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_50px_-28px_var(--accent-lueur)] sm:p-7">
         <Rosace epaisseur={0.8} className="pointer-events-none absolute -right-36 top-1/2 h-[460px] w-[460px] -translate-y-1/2 text-white opacity-[0.22]" />
         <div className="relative flex flex-wrap items-center gap-6">
           <div className="min-w-0 flex-1">
@@ -148,8 +148,8 @@ function Messages({ d }: { d: DossierDetail }) {
     <Card>
       <div className="max-h-[480px] space-y-2 overflow-y-auto">
         {(data ?? []).map((m) => (
-          <div key={m.id} className={cx("n-surgir max-w-[80%] rounded-2xl px-4 py-2.5 text-sm", m.from_promoter ? "rounded-bl-[6px] bg-panel-2" : m.internal ? "ml-auto rounded-br-[6px] border border-dashed border-warn bg-warn-doux" : "n-degrade ml-auto rounded-br-[6px] text-white")}>
-            <div className={cx("text-[11.5px]", !m.from_promoter && !m.internal ? "text-white/80" : "text-muted")}>{m.author}, {fmtDateTime(m.date)}{m.internal ? ", note interne" : ""}</div>
+          <div key={m.id} className={cx("n-surgir max-w-[80%] rounded-2xl px-4 py-2.5 text-sm", m.from_promoter ? "rounded-bl-[6px] bg-panel-2" : m.internal ? "ml-auto rounded-br-[6px] border border-dashed border-warn bg-warn-doux" : "bg-accent ml-auto rounded-br-[6px] text-white")}>
+            <div className={cx("text-[11.5px]", !m.from_promoter && !m.internal ? "text-white/90" : "text-muted")}>{m.author}, {fmtDateTime(m.date)}{m.internal ? ", note interne" : ""}</div>
             <div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{m.body}</div>
           </div>
         ))}

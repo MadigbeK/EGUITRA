@@ -93,7 +93,7 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
             <Field label="Mot de passe">
               <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
             </Field>
-            <Button type="submit" variant="primary" className="mt-2 min-h-11 w-full" loading={busy}>
+            <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" loading={busy}>
               Se connecter
             </Button>
           </form>
@@ -102,7 +102,7 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
         {step.kind === "mfa" && (
           <form onSubmit={submitCode} className="space-y-5">
             <CodeInput value={code} onChange={setCode} />
-            <Button type="submit" variant="primary" className="min-h-11 w-full" loading={busy} disabled={code.length !== 6}>
+            <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={code.length !== 6}>
               Valider
             </Button>
             <button type="button" className="w-full text-center text-[13px] font-medium text-muted underline-offset-2 hover:text-ink hover:underline" onClick={() => setStep({ kind: "credentials" })}>
@@ -133,7 +133,7 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
             )}
             <div className="rounded-lg bg-panel-2 px-3 py-2.5 text-center font-mono text-[13px] tracking-[0.18em] text-ink-2 select-all">{step.secret}</div>
             <CodeInput value={code} onChange={setCode} />
-            <Button type="submit" variant="primary" className="min-h-11 w-full" loading={busy} disabled={code.length !== 6}>
+            <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={code.length !== 6}>
               Activer et se connecter
             </Button>
           </form>

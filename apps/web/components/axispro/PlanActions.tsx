@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock, ListChecks, Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segmented, Select, Textarea, cx } from "@/components/ui";
+import { ListChecks, Plus, Trash2 } from "@/components/icons";
+import { Badge, Button, Card, ErrorBox, Field, Input, Kpi, Loading, Notice, Segmented, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { ACTION_SOURCE, ACTION_STATE, type Action, type ActionState } from "@/lib/axispro-types";
 import { fmtDate, pluriel } from "@/lib/format";
@@ -46,10 +46,10 @@ export function PlanActions({ dossierId }: { dossierId?: number }) {
     <div className="space-y-6">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Actions ouvertes" value={String(ouvertes.length)} icon={ListChecks} teinte="azur" />
-        <Kpi label="En retard" value={String(ouvertes.filter((a) => a.overdue).length)} icon={AlertTriangle} teinte="danger" tone={ouvertes.some((a) => a.overdue) ? "danger" : "ok"} />
-        <Kpi label="Déclarées faites, à valider" value={String(ouvertes.filter((a) => a.state === "submitted").length)} icon={Clock} teinte="ambre" tone={ouvertes.some((a) => a.state === "submitted") ? "warn" : "neutral"} />
-        <Kpi label={dossierId ? "Réalisées" : "Confiées au porteur"} value={String(dossierId ? base.filter((a) => a.state === "done").length : ouvertes.filter((a) => a.assignee === "porteur").length)} icon={CheckCircle2} teinte="jade" />
+        <Kpi label="Actions ouvertes" value={String(ouvertes.length)} />
+        <Kpi label="En retard" value={String(ouvertes.filter((a) => a.overdue).length)} tone={ouvertes.some((a) => a.overdue) ? "danger" : "ok"} />
+        <Kpi label="Déclarées faites, à valider" value={String(ouvertes.filter((a) => a.state === "submitted").length)} tone={ouvertes.some((a) => a.state === "submitted") ? "warn" : "neutral"} />
+        <Kpi label={dossierId ? "Réalisées" : "Confiées au porteur"} value={String(dossierId ? base.filter((a) => a.state === "done").length : ouvertes.filter((a) => a.assignee === "porteur").length)} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -121,12 +121,12 @@ function LigneAction({ a, global, agir }: { a: Action; global: boolean; agir: (f
           <Input aria-label={`Échéance de ${a.name}`} type="date" className="min-h-8 w-40 py-1 text-[13px]" defaultValue={a.due_date ?? ""} onBlur={(e) => e.target.value !== (a.due_date ?? "") && patch({ due_date: e.target.value || null })} />
           <Select aria-label={`État de ${a.name}`} className="min-h-8 w-44 py-1 text-[13px]" value={a.state} onChange={(e) => patch({ state: e.target.value as ActionState })} options={(Object.keys(ACTION_STATE) as ActionState[]).map((k) => ({ value: k, label: ACTION_STATE[k].label }))} />
           {a.state === "submitted" && (
-            <Button variant="primary" className="min-h-8 px-2.5 py-1 text-[13px]" onClick={() => patch({ state: "done" }, "Action validée.")}>
+            <Button variant="primary" size="sm" onClick={() => patch({ state: "done" }, "Action validée.")}>
               Valider
             </Button>
           )}
           {!global && (
-            <button type="button" aria-label={`Supprimer ${a.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => window.confirm(`Supprimer l'action « ${a.name} » ?`) && agir(() => apiSend("DELETE", `/axispro/actions/${a.id}`), "Action supprimée.")}>
+            <button type="button" aria-label={`Supprimer ${a.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer l'action « ${a.name} » ?`, { action: "Supprimer", danger: true })) && agir(() => apiSend("DELETE", `/axispro/actions/${a.id}`), "Action supprimée.")}>
               <Trash2 className="h-4 w-4" />
             </button>
           )}

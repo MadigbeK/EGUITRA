@@ -142,13 +142,13 @@ function VatTab({ period, year, month, onPrepared }: { period: string; year: num
             padded={false}
             actions={
               <div className="no-print flex flex-wrap gap-2">
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/vat/export?${period}&format=xlsx`, `${name}.xlsx`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/vat/export?${period}&format=xlsx`, `${name}.xlsx`)}>
                   <Download className="h-3.5 w-3.5" /> XLSX avec annexe
                 </Button>
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/vat/export?${period}&format=csv&part=declaration`, `${name}_declaration.csv`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/vat/export?${period}&format=csv&part=declaration`, `${name}_declaration.csv`)}>
                   <Download className="h-3.5 w-3.5" /> CSV déclaration
                 </Button>
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/vat/export?${period}&format=csv`, `${name}_annexe.csv`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/vat/export?${period}&format=csv`, `${name}_annexe.csv`)}>
                   <Download className="h-3.5 w-3.5" /> CSV annexe
                 </Button>
               </div>
@@ -199,16 +199,16 @@ function WithholdingTab({ period, year, month, onPrepared }: { period: string; y
             padded={false}
             actions={
               <div className="no-print flex flex-wrap gap-2">
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=xlsx`, `${name}.xlsx`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=xlsx`, `${name}.xlsx`)}>
                   <Download className="h-3.5 w-3.5" /> XLSX avec annexe
                 </Button>
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=csv&part=declaration`, `${name}_nature.csv`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=csv&part=declaration`, `${name}_nature.csv`)}>
                   <Download className="h-3.5 w-3.5" /> CSV par nature
                 </Button>
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=csv&part=tiers`, `${name}_tiers.csv`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=csv&part=tiers`, `${name}_tiers.csv`)}>
                   <Download className="h-3.5 w-3.5" /> CSV par tiers
                 </Button>
-                <Button className="px-2 py-1 text-xs" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=csv`, `${name}_annexe.csv`)}>
+                <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/withholding/export?${period}&format=csv`, `${name}_annexe.csv`)}>
                   <Download className="h-3.5 w-3.5" /> CSV annexe
                 </Button>
               </div>
@@ -272,7 +272,7 @@ function WithholdingSettings() {
   }
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      <Card title="Retenues configurées" padded={false} actions={<Button className="px-2 py-1 text-xs" onClick={() => setModal("tax")}><Plus className="h-3.5 w-3.5" /> Nouvelle retenue</Button>}>
+      <Card title="Retenues configurées" padded={false} actions={<Button size="sm" onClick={() => setModal("tax")}><Plus className="h-3.5 w-3.5" /> Nouvelle retenue</Button>}>
         {error && <div className="p-3"><Notice tone="danger">{error}</Notice></div>}
         <DataTable
           dense
@@ -285,11 +285,11 @@ function WithholdingSettings() {
             { key: "rate", label: "Taux", align: "right", render: (t) => `${t.rate} %` },
             { key: "account", label: "Compte", render: (t) => t.account?.code ?? "–" },
             { key: "nature", label: "Nature", render: (t) => t.nature ?? "–" },
-            { key: "active", label: "", render: (t) => <Button className="px-2 py-0.5 text-xs" onClick={() => toggle(t)}>{t.active ? "Archiver" : "Réactiver"}</Button> },
+            { key: "active", label: "", render: (t) => <Button size="sm" onClick={() => toggle(t)}>{t.active ? "Archiver" : "Réactiver"}</Button> },
           ]}
         />
       </Card>
-      <Card title="Tiers soumis à retenue" padded={false} actions={<Button className="px-2 py-1 text-xs" onClick={() => setModal({ partner: null })}><Plus className="h-3.5 w-3.5" /> Ajouter un tiers</Button>}>
+      <Card title="Tiers soumis à retenue" padded={false} actions={<Button size="sm" onClick={() => setModal({ partner: null })}><Plus className="h-3.5 w-3.5" /> Ajouter un tiers</Button>}>
         <DataTable
           dense
           rows={partners ?? []}
@@ -423,12 +423,12 @@ function History({ year }: { year: number }) {
                 render: (r) => (
                   <div className="flex flex-wrap justify-end gap-1">
                     {r.attachment ? (
-                      <Button className="px-2 py-0.5 text-xs" onClick={() => apiDownload(`/finance/fiscal/returns/${r.id}/attachment`, r.attachment?.name ?? "accuse")}>Accusé</Button>
+                      <Button size="sm" onClick={() => apiDownload(`/finance/fiscal/returns/${r.id}/attachment`, r.attachment?.name ?? "accuse")}>Accusé</Button>
                     ) : (
                       <FileButton small label="Joindre l'accusé" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(file) => attach(r, file)} />
                     )}
-                    {r.state === "prepared" && <Button className="px-2 py-0.5 text-xs" onClick={() => setAction({ record: r, kind: "file" })}>Déposée</Button>}
-                    {r.state === "filed" && <Button className="px-2 py-0.5 text-xs" onClick={() => setAction({ record: r, kind: "pay" })}>Payée</Button>}
+                    {r.state === "prepared" && <Button size="sm" onClick={() => setAction({ record: r, kind: "file" })}>Déposée</Button>}
+                    {r.state === "filed" && <Button size="sm" onClick={() => setAction({ record: r, kind: "pay" })}>Payée</Button>}
                   </div>
                 ),
               },

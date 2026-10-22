@@ -6,7 +6,7 @@ import { Calendar, CheckCircle2, Clock, Link2, MapPin, Plus, XCircle } from "@/c
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import { Intitule, LectureSeule, RESERVE_CABINET, Recherche, correspond, majuscule, messageErreur, pluriel, useEcriture, useMonId, useRetour } from "@/components/portail/cabinet/outils";
 import { ajouterAuCalendrier, dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
-import { Badge, Button, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, type Tone } from "@/components/ui";
+import { Badge, Button, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { Cibles, MeetingMode, MeetingRow, MeetingState } from "@/lib/portail-types";
 
@@ -82,7 +82,7 @@ export default function RendezVousPage() {
               {demandes.map((m) => (
                 <Carte key={m.id} m={m}>
                   <div className="flex flex-wrap gap-1.5">
-                    <Button variant="primary" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "repondre", m })}>
+                    <Button variant="primary" size="sm" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "repondre", m })}>
                       Répondre
                     </Button>
                   </div>
@@ -95,19 +95,19 @@ export default function RendezVousPage() {
                 return (
                   <Carte key={m.id} m={m} alerte={passe ? "Date passée : marquez-le tenu avec son compte rendu, ou annulez-le." : undefined}>
                     <div className="flex flex-wrap gap-1.5">
-                      <Button variant={passe ? "primary" : "secondary"} className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "tenu", m })}>
+                      <Button variant={passe ? "primary" : "secondary"} size="sm" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "tenu", m })}>
                         <CheckCircle2 className="h-3.5 w-3.5" /> Marquer tenu
                       </Button>
                       {m.start && (
                         <Button
                           variant="ghost"
-                          className="min-h-8 px-2.5 py-1 text-[13px]"
+                          size="sm"
                           onClick={() => ajouterAuCalendrier({ titre: `${m.subject} (${m.dossier.reference})`, debut: m.start ?? "", fin: m.end, lieu: m.location ?? m.online_url, description: m.agenda, uid: `rdv-${m.id}` })}
                         >
                           <Calendar className="h-3.5 w-3.5" /> Agenda
                         </Button>
                       )}
-                      <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[13px] text-danger hover:text-danger" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "annuler", m })}>
+                      <Button variant="ghost" size="sm" className="text-danger hover:text-danger" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "annuler", m })}>
                         <XCircle className="h-3.5 w-3.5" /> Annuler
                       </Button>
                     </div>
@@ -119,7 +119,7 @@ export default function RendezVousPage() {
               {passes.slice(0, historique).map((m) => (
                 <Carte key={m.id} m={m}>
                   {m.state === "done" && (
-                    <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-[13px]" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "compte_rendu", m })}>
+                    <Button variant="ghost" size="sm" disabled={!ecriture} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setModale({ kind: "compte_rendu", m })}>
                       {m.minutes ? "Modifier le compte rendu" : "Rédiger le compte rendu"}
                     </Button>
                   )}
@@ -163,7 +163,7 @@ function Colonne({ titre, compte, detail, vide, children }: { titre: string; com
 function Carte({ m, alerte, children }: { m: MeetingRow; alerte?: string; children?: ReactNode }) {
   const [ouvert, setOuvert] = useState(false);
   return (
-    <li className="rounded-2xl bg-panel p-4 shadow-[var(--ombre-feuille)]">
+    <li className={cx(FEUILLE, "p-4")}>
       <div className="flex items-start justify-between gap-2">
         <h3 className="min-w-0 font-semibold leading-snug text-ink">{m.subject}</h3>
         <Badge tone={ETAT[m.state]}>{m.state_label}</Badge>
@@ -285,9 +285,9 @@ function Repondre({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; 
     void envoyer("confirm", () => apiSend("PATCH", chemin, { action: "confirm", start, location: location.trim(), online_url: url.trim(), duration: Number(duration), cabinet_note: note.trim() }), "Rendez-vous confirmé : le porteur est prévenu.");
   }
 
-  function decliner() {
-    if (!note.trim() && !window.confirm("Décliner sans message ? Un mot d'explication aide le porteur à proposer d'autres créneaux.")) return;
-    if (note.trim() && !window.confirm("Décliner cette demande ? Le porteur sera prévenu avec votre message.")) return;
+  async function decliner() {
+    if (!note.trim() && !(await demanderConfirmation("Décliner sans message ? Un mot d'explication aide le porteur à proposer d'autres créneaux.", { action: "Décliner", danger: true }))) return;
+    if (note.trim() && !(await demanderConfirmation("Décliner cette demande ? Le porteur sera prévenu avec votre message.", { action: "Décliner", danger: true }))) return;
     void envoyer("decline", () => apiSend("PATCH", chemin, { action: "decline", cabinet_note: note.trim() }), "Demande déclinée : le porteur est prévenu.");
   }
 
@@ -355,9 +355,9 @@ function Repondre({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; 
 function Annuler({ m, onClose, onDone }: { m: MeetingRow; onClose: () => void; onDone: (message: string) => Promise<void> }) {
   const [note, setNote] = useState("");
   const { envoi, erreur, setErreur, envoyer } = useEnvoi(onDone);
-  function annuler() {
+  async function annuler() {
     if (!note.trim()) return setErreur("Expliquez au porteur pourquoi le rendez-vous est annulé.");
-    if (!window.confirm(`Annuler le rendez-vous « ${m.subject} » ? Le porteur sera prévenu.`)) return;
+    if (!(await demanderConfirmation(`Annuler le rendez-vous « ${m.subject} » ? Le porteur sera prévenu.`, { action: "Annuler le rendez-vous", danger: true }))) return;
     void envoyer("cancel", () => apiSend("PATCH", `/axispro/portail/rendez-vous/${m.id}`, { action: "cancel", cabinet_note: note.trim() }), "Rendez-vous annulé : le porteur est prévenu.");
   }
   return (

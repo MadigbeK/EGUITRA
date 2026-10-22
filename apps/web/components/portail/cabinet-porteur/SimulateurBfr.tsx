@@ -1,11 +1,12 @@
 "use client";
 
 import { Card, Notice } from "@/components/ui";
+import { SERIES } from "@/lib/couleurs";
 import { fmtGNF, fmtShort } from "@/lib/format";
 import { ChampMontant, ChampNombre, Ligne } from "./champs";
 import { ANNEE_JOURS, calculerBfr, type ParamsBfr } from "./calculs";
 
-const COULEURS = { stocks: "#df8f17", creances: "#2d82dc", fournisseurs: "#12956a", bfr: "#e25f35" };
+const COULEURS = { stocks: SERIES[2], creances: SERIES[1], fournisseurs: SERIES[0], bfr: SERIES[5] };
 
 function Barre({ titre, parts, echelle }: { titre: string; parts: Array<{ label: string; valeur: number; couleur: string }>; echelle: number }) {
   return (
@@ -55,7 +56,7 @@ export function SimulateurBfr({ params, onChange }: { params: ParamsBfr; onChang
       </Card>
 
       <div className="min-w-0 space-y-6">
-        <section aria-label="Besoin en fonds de roulement" className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(125deg,#16304e_0%,#1f4a7a_55%,#137c86_100%)] p-6 text-white shadow-[0_30px_60px_-36px_rgb(16_40_70/0.7)] sm:p-7">
+        <section aria-label="Besoin en fonds de roulement" className="relative overflow-hidden rounded-[22px] bg-accent-strong p-6 text-white shadow-[0_30px_60px_-36px_rgb(16_40_70/0.7)] sm:p-7">
           <div className="text-[13px] font-medium text-white/70">{b.bfr >= 0 ? "Besoin en fonds de roulement" : "Ressource en fonds de roulement"}</div>
           <div aria-live="polite" className="mt-1 font-display text-[34px] font-bold leading-none tabular sm:text-[42px]">
             {fmtGNF(Math.abs(b.bfr))}

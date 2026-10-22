@@ -41,7 +41,8 @@ export const COULEUR: Record<CategoryColor, { teinte: Teinte; vif: string; doux:
   or: { teinte: "or", vif: "#c39a3f", doux: "#f8efdc" },
   jade: { teinte: "jade", vif: "#12956a", doux: "#e2f5ea" },
   corail: { teinte: "corail", vif: "#e25f35", doux: "#fdebe4" },
-  violet: { teinte: "rose", vif: "#7c5ce6", doux: "#efeafd" },
+  // Clé « violet » gardée (valeur enregistrée par le noyau) ; la teinte affichée est le rose.
+  violet: { teinte: "rose", vif: "#c4417a", doux: "#fbe7f0" },
 };
 
 const ICONES_RUBRIQUE: Record<string, Icon> = { Landmark, TrendingUp, Scale, Building2, Info, FileCheck2, BookOpen, Calendar };
