@@ -225,7 +225,7 @@ class TestOutilDuCabinet(ApiCase):
         self.policy.action_activate()
         dossier = self.env["axispro.dossier"].create({
             "name": "Centrale solaire", "promoter_id": self.promoter.id, "company_id": self.cabinet.id,
-            "sector": "Énergie", "location": "Kindia",
+            "sector": "Énergie", "location": "Kindia", "consultant_id": self.responsable.id,
         })
         token = self.open_session("analyste3", app="axispro")["access_token"]
         status, body = self.call("GET", "/axispro/consultants", token=token)
@@ -265,6 +265,10 @@ class TestOutilDuCabinet(ApiCase):
 
         status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/assignments",
                                  {"compartment_id": c1.id, "user_id": None}, token=token)
+        self.assertEqual(status, 403, "Seul le responsable du dossier retire une affectation")
+        responsable = self.open_session("responsable3", app="axispro")["access_token"]
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/assignments",
+                                 {"compartment_id": c1.id, "user_id": None}, token=responsable)
         self.assertEqual(status, 200, body)
         self.env.invalidate_all()
         self.assertFalse(dossier.assignment_ids)
@@ -326,3 +330,42 @@ class TestOutilDuCabinet(ApiCase):
         self.assertTrue(all(r["editable_by_me"] for r in rows), rows)
         self.env.invalidate_all()
         self.assertEqual((foncier.status, foncier.comment), ("partial", "Titre foncier reçu"))
+
+    def test_affectation_des_compartiments(self):
+        """Seul le responsable du dossier confie un compartiment à un autre, le reprend ou retire
+        l'affectation ; un consultant peut seulement s'attribuer un compartiment libre (journal)."""
+        self.policy.action_activate()
+        dossier = self.env["axispro.dossier"].create({
+            "name": "Centrale solaire", "promoter_id": self.promoter.id, "company_id": self.cabinet.id,
+            "consultant_id": self.responsable.id,
+        })
+        c1, c3 = (self.policy.compartment_ids.filtered(lambda k, code=code: k.code == code) for code in ("C1", "C3"))
+        path = f"/axispro/dossiers/{dossier.id}/assignments"
+        autre = self.open_session("consultant3", app="axispro")["access_token"]
+        status, body = self.call("POST", path, {"compartment_id": c1.id, "user_id": self.analyste.id}, token=autre)
+        self.assertEqual(status, 403, "Un simple consultant ne confie pas un compartiment à un tiers")
+        self.assertIn("responsable du dossier (Responsable3)", body["message"])
+        status, body = self.call("POST", path, {"compartment_id": c1.id, "user_id": self.autre.id}, token=autre)
+        self.assertEqual(status, 200, "Un consultant s'attribue un compartiment libre")
+        self.env.invalidate_all()
+        entry = dossier.journal_ids.filtered(lambda j: j.kind == "assignment")[:1]
+        self.assertEqual((entry.user_id, entry.after), (self.autre, "Consultant3"))
+        self.assertIn("pris en charge par le consultant lui-même", entry.note)
+        status, body = self.call("POST", path, {"compartment_id": c1.id, "user_id": None}, token=autre)
+        self.assertEqual(status, 403, "Retrait d'une affectation réservé au responsable")
+
+        analyste = self.open_session("analyste3", app="axispro")["access_token"]
+        status, body = self.call("POST", path, {"compartment_id": c1.id, "user_id": self.analyste.id}, token=analyste)
+        self.assertEqual(status, 403, "Pas de reprise d'un compartiment déjà affecté")
+        self.assertIn("Consultant3", body["message"], "Le consultant affecté est nommé")
+
+        responsable = self.open_session("responsable3", app="axispro")["access_token"]
+        for compartment, user in ((c3, self.analyste), (c1, self.analyste)):
+            status, body = self.call("POST", path, {"compartment_id": compartment.id, "user_id": user.id},
+                                     token=responsable)
+            self.assertEqual(status, 200, body)
+        owners = {c["code"]: (c["owner"] or {}).get("id") for c in body["compartments"]}
+        self.assertEqual(owners, {"C1": self.analyste.id, "C3": self.analyste.id},
+                         "Le responsable confie et reprend les compartiments")
+        status, body = self.call("POST", path, {"compartment_id": c3.id, "user_id": None}, token=responsable)
+        self.assertEqual(status, 200, body)

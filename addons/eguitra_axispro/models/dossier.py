@@ -72,11 +72,11 @@ def _input_author(env):
     return not _system(env) and not env.user.share
 
 
-def _and_lead(dossier):
-    """« et le responsable du dossier (Nom) » pour un message de refus ; sans nom si le dossier n'a
-    pas de responsable désigné (dossier créé par le compte système)."""
+def _lead_label(dossier):
+    """« le responsable du dossier (Nom) » pour un message de refus ; sans nom si le dossier n'a pas
+    de responsable désigné (dossier créé par le compte système)."""
     lead = dossier.sudo().consultant_id.filtered(lambda u: u.id != SUPERUSER_ID)
-    return f" et le responsable du dossier ({lead.name})" if lead else " et le responsable du dossier"
+    return f"le responsable du dossier ({lead.name})" if lead else "le responsable du dossier"
 
 
 class AxisproDossier(models.Model):
@@ -227,8 +227,8 @@ class AxisproDossier(models.Model):
         owner = dossier.assignment_ids.filtered(lambda a: a.compartment_id == compartment).user_id
         if not owner or user in (owner | dossier.consultant_id):
             return None
-        return (f"compartiment {compartment.code} {compartment.name} confié à {owner.name} ; seuls ce consultant"
-                f"{_and_lead(dossier)} en écrivent l'évaluation.")
+        return (f"compartiment {compartment.code} {compartment.name} confié à {owner.name} ; seuls ce consultant "
+                f"et {_lead_label(dossier)} en écrivent l'évaluation.")
 
     def log(self, kind, note=None, criterion=None, before=None, after=None):
         """Inscription au journal du dossier (auteur authentifié, horodatage du serveur)."""
@@ -437,19 +437,26 @@ class AxisproDossier(models.Model):
         return out
 
     def assign(self, compartment, user):
-        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation). Un
-        compartiment déjà confié ne change de consultant que par ce consultant ou le responsable du
-        dossier : l'évaluation lui étant réservée, un autre ne peut pas se l'attribuer."""
+        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation).
+        L'évaluation étant réservée au consultant affecté, seuls le responsable du dossier
+        (consultant_id) et le compte système confient un compartiment à quelqu'un d'autre, le
+        reprennent ou retirent l'affectation ; un consultant de l'équipe peut seulement s'attribuer
+        un compartiment encore libre, prise inscrite au journal du dossier. Refus 403 sinon."""
         self.ensure_one()
         if compartment.policy_id != self.policy_id:
             raise UserError("Ce compartiment n'appartient pas à la grille du dossier.")
         current = self.assignment_ids.filtered(lambda a: a.compartment_id == compartment)
-        if current and current.user_id != user and not _system(self.env) \
-                and self.env.user not in (current.user_id | self.consultant_id):
-            raise AccessError(
-                f"Compartiment {compartment.code} {compartment.name} confié à {current.user_id.sudo().name} ; seuls ce "
-                f"consultant{_and_lead(self)} changent son affectation."
-            )
+        me = self.env.user
+        self_take = False
+        if current.user_id != user and not _system(self.env) and me != self.consultant_id:
+            label = f"Compartiment {compartment.code} {compartment.name}"
+            if current:
+                raise AccessError(f"{label} confié à {current.user_id.sudo().name} : seul {_lead_label(self)} "
+                                  "change ou retire cette affectation.")
+            if user != me:
+                raise AccessError(f"{label} libre : vous pouvez vous l'attribuer, mais seul {_lead_label(self)} "
+                                  "le confie à un autre consultant.")
+            self_take = True
         before = current.user_id.name or None
         if not user:
             current.unlink()
@@ -459,8 +466,10 @@ class AxisproDossier(models.Model):
             self.env["axispro.assignment"].create({"dossier_id": self.id, "compartment_id": compartment.id,
                                                    "user_id": user.id})
         if (user.name if user else None) != before:
-            self.log("assignment", note=f"Compartiment {compartment.code} {compartment.name}",
-                     before=before or "Non affecté", after=user.name if user else "Non affecté")
+            note = f"Compartiment {compartment.code} {compartment.name}"
+            if self_take:
+                note += " : pris en charge par le consultant lui-même"
+            self.log("assignment", note=note, before=before or "Non affecté", after=user.name if user else "Non affecté")
         return True
 
     def action_advance_gate(self, force_reason=None):

@@ -343,8 +343,9 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/assignments", methods=("POST",), profiles=WRITE)
     def assign(self, dossier_id, **_kw):
         """Confie un compartiment du dossier à un consultant : {compartment_id, user_id} (user_id vide :
-        retire l'affectation). Un compartiment déjà confié ne change de consultant que par ce
-        consultant ou le responsable du dossier (refus 403)."""
+        retire l'affectation). Seul le responsable du dossier confie un compartiment à un autre, le
+        reprend ou retire l'affectation ; un consultant peut seulement s'attribuer un compartiment
+        libre (refus 403 sinon)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (compartment_id,) = require(data, "compartment_id")
