@@ -227,14 +227,17 @@ class TestRh(FinanceDataMixin, TransactionCase):
         with self.assertRaisesRegex(AccessError, "ne changent que par ses actions"):
             self.env["eguitra.rh.payroll"].with_user(self.gestionnaire).create(
                 {"company_id": self.company.id, "month": date(2026, 10, 1), "state": "validated"})
-        self.assertEqual((payroll.state, payroll.prepared_by_ids), ("draft", self.env.user))
+        # Le compte système (archivé) qui a préparé la paie est bien retenu : _preparers le lit malgré le
+        # filtre des comptes actifs, que l'ORM applique à la lecture directe du champ.
+        self.assertEqual((payroll.state, payroll._preparers()), ("draft", self.env.user))
+        self.assertTrue(payroll._prepared_by(self.env.user))
 
         # Écritures directes dans l'ORM : le compte est retenu parmi les préparateurs.
         slip = payroll.payslip_ids.filtered(lambda s: s.employee_id == self.alpha)
         self.env["eguitra.rh.payslip.input"].with_user(self.gestionnaire).create({
             "payslip_id": slip.id, "rubric_id": self.env.ref("eguitra_rh.rubric_rendement").id, "amount": 100_000})
         slip.line_ids[:1].with_user(self.administrateur).write({"amount": 1})
-        self.assertEqual(payroll.prepared_by_ids, self.env.user | self.gestionnaire | self.administrateur)
+        self.assertEqual(payroll._preparers(), self.env.user | self.gestionnaire | self.administrateur)
         with self.assertRaisesRegex(AccessError, "autre personne"):
             payroll.with_user(self.administrateur).action_validate()
 
