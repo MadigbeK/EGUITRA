@@ -132,7 +132,7 @@ def announcement_row(a, read=None, full=False):
     row = {"id": a.id, "title": a.name, "kind": a.kind, "kind_label": dict(ANNOUNCEMENT_KINDS)[a.kind],
            "pinned": a.pinned, "require_ack": a.require_ack, "published_at": a.published_at,
            "expire_date": a.expire_date, "cta_url": a.cta_url or None, "cta_label": a.cta_label or None,
-           "author": a.author_id.name or "MB AxisPro", "excerpt": excerpt(a.body),
+           "author": a.author_id.name or "MB AxisPro Consulting", "excerpt": excerpt(a.body),
            "read": bool(read), "acknowledged": bool(read and read.acknowledged_at)}
     if full:
         row["body"] = a.body or ""
@@ -148,7 +148,7 @@ def article_row(a, reaction=None, gate_codes=(), full=False):
            "helpful": reaction.helpful if reaction and reaction.helpful else None,
            "has_files": bool(a.attachment_ids), "video_url": a.video_url or None}
     if full:
-        row.update({"body": a.body or "", "author": a.author_id.name or "MB AxisPro",
+        row.update({"body": a.body or "", "author": a.author_id.name or "MB AxisPro Consulting",
                     "files": [file_row(f) for f in a.attachment_ids]})
     return row
 

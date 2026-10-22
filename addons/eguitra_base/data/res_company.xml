@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
-    <!-- La société principale du noyau devient EGUITRA GROUP SARLU. MB AxisPro est
+    <!-- La société principale du noyau devient EGUITRA GROUP SARLU. MB AxisPro Consulting est
          créée par le post_init_hook, qui lui charge le plan SYSCOHADA Guinée. -->
     <record id="base.main_company" model="res.company">
         <field name="name">EGUITRA GROUP SARLU</field>

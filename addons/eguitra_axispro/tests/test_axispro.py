@@ -77,7 +77,7 @@ class TestAxispro(ApiCase):
         self._set(dossier, "C003", "met")
         score = dossier.scoring()
         marche = next(d for d in score["domains"] if d["code"] == "D01")
-        # Méthode MB AxisPro : un critère non encore évalué (C004, gate suivant) compte comme non disponible.
+        # Méthode MB AxisPro Consulting : un critère non encore évalué (C004, gate suivant) compte comme non disponible.
         self.assertAlmostEqual(marche["score"], (3 * 1 + 1 * 0.5 + 2 * 0) / 6 * 100)
         self.assertAlmostEqual(score["global_score"], (marche["score"] * 2 + 100 * 1) / 3)
         self.assertEqual(score["recommendation"], "go", "Ancienne grille : pondération par domaine, seuil de 70")
@@ -300,7 +300,7 @@ class TestAxispro(ApiCase):
         self.assertEqual((status, [m["body"] for m in messages]), (200, ["Bonjour"]), "Les échanges restent lisibles")
 
     def test_activites_du_cabinet(self):
-        """Les services du cabinet sont des activités de MB AxisPro, proposées aux lignes de facture."""
+        """Les services du cabinet sont des activités de MB AxisPro Consulting, proposées aux lignes de facture."""
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
         names = self.env["account.analytic.account"].search([("plan_id", "=", plan.id),
                                                              ("company_id", "=", self.cabinet.id)]).mapped("name")

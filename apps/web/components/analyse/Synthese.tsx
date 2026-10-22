@@ -207,7 +207,7 @@ function CockpitGroupe() {
   );
 }
 
-/* ─── MB AxisPro ────────────────────────────────────────────── */
+/* ─── MB AxisPro Consulting ────────────────────────────────────────────── */
 
 const RECO: Record<Recommendation, { label: string; couleur: string }> = {
   bankable: { label: "Bankable", couleur: COULEUR_VERDICT.bankable! },

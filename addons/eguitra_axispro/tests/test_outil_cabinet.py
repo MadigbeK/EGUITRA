@@ -152,7 +152,7 @@ class TestOutilDuCabinet(ApiCase):
         cls.cabinet = cls.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         cls.env = cls.env(context=dict(cls.env.context, allowed_company_ids=cls.cabinet.ids))
         Policy = cls.env["axispro.policy"]
-        cls.previous = Policy.import_grid(cls.cabinet, "Méthode MB AxisPro", "grille.csv", extended_grid())
+        cls.previous = Policy.import_grid(cls.cabinet, "Méthode MB AxisPro Consulting", "grille.csv", extended_grid())
         cls.previous.action_activate()
         cls.policy = Policy.import_grid(cls.cabinet, "Outil du cabinet v3", "outil.xlsx", cabinet_workbook())
         cls.promoter = cls.env["res.partner"].create({"name": "SPV Soleil"})

@@ -3,7 +3,7 @@
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
-# Services de MB AxisPro (activités analytiques du cabinet). Les honoraires des dossiers
+# Services de MB AxisPro Consulting (activités analytiques du cabinet). Les honoraires des dossiers
 # d'AxisPro Suite relèvent de la gestion de projets ; les autres services se facturent depuis Finance.
 PROJECT_ACTIVITY = "Gestion de projets"
 CABINET_ACTIVITIES = (PROJECT_ACTIVITY, "Formation et coaching", "Conseil", "Audit d'évaluation des transporteurs",
@@ -33,7 +33,7 @@ class AxisproTimesheet(models.Model):
 
     @api.model
     def _ensure_cabinet_activities(self):
-        """Activités du cabinet (services de MB AxisPro), proposées à chaque ligne de facture
+        """Activités du cabinet (services de MB AxisPro Consulting), proposées à chaque ligne de facture
         de Finance ; rejoué à chaque mise à jour du module."""
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
         Analytic = self.env["account.analytic.account"].sudo()

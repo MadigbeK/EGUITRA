@@ -1,6 +1,6 @@
-# Guide du porteur de projet : le portail MB AxisPro
+# Guide du porteur de projet : le portail MB AxisPro Consulting
 
-Le cabinet MB AxisPro vous ouvre un accès au portail des porteurs de projets : votre dossier, vos
+Le cabinet MB AxisPro Consulting vous ouvre un accès au portail des porteurs de projets : votre dossier, vos
 pièces, vos échanges avec le cabinet, vos rendez-vous, les conseils et les événements du cabinet,
 au même endroit, sur ordinateur comme sur téléphone.
 

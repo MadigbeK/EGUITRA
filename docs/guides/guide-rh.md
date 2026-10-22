@@ -7,7 +7,7 @@ et les prêts, et vous préparez la paie du mois jusqu'au bulletin et à l'écri
 reçoit cette écriture en brouillon : elle la relit, la comptabilise et règle les salaires.
 
 La gestion RH est commune aux deux sociétés, comme la finance : vous voyez et gérez le personnel
-d'EGUITRA GROUP SARLU et de MB AxisPro dans les mêmes listes et le même tableau de bord (le filtre
+d'EGUITRA GROUP SARLU et de MB AxisPro Consulting dans les mêmes listes et le même tableau de bord (le filtre
 « Société » restreint l'affichage à l'une d'elles). Chaque société reste l'employeur légal de ses
 salariés : l'employeur se choisit à l'embauche, et chaque société a sa paie, sa déclaration CNSS, ses
 impôts sur salaires et son écriture de paie, préparées ensemble chaque mois.
@@ -31,7 +31,7 @@ La direction voit tout et approuve les absences ; elle ne modifie ni les dossier
 
 « Nouveau salarié » : nom, poste, département, responsable hiérarchique, contrat (CDI, CDD, stage,
 apprentissage), date d'embauche, fin du contrat pour un CDD, fin de la période d'essai, salaire de
-base. Le matricule est attribué tout seul (EG-0001 pour EGUITRA GROUP, AX-0001 pour MB AxisPro).
+base. Le matricule est attribué tout seul (EG-0001 pour EGUITRA GROUP, AX-0001 pour MB AxisPro Consulting).
 
 Complétez ensuite la fiche ; la liste signale ce qui manque :
 

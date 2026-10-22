@@ -9,7 +9,7 @@ de l'offre ne changent pas.
 
 ## 1. Ce qui est construit
 
-Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro :
+Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro Consulting :
 
 - **EGUITRA Finance** : pilotage du dirigeant, comptabilité SYSCOHADA, trésorerie, approbations,
   clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers chantiers et
@@ -17,7 +17,7 @@ Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro :
 - **NIMOVA · Transport** (application à part entière depuis le 22 octobre 2026) : rotations,
   facturation, manquants, rentabilité (coûts standard, déclarés, comptabilisés), ensembles gérés
   pour des propriétaires et leurs relevés, taxes spécifiques, flotte, routes et tarifs.
-- **AxisPro Suite** : évaluation des projets selon la méthode MB AxisPro (stage gates, scoring
+- **AxisPro Suite** : évaluation des projets selon la méthode MB AxisPro Consulting (stage gates, scoring
   Readiness et Bankability, knock-outs, écarts prioritaires), data room, comités et décisions
   scellées, rapports, modèle financier, risques et plan d'actions, temps et honoraires du cabinet.
 - **Portail des porteurs de projets** : suivi du dossier, dépôt des pièces, échanges avec le cabinet.
@@ -69,7 +69,7 @@ modifiée, aucun contournement possible hors du moteur.
 
 ## 4. Organisation des données
 
-- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro (cabinet)
+- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro Consulting (cabinet)
   vivent dans la même base, avec des **comptabilités entièrement séparées** : chacune son plan de
   comptes SYSCOHADA, ses journaux, ses taxes, sa numérotation des pièces, ses exercices et ses
   clôtures. Les données sont cloisonnées par société : un utilisateur ne voit que les sociétés qui
@@ -107,7 +107,7 @@ modifiée, aucun contournement possible hors du moteur.
 | Chantiers | retenue de garantie (5 % par défaut) portée en 4117 jusqu'à sa libération |
 | Immobilier | quittancement chaque nuit : une facture par échéance passée, datée de l'échéance, validée aussitôt (rattrapage compris) ; impayés relancés comme les autres créances |
 | Pièces déposées | PDF, JPEG, PNG, Word .docx et Excel .xlsx, reconnus d'après leur contenu ; 20 Mo par fichier ; dossier d'un porteur limité à 400 pièces ou 1 Go, 50 messages par jour |
-| AxisPro (méthode MB AxisPro, réf. SC-01) | grille officielle de 111 critères, 15 domaines, 8 gates ; atteint 1, partiel 0,5, non disponible 0, non évalué compté non disponible ; preuve exigée ou périmée : critère ramené à partiel ; scores Project Readiness, APD Readiness et Bankability ; knock-out non atteint (ou incomplet) : NO-GO ; BANKABLE à partir de 80/100, APD READY à partir de 65, CONDITIONAL GO à partir de 50, HOLD à partir de 30 ; décision du comité scellée, dossier figé jusqu'à une nouvelle révision |
+| AxisPro (méthode MB AxisPro Consulting, réf. SC-01) | grille officielle de 111 critères, 15 domaines, 8 gates ; atteint 1, partiel 0,5, non disponible 0, non évalué compté non disponible ; preuve exigée ou périmée : critère ramené à partiel ; scores Project Readiness, APD Readiness et Bankability ; knock-out non atteint (ou incomplet) : NO-GO ; BANKABLE à partir de 80/100, APD READY à partir de 65, CONDITIONAL GO à partir de 50, HOLD à partir de 30 ; décision du comité scellée, dossier figé jusqu'à une nouvelle révision |
 
 ## 6. Sécurité
 
@@ -193,7 +193,7 @@ recalculées par la plateforme et leur conformité (« n/26 ») est annexée au 
 
 ## 11. Validation
 
-| Pour EGUITRA GROUP SARLU et MB AxisPro | Pour E-VOLUTION XP |
+| Pour EGUITRA GROUP SARLU et MB AxisPro Consulting | Pour E-VOLUTION XP |
 |---|---|
 | M. Mohamed Nimaga, Directeur Général | Madigbè Kouyaté, gérant |
 | Date et signature : | Date et signature : |

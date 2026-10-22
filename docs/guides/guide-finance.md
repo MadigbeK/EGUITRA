@@ -68,7 +68,7 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 
 - « Nouvelle facture » : client, date, contrat ou bon de commande, devise, lignes (désignation,
   quantité, prix, TVA) et, sous chaque ligne, un compte par axe analytique (activité, centre de coût,
-  chantier, ensemble routier, route, bien ; dossier pour MB AxisPro). Sans compte saisi, la ligne
+  chantier, ensemble routier, route, bien ; dossier pour MB AxisPro Consulting). Sans compte saisi, la ligne
   prend le compte de produit de l'activité ; choisir un autre compte demande le droit « Saisie libre
   des comptes ». Les axes laissés vides suivent les imputations automatiques. « Avoir » pour annuler
   tout ou partie d'une facture.

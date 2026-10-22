@@ -305,7 +305,12 @@ AA), cohérence visuelle, revue des écrans sur la maquette. Corrigé :
   rien ne la faisait apparaître), noms d'étape de l'entonnoir AxisPro sur deux lignes, constats de
   l'Analyse en feuille (sans liseré, pastille ni étincelle), libellés en casse normale, page
   d'erreur en « Erreur » avec le bouton commun.
-- Code mort : quatre animations et douze icônes inutilisées.
+- Code mort : quatre animations et douze icônes inutilisées. À la fusion (cd92bc2 sur
+  `claude/bold-shannon-gpg2hv`), la session fonctionnelle a gardé les icônes, dont la nouvelle
+  application Transport a besoin, et reporté les retouches sur les écrans qu'elle a restructurés
+  (`components/finance/TableauDeBord.tsx`, `components/transport/Rotations.tsx` et `Synthese.tsx`).
+  Le portail réécrit et le plan d'actions AxisPro reçoivent les leurs de leurs sessions. Recette en
+  cours de reconstruction ; production sur confirmation du gérant.
 - `CHARTE.md` mise à jour (logo le pli, Funnel, page de connexion, arbitrages en attente).
 
 ## Harmonisation des composants (22 octobre 2026)
@@ -356,6 +361,15 @@ d'un chantier (Échap ne ferme qu'elle), boutons `sm` des situations (32 px), co
 Non vérifié à l'écran : le portail des porteurs, car la maquette ne sert pas `/portail/espace`
 (réécrit depuis) ; la coque y affiche désormais l'erreur au lieu de « Préparation de votre
 espace » sans fin.
+
+## Portail sur photo (22 octobre 2026)
+
+À la demande du gérant, le fond bleu nuit de la page de connexion du portail devient une photo :
+une entrepreneure à son bureau (Pexels 20209020, licence gratuite, choisie par le gérant parmi
+douze). Logo du cabinet, titre, liste, cercle et marches restent en place. La photo est voilée de
+bleu nuit pour la lecture. Comme pour NIMOVA, elle est servie en WebP de 22 à 96 Ko, avec un aperçu
+flou inscrit dans la page et un cache d'un an (`public/scenes/portail-20209020-*`). Les deux scènes
+partagent désormais le composant `PhotoScene` de `app/login/page.tsx`.
 
 ## Reste à faire
 

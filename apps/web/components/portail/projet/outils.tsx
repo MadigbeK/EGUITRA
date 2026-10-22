@@ -59,7 +59,7 @@ export function LienBouton({ href, children, variant = "secondary", className, e
 export function PasDeDossier() {
   return (
     <Card>
-      <Empty title="Aucun dossier n'est encore ouvert à votre nom." hint="Votre consultant MB AxisPro vous informera dès son ouverture." />
+      <Empty title="Aucun dossier n'est encore ouvert à votre nom." hint="Votre consultant MB AxisPro Consulting vous informera dès son ouverture." />
     </Card>
   );
 }

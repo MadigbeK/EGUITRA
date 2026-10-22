@@ -1,10 +1,10 @@
-"""Analyses de MB AxisPro (spécification, chapitre 6).
+"""Analyses de MB AxisPro Consulting (spécification, chapitre 6).
 
 Une méthode publique par section (synthese, portefeuille, diagnostic, comites, financements,
 activite, risques), de signature (company, period, ctx=None) -> dict : blocs de la section, constats
 (insight puis rank) et fiabilité. `ctx` partage entre sections les données d'une requête (le cockpit
 réunit toutes les sections) : chaque dossier n'est évalué qu'une fois par requête (dossier.evaluate()
-puis dossier.scoring(résultat), méthode MB AxisPro de scoring.py).
+puis dossier.scoring(résultat), méthode MB AxisPro Consulting de scoring.py).
 
 Conventions :
 - Les états (gate courant, scores, risques et actions ouverts) sont ceux de la date d'arrêté pour le
@@ -898,7 +898,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 metric={"label": "Dossiers BANKABLE CANDIDATE", "value": len(bankable), "unit": "count",
                         "reference": len(b.live), "reference_label": "Dossiers du portefeuille"},
                 impact_gnf=need, confidence=0.85,
-                method="Recommandation de la méthode MB AxisPro : Bankability au-dessus du seuil de la politique, gate "
+                method="Recommandation de la méthode MB AxisPro Consulting : Bankability au-dessus du seuil de la politique, gate "
                        "Bankability en GO (DSCR au moins égal au seuil bancaire), aucun knock-out actif.",
                 action="Ouvrir les data rooms et organiser la présentation aux financeurs ciblés.",
                 link=_dossier_link(bankable[0]) if len(bankable) == 1 else "/analyse/financements",

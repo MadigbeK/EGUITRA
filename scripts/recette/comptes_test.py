@@ -1,9 +1,9 @@
 # ruff: noqa: F821 (env est fourni par « odoo shell »)
 """Comptes de test de la recette : un compte par métier, pour les utilisateurs réels d'EGUITRA GROUP
-et de MB AxisPro qui testent la plateforme et font leurs retours. Recette seulement.
+et de MB AxisPro Consulting qui testent la plateforme et font leurs retours. Recette seulement.
 
 Chaque compte reçoit les profils et les sociétés de son métier (deux sociétés distinctes : un
-profil métier d'EGUITRA n'est ouvert qu'à EGUITRA GROUP, le cabinet qu'à MB AxisPro),
+profil métier d'EGUITRA n'est ouvert qu'à EGUITRA GROUP, le cabinet qu'à MB AxisPro Consulting),
 un mot de passe provisoire à remplacer à la première connexion et la double authentification à
 activer sur le téléphone du testeur. Un compte = une personne (le téléphone qui reçoit les codes).
 
@@ -48,6 +48,7 @@ COMPTES = [
     ("test.dg", "Test - Direction générale", ["direction"], ["groupe", "cabinet"]),
     ("test.daf", "Test - Responsable financier", ["finance"], ["groupe", "cabinet"]),
     ("test.comptable", "Test - Comptable", ["finance"], ["groupe", "cabinet"]),
+    ("test.achats", "Test - Acheteur", ["achats"], ["groupe", "cabinet"]),
     ("test.exploitation", "Test - Responsable exploitation transport", ["exploitation"], ["groupe"]),
     ("test.parc", "Test - Agent de parc", ["exploitation"], ["groupe"]),
     ("test.chantiers", "Test - Conducteur de travaux", ["chantiers"], ["groupe"]),

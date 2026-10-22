@@ -7,9 +7,9 @@ import { COOKIES } from "@/lib/session";
 import { PasswordForm } from "./PasswordForm";
 
 export async function generateMetadata(): Promise<Metadata> {
-  // Un porteur de projet reste chez MB AxisPro : pas de marque interne dans l'onglet.
+  // Un porteur de projet reste chez MB AxisPro Consulting : pas de marque interne dans l'onglet.
   const fromCookie = (await cookies()).get(COOKIES.app)?.value;
-  if (fromCookie === "portail") return { title: { absolute: "Mot de passe · MB AxisPro" }, description: "Portail des porteurs de projets de MB AxisPro : dossier, pièces et échanges avec le cabinet.", icons: { icon: "/icons/portail.svg" } };
+  if (fromCookie === "portail") return { title: { absolute: "Mot de passe · MB AxisPro Consulting" }, description: "Portail des porteurs de projets de MB AxisPro Consulting : dossier, pièces et échanges avec le cabinet.", icons: { icon: "/icons/portail.svg" } };
   return { title: "Mot de passe" };
 }
 

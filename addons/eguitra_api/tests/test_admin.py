@@ -100,7 +100,7 @@ class TestAdmin(ApiCase):
         compte = {"name": "Consultant", "login": "consultant.x", "password": "Provisoire-2026", "profiles": ["cabinet"]}
         status, body = self.call("POST", "/admin/users", dict(compte, company_ids=[groupe.id]), token=token)
         self.assertEqual(status, 422, body)
-        self.assertIn("MB AxisPro", body["message"])
+        self.assertIn("MB AxisPro Consulting", body["message"])
         status, user = self.call("POST", "/admin/users", dict(compte, company_ids=[cabinet.id]), token=token)
         self.assertEqual((status, sorted(user["apps"])), (200, ["analyse", "axispro"]), user)
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "chantiers"]}, token=token)

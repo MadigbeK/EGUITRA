@@ -139,7 +139,7 @@ export default function MonProjet() {
         </Card>
 
         {/* Équipe du cabinet */}
-        <Card title="Votre équipe MB AxisPro" className="xl:col-span-5">
+        <Card title="Votre équipe MB AxisPro Consulting" className="xl:col-span-5">
           {data.team.length === 0 ? (
             <p className="text-sm text-muted">Le cabinet désignera bientôt votre consultant. En attendant, vous pouvez écrire au cabinet depuis la messagerie.</p>
           ) : (

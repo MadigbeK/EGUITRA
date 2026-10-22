@@ -110,7 +110,7 @@ export default function Actualites() {
       <EnTete
         surtitre="Le cabinet"
         titre="Actualités"
-        texte="Appels à projets, opportunités de financement, informations importantes et rendez-vous de MB AxisPro."
+        texte="Appels à projets, opportunités de financement, informations importantes et rendez-vous de MB AxisPro Consulting."
       />
 
       {aConfirmer.length > 0 && (

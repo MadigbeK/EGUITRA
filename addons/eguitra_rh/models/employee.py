@@ -197,7 +197,7 @@ class EguitraRhEmployee(models.Model):
         return result
 
     def _next_matricule(self):
-        """EG-0001 pour EGUITRA GROUP, AX-0001 pour MB AxisPro, numéros propres à chaque société."""
+        """EG-0001 pour EGUITRA GROUP, AX-0001 pour MB AxisPro Consulting, numéros propres à chaque société."""
         self.ensure_one()
         prefix = {"groupe": "EG", "cabinet": "AX"}.get(self.company_id.eguitra_entity) or "SAL"
         existing = self.sudo().with_context(active_test=False).search(

@@ -280,7 +280,7 @@ export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteS
       </div>
     );
   }
-  const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro";
+  const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro Consulting";
   return (
     <div className="mx-auto max-w-2xl py-10">
       <Notice tone="accent">

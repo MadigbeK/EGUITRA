@@ -8,7 +8,7 @@ import { ApiError } from "@/lib/api-client";
 import { fmtShort } from "@/lib/format";
 import type { DossierDetail } from "@/lib/axispro-types";
 
-/** Règles de passage des gates (méthode MB AxisPro). */
+/** Règles de passage des gates (méthode MB AxisPro Consulting). */
 export const RULE_LABELS: Record<string, string> = {
   intake: "Recevabilité (fiche projet)",
   prequalification: "Préqualification (knock-outs du gate, maturité)",

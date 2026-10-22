@@ -280,7 +280,7 @@ export default function Evenements() {
       <EnTete
         surtitre="Le cabinet"
         titre="Événements et formations"
-        texte="Ateliers, formations, webinaires et rencontres de MB AxisPro. Inscrivez-vous en un geste ; le lien de connexion des séances en ligne vous est réservé."
+        texte="Ateliers, formations, webinaires et rencontres de MB AxisPro Consulting. Inscrivez-vous en un geste ; le lien de connexion des séances en ligne vous est réservé."
       />
 
       {prochain && (

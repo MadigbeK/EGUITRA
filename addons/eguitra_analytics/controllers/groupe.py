@@ -1,5 +1,5 @@
 """Routes /analyse/groupe/... (spécification, chapitre 5) : une route par section, réservée à EGUITRA GROUP
-(organisation.MODULE_ENTITY : 422 wrong_company depuis MB AxisPro) et aux profils admin,
+(organisation.MODULE_ENTITY : 422 wrong_company depuis MB AxisPro Consulting) et aux profils admin,
 direction et finance.
 
 Paramètres communs (controllers/common.parse_period) : period (ytd, 12m, q, m, custom), date_to, date_from.

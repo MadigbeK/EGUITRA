@@ -30,7 +30,7 @@
             <div class="page ax">
                 <t t-call="eguitra_axispro.report_axispro_style"/>
                 <h1>Rapport d'évaluation : <t t-esc="r['title']"/></h1>
-                <p class="muted small">Méthode MB AxisPro « Project Readiness &amp; Bankability Assessment ». Édité le
+                <p class="muted small">Méthode MB AxisPro Consulting « Project Readiness &amp; Bankability Assessment ». Édité le
                     <t t-esc="r['generated']"/>.</p>
 
                 <h2>Fiche projet</h2>

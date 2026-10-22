@@ -32,7 +32,7 @@ STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
 # Colonnes facultatives :
 # - critère adossé à un indicateur du modèle financier (indicateur, seuil, seuil_partiel) ;
-# - méthode MB AxisPro : exigence (bloquant, apd, closing), bancabilite, livrable (critère, domaine
+# - méthode MB AxisPro Consulting : exigence (bloquant, apd, closing), bancabilite, livrable (critère, domaine
 #   ou gate), role (« capex » : critère contrôlé contre l'investissement de la fiche) ;
 # - gates : entree, passage, regle, seuil_attente, seuil_go, portee (globale ou cumulee), domaines
 #   (codes séparés par « ; »), completude_min (complétude documentaire exigée pour examiner le gate) ;
@@ -178,7 +178,7 @@ class AxisproPolicy(models.Model):
 
         Lignes de type « gate », « domaine », « critere » et « piece ». Le poids d'un critère est sa
         pondération dans le score ; celui d'un domaine ne sert qu'en pondération par domaine. Une
-        grille au format MB AxisPro (colonne « exigence ») est notée à plat, comme la méthode du
+        grille au format MB AxisPro Consulting (colonne « exigence ») est notée à plat, comme la méthode du
         cabinet ; une grille à l'ancien format garde la pondération par domaine. L'outil du cabinet
         apporte ses propres seuils et réglages, qui l'emportent sur ceux du formulaire, et reprend les
         repères de la version en vigueur (codes, aides, rattachements des pièces).

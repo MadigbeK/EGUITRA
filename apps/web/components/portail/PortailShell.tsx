@@ -330,7 +330,7 @@ function Compte({ me, entreprise, onLogout }: { me: Me; entreprise: string | nul
 /* ─── Coquille ─────────────────────────────────────────────────────────── */
 
 /**
- * Portail des porteurs, à la marque MB AxisPro : colonne de menu (dossier en cours, rubriques avec
+ * Portail des porteurs, à la marque MB AxisPro Consulting : colonne de menu (dossier en cours, rubriques avec
  * compteurs, consultant joignable), cloche des notifications, barre d'onglets sur téléphone.
  */
 export function PortailShell({ me, children }: { me: Me; children: ReactNode }) {

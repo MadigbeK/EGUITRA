@@ -111,7 +111,7 @@ export default function GrillePage() {
     <div>
       <PageHeader
         title="Grille d'évaluation"
-        subtitle="Méthode MB AxisPro : la grille du cabinet est une donnée ; chaque modification crée une nouvelle version, et un dossier reste évalué selon la version en vigueur à son ouverture."
+        subtitle="Méthode MB AxisPro Consulting : la grille du cabinet est une donnée ; chaque modification crée une nouvelle version, et un dossier reste évalué selon la version en vigueur à son ouverture."
         actions={
           <>
             <Button onClick={() => apiDownload("/axispro/policies/template", "grille_axispro_modele.xlsx")}><Download className="h-4 w-4" /> Classeur modèle</Button>
@@ -426,7 +426,7 @@ function Flag({ on, editable, danger, onToggle }: { on: boolean; editable: boole
 
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const [f, setF] = useState({ name: "Politique d'évaluation MB AxisPro", go_threshold: "", conditional_threshold: "50", notes: "" });
+  const [f, setF] = useState({ name: "Politique d'évaluation MB AxisPro Consulting", go_threshold: "", conditional_threshold: "50", notes: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function submit() {
@@ -453,7 +453,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (id: nu
           <b>Outil de scoring du cabinet.</b> Le classeur du cabinet (onglets Scoring, Stage_Gate, Data_Room_Index et Parametres) s&apos;importe tel quel : compartiments, domaines, critères, gates et leur complétude minimale, pièces de la data room, barème et seuils de classement en sont lus. Les codes des critères et des pièces, les aides, les livrables et les rattachements pièce-critère sont repris de la version en vigueur quand le libellé est le même, pour que dossiers, exports et analyses gardent leurs repères.
         </Notice>
         <p className="text-xs text-muted">
-          Format générique, classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide ; lignes de type gate, domaine, critere et piece. Colonnes facultatives de la méthode MB AxisPro : exigence (bloquant, apd, closing), bancabilite, livrable, role (capex), règles des gates (regle, seuil_attente, seuil_go, portee, domaines, entree, passage, completude_min), compartiment des domaines (« C0 — Coordination et cadrage projet ») et rattachement des pièces (criteres). Une grille avec la colonne « exigence » est notée à plat, APD READY à 65 ; sinon, par domaine, à 70. Le détail est dans l&apos;onglet Aide du classeur modèle. La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.
+          Format générique, classeur XLSX ou CSV aux colonnes : type, code, libelle, domaine, gate, poids, critique, eliminatoire, preuve, aide ; lignes de type gate, domaine, critere et piece. Colonnes facultatives de la méthode MB AxisPro Consulting : exigence (bloquant, apd, closing), bancabilite, livrable, role (capex), règles des gates (regle, seuil_attente, seuil_go, portee, domaines, entree, passage, completude_min), compartiment des domaines (« C0 — Coordination et cadrage projet ») et rattachement des pièces (criteres). Une grille avec la colonne « exigence » est notée à plat, APD READY à 65 ; sinon, par domaine, à 70. Le détail est dans l&apos;onglet Aide du classeur modèle. La grille importée devient une nouvelle version en brouillon, à vérifier avant sa mise en vigueur.
         </p>
         <Field label="Classeur"><input type="file" accept=".xlsx,.xlsm,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" /></Field>
         <Field label="Intitulé"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>

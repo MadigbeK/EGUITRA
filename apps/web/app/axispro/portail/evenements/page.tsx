@@ -378,7 +378,7 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Field label="Intervenants">
-            <Input value={f.speaker} maxLength={200} placeholder="Exemple : Awa Camara, MB AxisPro" onChange={(e) => set("speaker", e.target.value)} />
+            <Input value={f.speaker} maxLength={200} placeholder="Exemple : Awa Camara, MB AxisPro Consulting" onChange={(e) => set("speaker", e.target.value)} />
           </Field>
           <Field label="Lieu">
             <Input value={f.location} maxLength={200} placeholder="Exemple : salle de formation, Kaloum" onChange={(e) => set("location", e.target.value)} />

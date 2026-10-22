@@ -88,7 +88,7 @@ export default function Outils() {
       {outil === "bfr" && <SimulateurBfr params={bfr} onChange={setBfr} />}
 
       <p className="text-[12px] leading-relaxed text-muted">
-        Résultats indicatifs, à confirmer avec votre consultant MB AxisPro. Une question sur vos chiffres ?{" "}
+        Résultats indicatifs, à confirmer avec votre consultant MB AxisPro Consulting. Une question sur vos chiffres ?{" "}
         <Link href="/portail/messages" className="font-semibold text-accent hover:underline">Écrivez-lui</Link>.
       </p>
     </div>

@@ -20,7 +20,7 @@ Les deux environnements ne partagent que le serveur et le proxy : ni grappe Post
 de passe, ni fichiers, ni cookies de session. Le noyau de production se connecte à sa base avec un
 rôle sans privilège de superutilisateur (`ODOO_DB_USER`).
 
-Chaque environnement contient **les deux sociétés**, EGUITRA GROUP SARLU et MB AxisPro,
+Chaque environnement contient **les deux sociétés**, EGUITRA GROUP SARLU et MB AxisPro Consulting,
 dans une même base : chacune a son plan de comptes SYSCOHADA, ses journaux, ses taxes et sa
 numérotation ; les données sont cloisonnées par société ; un même compte peut être ouvert aux deux
 sociétés (sélecteur en haut de l'écran, vue « Groupe consolidé »).

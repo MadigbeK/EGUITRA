@@ -1,9 +1,9 @@
 {
     "name": "EGUITRA - Portail des porteurs de projets",
-    "summary": "Espace des porteurs accompagnés par MB AxisPro : tableau de bord du projet, messagerie avec pièces "
+    "summary": "Espace des porteurs accompagnés par MB AxisPro Consulting : tableau de bord du projet, messagerie avec pièces "
                "jointes, rendez-vous, communications du cabinet, centre de ressources et de conseils, événements et "
                "formations, agenda, notifications, avis ; outils de publication du cabinet",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.1.0",
     "category": "Services",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

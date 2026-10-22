@@ -30,9 +30,9 @@ export function useMeta() {
   return useApi<Meta>("/rh/meta");
 }
 
-/** Nom court d'une société dans les listes : « EGUITRA GROUP », « MB AxisPro ». */
+/** Nom court d'une société dans les listes : « EGUITRA GROUP », « MB AxisPro Consulting ». */
 export function nomCourt(c: CompanyRef): string {
-  return c.entity === "groupe" ? "EGUITRA GROUP" : c.entity === "cabinet" ? "MB AxisPro" : c.name;
+  return c.entity === "groupe" ? "EGUITRA GROUP" : c.entity === "cabinet" ? "MB AxisPro Consulting" : c.name;
 }
 
 /** Employeur d'un salarié ou société d'une paie : emblème et nom court. */

@@ -9,7 +9,7 @@
   porteur (ce dernier réservé au portail, ouvert depuis la fiche d'un dossier AxisPro). Le profil
   achats ouvre les engagements de dépense, les pièces d'achat par catégorie, les fournisseurs et le
   suivi de ses demandes, rien d'autre de la comptabilité.
-- Sociétés accessibles : cocher EGUITRA GROUP SARLU, MB AxisPro ou les deux, et choisir
+- Sociétés accessibles : cocher EGUITRA GROUP SARLU, MB AxisPro Consulting ou les deux, et choisir
   la société à l'ouverture. Un compte ouvert aux deux passe de l'une à l'autre sans se reconnecter ;
   chaque comptabilité reste séparée.
 - Départ d'un collaborateur : désactiver le compte (ses sessions sont fermées, l'historique reste).

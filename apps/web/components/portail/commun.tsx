@@ -123,7 +123,7 @@ export function ajouterAuCalendrier({ titre, debut, fin, lieu, description, uid 
   const start = new Date(debut);
   const end = fin ? new Date(fin) : new Date(start.getTime() + 3_600_000);
   const lignes = [
-    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MB AxisPro//Portail//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MB AxisPro Consulting//Portail//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     "BEGIN:VEVENT", `UID:${uid}@portail.mbaxispro`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(start)}`, `DTEND:${icsDate(end)}`,
     `SUMMARY:${icsTexte(titre)}`, lieu ? `LOCATION:${icsTexte(lieu)}` : "", description ? `DESCRIPTION:${icsTexte(description)}` : "",
     "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", `DESCRIPTION:${icsTexte(titre)}`, "END:VALARM",

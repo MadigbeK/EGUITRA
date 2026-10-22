@@ -1,4 +1,4 @@
-"""Grille officielle MB AxisPro tirée du prototype de la direction (MB_AxisPro_Suite.html), au format
+"""Grille officielle MB AxisPro Consulting tirée du prototype de la direction (MB_AxisPro_Suite.html), au format
 d'import de la plateforme (AxisPro Suite, Politique d'évaluation, Importer une grille).
 
 Le prototype n'est pas versionné (document du client) : il est lu en place, comme une donnée, sans
