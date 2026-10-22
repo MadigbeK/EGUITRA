@@ -263,6 +263,19 @@ PILOTE CA »), appliquée sur la branche `claude/harmonisation-composants`.
   la coque, barre rose clair (#f3a9c9) au lieu du lilas sur le billet, événements de l'agenda du
   portail en rose. La rubrique de teinte « violet » du portail s'affiche en rose sous le nom
   « Rose » ; sa clé `violet` reste, c'est la valeur enregistrée par le noyau.
+- Dégradés : aplat de la couleur de l'application partout, sauf trois surfaces de marque qui gardent
+  le leur (billet de trésorerie, panneau de la page de connexion, en-tête de Rotations). La classe
+  `.n-degrade` est supprimée. Boutons principaux (survol en `--accent-strong`), avatars, numéros,
+  gates, pastilles et bulles de message passent en `bg-accent` (texte blanc de 5,08 à 6,96:1 selon
+  l'application). Le bandeau du dossier AxisPro, le compte choisi de la trésorerie, les bandeaux
+  bleu nuit du portail et la date des rendez-vous passent en `bg-accent-strong` : sur l'accent, leurs
+  textes à 60-80 % de blanc et leurs pastilles translucides tombaient sous 4,5:1 ; sur l'accent fort,
+  le blanc à 70 % donne 4,67:1 au moins, et les textes à 60 et 65 % montent à 75 %. Heure et auteur
+  des bulles passent à 90 % de blanc. Aplats aussi pour les colonnes (`BarChart`, entonnoir du
+  pipeline), les filets de la coque, le fil doré des rubriques, le fond de l'accueil, de la
+  messagerie et des communications épinglées. Gardés : rubans et reflet de l'accueil (bandes nettes
+  et animation), aires des courbes et éventail des prévisions (encodage des données), squelettes de
+  chargement et rayures.
 
 ## Partis pris de la session design
 
@@ -346,10 +359,9 @@ espace » sans fin.
 
 ## Reste à faire
 
-- Arbitrages du gérant (audit du 22 octobre) : dégradés des boutons principaux, avatars et
-  bandeaux (aplat proposé, dégradé gardé pour le seul billet) ; jargon anglais du cabinet
-  (Readiness, Bankability, Data room, Pipeline) ; icônes en tête des boutons texte. L'accent de
-  l'Analyse est tranché (or bronze, voir les décisions du 22 octobre).
+- Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,
+  Data room, Pipeline) ; icônes en tête des boutons texte. L'accent de l'Analyse et les dégradés sont
+  tranchés (voir les décisions du 22 octobre).
 - Harmonisation des composants : faite le 22 octobre (section ci-dessus), sauf l'échelle des
   titres et des tailles de texte. Restent aussi les sceaux d'icône (`TUILE`) et les couleurs des
   types d'événements du portail, encore en hexadécimal, et les listes « Chargement des listes » et

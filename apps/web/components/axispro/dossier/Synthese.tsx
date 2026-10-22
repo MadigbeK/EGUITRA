@@ -83,7 +83,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
               {d.gaps.map((g, i) => (
                 <li key={g.criterion_id} className={cx("rounded-xl border bg-panel px-3.5 py-3 text-sm", g.knockout ? "border-danger/30 bg-danger-doux/40" : "border-line")}>
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <span className="n-degrade grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
+                    <span className="bg-accent grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
                     {g.compartment && <PuceCompartiment code={g.compartment} nom={g.compartment_name} />}
                     <span className="font-medium">{g.code} {g.name}</span>
                     {g.knockout && <Badge tone="danger">Knock-out</Badge>}
@@ -244,7 +244,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
                 <Chiffre titre="Knock-outs actifs" court="KO" valeur={c.knockouts} ton={c.knockouts ? "text-danger" : undefined} />
               </dl>
               <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
-                <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "n-degrade text-white" : "border border-dashed border-line-strong text-muted")}>
+                <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "bg-accent text-white" : "border border-dashed border-line-strong text-muted")}>
                   {c.owner ? initiales(c.owner.name) : "?"}
                 </span>
                 {cabinet ? (

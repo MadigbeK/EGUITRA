@@ -21,13 +21,13 @@ export function initiales(nom: string): string {
 }
 
 /** Pastille aux initiales d'une personne (taille en pixels). */
-export function Avatar({ nom, taille = 40, className, degrade }: { nom: string; taille?: number; className?: string; degrade?: boolean }) {
+export function Avatar({ nom, taille = 40, className, plein }: { nom: string; taille?: number; className?: string; plein?: boolean }) {
   return (
     <span
       aria-hidden
       className={cx(
         "grid flex-none select-none place-items-center rounded-full font-display font-bold",
-        degrade ? "n-degrade text-white" : "bg-accent-doux text-accent",
+        plein ? "bg-accent text-white" : "bg-accent-doux text-accent",
         className,
       )}
       style={{ width: taille, height: taille, fontSize: Math.round(taille * 0.33) }}

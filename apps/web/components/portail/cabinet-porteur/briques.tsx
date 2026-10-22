@@ -130,7 +130,7 @@ export function BlocDate({ date, passe, className }: { date: string; passe?: boo
       aria-hidden
       className={cx(
         "flex w-[68px] flex-none flex-col items-center justify-center rounded-2xl py-2.5 text-center leading-none",
-        passe ? "bg-panel-2 text-muted" : "bg-[linear-gradient(160deg,#1f4a7a,#16304e)] text-white shadow-[0_14px_26px_-18px_rgb(22_48_78/0.9)]",
+        passe ? "bg-panel-2 text-muted" : "bg-accent-strong text-white shadow-[0_14px_26px_-18px_rgb(22_48_78/0.9)]",
         className,
       )}
     >

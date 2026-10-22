@@ -168,7 +168,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
               type="button"
               aria-pressed={miens}
               onClick={() => setMiens((v) => !v)}
-              className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-200", miens ? "n-degrade border-transparent text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : "border-line bg-panel text-ink-2 hover:border-line-strong hover:text-ink")}
+              className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-200", miens ? "bg-accent border-transparent text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : "border-line bg-panel text-ink-2 hover:border-line-strong hover:text-ink")}
             >
               <Users className="h-3.5 w-3.5" /> Mes compartiments
             </button>

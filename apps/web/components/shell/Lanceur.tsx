@@ -218,7 +218,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
           </div>
           <div className="lanceur-pied border-t border-line bg-panel-2 p-2">
             <Link href="/accueil" onClick={versAccueil} className="group flex items-center gap-3 rounded-xl px-2.5 py-2 outline-none transition-colors hover:bg-panel-3 focus-visible:ring-2 focus-visible:ring-accent">
-              <span className="gaufre grid h-9 w-9 flex-none place-items-center rounded-[10px] border border-line bg-[linear-gradient(135deg,#eaf4ef,#f8f4ea)] text-accent">
+              <span className="gaufre grid h-9 w-9 flex-none place-items-center rounded-[10px] border border-line bg-panel-2 text-accent">
                 <Gaufre className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1">

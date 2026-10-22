@@ -162,7 +162,7 @@ function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
               <div className="relative mt-3 flex h-[120px] items-center">
                 <div
                   className="n-pousser-y w-full rounded-xl"
-                  style={{ height: `${h}%`, background: `linear-gradient(180deg, color-mix(in oklab, var(--g-azur) ${100 - i * 9}%, var(--g-lagon)), color-mix(in oklab, var(--g-azur) ${70 - i * 7}%, var(--g-lagon)))`, opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
+                  style={{ height: `${h}%`, background: "var(--accent)", opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
                 />
               </div>
               <div className="mt-2 text-center text-[12px] font-semibold tabular text-muted">{Math.round((n / total) * 100)} %</div>

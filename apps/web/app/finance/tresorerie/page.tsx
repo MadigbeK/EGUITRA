@@ -111,7 +111,7 @@ export default function TreasuryPage() {
                   aria-pressed={choisi}
                   className={cx(
                     "n-kpi n-levable relative min-w-0 overflow-hidden rounded-[20px] p-4 text-left",
-                    choisi ? "n-degrade text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : FEUILLE,
+                    choisi ? "bg-accent-strong text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : FEUILLE,
                   )}
                 >
                   <div className="relative flex items-center justify-between gap-2">

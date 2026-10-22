@@ -229,7 +229,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
     >
       <nav aria-label="Rubriques" className="relative flex items-center gap-0.5">
         <span aria-hidden className="menus-survol pointer-events-none absolute inset-y-1.5 left-0 rounded-[11px] bg-panel shadow-[0_1px_2px_rgb(16_36_31/0.08),0_6px_16px_-8px_rgb(16_36_31/0.25)]" style={{ transform: `translateX(${survol?.x ?? fil?.x ?? 0}px)`, width: survol?.w ?? 0, opacity: survol ? 1 : 0 }} />
-        {fil && <span aria-hidden className="menus-fil pointer-events-none absolute -bottom-[13px] left-0 h-[2.5px] rounded-full bg-[linear-gradient(90deg,#b8893a,#e6c47e,#b8893a)]" style={{ transform: `translateX(${fil.x + 12}px)`, width: Math.max(0, fil.w - 24) }} />}
+        {fil && <span aria-hidden className="menus-fil pointer-events-none absolute -bottom-[13px] left-0 h-[2.5px] rounded-full bg-or" style={{ transform: `translateX(${fil.x + 12}px)`, width: Math.max(0, fil.w - 24) }} />}
         {sections.map((s) => {
           const dedans = s.label === active;
           const total = s.items.reduce((n, i) => n + (pastilleDe(i, badges)?.count ?? 0), 0);

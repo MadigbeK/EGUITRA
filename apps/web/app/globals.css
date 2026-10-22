@@ -612,11 +612,6 @@ input[type="radio"] {
   animation: n-tourner 0.9s linear infinite;
 }
 
-/* Fond des boutons et repères actifs : un dégradé dans la seule teinte de l'application. */
-.n-degrade {
-  background-image: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-}
-
 /* ─── Kit de visualisation de l'Analyse (SVG) ─────────────────────────── */
 
 /* Barre SVG qui pousse depuis sa base (ou son sommet pour une valeur négative). */
@@ -1380,7 +1375,9 @@ input[type="radio"] {
     animation: none !important;
     box-shadow: none !important;
   }
-  .n-degrade {
+  /* Aplats de l'application (bandeau du dossier, compte choisi) : ils s'impriment en couleur. */
+  .bg-accent,
+  .bg-accent-strong {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

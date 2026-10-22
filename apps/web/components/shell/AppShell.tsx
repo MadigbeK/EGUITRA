@@ -130,7 +130,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
             </Link>
             <CompteMenu app={app} me={me} onLogout={logout} placement="bas" />
           </div>
-          <div aria-hidden className="h-[3px] bg-[linear-gradient(90deg,#1f73d6,#2d82dc_40%,#0f9fa0)]" />
+          <div aria-hidden className="h-[3px] bg-accent" />
         </header>
         {passwordBanner}
         <main id="contenu" tabIndex={-1} key={pathname} className="outline-none n-page mx-auto min-w-0 max-w-6xl px-5 py-8 md:px-8 md:py-10">
@@ -410,7 +410,7 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
 
   const others = me.apps.filter((a) => a !== app && a !== "mobile");
   const avatar = (
-    <span aria-hidden className="n-degrade grid h-9 w-9 flex-none place-items-center rounded-full font-display text-[13px] font-bold tracking-[0.04em] text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]">
+    <span aria-hidden className="bg-accent grid h-9 w-9 flex-none place-items-center rounded-full font-display text-[13px] font-bold tracking-[0.04em] text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]">
       {initials(me.name)}
     </span>
   );
@@ -584,7 +584,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
                   onClick={() => c.aller()}
                   className={cx("flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors", i === actif ? "bg-accent-doux text-ink" : "text-ink-2")}
                 >
-                  <span className={cx("grid h-8 w-8 flex-none place-items-center rounded-lg transition-colors", i === actif ? "n-degrade text-white" : "bg-panel-3 text-muted")}>
+                  <span className={cx("grid h-8 w-8 flex-none place-items-center rounded-lg transition-colors", i === actif ? "bg-accent text-white" : "bg-panel-3 text-muted")}>
                     <I className="h-4 w-4" />
                   </span>
                   <span className="flex-1 font-medium">{c.libelle}</span>

@@ -9,7 +9,7 @@ import { majuscule } from "./outils";
 
 const TEINTE: Record<TimelineItem["kind"], string> = {
   start: "bg-accent-doux text-accent",
-  gate: "n-degrade text-white",
+  gate: "bg-accent text-white",
   decision: "bg-warn-doux text-warn",
   document: "bg-panel-2 text-ink-2",
   action: "bg-ok-doux text-ok-texte",

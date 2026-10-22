@@ -184,8 +184,8 @@ function Consultant({ dossier }: { dossier: PortailContext["dossier"] }) {
   const c = dossier?.consultant;
   if (!c) return null;
   return (
-    <div className="rounded-2xl bg-[linear-gradient(135deg,#1f3a5c,#23364b_55%,#174b5e)] p-4 text-white">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/60">Votre consultant</div>
+    <div className="rounded-2xl bg-accent-strong p-4 text-white">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/75">Votre consultant</div>
       <div className="mt-2 flex items-center gap-3">
         <span aria-hidden className="grid h-10 w-10 flex-none place-items-center rounded-full bg-white/15 font-display text-[13px] font-bold">{initiales(c.name)}</span>
         <div className="min-w-0">
@@ -296,7 +296,7 @@ function Compte({ me, entreprise, onLogout }: { me: Me; entreprise: string | nul
   return (
     <div ref={box} className="relative">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-2.5 rounded-full p-0.5 pr-2 hover:bg-panel-3">
-        <span aria-hidden className="n-degrade grid h-9 w-9 place-items-center rounded-full font-display text-[13px] font-bold text-white">{initiales(me.name)}</span>
+        <span aria-hidden className="bg-accent grid h-9 w-9 place-items-center rounded-full font-display text-[13px] font-bold text-white">{initiales(me.name)}</span>
         <span className="hidden max-w-[160px] text-left leading-tight md:block">
           <span className="block truncate text-[13px] font-semibold text-ink">{me.name}</span>
           {entreprise && <span className="block truncate text-[11.5px] text-muted">{entreprise}</span>}
@@ -431,7 +431,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
                 <Compte me={me} entreprise={espace?.user.company ?? null} onLogout={deconnexion} />
               </div>
             </div>
-            <div aria-hidden className="h-[3px] bg-[linear-gradient(90deg,#1f73d6,#2d82dc_40%,#0f9fa0)]" />
+            <div aria-hidden className="h-[3px] bg-accent" />
           </header>
           {me.password_change_required && (
             <div className="flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink lg:px-10">

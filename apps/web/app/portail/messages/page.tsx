@@ -76,7 +76,7 @@ function PieceJointe({ a, onTelecharger }: { a: Attachment; onTelecharger: (a: A
 function Bulles({ g, onTelecharger }: { g: Groupe; onTelecharger: (a: Attachment) => void }) {
   return (
     <div className={cx("mb-3 flex gap-2", g.moi ? "justify-end" : "justify-start")}>
-      {!g.moi && <Avatar nom={g.auteur} taille={32} degrade={g.cabinet} className="mt-[22px]" />}
+      {!g.moi && <Avatar nom={g.auteur} taille={32} plein={g.cabinet} className="mt-[22px]" />}
       <div className={cx("flex min-w-0 max-w-[86%] flex-col gap-1 sm:max-w-[72%]", g.moi ? "items-end" : "items-start")}>
         {!g.moi && (
           <span className="px-1 text-[12px] font-semibold text-ink-2">
@@ -91,14 +91,14 @@ function Bulles({ g, onTelecharger }: { g: Groupe; onTelecharger: (a: Attachment
               <div
                 className={cx(
                   "max-w-full rounded-2xl px-3.5 py-2 text-[14px] leading-relaxed",
-                  g.moi ? "n-degrade text-white shadow-[0_8px_18px_-12px_var(--accent-lueur)]" : "bg-panel-2 text-ink ring-1 ring-line",
+                  g.moi ? "bg-accent text-white shadow-[0_8px_18px_-12px_var(--accent-lueur)]" : "bg-panel-2 text-ink ring-1 ring-line",
                   dernier && (g.moi ? "rounded-br-md" : "rounded-bl-md"),
                 )}
               >
                 <p className="whitespace-pre-wrap break-words">
                   <TexteMessage texte={m.body} moi={g.moi} />
                 </p>
-                <time dateTime={m.date} className={cx("mt-0.5 block text-right text-[11px] tabular-nums", g.moi ? "text-white/75" : "text-muted")}>
+                <time dateTime={m.date} className={cx("mt-0.5 block text-right text-[11px] tabular-nums", g.moi ? "text-white/90" : "text-muted")}>
                   {heure(m.date)}
                 </time>
               </div>
@@ -211,7 +211,7 @@ export default function Messagerie() {
       >
         {/* Interlocuteur */}
         <header className="flex items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
-          <Avatar nom={consultant?.name ?? "MB AxisPro"} taille={44} degrade />
+          <Avatar nom={consultant?.name ?? "MB AxisPro"} taille={44} plein />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[15px] font-semibold text-ink">{consultant?.name ?? "L'équipe MB AxisPro"}</div>
             <div className="truncate text-[12.5px] text-muted">
@@ -241,7 +241,7 @@ export default function Messagerie() {
             const el = e.currentTarget;
             enBas.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
           }}
-          className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,var(--panel)_0%,var(--panel-2)_100%)] px-3 pb-4 sm:px-6"
+          className="min-h-0 flex-1 overflow-y-auto bg-panel-2 px-3 pb-4 sm:px-6"
         >
           {nombre === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">

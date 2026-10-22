@@ -164,7 +164,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   }
 
   return (
-    <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#eaf4ef_0%,#f3f6f1_45%,#f8f4ea_100%)] text-ink">
+    <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-bg text-ink">
       {/* Rubans de lumière en diagonale, comme le fond de l'accueil d'Odoo ; ils dérivent et suivent le curseur. */}
       <div aria-hidden className="accueil-ruban pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_38%,rgb(255_255_255/0.62)_38%,rgb(255_255_255/0.62)_58%,transparent_58%)]" />
       <div aria-hidden className="accueil-ruban-2 pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_64%,rgb(165_230_194/0.2)_64%,rgb(165_230_194/0.2)_80%,transparent_80%)]" />

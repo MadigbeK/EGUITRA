@@ -50,7 +50,7 @@ function CarteAVenir({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean; o
   return (
     <article className={cx(FEUILLE, "overflow-hidden")}>
       <div className="flex flex-col sm:flex-row">
-        <div className="n-degrade flex items-center gap-4 px-5 py-4 text-white sm:w-44 sm:flex-none sm:flex-col sm:justify-center sm:gap-1 sm:py-6 sm:text-center">
+        <div className="bg-accent-strong flex items-center gap-4 px-5 py-4 text-white sm:w-44 sm:flex-none sm:flex-col sm:justify-center sm:gap-1 sm:py-6 sm:text-center">
           <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80">{d.toLocaleDateString("fr-FR", { weekday: "long" })}</span>
           <span className="font-display text-[44px] font-bold leading-none">{d.getDate()}</span>
           <span className="text-[13.5px] font-semibold">{d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>

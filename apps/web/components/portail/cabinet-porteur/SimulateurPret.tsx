@@ -111,7 +111,7 @@ export function SimulateurPret({ params, onChange, resultat }: { params: ParamsP
           <Notice tone="warn">{resultat.ok ? "" : resultat.raison}</Notice>
         ) : (
           <>
-            <section aria-label="Résultat de la simulation" className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(125deg,#16304e_0%,#1f4a7a_55%,#137c86_100%)] p-6 text-white shadow-[0_30px_60px_-36px_rgb(16_40_70/0.7)] sm:p-7">
+            <section aria-label="Résultat de la simulation" className="relative overflow-hidden rounded-[22px] bg-accent-strong p-6 text-white shadow-[0_30px_60px_-36px_rgb(16_40_70/0.7)] sm:p-7">
               <div className="text-[13px] font-medium text-white/70">Échéance mensuelle{params.differe > 0 ? " après le différé" : ""}</div>
               <div aria-live="polite" className="mt-1 font-display text-[34px] font-bold leading-none tabular sm:text-[42px]">
                 {fmtInt(r.echeance)} <span className="text-[16px] font-semibold text-white/70">GNF</span>
@@ -132,7 +132,7 @@ export function SimulateurPret({ params, onChange, resultat }: { params: ParamsP
                   { l: "Annuité en régime de croisière", v: fmtGNF(r.echeance * 12) },
                 ].map((x) => (
                   <div key={x.l} className="rounded-2xl bg-white/[0.09] px-4 py-3 ring-1 ring-white/10">
-                    <dt className="text-[12px] text-white/65">{x.l}</dt>
+                    <dt className="text-[12px] text-white/75">{x.l}</dt>
                     <dd className="mt-0.5 text-[15.5px] font-bold tabular">{x.v}</dd>
                   </div>
                 ))}

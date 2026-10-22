@@ -334,7 +334,7 @@ function ajuste(base: string, extra?: string): string {
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON: Record<ButtonVariant, string> = {
-  primary: "n-degrade text-accent-ink shadow-[0_8px_18px_-10px_var(--accent-lueur)] hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)] hover:brightness-[1.07]",
+  primary: "bg-accent text-accent-ink shadow-[0_8px_18px_-10px_var(--accent-lueur)] hover:bg-accent-strong hover:shadow-[0_12px_24px_-10px_var(--accent-lueur)]",
   secondary: "border border-line bg-panel text-ink shadow-[0_1px_2px_rgb(16_36_31/0.05)] hover:border-line-strong hover:bg-panel-2",
   ghost: "text-ink-2 hover:bg-panel-3 hover:text-ink",
   danger: "border border-danger/30 bg-panel text-danger hover:border-danger hover:bg-danger hover:text-white",
@@ -649,7 +649,7 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
             <span
               className={cx(
                 "grid h-8 w-8 flex-none place-items-center rounded-full text-[13px] font-bold tabular",
-                s.state === "done" ? "n-degrade text-accent-ink shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : s.state === "current" ? "n-pouls bg-or text-foret" : "border-2 border-line-strong/70 bg-panel text-muted",
+                s.state === "done" ? "bg-accent text-accent-ink shadow-[0_6px_14px_-8px_var(--accent-lueur)]" : s.state === "current" ? "n-pouls bg-or text-foret" : "border-2 border-line-strong/70 bg-panel text-muted",
               )}
               style={s.state === "current" ? ({ "--pouls": "rgb(211 170 91 / 0.55)" } as CSSProperties) : undefined}
             >
@@ -1123,7 +1123,7 @@ export function AreaChart({ labels, series, height = 220, format, formatAxis, la
 }
 
 /**
- * Colonnes d'une série : barres en dégradé de la couleur de l'application, extrémité arrondie,
+ * Colonnes d'une série : barres pleines de la couleur de l'application, extrémité arrondie,
  * valeurs négatives sous la ligne de base, poussée animée, info-bulle au survol et au clavier.
  */
 export function BarChart({ data, height = 190, format }: { data: Array<{ label: string; value: number; tone?: Tone }>; height?: number; format?: (v: number) => string }) {
@@ -1152,8 +1152,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
           {data.map((d, i) => {
             const h = (Math.abs(d.value) / span) * 100;
             const negative = d.value < 0;
-            const couleur = negative ? "var(--danger-vif)" : d.tone === "accent" ? "var(--n-or)" : "var(--accent-vif)";
-            const fonce = negative ? "var(--danger)" : d.tone === "accent" ? "var(--or-fonce)" : "var(--accent)";
+            const couleur = negative ? "var(--danger)" : d.tone === "accent" ? "var(--or-fonce)" : "var(--accent)";
             return (
               <div
                 key={`${d.label}-${i}`}
@@ -1173,7 +1172,7 @@ export function BarChart({ data, height = 190, format }: { data: Array<{ label: 
                       top: negative ? `${base}%` : undefined,
                       bottom: negative ? undefined : `${100 - base}%`,
                       height: `${Math.max(h, 0.8)}%`,
-                      background: `linear-gradient(${negative ? "0deg" : "180deg"}, ${couleur}, ${fonce})`,
+                      background: couleur,
                       "--i": i,
                     } as CSSProperties
                   }
@@ -1402,7 +1401,7 @@ export function Gauge({ value, max, zones, format, sousTitre, vide }: { value: n
 }
 
 /**
- * Classement horizontal (cinq premiers, marges par activité) : rang, libellé, barre en dégradé
+ * Classement horizontal (cinq premiers, marges par activité) : rang, libellé, barre pleine
  * texturée qui s'allonge à l'affichage, montant au bout. Une valeur négative passe au rouge.
  */
 export function RankBars({ items, format, couleur = "var(--accent-vif)" }: { items: Array<{ key: string | number; label: string; value: number; detail?: string }>; format?: (v: number) => string; couleur?: string }) {

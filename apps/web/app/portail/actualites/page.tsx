@@ -38,7 +38,7 @@ function CarteActualite({ a, epinglee }: { a: AnnouncementRow; epinglee?: boolea
       href={`/portail/actualites/${a.id}`}
       className={cx(
         "group relative flex h-full gap-4 overflow-hidden rounded-[20px] p-5 shadow-[var(--ombre-feuille)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--ombre-levee)] sm:p-6",
-        epinglee ? "bg-[linear-gradient(150deg,var(--panel)_55%,var(--accent-doux))]" : "bg-panel",
+        epinglee ? "bg-accent-doux" : "bg-panel",
       )}
     >
       <span aria-hidden className="absolute inset-y-0 left-0 w-1" style={{ background: n.trait }} />

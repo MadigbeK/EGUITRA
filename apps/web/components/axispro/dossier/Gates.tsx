@@ -51,7 +51,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
       >
         <ol className="flex flex-wrap gap-2">
           {gates.map((g, i) => (
-            <li key={g.code} className={cx("flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold", i < courant ? "border-jade/40 bg-ok-doux/60 text-ok-texte" : i === courant ? "n-degrade border-transparent text-white" : "border-line text-muted")}>
+            <li key={g.code} className={cx("flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold", i < courant ? "border-jade/40 bg-ok-doux/60 text-ok-texte" : i === courant ? "bg-accent border-transparent text-white" : "border-line text-muted")}>
               {i < courant ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Flag className="h-3.5 w-3.5" />}
               {g.code} {g.name}
             </li>
@@ -69,7 +69,7 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
           return (
             <section key={g.code} className={cx(FEUILLE, "p-4", i === courant && "ring-2 ring-accent/40")}>
               <header className="flex flex-wrap items-center gap-2">
-                <span className="n-degrade grid h-8 min-w-8 place-items-center rounded-full px-2 text-[12.5px] font-bold text-white">{g.code}</span>
+                <span className="bg-accent grid h-8 min-w-8 place-items-center rounded-full px-2 text-[12.5px] font-bold text-white">{g.code}</span>
                 <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{g.name}</h3>
                 {i < courant && <Badge tone="ok">Franchi</Badge>}
                 {i === courant && <Badge tone="accent" vivant>Gate courant</Badge>}
