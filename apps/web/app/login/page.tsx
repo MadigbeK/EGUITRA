@@ -34,7 +34,7 @@ async function appOf(params: Params): Promise<AppCode> {
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
   const app = await appOf(await searchParams);
   // Le portail est celui du cabinet : ni le nom ni le monogramme de la marque interne.
-  if (app === "portail") return { title: { absolute: "Connexion · MB AxisPro Consulting" }, description: "Portail des porteurs de projets de MB AxisPro Consulting : dossier, pièces et échanges avec le cabinet.", icons: { icon: "/icons/portail.svg" } };
+  if (app === "portail") return { title: { absolute: "Connexion · MB AxisPro" }, description: "Portail des porteurs de projets de MB AxisPro : dossier, pièces et échanges avec le cabinet.", icons: { icon: "/icons/portail.svg" } };
   return { title: "Connexion" };
 }
 
@@ -182,7 +182,7 @@ function ScenePortail() {
             })}
           </ul>
         </div>
-        <p className="hidden text-[13px] text-white/55 lg:block">MB AxisPro Consulting, cabinet d&apos;accompagnement des porteurs de projets</p>
+        <p className="hidden text-[13px] text-white/55 lg:block">MB AxisPro, cabinet d&apos;accompagnement des porteurs de projets</p>
       </div>
     </aside>
   );

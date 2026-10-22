@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
-import { AlertTriangle, CheckCircle2, FileText, FolderKanban, Plus, ShieldAlert, XCircle } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Donut, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { FileText, Plus, ShieldAlert } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Donut, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
@@ -14,16 +15,7 @@ import { note } from "@/components/axispro/dossier/commun";
 
 type Vue = "tableau" | "liste";
 
-const COULEUR_RECO: Record<Recommendation, string> = {
-  bankable: "#0b7a55",
-  apd_ready: "#12956a",
-  go: "#3fb68b",
-  conditional: "#df8f17",
-  hold: "#e25f35",
-  no_go: "#ec4f49",
-  pending: "#9aa9a2",
-  postponed: "#2d82dc",
-};
+const COULEUR_RECO: Record<Recommendation, string> = COULEUR_VERDICT;
 
 /** Couleur d'un score selon les classes de la méthode (65 APD READY, 50 CONDITIONAL GO, 30 HOLD). */
 function teinteScore(score: number | null) {
@@ -88,10 +80,10 @@ export default function DossiersPage() {
         }
       />
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Dossiers" value={String(rows.length)} icon={FolderKanban} teinte="azur" hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
-        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" icon={CheckCircle2} teinte="jade" hint={pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate")} />
-        <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" icon={AlertTriangle} teinte="ambre" />
-        <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" icon={XCircle} teinte="danger" />
+        <Kpi label="Dossiers" value={String(rows.length)} hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
+        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" hint={pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate")} />
+        <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" />
+        <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" />
       </div>
 
       {rows.length > 0 && etapes.length > 0 && (
@@ -122,10 +114,9 @@ export default function DossiersPage() {
         value={state}
         onChange={setState}
       />
-      {error && <ErrorBox error={error} />}
       {!data ? (
         <Card padded={false}>
-          <Loading label="Chargement des dossiers…" />
+          <Etat error={error} onRetry={() => mutate()} label="Chargement des dossiers…" />
         </Card>
       ) : vue === "tableau" && etapes.length > 0 ? (
         <Tableau etapes={etapes} rows={rows} rang={rang} />
@@ -171,7 +162,7 @@ function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
               <div className="relative mt-3 flex h-[120px] items-center">
                 <div
                   className="n-pousser-y w-full rounded-xl"
-                  style={{ height: `${h}%`, background: `linear-gradient(180deg, color-mix(in oklab, #2d82dc ${100 - i * 9}%, #0f9fa0), color-mix(in oklab, #2d82dc ${70 - i * 7}%, #0f9fa0))`, opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
+                  style={{ height: `${h}%`, background: "var(--accent)", opacity: 0.35 + 0.65 * (n / total), "--i": i } as CSSProperties}
                 />
               </div>
               <div className="mt-2 text-center text-[12px] font-semibold tabular text-muted">{Math.round((n / total) * 100)} %</div>
@@ -212,7 +203,7 @@ function Tableau({ etapes, rows, rang }: { etapes: Gate[]; rows: DossierSummary[
 function CarteDossier({ d }: { d: DossierSummary }) {
   const evalue = (d.progress.assessed / Math.max(1, d.progress.criteria)) * 100;
   return (
-    <Link href={`/axispro/dossiers/${d.id}`} className="n-levable block rounded-xl border border-line bg-panel p-3.5 shadow-[var(--ombre-carte)]">
+    <Link href={`/axispro/dossiers/${d.id}`} className={cx(FEUILLE, "n-levable block p-3.5")}>
       <div className="flex items-center justify-between gap-2">
         <span className="rounded-md bg-accent-doux px-1.5 py-0.5 text-[11.5px] font-semibold tabular text-accent">{d.reference}</span>
         <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-bold tabular", teinteScore(d.progress.assessed ? d.readiness : null))} title="Project Readiness Score">{d.progress.assessed ? `${note(d.readiness)} / 100` : "Non noté"}</span>

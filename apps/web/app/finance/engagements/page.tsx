@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { Download, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
+import type { ExpenseCategory } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 
 type State = "draft" | "submitted" | "approved" | "rejected" | "done" | "cancelled";
@@ -57,14 +58,13 @@ export default function EngagementsPage() {
       />
       {tab === "open" && data && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Kpi label="Engagements en cours" value={String(engaged.length)} teinte="azur" />
-          <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} teinte="lagon" />
-          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} teinte="ambre" hint="Engagé moins pièces d'achat comptabilisées" />
+          <Kpi label="Engagements en cours" value={String(engaged.length)} />
+          <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} />
+          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} hint="Engagé moins pièces d'achat comptabilisées" />
         </div>
       )}
       <Tabs tabs={[{ key: "open", label: "En cours" }, { key: "pending", label: "À soumettre ou en approbation" }, { key: "all", label: "Tous" }]} value={tab} onChange={setTab} />
-      {error && <ErrorBox error={error} />}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <Card padded={false}>
           <DataTable rows={rows} rowKey={(c) => c.id} onRowClick={(c) => setSelected(c.id)} empty="Aucun engagement." columns={[
             { key: "name", label: "Engagement", render: (c) => <div className="min-w-[200px]"><b>{c.name}</b> {c.object}<div className="text-[12px] text-muted">{c.partner.name}{c.account ? ` · ${c.account.code}` : ""}</div></div> },
@@ -87,18 +87,26 @@ export default function EngagementsPage() {
   );
 }
 
+/**
+ * Nouvel engagement. Le profil Achats ne choisit pas le compte : la catégorie de dépense le fixe (le plan
+ * de comptes ne lui est pas ouvert) ; les autres profils désignent le compte, ou le laissent à la finance.
+ */
 function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(null);
-  const { data: accounts } = useApi<Array<{ id: number; code: string; name: string }>>("/finance/accounts?prefix=6&limit=2000");
-  const { data: assets } = useApi<Array<{ id: number; code: string; name: string }>>("/finance/accounts?prefix=2&limit=2000");
-  const [f, setF] = useState({ object: "", amount: "", account_id: "", date_expected: "", note: "" });
+  const { achats, pret } = useAchatsSeul();
+  const { data: accounts } = useApi<Array<{ id: number; code: string; name: string }>>(pret && !achats ? "/finance/accounts?prefix=6&limit=2000" : null);
+  const { data: assets } = useApi<Array<{ id: number; code: string; name: string }>>(pret && !achats ? "/finance/accounts?prefix=2&limit=2000" : null);
+  const { data: categories } = useApi<ExpenseCategory[]>(achats ? "/finance/expense-categories" : null);
+  const [f, setF] = useState({ object: "", amount: "", account_id: "", category_id: "", date_expected: "", note: "" });
   const [error, setError] = useState<string | null>(null);
   async function submit(send: boolean) {
     setError(null);
     try {
+      const { account_id, category_id, ...rest } = f;
       const c = await apiSend<Commitment>("POST", "/finance/commitments", {
-        ...f, partner_id: partner?.id, amount: Number(f.amount.replace(/\s/g, "").replace(",", ".")) || 0,
-        account_id: f.account_id ? Number(f.account_id) : null, date_expected: f.date_expected || null, submit: send,
+        ...rest, partner_id: partner?.id, amount: Number(f.amount.replace(/\s/g, "").replace(",", ".")) || 0,
+        ...(achats ? { category_id: category_id ? Number(category_id) : undefined } : { account_id: account_id ? Number(account_id) : null }),
+        date_expected: f.date_expected || null, submit: send,
       });
       onDone(c.id);
     } catch (e) {
@@ -118,7 +126,13 @@ function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id:
         <Field label="Fournisseur"><PartnerPicker value={partner} onChange={setPartner} kind="supplier" /></Field>
         <Field label="Objet de la dépense"><Input value={f.object} onChange={(e) => setF({ ...f, object: e.target.value })} placeholder="Gasoil du chantier, location d'engin…" /></Field>
         <Field label="Montant hors taxes"><Input inputMode="numeric" className="font-mono" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
-        <Field label="Compte de charge ou d'immobilisation"><Select value={f.account_id} placeholder="À préciser par la finance" onChange={(e) => setF({ ...f, account_id: e.target.value })} options={[...(accounts ?? []), ...(assets ?? [])].map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} /></Field>
+        {achats ? (
+          <Field label="Catégorie de dépense" hint="Elle fixe le compte de charge ou d'immobilisation.">
+            <Select value={f.category_id} placeholder="À préciser par la finance" onChange={(e) => setF({ ...f, category_id: e.target.value })} options={(categories ?? []).map((c) => ({ value: c.id, label: c.account ? `${c.name} (${c.account.code})` : c.name }))} />
+          </Field>
+        ) : (
+          <Field label="Compte de charge ou d'immobilisation"><Select value={f.account_id} placeholder="À préciser par la finance" onChange={(e) => setF({ ...f, account_id: e.target.value })} options={[...(accounts ?? []), ...(assets ?? [])].map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} /></Field>
+        )}
         <Field label="Livraison ou exécution prévue"><Input type="date" value={f.date_expected} onChange={(e) => setF({ ...f, date_expected: e.target.value })} /></Field>
         <Field label="Justification" className="md:col-span-2"><Textarea value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
         <p className="text-[12px] text-muted md:col-span-2">Le devis se joint après l&apos;enregistrement. L&apos;engagement suit les seuils d&apos;approbation des engagements (À valider &gt; Circuits).</p>
@@ -128,7 +142,10 @@ function CommitmentForm({ onClose, onDone }: { onClose: () => void; onDone: (id:
 }
 
 function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: c, mutate } = useApi<Commitment>(`/finance/commitments/${id}`);
+  const { data: c, error, mutate } = useApi<Commitment>(`/finance/commitments/${id}`);
+  // Solder un engagement : finance et direction (le noyau refuse les autres profils).
+  const { data: me } = useApi<{ profiles: string[] }>("/auth/me");
+  const soldeur = Boolean(me?.profiles.some((p) => p === "finance" || p === "direction"));
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   async function run(fn: () => Promise<unknown>, ok: string) {
     setMessage(null);
@@ -143,7 +160,7 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
   }
   return (
     <Modal open wide title={c ? `${c.name} · ${c.object}` : "Engagement"} onClose={onClose}>
-      {!c ? <Loading /> : (
+      {!c ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-4 text-sm">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -177,8 +194,8 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
           </Card>
           <div className="flex flex-wrap gap-2">
             {(c.state === "draft" || c.state === "rejected") && <Button variant="primary" onClick={() => run(() => apiSend("POST", `/finance/commitments/${c.id}/submit`), "Engagement soumis à l'approbation.")}>Soumettre à l&apos;approbation</Button>}
-            {c.state === "approved" && <Button onClick={() => window.confirm("Solder l'engagement ? Plus aucune pièce ne pourra s'y rattacher.") && run(() => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé.")}>Solder</Button>}
-            {["draft", "submitted", "rejected", "approved"].includes(c.state) && <Button variant="danger" onClick={() => window.confirm("Annuler l'engagement ?") && run(() => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé.")}>Annuler</Button>}
+            {c.state === "approved" && soldeur && <Button onClick={async () => (await demanderConfirmation("Solder l'engagement ? Plus aucune pièce ne pourra s'y rattacher.", { action: "Solder" })) && run(() => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé.")}>Solder</Button>}
+            {["draft", "submitted", "rejected", "approved"].includes(c.state) && <Button variant="danger" onClick={async () => (await demanderConfirmation("Annuler l'engagement ?", { action: "Annuler l'engagement", danger: true })) && run(() => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé.")}>Annuler</Button>}
           </div>
         </div>
       )}

@@ -9,7 +9,7 @@ BLOCS = {
     "health": "Santé", "waterfall": "Cascade du résultat", "monthly": "Évolution mensuelle",
     "activities": "Activités", "by_activity": "Par activité", "bridge": "Pont d'EBE",
     "transport_effects": "Effets volume-prix-mix", "cost_structure": "Structure des coûts",
-    "budget_variance": "Budget", "metiers": "Chantiers et biens", "position": "Position de trésorerie",
+    "budget_variance": "Budget", "metiers": "BTP et immobilier", "position": "Position de trésorerie",
     "forecast": "Prévision", "runway": "Autonomie de trésorerie", "cycle": "Cycle de conversion",
     "collections": "Encaissements attendus", "concentration": "Concentration", "segments": "Segments clients",
     "behaviour": "Comportement de paiement", "trends": "Tendances clients", "available": "Données disponibles",
@@ -30,6 +30,7 @@ BLOCS = {
     "by_funder": "Par financeur", "pipeline": "Pipeline", "coverage": "Couverture", "time": "Temps passé",
     "realization": "Réalisation", "profitability": "Rentabilité des dossiers", "summary": "Résumé",
     "risk_matrix": "Matrice des risques", "actions": "Actions", "responsiveness": "Réactivité des porteurs",
+    "compartments": "Par compartiment",
 }
 
 # Colonnes et indicateurs.
@@ -124,6 +125,9 @@ COLONNES = {
     "done": "Terminées", "created": "Créées", "done_rate_pct": "Terminées (%)", "weeks_to_clear": "Semaines pour solder",
     "responded": "Réponses", "pending": "En attente", "oldest_pending_days": "Plus ancienne attente (jours)",
     "severity": "Gravité", "narrative": "Constat", "metric": "Mesure", "method": "Méthode", "link": "Lien",
+    "compartment": "Compartiment", "domains": "Domaines", "gaps": "Manques à traiter",
+    "gaps_per_dossier": "Manques par dossier", "studies": "Études à produire renseignées",
+    "unassigned": "Dossiers sans consultant", "unassigned_dossiers": "Dossiers sans consultant (détail)",
 }
 
 # Traduction mot à mot des clés inconnues (avant mise en forme).

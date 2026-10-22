@@ -9,25 +9,28 @@ de l'offre ne changent pas.
 
 ## 1. Ce qui est construit
 
-Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro Consulting :
+Une plateforme unique pour EGUITRA GROUP SARLU et MB AxisPro :
 
 - **EGUITRA Finance** : pilotage du dirigeant, comptabilité SYSCOHADA, trésorerie, approbations,
-  clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers transport,
-  chantiers et immobilier.
+  clôtures, états financiers, fiscalité, dette, immobilisations, budget, et les métiers chantiers et
+  immobilier.
+- **NIMOVA · Transport** (application à part entière depuis le 22 octobre 2026) : rotations,
+  facturation, manquants, rentabilité (coûts standard, déclarés, comptabilisés), ensembles gérés
+  pour des propriétaires et leurs relevés, taxes spécifiques, flotte, routes et tarifs.
 - **AxisPro Suite** : évaluation des projets selon la méthode MB AxisPro (stage gates, scoring
   Readiness et Bankability, knock-outs, écarts prioritaires), data room, comités et décisions
   scellées, rapports, modèle financier, risques et plan d'actions, temps et honoraires du cabinet.
 - **Portail des porteurs de projets** : suivi du dossier, dépôt des pièces, échanges avec le cabinet.
 - **Rotations** : application de saisie au parc, installable sur téléphone, utilisable sans réseau.
 
-Les utilisateurs ne voient que ces quatre applications. Le noyau de gestion (Odoo Community 19)
+Les utilisateurs ne voient que ces applications (et NIMOVA · Analyse, pour le dirigeant). Le noyau de gestion (Odoo Community 19)
 tient les comptes et n'est accessible qu'à l'équipe technique.
 
 ## 2. Architecture
 
 | Couche | Réalisation |
 |---|---|
-| Applications | Une application web (quatre espaces : finance, axispro, portail, mobile), à l'image du groupe et du cabinet, en français. |
+| Applications | Une application web (espaces : finance, transport, axispro, analyse, portail, mobile), à l'image du groupe et du cabinet, en français. |
 | Passerelle | Le navigateur ne détient jamais les jetons d'accès (cookies protégés) ; contrôle d'origine contre la falsification de requêtes ; fichiers déposés toujours servis en téléchargement. |
 | API métier | Huit modules spécifiques ; chaque appel s'exécute sous l'identité de l'utilisateur, avec ses droits. Double authentification, sessions révocables, limitation des essais, journal des accès. |
 | Noyau | Odoo Community 19, localisation guinéenne (plan SYSCOHADA en GNF), dix modules OCA. |
@@ -66,7 +69,7 @@ modifiée, aucun contournement possible hors du moteur.
 
 ## 4. Organisation des données
 
-- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro Consulting (cabinet)
+- **Sociétés (multi-sociétés)** : EGUITRA GROUP SARLU (groupe) et MB AxisPro (cabinet)
   vivent dans la même base, avec des **comptabilités entièrement séparées** : chacune son plan de
   comptes SYSCOHADA, ses journaux, ses taxes, sa numérotation des pièces, ses exercices et ses
   clôtures. Les données sont cloisonnées par société : un utilisateur ne voit que les sociétés qui
@@ -99,6 +102,8 @@ modifiée, aucun contournement possible hors du moteur.
 | Relances des clients | rappel dès 1 jour de retard, relance ferme à 15 jours, mise en demeure à 30 jours (jamais envoyée sans décision de la finance) |
 | Clôture mensuelle | contrôles bloquants (équilibres, compte de passage, pièces en attente, relevés rapprochés), verrouillage et empreinte de chaînage des écritures, réouverture tracée |
 | Transport | tarif du client sur la route, à défaut tarif de la route ; facture par client, une ligne par rotation |
+| Coût standard d'une rotation | forfaits de la route (litres de carburant aller et retour × prix du litre applicable à la date de chargement, prime de route, péages, autres frais) ; mis à jour tant que la rotation est saisie, figé à sa validation ; marge estimée = montant facturable + taxes refacturées − manquants à charge − coût standard |
+| Ensembles gérés pour des propriétaires | règles de répartition en % du chiffre d'affaires brut, par ensemble ou par catégorie (la règle de l'ensemble l'emporte pour un même bénéficiaire), dues même si la marge est négative ; part du propriétaire = marge − commissions ; marge sur frais déclarés et charges mensuelles au prorata des jours, ou sur pièces comptabilisées sur l'ensemble ; relevé figé, pièces en brouillon (facture d'achat du propriétaire, refacturation d'une part négative, factures des commissions des tiers) |
 | Chantiers | retenue de garantie (5 % par défaut) portée en 4117 jusqu'à sa libération |
 | Immobilier | quittancement chaque nuit : une facture par échéance passée, datée de l'échéance, validée aussitôt (rattrapage compris) ; impayés relancés comme les autres créances |
 | Pièces déposées | PDF, JPEG, PNG, Word .docx et Excel .xlsx, reconnus d'après leur contenu ; 20 Mo par fichier ; dossier d'un porteur limité à 400 pièces ou 1 Go, 50 messages par jour |
@@ -188,7 +193,7 @@ recalculées par la plateforme et leur conformité (« n/26 ») est annexée au 
 
 ## 11. Validation
 
-| Pour EGUITRA GROUP SARLU et MB AxisPro Consulting | Pour E-VOLUTION XP |
+| Pour EGUITRA GROUP SARLU et MB AxisPro | Pour E-VOLUTION XP |
 |---|---|
 | M. Mohamed Nimaga, Directeur Général | Madigbè Kouyaté, gérant |
 | Date et signature : | Date et signature : |

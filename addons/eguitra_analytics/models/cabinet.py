@@ -1,4 +1,4 @@
-"""Analyses de MB AxisPro Consulting (spécification, chapitre 6).
+"""Analyses de MB AxisPro (spécification, chapitre 6).
 
 Une méthode publique par section (synthese, portefeuille, diagnostic, comites, financements,
 activite, risques), de signature (company, period, ctx=None) -> dict : blocs de la section, constats
@@ -978,6 +978,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         heat_domains = ([{"code": dom.code, "label": dom.name} for dom in heat_policy.domain_ids.sorted("sequence")]
                         if heat_policy else [])
         other_policy = 0
+        compartments = {}
         for d in live:
             r, s = b.result(d)
             t = b.timeline(d)
@@ -986,6 +987,25 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             other_policy += not on_map
             if on_map:
                 heat_rows.append(dict(_brief(d), gate=t["gate"], readiness=_r(s["readiness"])))
+                # Suivi par compartiment (outil du cabinet, version 3) : charge et retard de chaque bloc
+                # d'expertise sur le portefeuille, consultants affectés.
+                owners = {a.compartment_id.id: a.user_id.name for a in d.assignment_ids}
+                for c in r.get("compartments") or []:
+                    row = compartments.setdefault(c["code"], {
+                        "code": c["code"], "label": c["name"], "domains": c["domains"], "dossiers": 0, "_scores": [],
+                        "gaps": 0, "studies": 0, "knockouts": 0, "unassigned": 0, "_owners": defaultdict(int),
+                        "_unassigned": []})
+                    row["dossiers"] += 1
+                    if c["score"] is not None:
+                        row["_scores"].append(c["score"])
+                    row["gaps"] += c["gaps"]
+                    row["studies"] += c["studies"]
+                    row["knockouts"] += c["knockouts"]
+                    if c["compartment_id"] in owners:
+                        row["_owners"][owners[c["compartment_id"]]] += 1
+                    else:
+                        row["unassigned"] += 1
+                        row["_unassigned"].append(d)
             for row in r["domains"]:
                 if on_map:
                     cells.append({"dossier": d.reference, "dossier_id": d.id, "domain": row["code"],
@@ -1108,6 +1128,14 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "missing_by_age": [{"bucket": key, "label": label, "count": buckets[key]} for key, label, _l, _h in AGE_BUCKETS],
             "rows": missing[:30],
         }
+        compartment_rows = []
+        for row in compartments.values():
+            scores, owners, unassigned = row.pop("_scores"), row.pop("_owners"), row.pop("_unassigned")
+            compartment_rows.append(dict(
+                row, mean=_r(pf.mean(scores)), gaps_per_dossier=_r(row["gaps"] / row["dossiers"]) if row["dossiers"] else None,
+                consultants=[{"name": name, "dossiers": n} for name, n in sorted(owners.items(), key=lambda x: (-x[1], x[0]))],
+                unassigned_dossiers=[dict(_brief(d), link=_dossier_link(d)) for d in unassigned],
+            ))
         progression = self._progression(b)
         notes = []
         if backlog:
@@ -1119,7 +1147,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             notes.append(("Aucun dossier en cours à diagnostiquer.", 0))
         candidates = self._diagnostic_insights(b, top_gaps, averages, ko_rows, evidence_block, backlog,
                                                backlog_dossiers, pending_ko, progression)
+        candidates += self._compartment_insights(compartment_rows)
         return {
+            "compartments": compartment_rows,
             "domain_heatmap": {"dossiers": heat_rows, "domains": heat_domains or [{"code": x["code"], "label": x["label"]}
                                                                                    for x in domains],
                                "cells": cells, "averages": averages,
@@ -1169,6 +1199,48 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 "improving": sum(1 for x in rows if (x["delta"] or 0) > 0),
                 "stagnating": [x["id"] for x in rows if (x["delta"] or 0) <= 0 and x["days"] >= STAGNATION_DAYS
                                and (x["readiness"] or 0) < b.thresholds["bankable"]]}
+
+    def _compartment_insights(self, rows):
+        """Constats du suivi par compartiment : bloc d'expertise en retard, compartiments sans consultant."""
+        out = []
+        late = [x for x in rows if x["mean"] is not None and x["dossiers"] >= 2 and x["mean"] < 50]
+        if late:
+            worst = min(late, key=lambda x: (x["mean"], -x["gaps"]))
+            out.append(insight(
+                f"cabinet.compartiment_en_retard.{worst['code']}", "diagnostic", "medium",
+                f"Le compartiment {worst['code']} {worst['label']} est le plus en retard",
+                f"Score moyen de {_fr(worst['mean'], 1)}/100 sur {_n(worst['dossiers'], 'dossier')}, "
+                f"{_n(worst['gaps'], 'manque')} à traiter ({_fr(worst['gaps_per_dossier'], 1)} par dossier) et "
+                f"{_n(worst['studies'], 'étude renseignée', 'études renseignées')} : "
+                f"{', '.join(worst['domains'])}.",
+                metric={"label": "Score moyen du compartiment", "value": worst["mean"], "unit": "score",
+                        "reference": 50.0, "reference_label": "Priorité élevée en dessous"},
+                confidence=_confidence(worst["dossiers"]),
+                method="Score de la méthode sur les critères des domaines du compartiment (toute la grille), moyenne "
+                       "des dossiers suivant la grille de la carte des domaines ; manques : critères non disponibles "
+                       "ou incomplets.",
+                action="Renforcer ce compartiment : consultant dédié, études à lancer en priorité (les plus longues "
+                       "d'abord), pièces à réclamer aux porteurs.",
+                link=f"/analyse/diagnostic?compartment={worst['code']}",
+            ))
+        unassigned = [x for x in rows if x["unassigned"]]
+        if unassigned:
+            total = sum(x["unassigned"] for x in unassigned)
+            dossiers = {d["reference"] or d["name"] for x in unassigned for d in x["unassigned_dossiers"]}
+            out.append(insight(
+                "cabinet.compartiments_sans_consultant", "diagnostic", "info",
+                f"{_n(total, 'compartiment')} sans consultant sur {_n(len(dossiers), 'dossier')}",
+                "Un manque sans responsable n'est qu'une observation : chaque compartiment d'un dossier se confie à "
+                f"un consultant ({', '.join(x['code'] for x in unassigned)}).",
+                metric={"label": "Compartiments sans consultant", "value": total, "unit": "count",
+                        "reference": 0, "reference_label": "Cible"},
+                confidence=0.95,
+                method="Affectations des consultants par compartiment, dossiers en cours suivant la grille de la carte "
+                       "des domaines.",
+                action="Confier chaque compartiment à un consultant depuis la synthèse du dossier.",
+                link="/analyse/diagnostic",
+            ))
+        return out
 
     def _diagnostic_insights(self, b, top_gaps, averages, knockouts, evidence, backlog, backlog_dossiers, pending_ko,
                              progression):

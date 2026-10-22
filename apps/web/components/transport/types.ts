@@ -17,13 +17,31 @@ export interface Product {
 export interface Referentials {
   vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string }>;
   drivers: Array<{ id: number; name: string; phone: string | null }>;
-  routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number }> }>;
+  routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number }> } & RouteStandards>;
   clients: Ref[];
   products: Array<{ id: number; code: string; label: string }>;
   costs: Array<{ code: string; label: string }>;
   volume_correction?: boolean;
   measures?: Array<{ code: string; label: string }>;
+  /** Prix du litre en vigueur (coût standard estimé à la saisie). */
+  fuel_price?: number;
 }
+
+/** Forfaits de référence d'une route pour une rotation complète (aller et retour). */
+export interface RouteStandards {
+  std_fuel_liters: number;
+  std_driver_bonus: number;
+  std_tolls: number;
+  std_other_costs: number;
+}
+
+export type Ownership = "own" | "managed";
+export const OWNERSHIPS: Array<{ value: Ownership; label: string }> = [
+  { value: "own", label: "Propre" },
+  { value: "managed", label: "Géré pour un propriétaire" },
+];
+
+export interface VehicleCharge { id?: number; name: string; amount: number; periodicity: "month" | "year"; monthly?: number; date_from: string | null; date_to: string | null }
 
 export type ShortageRule = "none" | "invoice" | "driver" | "both";
 
@@ -40,9 +58,16 @@ export interface TransportSettings {
   volume_correction: boolean;
   shortage_account: AccountRef | null;
   claim_account: AccountRef | null;
+  owner_cost_basis: "declared" | "booked";
+  owner_cost_bases: Array<{ code: string; label: string }>;
+  owner_account: AccountRef | null;
+  owner_income_account: AccountRef | null;
+  commission_account: AccountRef | null;
   activity: { id: number; code: string | null; name: string } | null;
   activities: Array<{ id: number; code: string | null; name: string }>;
   can_edit: boolean;
+  /** Relevés des propriétaires et règles de répartition (administration, direction, finance). */
+  sees_accounts?: boolean;
 }
 
 export interface ClientTerms { id: number; name: string; shortage_tolerance: number | null; shortage_rule: ShortageRule | null }
@@ -68,6 +93,8 @@ export interface ProfitRow {
   shortage_claim: number;
   shortage_net_cost: number;
   excess_rotations: number;
+  standard_cost?: number;
+  estimated_margin?: number;
 }
 
 /** Message affiché en tête d'un écran après une action. */

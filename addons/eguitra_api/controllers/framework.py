@@ -128,7 +128,7 @@ def _authenticate():
 
 def _set_companies(user):
     """Société courante. Une application qui ne sert qu'une société (AxisPro Suite et le portail :
-    MB AxisPro Consulting ; Rotations : EGUITRA GROUP) y travaille toujours, même pour un compte
+    MB AxisPro ; Rotations : EGUITRA GROUP) y travaille toujours, même pour un compte
     ouvert aux deux sociétés. Sinon : en-tête X-Eguitra-Company si autorisée, à défaut la société
     de l'utilisateur."""
     allowed = user.company_ids.ids

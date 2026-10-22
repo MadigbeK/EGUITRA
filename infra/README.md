@@ -20,7 +20,7 @@ Les deux environnements ne partagent que le serveur et le proxy : ni grappe Post
 de passe, ni fichiers, ni cookies de session. Le noyau de production se connecte à sa base avec un
 rôle sans privilège de superutilisateur (`ODOO_DB_USER`).
 
-Chaque environnement contient **les deux sociétés**, EGUITRA GROUP SARLU et MB AxisPro Consulting,
+Chaque environnement contient **les deux sociétés**, EGUITRA GROUP SARLU et MB AxisPro,
 dans une même base : chacune a son plan de comptes SYSCOHADA, ses journaux, ses taxes et sa
 numérotation ; les données sont cloisonnées par société ; un même compte peut être ouvert aux deux
 sociétés (sélecteur en haut de l'écran, vue « Groupe consolidé »).
@@ -121,9 +121,21 @@ production. Compte rendu : `logs/availability/AAAA-MM.md`.
 - Recette ouverte sur Internet en HTTPS avant l'achat du domaine (16 octobre 2026) : nom provisoire
   `recette.<adresse IP, points remplacés par des tirets>.sslip.io` (service DNS public qui renvoie
   l'adresse contenue dans le nom), dans `RECETTE_DOMAIN` de `infra/.env` ; certificat Let's Encrypt
-  obtenu par Caddy (`docker compose --profile proxy up -d caddy`). À remplacer par
-  `recette.nimovagroup.com` dès le domaine enregistré. Les domaines non renseignés prennent un nom en
-  `.localhost` (jamais joignable) : la production reste fermée tant qu'ils ne sont pas définis.
+  obtenu par Caddy (`docker compose --profile proxy up -d caddy`). Les domaines non renseignés prennent
+  un nom en `.localhost` (jamais joignable) : la production reste fermée tant qu'ils ne sont pas définis.
+- Bascule sur le domaine définitif (`nimova.gn`, commandé le 21 octobre 2026, DNS gérés par le
+  registraire) :
+  1. chez le registraire, enregistrements A vers l'adresse du serveur pour `finance`, `axispro`,
+     `portail` (ou le nom choisi pour le portail), `recette` et `noyau` ;
+  2. `infra/domaines.sh verifier nimova.gn` : chaque nom doit pointer vers le serveur ;
+  3. `infra/domaines.sh appliquer nimova.gn [nom-du-portail]` : copie de `.env`, noms inscrits, proxy
+     recréé, certificats obtenus, chaque adresse contrôlée en HTTPS (le noyau répond 403 hors des
+     adresses `ADMIN_IPS`) ; l'ancien nom de la recette en `sslip.io` cesse de répondre ;
+  4. vérifier `ACME_EMAIL` (adresse réelle) et `ADMIN_IPS` (adresses de l'équipe technique) dans
+     `.env` ;
+  5. rétablir la double authentification de la recette avant de communiquer son adresse
+     (paramètre système `eguitra_api.mfa_required` = 1 dans la base de recette, puis
+     `docker compose restart odoo-recette`).
 
 - Noyaux et applications n'écoutent que sur 127.0.0.1 ; accès d'administration par tunnel SSH :
   `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 -L 8069:127.0.0.1:8069 -L 8169:127.0.0.1:8169 eguitra-vps`,

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { voisine } from "@/components/accueil/tuiles";
 import { ChevronDown } from "@/components/icons";
-import { cx } from "@/components/ui";
+import { PANNEAU, cx } from "@/components/ui";
 import type { NavBadge, NavItem, NavSection } from "@/lib/nav";
 
 export type Pastilles = Partial<Record<NavBadge, { count: number; severe: boolean }>>;
@@ -21,6 +21,9 @@ const DESCRIPTIONS: Record<string, string> = {
   "/finance/pilotage": "Budget par activité, réalisé et écarts",
   "/finance/rapport": "Le rapport du mois, prêt à imprimer",
   "/finance/approbations": "Pièces et paiements qui attendent un visa",
+  "/finance/demandes": "Vos pièces et engagements soumis, et leur état",
+  "/finance/fournisseurs": "Fiches et coordonnées des fournisseurs",
+  "/finance/guide-achats": "Engager, saisir, soumettre, suivre",
   "/finance/engagements": "Demandes de dépense avant commande",
   "/finance/alertes": "Seuils franchis et anomalies à traiter",
   "/finance/guide": "Mode d'emploi des écrans de la finance",
@@ -36,7 +39,15 @@ const DESCRIPTIONS: Record<string, string> = {
   "/finance/etats": "Balance, grand livre et états financiers",
   "/finance/fiscalite": "TVA, retenues et déclarations",
   "/finance/clotures": "Contrôles et clôture des périodes",
-  "/finance/transport": "Rotations, camions et résultat par route",
+  "/transport": "Volume du mois, marge, rotations à traiter, contrôles",
+  "/transport/rotations": "Saisie, validation et facturation des rotations",
+  "/transport/manquants": "Manquants tolérés et excédentaires, créances",
+  "/transport/rentabilite": "Marge par ensemble, route, chauffeur, client",
+  "/transport/proprietaires": "Ensembles gérés : relevés, commissions, pièces",
+  "/transport/taxes": "Barème et état mensuel des taxes spécifiques",
+  "/transport/flotte": "Ensembles, propriété, charges, chauffeurs",
+  "/transport/routes": "Distances, coûts standard, carburant, tarifs",
+  "/transport/parametres": "Manquants, relevés, clients, produits",
   "/finance/chantiers": "Coûts, avancement et marge des chantiers",
   "/finance/immobilier": "Biens, baux et loyers",
   "/finance/admin/utilisateurs": "Comptes, profils et accès",
@@ -68,6 +79,15 @@ const DESCRIPTIONS: Record<string, string> = {
   "/analyse/financements": "Montants obtenus et taux d'accord",
   "/analyse/activite": "Honoraires, temps et rentabilité",
   "/analyse/risques": "Risques et retards d'exécution",
+  "/rh": "Effectif, échéances, absences et masse salariale",
+  "/rh/guide": "Mode d'emploi de l'espace RH",
+  "/rh/salaries": "Dossiers du personnel, contrats et rémunérations",
+  "/rh/conges": "Demandes, planning et soldes de congés",
+  "/rh/avances": "Avances sur salaire et prêts, retenues mensuelles",
+  "/rh/paie": "Bulletins du mois, contrôles, validation, écriture",
+  "/rh/simulateur": "Du salaire de base au net, ou du net au brut",
+  "/rh/moi": "Vos congés, vos bulletins, votre équipe",
+  "/rh/parametres": "Barème, taux, rubriques, absences, jours fériés",
 };
 
 const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" en attente", " en attente"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };
@@ -208,8 +228,8 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
       }}
     >
       <nav aria-label="Rubriques" className="relative flex items-center gap-0.5">
-        <span aria-hidden className="menus-survol pointer-events-none absolute inset-y-1.5 left-0 rounded-[11px] bg-white shadow-[0_1px_2px_rgb(16_36_31/0.08),0_6px_16px_-8px_rgb(16_36_31/0.25)]" style={{ transform: `translateX(${survol?.x ?? fil?.x ?? 0}px)`, width: survol?.w ?? 0, opacity: survol ? 1 : 0 }} />
-        {fil && <span aria-hidden className="menus-fil pointer-events-none absolute -bottom-[13px] left-0 h-[2.5px] rounded-full bg-[linear-gradient(90deg,#b8893a,#e6c47e,#b8893a)]" style={{ transform: `translateX(${fil.x + 12}px)`, width: Math.max(0, fil.w - 24) }} />}
+        <span aria-hidden className="menus-survol pointer-events-none absolute inset-y-1.5 left-0 rounded-[11px] bg-panel shadow-[0_1px_2px_rgb(16_36_31/0.08),0_6px_16px_-8px_rgb(16_36_31/0.25)]" style={{ transform: `translateX(${survol?.x ?? fil?.x ?? 0}px)`, width: survol?.w ?? 0, opacity: survol ? 1 : 0 }} />
+        {fil && <span aria-hidden className="menus-fil pointer-events-none absolute -bottom-[13px] left-0 h-[2.5px] rounded-full bg-or" style={{ transform: `translateX(${fil.x + 12}px)`, width: Math.max(0, fil.w - 24) }} />}
         {sections.map((s) => {
           const dedans = s.label === active;
           const total = s.items.reduce((n, i) => n + (pastilleDe(i, badges)?.count ?? 0), 0);
@@ -261,7 +281,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
           aria-label={section.label}
           onKeyDown={clavierPanneau}
           key={section.label}
-          className="menus-panneau absolute top-[calc(100%+14px)] z-50 rounded-[22px] border border-line bg-white p-2.5 shadow-[var(--ombre-flottante)]"
+          className={cx(PANNEAU, "menus-panneau absolute top-[calc(100%+14px)] z-50 p-1.5")}
           style={{ left: place.left, width: place.width }}
         >
           <ul className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${section.items.length <= 3 ? section.items.length : section.items.length <= 8 ? 2 : 3}, minmax(0, 1fr))` }}>
@@ -275,7 +295,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
                     href={item.href}
                     aria-current={actif ? "page" : undefined}
                     onClick={() => setOuvert(null)}
-                    className={cx("tuile group flex items-start gap-3 rounded-2xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux" : "hover:bg-[#f2f6f3] focus-visible:bg-[#f2f6f3]", joue && "joue")}
+                    className={cx("tuile group flex items-start gap-3 rounded-xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux" : "hover:bg-panel-2 focus-visible:bg-panel-2", joue && "joue")}
                     style={{ "--d-intro": `${90 + n * 30}ms` } as CSSProperties}
                   >
                     <IconeModule cle={item.href} className="h-10 w-10 flex-none transition-transform duration-300 ease-[var(--ease-ressort)] group-hover:scale-110" />

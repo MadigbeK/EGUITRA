@@ -50,9 +50,9 @@ d'un changement).
 | Identifiant | Ce que l'on voit |
 |---|---|
 | n'importe lequel, par exemple `demo` | Profil complet (administration, direction, finance, exploitation, chantiers, immobilier, cabinet), applications Finance, AxisPro et mobile, les deux sociétés. |
-| `porteur` | Porteur de projet : portail seul, société MB AxisPro Consulting, deux dossiers. |
+| `porteur` | Porteur de projet : portail seul, société MB AxisPro, deux dossiers. |
 | `parc` | Exploitation : application mobile Rotations et Finance, société EGUITRA seule. |
-| `cabinet` | Consultant du cabinet : AxisPro seul, société MB AxisPro Consulting. |
+| `cabinet` | Consultant du cabinet : AxisPro seul, société MB AxisPro. |
 | `provisoire` | Profil complet avec mot de passe provisoire : le changement de mot de passe est imposé. |
 | `mfa` | Étape du code à six chiffres. `000000` est refusé, tout autre code est accepté. |
 | `activation` | Première activation de la double authentification (QR code et clé), même règle pour le code. |
@@ -60,13 +60,19 @@ d'un changement).
 ## Sociétés et cas particuliers
 
 Le sélecteur de société change les chiffres : EGUITRA GROUP SARLU (transport, BTP, immobilier) et
-MB AxisPro Consulting (cabinet, environ vingt fois plus petit). La vue « groupe » consolide les deux.
+MB AxisPro (cabinet, environ vingt fois plus petit). La vue « groupe » consolide les deux.
 AxisPro et le portail s'ouvrent sur la société du cabinet.
 
 Les données contiennent volontairement les cas utiles au design : listes vides, noms très longs,
 factures échues et relances des trois niveaux, échéance de prêt en retard, rotation et chantier à marge
 négative, biens vacants, demande d'approbation rejetée, alerte bloquante (compte de passage 585 non
 soldé), dossier AxisPro en NO-GO sur un critère éliminatoire et dossier sans aucune évaluation.
+
+AxisPro suit la version 3 de l'outil de scoring du cabinet : les grilles v2 (en vigueur) et v3 (brouillon,
+modifiable) ont huit compartiments C0 à C7, la v1 (archivée, dossiers clos) n'en a pas ; les gates G1 et
+G4 exigent une complétude documentaire minimale de 40 % et 70 %. Dans les dossiers ouverts, C1 et C4
+restent à affecter et le dossier d'aquaculture n'a pas d'équipe ; `cabinet` (Aïssatou Barry) reçoit C0, C5
+et C6 des dossiers qu'elle mène, dont la rizerie de Kankan (« Mes compartiments »).
 
 ## NIMOVA · Analyse
 

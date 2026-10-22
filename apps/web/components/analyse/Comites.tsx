@@ -2,13 +2,13 @@
 
 import { type CSSProperties } from "react";
 import { AreaChart, Badge, Card, ErrorBox, cx } from "@/components/ui";
+import { COULEUR_DECISION, ETATS } from "@/lib/couleurs";
 import { CarteChaleur, Legende, TableRepli } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtDate, fmtPct, joursOu, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetComites, Decision } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
-const COULEUR_DECISION: Record<string, string> = { go: "#12956a", conditional: "#df8f17", hold: "#e25f35", no_go: "#ec4f49", postponed: "#2d82dc" };
 const LIBELLE_DECISION: Record<string, string> = { go: "GO", conditional: "GO sous conditions", hold: "HOLD", no_go: "NO-GO", postponed: "Ajourné" };
 
 /** Qualité des décisions : accord méthode × comité, décisions par mois, délai de décision, scores à la décision, passages forcés. */
@@ -116,7 +116,7 @@ function Corps() {
             <Card title="Décisions par mois" className="xl:col-span-7">
               {serieDecisions.length && mois.length && total > 0 ? (
                 <>
-                  <Legende className="mb-3" items={serieDecisions.map((s) => ({ key: s.key, label: s.label, couleur: COULEUR_DECISION[s.key] ?? "#9aa9a2", forme: "carre" as const }))} />
+                  <Legende className="mb-3" items={serieDecisions.map((s) => ({ key: s.key, label: s.label, couleur: COULEUR_DECISION[s.key] ?? ETATS.neutre, forme: "carre" as const }))} />
                   <BarresEmpilees months={mois} series={serieDecisions} />
                 </>
               ) : (
@@ -151,7 +151,7 @@ function BarresEmpilees({ months, series }: { months: string[]; series: CabinetC
             {series.map((s) => {
               const v = s.values[i] ?? 0;
               if (!v) return null;
-              return <span key={s.key} className="n-pousser-y block w-full flex-none rounded-[3px]" style={{ height: `${(v / max) * 100}%`, background: COULEUR_DECISION[s.key] ?? "#9aa9a2", "--i": i } as CSSProperties} />;
+              return <span key={s.key} className="n-pousser-y block w-full flex-none rounded-[3px]" style={{ height: `${(v / max) * 100}%`, background: COULEUR_DECISION[s.key] ?? ETATS.neutre, "--i": i } as CSSProperties} />;
             })}
           </div>
         ))}
@@ -175,7 +175,7 @@ function Bandes({ series }: { series: CabinetComites["score_at_decision"] }) {
       <ul className="space-y-3">
         {series.map((s) => {
           const mediane = s.median ?? (s.scores.length ? [...s.scores].sort((a, b) => a - b)[Math.floor(s.scores.length / 2)] ?? null : null);
-          const couleur = COULEUR_DECISION[s.decision as Decision] ?? "#9aa9a2";
+          const couleur = COULEUR_DECISION[s.decision as Decision] ?? ETATS.neutre;
           return (
             <li key={s.decision} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3 text-[12.5px]">
               <span className="flex items-center gap-2 font-medium text-ink-2">

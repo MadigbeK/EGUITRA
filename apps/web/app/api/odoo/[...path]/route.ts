@@ -26,9 +26,13 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const { path } = await ctx.params;
   const apiPath = "/" + path.join("/");
   // Le chemin doit être déjà normalisé : « /./auth/login » deviendrait « /auth/login » une fois relayé
-  // et contournerait le filtre des routes d'authentification.
+  // et contournerait le filtre des routes d'authentification. Seule la lecture du profil de la session
+  // (GET /auth/me : profils, droits, sociétés) passe : les écrans en ont besoin (profil Achats seul,
+  // saisie libre des comptes) ; connexion, renouvellement, mot de passe et déconnexion restent aux
+  // actions du serveur.
   const normalized = new URL(apiPath, "http://passerelle").pathname;
-  if (!ALLOWED_PATH.test(apiPath) || normalized !== apiPath || apiPath.includes("..") || apiPath.startsWith("/auth/")) {
+  const sessionProfile = apiPath === "/auth/me" && req.method === "GET";
+  if (!ALLOWED_PATH.test(apiPath) || normalized !== apiPath || apiPath.includes("..") || (apiPath.startsWith("/auth/") && !sessionProfile)) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 

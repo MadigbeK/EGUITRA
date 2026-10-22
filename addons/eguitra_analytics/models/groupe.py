@@ -2267,7 +2267,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 metric=_metric("Valeur des manquants", value, "gnf"), impact_gnf=value, confidence=0.85,
                 method="Manquant excédentaire (au-delà de la tolérance) valorisé au prix du m³ de la rotation.",
                 action="Appliquer la règle de reprise sur les chauffeurs et vérifier les jaugeages au chargement.",
-                link="/finance/transport"))
+                link="/transport/manquants"))
         unbilled = (tr["kpis"] or {}).get("unbilled") or {}
         late = [u for u in unbilled.get("items", []) if u["date"] and u["date"] <= ctx.date_to - timedelta(days=30)]
         if late:
@@ -2278,7 +2278,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 metric=_metric("Non facturé", amount, "gnf"), impact_gnf=amount, confidence=0.95,
                 method="Rotations validées non facturées, livrées depuis plus de 30 jours.",
                 action="Facturer ces rotations : le produit est acquis, la créance et l'encaissement attendent.",
-                link="/finance/transport"))
+                link="/transport/rotations"))
         best = max((r for r in pricing if r["revenue"] and r["margin_rate"] is not None), key=lambda r: r["margin_rate"],
                    default=None)
         if best and best["margin_rate"] > 0 and (not target or best["margin_rate"] >= target):
@@ -2978,7 +2978,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return self._check(
             "unbilled_rotations", "Rotations facturées", len(late), "count", 0, stats.linear_score(len(late), 10, 0),
             f"{len(late)} rotation(s) validée(s) non facturée(s) depuis plus de 30 jours ({gnf(amount)}).",
-            "/finance/transport", "Rotations validées, livrées depuis plus de 30 jours et non facturées.",
+            "/transport/rotations", "Rotations validées, livrées depuis plus de 30 jours et non facturées.",
             "Facturer les rotations livrées.", count=len(late), amount=amount)
 
     def _check_tiers_without_partner(self, ctx):
@@ -3017,7 +3017,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return self._check(
             "rotations_fuel", "Litres de carburant saisis", value, "pct", 90.0, stats.linear_score(value, 30, 90),
             f"{len(period) - with_fuel} rotation(s) sans litres de carburant : consommation non contrôlable.",
-            "/finance/transport", "Part des rotations de la période dont les litres de carburant sont saisis.",
+            "/transport/rotations", "Part des rotations de la période dont les litres de carburant sont saisis.",
             "Saisir les litres (bon de carburant) sur chaque rotation, au bureau ou dans l'application Rotations.",
             count=len(period) - with_fuel)
 

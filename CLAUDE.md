@@ -12,7 +12,7 @@ Avant toute action, lire `docs/projet/ETAT.md` : décisions prises, état d'avan
 ## Décisions techniques (raisons dans ETAT.md)
 - Odoo 19.0 Community + dix modules OCA 19.0 épinglés (`infra/oca/`), confirmé. Moteur d'approbation spécifique (`addons/eguitra_approval`) à la place de `base_tier_validation`, absent en 19.0.
 - Huit modules `addons/eguitra_*` ; l'API métier (`/api/v1`, `eguitra_api`) s'exécute dans le noyau sous l'identité de l'utilisateur. L'utilisateur ne voit jamais Odoo.
-- Une seule application Next.js (`apps/web`) pour les quatre surfaces : `/finance`, `/axispro`, `/portail`, `/mobile` (Rotations, application web progressive hors ligne). Le navigateur ne parle qu'à la passerelle `/api/odoo`.
+- Une seule application Next.js (`apps/web`) pour les surfaces : `/finance`, `/transport` (application à part entière depuis le 22/10/2026), `/axispro`, `/analyse`, `/portail`, `/mobile` (Rotations, application web progressive hors ligne). Le navigateur ne parle qu'à la passerelle `/api/odoo`.
 - Déploiement en conteneurs (Docker Compose) sur un VPS Ubuntu 26.04 LTS. Deux environnements complets et séparés sur le même serveur : production (`db`, `odoo`, `web`) et recette (`db-recette`, `odoo-recette`, `web-recette`), sans base, secret ni cookie communs. Exploitation : `infra/README.md`.
 - Multi-sociétés : EGUITRA GROUP SARLU et MB AxisPro Consulting dans la même base de chaque environnement, comptabilités séparées, un même compte pouvant être ouvert aux deux sociétés (engagement pris auprès du client).
 - Sauvegardes : archivage continu des WAL (15 minutes au plus), sauvegarde de base quotidienne, pièces jointes toutes les 15 minutes, copie hors site chiffrée chez un second hébergeur (`infra/backup/README.md`).

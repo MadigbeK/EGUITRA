@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monogramme } from "@/components/brand";
 import { CloudOff, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
-import { Badge, Button, Field, Input, Notice, Select, Textarea, cx } from "@/components/ui";
+import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiGet, apiSend } from "@/lib/api-client";
 import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
 import { fmtDate, fmtDec, pluriel } from "@/lib/format";
@@ -245,7 +245,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     const vehicle = refs?.vehicles.find((v) => String(v.id) === form.vehicle_id);
     // Le bureau ne valide pas une rotation chargée au-delà de la capacité : l'agent est prévenu dès la saisie.
     if (vehicle?.capacity_liters && num(form.volume_loaded) * 1000 > vehicle.capacity_liters &&
-      !window.confirm(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³) : le bureau devra le corriger avant validation. Enregistrer quand même ?`)) {
+      !(await demanderConfirmation(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtDec(vehicle.capacity_liters / 1000)} m³) : le bureau devra le corriger avant validation.`, { titre: "Enregistrer au-delà de la capacité ?", action: "Enregistrer quand même" }))) {
       return;
     }
     const item: QueuedRotation = {
@@ -261,13 +261,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }
 
   async function remove(item: QueuedRotation) {
-    if (!window.confirm("Supprimer cette saisie du téléphone ? Elle ne sera pas transmise.")) return;
+    if (!(await demanderConfirmation("Supprimer cette saisie du téléphone ? Elle ne sera pas transmise.", { action: "Supprimer", danger: true }))) return;
     await queue.remove(item.client_uuid);
     await loadQueue();
   }
 
   async function logout() {
-    if (mine.length && !window.confirm(`${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion. Se déconnecter ?`)) return;
+    if (mine.length && !(await demanderConfirmation(`${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
     // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
     const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
     if (!res?.ok) {
@@ -339,7 +339,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           refs === null ? <Notice tone="warn">Les listes (camions, clients, routes) ne sont pas encore sur ce téléphone. Ouvrez l&apos;application une première fois avec du réseau.</Notice> : (
             <div className="space-y-4">
               {form.uuid && <Notice tone="accent">Correction d&apos;une saisie en attente.</Notice>}
-              <section className="space-y-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+              <section className={cx(FEUILLE, "space-y-4 p-4")}>
                 <Field label="Date de chargement"><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
                 <Field label="Ensemble routier">
                   <Select className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
@@ -356,7 +356,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 </div>
               </section>
 
-              <section className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+              <section className={cx(FEUILLE, "grid grid-cols-2 gap-3 p-4")}>
                 <Field label="Volume chargé (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide" inputMode="decimal" value={form.volume_loaded} onChange={(e) => setForm({ ...form, volume_loaded: e.target.value })} /></Field>
                 <Field label="Volume livré (m³)"><Input className="min-h-14 font-compteur text-[28px] font-semibold tracking-wide placeholder:font-sans placeholder:text-sm placeholder:font-normal" inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => setForm({ ...form, volume_delivered: e.target.value })} /></Field>
                 {(refs.measures ?? []).map((m) => (
@@ -364,7 +364,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 ))}
               </section>
 
-              <section className="rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+              <section className={cx(FEUILLE, "p-4")}>
                 <button type="button" aria-expanded={showCosts} className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px] font-medium text-ink" onClick={() => setShowCosts(!showCosts)}>
                   Frais de route
                   <span className="text-right text-[13px] font-normal text-muted">{showCosts ? "Masquer" : "Carburant, péages, frais de route…"}</span>
@@ -391,11 +391,11 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
               <span>{lastSync ? `Dernier envoi à ${lastSync}` : "Les saisies partent seules dès que le réseau revient."}</span>
-              <Button className="min-h-11 px-4" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
+              <Button size="lg" loading={syncing} disabled={!online || !mine.length} onClick={() => void sync()}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
             </div>
             {mine.length === 0 && <p className="py-8 text-center text-sm text-muted">Toutes vos saisies ont été transmises.</p>}
             {mine.map((item) => (
-              <div key={item.client_uuid} className={cx("n-surgir rounded-2xl border bg-panel p-4 text-sm shadow-[var(--ombre-carte)]", item.status === "error" ? "border-danger/40" : "border-line")}>
+              <div key={item.client_uuid} className={cx(FEUILLE, "n-surgir p-4 text-sm", item.status === "error" && "ring-1 ring-danger/40")}>
                 <div className="flex items-start justify-between gap-3">
                   <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
                     <Truck className="h-5 w-5" />
@@ -409,8 +409,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtDec(item.payload.volume_loaded ?? item.payload.volume_delivered)} <span className="text-[15px] font-semibold text-muted">m³</span></div>
                 {item.message && <div className="mt-2 text-[13px] font-medium text-danger">{item.message}</div>}
                 <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
-                  <Button variant="ghost" className="min-h-11" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
-                  <Button variant="danger" className="min-h-11" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
+                  <Button variant="ghost" size="lg" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setView("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
+                  <Button variant="danger" size="lg" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
                 </div>
               </div>
             ))}
@@ -422,7 +422,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           <div className="space-y-2">
             {!online && <Notice tone="warn">Hors réseau : dernière liste connue.</Notice>}
             {sent === null ? <p role="status" className="py-8 text-center text-sm text-muted">Chargement des rotations…</p> : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : (
-              <ul className="divide-y divide-line rounded-2xl border border-line bg-panel px-4 shadow-[var(--ombre-carte)]">
+              <ul className={cx(FEUILLE, "divide-y divide-line px-4")}>
                 {sent.map((r) => (
                   <li key={r.id} className="flex items-start justify-between gap-3 py-3.5 text-sm">
                     <div className="min-w-0">

@@ -1,13 +1,14 @@
 "use client";
 
 import { Badge, Card, DataTable, ErrorBox, Repartition, cx } from "@/components/ui";
+import { COULEUR_FINANCEMENT, ETATS } from "@/lib/couleurs";
 import { Puces, Sankey } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetFinancements, Recommendation } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
-const COULEUR_ETAT: Record<string, string> = { identified: "#9aa9a2", submitted: "#2d82dc", review: "#0f9fa0", agreed: "#df8f17", signed: "#12956a", disbursed: "#0b6e4f", rejected: "#ec4f49", withdrawn: "#c4cfc8" };
+const COULEUR_ETAT = COULEUR_FINANCEMENT;
 const RECO_LABEL: Record<Recommendation, string> = { bankable: "Bankable", apd_ready: "APD Ready", go: "GO", conditional: "GO sous conditions", hold: "HOLD", no_go: "NO-GO", pending: "À compléter" };
 
 /** Financements recherchés : flux secteur → financeur → état, succès par financeur, pipeline par état, couverture du besoin. */
@@ -80,7 +81,7 @@ function Corps() {
             </Card>
             <Card title="Le pipeline par état" className="xl:col-span-5">
               {(d.pipeline ?? []).some((p) => p.count > 0) ? (
-                <Repartition parts={d.pipeline.filter((p) => p.count > 0).map((p) => ({ key: p.state, label: `${p.label} (${p.count})`, value: p.amount, color: COULEUR_ETAT[p.state] ?? "#9aa9a2" }))} format={(v) => `${fmtShort(v)} GNF`} />
+                <Repartition parts={d.pipeline.filter((p) => p.count > 0).map((p) => ({ key: p.state, label: `${p.label} (${p.count})`, value: p.amount, color: COULEUR_ETAT[p.state] ?? ETATS.neutre }))} format={(v) => `${fmtShort(v)} GNF`} />
               ) : (
                 <Vide compact titre="Aucune démarche" />
               )}

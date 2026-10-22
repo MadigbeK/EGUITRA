@@ -5,10 +5,12 @@ PROFILE_GROUPS = {
     "admin": "eguitra_base.group_profile_admin",
     "direction": "eguitra_base.group_profile_direction",
     "finance": "eguitra_base.group_profile_finance",
+    "achats": "eguitra_base.group_profile_achats",
     "exploitation": "eguitra_base.group_profile_exploitation",
     "chantiers": "eguitra_base.group_profile_chantiers",
     "immobilier": "eguitra_base.group_profile_immobilier",
     "cabinet": "eguitra_base.group_profile_cabinet",
+    "rh": "eguitra_base.group_profile_rh",
     "porteur": "eguitra_base.group_profile_porteur",
 }
 

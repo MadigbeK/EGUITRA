@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { KeyRound, Plus, ShieldOff } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tag } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, PasswordInput, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Company, Me } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -11,12 +11,19 @@ interface UserRow extends Me {
   active: boolean;
   last_login: string | null;
 }
-/** entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro). */
+/**
+ * Profil de la plateforme, tel que le noyau le décrit (libellé et description du groupe : Achats compris).
+ * entity : société exigée par le profil (exploitation, chantiers, immobilier : EGUITRA ; cabinet, porteur :
+ * MB AxisPro) ; null pour un profil commun aux deux sociétés (direction, finance, achats).
+ */
 interface ProfileDef { code: string; name: string; description: string | null; entity: "groupe" | "cabinet" | null }
 /** Droit complémentaire aux profils (free_accounts : saisie libre des comptes). */
 interface RightDef { code: string; name: string; description: string | null }
 type Rights = Record<string, boolean | undefined>;
-/** Profils de saisie comptable : la saisie libre des comptes les concerne, accordée d'office à leur ouverture. */
+/**
+ * Profils de saisie comptable : la saisie libre des comptes les concerne, accordée d'office à leur ouverture.
+ * Le profil Achats n'en fait pas partie : la catégorie de dépense fixe toujours son compte.
+ */
 const PROFILS_COMPTABLES = ["admin", "direction", "finance"];
 
 /** Utilisateurs : profils, droits complémentaires, sociétés, mot de passe provisoire, double authentification. */
@@ -37,10 +44,9 @@ export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]
           </Button>
         }
       />
-      {error && <ErrorBox error={error} />}
       <Card padded={false}>
         {!users ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={users}
@@ -135,7 +141,7 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
           </Field>
           {!user && (
             <Field label="Mot de passe provisoire" hint="10 caractères minimum ; à changer à la première connexion.">
-              <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </Field>
           )}
         </div>
@@ -193,7 +199,7 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
         )}
         {manquantes.length > 0 && (
           <Notice tone="warn">
-            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro Consulting" : "EGUITRA GROUP SARLU")}.`).join(" ")}
+            {manquantes.map((p) => `Le profil « ${p.name} » exige la société ${societeExigee(p) ?? (p.entity === "cabinet" ? "MB AxisPro" : "EGUITRA GROUP SARLU")}.`).join(" ")}
           </Notice>
         )}
         {user && (
@@ -224,7 +230,7 @@ function PasswordReset({ userId }: { userId: number }) {
     );
   return (
     <div className="flex items-center gap-2">
-      <Input type="password" autoComplete="new-password" placeholder="10 caractères minimum" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <PasswordInput autoComplete="new-password" placeholder="10 caractères minimum" value={password} onChange={(e) => setPassword(e.target.value)} />
       <Button
         disabled={password.length < 10}
         onClick={() =>

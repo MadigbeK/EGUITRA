@@ -1,5 +1,5 @@
 /**
- * NIMOVA · Analyse, MB AxisPro Consulting (chapitre 6 de la spécification) : un portefeuille de
+ * NIMOVA · Analyse, MB AxisPro (chapitre 6 de la spécification) : un portefeuille de
  * quatorze projets sur les huit gates de la méthode, leurs évaluations, comités, financements,
  * temps et risques, puis les sept routes /analyse/cabinet/* dans les formes exactes du noyau.
  * Données fictives et déterministes.
@@ -218,7 +218,24 @@ export function routesCabinet({ route, makeRng, TODAY, periode, enveloppe, exige
     });
     const vitesses = progressionRows.map((x) => x.velocity_per_month).filter((v) => v !== null);
     const progression = { dates, dossiers: progressionRows.map((x) => ({ id: x.id, reference: x.reference, scores: x._scores })), rows: progressionRows.map(({ _scores, ...x }) => x), median_velocity_per_month: vitesses.length ? r1(median(vitesses)) : null, improving: progressionRows.filter((x) => (x.delta ?? 0) > 0).length, stagnating: progressionRows.filter((x) => (x.velocity_per_month ?? 1) <= 0.5 && x.days > 60).map((x) => x.id) };
+    // Suivi par compartiment (outil de scoring du cabinet, version 3).
+    const evalues = DOSSIERS.filter((d) => d.gate > 0);
+    const compartments = [
+      ["C0", "Coordination et cadrage projet", ["Présentation et cadrage stratégique du projet"], 66, 9, 5, 0, [["Awa Camara", 6]]],
+      ["C1", "Foncier et autorisations", ["Maîtrise foncière et implantation du site", "Autorisations et conformité réglementaire"], 38, 41, 12, 2, [["Moussa Diallo", 5], ["Awa Camara", 2]]],
+      ["C2", "Technique et ingénierie", ["Conception technique et ingénierie du projet"], 55, 30, 8, 0, [["Ibrahima Sow", 7]]],
+      ["C3", "Marché et commercial", ["Analyse de marché et perspectives de demande", "Débouchés commerciaux et contractualisation"], 47, 27, 9, 1, [["Awa Camara", 4]]],
+      ["C4", "Coûts et modélisation financière", ["Structure des coûts d'investissement et d'exploitation (CAPEX / OPEX)", "Modélisation financière et rentabilité"], 44, 35, 14, 0, [["Ibrahima Sow", 6]]],
+      ["C5", "Juridique et corporate", ["Conformité et identité du promoteur", "Cadre juridique et contractuel"], 61, 22, 6, 1, [["Moussa Diallo", 7]]],
+      ["C6", "Environnement, social et HSSE", ["Performance environnementale, sociale et HSSE"], 35, 24, 3, 0, []],
+      ["C7", "Financement, partenaires et garanties", ["Écosystème de partenaires et parties prenantes", "Structuration du financement", "Sûretés, garanties et couverture des risques"], 42, 38, 7, 0, [["Awa Camara", 3]]],
+    ].map(([code, label, domains, mean, gaps, studies, knockouts, owners]) => {
+      const affectes = sum(owners, ([, n]) => n);
+      const sans = evalues.slice(0, Math.max(0, evalues.length - affectes));
+      return { code, label, domains, dossiers: evalues.length, mean, gaps, gaps_per_dossier: r1(gaps / Math.max(1, evalues.length)), studies, knockouts, unassigned: sans.length, consultants: owners.map(([name, dossiers]) => ({ name, dossiers })), unassigned_dossiers: sans.map(ref) };
+    });
     return {
+      compartments,
       domain_heatmap: { dossiers: DOSSIERS.map((d) => ({ ...ref(d), gate: GATES[d.gate].gate, readiness: d.gate > 0 ? d.readiness : null })), domains: DOMAINES.map(({ code, label }) => ({ code, label })), cells, averages },
       top_gaps, themes, knockouts, knockouts_pending: 2, evaluation_backlog: { criteria: 6, dossiers: 3 },
       evidence: { coverage_pct: 71.4, required: 126, proven: 90, no_proof: 36, expired: 9, missing: rows.length, missing_median_age_days: round(median(rows.map((x) => x.age_days))), missing_over_60: rows.filter((x) => x.age_days > 60).length, missing_by_age: tranches.map(([bucket, label, test]) => ({ bucket, label, count: rows.filter((x) => test(x.age_days)).length })), rows },

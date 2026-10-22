@@ -9,7 +9,7 @@ Reprend le prototype de la direction « Project Readiness & Bankability Assessme
 - requalification sans toucher la saisie : preuve périmée, ou critère exigeant une preuve déclaré
   disponible sans pièce, ramené à « incomplet » (la grille officielle exige une preuve pour les
   knock-outs et les exigences bloquantes, comme le prototype ; une autre grille en décide) ;
-- Project Readiness = Σ points × poids / Σ poids ; APD Readiness = hors exigences « DD, SPV,
+- Project Readiness = Σ points × poids / Σ poids ; APD Readiness = hors exigences « due diligence et
   closing » ; Bankability = critères pertinents pour la bancabilité ; score par domaine ; à plat
   sur toute la grille (pondération par domaine possible) ;
 - knock-out actif : non disponible, ou incomplet si la politique le prévoit ;
@@ -17,7 +17,11 @@ Reprend le prototype de la direction « Project Readiness & Bankability Assessme
   0,5 × (poids + critique + 3 × knock-out) ; départage dans l'ordre de la grille ;
 - data room : pièce disponible si une version reçue ou validée existe, ou si un critère rattaché
   porte une preuve ;
-- huit règles de passage des stage gates, classification en cinq classes et recommandation.
+- suivi par compartiment (outil du cabinet, version 3) : score, critères, manques à traiter et
+  études à produire renseignées des domaines confiés à un même consultant ;
+- huit règles de passage des stage gates, complétude documentaire minimale pour examiner un gate
+  (exigence d'entrée : « checklist complétée à au moins 40 % »), classification en cinq classes et
+  recommandation.
 
 Améliorations : les seuils des gates de préqualification et de préfaisabilité peuvent porter sur
 les seuls critères des gates atteints (portée « cumulée ») au lieu de toute la grille, ce qui les
@@ -33,7 +37,7 @@ STATUS_LABELS = {
     "not_met": "Non disponible",
     "na": "Non applicable",
 }
-REQUIREMENTS = {"blocking": "Bloquant", "apd": "Pendant l'APD", "closing": "DD, SPV, closing"}
+REQUIREMENTS = {"blocking": "Bloquant", "apd": "Pendant l'APD", "closing": "Due diligence et closing"}
 DECISIONS = {"go": "GO", "conditional": "CONDITIONAL GO", "hold": "HOLD", "no_go": "NO-GO"}
 RULES = {
     "intake": "Recevabilité (fiche projet)",
@@ -85,9 +89,10 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
 
     policy : réglages (DEFAULT_POLICY) ; criteria : dictionnaires ordonnés comme la grille (id, code,
     name, domain_id, gate_index, weight, critical, knockout, evidence, requirement, bankability) ;
-    evaluations : {criterion_id: {status, has_proof, expired_on}} ; domains : (id, code, name,
-    weight) ; documents : pièces standard (id, code, name, category, file_state, criterion_ids) ;
-    gates : ordonnés (id, code, name, index, rule, hold, go, domain_ids, scope) ; context : fiche,
+    evaluations : {criterion_id: {status, has_proof, expired_on, study}} ; domains : (id, code, name,
+    weight, compartment_id, compartment_code, compartment_name) ; documents : pièces standard (id,
+    code, name, category, file_state, criterion_ids) ; gates : ordonnés (id, code, name, index, rule,
+    hold, go, domain_ids, scope, min_completeness) ; context : fiche,
     hypothèses (dscr, dd_red_flag, dataroom_open, lenders_agreement, cp_lifted, financing_signed),
     investment, capex_criterion_id.
     """
@@ -106,7 +111,8 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
             status = "partial"
             alerts.append("Déclaré disponible sans pièce justificative")
         lines.append(dict(c, entered=entered, status=status, points=POINTS[status], alerts=alerts,
-                          has_proof=bool(e.get("has_proof")), domain=domain_by_id.get(c["domain_id"], {})))
+                          has_proof=bool(e.get("has_proof")), study=bool(e.get("study")),
+                          domain=domain_by_id.get(c["domain_id"], {})))
 
     def kept(x):
         return not (p["exclude_na"] and x["status"] == "na")
@@ -131,9 +137,13 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
     apd = score(lambda x: x.get("requirement") != "closing") or 0.0
     bankability = score(lambda x: x.get("bankability")) or 0.0
 
-    na_count = sum(1 for x in lines if x["status"] == "na")
-    met_count = sum(1 for x in lines if x["status"] == "met")
-    completeness = met_count / (len(lines) - na_count) * 100 if len(lines) - na_count else 0.0
+    def completeness_of(sel):
+        """Part des critères disponibles et exploitables, hors non applicables."""
+        rows = [x for x in lines if sel(x)]
+        countable = sum(1 for x in rows if x["status"] != "na")
+        return sum(1 for x in rows if x["status"] == "met") / countable * 100 if countable else 0.0
+
+    completeness = completeness_of(lambda x: True)
 
     def blocking(status):
         return status == "not_met" or (p["ko_partial_blocks"] and status == "partial")
@@ -165,6 +175,22 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
         })
     domain_scores = {d["domain_id"]: d["score"] for d in domain_rows}
 
+    compartment_rows = []
+    for d in sorted(domains, key=lambda d: d.get("compartment_sequence") or 0):
+        cid = d.get("compartment_id")
+        if cid and not any(row["compartment_id"] == cid for row in compartment_rows):
+            members = [x["id"] for x in domains if x.get("compartment_id") == cid]
+            rows = [x for x in lines if x["domain_id"] in members]
+            compartment_rows.append({
+                "compartment_id": cid, "code": d.get("compartment_code"), "name": d.get("compartment_name"),
+                "score": flat(lambda x, m=members: x["domain_id"] in m), "criteria": len(rows),
+                "assessed": sum(1 for x in rows if x["entered"] != "not_assessed"),
+                "gaps": sum(1 for g in gaps if g["domain_id"] in members),
+                "studies": sum(1 for x in rows if x["study"]),
+                "knockouts": sum(1 for k in knockouts if k["domain_id"] in members),
+                "domains": [x["name"] for x in domains if x["id"] in members],
+            })
+
     by_criterion = {x["id"]: x for x in lines}
     dataroom = []
     for doc in documents:
@@ -195,7 +221,7 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
     ctx = {
         "lines": lines, "readiness": readiness, "apd": apd, "bankability": bankability, "knockouts": knockouts,
         "domain_scores": domain_scores, "dataroom_completeness": dataroom_completeness, "policy": p,
-        "context": context, "score": score, "domains": domains,
+        "context": context, "score": score, "domains": domains, "completeness_of": completeness_of,
     }
     gate_rows = []
     for g in gates:
@@ -207,7 +233,7 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
             "available": sum(1 for x in in_gate if x["status"] == "met"),
             "knockouts": sum(1 for k in knockouts if k["gate_index"] == g["index"]),
             "entry_requirements": g.get("entry_requirements"), "deliverables": g.get("deliverables"),
-            "exit_criteria": g.get("exit_criteria"),
+            "exit_criteria": g.get("exit_criteria"), "min_completeness": g.get("min_completeness"),
         })
     next_gate = next((g for g in gate_rows if g["decision"] != "go"), None)
     recommendation, detail = _recommendation(p, readiness, apd, bankability, knockouts, gate_rows)
@@ -224,6 +250,7 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
         "critical_missing_excl_ko": [x for x in critical_missing if not x.get("knockout")],
         "gaps": gaps,
         "domains": domain_rows,
+        "compartments": compartment_rows,
         "requalified": [x for x in lines if x["entered"] != "not_assessed" and x["entered"] != x["status"]],
         "anomalies": anomalies,
         "classification": classification[0],
@@ -245,7 +272,22 @@ def _ko_motifs(knockouts):
 
 
 def _gate(g, ctx):
-    """Décision d'un gate : (décision, motifs)."""
+    """Décision d'un gate : (décision, motifs). Une complétude documentaire inférieure au minimum du
+    gate (exigence d'entrée) ramène un GO ou un CONDITIONAL GO à HOLD ; un NO-GO reste un NO-GO."""
+    decision, motifs = _gate_rule(g, ctx)
+    floor = g.get("min_completeness")
+    if floor and decision != "no_go":
+        cumulative = g.get("scope") == "cumulative"
+        done = ctx["completeness_of"](lambda x: x["gate_index"] <= g["index"] if cumulative else True)
+        if done < floor:
+            scope = " des gates atteints" if cumulative else ""
+            motif = (f"Complétude documentaire{scope} {fnum(done)} %, minimum {fnum(floor, 0)} % pour examiner "
+                     "ce gate.")
+            return "hold", [motif] + (motifs if decision == "hold" else [])
+    return decision, motifs
+
+
+def _gate_rule(g, ctx):
     rule, lines, knockouts, p = g["rule"], ctx["lines"], ctx["knockouts"], ctx["policy"]
     hyp, fiche = ctx["context"].get("hyp", {}), ctx["context"].get("fiche", {})
     hold = g.get("hold")

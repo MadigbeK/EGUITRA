@@ -22,6 +22,8 @@ from .statements_export import income_with_month
 
 # Profils qui choisissent un compte analytique à la saisie (chantiers, immobilier, parc).
 ANALYTIC_PICKERS = FIN_READ + ("exploitation", "chantiers", "immobilier")
+# Le profil Achats impute ses pièces sur les axes de la société (sélecteur par axe), sans autre lecture.
+AXES_PICKERS = ANALYTIC_PICKERS + ("achats",)
 
 
 def _analytic_row(account, company):
@@ -164,7 +166,7 @@ class EguitraFinanceDashboard(http.Controller):
         rows = request.env["eguitra.finance.metrics"].sudo().by_analytic_plan(companies(kw), plan, start, end)
         return {"plan": plan.name, "date_from": start, "date_to": end, "rows": rows}
 
-    @api_route("/finance/analytic-axes", profiles=ANALYTIC_PICKERS)
+    @api_route("/finance/analytic-axes", profiles=AXES_PICKERS)
     def analytic_axes(self, **kw):
         """Axes proposés dans la société de travail, avec leurs comptes (actifs, sauf all=1) : la saisie
         affiche un sélecteur par axe ; activité et centre de coût sont tenus par la finance."""

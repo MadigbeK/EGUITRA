@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Card, DataTable, Field, Input, Loading, Notice, PageHeader, Select, Tag } from "@/components/ui";
+import { Button, Card, DataTable, Etat, Field, Input, Notice, PageHeader, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { GRAVITES } from "@/components/finance/Pilotage";
 import type { AlertUnit, Severity } from "@/lib/finance-types";
@@ -13,8 +13,8 @@ const UNITE: Record<AlertUnit, string> = { gnf: "GNF", pct: "%", days: "jours", 
 interface Currency { id: number; name: string; symbol: string; rate: number; inverse_rate: number; date: string | null }
 
 export default function SettingsPage() {
-  const { data: thresholds, mutate } = useApi<Threshold[]>("/finance/thresholds");
-  const { data: currencies, mutate: refreshRates } = useApi<Currency[]>("/finance/currencies");
+  const { data: thresholds, error: erreurSeuils, mutate } = useApi<Threshold[]>("/finance/thresholds");
+  const { data: currencies, error: erreurDevises, mutate: refreshRates } = useApi<Currency[]>("/finance/currencies");
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   async function save(t: Threshold, patch: Partial<Threshold>) {
     try {
@@ -31,7 +31,7 @@ export default function SettingsPage() {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card title="Seuils d'alerte" padded={false}>
         {!thresholds ? (
-          <Loading />
+          <Etat error={erreurSeuils} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={thresholds.filter((t) => t.applicable)}
@@ -74,10 +74,10 @@ export default function SettingsPage() {
         )}
       </Card>
       <Card title="Taux de change" padded={false}>
-        {!currencies ? <Loading /> : <Rates currencies={currencies} onSaved={() => refreshRates()} />}
+        {!currencies ? <Etat error={erreurDevises} onRetry={() => refreshRates()} /> : <Rates currencies={currencies} onSaved={() => refreshRates()} />}
       </Card>
       <Card title="Comptes de banque et de caisse" padded={false}>
-        {!currencies ? <Loading /> : <TreasuryAccounts currencies={currencies} />}
+        {!currencies ? <Etat error={erreurDevises} onRetry={() => refreshRates()} /> : <TreasuryAccounts currencies={currencies} />}
       </Card>
     </div>
   );

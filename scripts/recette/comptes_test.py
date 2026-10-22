@@ -1,9 +1,9 @@
 # ruff: noqa: F821 (env est fourni par « odoo shell »)
 """Comptes de test de la recette : un compte par métier, pour les utilisateurs réels d'EGUITRA GROUP
-et de MB AxisPro Consulting qui testent la plateforme et font leurs retours. Recette seulement.
+et de MB AxisPro qui testent la plateforme et font leurs retours. Recette seulement.
 
 Chaque compte reçoit les profils et les sociétés de son métier (deux sociétés distinctes : un
-profil métier d'EGUITRA n'est ouvert qu'à EGUITRA GROUP, le cabinet qu'à MB AxisPro Consulting),
+profil métier d'EGUITRA n'est ouvert qu'à EGUITRA GROUP, le cabinet qu'à MB AxisPro),
 un mot de passe provisoire à remplacer à la première connexion et la double authentification à
 activer sur le téléphone du testeur. Un compte = une personne (le téléphone qui reçoit les codes).
 
@@ -17,6 +17,14 @@ Lancement sur le serveur, depuis infra/ (les mots de passe ne sortent que dans l
 Relancé, le script garde les comptes existants (mot de passe et double authentification) ; avec
 COMPTES_TEST_REINITIALISER=test.dg,test.daf (ou « tous »), il leur redonne un mot de passe
 provisoire et remet leur double authentification à zéro.
+
+Recette en mot de passe commun (scripts/recette/mot_de_passe_commun.py, eguitra_api.shared_password
+= 1) : les comptes créés reçoivent ce mot de passe, sans changement imposé ; le lancer avec
+-e MOT_DE_PASSE=... après « exec -T ». La réinitialisation est alors refusée.
+
+Les rôles RH du libre-service (salarié, chef d'équipe) ne sont pas des profils : ce sont des
+comptes liés à un dossier du personnel (scripts/recette/donnees_demo_rh.py lie test.salarie, salarié
+sans autre profil, et test.exploitation et test.dg, chefs d'équipe).
 """
 
 import os
@@ -45,6 +53,9 @@ COMPTES = [
     ("test.chantiers", "Test - Conducteur de travaux", ["chantiers"], ["groupe"]),
     ("test.immobilier", "Test - Gestionnaire immobilier", ["immobilier"], ["groupe"]),
     ("test.consultant", "Test - Consultant du cabinet", ["cabinet"], ["cabinet"]),
+    ("test.rh", "Test - Gestionnaire RH", ["rh"], ["groupe", "cabinet"]),
+    # Sans profil : le salarié qui n'a que « Mon espace » (lié à un dossier par donnees_demo_rh.py).
+    ("test.salarie", "Test - Salarié", [], ["groupe"]),
     ("test.admin", "Test - Administrateur", ["admin"], ["groupe", "cabinet"]),
     ("test.porteur", "Test - Porteur de projet", ["porteur"], ["cabinet"]),
 ]
@@ -52,6 +63,10 @@ COMPTES = [
 DOSSIER_PORTEUR = "Unité de séchage de mangues (démo)"
 
 reinit = {x.strip() for x in os.environ.get("COMPTES_TEST_REINITIALISER", "").split(",") if x.strip()}
+COMMUN = env["ir.config_parameter"].sudo().get_param("eguitra_api.shared_password") == "1"
+if COMMUN:
+    assert os.environ.get("MOT_DE_PASSE"), "Recette en mot de passe commun : le donner dans MOT_DE_PASSE."
+    assert not reinit, "Recette en mot de passe commun : pas de réinitialisation."
 ALPHABET = "".join(c for c in string.ascii_letters + string.digits if c not in "Il1O0o")
 
 
@@ -67,9 +82,9 @@ for login, nom, profils, entites in COMPTES:
     nouveau = not user
     password = None
     if nouveau:
-        password = mot_de_passe()
+        password = os.environ["MOT_DE_PASSE"] if COMMUN else mot_de_passe()
         user = Users.create({
-            "name": nom, "login": login, "password": password, "eguitra_password_temporary": True,
+            "name": nom, "login": login, "password": password, "eguitra_password_temporary": not COMMUN,
             "company_id": societes[0].id, "company_ids": [Command.set(societes.ids)], "lang": "fr_FR",
             "tz": "Africa/Conakry",
         })
@@ -86,7 +101,7 @@ for login, nom, profils, entites in COMPTES:
         dossier = env["axispro.dossier"].sudo().search([("name", "=", DOSSIER_PORTEUR)], limit=1)
         if dossier:
             dossier.portal_user_ids = [Command.link(user.id)]
-    if password:
+    if password and not COMMUN:
         print(f"COMPTE\t{login}\t{password}\t{nom}")
     print(f"RESUME\t{login}\t{'créé' if nouveau else ('réinitialisé' if password else 'inchangé')}\t"
           f"profils={','.join(user._eguitra_profiles())}\tapplications={','.join(user._eguitra_apps())}\t"

@@ -18,7 +18,7 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 | Un encaissement ou un paiement | Comptabilité > Trésorerie | Rapprocher chaque ligne du relevé de sa facture : c'est ce qui solde la créance ou la dette. |
 | Une échéance d'emprunt prélevée en banque | Comptabilité > Trésorerie, « Rapprocher » | L'échéance est proposée sur la ligne du relevé : capital et intérêts en contrepartie, la sortie n'est comptée qu'une fois. |
 | Un virement entre deux comptes | Comptabilité > Trésorerie, « Virement interne » | Il passe par le compte de passage 585, qui doit être soldé. |
-| Une rotation de camion | Métiers > Transport (ou Rotations au parc) | Une rotation par voyage : source unique de la facturation et de la rentabilité par camion et par route. |
+| Une rotation de camion | Application Transport > Rotations (ou Rotations au parc) | Une rotation par voyage : source unique de la facturation et de la rentabilité par camion et par route. |
 | Un bien amortissable | Comptabilité > Immobilisations | Les dotations échues sont comptabilisées chaque nuit. |
 | Un nouvel emprunt ou crédit-bail | Comptabilité > Dette et financement | Renseigner l'objet, le compte de dette, le compte d'intérêts et le journal, puis « Mettre en service ». |
 | Le déblocage d'un emprunt | Comptabilité > Trésorerie, type « Déblocage d'emprunt » | Désigner le financement : l'entrée de banque crédite son compte de dette. |
@@ -79,7 +79,10 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
   depuis leurs écrans : ne pas les ressaisir ici.
 - Impression PDF de la facture, pièces jointes, suivi du reste à encaisser.
 
-## Transport : paramètres, manquants et taxes (Métiers > Transport)
+## Transport : paramètres, manquants et taxes (application NIMOVA · Transport)
+
+Le transport a sa propre application, NIMOVA · Transport (accueil NIMOVA, rayon Transport, ou
+adresse `/transport`) ; l'ancienne entrée Finance > Métiers > Transport y mène.
 
 - Paramètres : tolérance de manquant par défaut (en % du volume chargé) et traitement du manquant
   hors tolérance (constat, déduction sur la facture du client, créance sur le chauffeur, ou les
@@ -98,6 +101,29 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 - Export des rotations (XLSX ou CSV) : une colonne par frais (pneumatiques compris), puis
   kilométrage et ratios (distance, carburant, durée, chiffre d'affaires et coût au kilomètre, coût
   au litre, consommation aux 100 km).
+- Coûts standard (Routes et tarifs) : pour chaque route, les forfaits d'une rotation complète
+  (litres de carburant aller et retour, prime de route, péages, autres frais), et les prix du
+  litre de carburant avec leur date d'application. La rotation affiche dès la saisie son coût
+  standard et sa marge estimée ; la validation les fige (un nouveau prix ne réécrit pas les
+  rotations passées). La rentabilité montre côte à côte coûts standard, déclarés et comptabilisés ;
+  les contrôles signalent une route dont le carburant au km s'écarte de plus de 40 % de la médiane.
+- Ensembles gérés pour des propriétaires (Flotte et chauffeurs) : propriété de chaque ensemble
+  (propre, ou géré pour un propriétaire désigné) et ses charges mensuelles (assurance,
+  géolocalisation, vignettes… ; une charge annuelle compte pour un douzième par mois).
+- Règles de répartition (onglet Propriétaires) : un bénéficiaire reçoit un pourcentage du chiffre
+  d'affaires brut d'un ensemble ou de tous les ensembles propres ou gérés, rotation par rotation,
+  même quand la marge est négative ; la règle d'un ensemble remplace la règle générale du même
+  bénéficiaire. La part que la société retient sur un ensemble géré est une règle à son nom.
+- Relevés des propriétaires (onglet Propriétaires) : « Établir les relevés du mois » calcule, pour
+  chaque ensemble géré ou visé par une règle, le chiffre d'affaires des rotations validées, les
+  charges (frais déclarés et charges mensuelles, ou pièces comptabilisées sur l'ensemble, selon les
+  paramètres ; les deux montants restent affichés), la marge, les commissions et la part du
+  propriétaire (le résiduel, négatif quand l'ensemble n'a pas couvert ses charges). Le relevé
+  s'imprime (PDF pour le propriétaire) et s'exporte (Excel). « Préparer les pièces » crée en
+  brouillon la facture d'achat du propriétaire (part positive) ou la facture de refacturation (part
+  négative) et la facture de chaque bénéficiaire tiers ; à valider dans Achats et Ventes.
+  « Rouvrir » supprime des pièces restées en brouillon. Comptes (Paramètres) à valider avec
+  l'expert-comptable.
 
 ## Relances clients (Comptabilité > Relances clients)
 

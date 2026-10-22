@@ -31,7 +31,7 @@ export default function PiecesPage() {
                 key={g.id ?? "none"}
                 title={
                   <span className="flex items-center gap-3">
-                    <span className="n-degrade grid h-8 w-8 flex-none place-items-center rounded-full text-[13px] font-bold text-white">{g.rang}</span>
+                    <span className="bg-accent grid h-8 w-8 flex-none place-items-center rounded-full text-[13px] font-bold text-white">{g.rang}</span>
                     {g.title}
                     <span className="rounded-full bg-accent-doux px-2 py-0.5 text-[12px] font-semibold text-accent">
                       {rows.length} pièce{rows.length > 1 ? "s" : ""}

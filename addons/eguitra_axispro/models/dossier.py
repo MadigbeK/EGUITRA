@@ -88,6 +88,7 @@ class AxisproDossier(models.Model):
     review_ids = fields.One2many("axispro.review", "dossier_id", "Revues de comité")
     message_ids = fields.One2many("axispro.message", "dossier_id", "Échanges")
     journal_ids = fields.One2many("axispro.journal", "dossier_id", "Journal")
+    assignment_ids = fields.One2many("axispro.assignment", "dossier_id", "Consultants par compartiment")
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -153,6 +154,7 @@ class AxisproDossier(models.Model):
             evaluations[e.criterion_id.id] = {
                 "status": e.status, "has_proof": bool(proofs),
                 "expired_on": max(proofs.mapped("validity_date")) if proofs and not valid else None,
+                "study": bool(e.deliverable),
             }
         latest = {}
         for doc in self.document_ids.sorted("version"):
@@ -162,9 +164,14 @@ class AxisproDossier(models.Model):
             "id": t.id, "code": t.code, "name": t.name, "category": t.category or None,
             "file_state": latest[t.id].state if t.id in latest else "missing", "criterion_ids": t.criterion_ids.ids,
         } for t in policy.document_type_ids]
-        domains = [{"id": d.id, "code": d.code, "name": d.name, "weight": d.weight} for d in policy.domain_ids]
+        domains = [{"id": d.id, "code": d.code, "name": d.name, "weight": d.weight,
+                    "compartment_id": d.compartment_id.id or None, "compartment_code": d.compartment_id.code or None,
+                    "compartment_name": d.compartment_id.name or None,
+                    "compartment_sequence": d.compartment_id.sequence if d.compartment_id else 0}
+                   for d in policy.domain_ids]
         gate_rows = [{
             "id": g.id, "code": g.code, "name": g.name, "index": i, "rule": g.rule_code,
+            "min_completeness": g.min_completeness or None,
             "hold": g.threshold_hold or None, "go": g.threshold_go or None, "domain_ids": g.domain_ids.ids,
             "scope": g.score_scope, "entry_requirements": g.entry_requirements or g.description or None,
             "deliverables": g.deliverables or None, "exit_criteria": g.exit_criteria or None,
@@ -240,6 +247,9 @@ class AxisproDossier(models.Model):
                                                  "recommandation.")
         else:
             recommendation, detail = r["recommendation"], r["recommendation_detail"]
+        owners = {a.compartment_id.id: a.user_id for a in self.assignment_ids}
+        compartments = [dict(c, owner={"id": owners[c["compartment_id"]].id, "name": owners[c["compartment_id"]].name}
+                             if c["compartment_id"] in owners else None) for c in r["compartments"]]
         return {
             "global_score": r["readiness"],
             "readiness": r["readiness"],
@@ -252,6 +262,7 @@ class AxisproDossier(models.Model):
             "recommendation_detail": detail,
             "method_recommendation": r["recommendation"],
             "domains": r["domains"],
+            "compartments": compartments,
             "knockouts": [brief(x) for x in r["knockouts"]],
             "knockouts_pending": sum(1 for x in r["knockouts"] if x["entered"] == "not_assessed"),
             "critical_open": [brief(x) for x in r["critical_missing"]],
@@ -287,6 +298,8 @@ class AxisproDossier(models.Model):
             c = criteria[g["id"]]
             rows.append({
                 "criterion_id": g["id"], "code": g["code"], "name": g["name"], "domain": g["domain"].get("name"),
+                "compartment": g["domain"].get("compartment_code"), "compartment_id": g["domain"].get("compartment_id"),
+                "compartment_name": g["domain"].get("compartment_name"),
                 "gate": gate_by_index.get(g["gate_index"], {}).get("code"), "status": g["status"], "entered": g["entered"],
                 "knockout": bool(g.get("knockout")), "critical": bool(g.get("critical")),
                 "blocking": g.get("requirement") == "blocking", "priority": round(g["priority"], 2),
@@ -319,6 +332,25 @@ class AxisproDossier(models.Model):
                 "criteria": info.get("criteria", []),
             })
         return out
+
+    def assign(self, compartment, user):
+        """Confie un compartiment de la grille à un consultant (user vide : retire l'affectation)."""
+        self.ensure_one()
+        if compartment.policy_id != self.policy_id:
+            raise UserError("Ce compartiment n'appartient pas à la grille du dossier.")
+        current = self.assignment_ids.filtered(lambda a: a.compartment_id == compartment)
+        before = current.user_id.name or None
+        if not user:
+            current.unlink()
+        elif current:
+            current.user_id = user
+        else:
+            self.env["axispro.assignment"].create({"dossier_id": self.id, "compartment_id": compartment.id,
+                                                   "user_id": user.id})
+        if (user.name if user else None) != before:
+            self.log("assignment", note=f"Compartiment {compartment.code} {compartment.name}",
+                     before=before or "Non affecté", after=user.name if user else "Non affecté")
+        return True
 
     def action_advance_gate(self, force_reason=None):
         """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant ; sinon refus motivé,
@@ -453,6 +485,29 @@ class AxisproMessage(models.Model):
     internal = fields.Boolean("Note interne au cabinet")
 
 
+class AxisproAssignment(models.Model):
+    """Consultant chargé d'un compartiment de la grille sur un dossier (outil du cabinet : « chaque
+    consultant filtre sur son compartiment »). L'affectation n'entre pas dans la décision : elle reste
+    modifiable sur un dossier verrouillé, et chaque changement est inscrit au journal."""
+
+    _name = "axispro.assignment"
+    _description = "Consultant d'un compartiment sur un dossier"
+    _order = "dossier_id, compartment_id"
+
+    dossier_id = fields.Many2one("axispro.dossier", required=True, ondelete="cascade", index=True)
+    company_id = fields.Many2one(related="dossier_id.company_id", store=True)
+    compartment_id = fields.Many2one("axispro.compartment", required=True, ondelete="cascade")
+    user_id = fields.Many2one("res.users", "Consultant", required=True, ondelete="cascade")
+
+    _unique = models.Constraint("unique(dossier_id, compartment_id)", "Un seul consultant par compartiment et par dossier.")
+
+    @api.constrains("compartment_id", "dossier_id")
+    def _check_policy(self):
+        for a in self:
+            if a.compartment_id.policy_id != a.dossier_id.policy_id:
+                raise UserError("Ce compartiment n'appartient pas à la grille du dossier.")
+
+
 class AxisproJournal(models.Model):
     _name = "axispro.journal"
     _description = "Journal d'un dossier AxisPro"
@@ -464,7 +519,8 @@ class AxisproJournal(models.Model):
     user_id = fields.Many2one("res.users", "Par", default=lambda self: self.env.user, required=True, readonly=True)
     kind = fields.Selection(
         [("status", "Statut d'un critère"), ("document", "Data room"), ("gate", "Stage gate"),
-         ("decision", "Décision de comité"), ("revision", "Révision"), ("import", "Import")],
+         ("decision", "Décision de comité"), ("revision", "Révision"), ("import", "Import"),
+         ("assignment", "Équipe du dossier")],
         required=True, readonly=True,
     )
     criterion_id = fields.Many2one("axispro.criterion", "Critère", ondelete="set null", readonly=True)

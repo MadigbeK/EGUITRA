@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Droplet } from "@/components/icons";
-import { Badge, Card, DataTable, Field, Input, Kpi, Loading, Select } from "@/components/ui";
+import { Badge, Card, DataTable, Etat, Field, Input, Kpi, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { SHORTAGE_RULES, type ProfitRow, type Ref, type ShortageRule } from "./types";
@@ -35,8 +34,8 @@ export function Manquants() {
   const [group, setGroup] = useState("driver");
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const { data } = useApi<{ rows: ProfitRow[] }>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
-  const { data: list } = useApi<{ items: ShortageRotation[]; total_count: number }>(`/transport/rotations?shortage=excess&state=done,invoiced&date_from=${from}&date_to=${to}&limit=200`);
+  const { data, error: erreurMarges, mutate: majMarges } = useApi<{ rows: ProfitRow[] }>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
+  const { data: list, error: erreurRotations, mutate: majRotations } = useApi<{ items: ShortageRotation[]; total_count: number }>(`/transport/rotations?shortage=excess&state=done,invoiced&date_from=${from}&date_to=${to}&limit=200`);
   const rows = data?.rows ?? [];
   const sum = (k: keyof ProfitRow) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
   const loaded = sum("volume_loaded");
@@ -49,14 +48,14 @@ export function Manquants() {
       </div>
       {data && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Manquant total" value={`${fmtDec(sum("shortage"))} m³`} icon={Droplet} teinte="corail" hint={`${fmtPct(loaded ? (sum("shortage") / loaded) * 100 : null, 2)} du volume chargé`} />
+          <Kpi label="Manquant total" value={`${fmtDec(sum("shortage"))} m³`} hint={`${fmtPct(loaded ? (sum("shortage") / loaded) * 100 : null, 2)} du volume chargé`} />
           <Kpi label="Hors tolérance" value={`${fmtDec(sum("shortage_excess"))} m³`} tone={sum("shortage_excess") > 0 ? "warn" : "ok"} hint={pluriel(sum("excess_rotations"), "rotation")} />
           <Kpi label="Valeur hors tolérance" value={fmtShort(sum("shortage_value"))} tone={sum("shortage_value") > 0 ? "warn" : "neutral"} hint="Au prix du m³ du produit ou du tarif" />
           <Kpi label="Coût net pour la marge" value={fmtShort(sum("shortage_net_cost"))} hint={`Déduit ${fmtShort(sum("shortage_deduction"))}, réclamé aux chauffeurs ${fmtShort(sum("shortage_claim"))}`} />
         </div>
       )}
       <Card padded={false}>
-        {!data ? <Loading /> : (
+        {!data ? <Etat error={erreurMarges} onRetry={() => majMarges()} /> : (
           <DataTable rows={rows} rowKey={(r, i) => `${r.key}-${i}`} empty="Aucune rotation validée sur la période." columns={[
             { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé" },
             { key: "rotations", label: "Rotations", align: "right", render: (r) => String(r.rotations) },
@@ -73,7 +72,7 @@ export function Manquants() {
         )}
       </Card>
       <Card title="Rotations hors tolérance" padded={false}>
-        {!list ? <Loading /> : (
+        {!list ? <Etat error={erreurRotations} onRetry={() => majRotations()} /> : (
           <DataTable dense rows={list.items} rowKey={(r) => r.id} empty="Aucune rotation au-delà de la tolérance sur la période." columns={[
             { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name ?? "–"}</span> },
             { key: "date_loading", label: "Chargement", render: (r) => fmtDate(r.date_loading) },

@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { scaleLinear } from "d3-scale";
-import { AreaChart, Badge, Card, DataTable, ErrorBox, GAMME, Tabs, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, DataTable, ErrorBox, SERIES, Tabs, cx } from "@/components/ui";
 import { Cascade, Puces, TableRepli } from "@/components/analyse/charts";
 import { COULEUR, Cadre } from "@/components/analyse/charts/commun";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
@@ -99,7 +99,7 @@ function Corps() {
               { key: "pont", label: "Pont d'EBE" },
               { key: "structure", label: "Structure de coûts" },
               { key: "budget", label: "Budget et écarts", count: lignesBudget.filter((b) => (b.risk_probability_pct ?? 0) >= 50).length || undefined },
-              { key: "metiers", label: "Chantiers et immobilier" },
+              { key: "metiers", label: "BTP et immobilier" },
             ]}
           />
           {onglet === "pont" && (
@@ -119,11 +119,11 @@ function Corps() {
               <Card title="Chiffre d'affaires et marge par activité" className="xl:col-span-5">
                 {seriesCa.length && d.by_activity.months.length ? (
                   <>
-                    <AreaChart label="Chiffre d'affaires mensuel par activité" labels={d.by_activity.months.map((m) => moisCourt(m, true))} series={seriesCa.map((s, i) => ({ key: s.key, label: s.label.replace(/ : produits$/, ""), values: combler(s.values), color: GAMME[i % GAMME.length]! }))} height={200} format={(v) => fmtGNF(v)} />
+                    <AreaChart label="Chiffre d'affaires mensuel par activité" labels={d.by_activity.months.map((m) => moisCourt(m, true))} series={seriesCa.map((s, i) => ({ key: s.key, label: s.label.replace(/ : produits$/, ""), values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={200} format={(v) => fmtGNF(v)} />
                     {seriesMarge.length > 0 && (
                       <div className="mt-4 border-t border-line pt-3">
                         <div className="mb-2 text-[12.5px] font-semibold text-ink-2">Marge par activité</div>
-                        <AreaChart label="Marge mensuelle par activité" labels={d.by_activity.months.map((m) => moisCourt(m, true))} series={seriesMarge.map((s, i) => ({ key: s.key, label: s.label.replace(/ : marge$/, ""), values: combler(s.values), color: GAMME[i % GAMME.length]! }))} height={150} format={(v) => fmtGNF(v)} />
+                        <AreaChart label="Marge mensuelle par activité" labels={d.by_activity.months.map((m) => moisCourt(m, true))} series={seriesMarge.map((s, i) => ({ key: s.key, label: s.label.replace(/ : marge$/, ""), values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={150} format={(v) => fmtGNF(v)} />
                       </div>
                     )}
                   </>
@@ -208,7 +208,7 @@ function Corps() {
           )}
           {onglet === "metiers" && (
             <div className="grid gap-5 xl:grid-cols-12">
-              <Card title="Chantiers : avancement et performance des coûts" className="xl:col-span-7" padded={false}>
+              <Card title="BTP : avancement et performance des coûts par chantier" className="xl:col-span-7" padded={false}>
                 {chantiers.length === 0 ? (
                   <Vide titre="Aucun chantier sur la période" />
                 ) : (

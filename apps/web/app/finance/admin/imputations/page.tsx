@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, fromDistribution, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
@@ -69,9 +69,8 @@ function Rules() {
         <p className="px-5 pb-3 text-sm text-muted">
           Une ligne dont le compte commence par le préfixe (ou qui porte le tiers) reçoit les comptes analytiques de la règle sur les axes laissés vides. Des règles d&apos;axes différents se cumulent ; sur un même axe, la plus précise l&apos;emporte.
         </p>
-        {error && <ErrorBox error={error} />}
         {!rules ? (
-          <Loading />
+          <Etat error={error} onRetry={() => mutate()} />
         ) : (
           <DataTable
             rows={rules}
@@ -223,9 +222,8 @@ function Categories() {
           <Notice tone={message.tone}>{message.text}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} />}
       {!data ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <DataTable
           rows={data}
@@ -396,9 +394,8 @@ function OperationTypes() {
           <Notice tone={message.tone}>{message.text}</Notice>
         </div>
       )}
-      {error && <ErrorBox error={error} />}
       {!data ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <DataTable
           rows={data}
@@ -544,9 +541,8 @@ function PaymentModes() {
   }
   return (
     <Card title="Modes de paiement" padded={false}>
-      {error && <ErrorBox error={error} />}
       {!data ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <DataTable
           rows={data}
@@ -605,9 +601,8 @@ function Requirements() {
   return (
     <Card title="Axes obligatoires" padded={false}>
       <p className="px-5 pb-3 text-sm text-muted">Une pièce qui mouvemente un compte du préfixe ne se valide pas sans répartition complète (100 %) sur l&apos;axe.</p>
-      {error && <ErrorBox error={error} />}
       {!data ? (
-        <Loading />
+        <Etat error={error} onRetry={() => mutate()} />
       ) : (
         <DataTable
           rows={data}

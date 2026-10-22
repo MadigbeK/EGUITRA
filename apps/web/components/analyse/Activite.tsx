@@ -1,6 +1,6 @@
 "use client";
 
-import { AreaChart, Badge, Card, DataTable, ErrorBox, GAMME, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, DataTable, ErrorBox, SERIES, cx } from "@/components/ui";
 import { CarteChaleur, Eventail, Puces } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
@@ -79,7 +79,7 @@ function Corps() {
                   {d.time.by_service.map((x, i) => (
                     <div key={x.key} className="rounded-xl border border-line bg-panel-2/60 px-3 py-2">
                       <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-muted">
-                        <span aria-hidden className="h-2 w-2 flex-none rounded-full" style={{ background: GAMME[i % GAMME.length] }} />
+                        <span aria-hidden className="h-2 w-2 flex-none rounded-full" style={{ background: SERIES[i % SERIES.length] }} />
                         <span className="truncate">{x.label}</span>
                       </div>
                       <div className="font-display text-[17px] font-bold tabular text-ink">{heures(x.hours)}</div>
@@ -106,7 +106,7 @@ function Corps() {
             <Card title="Honoraires par ligne de service" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Créances {fmtShort(d.revenue.receivables.open)} GNF, dont {fmtShort(d.revenue.receivables.overdue)} échues{d.revenue.receivables.dso_days !== null ? ` · DSO ${joursOu(d.revenue.receivables.dso_days)}` : ""}</span>}>
               {d.revenue.monthly.series.length && d.revenue.monthly.months.length ? (
                 <>
-                  <AreaChart label="Honoraires mensuels par ligne de service" labels={d.revenue.monthly.months.map((m) => moisCourt(m, true))} series={d.revenue.monthly.series.map((x, i) => ({ key: x.key, label: x.label, values: combler(x.values), color: GAMME[i % GAMME.length]! }))} height={230} format={(v) => fmtGNF(v)} />
+                  <AreaChart label="Honoraires mensuels par ligne de service" labels={d.revenue.monthly.months.map((m) => moisCourt(m, true))} series={d.revenue.monthly.series.map((x, i) => ({ key: x.key, label: x.label, values: combler(x.values), color: SERIES[i % SERIES.length]! }))} height={230} format={(v) => fmtGNF(v)} />
                   {d.revenue.unassigned > 0 && <p className="mt-2 text-[12px] leading-snug text-muted">{fmtShort(d.revenue.unassigned)} GNF de chiffre d&apos;affaires sans ligne de service sur la période : imputez les factures d&apos;honoraires sur l&apos;axe des activités du cabinet.</p>}
                 </>
               ) : (

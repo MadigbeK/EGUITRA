@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, Flag, ShieldAlert } from "@/components/icons";
-import { Badge, Button, Card, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
+import { ArrowRight, CheckCircle2, FileCheck2, Flag, ShieldAlert } from "@/components/icons";
+import { Badge, Button, Card, FEUILLE, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend } from "@/lib/api-client";
 import { pluriel } from "@/lib/format";
 import { GATE_DECISION, HYPOTHESES, YES_NO, type DossierDetail } from "@/lib/axispro-types";
-import { RULE_LABELS, useRetour } from "./commun";
+import { RULE_LABELS, arrondi, useRetour } from "./commun";
 
 /**
  * Stage gates : règle de passage, décision calculée et motifs, exigences d'entrée, livrables et
@@ -51,14 +51,14 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
       >
         <ol className="flex flex-wrap gap-2">
           {gates.map((g, i) => (
-            <li key={g.code} className={cx("flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold", i < courant ? "border-jade/40 bg-ok-doux/60 text-ok-texte" : i === courant ? "n-degrade border-transparent text-white" : "border-line text-muted")}>
+            <li key={g.code} className={cx("flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold", i < courant ? "border-jade/40 bg-ok-doux/60 text-ok-texte" : i === courant ? "bg-accent border-transparent text-white" : "border-line text-muted")}>
               {i < courant ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Flag className="h-3.5 w-3.5" />}
               {g.code} {g.name}
             </li>
           ))}
         </ol>
         <p className="mt-3 text-[12.5px] text-muted">
-          Un knock-out actif dans le périmètre d&apos;un gate impose NO-GO quel que soit le score. Les hypothèses de décision des gates 4 à 7 (DSCR, red flag, data room, bailleurs, conditions précédentes, signature) se renseignent dans la synthèse.
+          Un knock-out actif dans le périmètre d&apos;un gate impose NO-GO quel que soit le score ; sous la complétude documentaire minimale d&apos;un gate, un GO ou un CONDITIONAL GO est ramené à HOLD. Les hypothèses de décision des gates 4 à 7 (DSCR, red flag, data room, bailleurs, conditions précédentes, signature) se renseignent dans la synthèse.
         </p>
       </Card>
 
@@ -67,9 +67,9 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
           const dec = GATE_DECISION[g.decision];
           const hyp = HYPOTHESES.filter((h) => h.gate === g.code);
           return (
-            <section key={g.code} className={cx("rounded-2xl border bg-panel p-4 shadow-[var(--ombre-carte)]", i === courant ? "border-accent/50 ring-2 ring-accent/15" : "border-line")}>
+            <section key={g.code} className={cx(FEUILLE, "p-4", i === courant && "ring-2 ring-accent/40")}>
               <header className="flex flex-wrap items-center gap-2">
-                <span className="n-degrade grid h-8 min-w-8 place-items-center rounded-full px-2 text-[12.5px] font-bold text-white">{g.code}</span>
+                <span className="bg-accent grid h-8 min-w-8 place-items-center rounded-full px-2 text-[12.5px] font-bold text-white">{g.code}</span>
                 <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{g.name}</h3>
                 {i < courant && <Badge tone="ok">Franchi</Badge>}
                 {i === courant && <Badge tone="accent" vivant>Gate courant</Badge>}
@@ -84,7 +84,12 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
                   </li>
                 ))}
               </ul>
-              <div className="mt-3 flex flex-wrap gap-3 text-[12px] text-muted">
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-muted">
+                {g.min_completeness ? (
+                  <span title="Exigence d'entrée : en dessous, le gate ne s'examine pas (HOLD)" className="inline-flex items-center gap-1 rounded-md bg-panel-3 px-1.5 py-0.5 font-semibold text-ink-2">
+                    <FileCheck2 aria-hidden className="h-3.5 w-3.5 text-muted" /> Complétude minimale {arrondi(g.min_completeness)} %
+                  </span>
+                ) : null}
                 <span>{g.available}/{g.criteria} {g.available > 1 ? "critères disponibles" : "critère disponible"}</span>
                 {g.knockouts > 0 && <span className="font-semibold text-danger">{pluriel(g.knockouts, "knock-out")} du gate</span>}
                 {hyp.map((h) => (

@@ -11,6 +11,11 @@ class TestAdmin(ApiCase):
         cls._create_user("aissatou", "admin")
         cls._create_user("fatou", "finance")
 
+    def test_application_rh_selon_son_module(self):
+        admin = self.env["res.users"].search([("login", "=", "aissatou")])
+        self.assertEqual("rh" in admin._eguitra_apps(), "eguitra.rh.employee" in self.env,
+                         "L'espace RH n'existe que là où son module est installé")
+
     def test_profil_requis(self):
         session = self.open_session("fatou")
         status, body = self.call("GET", "/admin/users", token=session["access_token"])
@@ -22,7 +27,21 @@ class TestAdmin(ApiCase):
 
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual(status, 200)
-        self.assertIn("exploitation", [p["code"] for p in profils])
+        self.assertEqual([p["code"] for p in profils], ["admin", "direction", "finance", "achats", "exploitation",
+                                                        "chantiers", "immobilier", "cabinet", "rh", "porteur"])
+        rh = next(p for p in profils if p["code"] == "rh")
+        self.assertEqual((rh["name"], rh["entity"]), ("Ressources humaines", None), "Profil commun aux deux sociétés")
+        achats = next(p for p in profils if p["code"] == "achats")
+        self.assertEqual((achats["name"], achats["entity"]), ("Achats", None), "Profil commun aux deux sociétés")
+        self.assertIn("pièces d'achat", achats["description"])
+
+        status, acheteuse = self.call("POST", "/admin/users", {
+            "name": "Mariama Achats", "login": "mariama.achats", "password": "Provisoire-2026", "profiles": ["achats"],
+        }, token=token)
+        self.assertEqual(status, 200, acheteuse)
+        self.assertEqual((acheteuse["profiles"], acheteuse["apps"]), (["achats"], ["finance"]))
+        # Droit déclaré par eguitra_finance : absent quand ce module n'est pas installé.
+        self.assertFalse(acheteuse["rights"].get("free_accounts"), "Saisie libre des comptes non accordée")
 
         status, user = self.call("POST", "/admin/users", {
             "name": "Ibrahima Exploitation", "login": "Ibrahima", "password": "Provisoire-2026",
@@ -32,7 +51,7 @@ class TestAdmin(ApiCase):
         self.assertEqual(user["login"], "ibrahima")
         self.assertEqual(user["profiles"], ["exploitation"])
         self.assertTrue(user["password_change_required"])
-        self.assertEqual(sorted(user["apps"]), ["finance", "mobile"])
+        self.assertEqual(sorted(user["apps"]), ["finance", "mobile", "transport"])
 
         status, _b = self.call("POST", "/admin/users", {
             "name": "Doublon", "login": "ibrahima", "password": "Provisoire-2026", "profiles": ["finance"],
@@ -58,6 +77,20 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 200)
         self.assertFalse(desactive["active"])
 
+    def test_mot_de_passe_commun_de_la_recette(self):
+        self.env["ir.config_parameter"].sudo().set_param("eguitra_api.shared_password", "1")
+        token = self.open_session("aissatou")["access_token"]
+        status, user = self.call("POST", "/admin/users", {
+            "name": "Testeur Recette", "login": "testeur.recette", "password": "Commun-recette-2026",
+            "profiles": ["finance"],
+        }, token=token)
+        self.assertEqual(status, 200, user)
+        self.assertFalse(user["password_change_required"], "Pas de changement imposé : il serait refusé")
+        status, body = self.call(
+            "POST", f"/admin/users/{user['id']}/password", {"password": "Autre-mot-2026"}, token=token
+        )
+        self.assertEqual((status, body["error"]), (403, "password_locked"))
+
     def test_profils_coherents_avec_les_societes(self):
         """Un profil propre à une société exige que le compte y soit ouvert."""
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
@@ -67,7 +100,7 @@ class TestAdmin(ApiCase):
         compte = {"name": "Consultant", "login": "consultant.x", "password": "Provisoire-2026", "profiles": ["cabinet"]}
         status, body = self.call("POST", "/admin/users", dict(compte, company_ids=[groupe.id]), token=token)
         self.assertEqual(status, 422, body)
-        self.assertIn("MB AxisPro Consulting", body["message"])
+        self.assertIn("MB AxisPro", body["message"])
         status, user = self.call("POST", "/admin/users", dict(compte, company_ids=[cabinet.id]), token=token)
         self.assertEqual((status, sorted(user["apps"])), (200, ["analyse", "axispro"]), user)
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "chantiers"]}, token=token)

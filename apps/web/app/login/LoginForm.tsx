@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Button, Field, Input, Notice, cx } from "@/components/ui";
+import { Button, Field, Input, Notice, PasswordInput, cx } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
 
 type Step = { kind: "credentials" } | { kind: "mfa" } | { kind: "setup"; secret: string; qr: string };
@@ -18,7 +18,7 @@ async function post(url: string, body: unknown) {
 
 /** Phrase d'accueil : l'application ouverte, ou le cabinet pour les porteurs de projets. */
 function introduction(app: AppCode): string {
-  if (app === "portail") return "Votre espace de porteur de projet chez MB AxisPro Consulting.";
+  if (app === "portail") return "Votre espace de porteur de projet chez MB AxisPro.";
   const tagline = APPS[app].tagline;
   return `${APPS[app].name}, ${tagline.charAt(0).toLowerCase()}${tagline.slice(1)}.`;
 }
@@ -91,9 +91,9 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
               <Input autoComplete="username" autoFocus value={login} onChange={(e) => setLogin(e.target.value)} required className="min-h-11" />
             </Field>
             <Field label="Mot de passe">
-              <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
+              <PasswordInput autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
             </Field>
-            <Button type="submit" variant="primary" className="mt-2 min-h-11 w-full" loading={busy}>
+            <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" loading={busy}>
               Se connecter
             </Button>
           </form>
@@ -102,7 +102,7 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
         {step.kind === "mfa" && (
           <form onSubmit={submitCode} className="space-y-5">
             <CodeInput value={code} onChange={setCode} />
-            <Button type="submit" variant="primary" className="min-h-11 w-full" loading={busy} disabled={code.length !== 6}>
+            <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={code.length !== 6}>
               Valider
             </Button>
             <button type="button" className="w-full text-center text-[13px] font-medium text-muted underline-offset-2 hover:text-ink hover:underline" onClick={() => setStep({ kind: "credentials" })}>
@@ -133,7 +133,7 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
             )}
             <div className="rounded-lg bg-panel-2 px-3 py-2.5 text-center font-mono text-[13px] tracking-[0.18em] text-ink-2 select-all">{step.secret}</div>
             <CodeInput value={code} onChange={setCode} />
-            <Button type="submit" variant="primary" className="min-h-11 w-full" loading={busy} disabled={code.length !== 6}>
+            <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={code.length !== 6}>
               Activer et se connecter
             </Button>
           </form>

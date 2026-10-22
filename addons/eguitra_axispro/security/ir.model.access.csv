@@ -36,3 +36,7 @@ access_funding_cabinet,financements cabinet,model_axispro_funding,eguitra_base.g
 access_funding_direction,financements direction,model_axispro_funding,eguitra_base.group_profile_direction,1,0,0,0
 access_journal_cabinet,journal cabinet,model_axispro_journal,eguitra_base.group_profile_cabinet,1,0,0,0
 access_journal_direction,journal direction,model_axispro_journal,eguitra_base.group_profile_direction,1,0,0,0
+access_compartment_cabinet,compartiments cabinet,model_axispro_compartment,eguitra_base.group_profile_cabinet,1,1,1,1
+access_compartment_direction,compartiments direction,model_axispro_compartment,eguitra_base.group_profile_direction,1,0,0,0
+access_assignment_cabinet,équipe des dossiers cabinet,model_axispro_assignment,eguitra_base.group_profile_cabinet,1,1,1,1
+access_assignment_direction,équipe des dossiers direction,model_axispro_assignment,eguitra_base.group_profile_direction,1,0,0,0

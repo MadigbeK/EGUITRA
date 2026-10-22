@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, Field, Input, Loading, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt } from "@/lib/format";
 import { SHORTAGE_RULES, parseNumber, type AccountRef, type ClientTerms, type Message, type Product, type Ref, type ShortageRule, type TransportSettings } from "./types";
@@ -26,12 +26,13 @@ function useSend(onDone: () => void) {
 
 /** Paramétrage du transport : manquants, conditions des clients, produits transportés. */
 export function Parametres() {
-  const { data: settings, mutate } = useApi<TransportSettings>("/transport/settings");
-  if (!settings) return <Loading />;
+  const { data: settings, error, mutate } = useApi<TransportSettings>("/transport/settings");
+  if (!settings) return <Etat error={error} onRetry={() => mutate()} />;
   return (
     <div className="space-y-6">
       {!settings.can_edit && <Notice tone="accent">Paramètres tenus par la finance : consultation seulement.</Notice>}
       <Manquants settings={settings} onSaved={() => void mutate()} />
+      <RelevesProprietaires settings={settings} onSaved={() => void mutate()} />
       <ConditionsClients canEdit={settings.can_edit} />
       <BaremeTaxes canEdit={settings.can_edit} />
       <Produits canEdit={settings.can_edit} />
@@ -61,7 +62,7 @@ const RATE_UNIT: Record<TaxRule["base"], string> = { delivered: "GNF par m³", l
 
 /** Barème des taxes spécifiques : chaque taxe applicable devient une ligne des rotations. */
 function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
-  const { data, mutate } = useApi<{ taxes: TaxRule[]; natures: Choice[]; bases: Choice[] }>("/transport/taxes");
+  const { data, error, mutate } = useApi<{ taxes: TaxRule[]; natures: Choice[]; bases: Choice[] }>("/transport/taxes");
   const [editing, setEditing] = useState<TaxRule | "new" | null>(null);
   const { message, send } = useSend(() => void mutate());
   const label = (list: Choice[] | undefined, code: string) => list?.find((c) => c.code === code)?.label ?? code;
@@ -72,7 +73,7 @@ function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
         Calculées sur chaque rotation saisie ou validée (une rotation facturée garde les siennes). Une taxe refacturée s&apos;ajoute à la facture du
         client. Les taxes payées hors barème se saisissent sur la rotation (« Autres taxes payées »).
       </p>
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data.taxes} rowKey={(t) => t.id} empty="Aucune taxe au barème." onRowClick={canEdit ? (t) => setEditing(t) : undefined} columns={[
           { key: "name", label: "Taxe", render: (t) => <span className={t.active ? "" : "text-muted line-through"}>{t.name}</span> },
           { key: "nature", label: "Nature", render: (t) => label(data.natures, t.nature) },
@@ -152,6 +153,43 @@ function TaxForm({ tax, natures, bases, onClose, onSave }: { tax: TaxRule | null
   );
 }
 
+/** Relevés des ensembles gérés : base des charges et comptes des pièces préparées. */
+function RelevesProprietaires({ settings, onSaved }: { settings: TransportSettings; onSaved: () => void }) {
+  const { message, send } = useSend(onSaved);
+  const { data: charges } = useApi<AccountRef[]>(settings.can_edit ? "/finance/accounts?prefix=6&limit=2000" : null);
+  const { data: produits } = useApi<AccountRef[]>(settings.can_edit ? "/finance/accounts?prefix=7&limit=2000" : null);
+  const ro = !settings.can_edit;
+  const options = (current: AccountRef | null, list: AccountRef[] | undefined) =>
+    current && !list ? [{ value: current.id, label: `${current.code} ${current.name}` }] : (list ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }));
+  const account = (label: string, hint: string, key: string, current: AccountRef | null, list: AccountRef[] | undefined) => (
+    <Field label={label} hint={hint}>
+      <Select disabled={ro} value={current?.id ?? ""} placeholder="Compte par défaut"
+        onChange={(e) => void send("PATCH", "/transport/settings", { [key]: e.target.value ? Number(e.target.value) : null }, "Compte enregistré.")}
+        options={options(current, list)} />
+    </Field>
+  );
+  return (
+    <Card title="Ensembles gérés pour des propriétaires">
+      {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
+      <p className="mb-4 max-w-3xl text-[13px] leading-relaxed text-muted">
+        Le relevé d&apos;un ensemble géré retient, selon la base choisie, les frais déclarés des rotations et les charges mensuelles de
+        l&apos;ensemble, ou les pièces comptabilisées sur l&apos;ensemble ; il montre toujours les deux. Ses pièces se préparent en brouillon :
+        facture d&apos;achat du propriétaire, refacturation d&apos;une part négative, factures des commissions. Comptes à valider avec
+        l&apos;expert-comptable.
+      </p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Field label="Charges des relevés">
+          <Select disabled={ro} value={settings.owner_cost_basis} onChange={(e) => void send("PATCH", "/transport/settings", { owner_cost_basis: e.target.value }, "Base des relevés enregistrée.")}
+            options={settings.owner_cost_bases.map((b) => ({ value: b.code, label: b.label }))} />
+        </Field>
+        {account("Part des propriétaires", "Vide : 6223, sinon 622 ou 62.", "owner_account_id", settings.owner_account, charges)}
+        {account("Charges refacturées aux propriétaires", "Vide : 7078, sinon 707 ou 706.", "owner_income_account_id", settings.owner_income_account, produits)}
+        {account("Commissions versées", "Vide : 6322, sinon 632 ou 63.", "commission_account_id", settings.commission_account, charges)}
+      </div>
+    </Card>
+  );
+}
+
 function Manquants({ settings, onSaved }: { settings: TransportSettings; onSaved: () => void }) {
   const { message, send } = useSend(onSaved);
   const { data: charges } = useApi<AccountRef[]>(settings.can_edit ? "/finance/accounts?prefix=6&limit=2000" : null);
@@ -206,12 +244,12 @@ function Manquants({ settings, onSaved }: { settings: TransportSettings; onSaved
 const ruleLabel = (rule: ShortageRule | null) => SHORTAGE_RULES.find((r) => r.value === rule)?.label;
 
 function ConditionsClients({ canEdit }: { canEdit: boolean }) {
-  const { data, mutate } = useApi<ClientTerms[]>("/transport/clients");
+  const { data, error, mutate } = useApi<ClientTerms[]>("/transport/clients");
   const { message, send } = useSend(() => void mutate());
   return (
     <Card title="Conditions de manquant des clients" padded={false}>
       {message && <div className="p-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data} rowKey={(c) => c.id} empty="Aucun client du transport (tarif ou rotation)." columns={[
           { key: "name", label: "Client" },
           { key: "shortage_tolerance", label: "Tolérance (%)", render: (c) => (
@@ -230,14 +268,14 @@ function ConditionsClients({ canEdit }: { canEdit: boolean }) {
 
 /** Produits transportés : le code est la clé des saisies de Rotations, il ne change plus une fois créé. */
 function Produits({ canEdit }: { canEdit: boolean }) {
-  const { data, mutate } = useApi<Product[]>("/transport/products");
+  const { data, error, mutate } = useApi<Product[]>("/transport/products");
   const [f, setF] = useState({ name: "", code: "" });
   const { message, send } = useSend(() => void mutate());
   const patch = (p: Product, body: Record<string, unknown>, ok: string) => void send("PATCH", `/transport/products/${p.id}`, body, ok);
   return (
     <Card title="Produits transportés" padded={false}>
       {message && <div className="p-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
-      {!data ? <Loading /> : (
+      {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={data} rowKey={(p) => p.id} empty="Aucun produit." columns={[
           { key: "name", label: "Produit", render: (p) => <Input disabled={!canEdit} className="w-48" defaultValue={p.name} onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== p.name && patch(p, { name: e.target.value.trim() }, "Produit renommé.")} /> },
           { key: "code", label: "Code", render: (p) => <span className="font-mono text-xs">{p.code}</span> },

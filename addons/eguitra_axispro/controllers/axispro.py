@@ -46,6 +46,13 @@ def _dossier(dossier_id):
     return dossier
 
 
+def _consultants():
+    company = request.env.company
+    users = request.env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", company.id)],
+                                                   order="name")
+    return users.filtered(lambda u: u.has_group("eguitra_base.group_profile_cabinet"))
+
+
 def _record(model, record_id, label):
     record = request.env[model].browse(record_id).exists()
     if not record:
@@ -84,11 +91,15 @@ def _policy_payload(policy):
             {"id": g.id, "code": g.code, "name": g.name, "sequence": g.sequence, "description": g.description or None,
              "rule_code": g.rule_code, "threshold_hold": g.threshold_hold or None, "threshold_go": g.threshold_go or None,
              "score_scope": g.score_scope, "domain_ids": g.domain_ids.ids,
+             "min_completeness": g.min_completeness or None,
              "entry_requirements": g.entry_requirements or None, "deliverables": g.deliverables or None,
              "exit_criteria": g.exit_criteria or None}
             for g in policy.gate_ids
         ],
-        "domains": [{"id": d.id, "code": d.code, "name": d.name, "weight": d.weight, "deliverable": d.deliverable or None}
+        "compartments": [{"id": k.id, "code": k.code, "name": k.name, "sequence": k.sequence,
+                          "domain_ids": k.domain_ids.ids} for k in policy.compartment_ids],
+        "domains": [{"id": d.id, "code": d.code, "name": d.name, "weight": d.weight, "deliverable": d.deliverable or None,
+                     "compartment_id": d.compartment_id.id or None}
                     for d in policy.domain_ids],
         "criteria": [
             {"id": c.id, "code": c.code, "name": c.name, "domain_id": c.domain_id.id, "gate_id": c.gate_id.id,
@@ -200,7 +211,7 @@ class EguitraAxispro(http.Controller):
             if data["rule_code"] not in RULES:
                 raise ApiError(400, "invalid_parameter", "Règle de passage inconnue.")
             values["rule_code"] = data["rule_code"]
-        for key in ("threshold_hold", "threshold_go"):
+        for key in ("threshold_hold", "threshold_go", "min_completeness"):
             if key in data:
                 values[key] = _percent(data, key)
         if data.get("score_scope") in dict(SCOPES):
@@ -219,8 +230,23 @@ class EguitraAxispro(http.Controller):
         values = {k: data[k] or False for k in ("name", "deliverable") if k in data}
         if "weight" in data:
             values["weight"] = as_float(data["weight"], "weight")
+        if "compartment_id" in data:
+            wanted = int_value(data["compartment_id"], "compartment_id") if data["compartment_id"] else 0
+            compartment = domain.policy_id.compartment_ids.filtered(lambda k: k.id == wanted)
+            if wanted and not compartment:
+                raise ApiError(400, "invalid_parameter", "Compartiment inconnu dans cette version de la grille.")
+            values["compartment_id"] = compartment.id or False
         domain.write(values)
         return {"status": "ok"}
+
+    @api_route("/axispro/compartments/<int:compartment_id>", methods=("PATCH",), profiles=WRITE)
+    def update_compartment(self, compartment_id, **_kw):
+        compartment = _record("axispro.compartment", compartment_id, "Compartiment")
+        _draft(compartment.policy_id)
+        data = read_json()
+        values = {k: str(data[k]).strip()[:200] for k in ("code", "name") if data.get(k)}
+        compartment.write(values)
+        return _policy_payload(compartment.policy_id)
 
     @api_route("/axispro/criteria/<int:criterion_id>", methods=("PATCH",), profiles=WRITE)
     def update_criterion(self, criterion_id, **_kw):
@@ -308,6 +334,33 @@ class EguitraAxispro(http.Controller):
         dossier.write(self._values(read_json()))
         return dossier_detail(dossier)
 
+    @api_route("/axispro/consultants", profiles=READ)
+    def consultants(self, **_kw):
+        """Consultants du cabinet (profil cabinet, ouverts à la société de travail), à qui confier un
+        compartiment de la grille."""
+        return [{"id": u.id, "name": u.name} for u in _consultants()]
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/assignments", methods=("POST",), profiles=WRITE)
+    def assign(self, dossier_id, **_kw):
+        """Confie un compartiment du dossier à un consultant : {compartment_id, user_id} (user_id vide :
+        retire l'affectation)."""
+        dossier = _dossier(dossier_id)
+        data = read_json()
+        (compartment_id,) = require(data, "compartment_id")
+        compartment = dossier.policy_id.compartment_ids.filtered(
+            lambda k: k.id == int_value(compartment_id, "compartment_id"))
+        if not compartment:
+            raise ApiError(404, "not_found", "Compartiment introuvable dans la grille du dossier.")
+        user = request.env["res.users"]
+        if data.get("user_id"):
+            wanted = int_value(data["user_id"], "user_id")
+            user = _consultants().filtered(lambda u: u.id == wanted)
+            if not user:
+                raise ApiError(422, "business_rule", "Seul un consultant du cabinet ouvert à cette société peut "
+                                                     "recevoir un compartiment.")
+        dossier.assign(compartment, user)
+        return {"status": "ok", "compartments": dossier.scoring()["compartments"]}
+
     @api_route("/axispro/dossiers/<int:dossier_id>/portal-access", methods=("POST",), profiles=WRITE)
     def portal_access(self, dossier_id, **_kw):
         """Ouvre le portail au porteur : compte porteur créé au besoin, mot de passe provisoire."""
@@ -333,7 +386,8 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/criteria", profiles=READ)
     def criteria(self, dossier_id, **kw):
         """Critères du dossier : statut saisi et statut retenu par la méthode (requalification),
-        alertes, priorité de l'écart, preuves et leur validité, livrable, responsable, échéance."""
+        alertes, priorité de l'écart, preuves et leur validité, livrable, responsable, échéance.
+        Filtres : gate_id, compartment_id, mine=1 (compartiments confiés à l'utilisateur)."""
         dossier = _dossier(dossier_id)
         result = dossier.evaluate()
         lines = {x["id"]: x for x in result["lines"]}
@@ -343,9 +397,16 @@ class EguitraAxispro(http.Controller):
         for t in dossier.policy_id.document_type_ids:
             for c in t.criterion_ids:
                 pieces.setdefault(c.id, []).append({"id": t.id, "code": t.code, "name": t.name})
+        owners = {a.compartment_id.id: a.user_id for a in dossier.assignment_ids}
         evaluations = dossier.evaluation_ids
         if kw.get("gate_id"):
             evaluations = evaluations.filtered(lambda e: e.criterion_id.gate_id.id == int_arg(kw, "gate_id"))
+        if kw.get("compartment_id"):
+            wanted = int_arg(kw, "compartment_id")
+            evaluations = evaluations.filtered(lambda e: e.criterion_id.domain_id.compartment_id.id == wanted)
+        if kw.get("mine") in ("1", "true"):
+            mine = {k for k, u in owners.items() if u == request.env.user}
+            evaluations = evaluations.filtered(lambda e: e.criterion_id.domain_id.compartment_id.id in mine)
         rows = []
         for e in evaluations.sorted(lambda e: (e.criterion_id.sequence, e.criterion_id.id)):
             c = e.criterion_id
@@ -353,6 +414,10 @@ class EguitraAxispro(http.Controller):
             rows.append({
                 "id": e.id, "criterion_id": c.id, "code": c.code, "name": c.name, "domain": c.domain_id.name,
                 "domain_id": c.domain_id.id, "domain_code": c.domain_id.code, "gate_id": c.gate_id.id,
+                "compartment_id": c.domain_id.compartment_id.id or None,
+                "compartment": c.domain_id.compartment_id.code or None,
+                "compartment_name": c.domain_id.compartment_id.name or None,
+                "owner": owners[c.domain_id.compartment_id.id].name if c.domain_id.compartment_id.id in owners else None,
                 "gate": c.gate_id.code, "weight": c.weight, "critical": c.critical, "knockout": c.knockout,
                 "evidence_required": c.evidence_required, "requirement": c.requirement_type,
                 "bankability": c.bankability, "guidance": c.guidance or None,

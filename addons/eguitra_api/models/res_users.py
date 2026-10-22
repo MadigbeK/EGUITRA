@@ -14,13 +14,14 @@ class ResUsers(models.Model):
     )
 
     def _eguitra_apps(self):
-        """Applications du compte : un de ses profils l'ouvre, et le compte est ouvert à la société
-        qu'elle sert (AxisPro Suite sans MB AxisPro Consulting n'aurait rien à montrer)."""
+        """Applications du compte : un de ses profils l'ouvre, le compte est ouvert à la société
+        qu'elle sert (AxisPro Suite sans MB AxisPro n'aurait rien à montrer) et son module est installé."""
         self.ensure_one()
         profiles = set(self._eguitra_profiles())
         entities = set(self.sudo().company_ids.mapped("eguitra_entity"))
         return [app for app, spec in APPS.items()
-                if profiles & spec["profiles"] and (not spec["entity"] or spec["entity"] in entities)]
+                if profiles & spec["profiles"] and (not spec["entity"] or spec["entity"] in entities)
+                and (not spec.get("model") or spec["model"] in self.env)]
 
     def _eguitra_check_companies(self):
         """Un profil propre à une société exige que le compte soit ouvert à cette société."""

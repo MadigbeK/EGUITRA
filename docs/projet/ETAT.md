@@ -1,4 +1,4 @@
-# État du projet EGUITRA, au 19 octobre 2026
+# État du projet EGUITRA, au 21 octobre 2026
 
 Ce fichier est la mémoire du projet entre deux sessions de travail. Le mettre à jour à chaque fin de session.
 
@@ -83,8 +83,8 @@ séparément. Règles, décrites en un seul endroit, `addons/eguitra_api/organis
   qui n'est pas ouvert à cette société ne peut pas l'ouvrir. Les routes d'AxisPro refusent de
   travailler dans EGUITRA GROUP, quelle que soit l'application qui les appelle.
 - Profils et applications : un profil ouvre une ou plusieurs applications (administration et
-  direction : tout ; finance : Finance ; cabinet : AxisPro ; exploitation : Finance et Rotations ;
-  porteur : portail). Un profil propre à une société exige que le compte y soit ouvert (exploitation,
+  direction : tout ; finance : Finance ; achats : Finance, partie achats seule ; cabinet : AxisPro ;
+  exploitation : Finance et Rotations ; porteur : portail). Un profil propre à une société exige que le compte y soit ouvert (exploitation,
   chantiers, immobilier : EGUITRA ; cabinet, porteur : MB AxisPro) : contrôlé à l'enregistrement du
   compte, la société est cochée d'office à l'écran.
 - Nouvelle application ou nouveau module : une ligne dans `organisation.py` (APPS, MODULE_ENTITY,
@@ -128,6 +128,7 @@ séparément. Règles, décrites en un seul endroit, `addons/eguitra_api/organis
 | `addons/eguitra_chantier` | Chantiers, situations d'avancement, facturation, retenues de garantie (4117) et leur libération. |
 | `addons/eguitra_immobilier` | Biens, baux, loyers récurrents (module OCA `contract`) facturés et validés chaque nuit, impayés, quittances. |
 | `addons/eguitra_axispro` | Politique d'évaluation versionnée (grille importée), dossiers, évaluation par gate, score, éliminatoires, recommandation, écarts, data room, comités verrouillés et comparés, rapports, temps et honoraires, portail des porteurs. |
+| `addons/eguitra_portail` | Portail des porteurs (22 octobre) : communications ciblées du cabinet avec accusé de lecture, centre de ressources (rubriques, articles, guides, questions fréquentes, modèles à télécharger, recommandés selon l'étape du dossier), événements et formations (inscriptions, liste d'attente, présence), rendez-vous (demande sur créneaux, confirmation, compte rendu partagé), notifications (créées par les événements du dossier AxisPro, rappels du matin), messages lus, avis des porteurs (note et recommandation), pièces jointes aux messages ; API du porteur `/portail/...` et outils du cabinet `/axispro/portail/...`. |
 | `apps/web` | Les quatre surfaces web (33 écrans), la passerelle sécurisée, l'application Rotations hors ligne. |
 | `scripts/dev/sync.sh` | Envoi du code sur le serveur de recette. |
 | `scripts/recette/donnees_demo.py` | Données fictives « Démo » pour la recette (transport, achats, chantier, biens, AxisPro). |
@@ -146,11 +147,22 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Base `eguitra`, neuf modules (dont `eguitra_analytics`, NIMOVA · Analyse), deux sociétés, vide de données (en attente de la reprise). Version en service : 20261018-0806 (commit 1cf033b), mise en production le 18 octobre à 8 h 06 à la demande du gérant (sauvegarde de base prise juste avant, module d'analyse installé par `release.sh`) ; noyau et applications répondent, supervision sans alerte. Versions précédentes : 20261017-2328 (finance 19.0.1.5.0, transport 19.0.1.2.0 ; `monitor-install.sh` relancé), 20261014-1548 ; historique : `infra/release.sh --list`.
+- Version en service : 20261022-1012 (commit e396cf6), mise en production le 22 octobre à 10 h 13 (sauvegarde prise à 10 h 12) : outil de scoring v3 et compartiments AxisPro, grille AxisPro importée et en vigueur, portail des porteurs (`eguitra_portail` installé), application Transport, profil Achats et saisie libre enfin appliqués dans les écrans (passerelle `/auth/me`), design. Dix modules ; `eguitra_rh` pas encore installé. Détail au chapitre 7 (22 octobre).
+- Base `eguitra`, deux sociétés « EGUITRA GROUP SARLU » et « MB AxisPro », vide de données (en attente de la reprise). Version précédente : 20261021-1655 (commit 574b21d : le module ouvert depuis l'accueil reçoit la société affichée, et Analyse passe d'elle-même dans les livres de la section demandée quand le compte y est ouvert ; défaut signalé par le gérant, Pipeline ouvert depuis l'accueil sur MB AxisPro affichait EGUITRA), mise en production le 21 octobre à 16 h 56, sauvegarde prise juste avant. Versions précédentes du jour : 20261021-1645 (commit 7fb8cf3 : nouvelle page de connexion de la session design, photo d'équipe ; verrou du mot de passe commun de la recette, inactif en production), 20261021-1536 (commit 8cf57ee : logo NIMOVA « le pli », icônes et cache `rotations-v3` de Rotations ; application web seule, aucun module changé), mise en production le 21 octobre à 15 h 36 à la demande du gérant (sauvegarde prise juste avant) ; noyau et applications répondent, page de connexion contrôlée en HTTPS. Version précédente : 20261021-1505 (commit 63bf889 : profil Achats, libellés « MB AxisPro » et « BTP » avec migration d'`eguitra_base` 19.0.1.4.0, conventions d'amortissement des biens repris, `eguitra_finance` 19.0.1.7.0), mise en production le 21 octobre à 15 h 05 après 315 tests au vert sur les neuf modules (sauvegarde prise juste avant) ; noyau et applications répondent. Adresses publiques provisoires en HTTPS, en attendant nimova.gn : https://finance.178-33-206-212.sslip.io, https://axispro.178-33-206-212.sslip.io, https://portail.178-33-206-212.sslip.io (recette : https://recette.178-33-206-212.sslip.io). Versions précédentes : 20261021-1303 (direction visuelle « papier-valeur », menus du haut, bandeau des dossiers AxisPro), 20261021-1218 (export Excel d'Analyse, correctif de la page de changement du mot de passe ; le même code avait été mis en production six minutes plus tôt par une autre session, 20261021-1212 : à l'avenir une seule session pour la production), 20261018-0806 (NIMOVA · Analyse), 20261017-2328 (finance 19.0.1.5.0, transport 19.0.1.2.0 ; `monitor-install.sh` relancé), 20261014-1548 ; historique : `infra/release.sh --list`.
+- Double authentification suspendue le 21 octobre à la demande du gérant, pendant la prise en main des comptes du client (même paramètre que la recette). Écart à l'offre (chapitre 5.3) : **à rétablir avant la reprise des données réelles** (paramètre à 1, puis redémarrage du noyau).
 - Tâches de nuit actives : quittancement des loyers, dotations aux amortissements, relances des clients, purges (jetons, journaux d'accès, tentatives). La génération du module `contract` est désactivée.
 - Identité des sociétés (adresse, NIF, RCCM, logo) à saisir dans Administration > Sociétés dès réception des informations du client : elles figurent en tête et au pied des factures.
 - Super administrateur `emkouyate` (Madigbè Kouyaté, E-VOLUTION XP), créé le 15 octobre à la demande du gérant : tous les profils internes (administration, direction, finance, exploitation, chantiers, immobilier, cabinet), deux sociétés, mot de passe provisoire choisi par le gérant, à remplacer à la première connexion avec l'activation de la double authentification. Contrôlé le 16 octobre : compte actif, mot de passe définitif choisi, double authentification activée, aucun échec de connexion, noyau et applications de production en service.
 - Administrateur `m.kouyate` (Madigbè Kouyaté), ouvert aux deux sociétés. Mot de passe provisoire dans `~/eguitra/infra/secrets/production-admin.txt` sur le serveur (lisible du seul utilisateur `deploy`) : à la première connexion, activer la double authentification puis choisir le mot de passe ; supprimer ensuite ce fichier.
+- Comptes du client (21 octobre, liste reçue par le gérant) : sept comptes, identifiant = adresse
+  électronique professionnelle, créés par `scripts/comptes/comptes.py` (liste dans
+  `infra/secrets/comptes-client.json` du serveur, jamais dans le dépôt) : direction (deux sociétés),
+  finance (deux sociétés), achats (EGUITRA GROUP), exploitation et cabinet (deux sociétés), deux comptes
+  cabinet (MB AxisPro, dont un en attendant le module RH annoncé pour plus tard), exploitation (EGUITRA
+  GROUP). Mots de passe provisoires dans `infra/secrets/comptes-client-production.tsv` (lisible du seul
+  utilisateur `deploy`) ; à la première connexion : nouveau mot de passe et double authentification.
+  Relancer le script avec la liste complète met à jour profils et sociétés sans toucher aux mots de
+  passe existants.
 - Restauration de la base de production vérifiée le 14 octobre (sauvegarde de 13 h 21).
 
 ### Recette
@@ -164,6 +176,293 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Sauvegardes de la production actives en local ; copie hors site en attente du stockage objet.
 
 ## 7. Prochaines étapes
+
+**22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
+portail, complet, carte blanche »). Fait :
+- Module `eguitra_portail` 19.0.1.0.0 (dépend d'`eguitra_axispro` sans modifier ses fichiers), 8 tests au
+  vert. Le porteur ne lit que ses dossiers et les publications dont il fait partie du public ; jamais le
+  scoring, les notes internes ni les critères. Indicateur « préparation du dossier » propre au portail
+  (pièces 50 %, actions 30 %, étapes 20 %), distinct du score du cabinet. La fiche de l'entreprise ne
+  change pas depuis le portail : la demande part au consultant (revue de sécurité).
+- Écrans du porteur (`apps/web/app/portail/`, coquille `components/portail/PortailShell.tsx`) : accueil
+  (prochaines étapes, à venir, fil du projet, actualités, conseils de l'étape), mon projet (équipe,
+  financements, fil complet), pièces et data room, plan d'actions, messagerie avec pièces jointes,
+  rendez-vous (ajout à l'agenda .ics), actualités, conseils et ressources, événements et formations,
+  agenda, simulateurs (prêt, DSCR, seuil de rentabilité, BFR), notifications, profil, avis.
+- Outils du cabinet (`apps/web/app/axispro/portail/`, menu Cabinet > « Portail des porteurs ») :
+  synthèse, messagerie de tous les dossiers (notes internes), communications, ressources, événements et
+  inscriptions, rendez-vous, porteurs et avis.
+- Neuf contenus de conseil proposés à l'installation, **en brouillon, à relire et publier par le
+  cabinet** (rien n'est publié en production sans lui). Recette : publiés, avec communications,
+  événements, rendez-vous et échanges de démonstration (`scripts/recette/portail_demo.py`). Comptes de
+  test : `test.porteur` et `porteur.demo` (portail), `test.consultant` (cabinet).
+- `infra/test.sh` installe désormais un module nouveau (première commande en `-i` et `-u`) ; le module
+  est dans `release.sh`, `init-db.sh` et `scripts/reprise/essai.sh`. Protocole entre sessions : on se
+  prévient avant chaque `test.sh` (base `eguitra_ci` partagée).
+- Reste : courriels de notification quand le serveur d'envoi sera fourni (aujourd'hui, notifications
+  dans le portail seulement) ; pagination des notifications et des rendez-vous anciens ; publication
+  des neuf contenus proposés par le cabinet (brouillons en production).
+- **En production depuis la version 20261022-1012** (22 octobre, 10 h 13, mise en production conduite
+  par la session AXISPRO SUITE) : tests des dix modules sur ce code, 342 au vert ; répétition sur une
+  copie de la base de production ; contrôlé ensuite : portail installé (6 rubriques, 9 contenus en
+  brouillon), routes du portail et d'AxisPro en service, double authentification toujours suspendue
+  (choix du gérant), aucune erreur au journal du noyau.
+- `infra/test.sh` affiche « ÉCHEC » quand une longue série de tests se termine : les contrôles de
+  santé du conteneur, en attente pendant les tests, sont servis à l'arrêt et ne peuvent plus écrire
+  au journal des accès (« cursor already closed »). Lire le décompte « 0 failed, 0 error(s) of N
+  tests » ; à corriger dans le script (ignorer cette ligne ou couper le contrôle de santé du conteneur
+  de test).
+
+**22 octobre, nuit : outil de scoring du cabinet, version 3 (AxisPro)**, demandé par le gérant (« intègre
+tout, carte blanche »). Reçu : deux versions du classeur « MB AxisPro Outil Scoring Maturité Projet »
+(réf. MBAP/PROJECT-DEVELOPMENT/SC-01). L'ancienne (111 critères, 15 domaines, 8 gates) est la grille v2
+déjà en service. La nouvelle compte 104 critères (domaine SPV / Gouvernance retiré), 14 domaines
+renommés en clair, 8 compartiments d'expertise C0 à C7 confiés chacun à un consultant, 7 gates (gate
+SPV fusionné avec le financial close), 39 pièces et une notice sous chaque onglet. Les classeurs restent
+hors du dépôt (document du client, nom du mandat) : `infra/secrets/grille/` du serveur.
+- Fait (eguitra_axispro 19.0.1.3.0, migration de la piste d'audit) :
+  - Import natif de l'outil du cabinet (`addons/eguitra_axispro/grille_cabinet.py`). Règles des gates
+    déduites des noms, seuils, complétude minimale et domaines contrôlés lus dans Stage_Gate ; seuils
+    et barème lus dans Parametres (barème différent refusé). Codes, aides, livrables, indicateurs et
+    rattachements des pièces repris de la version en vigueur. L'ancien classeur redonne exactement la v2.
+  - Réglages du classeur : un knock-out incomplet ne bloque pas, « non applicable » vaut 1 point.
+  - Compartiments, consultant par compartiment sur un dossier (journal), suivi par compartiment
+    (score, manques, études renseignées, knock-outs), check-list filtrée (« Mes compartiments »),
+    complétude documentaire minimale pour examiner un gate (HOLD en dessous).
+  - Exports et réimport de l'outil rempli hors ligne (études à produire), compartiment des actions.
+  - Analyse : bloc « Par compartiment d'expertise » du diagnostic des projets, deux constats.
+  - Guide du cabinet, cahier de recette (A01 revu, A12 à A14). Tests : 55 AxisPro et 10 Analyse du
+    cabinet au vert.
+  - Passerelle web : `GET /auth/me` ouvert au navigateur. Il était refusé (404), si bien que le profil
+    Achats seul et la saisie libre des comptes ne s'appliquaient jamais dans les écrans, en production
+    aussi : à mettre en production.
+- Recette : modules mis à jour le 22 octobre à 01 h 00, grille v3 importée et en vigueur (version 3 :
+  7 gates, 8 compartiments, 14 domaines, 104 critères, 9 knock-outs, 39 pièces, 95 rattachements ;
+  30 critères sans pièce rattachée) ; dossiers de démonstration restés sur leur version ; web-recette
+  reconstruit. Incident : `apps/web/lib/nav.ts` du serveur était rempli d'octets nuls (écrit à 00 h 40,
+  origine inconnue) et bloquait toute reconstruction ; remplacé par la version commitée.
+- Production (22 octobre, 10 h 13, mandat du gérant : « tout terminer, tester et mettre en production ») :
+  version 20261022-1012 (commit e396cf6, toutes les sessions), conduite par la session AxisPro seule
+  (verrou `~/eguitra/logs/mise-en-production.lock`, accord écrit des autres sessions, qui avaient reçu
+  la même consigne : à l'avenir, une seule session reçoit la mise en production). Avant : serveur en
+  miroir exact du commit poussé, 342 tests au vert sur les dix modules (seule ligne ERROR : une requête
+  /health écrite au journal d'accès pendant l'arrêt du serveur de test), répétition générale sur une
+  copie de la base de production restaurée à part (-i/-u des dix modules sans erreur, import de la
+  grille, copie supprimée). Puis grille AxisPro importée et en vigueur en production (version 1 :
+  7 gates, 8 compartiments, 104 critères, 39 pièces, 95 rattachements), exportée à l'identique de la
+  recette (`scripts/grille/exporter.py`, puis `importer.py` avec `GRILLE_REGLAGES`). Contrôles :
+  `eguitra_api.mfa_required` resté à 0 (demande du gérant), `eguitra_portail` installé, `eguitra_rh`
+  absent et aucune application « rh » visible, /login 200 sur les trois adresses, `/api/odoo/auth/me`
+  401 sans session et `/auth/login` toujours fermé. Verrou libéré pour la session RH (seconde mise en
+  production, avec `eguitra_rh`).
+- À demander au cabinet : le questionnaire Word de préqualification (14 sections, une par domaine,
+  section 19 : fiche de synthèse), qui pourrait devenir le formulaire du porteur au portail.
+
+**22 octobre : module RH (NIMOVA · RH)**, à la demande du gérant (« une gestion complète, simple et
+intelligente des ressources humaines », carte blanche). La paie était hors du périmètre de l'offre
+(chapitre 3) : évolution demandée par le gérant. Spécification : `docs/projet/rh/specification.md` ;
+guide : `docs/guides/guide-rh.md` (et `word/Guide_rh.docx`).
+- Fait, socle : profil « Ressources humaines » (`rh`, eguitra_base 19.0.1.5.0), application `rh`
+  (administration, direction, RH ; les deux sociétés). Un compte lié à un dossier salarié en cours
+  ouvre aussi l'espace, réduit à « Mon espace ».
+- Fait, noyau (`addons/eguitra_rh`, 16 tests) : salariés (matricule EG-/AX- par société, fiche tiers
+  pour le 422, éléments fixes, documents à échéance, historique du salaire avec motif), départements,
+  absences en jours ouvrables (lundi au samedi, jours fériés de la Guinée 2026-2027, fêtes musulmanes
+  2027 estimées), soldes de congés calculés (2,5 jours par mois, solde de reprise), décision par la
+  RH, la direction ou le responsable hiérarchique, avances et prêts retenus sur la paie ; paie du mois
+  (prorata, absences non rémunérées, heures majorées, prime par rotation des chauffeurs si
+  paramétrée, CNSS 5 % et 18 % plafonnée à 2 500 000, RTS au barème du CGI art. 63 vérifié dans le
+  texte officiel, exonération des indemnités forfaitaires dans la limite de 25 % du brut, VF 6 %,
+  taxe d'apprentissage 2 %), contrôles avant validation, bulletin (net en lettres, cumuls), écriture
+  de paie en brouillon dans le journal « Salaires » (SAL, créé au besoin ; 661/663/664/641, 431, 4472,
+  4478, 4211, 422 au nom de chaque salarié, axe d'activité), export Excel (livre de paie, virements,
+  CNSS, impôts), simulateur (du net au salaire de base), échéancier (fins d'essai et de CDD,
+  documents, soldes élevés, paie non validée, fiches incomplètes, anniversaires). Revue de sécurité :
+  références écrites dans un dossier contrôlées contre la société de travail (signalé par la session
+  Transport).
+- Fait, web : espace `/rh` (thème prune), 14 écrans (tableau de bord, salariés et fiche, absences et
+  planning, avances, paie, bulletin imprimable, simulateur, Mon espace, paramètres, guide).
+- Recette (22 octobre) : `eguitra_rh` installé, `eguitra_base` mis à jour, noyau redémarré,
+  application web reconstruite ; données fictives chargées (`scripts/recette/donnees_demo_rh.py` :
+  12 salariés des deux sociétés, documents à échéance, absences, une avance, paie de septembre
+  validée) ; `recette.admin` reçoit le profil RH ; test.dg, test.exploitation, test.parc et
+  test.consultant sont liés à des dossiers pour essayer « Mon espace ». Vérifié dans le navigateur :
+  tableau de bord, paie de septembre, bulletin imprimable (montants recalculés à la main) ; et par
+  l'API : libre-service de test.parc (son dossier, son solde, son bulletin ; liste du personnel 403,
+  `/rh` renvoyé vers `/rh/moi`). Soldes de congés des dossiers fictifs élevés faute de solde de
+  reprise : à la reprise réelle, saisir le solde et sa date pour chaque salarié.
+- **À faire valider par l'expert-comptable et la CNSS avant la première paie réelle** : taux et
+  plafond CNSS, SMIG, traitement des indemnités, taxe d'apprentissage ou contribution de 1,5 % à la
+  formation professionnelle selon l'effectif, comptes de paie (CNSS par défaut sur la racine 431).
+- **Gestion commune aux deux sociétés** (remarque du gérant : « comme le cas des finances »), commits
+  200029c et 3fb7e95 : un seul service RH, mêmes listes et tableau de bord consolidé (filtre Société),
+  employeur légal choisi à l'embauche, une paie par société préparées ensemble, départements communs
+  (gérés par un compte ouvert aux deux sociétés, revue de sécurité de la session AxisPro) ou propres à
+  une société, responsable hiérarchique de l'une ou l'autre ; taux, barème, congés, heures, alertes et
+  comptes communs, numéro d'employeur CNSS, taxe de formation et journal propres à chaque société.
+  Écrans de gestion fermés au libre-service (renvoi vers Mon espace, 32680ba). L'application `rh`
+  n'est accordée que là où le module est installé (b215d21). 71 tests au vert (eguitra_rh,
+  eguitra_transport ; eguitra_api et eguitra_base au passage précédent). Recette mise à jour et
+  vérifiée (12 salariés des deux sociétés dans une liste, paie par société).
+- **Production (22 octobre, 10 h 30, carte blanche du gérant)** : version 20261022-1030 (32680ba),
+  `eguitra_rh` installé (ajouté à `MODULES` de `release.sh`, à `init-db.sh` et à `essai.sh`),
+  sauvegarde prise juste avant ; vide de données (19 rubriques, 9 types d'absence, 18 jours fériés) ;
+  contrôlé : noyau et applications sains, paramètres de connexion et grille AxisPro en vigueur
+  inchangés. La direction et l'administration voient
+  l'espace RH ; pour la personne chargée des RH, lui donner le profil « Ressources humaines »
+  (Administration > Utilisateurs) à la place du profil cabinet provisoire. Saisie des dossiers et des
+  congés possible dès maintenant ; **première paie réelle seulement après validation des taux** (point
+  ci-dessus).
+
+**22 octobre : ensembles gérés pour des propriétaires et coûts standard** (écarts 5.1 et 5.2 de
+l'analyse du logiciel actuel, sur l'accord du gérant : « poursuis »). `eguitra_transport` 19.0.1.3.0.
+- Fait, noyau : propriété de l'ensemble (propre, géré pour un propriétaire) et charges mensuelles
+  (prorata des jours, charge annuelle au douzième) ; règles de répartition en % du chiffre d'affaires
+  brut, par ensemble ou par catégorie ; relevés par ensemble et par période (frais déclarés et
+  charges mensuelles, ou pièces comptabilisées sur l'ensemble, selon le paramètre ; les deux
+  montants gardés), figés, imprimables (PDF) et exportables (Excel) ; pièces en brouillon (facture
+  d'achat du propriétaire, refacturation d'une part négative, factures des commissions des tiers),
+  supprimées si le relevé est rouvert. Coûts standard des routes (litres aller et retour, prime,
+  péages, autres frais) et prix du carburant datés ; coût standard et marge estimée des rotations,
+  mis à jour tant qu'elles sont saisies, figés à la validation ; rentabilité avec coûts standard ;
+  contrôle des forfaits de carburant incohérents (écart de plus de 40 % à la médiane au km).
+  Routes `/transport/share-rules`, `/transport/fuel-prices`, `/transport/owner-statements` (lecture
+  administration, direction, finance ; écriture administration, finance). Piste d'audit étendue
+  (migration 19.0.1.3.0). 10 tests ; 54 tests du module au vert sur base jetable.
+- Fait, application web : onglet « Propriétaires » (relevés du mois, détail, PDF, Excel, pièces,
+  règles de répartition), propriété et charges dans « Flotte et chauffeurs », forfaits et prix du
+  carburant dans « Routes et tarifs », gain estimé dans le formulaire de rotation, marge estimée dans
+  la liste tant qu'aucun frais n'est saisi, paramètres des relevés (base, comptes).
+- Recette : module mis à jour (`-u eguitra_transport`), noyau redémarré, application web reconstruite.
+- À décider avec l'expert-comptable : traitement des ensembles gérés (mandat ou commission) et comptes
+  (par défaut 6223 part des propriétaires, 7078 refacturation, 6322 commissions, avec repli sur la
+  racine) ; avec le client : contrats des propriétaires et du partenaire (questions 7 à 11 de
+  l'analyse).
+- Production : par `infra/release.sh` après validation du gérant (module transport à mettre à jour).
+
+**22 octobre : NIMOVA · Transport, application à part entière** (décision du gérant : « TRANSPORT est
+un module comme AxisPro Suite et Finance »).
+- Noyau : application `transport` dans `organisation.py` (profils administration, direction,
+  finance, exploitation ; société servie : EGUITRA GROUP). Liens des alertes et des constats
+  d'Analyse vers les pages du transport (`/transport/rentabilite`, `/transport/rotations`,
+  `/transport/manquants`). Contrôle du tiers propriétaire ou bénéficiaire (lisible, commun ou de la
+  société de travail), à la suite de la revue de sécurité.
+- Web : espace `/transport` (accent ambre) : tableau de bord (chiffres du mois, contrôles, rotations
+  à traiter), Rotations, Manquants, Rentabilité, Propriétaires et répartition (direction et
+  finance), Taxes spécifiques, Flotte et chauffeurs, Routes et tarifs, Paramètres ; registre des
+  applications, navigation, accueil (rayon Transport), bascule des espaces, passerelle (en-tête
+  X-Eguitra-App), garde des pages. Les écrans sont des composants partagés
+  (`components/transport/`). L'ancienne adresse `/finance/transport` redirige ; l'entrée Finance >
+  Métiers > Transport disparaît. Le profil exploitation garde Finance (engagements, validations).
+- Maquette d'API : application transport, relevés, règles, prix du carburant, contrôles. Vérifié
+  dans le navigateur sur la maquette (connexion, accueil, tableau de bord, relevés, pièces, flotte,
+  charges, routes, gain estimé).
+- Tests : 86 tests d'eguitra_api et d'eguitra_transport sur une base jetable séparée
+  (`eguitra_ci_transport`, les sessions parallèles se gênant sur `eguitra_ci`), tous au vert pour le
+  transport ; seul `test_admin` échoue, sur la version non committée de la session RH (profil « rh »
+  attendu). Idée pour `infra/test.sh` (en cours de modification par une autre session) : un nom de
+  base jetable paramétrable, pour que deux sessions testent en même temps.
+- Recette : noyau à jour (redémarré par la session AxisPro). Application web à reconstruire : la
+  construction échoue sur l'état intermédiaire des fichiers RH envoyés au serveur (`lib/nav.ts` abîmé,
+  registre « rh » sans la coque correspondante) ; la session RH est prévenue. Ensuite `/transport`
+  apparaîtra sur la recette ; l'écran Finance > Transport de la version en service porte déjà les
+  relevés des propriétaires et les coûts standard.
+- Production : en service depuis la version 20261022-1012 (22 octobre, 10 h 13 ; code e396cf6 ;
+  release.sh mené par la session AXISPRO SUITE après 342 tests sans échec et une répétition générale
+  sur une copie de la base de production). Vérifié : /transport et sa connexion, transport
+  19.0.1.3.0, quatre nouvelles tables, piste d'audit des onze modèles du transport, journal sans
+  erreur, double authentification toujours coupée (mfa_required = 0, demande du gérant).
+- Constat à traiter à part : la passerelle web refuse toute route `/auth/*`, si bien que
+  `useSaisieLibre()` et `useAchatsSeul()` (lecture de `/auth/me` dans le navigateur, `lib/api-client.ts`)
+  reçoivent toujours 404 ; l'écran Transport lit donc ses droits dans `/transport/settings`
+  (`sees_accounts`).
+
+**21 octobre fin d'après-midi : mise en production 20261021-1505 et comptes du client.**
+- Décisions du gérant sur la liste des utilisateurs : un vrai profil « Achats » pour la responsable
+  des achats ; module RH plus tard (la personne concernée reçoit en attendant le profil cabinet) ; société
+  nommée « MB AxisPro » ; « Chantiers » renommé « BTP » à l'écran ; on n'attend pas nimova.gn pour
+  ouvrir la production.
+- Fait : profil Achats (engagements, pièces d'achat, fournisseurs sans soldes, demandes, guide
+  `docs/guides/guide-achats.md`) ; 315 tests au vert ; mise en production 20261021-1505 ; production
+  ouverte sur les adresses provisoires `*.178-33-206-212.sslip.io` ; sept comptes du client créés
+  (chapitre 6).
+- À faire : remettre à chacun son identifiant, son mot de passe provisoire et l'adresse (le gérant,
+  depuis le fichier protégé du serveur) ; saisir l'identité des sociétés ; bascule vers nimova.gn dès
+  la finalisation (`infra/domaines.sh`) ; reprise des données en production après le choix de la
+  convention d'amortissement.
+
+**21 octobre après-midi : convention d'amortissement des biens repris, essai outillé, domaines.**
+- Les trois conventions de la décision 1 sont prêtes, au choix de l'expert-comptable, par une seule
+  variable `REPRISE_CONVENTION_AMORTISSEMENT` (reprise.sh) et l'option `--convention` du contrôle :
+  `plateforme` (défaut, rattrapage de l'écart de reprise en janvier, dotations de l'exercice
+  d'environ +10 %), `fin-de-plan` (écart reporté sur la dernière dotation du plan, environ +0,8 %),
+  `prototype` (mois entiers à compter du mois qui suit l'acquisition, arrondis seulement). Détail :
+  `scripts/reprise/README.md`. `eguitra_finance` 19.0.1.6.0 avec migration ; paramètre système
+  `eguitra_finance.takeover_gap` (`first` ou `last`) pour les reprises faites ensuite à l'écran.
+  Note de réponse aux attentes (décision 1) mise à jour et régénérée.
+- Tests : 304 au vert sur les neuf modules avant la fusion ; `eguitra_finance` seul ensuite,
+  120 au vert (dont les 6 de `TestTakeoverConventions`). Le test de la piste d'audit exigeait les
+  modèles d'`eguitra_approval` même quand ce module n'est pas installé (test d'`eguitra_finance` seul) :
+  corrigé. Recette mise à jour (`-u eguitra_finance`, noyau redémarré). La production recevra
+  19.0.1.6.0 à la prochaine mise en production, menée par la session « AXISPRO SUITE » avec le profil
+  Achats (qui prendra 19.0.1.7.0 s'il modifie `eguitra_finance`).
+- Essai de reprise outillé : `scripts/reprise/essai.sh dossier` (base jetable `eguitra_reprise_essai`,
+  copie de la base modèle des tests, reprise enregistrée, dotations jusqu'à la date d'arrêté et
+  résultat « n/26 » par `validation.py`, sans montant) remplace `~/essai_complet.sh` et
+  `~/validation_essai.py`. Essais du 21 octobre sur le dossier réel, 18/26 dans les deux cas, comme
+  le contrôle hors ligne : convention `plateforme`, dotations +10,0 % et résultat net -50,8 % ;
+  convention `fin-de-plan`, dotations +0,77 %, résultat net -3,9 %, capitaux propres -0,14 %, totaux
+  du bilan -0,05 % (20 biens sur 24 portent un écart de reprise sur leur dernière dotation). La
+  convention `prototype` reste à essayer dans la plateforme (dossier converti par `dossier_json.py
+  --convention=prototype`).
+- Domaines : `infra/domaines.sh verifier|appliquer nimova.gn` contrôle les enregistrements A (finance,
+  axispro, portail, recette, noyau), inscrit les noms dans `infra/.env` (copie de l'ancien fichier),
+  recrée le proxy et contrôle le HTTPS. nimova.gn commandé chez Afribone, en attente de finalisation ;
+  d'ici là la production est servie sur des adresses provisoires `*.178-33-206-212.sslip.io` (session
+  « AXISPRO SUITE », ancien `.env` copié dans `infra/secrets/env.avant-domaines-provisoires`). Après
+  la bascule : rétablir la double authentification de la recette si les tests sont finis.
+- Logo NIMOVA « le pli » (session design, validé par le gérant) fusionné et en recette (application
+  web reconstruite, commit 76732c4) ; cache hors ligne de Rotations passé en `rotations-v3` pour
+  livrer les nouvelles icônes. En production depuis la version 20261021-1536.
+- Engagement de confidentialité court du prestataire, à signer avant la remise des données réelles
+  (`docs/projet/Engagement_de_confidentialite.docx`, générateur `engagement-de-confidentialite.js`),
+  en complément de l'accord réciproque. Engagements à tenir : réglage de confidentialité de
+  l'assistant d'IA (pas d'entraînement), disque du poste chiffré, base d'essai `eguitra_reprise_essai`
+  (données réelles, grappe de recette) à effacer dès la convention d'amortissement décidée.
+- Recette : un mot de passe commun à tous les comptes, que personne ne modifie, à la demande du
+  gérant (`scripts/recette/mot_de_passe_commun.py`, paramètre `eguitra_api.shared_password` ; refus
+  403 `password_locked` des changements et réinitialisations). Valeur choisie par le gérant, dans le
+  fichier protégé du serveur `infra/secrets/recette-mot-de-passe-commun.txt`. Tests de l'API : 32 au
+  vert (test du profil Achats rendu valable sans `eguitra_finance` installé).
+- Poste de travail : disque C: saturé le 21 octobre (0 octet libre, fusion git impossible) ; place
+  libérée par le gérant. Surveiller l'espace libre avant les constructions et les analyses de vidéo.
+
+**21 octobre : analyse du logiciel de transport actuel** (vidéo de présentation reçue par le gérant,
+43 minutes). Le logiciel est Datakö Fleet Manager (service en ligne, formule Business) : 5 citernes,
+8 conducteurs, 13 routes, environ 45 rotations en 2026, historique de mai à octobre. Synthèse,
+comparaison avec `eguitra_transport`, correspondance des données et questions au client :
+`docs/projet/analyse-systeme-transport-actuel.md`. La vidéo, les images, la transcription et les notes
+détaillées restent hors du dépôt (données du client ; `.gitignore` exclut les vidéos).
+- Constats : outil de pilotage aux coûts forfaitaires (carburant au prix officiel du mois, recalculé
+  rétroactivement), sans facture ni comptabilité, encaissement coché par livraison ; chiffre d'affaires
+  sur le livré, manquant sans tolérance (fret perdu seulement). NIMOVA réglé sur « constat seulement »
+  reproduit ce calcul.
+- Écarts à combler, proposés au gérant : camions gérés pour des propriétaires tiers avec règles de
+  répartition et relevé mensuel (5.1), coûts standard par route et gain estimé figé à la saisie (5.2),
+  dossier de livraison (5.3), documents et conformité des véhicules (5.4), simulation d'investissement
+  (5.5). Décision du gérant attendue sur le périmètre (offre ou évolution).
+- Reprise : demander à Datakö un export complet (l'export Excel des livraisons arrondit le tarif et omet
+  conducteurs, coûts et encaissements) ; expliquer l'écart entre 383 rotations (classeur cité par
+  l'offre) et environ 45 dans Datakö.
+- Analyse chiffrée (même jour) : valeurs de la vidéo relevées et recalculées au franc près ; classeur
+  confidentiel remis au gérant, hors dépôt (scratchpad de la session). Conclusions sans montants au
+  chapitre 9 du document : marge de Datakö sans salaires, entretien réel, amortissement ni crédit-bail ;
+  flotte peu employée ; camions gérés à l'arrêt ; forfaits de carburant incohérents ; simulateur sans
+  charges variables. Deux questions ajoutées (26 au total).
+- Convertisseur `scripts/reprise/datako.py` (export « Livraisons » de Datakö vers `routes.csv`,
+  `ensembles.csv`, `rotations.csv`, avec tarifs à deux décimales, forfaits de route et prix mensuel du
+  carburant en compléments) ; testé sur les livraisons d'octobre relevées : chiffre d'affaires
+  retrouvé au franc. Documenté dans `scripts/reprise/README.md`.
 
 **19 octobre : rechargement sans fin de la page de changement du mot de passe** (signalé par le gérant
 après réinitialisation du mot de passe de `test.dg` en recette). Cause : le cadre de la page interroge
@@ -398,7 +697,7 @@ reçus le 14 septembre, conservés hors dépôt ; courrier : `docs/client/2026-0
 0. **Mis de côté le 15 octobre, à reprendre avec le gérant** : nouvelle identité du SIG, « NIMOVA », envoyée par le DG (« le fondamental reste », « l'outil doit être unique à nous ») et choix du nom de domaine (nimova.com, nimova.cloud ou nimovagroup.com). Message et fichiers : `docs/client/2026-10-15-identite-nimova/`.
 1. Prérequis client à relancer (bloquants pour la reprise et la mise en production) : charte graphique et logos, classeur 2026 (dernière version), relevés bancaires 2026, plan de comptes et contact de l'expert-comptable, liste des utilisateurs par profil, grille AxisPro officielle (111 critères) et liste des pièces de la data room, accès aux noms de domaine.
 2. Stockage objet hors site (second hébergeur, environ 100 Go) : créer le bucket, remplir `infra/backup.env`.
-3. Noms de domaine : pointer finance.*, axispro.*, portail.* et le domaine technique vers le serveur, puis `docker compose --profile proxy up -d`.
+3. Noms de domaine : `nimova.gn` commandé le 21 octobre chez Afribone (DNS gérés par Afribone), en attente de finalisation. Ensuite : enregistrements A vers 178.33.206.212 pour finance, axispro, portail (ou le domaine du cabinet), recette et noyau ; renseigner FINANCE_DOMAIN, AXISPRO_DOMAIN, PORTAIL_DOMAIN, RECETTE_DOMAIN et CORE_DOMAIN dans `infra/.env` et recharger le proxy (déjà en service, ports 80 et 443 ouverts) ; rétablir la double authentification de la recette avant de l'ouvrir sous ce nom.
 4. Reprise des données dès réception du classeur : remplir les modèles de `scripts/reprise/modeles/` (tiers, soldes d'ouverture, écritures, budget, rotations 2026), contrôler puis appliquer sur la recette ; immobilisations et emprunts par les écrans. Relevés bancaires 2026 par l'écran Trésorerie.
 5. Validation du plan de comptes et des correspondances des états SYSCOHADA avec l'expert-comptable ; paramétrage des seuils d'approbation et d'alerte avec le DG.
 6. Première connexion du gérant à la production (`m.kouyate`), puis création des comptes du client avec leurs sociétés ; jamais de données de démonstration en production.

@@ -3,18 +3,18 @@
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Printer, ScrollText } from "@/components/icons";
 import { CachetDocument } from "@/components/brand";
-import { Badge, Button, Card, DataTable, Loading, Segmented } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Segmented } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import { ACTION_STATE, FUNDING_STATE, GATE_DECISION, INSTRUMENTS, RECO, RISK_LEVEL, STATUS_LABELS, type ActionState, type DossierDetail, type FundingState, type Indicators, type JournalEntry, type RiskLevel, type StandardDoc } from "@/lib/axispro-types";
 import { fmtDate, fmtDateTime, fmtPct, fmtShort } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { arrondi, montant } from "./commun";
+import { PuceCompartiment, arrondi, montant } from "./commun";
 
 /** Journal du dossier : statuts des critères, dépôts, passages de gate, décisions, révisions, imports. */
 export function Journal({ d }: { d: DossierDetail }) {
   const [kind, setKind] = useState<"" | JournalEntry["kind"]>("");
-  const { data } = useApi<JournalEntry[]>(`/axispro/dossiers/${d.id}/journal?limit=500`);
-  if (!data) return <Loading />;
+  const { data, error, mutate } = useApi<JournalEntry[]>(`/axispro/dossiers/${d.id}/journal?limit=500`);
+  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
   const rows = kind ? data.filter((j) => j.kind === kind) : data;
   return (
     <Card
@@ -24,6 +24,7 @@ export function Journal({ d }: { d: DossierDetail }) {
         <Segmented label="Nature" value={kind} onChange={setKind} options={[
           { key: "", label: "Tout" }, { key: "status", label: "Statuts" }, { key: "document", label: "Data room" },
           { key: "gate", label: "Gates" }, { key: "decision", label: "Décisions" }, { key: "revision", label: "Révisions" }, { key: "import", label: "Imports" },
+          { key: "assignment", label: "Équipe" },
         ]} />
       }
     >
@@ -31,7 +32,11 @@ export function Journal({ d }: { d: DossierDetail }) {
         { key: "date", label: "Date", render: (j) => <span className="whitespace-nowrap">{fmtDateTime(j.date)}</span> },
         { key: "user", label: "Par" },
         { key: "kind", label: "Nature", render: (j) => <Badge tone={j.kind === "decision" ? "accent" : j.kind === "gate" ? "ok" : "neutral"}>{j.kind_label}</Badge> },
-        { key: "detail", label: "Détail", render: (j) => (j.kind === "status" ? <span><b>{j.criterion}</b> : {j.before} → {j.after}</span> : <span>{j.note}</span>) },
+        {
+          key: "detail",
+          label: "Détail",
+          render: (j) => (j.kind === "status" ? <span><b>{j.criterion}</b> : {j.before} → {j.after}</span> : j.kind === "assignment" ? <span>{j.note} : {j.before} → <b>{j.after}</b></span> : <span>{j.note}</span>),
+        },
       ]} />
     </Card>
   );
@@ -52,8 +57,8 @@ interface ReportData {
 /** Rapport de décision : PDF scellé, classeur au plan du modèle du cabinet, fiche d'évaluation,
  * export JSON, data room compressée et liste des pièces à fournir ; aperçu à l'écran. */
 export function Rapport({ d }: { d: DossierDetail }) {
-  const { data } = useApi<ReportData>(`/axispro/dossiers/${d.id}/report`);
-  if (!data) return <Loading />;
+  const { data, error, mutate } = useApi<ReportData>(`/axispro/dossiers/${d.id}/report`);
+  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
   const s = d.scoring;
   const ref = d.reference.replace(/\//g, "-");
   const missing = data.documents.filter((x) => x.required && x.due && !x.available);
@@ -82,14 +87,14 @@ export function Rapport({ d }: { d: DossierDetail }) {
             <b>Stage gates.</b>
             <ul className="mt-1 grid grid-cols-1 gap-1 md:grid-cols-2">
               {s.gates.map((g) => (
-                <li key={g.code} className="flex items-start gap-2"><Badge tone={GATE_DECISION[g.decision].tone}>{GATE_DECISION[g.decision].label}</Badge><span><b>{g.code}</b> {g.name} : <span className="text-muted">{g.motifs.join(" ")}</span></span></li>
+                <li key={g.code} className="flex items-start gap-2"><Badge tone={GATE_DECISION[g.decision].tone}>{GATE_DECISION[g.decision].label}</Badge><span><b>{g.code}</b> {g.name}{g.min_completeness ? ` (complétude minimale ${arrondi(g.min_completeness)} %)` : ""} : <span className="text-muted">{g.motifs.join(" ")}</span></span></li>
               ))}
             </ul>
           </div>
           {d.hypotheses && <p><b>Commentaires et hypothèses de décision.</b> {d.hypotheses}</p>}
           <div>
             <b>Écarts prioritaires.</b>
-            <ol className="ml-5 list-decimal">{data.gaps.map((g) => <li key={g.criterion_id}>{g.code} {g.name} ({STATUS_LABELS[g.status].toLowerCase()}) : {g.action}{g.responsible ? `, ${g.responsible}` : ""}{g.due_date ? `, échéance ${fmtDate(g.due_date)}` : ""}</li>)}</ol>
+            <ol className="ml-5 list-decimal">{data.gaps.map((g) => <li key={g.criterion_id}>{g.compartment && <><PuceCompartiment code={g.compartment} nom={g.compartment_name} className="mr-1 align-[1px]" />{" "}</>}{g.code} {g.name} ({STATUS_LABELS[g.status].toLowerCase()}) : {g.action}{g.responsible ? `, ${g.responsible}` : ""}{g.due_date ? `, échéance ${fmtDate(g.due_date)}` : ""}</li>)}</ol>
           </div>
           {s.anomalies.length > 0 && (
             <div>

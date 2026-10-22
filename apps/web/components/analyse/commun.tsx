@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, TriangleAlert, type Icon } from "@/components/icons";
-import { Badge, Button, Delta, Empty, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
+import { Badge, Button, Delta, Empty, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import type { EntiteSociete } from "@/lib/config";
@@ -235,11 +235,52 @@ export function QualiteDonnees({ quality }: { quality: Quality }) {
 
 /* ─── Garde de société ─────────────────────────────────────────────────── */
 
-/** Les sections d'une société ne s'ouvrent que dans ses livres : sinon, on explique et on oriente. */
+/**
+ * Les sections d'une société ne s'ouvrent que dans ses livres. Un compte ouvert à cette société y
+ * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique.
+ */
 export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteSociete; contexte: Contexte | undefined; children: ReactNode }) {
+  const cible = contexte && contexte.entity !== attendu ? contexte.companies?.find((c) => c.entity === attendu) : undefined;
+  const [echec, setEchec] = useState(false);
+  useEffect(() => {
+    if (!cible) return;
+    // Un seul essai par société en quelques secondes : jamais de rechargements en boucle.
+    const essai = `garde-societe-${cible.id}`;
+    try {
+      if (Date.now() - Number(sessionStorage.getItem(essai) ?? 0) < 10_000) return setEchec(true);
+      sessionStorage.setItem(essai, String(Date.now()));
+    } catch {
+      return setEchec(true);
+    }
+    let abandon = false;
+    fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: cible.id, app: "analyse" }) })
+      .then((res) => {
+        if (abandon) return;
+        // Rechargement complet, comme au changement de société : rien de l'autre société ne reste affiché.
+        if (res.ok) window.location.reload();
+        else setEchec(true);
+      })
+      .catch(() => !abandon && setEchec(true));
+    return () => {
+      abandon = true;
+      try {
+        sessionStorage.removeItem(essai);
+      } catch {
+        // stockage indisponible : rien à effacer
+      }
+    };
+  }, [cible]);
   if (!contexte) return <AttenteSection />;
   if (contexte.entity === attendu) return <>{children}</>;
-  const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro Consulting";
+  if (cible && !echec) {
+    return (
+      <div className="space-y-4">
+        <p role="status" className="text-sm text-muted">Ouverture dans les livres de {cible.name}…</p>
+        <AttenteSection />
+      </div>
+    );
+  }
+  const nom = attendu === "groupe" ? "EGUITRA GROUP SARLU" : "MB AxisPro";
   return (
     <div className="mx-auto max-w-2xl py-10">
       <Notice tone="accent">
@@ -518,7 +559,7 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
   const metric = insight.metric && insight.metric.value !== null ? insight.metric : null;
   const impact = nombre(insight.impact_gnf);
   return (
-    <article className={cx("an-carte n-levable relative flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]", compact ? "p-4" : "p-5")} style={{ "--i": rang ?? 0 } as CSSProperties}>
+    <article className={cx(FEUILLE, "an-carte n-levable relative flex min-w-0 flex-col overflow-hidden", compact ? "p-4" : "p-5")} style={{ "--i": rang ?? 0 } as CSSProperties}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={g.tone}>{g.label}</Badge>
@@ -620,14 +661,14 @@ export function Constats({ insights, titre = "Constats remarquables", colonnes =
 const STATUT: Record<Kpi["status"], Tone> = { good: "ok", warn: "warn", bad: "danger", neutral: "neutral" };
 
 /** Carte de chiffre clé du contrat : valeur, variation N-1, cible, tendance 12 mois, définition au survol. */
-export function KpiContrat({ kpi, icon, teinte }: { kpi: Kpi; icon?: Icon; teinte?: Teinte }) {
+export function KpiContrat({ kpi }: { kpi: Kpi }) {
   const cible = kpi.target !== null ? `cible ${fmtValeur(kpi.target, kpi.unit)}` : null;
   const ref = kpi.previous !== null && (kpi.previous !== 0 || kpi.delta_pct !== null) ? `N-1 ${fmtValeur(kpi.previous, kpi.unit)}` : null;
   const tendance = nombres(kpi.trend);
   const statut = STATUT[kpi.status] ?? "neutral";
   return (
-    <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && "kpi-avec-tendance overflow-hidden rounded-[20px] bg-panel shadow-[var(--ombre-feuille)]")}>
-      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} icon={icon} teinte={teinte} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
+    <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
+      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
         <div className="px-5 pb-3">
           <Sparkline values={tendance} color={statut === "danger" ? COULEUR.mauvais : statut === "warn" ? COULEUR.alerte : COULEUR.accent} height={32} />

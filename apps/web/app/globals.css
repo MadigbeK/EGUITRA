@@ -48,6 +48,7 @@
   --color-pin: var(--n-pin);
   --color-menthe: var(--n-menthe);
   --color-or: var(--n-or);
+  --color-or-fonce: var(--or-fonce);
   --color-creme: var(--n-creme);
   --color-nuit: var(--n-nuit);
   --color-jade: var(--g-jade);
@@ -102,6 +103,15 @@
   --g-lagon: #0f9fa0;
   --g-corail: #e25f35;
   --g-anis: #8fbf2a;
+  /* Repères d'état des graphiques (lib/couleurs.ts) : nuances du jade, rouges de l'échelle des
+     retards, gris d'une valeur sans état. */
+  --g-jade-fonce: #0b7a55;
+  --g-jade-clair: #3fb68b;
+  --g-rouge: #c0302d;
+  --g-bordeaux: #7a1f1c;
+  --g-gris: #9aa9a2;
+  /* Or foncé : repère doré sur le blanc (3:1 au moins), bas des colonnes dorées. */
+  --or-fonce: #a87d2e;
 
   /* Neutres teintés de vert */
   --bg: #eef2ef;
@@ -165,14 +175,36 @@
   --accent-lueur: rgb(47 140 230 / 0.35);
 }
 
-/* Analyse : le violet de l'intelligence des données, à part des couleurs métier. */
+/* Transport : l'ambre du carburant et de la route, entre le vert de la finance et le corail du parc. */
+[data-app="transport"] {
+  --accent: #a85a0c;
+  --accent-strong: #8a4908;
+  --accent-haut: #bb6612;
+  --accent-vif: #e08a1e;
+  --accent-doux: #fdf0de;
+  --accent-lueur: rgb(224 138 30 / 0.35);
+}
+
+/* RH : la prune, chaleur des personnes, distincte du bronze de l'Analyse et de l'ambre du transport. */
+[data-app="rh"] {
+  --accent: #9b2f6c;
+  --accent-strong: #7f2459;
+  --accent-haut: #ab3a7a;
+  --accent-vif: #c4417a;
+  --accent-doux: #fbe9f2;
+  --accent-lueur: rgb(196 65 122 / 0.35);
+}
+
+/* Analyse : l'or bronze de la diagonale du logo, la lecture d'ensemble posée sur les métiers
+   (choix du gérant, 22 octobre 2026). Accent 5,67:1 sur le blanc, 5,02 sur le fond ; texte blanc sur
+   --accent-haut 4,88:1 ; --accent-vif sert au décor seulement (3,2:1). */
 [data-app="analyse"] {
-  --accent: #5b3fb8;
-  --accent-strong: #4a2f9c;
-  --accent-haut: #6a4ccd;
-  --accent-vif: #7c5ce6;
-  --accent-doux: #eee9fb;
-  --accent-lueur: rgb(124 92 230 / 0.35);
+  --accent: #86601c;
+  --accent-strong: #6e4e15;
+  --accent-haut: #94691f;
+  --accent-vif: #b8872e;
+  --accent-doux: #f6eedd;
+  --accent-lueur: rgb(184 135 46 / 0.35);
 }
 
 /*
@@ -201,13 +233,13 @@
   --danger-doux: #3d1b1a;
   --info: #6fa8f0;
   --info-doux: #16294a;
-  --accent: #a28cf5;
-  --accent-strong: #8c73ee;
-  --accent-haut: #b19ef8;
-  --accent-vif: #b7a4ff;
-  --accent-doux: #2a2350;
-  --accent-ink: #120d2b;
-  --accent-lueur: rgb(162 140 245 / 0.4);
+  --accent: #e2bf74;
+  --accent-strong: #d4aa55;
+  --accent-haut: #e9cc8c;
+  --accent-vif: #efd69f;
+  --accent-doux: #33291a;
+  --accent-ink: #1a1408;
+  --accent-lueur: rgb(226 191 116 / 0.4);
   --ombre-carte: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 14px -6px rgb(0 0 0 / 0.4);
   --ombre-levee: 0 2px 4px rgb(0 0 0 / 0.3), 0 18px 36px -16px rgb(0 0 0 / 0.6);
   --ombre-flottante: 0 28px 70px -24px rgb(0 0 0 / 0.75), 0 4px 12px rgb(0 0 0 / 0.3);
@@ -305,6 +337,12 @@ input[type="radio"] {
   accent-color: var(--accent);
   width: 1rem;
   height: 1rem;
+}
+
+/* Mot de passe : l'œil de NIMOVA seul (Edge ajoute le sien). */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
 }
 
 /* Liste déroulante : flèche dessinée, la même sur tous les systèmes. */
@@ -578,11 +616,6 @@ input[type="radio"] {
 
 .n-tourne {
   animation: n-tourner 0.9s linear infinite;
-}
-
-/* Fond des boutons et repères actifs : un dégradé dans la seule teinte de l'application. */
-.n-degrade {
-  background-image: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
 }
 
 /* ─── Kit de visualisation de l'Analyse (SVG) ─────────────────────────── */
@@ -1231,10 +1264,10 @@ input[type="radio"] {
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.97);
-    clip-path: inset(0 0 60% 0 round 22px);
+    clip-path: inset(0 0 60% 0 round 18px);
   }
   to {
-    clip-path: inset(0 0 0 0 round 22px);
+    clip-path: inset(0 0 0 0 round 18px);
   }
 }
 .menus-item {
@@ -1348,7 +1381,9 @@ input[type="radio"] {
     animation: none !important;
     box-shadow: none !important;
   }
-  .n-degrade {
+  /* Aplats de l'application (bandeau du dossier, compte choisi) : ils s'impriment en couleur. */
+  .bg-accent,
+  .bg-accent-strong {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -1367,9 +1402,9 @@ input[type="radio"] {
     --ink: #10241f;
     --ink-2: #344a42;
     --muted: #5c6e66;
-    --accent: #5b3fb8;
-    --accent-vif: #7c5ce6;
-    --accent-doux: #eee9fb;
+    --accent: #86601c;
+    --accent-vif: #b8872e;
+    --accent-doux: #f6eedd;
     --accent-ink: #ffffff;
     color-scheme: light;
   }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Account, DebtSummary, Journal } from "@/lib/finance-types";
@@ -95,7 +95,7 @@ export default function DebtPage() {
 }
 
 function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { data: loan, mutate } = useApi<Loan>(`/finance/loans/${id}`);
+  const { data: loan, error: erreurChargement, mutate } = useApi<Loan>(`/finance/loans/${id}`);
   const [error, setError] = useState<string | null>(null);
   async function act(fn: () => Promise<unknown>) {
     setError(null);
@@ -111,7 +111,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
   return (
     <Modal open wide title={loan ? `${loan.name}, ${loan.lender.name}` : "Financement"} onClose={onClose} footer={loan?.state === "draft" && <Button variant="primary" onClick={() => act(() => apiSend("POST", `/finance/loans/${id}/activate`))}>Mettre en service</Button>}>
       {!loan ? (
-        <Loading />
+        <Etat error={erreurChargement} onRetry={() => mutate()} />
       ) : (
         <div className="space-y-4">
           {error && <Notice tone="danger">{error}</Notice>}
@@ -144,7 +144,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
                 label: "",
                 align: "right",
                 render: (l) =>
-                  l.paid ? <Badge tone="ok">{l.statement_line_id ? "Rapprochée du relevé" : "Réglée"}</Badge> : loan.state === "active" ? <Button className="px-2 py-1 text-xs" onClick={() => act(() => apiSend("POST", `/finance/loans/lines/${l.id}/pay`, {}))}>Régler</Button> : null,
+                  l.paid ? <Badge tone="ok">{l.statement_line_id ? "Rapprochée du relevé" : "Réglée"}</Badge> : loan.state === "active" ? <Button size="sm" onClick={() => act(() => apiSend("POST", `/finance/loans/lines/${l.id}/pay`, {}))}>Régler</Button> : null,
               },
             ]}
           />

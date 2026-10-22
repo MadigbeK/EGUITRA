@@ -1,7 +1,10 @@
-"""Politique d'évaluation versionnée : stage gates, domaines, critères, pièces standard.
+"""Politique d'évaluation versionnée : stage gates, compartiments, domaines, critères, pièces standard.
 
-La grille du cabinet (111 critères sur 15 domaines, 8 stage gates, 42 pièces de data room) est une
-donnée, importée depuis un classeur et modifiable par le cabinet sans intervention technique.
+La grille du cabinet (version 3 de l'outil de scoring : 104 critères sur 14 domaines répartis en
+8 compartiments, 7 stage gates, 39 pièces de data room) est une donnée, importée depuis un classeur
+(format d'import de la plateforme, ou outil de scoring du cabinet tel quel : grille_cabinet.py) et
+modifiable par le cabinet sans intervention technique. Un compartiment regroupe les domaines confiés
+à un même consultant.
 Chaque modification crée une nouvelle version ; un dossier reste évalué selon la version en
 vigueur à son ouverture, rappelée dans chaque rapport (offre, chapitre 3.7).
 
@@ -13,13 +16,15 @@ gates sont des données de la grille.
 
 import io
 import math
+import re
 import unicodedata
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, xlsx_row
+from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, workbook_sheets, xlsx_row
 
+from .. import grille_cabinet
 from ..engine import INDICATORS, suggest
 from ..scoring import DEFAULT_POLICY, REQUIREMENTS, RULES
 
@@ -30,16 +35,19 @@ GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique
 # - méthode MB AxisPro : exigence (bloquant, apd, closing), bancabilite, livrable (critère, domaine
 #   ou gate), role (« capex » : critère contrôlé contre l'investissement de la fiche) ;
 # - gates : entree, passage, regle, seuil_attente, seuil_go, portee (globale ou cumulee), domaines
-#   (codes séparés par « ; ») ;
+#   (codes séparés par « ; »), completude_min (complétude documentaire exigée pour examiner le gate) ;
+# - domaines : compartiment (« C0 — Coordination et cadrage projet » : code puis intitulé) ;
 # - pièces : criteres (codes des critères justifiés par la pièce, séparés par « ; »).
 OPTIONAL_COLUMNS = ("indicateur", "seuil", "seuil_partiel", "exigence", "bancabilite", "livrable", "role",
-                    "entree", "passage", "regle", "seuil_attente", "seuil_go", "portee", "domaines", "criteres")
+                    "entree", "passage", "regle", "seuil_attente", "seuil_go", "portee", "domaines", "criteres",
+                    "compartiment", "completude_min")
 WEIGHTINGS = [("flat", "À plat sur toute la grille"), ("domain", "Par domaine, selon leur pondération")]
 SCOPES = [("global", "Toute la grille"), ("cumulative", "Critères des gates atteints")]
 REQUIREMENT_ALIASES = {
     "bloquant": "blocking", "blocking": "blocking",
     "apd": "apd", "pendantapd": "apd", "pendant apd": "apd", "pendant l'apd": "apd",
     "closing": "closing", "dd-spv-closing": "closing", "dd spv closing": "closing", "dd, spv, closing": "closing",
+    "dd-closing": "closing", "dd closing": "closing", "dd et closing": "closing", "due diligence et closing": "closing",
 }
 
 
@@ -70,6 +78,7 @@ class AxisproPolicy(models.Model):
                                          ondelete="set null")
     notes = fields.Text("Principes de la politique", help="Rappelés dans chaque rapport de décision.")
     gate_ids = fields.One2many("axispro.gate", "policy_id", "Stage gates")
+    compartment_ids = fields.One2many("axispro.compartment", "policy_id", "Compartiments")
     domain_ids = fields.One2many("axispro.domain", "policy_id", "Domaines")
     criterion_ids = fields.One2many("axispro.criterion", "policy_id", "Critères")
     document_type_ids = fields.One2many("axispro.document.type", "policy_id", "Pièces standard")
@@ -105,8 +114,12 @@ class AxisproPolicy(models.Model):
         if linked and unproven:
             notes.append(f"{len(unproven)} critère(s) sans pièce de data room rattachée.")
         empty_gates = self.gate_ids.filtered(lambda g: not self.criterion_ids.filtered(lambda c, g=g: c.gate_id == g))
+        loose = self.domain_ids.filtered(lambda d: not d.compartment_id)
+        if self.compartment_ids and loose:
+            notes.append(f"{len(loose)} domaine(s) sans compartiment : " + ", ".join(loose.mapped("name")) + ".")
         return {
             "criteria": len(self.criterion_ids), "domains": len(self.domain_ids), "gates": len(self.gate_ids),
+            "compartments": len(self.compartment_ids),
             "documents": len(self.document_type_ids), "weight": sum(self.criterion_ids.mapped("weight")),
             "knockouts": len(self.criterion_ids.filtered("knockout")),
             "critical": len(self.criterion_ids.filtered("critical")),
@@ -137,25 +150,62 @@ class AxisproPolicy(models.Model):
                 raise UserError("Seuils de la politique incohérents : ils vont de 0 à 100, HOLD ≤ CONDITIONAL GO ≤ "
                                 "APD READY ≤ BANKABLE.")
 
+    def _inheritance(self):
+        """Repères d'une version, repris par la suivante quand elle vient de l'outil du cabinet : codes,
+        aides, livrables et indicateurs des critères, codes et rattachements des pièces (par libellé)."""
+        self.ensure_one()
+        criteria = {
+            grille_cabinet.label_key(c.name): {
+                "code": c.code, "guidance": c.guidance or "", "deliverable": c.deliverable or "",
+                "domain_deliverable": c.domain_id.deliverable or "", "indicator": c.indicator or "",
+                "indicator_threshold": f"{c.indicator_threshold:g}" if c.indicator else "",
+                "indicator_partial": f"{c.indicator_partial:g}" if c.indicator and c.indicator_has_partial else "",
+                "capex": c == self.capex_criterion_id,
+            } for c in self.criterion_ids
+        }
+        pieces = {
+            grille_cabinet.label_key(t.name): {
+                "code": t.code, "guidance": t.guidance or "",
+                "criteria": [grille_cabinet.label_key(c.name) for c in t.criterion_ids],
+            } for t in self.document_type_ids
+        }
+        return {"criteria": criteria, "pieces": pieces}
+
     @api.model
     def import_grid(self, company, name, filename, content, go=None, conditional=50.0, notes=None):
         """Nouvelle version de la politique depuis un classeur (XLSX ou CSV, colonnes GRID_COLUMNS et,
-        au choix, OPTIONAL_COLUMNS).
+        au choix, OPTIONAL_COLUMNS), ou depuis l'outil de scoring du cabinet tel quel (grille_cabinet.py).
 
         Lignes de type « gate », « domaine », « critere » et « piece ». Le poids d'un critère est sa
         pondération dans le score ; celui d'un domaine ne sert qu'en pondération par domaine. Une
         grille au format MB AxisPro (colonne « exigence ») est notée à plat, comme la méthode du
-        cabinet ; une grille à l'ancien format garde la pondération par domaine.
+        cabinet ; une grille à l'ancien format garde la pondération par domaine. L'outil du cabinet
+        apporte ses propres seuils et réglages, qui l'emportent sur ceux du formulaire, et reprend les
+        repères de la version en vigueur (codes, aides, rattachements des pièces).
         """
-        rows, header = _read_rows(filename, content)
-        method = "exigence" in header
         last = self.search([("company_id", "=", company.id)], order="version desc", limit=1)
-        policy = self.create({
+        settings = {}
+        sheets = workbook_sheets(content) if filename.lower().endswith((".xlsx", ".xlsm")) else {}
+        if grille_cabinet.is_cabinet_workbook(sheets):
+            reference = self.active_policy(company) or last
+            rows, settings, problems = grille_cabinet.grid_rows(
+                sheets, lambda: dict.fromkeys(GRID_COLUMNS + OPTIONAL_COLUMNS, ""),
+                reference._inheritance() if reference else None)
+            if problems:
+                raise UserError("Outil de scoring refusé :\n" + "\n".join(problems[:20]))
+            method = True
+        else:
+            rows, header = _read_rows(filename, content)
+            method = "exigence" in header
+        if notes:
+            settings.pop("notes", None)
+        policy = self.create(dict({
             "name": name, "version": (last.version + 1) if last else 1, "company_id": company.id,
             "go_threshold": go if go is not None else (65.0 if method else 70.0), "conditional_threshold": conditional,
             "notes": notes, "weighting": "flat" if method else "domain",
-        })
+        }, **settings))
         gates, domains, criteria, errors = {}, {}, {}, []
+        compartments = {}
         gate_domains, seen = {}, {}
         seq = 0
         kinds = ("gate", "domaine", "critere", "piece")
@@ -216,13 +266,24 @@ class AxisproPolicy(models.Model):
                         "deliverables": row["livrable"] or False, "exit_criteria": row["passage"] or False,
                         "rule_code": rule, "threshold_hold": num(line_no, code, "seuil_attente", 0.0, 0, 100),
                         "threshold_go": num(line_no, code, "seuil_go", 0.0, 0, 100),
+                        "min_completeness": num(line_no, code, "completude_min", 0.0, 0, 100),
                         "score_scope": "cumulative" if _plain(row["portee"]).startswith("cumul") else "global",
                     })
                     gate_domains[code] = (line_no, _codes(row["domaines"]))
                 elif kind == "domaine":
+                    compartment = False
+                    if row["compartiment"]:
+                        key, title = _compartment(row["compartiment"])
+                        if key not in compartments:
+                            compartments[key] = self.env["axispro.compartment"].create({
+                                "policy_id": policy.id, "code": key, "name": title,
+                                "sequence": len(compartments) + 1,
+                            })
+                        compartment = compartments[key].id
                     domains[code] = self.env["axispro.domain"].create({
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
                         "weight": num(line_no, code, "poids", 1.0, 0), "deliverable": row["livrable"] or False,
+                        "compartment_id": compartment,
                     })
                 elif kind == "critere":
                     if row["domaine"] not in domains or row["gate"] not in gates:
@@ -268,6 +329,9 @@ class AxisproPolicy(models.Model):
                         "guidance": row["aide"] or False,
                         "criterion_ids": [(6, 0, [criteria[c].id for c in linked])],
                     })
+        # Compartiments dans l'ordre de leurs codes (C0, C1… C10), quel que soit l'ordre des domaines.
+        for i, k in enumerate(sorted(compartments.values(), key=lambda k: _natural(k.code)), start=1):
+            k.sequence = i
         for code, (line_no, codes) in gate_domains.items():
             unknown = [c for c in codes if c not in domains]
             if unknown:
@@ -290,8 +354,12 @@ class AxisproPolicy(models.Model):
         self.ensure_one()
         last = self.search([("company_id", "=", self.company_id.id)], order="version desc", limit=1)
         new = self.copy({"version": last.version + 1, "state": "draft", "date_active": False, "capex_criterion_id": False,
-                         "gate_ids": False, "domain_ids": False, "criterion_ids": False, "document_type_ids": False})
-        domains = {d: d.copy({"policy_id": new.id}) for d in self.domain_ids}
+                         "gate_ids": False, "domain_ids": False, "criterion_ids": False, "document_type_ids": False,
+                         "compartment_ids": False})
+        compartments = {k: k.copy({"policy_id": new.id}) for k in self.compartment_ids}
+        domains = {d: d.copy({"policy_id": new.id,
+                              "compartment_id": compartments[d.compartment_id].id if d.compartment_id else False})
+                   for d in self.domain_ids}
         gates = {g: g.copy({"policy_id": new.id, "domain_ids": [(6, 0, [domains[d].id for d in g.domain_ids])]})
                  for g in self.gate_ids}
         criteria = {c: c.copy({"policy_id": new.id, "gate_id": gates[c.gate_id].id, "domain_id": domains[c.domain_id].id})
@@ -321,6 +389,17 @@ def _plain(value):
 
 def _codes(value):
     return [c.strip() for c in str(value or "").replace(",", ";").split(";") if c.strip()]
+
+
+def _natural(code):
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", code or "")]
+
+
+def _compartment(value):
+    """(code, intitulé) d'un compartiment : « C0 — Coordination et cadrage projet », ou intitulé seul
+    (le code en est tiré)."""
+    code, title = grille_cabinet.compartment(value)
+    return code or (grille_cabinet.label_key(title)[:12].upper() or "K"), title
 
 
 def _indicator(value):
@@ -397,8 +476,9 @@ def grid_template():
              regle="intake", entree="Fiche projet reçue ; promoteur, secteur et pays identifiés.",
              livrable="Accusé de réception ; fiche d'enregistrement.", passage="Décision de recevabilité."),
         line(("gate", "G1", "Prequalification"), regle="prequalification", seuil_attente="30", seuil_go="50",
-             portee="cumulee"),
-        line(("domaine", "DOM01", "Marché", "", "", "1"), livrable="Étude de marché ou note de débouché à commander"),
+             portee="cumulee", completude_min="40"),
+        line(("domaine", "DOM01", "Marché", "", "", "1"), livrable="Étude de marché ou note de débouché à commander",
+             compartiment="C3 — Marché et commercial"),
         line(("critere", "C001", "Étude de marché documentée", "DOM01", "G1", "2", "oui", "non", "oui"),
              exigence="bloquant", bancabilite="oui"),
         line(("critere", "C002", "Couverture du service de la dette", "DOM01", "G1", "2", "oui", "non", "non",
@@ -415,7 +495,7 @@ def grid_template():
     help_sheet = book.add_worksheet("Aide")
     xlsx_row(help_sheet, 0, ("Colonne", "Contenu"), bold)
     help_rows = [
-        ("exigence", "bloquant, apd ou closing (DD, SPV, closing : hors APD Readiness)"),
+        ("exigence", "bloquant, apd ou closing (due diligence et closing, DD-Closing ou DD-SPV-Closing : hors APD Readiness)"),
         ("bancabilite", "oui si le critère compte dans le Bankability Score"),
         ("livrable", "document à produire (critère ou domaine) ; livrables attendus (gate)"),
         ("role", "capex : critère comparé à l'investissement saisi dans la fiche"),
@@ -425,6 +505,10 @@ def grid_template():
         ("portee", "globale (toute la grille) ou cumulee (critères des gates atteints)"),
         ("domaines", "codes des domaines contrôlés par le gate, séparés par ;"),
         ("criteres", "pour une pièce : codes des critères qu'elle justifie, séparés par ;"),
+        ("compartiment", "pour un domaine : compartiment qui le porte, « C0 — Coordination et cadrage projet »"),
+        ("completude_min", "pour un gate : complétude documentaire exigée pour l'examiner (en %, 0 : aucune)"),
+        ("Outil du cabinet", "le classeur de scoring du cabinet (onglets Scoring, Stage_Gate, Data_Room_Index, "
+                             "Parametres) s'importe aussi tel quel"),
     ]
     for r, row in enumerate(help_rows, start=1):
         xlsx_row(help_sheet, r, row)
@@ -458,8 +542,23 @@ class AxisproGate(models.Model):
     threshold_hold = fields.Float("Seuil d'attente", help="En dessous : HOLD. 0 : pas de seuil.")
     threshold_go = fields.Float("Seuil GO", help="Préqualification : au-dessus GO, entre les deux CONDITIONAL GO.")
     score_scope = fields.Selection(SCOPES, "Portée du score", default="global", required=True)
+    min_completeness = fields.Float("Complétude documentaire minimale (%)",
+                                    help="Exigence d'entrée : en dessous, le gate ne s'examine pas (HOLD). 0 : aucune. "
+                                         "Mesurée sur la même portée que le score.")
     domain_ids = fields.Many2many("axispro.domain", "axispro_gate_domain_rel", "gate_id", "domain_id",
                                   "Domaines contrôlés")
+
+
+class AxisproCompartment(models.Model):
+    _name = "axispro.compartment"
+    _description = "Compartiment d'expertise (domaines confiés à un même consultant)"
+    _order = "policy_id, sequence"
+
+    policy_id = fields.Many2one("axispro.policy", required=True, ondelete="cascade", index=True)
+    sequence = fields.Integer()
+    code = fields.Char(required=True)
+    name = fields.Char(required=True)
+    domain_ids = fields.One2many("axispro.domain", "compartment_id", "Domaines")
 
 
 class AxisproDomain(models.Model):
@@ -473,6 +572,7 @@ class AxisproDomain(models.Model):
     name = fields.Char(required=True)
     weight = fields.Float("Pondération", default=1.0)
     deliverable = fields.Char("Livrable type pour combler un écart")
+    compartment_id = fields.Many2one("axispro.compartment", "Compartiment", ondelete="set null", index=True)
 
 
 class AxisproCriterion(models.Model):

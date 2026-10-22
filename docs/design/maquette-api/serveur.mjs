@@ -19,6 +19,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
+import { enregistrerProprietaires, fuelPriceAt, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
 const HOST = "127.0.0.1";
@@ -439,13 +440,14 @@ const PROFILE_DEFS = [
   { code: "cabinet", name: "Cabinet AxisPro", description: "Dossiers de projets, évaluations, data room, comités, rapports, facturation des prestations." },
   { code: "porteur", name: "Porteur de projet", description: "Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet." },
 ];
-const APPS = ["finance", "axispro", "portail", "mobile", "analyse"];
+const APPS = ["finance", "transport", "axispro", "portail", "mobile", "analyse"];
 /** Applications ouvertes à chaque profil (eguitra_api.models.res_users.APP_PROFILES). */
 const APP_PROFILES = {
   finance: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"],
   axispro: ["admin", "direction", "cabinet"],
   portail: ["porteur"],
   mobile: ["admin", "exploitation"],
+  transport: ["admin", "direction", "finance", "exploitation"],
   analyse: ["admin", "direction", "finance", "cabinet"],
 };
 const INTERNAL = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet"];
@@ -460,7 +462,7 @@ const COMPANIES = {
     company_registry: "GN.TCC.2012.B.00101 (démo)", currency: "GNF", country: "Guinée", logo: null,
   },
   2: {
-    id: 2, name: "MB AxisPro Consulting", entity: "cabinet", street: "Immeuble Kaloum Centre, 5e étage",
+    id: 2, name: "MB AxisPro", entity: "cabinet", street: "Immeuble Kaloum Centre, 5e étage",
     street2: "Avenue de la République, Kaloum", zip: "BP 4411", city: "Conakry", phone: "+224 620 00 20 20",
     email: "contact@axispro.example", website: "www.axispro.example", vat: "999000202B",
     company_registry: "GN.TCC.2019.B.00202 (démo)", currency: "GNF", country: "Guinée", logo: null,
@@ -567,6 +569,9 @@ addPartner(169, "Aquaculture du Konkouré (démo)", "Kindia", "c");
 addPartner(170, "Groupement d'Intérêt Économique des Producteurs de Pomme de Terre et de Légumes du Fouta Djallon (démo)", "Timbi-Madina", "c");
 addPartner(171, "Bureau Services Kaloum (démo)", "Conakry", "f");
 addPartner(172, "Expertise Agro Conseil (démo)", "Conakry", "f");
+addPartner(173, "Transports Camara et Fils (démo)", "Conakry", "f");
+addPartner(174, "Moussa Kourouma", "Kankan", "f", { person: true });
+addPartner(175, "Consortium Logistique du Niger (démo)", "Conakry", "f");
 const partnerById = (id) => PARTNERS.find((p) => p.id === id);
 const partnerRef = (id) => {
   const p = id ? partnerById(id) : null;
@@ -1847,7 +1852,7 @@ function profitability(cids, from, to, group = "vehicle") {
     rows.push({
       key: key ?? null, label: (key !== null && labelOf(key)) || "Non renseigné", rotations: list.length,
       volume: round3(delivered || loaded), revenue: rev, cost, margin, shortage: round3(sum(list, (r) => r.shortage)),
-      margin_rate: rev ? (margin / rev) * 100 : null,
+      margin_rate: rev ? (margin / rev) * 100 : null, standard_cost: sum(list, (r) => standardOf(r).std_cost),
       costs: Object.fromEntries(COSTS.map(([c]) => [c, sum(list, (r) => r[c])])),
     });
   }
@@ -1966,7 +1971,7 @@ function companyAlerts(cid, day) {
   if (t && t.value) {
     const weak = profitability([cid], addDays(day, -30), day, "vehicle").filter((r) => r.margin_rate !== null && r.margin_rate < t.value);
     if (weak.length) {
-      alerts.push(make(t, "Marge transport sous le seuil", `${weak.length} ensemble(s) sous ${Math.round(t.value)} % de marge sur 30 jours : ${weak.slice(0, 5).map((r) => r.label).join(", ")}.`, null, "/finance/transport"));
+      alerts.push(make(t, "Marge transport sous le seuil", `${weak.length} ensemble(s) sous ${Math.round(t.value)} % de marge sur 30 jours : ${weak.slice(0, 5).map((r) => r.label).join(", ")}.`, null, "/transport/rentabilite"));
     }
   }
   t = th.approval_delay_days;
@@ -3095,6 +3100,44 @@ const AX_DOCS = [
   ["Rapport de visite de site", "Suivi", "G7", false, null],
   ["Autres documents utiles", "Divers", null, false, "Tout document que le porteur juge utile au cabinet."],
 ];
+/** Compartiments d'expertise (version 3 de l'outil de scoring du cabinet) : [code, intitulé, domaines].
+ * Les grilles v2 et v3 en ont ; la v1 (archivée) n'en a pas, comme une grille antérieure à l'outil. */
+const AX_COMPARTMENTS = [
+  ["C0", "Coordination et cadrage projet", ["D01"]],
+  ["C1", "Foncier et autorisations", ["D07", "D15"]],
+  ["C2", "Technique et ingénierie", ["D04", "D05"]],
+  ["C3", "Marché et commercial", ["D02", "D03"]],
+  ["C4", "Environnement, social et impact", ["D08", "D14"]],
+  ["C5", "Organisation et ressources humaines", ["D06"]],
+  ["C6", "Modèle financier et bancabilité", ["D09", "D10", "D11"]],
+  ["C7", "Garanties, risques et closing", ["D12", "D13"]],
+];
+/** Règle de passage, complétude documentaire minimale (exigence d'entrée, %) et texte d'entrée des gates. */
+const AX_GATE_RULES = {
+  G0: ["intake", null, "Fiche projet reçue et enregistrée."],
+  G1: ["prequalification", 40, "Checklist complétée à au moins 40 % ; promoteur identifiable."],
+  G2: ["feasibility", null, "Foncier confirmé et études de marché engagées."],
+  G3: ["apd", null, "CAPEX documentés et plan de financement esquissé."],
+  G4: ["bankability", 70, "Dossier documenté à au moins 70 % avant la revue de bancabilité."],
+  G5: ["due_diligence", null, null],
+  G6: ["structuring", null, null],
+  G7: ["closing", null, null],
+};
+const AX_RULES = {
+  intake: "Recevabilité (fiche projet)", prequalification: "Préqualification (knock-outs du gate, maturité)",
+  feasibility: "Préfaisabilité (knock-outs des domaines clés, maturité)", apd: "APD Readiness (zéro knock-out, score APD)",
+  bankability: "Bancabilité (score Bankability, DSCR)", due_diligence: "Due diligence (red flag, data room)",
+  structuring: "Structuration (accord des bailleurs, domaines cibles)", closing: "Financial close (conditions levées, documentation signée)",
+  generic: "Critères du gate évalués, sans knock-out",
+};
+const AX_SCOPES = { global: "Toute la grille", cumulative: "Critères des gates atteints" };
+const AX_REQUIREMENTS = { blocking: "Bloquant", apd: "Pendant l'APD", closing: "Due diligence et closing" };
+const AX_BANKABLE_DOMAINS = ["D09", "D10", "D11", "D12"];
+const AX_INDICATORS = {
+  dscr_min: { label: "DSCR minimal", higher: true, unit: "x" }, irr_project: { label: "TRI du projet", higher: true, unit: "%" },
+  npv: { label: "VAN du projet", higher: true, unit: "GNF" }, payback: { label: "Délai de récupération", higher: false, unit: "ans" },
+  equity_share: { label: "Apport des promoteurs", higher: true, unit: "%" },
+};
 /** Critères et pièces retirés de la version 1 (archivée). */
 const V1_SKIPPED_CRITERIA = [8, 16, 46, 61, 87, 104, 111];
 const V1_SKIPPED_DOCS = [12, 15, 23, 41];
@@ -3102,13 +3145,19 @@ const POLICY_NOTES = "Une recommandation GO exige un score d'au moins 70 sur 100
 
 function buildPolicy(id, version, state, dateActive, go, conditional, notes) {
   const p = id;
-  const gates = AX_GATES.map(([code, name, description], i) => ({ id: p * 10 + i + 1, code, name, description, sequence: i + 1 }));
+  const gates = AX_GATES.map(([code, name, description], i) => ({
+    id: p * 10 + i + 1, code, name, description, sequence: i + 1, rule_code: AX_GATE_RULES[code]?.[0] ?? "generic",
+    threshold_hold: null, threshold_go: null, score_scope: i <= 2 ? "cumulative" : "global", domain_ids: [],
+    min_completeness: version >= 2 ? (AX_GATE_RULES[code]?.[1] ?? null) : null, entry_requirements: AX_GATE_RULES[code]?.[2] ?? null, deliverables: null, exit_criteria: null,
+  }));
   const gateId = (code) => gates.find((g) => g.code === code)?.id ?? null;
+  const compartments = version >= 2 ? AX_COMPARTMENTS.map(([code, name], i) => ({ id: p * 100 + 60 + i + 1, code, name, sequence: i + 1 })) : [];
+  const compartmentOf = (domainCode) => compartments[AX_COMPARTMENTS.findIndex(([, , codes]) => codes.includes(domainCode))]?.id ?? null;
   const domains = [];
   const criteria = [];
   let n = 0;
   AX_DOMAINS.forEach(([code, name, weight, list], i) => {
-    const domain = { id: p * 100 + i + 1, code, name, weight, sequence: i + 1 };
+    const domain = { id: p * 100 + i + 1, code, name, weight, sequence: i + 1, deliverable: null, compartment_id: compartmentOf(code) };
     domains.push(domain);
     for (const [label, gate, w, flags, guidance] of list) {
       n += 1;
@@ -3116,13 +3165,19 @@ function buildPolicy(id, version, state, dateActive, go, conditional, notes) {
       criteria.push({
         id: p * 1000 + n, code: `C${pad(n, 3)}`, number: n, name: label, domain_id: domain.id, gate_id: gateId(gate),
         weight: version === 3 && n === 72 ? 4 : w, critical: flags.includes("c"), knockout: flags.includes("k"), evidence_required: flags.includes("e"), guidance,
+        requirement_type: flags.includes("c") || flags.includes("k") ? "blocking" : Number(gate.slice(1)) >= 5 ? "closing" : "apd",
+        bankability: AX_BANKABLE_DOMAINS.includes(code), deliverable: null, indicator: null,
       });
     }
   });
   const documents = AX_DOCS.map(([name, category, gate, required, guidance], i) => ({
     id: p * 1000 + 500 + i + 1, code: `P${pad(i + 1, 2)}`, number: i + 1, name, category, gate_id: gate ? gateId(gate) : null, required, guidance,
   })).filter((d) => !(version === 1 && V1_SKIPPED_DOCS.includes(d.number)));
-  return { id, company_id: 2, name: "Politique d'évaluation AxisPro", version, state, date_active: dateActive, go_threshold: go, conditional_threshold: conditional, notes, gates, domains, criteria, documents };
+  return {
+    id, company_id: 2, name: "Politique d'évaluation AxisPro", version, state, date_active: dateActive, go_threshold: go, conditional_threshold: conditional, notes,
+    threshold_bankable: 80, threshold_hold: 40, dscr_target: 1.2, weighting: "domain", ko_partial_blocks: false, evidence_check: true, exclude_na: true, expiry_check: false,
+    capex_criterion_id: null, gates, compartments, domains, criteria, documents,
+  };
 }
 const policyById = (id) => DB.policies.find((p) => p.id === id);
 const activePolicy = (cid) => DB.policies.find((p) => p.company_id === cid && p.state === "active") ?? null;
@@ -3143,7 +3198,10 @@ function scoring(dossier, gate = null) {
     const scored = list.filter((x) => x.e.status in STATUS_VALUES);
     const weight = sum(scored, (x) => x.c.weight);
     const score = weight ? (sum(scored, (x) => STATUS_VALUES[x.e.status] * x.c.weight) / weight) * 100 : null;
-    domains.push({ domain_id: domain.id, code: domain.code, name: domain.name, weight: domain.weight, score, assessed: list.filter((x) => x.e.status !== "not_assessed").length, criteria: list.length });
+    domains.push({
+      domain_id: domain.id, code: domain.code, name: domain.name, weight: domain.weight, score, assessed: list.filter((x) => x.e.status !== "not_assessed").length, criteria: list.length,
+      gaps: list.filter((x) => ["partial", "not_met"].includes(x.e.status)).length, knockouts: list.filter((x) => x.c.knockout && x.e.status === "not_met").length,
+    });
     if (score !== null) {
       total += score * domain.weight;
       totalWeight += domain.weight;
@@ -3168,24 +3226,71 @@ function scoring(dossier, gate = null) {
   const docs = documentsStatus(dossier).filter((x) => x.required);
   const recus = docs.filter((x) => ["received", "validated"].includes(x.state)).length;
   const classification = bankability >= 80 ? "Projet bancable" : apd >= 70 ? "Prêt pour l'APD" : readiness >= 50 ? "Projet prometteur" : "Projet à structurer";
-  const suivante = policy.gates.find((g) => g.sequence > (reached?.sequence ?? 0));
-  const decisionPorte = { go: "go", conditional: "conditional", no_go: "no_go" }[recommendation] ?? "hold";
-  const nextGate = suivante ? { gate_id: suivante.id, code: suivante.code, name: suivante.name, index: suivante.sequence, rule: "", decision: decisionPorte, motifs: [], criteria: 0, available: 0, knockouts: knockouts.length, entry_requirements: null, deliverables: null, exit_criteria: null } : null;
+  // Suivi par compartiment (scoring.compartments) : score des critères de ses domaines, manques, études
+  // renseignées, knock-outs actifs et consultant affecté (axispro.assignment).
+  const compartments = (policy.compartments || []).map((k) => {
+    const members = policy.domains.filter((dm) => dm.compartment_id === k.id).map((dm) => dm.id);
+    const list = evals.filter((x) => members.includes(x.c.domain_id));
+    const scored = list.filter((x) => x.e.status in STATUS_VALUES);
+    const weight = sum(scored, (x) => x.c.weight);
+    const owner = (DB.assignments || []).find((a) => a.dossier_id === dossier.id && a.compartment_id === k.id);
+    return {
+      compartment_id: k.id, code: k.code, name: k.name, score: weight ? (sum(scored, (x) => STATUS_VALUES[x.e.status] * x.c.weight) / weight) * 100 : null,
+      criteria: list.length, assessed: list.filter((x) => x.e.status !== "not_assessed").length,
+      gaps: list.filter((x) => ["partial", "not_met"].includes(x.e.status)).length, studies: list.filter((x) => x.e.deliverable).length,
+      knockouts: list.filter((x) => x.c.knockout && x.e.status === "not_met").length,
+      domains: policy.domains.filter((dm) => members.includes(dm.id)).map((dm) => dm.name),
+      owner: owner ? { id: owner.user_id, name: userName(owner.user_id) } : null,
+    };
+  });
+  // Décision de chaque gate : franchi avant le gate courant ; ensuite knock-out (NO-GO), critères à
+  // évaluer (HOLD), score des gates atteints ; une complétude sous le minimum du gate ramène à HOLD.
+  const domainName = (id) => policy.domains.find((dm) => dm.id === id)?.name ?? "";
+  const gateRows = [...policy.gates].sort((a, b) => a.sequence - b.sequence).map((g) => {
+    const inGate = evals.filter((x) => x.c.gate_id === g.id);
+    const upTo = evals.filter((x) => gateSeq(policy, x.c.gate_id) <= g.sequence);
+    const kos = upTo.filter((x) => x.c.knockout && x.e.status === "not_met");
+    let decision = "go";
+    let motifs = ["Gate franchi : critères évalués, sans knock-out actif."];
+    if (g.sequence >= (reached?.sequence ?? 0)) {
+      const scored = upTo.filter((x) => x.e.status in STATUS_VALUES);
+      const w = sum(scored, (x) => x.c.weight);
+      const sc = w ? (sum(scored, (x) => STATUS_VALUES[x.e.status] * x.c.weight) / w) * 100 : 0;
+      const pending = upTo.filter((x) => x.e.status === "not_assessed").length;
+      if (kos.length) [decision, motifs] = ["no_go", kos.map((x) => `Knock-out actif : ${x.c.name} (${domainName(x.c.domain_id)}).`)];
+      else if (pending) [decision, motifs] = ["hold", [`${pending} critère(s) des gates atteints à évaluer avant la décision.`]];
+      else if (sc >= policy.go_threshold) [decision, motifs] = ["go", [`Score des gates atteints ${Math.floor(sc)}/100, au moins ${policy.go_threshold}.`]];
+      else if (sc >= policy.conditional_threshold) [decision, motifs] = ["conditional", [`Score des gates atteints ${Math.floor(sc)}/100, sous ${policy.go_threshold} : passage sous conditions.`]];
+      else [decision, motifs] = ["hold", [`Score des gates atteints ${Math.floor(sc)}/100, sous ${policy.conditional_threshold}.`]];
+      const done = upTo.length ? (upTo.filter((x) => x.e.status !== "not_assessed").length / upTo.length) * 100 : 0;
+      if (g.min_completeness && decision !== "no_go" && done < g.min_completeness) {
+        motifs = [`Complétude documentaire des gates atteints ${Math.floor(done)} %, minimum ${g.min_completeness} % pour examiner ce gate.`, ...(decision === "hold" ? motifs : [])];
+        decision = "hold";
+      }
+    }
+    return {
+      gate_id: g.id, code: g.code, name: g.name, index: g.sequence, rule: g.rule_code ?? "generic", decision, motifs, criteria: inGate.length,
+      available: inGate.filter((x) => x.e.status === "met").length, knockouts: inGate.filter((x) => x.c.knockout && x.e.status === "not_met").length,
+      entry_requirements: g.entry_requirements ?? null, deliverables: g.deliverables ?? null, exit_criteria: g.exit_criteria ?? null, min_completeness: g.min_completeness ?? null,
+    };
+  });
+  const nextGate = gateRows.find((g) => g.decision !== "go") ?? null;
   return {
     global_score: globalScore, readiness, apd, bankability,
     completeness: evals.length ? (assessed / evals.length) * 100 : 0,
     dataroom_completeness: docs.length ? (recus / docs.length) * 100 : 0,
     classification, recommendation_detail: "", method_recommendation: recommendation,
-    domains: domains.map((d) => ({ ...d, priority: d.score === null ? null : d.score < 40 ? "URGENTE" : d.score < 60 ? "ÉLEVÉE" : d.score < 80 ? "MOYENNE" : "FAIBLE", gaps: 0, knockouts: 0 })),
+    domains: domains.map((d) => ({ ...d, priority: d.score === null ? null : d.score < 30 ? "URGENTE" : d.score < 50 ? "ÉLEVÉE" : d.score < 65 ? "MOYENNE" : "FAIBLE" })),
+    compartments,
     knockouts: knockouts.map((x) => ({ code: x.c.code, name: x.c.name, domain: null, gate: null })),
     knockouts_pending: 0,
     critical_open: critical.map((x) => ({ code: x.c.code, name: x.c.name, domain: null, gate: null })),
-    critical_missing_excl_ko: critical.length, requalified: [], gates: nextGate ? [nextGate] : [], next_gate: nextGate, anomalies: [],
+    critical_missing_excl_ko: critical.length, requalified: [], gates: gateRows, next_gate: nextGate, anomalies: [],
     proofs: 0, gaps_open: evals.filter((x) => ["not_met", "partial", "not_assessed"].includes(x.e.status)).length,
     documents_missing: docs.length - recus, pending_in_scope: inScope.filter((x) => x.e.status === "not_assessed").length,
     assessed, criteria: evals.length, recommendation,
-    policy: { weighting: "domain", ko_partial_blocks: false, evidence_check: false, exclude_na: true, expiry_check: false },
-    thresholds: { bankable: 80, go: policy.go_threshold, conditional: policy.conditional_threshold, hold: 40, dscr: 1.2 },
+    policy: { weighting: policy.weighting ?? "domain", ko_partial_blocks: Boolean(policy.ko_partial_blocks), evidence_check: Boolean(policy.evidence_check), exclude_na: policy.exclude_na !== false, expiry_check: Boolean(policy.expiry_check) },
+    thresholds: { bankable: policy.threshold_bankable ?? 80, go: policy.go_threshold, conditional: policy.conditional_threshold, hold: policy.threshold_hold ?? 40, dscr: policy.dscr_target ?? 1.2 },
   };
 }
 function gaps(dossier, limit = 5) {
@@ -3197,10 +3302,13 @@ function gaps(dossier, limit = 5) {
     if (!c) continue;
     const domain = policy.domains.find((d) => d.id === c.domain_id);
     const missing = 1 - (STATUS_VALUES[e.status] ?? 0);
+    const comp = (policy.compartments || []).find((k) => k.id === domain.compartment_id);
     rows.push({
       criterion_id: c.id, code: c.code, name: c.name, domain: domain.name, gate: policy.gates.find((g) => g.id === c.gate_id)?.code ?? null,
-      status: e.status, knockout: c.knockout, critical: c.critical,
-      priority: c.weight * domain.weight * missing * (c.knockout ? 3 : 1) * (c.critical ? 2 : 1), action: c.guidance || `Compléter : ${c.name}`,
+      compartment: comp?.code ?? null, compartment_id: comp?.id ?? null, compartment_name: comp?.name ?? null,
+      status: e.status, entered: e.status, knockout: c.knockout, critical: c.critical, blocking: c.requirement_type === "blocking",
+      priority: c.weight * domain.weight * missing * (c.knockout ? 3 : 1) * (c.critical ? 2 : 1), action: e.deliverable || c.guidance || `Compléter : ${c.name}`,
+      responsible: e.responsible ?? null, due_date: e.due_date ?? null, has_proof: e.document_ids.length > 0, evaluation_id: e.id,
     });
   }
   return rows.sort((a, b) => Number(!(a.knockout && a.status === "not_met")) - Number(!(b.knockout && b.status === "not_met")) || b.priority - a.priority).slice(0, limit);
@@ -3298,7 +3406,8 @@ function seedAxispro() {
       if (def.quality === "knockout" && c.number === 48) status = "not_met";
       const ev = {
         id: ++IDS.evaluation, dossier_id: dossier.id, criterion_id: c.id, status, comment: status === "not_assessed" ? null : r.pick(COMMENTS[status]),
-        document_ids: [], assessed_by: status === "not_assessed" ? null : def.consultant,
+        document_ids: [], deliverable: ["partial", "not_met"].includes(status) && c.number % 3 !== 1 ? `Étude complémentaire : ${c.name.charAt(0).toLowerCase()}${c.name.slice(1)}` : null,
+        responsible: null, due_date: null, assessed_by: status === "not_assessed" ? null : def.consultant,
         assessed_at: status === "not_assessed" ? null : stamp(addDays(def.opened, Math.min(span - 1, Math.round((seq / 8) * span) + r.int(0, 20))), r.int(8, 17), r.int(0, 59)),
       };
       if (def.quality === "knockout" && c.number === 48) ev.comment = "Le terrain de Pita relève d'un domaine coutumier sans titre ni bail notarié : critère éliminatoire non satisfait.";
@@ -3373,6 +3482,17 @@ function seedAxispro() {
     }
   }
   for (const t of DB.timesheets) delete t.billed;
+
+  // Équipe des dossiers ouverts sur une grille à compartiments : compartiments confiés aux consultants.
+  // C1 et C4 restent à affecter ; l'aquaculture du Konkouré, tout juste reçue, n'a pas encore d'équipe.
+  DB.assignments = [];
+  for (const dossier of DB.dossiers.filter((x) => x.state !== "closed" && x.id !== 9)) {
+    const lead = dossier.consultant_id;
+    const plan = { C0: lead, C2: 23, C3: lead === 21 ? 22 : 21, C5: lead, C6: lead, C7: lead === 21 ? 22 : 21 };
+    for (const k of policyById(dossier.policy_id).compartments || []) {
+      if (plan[k.code]) DB.assignments.push({ dossier_id: dossier.id, compartment_id: k.id, user_id: plan[k.code] });
+    }
+  }
 
   // Comités : instantanés de l'évaluation conservés avec chaque décision.
   const snapshot = (dossier, shift) => {
@@ -3487,6 +3607,7 @@ function calibrate() {
 function seed() {
   seedLoans();
   seedTransport();
+  seedProprietaires(DB);
   seedChantiers();
   seedImmobilier();
   buildLedger();
@@ -5137,6 +5258,7 @@ function rotationRow(rot) {
     product: rot.product, delivery_note: rot.delivery_note, volume_loaded: rot.volume_loaded, volume_delivered: rot.volume_delivered, shortage: rot.shortage,
     rate: rot.rate, revenue: rot.revenue, costs: Object.fromEntries(COSTS.map(([c]) => [c, rot[c] || 0])), total_cost: rot.total_cost, margin: rot.margin, margin_rate: rot.margin_rate,
     note: rot.note, invoice: invoice ? { id: invoice.id, name: invoice.name ?? "/" } : null, client_uuid: rot.client_uuid,
+    ...standardOf(rot),
   };
 }
 const companyRotations = (ctx) => DB.rotations.filter((r) => r.company_id === ctx.company);
@@ -5191,7 +5313,9 @@ route("GET", "/transport/referentials", TR_READ, (ctx) => {
     routes: DB.routes.filter((r) => r.company_id === ctx.company && r.active).map((r) => ({
       id: r.id, name: r.name, distance_km: r.distance_km, default_rate: r.default_rate,
       tariffs: DB.tariffs.filter((t) => t.route_id === r.id).map((t) => ({ partner_id: t.partner_id, product: t.product, rate: t.rate })),
+      std_fuel_liters: r.std_fuel_liters || 0, std_driver_bonus: r.std_driver_bonus || 0, std_tolls: r.std_tolls || 0, std_other_costs: r.std_other_costs || 0,
     })),
+    fuel_price: fuelPriceAt(ctx.company, TODAY),
     clients: [...clientIds].map(partnerRef).filter(Boolean).sort((a, b) => byFr(a.name, b.name)),
     products: PRODUCTS.map(([code, label]) => ({ code, label })),
     costs: COSTS.map(([code, label]) => ({ code, label })),
@@ -5201,6 +5325,7 @@ route("GET", "/transport/vehicles", TR_READ, (ctx) =>
   DB.vehicles.filter((v) => v.company_id === ctx.company).map((v) => ({
     id: v.id, name: v.name, tractor_plate: v.tractor_plate, trailer_plate: v.trailer_plate, brand: v.brand, capacity_liters: v.capacity_liters,
     driver: simpleRef(DB.drivers, v.driver_id), state: v.state, active: v.active,
+    ownership: v.ownership, owner: partnerRef(v.owner_id), charges: v.charges, monthly_charges: v.charges.reduce((s, c) => s + monthlyOf(c), 0),
   })));
 function vehicleValues(v, data) {
   for (const key of ["name", "tractor_plate", "trailer_plate", "brand"]) if (key in data) v[key] = data[key] || null;
@@ -5208,11 +5333,14 @@ function vehicleValues(v, data) {
   if (["service", "maintenance", "off"].includes(data.state)) v.state = data.state;
   if ("driver_id" in data) v.driver_id = data.driver_id ? Number(data.driver_id) : null;
   if ("active" in data) v.active = Boolean(data.active);
+  if (data.ownership in OWNERSHIP_LABELS) v.ownership = data.ownership;
+  if ("owner_id" in data) v.owner_id = data.owner_id ? Number(data.owner_id) : null;
+  if ("charges" in data) v.charges = (data.charges || []).map((c, i) => ({ id: Date.now() + i, name: c.name, amount: Number(c.amount) || 0, periodicity: c.periodicity === "year" ? "year" : "month", date_from: c.date_from || null, date_to: c.date_to || null }));
 }
 route("POST", "/transport/vehicles", TR_WRITE, (ctx) => {
   requireFields(ctx.body, "name");
   if (DB.vehicles.some((v) => v.company_id === ctx.company && v.name === ctx.body.name)) throw new ApiError(409, "conflict", "Ce code d'ensemble existe déjà.");
-  const v = { id: newId("vehicle"), company_id: ctx.company, name: "", tractor_plate: null, trailer_plate: null, brand: null, capacity_liters: 0, driver_id: null, state: "service", active: true };
+  const v = { id: newId("vehicle"), company_id: ctx.company, name: "", tractor_plate: null, trailer_plate: null, brand: null, capacity_liters: 0, driver_id: null, state: "service", active: true, ownership: "own", owner_id: null, charges: [] };
   vehicleValues(v, ctx.body);
   DB.vehicles.push(v);
   DB.analytic.push({ id: newId("analytic"), company_id: ctx.company, plan: "vehicule", name: v.name, code: null, active: true });
@@ -5247,12 +5375,16 @@ route("PATCH", "/transport/drivers/:id", TR_WRITE, (ctx) => {
 route("GET", "/transport/routes", TR_READ, (ctx) =>
   DB.routes.filter((r) => r.company_id === ctx.company).map((r) => ({
     id: r.id, name: r.name, origin: r.origin, destination: r.destination, distance_km: r.distance_km, default_rate: r.default_rate, active: r.active,
+    distance_return_km: null, round_trip_km: 2 * (r.distance_km || 0), round_trip_inconsistent: false, duration_days: null,
     tariffs: DB.tariffs.filter((t) => t.route_id === r.id).map((t) => ({ id: t.id, partner: partnerRef(t.partner_id), product: t.product, rate: t.rate })),
+    std_fuel_liters: r.std_fuel_liters || 0, std_driver_bonus: r.std_driver_bonus || 0, std_tolls: r.std_tolls || 0, std_other_costs: r.std_other_costs || 0,
+    fuel_per_km: r.distance_km && r.std_fuel_liters ? r.std_fuel_liters / (2 * r.distance_km) : null,
   })));
 function routeValues(rt, data) {
   for (const key of ["name", "origin", "destination"]) if (key in data) rt[key] = data[key] || null;
   if ("distance_km" in data) rt.distance_km = Number.parseInt(data.distance_km || 0, 10) || 0;
   if ("default_rate" in data) rt.default_rate = numArg(data.default_rate || 0, "default_rate");
+  for (const key of ["std_fuel_liters", "std_driver_bonus", "std_tolls", "std_other_costs"]) if (key in data) rt[key] = numArg(data[key] || 0, key);
   if ("active" in data) rt.active = Boolean(data.active);
   if ("tariffs" in data) {
     DB.tariffs = DB.tariffs.filter((t) => t.route_id !== rt.id);
@@ -5356,6 +5488,7 @@ route("GET", "/transport/summary", TR_READ, (ctx) => {
   return {
     date_from: start, date_to: end, rotations: done.length, volume: round3(sum(done, (r) => r.volume_delivered)), revenue: rev, cost: sum(done, (r) => r.total_cost), margin,
     margin_rate: rev ? (margin / rev) * 100 : null, to_invoice: { count: toInvoice.length, amount: sum(toInvoice, (r) => r.revenue) },
+    margin_min: 15, shortage_excess: { count: 0, volume: 0, value: 0 },
     drafts: all.filter((r) => r.state === "draft").length,
     fleet: Object.fromEntries(["service", "maintenance", "off"].map((s) => [s, vehicles.filter((v) => v.state === s).length])),
   };
@@ -5642,13 +5775,43 @@ route("GET", "/immobilier/receipts/:id", IM_READ, (ctx) => {
 
 /* ─── AxisPro Suite ─────────────────────────────────────────────────────── */
 
+/** Politique d'évaluation (_policy_payload du noyau) : réglages, contrôle de cohérence, gates, compartiments,
+ * domaines, critères et pièces. */
 function policyPayload(p) {
+  const compartments = p.compartments || [];
+  const loose = compartments.length ? p.domains.filter((dm) => !dm.compartment_id) : [];
+  const koNotCritical = p.criteria.filter((c) => c.knockout && !c.critical);
   return {
     id: p.id, name: p.name, version: p.version, state: p.state, date_active: p.date_active, go_threshold: p.go_threshold, conditional_threshold: p.conditional_threshold, notes: p.notes,
-    gates: p.gates.map(({ id, code, name, description }) => ({ id, code, name, description })),
-    domains: p.domains.map(({ id, code, name, weight }) => ({ id, code, name, weight })),
-    criteria: p.criteria.map(({ id, code, name, domain_id, gate_id, weight, critical, knockout, evidence_required, guidance }) => ({ id, code, name, domain_id, gate_id, weight, critical, knockout, evidence_required, guidance })),
-    documents: p.documents.map(({ id, code, name, category, gate_id, required, guidance }) => ({ id, code, name, category, gate_id, required, guidance })),
+    threshold_bankable: p.threshold_bankable ?? 80, threshold_hold: p.threshold_hold ?? 40, dscr_target: p.dscr_target ?? 1.2, weighting: p.weighting ?? "domain",
+    ko_partial_blocks: Boolean(p.ko_partial_blocks), evidence_check: Boolean(p.evidence_check), exclude_na: p.exclude_na !== false, expiry_check: Boolean(p.expiry_check),
+    capex_criterion_id: p.capex_criterion_id ?? null,
+    weightings: { flat: "À plat sur toute la grille", domain: "Par domaine, selon leur pondération" }, rules: AX_RULES, scopes: AX_SCOPES, requirements: AX_REQUIREMENTS,
+    integrity: {
+      criteria: p.criteria.length, domains: p.domains.length, gates: p.gates.length, compartments: compartments.length, documents: p.documents.length,
+      weight: sum(p.criteria, (c) => c.weight), knockouts: p.criteria.filter((c) => c.knockout).length, critical: p.criteria.filter((c) => c.critical).length,
+      bankability: p.criteria.filter((c) => c.bankability).length,
+      requirements: Object.fromEntries(Object.keys(AX_REQUIREMENTS).map((k) => [k, p.criteria.filter((c) => (c.requirement_type ?? "apd") === k).length])),
+      links: 0, gates_without_criteria: p.gates.filter((g) => !p.criteria.some((c) => c.gate_id === g.id)).map((g) => g.code),
+      notes: [
+        ...(koNotCritical.length ? [`${koNotCritical.length} critère(s) éliminatoire(s) non marqué(s) critique(s) : ${koNotCritical.map((c) => c.code).join(", ")}.`] : []),
+        ...(loose.length ? [`${loose.length} domaine(s) sans compartiment : ${loose.map((dm) => dm.name).join(", ")}.`] : []),
+      ],
+    },
+    gates: p.gates.map((g) => ({
+      id: g.id, code: g.code, name: g.name, sequence: g.sequence, description: g.description ?? null, rule_code: g.rule_code ?? "generic",
+      threshold_hold: g.threshold_hold || null, threshold_go: g.threshold_go || null, score_scope: g.score_scope ?? "global", domain_ids: g.domain_ids ?? [],
+      min_completeness: g.min_completeness || null, entry_requirements: g.entry_requirements ?? null, deliverables: g.deliverables ?? null, exit_criteria: g.exit_criteria ?? null,
+    })),
+    compartments: compartments.map((k) => ({ id: k.id, code: k.code, name: k.name, sequence: k.sequence, domain_ids: p.domains.filter((dm) => dm.compartment_id === k.id).map((dm) => dm.id) })),
+    domains: p.domains.map((dm) => ({ id: dm.id, code: dm.code, name: dm.name, weight: dm.weight, deliverable: dm.deliverable ?? null, compartment_id: dm.compartment_id ?? null })),
+    criteria: p.criteria.map((c) => ({
+      id: c.id, code: c.code, name: c.name, domain_id: c.domain_id, gate_id: c.gate_id, weight: c.weight, critical: c.critical, knockout: c.knockout,
+      evidence_required: c.evidence_required, guidance: c.guidance, requirement_type: c.requirement_type ?? "apd", bankability: Boolean(c.bankability),
+      deliverable: c.deliverable ?? null, pieces: [], indicator: c.indicator ?? null, indicator_threshold: c.indicator ? (c.indicator_threshold ?? 0) : null, indicator_partial: null,
+    })),
+    indicators: AX_INDICATORS,
+    documents: p.documents.map(({ id, code, name, category, gate_id, required, guidance }) => ({ id, code, name, category, gate_id, required, guidance, criteria: [] })),
   };
 }
 function dossierSummary(d) {
@@ -5733,10 +5896,12 @@ function copyPolicy(source, overrides) {
   const version = Math.max(...DB.policies.filter((p) => p.company_id === source.company_id).map((p) => p.version)) + 1;
   const gateMap = new Map(source.gates.map((g, i) => [g.id, id * 10 + i + 1]));
   const domainMap = new Map(source.domains.map((dm, i) => [dm.id, id * 100 + i + 1]));
+  const compartmentMap = new Map((source.compartments || []).map((k, i) => [k.id, id * 100 + 60 + i + 1]));
   const p = {
     ...source, id, version, state: "draft", date_active: null, ...overrides,
-    gates: source.gates.map((g) => ({ ...g, id: gateMap.get(g.id) })),
-    domains: source.domains.map((dm) => ({ ...dm, id: domainMap.get(dm.id) })),
+    gates: source.gates.map((g) => ({ ...g, id: gateMap.get(g.id), domain_ids: (g.domain_ids || []).map((x) => domainMap.get(x)) })),
+    compartments: (source.compartments || []).map((k) => ({ ...k, id: compartmentMap.get(k.id) })),
+    domains: source.domains.map((dm) => ({ ...dm, id: domainMap.get(dm.id), compartment_id: dm.compartment_id ? (compartmentMap.get(dm.compartment_id) ?? null) : null })),
     criteria: source.criteria.map((c) => ({ ...c, id: id * 1000 + c.number, domain_id: domainMap.get(c.domain_id), gate_id: gateMap.get(c.gate_id) })),
     documents: source.documents.map((t) => ({ ...t, id: id * 1000 + 500 + t.number, gate_id: t.gate_id ? gateMap.get(t.gate_id) : null })),
   };
@@ -5752,7 +5917,7 @@ route("GET", "/axispro/policies", AX_READ, (ctx) =>
   DB.policies
     .filter((p) => p.company_id === ctx.company)
     .sort((a, b) => b.version - a.version)
-    .map((p) => ({ id: p.id, name: p.name, version: p.version, state: p.state, date_active: p.date_active, criteria: p.criteria.length, domains: p.domains.length, gates: p.gates.length, documents: p.documents.length })));
+    .map((p) => ({ id: p.id, name: p.name, version: p.version, state: p.state, date_active: p.date_active, criteria: p.criteria.length, domains: p.domains.length, gates: p.gates.length, documents: p.documents.length, weighting: p.weighting ?? "domain" })));
 route("GET", "/axispro/policies/template", AX_READ, () => {
   const rows = [
     ["type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide"],
@@ -5792,9 +5957,81 @@ route("PATCH", "/axispro/criteria/:id", AX_WRITE, (ctx) => {
   if (policy.state !== "draft") throw businessRule("Seule une version en brouillon se modifie : créez une nouvelle version.");
   const c = policy.criteria.find((x) => x.id === ctx.params[0]);
   for (const key of ["name", "guidance"]) if (key in ctx.body) c[key] = ctx.body[key];
-  for (const key of ["critical", "knockout", "evidence_required"]) if (key in ctx.body) c[key] = Boolean(ctx.body[key]);
+  for (const key of ["critical", "knockout", "evidence_required", "bankability"]) if (key in ctx.body) c[key] = Boolean(ctx.body[key]);
   if ("weight" in ctx.body) c.weight = numArg(ctx.body.weight, "weight");
+  if (ctx.body.requirement_type in AX_REQUIREMENTS) c.requirement_type = ctx.body.requirement_type;
   return { status: "ok" };
+});
+/** Version en brouillon de la société contenant l'élément (gate, domaine, compartiment). */
+function draftPolicyWith(ctx, key, id, label) {
+  const policy = DB.policies.find((p) => p.company_id === ctx.company && (p[key] || []).some((x) => x.id === id));
+  if (!policy) throw notFound(`${label} introuvable.`);
+  if (policy.state !== "draft") throw businessRule("Seule une version en brouillon se modifie : créez une nouvelle version.");
+  return policy;
+}
+function percentArg(data, key) {
+  const v = numArg(data[key] || 0, key);
+  if (v < 0 || v > 100) throw badParam(`${key} : valeur de 0 à 100 attendue.`);
+  return v;
+}
+route("PATCH", "/axispro/policies/:id", AX_WRITE, (ctx) => {
+  const p = policyOf(ctx, ctx.params[0]);
+  if (p.state !== "draft") throw businessRule("Seule une version en brouillon se modifie : créez une nouvelle version.");
+  const data = ctx.body;
+  for (const key of ["name", "notes"]) if (key in data) p[key] = data[key] || null;
+  for (const key of ["threshold_bankable", "go_threshold", "conditional_threshold", "threshold_hold"]) if (key in data) p[key] = percentArg(data, key);
+  if ("dscr_target" in data) p.dscr_target = numArg(data.dscr_target || 0, "dscr_target");
+  if (["flat", "domain"].includes(data.weighting)) p.weighting = data.weighting;
+  for (const key of ["ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check"]) if (key in data) p[key] = Boolean(data[key]);
+  if ("capex_criterion_id" in data) p.capex_criterion_id = p.criteria.some((c) => c.id === Number(data.capex_criterion_id)) ? Number(data.capex_criterion_id) : null;
+  return policyPayload(p);
+});
+route("PATCH", "/axispro/gates/:id", AX_WRITE, (ctx) => {
+  const policy = draftPolicyWith(ctx, "gates", ctx.params[0], "Gate");
+  const g = policy.gates.find((x) => x.id === ctx.params[0]);
+  const data = ctx.body;
+  for (const key of ["name", "description", "entry_requirements", "deliverables", "exit_criteria"]) if (key in data) g[key] = data[key] || null;
+  if ("rule_code" in data) {
+    if (!AX_RULES[data.rule_code]) throw badParam("Règle de passage inconnue.");
+    g.rule_code = data.rule_code;
+  }
+  for (const key of ["threshold_hold", "threshold_go", "min_completeness"]) if (key in data) g[key] = percentArg(data, key) || null;
+  if (data.score_scope in AX_SCOPES) g.score_scope = data.score_scope;
+  if ("domain_ids" in data) g.domain_ids = policy.domains.filter((dm) => (data.domain_ids || []).map(Number).includes(dm.id)).map((dm) => dm.id);
+  return policyPayload(policy);
+});
+route("PATCH", "/axispro/domains/:id", AX_WRITE, (ctx) => {
+  const policy = draftPolicyWith(ctx, "domains", ctx.params[0], "Domaine");
+  const dm = policy.domains.find((x) => x.id === ctx.params[0]);
+  const data = ctx.body;
+  for (const key of ["name", "deliverable"]) if (key in data) dm[key] = data[key] || null;
+  if ("weight" in data) dm.weight = numArg(data.weight, "weight");
+  if ("compartment_id" in data) {
+    const wanted = data.compartment_id ? Number(data.compartment_id) : null;
+    if (wanted && !(policy.compartments || []).some((k) => k.id === wanted)) throw badParam("Compartiment inconnu dans cette version de la grille.");
+    dm.compartment_id = wanted;
+  }
+  return { status: "ok" };
+});
+route("PATCH", "/axispro/compartments/:id", AX_WRITE, (ctx) => {
+  const policy = draftPolicyWith(ctx, "compartments", ctx.params[0], "Compartiment");
+  const k = policy.compartments.find((x) => x.id === ctx.params[0]);
+  for (const key of ["code", "name"]) if (ctx.body[key]) k[key] = String(ctx.body[key]).trim().slice(0, 200);
+  return policyPayload(policy);
+});
+/** Consultants du cabinet ouverts à la société de travail, à qui confier un compartiment. */
+const axConsultants = (ctx) => USERS.filter((u) => u.active && u.profiles.includes("cabinet") && u.companies.includes(ctx.company)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+route("GET", "/axispro/consultants", AX_READ, (ctx) => axConsultants(ctx).map((u) => ({ id: u.id, name: u.name })));
+route("POST", "/axispro/dossiers/:id/assignments", AX_WRITE, (ctx) => {
+  const d = dossierOf(ctx, ctx.params[0]);
+  const [compartmentId] = requireFields(ctx.body, "compartment_id");
+  const k = (policyById(d.policy_id).compartments || []).find((x) => x.id === Number(compartmentId));
+  if (!k) throw notFound("Compartiment introuvable dans la grille du dossier.");
+  const userId = ctx.body.user_id ? Number(ctx.body.user_id) : null;
+  if (userId && !axConsultants(ctx).some((u) => u.id === userId)) throw businessRule("Seul un consultant du cabinet ouvert à cette société peut recevoir un compartiment.");
+  DB.assignments = (DB.assignments || []).filter((a) => !(a.dossier_id === d.id && a.compartment_id === k.id));
+  if (userId) DB.assignments.push({ dossier_id: d.id, compartment_id: k.id, user_id: userId });
+  return { status: "ok", compartments: scoring(d).compartments };
 });
 route("GET", "/axispro/dossiers", AX_READ, (ctx) => {
   const states = ctx.query.state ? ctx.query.state.split(",") : null;
@@ -5848,18 +6085,34 @@ route("POST", "/axispro/dossiers/:id/portal-access", AX_WRITE, (ctx) => {
   if (!d.portal_user_ids.includes(user.id)) d.portal_user_ids.push(user.id);
   return dossierDetail(d);
 });
+/** Check-list du dossier : filtres gate_id, compartment_id et mine=1 (compartiments confiés à l'utilisateur). */
 route("GET", "/axispro/dossiers/:id/criteria", AX_READ, (ctx) => {
   const d = dossierOf(ctx, ctx.params[0]);
   const policy = policyById(d.policy_id);
   const gateId = intArg(ctx.query, "gate_id");
+  const compartmentId = intArg(ctx.query, "compartment_id");
+  const owners = new Map((DB.assignments || []).filter((a) => a.dossier_id === d.id).map((a) => [a.compartment_id, a.user_id]));
+  const mine = ["1", "true"].includes(ctx.query.mine) ? new Set([...owners].filter(([, u]) => u === ctx.user.id).map(([k]) => k)) : null;
+  const priorities = new Map(gaps(d, 100000).map((g) => [g.criterion_id, Math.round(g.priority * 100) / 100]));
   return evaluationsOf(d)
     .map((e) => ({ e, c: criterionOf(policy, e.criterion_id) }))
     .filter((x) => x.c && (!gateId || x.c.gate_id === gateId))
-    .map(({ e, c }) => ({
-      id: e.id, criterion_id: c.id, code: c.code, name: c.name, domain: policy.domains.find((dm) => dm.id === c.domain_id).name, gate_id: c.gate_id, weight: c.weight,
-      critical: c.critical, knockout: c.knockout, evidence_required: c.evidence_required, guidance: c.guidance, status: e.status, comment: e.comment, documents: e.document_ids,
-      assessed_by: e.assessed_by ? userName(e.assessed_by) : null, assessed_at: e.assessed_at,
-    }));
+    .map(({ e, c }) => {
+      const domain = policy.domains.find((dm) => dm.id === c.domain_id);
+      const comp = (policy.compartments || []).find((k) => k.id === domain.compartment_id);
+      return {
+        id: e.id, criterion_id: c.id, code: c.code, name: c.name, domain: domain.name, domain_id: domain.id, domain_code: domain.code,
+        compartment_id: comp?.id ?? null, compartment: comp?.code ?? null, compartment_name: comp?.name ?? null,
+        owner: comp && owners.has(comp.id) ? userName(owners.get(comp.id)) : null,
+        gate_id: c.gate_id, gate: policy.gates.find((g) => g.id === c.gate_id)?.code ?? null, weight: c.weight, critical: c.critical, knockout: c.knockout,
+        evidence_required: c.evidence_required, requirement: c.requirement_type ?? "apd", bankability: Boolean(c.bankability), guidance: c.guidance,
+        status: e.status, retained: e.status, points: STATUS_VALUES[e.status] ?? 0, alerts: [], priority: priorities.get(c.id) ?? null,
+        comment: e.comment, deliverable: e.deliverable ?? null, default_deliverable: c.guidance || `Compléter : ${c.name}`, responsible: e.responsible ?? null, due_date: e.due_date ?? null,
+        documents: e.document_ids.map((id) => DB.documents.find((x) => x.id === id)).filter(Boolean).map((doc) => ({ id: doc.id, name: doc.name, version: doc.version, state: doc.state, validity_date: doc.validity_date ?? null })),
+        pieces: [], assessed_by: e.assessed_by ? userName(e.assessed_by) : null, assessed_at: e.assessed_at, indicator: null, suggestion: null,
+      };
+    })
+    .filter((row) => (!compartmentId || row.compartment_id === compartmentId) && (!mine || mine.has(row.compartment_id)));
 });
 route("PATCH", "/axispro/evaluations/:id", AX_WRITE, (ctx) => {
   const e = DB.evaluations.find((x) => x.id === ctx.params[0]);
@@ -5878,6 +6131,7 @@ route("PATCH", "/axispro/evaluations/:id", AX_WRITE, (ctx) => {
     Object.assign(e, { status: data.status, assessed_by: ctx.user.id, assessed_at: nowStamp() });
   }
   if ("comment" in data) e.comment = data.comment || null;
+  for (const key of ["deliverable", "responsible", "due_date"]) if (key in data) e[key] = data[key] || null;
   e.document_ids = docs;
   return { status: "ok", scoring: scoring(d) };
 });
@@ -5973,8 +6227,10 @@ route("GET", "/axispro/dossiers/:id/report", AX_READ, (ctx) => {
   const d = dossierOf(ctx, ctx.params[0]);
   const p = policyById(d.policy_id);
   return {
-    dossier: dossierDetail(d), policy: { name: p.name, version: p.version, date_active: p.date_active, notes: p.notes, go_threshold: p.go_threshold, conditional_threshold: p.conditional_threshold },
-    documents: documentsStatus(d), generated_at: nowStamp(),
+    dossier: dossierDetail(d),
+    policy: { name: p.name, version: p.version, date_active: p.date_active, notes: p.notes, go_threshold: p.go_threshold, conditional_threshold: p.conditional_threshold, weighting: p.weighting ?? "domain", thresholds: scoring(d).thresholds },
+    documents: documentsStatus(d).map((x) => ({ ...x, available: ["received", "validated"].includes(x.state) })), generated_at: nowStamp(),
+    financial: null, risks: [], actions: [], fundings: [], seal: null, gaps: gaps(d, 5),
   };
 });
 route("GET", "/axispro/dossiers/:id/report.xlsx", AX_READ, (ctx) => {
@@ -6098,6 +6354,7 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
 /* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */
 
 enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES });
+enregistrerProprietaires({ route, DB, ApiError, TR_READ, TODAY, COMPANIES, partnerRef, simpleRef, fileReply, xlsxBuffer });
 
 /* ════════════════════════════════════════════════════════════════════════════
  * Serveur HTTP

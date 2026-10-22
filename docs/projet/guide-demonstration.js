@@ -128,7 +128,7 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
   s.addText("Présenter la plateforme", { x: 0.6, y: 2.05, w: 6.3, h: 0.6, fontFace: H, fontSize: 30, color: C.white, margin: 0 });
   s.addText("Guide pas à pas pour la démonstration au DG, et questions-réponses", { x: 0.6, y: 2.7, w: 6.3, h: 0.7,
     fontFace: B, fontSize: 15, color: C.white, margin: 0 });
-  s.addText("EGUITRA GROUP × MB AxisPro Consulting · 16 octobre 2026", { x: 0.6, y: 4.55, w: 6.3, h: 0.3,
+  s.addText("EGUITRA GROUP × MB AxisPro · 16 octobre 2026", { x: 0.6, y: 4.55, w: 6.3, h: 0.3,
     fontFace: B, fontSize: 11, bold: true, color: C.white, margin: 0 });
   s.addText("Recette, données fictives repérées « Démo »", { x: 0.6, y: 4.85, w: 6.3, h: 0.3, fontFace: B,
     fontSize: 10, color: C.mint, margin: 0 });
@@ -219,7 +219,7 @@ function stepSlide(n, t, sub, items, say, opts = {}) {
   // légendes
   const legends = [
     ["1", "« Finance | AxisPro »", "passer d'une application à l'autre d'un clic (comptes ouverts aux deux)."],
-    ["2", "« Société »", "EGUITRA GROUP SARLU ou MB AxisPro Consulting ; l'écran se recharge."],
+    ["2", "« Société »", "EGUITRA GROUP SARLU ou MB AxisPro ; l'écran se recharge."],
     ["3", "Menu", "les écrans, par famille ; un clic ouvre l'écran."],
     ["4", "Votre nom", "en bas à gauche : « Changer le mot de passe », « Se déconnecter »."],
     ["5", "« Rechercher un écran »", "en haut : taper quelques lettres, puis Entrée."],
@@ -262,7 +262,7 @@ stepSlide(2, "Connexion et sécurité", "3 minutes · montrer l'écran de connex
 ], { duration: "3 min" });
 
 stepSlide(3, "Deux sociétés, un seul compte", "3 minutes · la promesse faite au client", [
-  ["Colonne de gauche, carte « Société » :", "choisir « MB AxisPro Consulting ». L'écran se recharge : autres chiffres, autre comptabilité."],
+  ["Colonne de gauche, carte « Société » :", "choisir « MB AxisPro ». L'écran se recharge : autres chiffres, autre comptabilité."],
   ["Revenir à « EGUITRA GROUP SARLU ».", ""],
   ["Sur le tableau de bord, cliquer « Groupe consolidé » :", "les deux sociétés réunies."],
   ["Recliquer sur la société", "pour revenir à une seule."],
@@ -535,7 +535,7 @@ QA.forEach(([theme, qas], idx) => {
   s.addText("NIMOVA", { x: 0.6, y: 1.7, w: 8.8, h: 0.7, fontFace: H, fontSize: 36, bold: true, color: C.white, margin: 0 });
   s.addText("La maîtrise intégrée de votre performance.", { x: 0.6, y: 2.45, w: 8.8, h: 0.5, fontFace: H, fontSize: 18,
     italic: true, color: C.mint, margin: 0 });
-  s.addText("EGUITRA GROUP × MB AxisPro Consulting · E-VOLUTION XP", { x: 0.6, y: 4.6, w: 8.8, h: 0.3, fontFace: B,
+  s.addText("EGUITRA GROUP × MB AxisPro · E-VOLUTION XP", { x: 0.6, y: 4.6, w: 8.8, h: 0.3, fontFace: B,
     fontSize: 11, color: C.white, margin: 0 });
 }
 

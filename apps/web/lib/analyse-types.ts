@@ -709,7 +709,7 @@ export interface GroupeFiabilite extends Envelope {
   checks: Check[];
 }
 
-/* ─── MB AxisPro Consulting (chapitre 6) ─────────────────────────────────── */
+/* ─── MB AxisPro (chapitre 6) ─────────────────────────────────── */
 
 export interface FunnelStage {
   gate: string;
@@ -873,7 +873,26 @@ export interface TopGap {
   details: Array<Ref & { status: string }>;
 }
 
+/** Suivi d'un compartiment d'expertise sur le portefeuille (outil du cabinet, version 3). */
+export interface CompartmentRow {
+  code: string;
+  label: string;
+  domains: string[];
+  dossiers: number;
+  /** Score moyen de la méthode sur les domaines du compartiment (0 à 100). */
+  mean: number | null;
+  gaps: number;
+  gaps_per_dossier: number | null;
+  studies: number;
+  knockouts: number;
+  unassigned: number;
+  consultants: Array<{ name: string; dossiers: number }>;
+  unassigned_dossiers: Ref[];
+}
+
 export interface CabinetDiagnostic extends Envelope {
+  /** Vide pour une grille sans compartiments. */
+  compartments?: CompartmentRow[];
   domain_heatmap: {
     dossiers: Array<Ref & { gate: string; readiness: number | null }>;
     domains: Array<{ code: string; label: string }>;

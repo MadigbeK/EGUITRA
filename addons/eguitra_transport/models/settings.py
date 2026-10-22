@@ -22,6 +22,10 @@ SHORTAGE_RULES = [
 ]
 DEDUCTED = ("invoice", "both")
 CLAIMED = ("driver", "both")
+OWNER_COST_BASES = [
+    ("declared", "Frais déclarés et charges mensuelles de l'ensemble"),
+    ("booked", "Pièces comptabilisées sur l'ensemble"),
+]
 
 
 class ResCompany(models.Model):
@@ -55,6 +59,26 @@ class ResCompany(models.Model):
              "l'activité de l'ancien classeur). Vide : activité « Transport pétrolier », créée au besoin.",
     )
 
+    # Camions gérés pour des propriétaires tiers (models/ownership.py).
+    transport_owner_cost_basis = fields.Selection(
+        OWNER_COST_BASES, "Charges des relevés de propriétaires", default="declared", required=True,
+        help="Frais déclarés : frais saisis sur les rotations et charges mensuelles de l'ensemble. Pièces "
+             "comptabilisées : charges de classe 6 imputées sur l'ensemble routier.",
+    )
+    transport_owner_account_id = fields.Many2one(
+        "account.account", "Compte de la part des propriétaires",
+        help="Charge de la part reversée au propriétaire d'un ensemble géré. Vide : premier compte 6223, sinon 622 ou 62.",
+    )
+    transport_owner_income_account_id = fields.Many2one(
+        "account.account", "Compte des charges refacturées aux propriétaires",
+        help="Produit d'une part négative, refacturée au propriétaire. Vide : premier compte 7078, sinon 707 ou 706.",
+    )
+    transport_commission_account_id = fields.Many2one(
+        "account.account", "Compte des commissions versées",
+        help="Charge des commissions dues aux bénéficiaires des règles de répartition. Vide : premier compte "
+             "6322, sinon 632 ou 63.",
+    )
+
     def _transport_account(self, field, prefixes, label):
         """Compte paramétré, sinon premier compte du plan sous les préfixes donnés."""
         self.ensure_one()
@@ -74,6 +98,18 @@ class ResCompany(models.Model):
     def _transport_claim_account(self):
         return self._transport_account("transport_claim_account_id", ("4211", "421"),
                                        "Compte des créances sur les chauffeurs")
+
+    def _transport_owner_account(self):
+        return self._transport_account("transport_owner_account_id", ("6223", "622", "62"),
+                                       "Compte de la part des propriétaires")
+
+    def _transport_owner_income_account(self):
+        return self._transport_account("transport_owner_income_account_id", ("7078", "707", "706"),
+                                       "Compte des charges refacturées aux propriétaires")
+
+    def _transport_commission_account(self):
+        return self._transport_account("transport_commission_account_id", ("6322", "632", "63"),
+                                       "Compte des commissions versées")
 
 
 class ResPartner(models.Model):

@@ -2,7 +2,7 @@
 
 Demande du gérant (17 octobre 2026, carte blanche) : un module d'analyse de données de niveau
 expert, « ultra premium », extrêmement utile, **différent selon la société sélectionnée** (EGUITRA
-GROUP SARLU ou MB AxisPro Consulting), avec l'accent sur la pertinence des informations, le design et
+GROUP SARLU ou MB AxisPro), avec l'accent sur la pertinence des informations, le design et
 des visuels d'exception. Ce document fixe l'architecture et le contrat entre le noyau et
 l'application web ; les agents le suivent à la lettre (noms de routes, de clés et d'unités).
 
@@ -193,7 +193,7 @@ négative).
   pièces en brouillon anciennes, comptes d'attente non soldés, tiers sans NIF, rotations non
   facturées anciennes.
 
-## 6. MB AxisPro Consulting (entité « cabinet »)
+## 6. MB AxisPro (entité « cabinet »)
 
 ### 6.1 `GET /analyse/cabinet/synthese` — Cockpit du cabinet
 - `kpis` : dossiers actifs, besoin de financement total, pipeline pondéré (besoin × probabilité de

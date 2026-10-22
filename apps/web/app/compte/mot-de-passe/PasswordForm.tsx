@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Button, Card, Field, Input, Notice, PageHeader } from "@/components/ui";
+import { Button, Card, Field, Input, Notice, PageHeader, PasswordInput } from "@/components/ui";
 import type { AppCode } from "@/lib/config";
 
 export function PasswordForm({ app, required = false }: { app: AppCode; required?: boolean }) {
@@ -36,13 +36,13 @@ export function PasswordForm({ app, required = false }: { app: AppCode; required
           {required && <Notice tone="warn">Votre mot de passe est provisoire : choisissez le vôtre pour continuer.</Notice>}
           {error && <Notice tone="danger">{error}</Notice>}
           <Field label="Mot de passe actuel">
-            <Input type="password" autoComplete="current-password" value={oldPassword} onChange={(e) => setOld(e.target.value)} required />
+            <PasswordInput autoComplete="current-password" value={oldPassword} onChange={(e) => setOld(e.target.value)} required />
           </Field>
           <Field label="Nouveau mot de passe">
-            <Input type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNew(e.target.value)} required />
+            <PasswordInput autoComplete="new-password" value={newPassword} onChange={(e) => setNew(e.target.value)} required />
           </Field>
           <Field label="Confirmation">
-            <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+            <PasswordInput autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </Field>
           <Button type="submit" variant="primary" loading={busy}>
             Enregistrer le nouveau mot de passe

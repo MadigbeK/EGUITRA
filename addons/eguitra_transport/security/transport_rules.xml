@@ -35,4 +35,29 @@
         <field name="model_id" ref="model_eguitra_transport_rotation_tax"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_vehicle_charge_company" model="ir.rule">
+        <field name="name">Charges des ensembles : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_vehicle_charge"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_share_rule_company" model="ir.rule">
+        <field name="name">Règles de répartition : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_share_rule"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_owner_statement_company" model="ir.rule">
+        <field name="name">Relevés des propriétaires : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_owner_statement"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_owner_statement_line_company" model="ir.rule">
+        <field name="name">Lignes des relevés : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_owner_statement_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_fuel_price_company" model="ir.rule">
+        <field name="name">Prix du carburant : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_fuel_price"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>

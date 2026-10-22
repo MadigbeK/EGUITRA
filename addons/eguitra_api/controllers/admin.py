@@ -7,6 +7,7 @@ from odoo.http import request
 from odoo.addons.eguitra_base.models.res_users import PROFILE_GROUPS
 
 from ..organisation import PROFILE_ENTITY
+from .auth import _password_shared, _refuse_if_password_shared
 from .framework import ApiError, api_route, int_arg, read_json, require, sudo_env
 
 ADMIN = ("admin",)
@@ -189,7 +190,7 @@ class EguitraAdminController(http.Controller):
             "login": login,
             "email": data.get("email") or False,
             "password": password,
-            "eguitra_password_temporary": True,
+            "eguitra_password_temporary": not _password_shared(env),
         })
         self._apply(user, {k: v for k, v in data.items() if k in ("company_ids", "company_id", "profiles", "rights")})
         return _user_row(user)
@@ -214,6 +215,7 @@ class EguitraAdminController(http.Controller):
     def reset_password(self, user_id, **_kw):
         user = self._get_user(user_id)
         (password,) = require(read_json(), "password")
+        _refuse_if_password_shared(sudo_env())
         user.write({"password": password, "eguitra_password_temporary": True})
         sudo_env()["eguitra.api.token"]._revoke_user(user)
         return {"status": "ok"}

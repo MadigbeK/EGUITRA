@@ -43,7 +43,7 @@ class EguitraAlertThreshold(models.Model):
                 alerts.append(self._alert(
                     t, "Marge transport sous le seuil",
                     f"{len(weak)} ensemble(s) sous {t.value:.0f} % de marge sur 30 jours : {names}.",
-                    None, "/finance/transport",
+                    None, "/transport/rentabilite",
                 ))
         t = thresholds.get("transport_shortage_excess")
         if t:
@@ -59,7 +59,7 @@ class EguitraAlertThreshold(models.Model):
                 alerts.append(self._alert(
                     t, "Manquants au-delà de la tolérance",
                     f"{count} rotation(s), {fmt_m3(excess)} hors tolérance sur 30 jours{valued}. Chauffeurs : {worst}.",
-                    excess, "/finance/transport",
+                    excess, "/transport/manquants",
                 ))
         return alerts
 

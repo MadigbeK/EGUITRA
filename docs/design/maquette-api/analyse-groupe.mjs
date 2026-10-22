@@ -113,10 +113,10 @@ export function routesGroupe({ route, makeRng, TODAY, periode, enveloppe, exiger
       ["old_drafts", "Pièces en brouillon anciennes", 6, "count", 0, "Pièces en brouillon depuis plus de 30 jours.", "Six factures d'achat en brouillon depuis septembre.", "/finance/achats?state=draft", "Valider ou supprimer les brouillons de septembre.", 6, 0.12e9],
       ["suspense", "Comptes d'attente soldés", 0, "gnf", 0, "Solde des comptes d'attente (classe 47) à la date d'arrêté.", "Comptes 47 soldés.", "/finance/clotures", null, 0, 0],
       ["partners_vat", "Tiers identifiés (NIF)", 99.1, "pct", 100, "Part des tiers facturés sur la période qui portent un NIF.", "3 tiers sans NIF, tous inactifs depuis 2024.", "/finance/tiers", "Renseigner le NIF des trois tiers.", 3, null],
-      ["unbilled_rotations", "Rotations facturées", 9, "count", 0, "Rotations validées depuis plus de 15 jours sans facture.", "Neuf rotations de septembre attendent leur facture (118 M GNF).", "/finance/transport", "Facturer les rotations de septembre.", 9, 0.118e9],
+      ["unbilled_rotations", "Rotations facturées", 9, "count", 0, "Rotations validées depuis plus de 15 jours sans facture.", "Neuf rotations de septembre attendent leur facture (118 M GNF).", "/transport/rotations", "Facturer les rotations de septembre.", 9, 0.118e9],
       ["tiers_without_partner", "Lignes de tiers rattachées", 0, "count", 0, "Lignes sur comptes de tiers sans partenaire.", "Toutes les lignes de tiers portent un partenaire.", "/finance/ecritures", null, 0, 0],
       ["unmapped_accounts", "Comptes classés dans les états", 0, "count", 0, "Comptes mouvementés absents du plan de regroupement des états financiers.", "Tous les comptes mouvementés sont classés.", "/finance/etats", null, 0, 0],
-      ["rotations_fuel", "Litres de carburant saisis", 94.2, "pct", 90, "Part des rotations validées de la période avec les litres de carburant saisis.", "23 rotations sans litres : consommation non contrôlable sur ces rotations.", "/finance/transport", "Rendre les litres obligatoires à la validation.", 23, null],
+      ["rotations_fuel", "Litres de carburant saisis", 94.2, "pct", 90, "Part des rotations validées de la période avec les litres de carburant saisis.", "23 rotations sans litres : consommation non contrôlable sur ces rotations.", "/transport/rotations", "Rendre les litres obligatoires à la validation.", 23, null],
     ];
     return defs.map(([key, label, value, unit, target, definition, detail, link, action, count, amount]) => {
       let score;

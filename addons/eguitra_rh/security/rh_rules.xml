@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cloisonnement par société : chaque compte ne voit que le personnel et la paie des sociétés
+     auxquelles il est ouvert. Le libre-service passe par l'API, bornée au dossier du compte. -->
+<odoo>
+    <record id="rule_rh_settings_company" model="ir.rule">
+        <field name="name">Paramètres de paie : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_settings"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_department_company" model="ir.rule">
+        <field name="name">Départements : communs ou des sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_department"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_employee_company" model="ir.rule">
+        <field name="name">Salariés : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_employee"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_document_company" model="ir.rule">
+        <field name="name">Documents du personnel : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_document"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_salary_change_company" model="ir.rule">
+        <field name="name">Historique du salaire : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_salary_change"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_leave_company" model="ir.rule">
+        <field name="name">Absences : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_leave"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_advance_company" model="ir.rule">
+        <field name="name">Avances et prêts : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_advance"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_payroll_company" model="ir.rule">
+        <field name="name">Paies : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_payroll"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_payslip_company" model="ir.rule">
+        <field name="name">Bulletins : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_rh_payslip"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_rh_holiday_company" model="ir.rule">
+        <field name="name">Jours fériés : communs ou de la société</field>
+        <field name="model_id" ref="model_eguitra_rh_holiday"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

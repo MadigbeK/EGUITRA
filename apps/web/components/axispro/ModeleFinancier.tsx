@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Calculator, Coins, Download, Landmark, Percent, Plus, Scale, Target, Trash2, TrendingUp } from "@/components/icons";
-import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Field, GAMME, Kpi, Loading, Notice, Segmented, Textarea, cx } from "@/components/ui";
+import { Download, Landmark, Plus, Trash2 } from "@/components/icons";
+import { AreaChart, Badge, BarChart, Button, Card, ErrorBox, Etat, Field, SERIES, Kpi, Loading, Notice, Segmented, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { LineKind, ModelRow, PlanLine, PlanPayload, Stress } from "@/lib/axispro-types";
 import { fmtPct, fmtShort } from "@/lib/format";
@@ -102,7 +102,7 @@ const PARAMETRES: Array<{ champ: string; titre: string; aide?: string }> = [
 export function ModeleFinancier({ dossierId, reference }: { dossierId: number; reference: string }) {
   const chemin = `/axispro/dossiers/${dossierId}/plan`;
   const { data, error, mutate } = useApi<PlanPayload>(chemin);
-  const { data: stress, mutate: recalculer } = useApi<Stress | null>(data?.lines.length ? `${chemin}/stress` : null);
+  const { data: stress, error: erreurStress, mutate: recalculer } = useApi<Stress | null>(data?.lines.length ? `${chemin}/stress` : null);
   const [message, setMessage] = useState<string | null>(null);
   const [vue, setVue] = useState<Vue>("statements");
 
@@ -138,12 +138,12 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-            <Kpi label="VAN du projet" value={fmtShort(ind.npv)} icon={TrendingUp} teinte={ind.npv >= 0 ? "jade" : "danger"} tone={ind.npv >= 0 ? "ok" : "danger"} hint={`Au taux de ${fmtPct(p.discount_rate, 1)}`} />
-            <Kpi label="TRI du projet" value={fmtPct(ind.irr_project)} icon={Percent} teinte="azur" tone={ind.irr_project !== null && ind.irr_project >= p.discount_rate ? "ok" : "warn"} hint={`Fonds propres : ${fmtPct(ind.irr_equity)}`} />
-            <Kpi label="DSCR minimal" value={ratio(ind.dscr_min)} icon={Scale} teinte={ind.dscr_min === null || ind.dscr_min >= p.dscr_target ? "jade" : "danger"} tone={ind.dscr_min === null ? "neutral" : ind.dscr_min >= p.dscr_target ? "ok" : "danger"} hint={ind.dscr_min === null ? "Pas d'emprunt" : `Exigé ${ratio(p.dscr_target)}, moyen ${ratio(ind.dscr_avg)}, LLCR ${ratio(ind.llcr)}`} />
-            <Kpi label="Délai de récupération" value={annees(ind.payback)} icon={Target} teinte="lagon" hint={`Actualisé : ${annees(ind.discounted_payback)}`} />
-            <Kpi label="Marge d'EBE en croisière" value={fmtPct(ind.ebitda_margin)} icon={Calculator} teinte="ambre" hint={`Point mort : ${fmtPct(ind.breakeven_ratio, 0)} du CA`} />
-            <Kpi label="Apport des promoteurs" value={fmtPct(ind.equity_share, 0)} icon={Coins} teinte="or" tone={ind.equity_share !== null && ind.equity_share >= p.equity_target ? "ok" : "warn"} hint={`Endettement : ${ratio(ind.gearing)} fois les fonds propres`} />
+            <Kpi label="VAN du projet" value={fmtShort(ind.npv)} tone={ind.npv >= 0 ? "ok" : "danger"} hint={`Au taux de ${fmtPct(p.discount_rate, 1)}`} />
+            <Kpi label="TRI du projet" value={fmtPct(ind.irr_project)} tone={ind.irr_project !== null && ind.irr_project >= p.discount_rate ? "ok" : "warn"} hint={`Fonds propres : ${fmtPct(ind.irr_equity)}`} />
+            <Kpi label="DSCR minimal" value={ratio(ind.dscr_min)} tone={ind.dscr_min === null ? "neutral" : ind.dscr_min >= p.dscr_target ? "ok" : "danger"} hint={ind.dscr_min === null ? "Pas d'emprunt" : `Exigé ${ratio(p.dscr_target)}, moyen ${ratio(ind.dscr_avg)}, LLCR ${ratio(ind.llcr)}`} />
+            <Kpi label="Délai de récupération" value={annees(ind.payback)} hint={`Actualisé : ${annees(ind.discounted_payback)}`} />
+            <Kpi label="Marge d'EBE en croisière" value={fmtPct(ind.ebitda_margin)} hint={`Point mort : ${fmtPct(ind.breakeven_ratio, 0)} du CA`} />
+            <Kpi label="Apport des promoteurs" value={fmtPct(ind.equity_share, 0)} tone={ind.equity_share !== null && ind.equity_share >= p.equity_target ? "ok" : "warn"} hint={`Endettement : ${ratio(ind.gearing)} fois les fonds propres`} />
           </div>
 
           {a.alerts.length > 0 && (
@@ -163,9 +163,9 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
                 format={(v) => `${millions(v)} M`}
                 formatAxis={(v) => fmtShort(v)}
                 series={[
-                  { key: "ca", label: "Chiffre d'affaires", values: nombres(ligne(a.statements, "revenue")), color: GAMME[1] },
-                  { key: "ebe", label: "EBE", values: nombres(ligne(a.statements, "ebitda")), color: GAMME[0] },
-                  { key: "treso", label: "Trésorerie cumulée", values: nombres(ligne(a.flows, "cash_cumulative")), color: GAMME[2] },
+                  { key: "ca", label: "Chiffre d'affaires", values: nombres(ligne(a.statements, "revenue")), color: SERIES[1] },
+                  { key: "ebe", label: "EBE", values: nombres(ligne(a.statements, "ebitda")), color: SERIES[0] },
+                  { key: "treso", label: "Trésorerie cumulée", values: nombres(ligne(a.flows, "cash_cumulative")), color: SERIES[2] },
                 ]}
               />
             </Card>
@@ -197,7 +197,7 @@ export function ModeleFinancier({ dossierId, reference }: { dossierId: number; r
               <PlanInitial plan={a.financing_plan} />
             </Card>
             <Card title="Sensibilités et scénarios" className="xl:col-span-7">
-              {!stress ? <Loading label="Calcul des sensibilités…" /> : <Sensibilites s={stress} />}
+              {!stress ? <Etat error={erreurStress} onRetry={() => recalculer()} label="Calcul des sensibilités…" /> : <Sensibilites s={stress} />}
             </Card>
           </div>
         </>
@@ -275,7 +275,7 @@ function Section({
           <h3 className="text-[15px] font-semibold text-ink">{section.titre}</h3>
           <p className="text-[12.5px] text-muted">{section.aide}</p>
         </div>
-        <Button className="min-h-8 px-2.5 py-1 text-[13px]" onClick={() => envoyer("POST", `${chemin}/lines`, { kind: section.kind, ...section.nouveau })}>
+        <Button size="sm" onClick={() => envoyer("POST", `${chemin}/lines`, { kind: section.kind, ...section.nouveau })}>
           <Plus className="h-4 w-4" /> Ajouter
         </Button>
       </div>
@@ -311,7 +311,7 @@ function Section({
                     </td>
                   ))}
                   <td className="px-1 text-right">
-                    <button type="button" aria-label={`Supprimer ${l.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => window.confirm(`Supprimer « ${l.name} » ?`) && envoyer("DELETE", `/axispro/plan-lines/${l.id}`)}>
+                    <button type="button" aria-label={`Supprimer ${l.name}`} title="Supprimer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={async () => (await demanderConfirmation(`Supprimer « ${l.name} » ?`, { action: "Supprimer", danger: true })) && envoyer("DELETE", `/axispro/plan-lines/${l.id}`)}>
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>

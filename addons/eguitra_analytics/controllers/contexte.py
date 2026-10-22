@@ -1,8 +1,7 @@
 """Route /analyse/contexte : société de travail, sections offertes, exercice (spécification, chapitre 7).
 
 Les sections suivent la société de travail (request.env.company, choisie par l'en-tête X-Eguitra-Company) :
-celles du groupe (5.1 à 5.8) pour EGUITRA GROUP SARLU, celles du cabinet (6.1 à 6.7) pour MB AxisPro
-Consulting ; seules figurent celles que les profils du compte ouvrent (droits des routes). Chaque section
+celles du groupe (5.1 à 5.8) pour EGUITRA GROUP SARLU, celles du cabinet (6.1 à 6.7) pour MB AxisPro ; seules figurent celles que les profils du compte ouvrent (droits des routes). Chaque section
 porte sa question au dirigeant, son icône (nom du jeu d'icônes de l'application web) et son chemin
 /analyse/<clé>. can_switch : le compte est ouvert aux deux sociétés."""
 

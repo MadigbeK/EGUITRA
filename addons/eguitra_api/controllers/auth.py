@@ -20,6 +20,18 @@ def _mfa_required(env):
     return env["ir.config_parameter"].sudo().get_param("eguitra_api.mfa_required", "1") != "0"
 
 
+def _password_shared(env):
+    """Recette : un mot de passe commun à tous les comptes, que personne ne modifie (posé par
+    scripts/recette/mot_de_passe_commun.py, jamais en production)."""
+    return env["ir.config_parameter"].sudo().get_param("eguitra_api.shared_password") == "1"
+
+
+def _refuse_if_password_shared(env):
+    if _password_shared(env):
+        raise ApiError(403, "password_locked",
+                       "Recette : le mot de passe est commun à tous les comptes et ne se modifie pas.")
+
+
 def _record_attempt(env, login, success, kind="password"):
     env["eguitra.api.login.attempt"].create(
         {"login": login, "ip": client_ip(), "success": success, "kind": kind}
@@ -202,6 +214,7 @@ class EguitraAuthController(http.Controller):
         old, new = require(data, "old_password", "new_password")
         user = request.env.user
         env = sudo_env()
+        _refuse_if_password_shared(env)
         # L'ancien mot de passe compte comme une connexion : essais bornés, même avec un jeton volé.
         _check_not_blocked(env, user.login)
         try:

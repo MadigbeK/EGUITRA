@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="cron_reminders" model="ir.cron">
+        <field name="name">Portail : rappels des rendez-vous, événements et actions du lendemain</field>
+        <field name="model_id" ref="model_portail_notification"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_reminders()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque matin à 07 h 00 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:00:00')"/>
+    </record>
+    <record id="cron_purge_notifications" model="ir.cron">
+        <field name="name">Portail : purge des notifications lues de plus de six mois</field>
+        <field name="model_id" ref="model_portail_notification"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 03 h 10 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:10:00')"/>
+    </record>
+</odoo>

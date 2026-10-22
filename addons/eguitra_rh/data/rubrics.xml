@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Rubriques de paie par défaut (communes aux deux sociétés). Les rubriques « du moteur » sont produites
+    par le calcul (salaire de base, absences non rémunérées, avances, prêts, rotations). Les indemnités
+    forfaitaires (logement, transport, panier, cherté de vie) sont exonérées de RTS dans la limite de 25 %
+    du brut (CGI, art. 55-3). Comptes du plan SYSCOHADA : 661 rémunérations directes, 663 indemnités
+    forfaitaires, 421 avances au personnel. À valider par l'expert-comptable.
+-->
+<odoo noupdate="1">
+    <record id="rubric_base" model="eguitra.rh.rubric">
+        <field name="code">BASE</field><field name="name">Salaire de base</field><field name="kind">gain</field>
+        <field name="account_code">6611</field><field name="system" eval="True"/><field name="sequence">1</field>
+    </record>
+    <record id="rubric_absence" model="eguitra.rh.rubric">
+        <field name="code">ABS</field><field name="name">Absences non rémunérées</field><field name="kind">gain</field>
+        <field name="account_code">6611</field><field name="system" eval="True"/><field name="sequence">2</field>
+    </record>
+    <record id="rubric_anciennete" model="eguitra.rh.rubric">
+        <field name="code">ANC</field><field name="name">Prime d'ancienneté</field>
+        <field name="account_code">6612</field><field name="sequence">10</field>
+    </record>
+    <record id="rubric_rendement" model="eguitra.rh.rubric">
+        <field name="code">RDT</field><field name="name">Prime de rendement</field>
+        <field name="account_code">6612</field><field name="sequence">11</field>
+    </record>
+    <record id="rubric_responsabilite" model="eguitra.rh.rubric">
+        <field name="code">RESP</field><field name="name">Prime de responsabilité</field>
+        <field name="account_code">6612</field><field name="sequence">12</field>
+    </record>
+    <record id="rubric_rotation" model="eguitra.rh.rubric">
+        <field name="code">ROT</field><field name="name">Prime de rotation</field>
+        <field name="account_code">6612</field><field name="system" eval="True"/><field name="sequence">13</field>
+    </record>
+    <record id="rubric_hs30" model="eguitra.rh.rubric">
+        <field name="code">HS30</field><field name="name">Heures supplémentaires (+30 %)</field>
+        <field name="input">hours</field><field name="overtime_rate">30</field>
+        <field name="account_code">6611</field><field name="sequence">20</field>
+    </record>
+    <record id="rubric_hs60" model="eguitra.rh.rubric">
+        <field name="code">HS60</field><field name="name">Heures supplémentaires (+60 %)</field>
+        <field name="input">hours</field><field name="overtime_rate">60</field>
+        <field name="account_code">6611</field><field name="sequence">21</field>
+    </record>
+    <record id="rubric_hs100" model="eguitra.rh.rubric">
+        <field name="code">HS100</field><field name="name">Heures de nuit, dimanche et jours fériés (+100 %)</field>
+        <field name="input">hours</field><field name="overtime_rate">100</field>
+        <field name="account_code">6611</field><field name="sequence">22</field>
+    </record>
+    <record id="rubric_logement" model="eguitra.rh.rubric">
+        <field name="code">LOGT</field><field name="name">Indemnité de logement</field>
+        <field name="exempt_allowance" eval="True"/><field name="account_code">6631</field><field name="sequence">30</field>
+    </record>
+    <record id="rubric_transport" model="eguitra.rh.rubric">
+        <field name="code">TRANSP</field><field name="name">Indemnité de transport</field>
+        <field name="exempt_allowance" eval="True"/><field name="account_code">6634</field><field name="sequence">31</field>
+    </record>
+    <record id="rubric_panier" model="eguitra.rh.rubric">
+        <field name="code">PANIER</field><field name="name">Prime de panier et de repas</field>
+        <field name="exempt_allowance" eval="True"/><field name="account_code">6638</field><field name="sequence">32</field>
+    </record>
+    <record id="rubric_cherte" model="eguitra.rh.rubric">
+        <field name="code">CHERTE</field><field name="name">Prime de cherté de vie</field>
+        <field name="exempt_allowance" eval="True"/><field name="account_code">6638</field><field name="sequence">33</field>
+    </record>
+    <record id="rubric_nature" model="eguitra.rh.rubric">
+        <field name="code">NATURE</field><field name="name">Avantage en nature</field>
+        <field name="account_code">6617</field><field name="sequence">40</field>
+    </record>
+    <record id="rubric_frais" model="eguitra.rh.rubric">
+        <field name="code">FRAIS</field><field name="name">Remboursement de frais justifiés</field>
+        <field name="cnss" eval="False"/><field name="taxable" eval="False"/>
+        <field name="account_code">6618</field><field name="sequence">41</field>
+    </record>
+    <record id="rubric_avance" model="eguitra.rh.rubric">
+        <field name="code">AVANCE</field><field name="name">Remboursement d'avance sur salaire</field>
+        <field name="kind">deduction</field><field name="cnss" eval="False"/><field name="taxable" eval="False"/>
+        <field name="account_code">4211</field><field name="system" eval="True"/><field name="sequence">60</field>
+    </record>
+    <record id="rubric_pret" model="eguitra.rh.rubric">
+        <field name="code">PRET</field><field name="name">Remboursement de prêt</field>
+        <field name="kind">deduction</field><field name="cnss" eval="False"/><field name="taxable" eval="False"/>
+        <field name="account_code">4211</field><field name="system" eval="True"/><field name="sequence">61</field>
+    </record>
+    <record id="rubric_acompte" model="eguitra.rh.rubric">
+        <field name="code">ACOMPTE</field><field name="name">Acompte sur salaire</field>
+        <field name="kind">deduction</field><field name="cnss" eval="False"/><field name="taxable" eval="False"/>
+        <field name="account_code">4212</field><field name="sequence">62</field>
+    </record>
+    <record id="rubric_retenue" model="eguitra.rh.rubric">
+        <field name="code">RET</field><field name="name">Retenue diverse</field>
+        <field name="kind">deduction</field><field name="cnss" eval="False"/><field name="taxable" eval="False"/>
+        <field name="account_code">4211</field><field name="sequence">63</field>
+    </record>
+</odoo>

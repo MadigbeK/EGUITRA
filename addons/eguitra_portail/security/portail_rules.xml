@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cabinet et direction : sociétés autorisées. Le porteur ne lit rien directement : l'API du
+         portail contrôle chaque accès (son dossier, le public d'une publication). -->
+    <record id="rule_category_company" model="ir.rule">
+        <field name="name">Portail, rubriques : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_category"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_article_company" model="ir.rule">
+        <field name="name">Portail, ressources : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_article"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_article_reaction_company" model="ir.rule">
+        <field name="name">Portail, réactions : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_article_reaction"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_announcement_company" model="ir.rule">
+        <field name="name">Portail, communications : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_announcement"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_announcement_read_company" model="ir.rule">
+        <field name="name">Portail, lectures : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_announcement_read"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_event_company" model="ir.rule">
+        <field name="name">Portail, événements : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_event"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_event_registration_company" model="ir.rule">
+        <field name="name">Portail, inscriptions : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_event_registration"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_meeting_company" model="ir.rule">
+        <field name="name">Portail, rendez-vous : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_meeting"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_feedback_company" model="ir.rule">
+        <field name="name">Portail, avis : sociétés autorisées</field>
+        <field name="model_id" ref="model_portail_feedback"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <!-- Notifications et repères de lecture : chacun les siens. -->
+    <record id="rule_notification_own" model="ir.rule">
+        <field name="name">Portail, notifications : les siennes</field>
+        <field name="model_id" ref="model_portail_notification"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_read_marker_own" model="ir.rule">
+        <field name="name">Portail, messages lus : les siens</field>
+        <field name="model_id" ref="model_portail_read_marker"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+</odoo>

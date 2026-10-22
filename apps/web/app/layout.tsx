@@ -11,7 +11,7 @@ const funnelDisplay = Funnel_Display({ subsets: ["latin"], variable: "--font-fun
 
 export const metadata: Metadata = {
   title: { default: "NIMOVA", template: "%s · NIMOVA" },
-  description: "NIMOVA, système intégré de gestion d'EGUITRA GROUP et de MB AxisPro Consulting",
+  description: "NIMOVA, système intégré de gestion d'EGUITRA GROUP et de MB AxisPro",
   robots: { index: false, follow: false },
   // Icône déclarée ici plutôt qu'en fichier app/icon.svg : le portail et sa page de connexion
   // peuvent ainsi la remplacer par celle du cabinet.

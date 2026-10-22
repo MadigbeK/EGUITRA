@@ -1,3 +1,5 @@
+import { ETATS } from "./couleurs";
+
 export type Recommendation = "bankable" | "apd_ready" | "go" | "conditional" | "hold" | "no_go" | "pending" | "postponed";
 export type Decision = "go" | "conditional" | "hold" | "no_go" | "postponed";
 type Tone = "ok" | "warn" | "danger" | "neutral" | "accent";
@@ -39,7 +41,7 @@ export const STATUS_SHORT: Record<Status, string> = {
   na: "Non applicable",
 };
 
-export const REQUIREMENT: Record<string, string> = { blocking: "Bloquant", apd: "Pendant l'APD", closing: "DD, SPV, closing" };
+export const REQUIREMENT: Record<string, string> = { blocking: "Bloquant", apd: "Pendant l'APD", closing: "Due diligence et closing" };
 export const YES_NO: Record<string, string> = { yes: "Oui", no: "Non" };
 export type HypothesisKey = "dd_red_flag" | "dataroom_open" | "lenders_agreement" | "cp_lifted" | "financing_signed";
 export const HYPOTHESES: Array<{ key: HypothesisKey; label: string; gate: string }> = [
@@ -52,6 +54,26 @@ export const HYPOTHESES: Array<{ key: HypothesisKey; label: string; gate: string
 
 export interface Gate { id: number; code: string; name: string; sequence?: number }
 export interface Currency { id: number; name: string; symbol: string }
+export interface UserRef { id: number; name: string }
+
+/** Compartiment d'expertise d'une version de la grille : bloc de domaines confié à un même consultant. */
+export interface Compartment { id: number; code: string; name: string; sequence: number; domain_ids: number[] }
+
+/** Suivi d'un compartiment dans un dossier (scoring.compartments) : score sur 100 des critères de ses
+ * domaines, manques à traiter, études à produire renseignées, knock-outs actifs et consultant affecté. */
+export interface CompartmentScore {
+  compartment_id: number;
+  code: string;
+  name: string;
+  score: number | null;
+  criteria: number;
+  assessed: number;
+  gaps: number;
+  studies: number;
+  knockouts: number;
+  domains: string[];
+  owner: UserRef | null;
+}
 
 export interface DossierSummary {
   id: number;
@@ -118,6 +140,8 @@ export interface GateResult {
   entry_requirements: string | null;
   deliverables: string | null;
   exit_criteria: string | null;
+  /** Complétude documentaire exigée pour examiner le gate (exigence d'entrée), en % ; null : aucune. */
+  min_completeness: number | null;
 }
 export interface DomainScore {
   domain_id: number;
@@ -144,6 +168,8 @@ export interface Scoring {
   recommendation_detail: string;
   method_recommendation: Recommendation;
   domains: DomainScore[];
+  /** Vide pour une grille sans compartiments. */
+  compartments: CompartmentScore[];
   knockouts: CriterionBrief[];
   knockouts_pending: number;
   critical_open: CriterionBrief[];
@@ -191,6 +217,9 @@ export interface Gap {
   code: string;
   name: string;
   domain: string;
+  compartment: string | null;
+  compartment_id: number | null;
+  compartment_name: string | null;
   gate: string | null;
   status: Status;
   entered: Status;
@@ -229,6 +258,11 @@ export interface CriterionEval {
   domain: string;
   domain_id: number;
   domain_code: string;
+  compartment_id: number | null;
+  compartment: string | null;
+  compartment_name: string | null;
+  /** Consultant à qui le compartiment est confié dans ce dossier. */
+  owner: string | null;
   gate_id: number;
   gate: string;
   weight: number;
@@ -260,7 +294,7 @@ export interface JournalEntry {
   id: number;
   date: string;
   user: string;
-  kind: "status" | "document" | "gate" | "decision" | "revision" | "import";
+  kind: "status" | "document" | "gate" | "decision" | "revision" | "import" | "assignment";
   kind_label: string;
   criterion: string | null;
   before: string | null;
@@ -466,10 +500,10 @@ export interface Risk {
 type Ton = Tone;
 
 export const RISK_LEVEL: Record<RiskLevel, { label: string; tone: Ton; color: string }> = {
-  critical: { label: "Critique", tone: "danger", color: "#ec4f49" },
-  high: { label: "Élevé", tone: "warn", color: "#e25f35" },
-  moderate: { label: "Modéré", tone: "neutral", color: "#df8f17" },
-  low: { label: "Faible", tone: "ok", color: "#12956a" },
+  critical: { label: "Critique", tone: "danger", color: ETATS.alerte },
+  high: { label: "Élevé", tone: "warn", color: ETATS.risque },
+  moderate: { label: "Modéré", tone: "neutral", color: ETATS.attention },
+  low: { label: "Faible", tone: "ok", color: ETATS.bon },
 };
 
 export const RISK_STATE: Record<Risk["state"], string> = { open: "Ouvert", mitigating: "En traitement", closed: "Maîtrisé" };
@@ -482,6 +516,9 @@ export interface Action {
   description: string | null;
   source: "gap" | "committee" | "risk" | "manual";
   criterion: string | null;
+  /** Compartiment du critère d'origine (outil du cabinet, version 3). */
+  compartment?: string | null;
+  compartment_name?: string | null;
   review_id: number | null;
   risk_id: number | null;
   assignee: "porteur" | "cabinet";

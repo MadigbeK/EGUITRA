@@ -40,7 +40,7 @@ résultat environ 0,87 Md, trésorerie environ 0,99 Md, créances environ 1,26 M
   travaille directement dans Odoo : c'est le moteur, invisible.
 
 ### 3. Deux sociétés, un seul compte (3 min)
-- Sélecteur de société en haut de l'écran : EGUITRA GROUP SARLU, puis MB AxisPro Consulting.
+- Sélecteur de société en haut de l'écran : EGUITRA GROUP SARLU, puis MB AxisPro.
   Deux comptabilités séparées : plans de comptes, journaux, numérotations.
 - Sur le tableau de bord, « Groupe consolidé » réunit les deux pour la direction.
 
@@ -80,7 +80,7 @@ résultat environ 0,87 Md, trésorerie environ 0,99 Md, créances environ 1,26 M
   loyer réglé, impayés, fin de bail.
 
 ### 9. AxisPro (6 min)
-- Passer sur MB AxisPro Consulting. Grille d'évaluation : grille de démonstration de 10 critères ;
+- Passer sur MB AxisPro. Grille d'évaluation : grille de démonstration de 10 critères ;
   la grille officielle de 111 critères s'importera depuis le classeur du cabinet.
 - Dossier « Usine de briques compressées » : évaluation par étape, score, critères éliminatoires,
   pièces de la data room, comités verrouillés, rapport Excel, temps et honoraires.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Card, DataTable, Field, Loading, PageHeader, Select, Tabs } from "@/components/ui";
+import { Badge, Card, DataTable, Etat, Field, PageHeader, Select, Tabs } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 
@@ -32,8 +32,8 @@ const MODELS = [
 export default function AuditPage() {
   const [tab, setTab] = useState<"audit" | "access">("audit");
   const [model, setModel] = useState("");
-  const { data: audit } = useApi<AuditEntry[]>(tab === "audit" ? `/admin/audit?limit=200${model ? `&model=${model}` : ""}` : null);
-  const { data: access } = useApi<AccessEntry[]>(tab === "access" ? "/admin/access-log?limit=300" : null);
+  const { data: audit, error: erreurAudit, mutate: majAudit } = useApi<AuditEntry[]>(tab === "audit" ? `/admin/audit?limit=200${model ? `&model=${model}` : ""}` : null);
+  const { data: access, error: erreurAcces, mutate: majAcces } = useApi<AccessEntry[]>(tab === "access" ? "/admin/access-log?limit=300" : null);
   return (
     <div>
       <PageHeader title="Journal d'audit" subtitle="Chaque création, modification et suppression avec l'utilisateur, la date et les valeurs avant et après. Accès conservés 12 mois." />
@@ -44,7 +44,7 @@ export default function AuditPage() {
             <Select value={model} onChange={(e) => setModel(e.target.value)} options={MODELS} />
           </Field>
           {!audit ? (
-            <Loading />
+            <Etat error={erreurAudit} onRetry={() => majAudit()} />
           ) : (
             <div className="space-y-2">
               {audit.map((a) => (
@@ -79,7 +79,7 @@ export default function AuditPage() {
       {tab === "access" && (
         <Card padded={false}>
           {!access ? (
-            <Loading />
+            <Etat error={erreurAcces} onRetry={() => majAcces()} />
           ) : (
             <DataTable
               dense

@@ -114,9 +114,15 @@ nom pour les lecteurs d'écran), état, pièce jointe. Les menus sont en texte s
 ## Ce qui est écarté
 
 Les signes d'une interface produite sans regard, relevés dans le guide transmis par le gérant, sont
-écartés. Deux exceptions de la seconde version attendent l'arbitrage du gérant (audit du
-22 octobre) : l'accent violet de l'Analyse, et les dégradés des boutons principaux et bandeaux.
-Restent absents : violet et bleu par défaut ailleurs, fond blanc pur, palette arc-en-ciel, ombres partout,
+écartés. Une couleur par application, tranchée par le gérant le 22 octobre 2026 : Finance vert,
+AxisPro et le portail bleu, Transport ambre, Rotations latérite, RH prune, Analyse or bronze (la
+diagonale d'or du logo, accent #86601c, 5,67:1 sur le blanc). Le violet n'apparaît plus nulle part.
+Pas de dégradé de couleur : boutons principaux, avatars, numéros, colonnes, pastilles et bandeaux
+sont des aplats de la couleur de l'application (`--accent`, `--accent-strong` au survol, et pour les
+grandes surfaces qui portent des textes secondaires, afin que le blanc y garde 4,5:1). Trois surfaces
+de marque gardent leur dégradé : le billet de trésorerie du tableau de bord, le panneau de la page de
+connexion et l'en-tête de Rotations. Les couleurs vives, les animations et les guillochis restent.
+Restent absents : violet, bleu par défaut hors d'AxisPro, fond blanc pur, palette arc-en-ciel, ombres partout,
 grilles de cartes identiques, emoji, verre dépoli décoratif, tirets cadratins, polices par défaut,
 liserés colorés à gauche des encadrés, grilles décoratives, coches vertes sur toutes les listes,
 même grand arrondi partout, orbes flous, trames de points, étincelles, flèches animées, animations

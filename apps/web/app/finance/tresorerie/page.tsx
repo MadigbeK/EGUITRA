@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale, Undo2, Wallet } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
@@ -61,7 +61,7 @@ export default function TreasuryPage() {
   const [journalId, setJournalId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"unreconciled" | "all">("unreconciled");
   const current = position?.accounts.find((a) => a.journal_id === journalId) ?? position?.accounts[0] ?? null;
-  const { data: lines, mutate } = useApi<{ items: StLine[]; total_count: number }>(current ? `/finance/treasury/${current.journal_id}/lines?state=${filter}&limit=300` : null);
+  const { data: lines, error: erreurLignes, mutate } = useApi<{ items: StLine[]; total_count: number }>(current ? `/finance/treasury/${current.journal_id}/lines?state=${filter}&limit=300` : null);
   const [modal, setModal] = useState<null | "operation" | "import" | "transfer">(null);
   const [matching, setMatching] = useState<StLine | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -99,7 +99,7 @@ export default function TreasuryPage() {
       {position && (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} icon={Landmark} teinte="jade" tone="ok" />
+            <Kpi label="Trésorerie totale" value={fmtShort(position.total)} hint={`Au ${fmtDate(position.as_of)}`} tone="ok" />
             {position.accounts.map((a) => {
               const choisi = current?.journal_id === a.journal_id;
               const I = a.type === "cash" ? Wallet : Landmark;
@@ -110,8 +110,8 @@ export default function TreasuryPage() {
                   onClick={() => setJournalId(a.journal_id)}
                   aria-pressed={choisi}
                   className={cx(
-                    "n-kpi n-levable relative min-w-0 overflow-hidden rounded-2xl border p-4 text-left",
-                    choisi ? "n-degrade border-transparent text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : "border-line bg-panel shadow-[var(--ombre-carte)]",
+                    "n-kpi n-levable relative min-w-0 overflow-hidden rounded-[20px] p-4 text-left",
+                    choisi ? "bg-accent-strong text-white shadow-[0_16px_30px_-16px_var(--accent-lueur)]" : FEUILLE,
                   )}
                 >
                   <div className="relative flex items-center justify-between gap-2">
@@ -154,7 +154,7 @@ export default function TreasuryPage() {
                 />
               </div>
               {!lines ? (
-                <Loading />
+                <Etat error={erreurLignes} onRetry={() => mutate()} />
               ) : (
                 <DataTable
                   rows={lines.items}
@@ -228,7 +228,7 @@ export default function TreasuryPage() {
                             <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée <Undo2 className="h-3.5 w-3.5" />
                           </button>
                         ) : (
-                          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setMatching(l)}>
+                          <Button variant="secondary" size="sm" onClick={() => setMatching(l)}>
                             <Link2 className="h-3.5 w-3.5" /> Rapprocher
                           </Button>
                         ),
@@ -553,7 +553,7 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
 }
 
 function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => void; onDone: () => void }) {
-  const { data: candidates } = useApi<Candidate[]>(`/finance/treasury/lines/${line.id}/candidates`);
+  const { data: candidates, error: erreurChargement, mutate: majCandidats } = useApi<Candidate[]>(`/finance/treasury/lines/${line.id}/candidates`);
   const { data: accounts } = useAccounts("");
   const { data: axes } = useAxes();
   const { data: allKinds } = useApi<OperationType[]>("/finance/treasury/operation-types");
@@ -621,7 +621,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
           </Notice>
         )}
         {!candidates ? (
-          <Loading />
+          <Etat error={erreurChargement} onRetry={() => majCandidats()} />
         ) : (
           <DataTable
             dense

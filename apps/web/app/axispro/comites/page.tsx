@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Gavel, Lock } from "@/components/icons";
-import { Anneau, Badge, Card, DataTable, Empty, ErrorBox, Loading, PageHeader, cx } from "@/components/ui";
+import { Anneau, Badge, Card, DataTable, Empty, Etat, FEUILLE, PageHeader, cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { RECO, type DossierSummary, type Review } from "@/lib/axispro-types";
 import { couleurScore, note } from "@/components/axispro/dossier/commun";
@@ -11,23 +11,22 @@ import { fmtDate, fmtShort, pluriel } from "@/lib/format";
 type ReviewRow = Review & { dossier: { id: number; reference: string; name: string; promoter: string } };
 
 export default function ComitesPage() {
-  const { data: dossiers, error } = useApi<DossierSummary[]>("/axispro/dossiers?state=open");
-  const { data: reviews, error: reviewsError } = useApi<ReviewRow[]>("/axispro/reviews");
+  const { data: dossiers, error, mutate: majDossiers } = useApi<DossierSummary[]>("/axispro/dossiers?state=open");
+  const { data: reviews, error: reviewsError, mutate: majRevues } = useApi<ReviewRow[]>("/axispro/reviews");
   const agenda = (dossiers ?? []).filter((d) => d.progress.assessed > 0 && !d.decision);
   return (
     <div>
       <PageHeader title="Comités" subtitle="Dossiers à présenter, décisions rendues et leur historique. Une décision verrouillée ne se modifie plus." actions={<span className="inline-flex items-center gap-2 rounded-xl bg-accent-doux px-3 py-2 text-[13px] font-semibold text-accent"><Gavel className="h-4 w-4" /> {pluriel((reviews ?? []).filter((r) => r.state === "locked").length, "décision verrouillée", "décisions verrouillées")}</span>} />
-      {(error || reviewsError) && <ErrorBox error={error ?? reviewsError} />}
       <div className="space-y-6">
         <Card title={`À présenter en comité (${agenda.length})`}>
           {!dossiers ? (
-            <Loading />
+            <Etat error={error} onRetry={() => majDossiers()} />
           ) : agenda.length === 0 ? (
             <Empty title="Aucun dossier en attente de décision." hint="Un dossier entre ici dès qu'un premier critère est évalué, et en sort à la décision du comité." />
           ) : (
             <div className="n-cascade grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               {agenda.map((d) => (
-                <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className="n-levable flex items-center gap-4 rounded-2xl border border-line bg-panel p-4 shadow-[var(--ombre-carte)]">
+                <Link key={d.id} href={`/axispro/dossiers/${d.id}`} className={cx(FEUILLE, "n-levable flex items-center gap-4 p-4")}>
                   <Anneau value={d.progress.assessed ? note(d.readiness) : null} taille={72} epaisseur={10} couleur={couleurScore(d.readiness)} sous="Readiness" />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -47,7 +46,7 @@ export default function ComitesPage() {
           )}
         </Card>
         <Card title="Décisions et revues" padded={false}>
-          {!reviews ? <Loading /> : (
+          {!reviews ? <Etat error={reviewsError} onRetry={() => majRevues()} /> : (
             <DataTable rows={reviews} rowKey={(r) => r.id} empty="Aucune revue de comité." columns={[
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
               { key: "dossier", label: "Dossier", render: (r) => <Link className="block min-w-[200px] hover:text-accent" href={`/axispro/dossiers/${r.dossier.id}`}><span className="font-semibold text-ink">{r.dossier.name}</span><span className="block text-[12px] font-semibold text-accent">{r.dossier.reference}</span></Link> },

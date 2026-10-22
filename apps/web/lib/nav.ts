@@ -20,6 +20,12 @@ export interface NavSection {
 }
 
 const FIN: Profile[] = ["admin", "direction", "finance"];
+/** Profil Achats : engagements, pièces d'achat, fournisseurs, ses demandes et son guide, rien d'autre. */
+const ACHATS: Profile[] = ["achats"];
+/** Profils qui tranchent ou suivent les validations depuis « À valider » (le profil Achats suit les siennes). */
+const VALIDATION: Profile[] = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"];
+/** Profils qui gèrent l'espace RH (la direction lit et approuve ; l'administration et la RH écrivent). */
+export const RH_GESTION: Profile[] = ["admin", "direction", "rh"];
 
 /** Navigation par application ; chaque entrée n'apparaît qu'aux profils listés (offre, chapitre 3.4). */
 export const NAV: Record<AppCode, NavSection[]> = {
@@ -30,17 +36,20 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance", label: "Tableau de bord", icon: "LayoutDashboard", profiles: FIN },
         { href: "/finance/pilotage", label: "Activités et budget", icon: "TrendingUp", profiles: FIN },
         { href: "/finance/rapport", label: "Rapport mensuel", icon: "FileText", profiles: FIN },
-        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", badge: "approvals" },
-        { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"] },
+        { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", profiles: VALIDATION, badge: "approvals" },
+        { href: "/finance/demandes", label: "Mes demandes", icon: "BadgeCheck", profiles: ACHATS },
+        { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"] },
         { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
         { href: "/finance/guide", label: "Guide de la finance", icon: "Info", profiles: FIN },
+        { href: "/finance/guide-achats", label: "Guide des achats", icon: "Info", profiles: ACHATS },
       ],
     },
     {
       label: "Comptabilité",
       items: [
         { href: "/finance/ventes", label: "Ventes", icon: "Receipt", profiles: FIN },
-        { href: "/finance/achats", label: "Achats et dépenses", icon: "ShoppingCart", profiles: FIN },
+        { href: "/finance/achats", label: "Achats et dépenses", icon: "ShoppingCart", profiles: [...FIN, "achats"] },
+        { href: "/finance/fournisseurs", label: "Fournisseurs", icon: "Users", profiles: ACHATS },
         { href: "/finance/tresorerie", label: "Trésorerie", icon: "Landmark", profiles: FIN },
         { href: "/finance/relances", label: "Relances clients", icon: "Mail", profiles: FIN },
         { href: "/finance/tiers", label: "Tiers", icon: "Users", profiles: FIN },
@@ -56,8 +65,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
     {
       label: "Métiers",
       items: [
-        { href: "/finance/transport", label: "Transport", icon: "Truck", profiles: ["admin", "direction", "finance", "exploitation"], entity: "groupe" },
-        { href: "/finance/chantiers", label: "Chantiers", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"], entity: "groupe" },
+        { href: "/finance/chantiers", label: "BTP", icon: "HardHat", profiles: ["admin", "direction", "finance", "chantiers"], entity: "groupe" },
         { href: "/finance/immobilier", label: "Immobilier", icon: "Building2", profiles: ["admin", "direction", "finance", "immobilier"], entity: "groupe" },
       ],
     },
@@ -82,6 +90,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/axispro/financements", label: "Financements", icon: "HandCoins" },
         { href: "/axispro/comites", label: "Comités", icon: "Gavel" },
         { href: "/axispro/temps", label: "Temps et facturation", icon: "Clock" },
+        { href: "/axispro/portail", label: "Portail des porteurs", icon: "Users" },
       ],
     },
     {
@@ -96,6 +105,33 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/axispro/admin/utilisateurs", label: "Utilisateurs", icon: "UserCog", profiles: ["admin"] },
         { href: "/axispro/admin/societes", label: "Sociétés", icon: "Building2", profiles: ["admin"] },
+      ],
+    },
+  ],
+  // Transport : application à part entière, servie au seul groupe (organisation.py).
+  transport: [
+    {
+      label: "Exploitation",
+      items: [
+        { href: "/transport", label: "Tableau de bord", icon: "LayoutDashboard" },
+        { href: "/transport/rotations", label: "Rotations", icon: "Truck" },
+        { href: "/transport/manquants", label: "Manquants", icon: "Droplet" },
+      ],
+    },
+    {
+      label: "Gestion",
+      items: [
+        { href: "/transport/rentabilite", label: "Rentabilité", icon: "TrendingUp" },
+        { href: "/transport/proprietaires", label: "Propriétaires et répartition", icon: "HandCoins", profiles: FIN },
+        { href: "/transport/taxes", label: "Taxes spécifiques", icon: "Receipt" },
+      ],
+    },
+    {
+      label: "Référentiels",
+      items: [
+        { href: "/transport/flotte", label: "Flotte et chauffeurs", icon: "Gauge" },
+        { href: "/transport/routes", label: "Routes et tarifs", icon: "Route" },
+        { href: "/transport/parametres", label: "Paramètres", icon: "SlidersHorizontal" },
       ],
     },
   ],
@@ -121,7 +157,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       ],
     },
     {
-      label: "MB AxisPro Consulting",
+      label: "MB AxisPro",
       items: [
         { href: "/analyse/portefeuille", label: "Projets et pipeline", icon: "FolderKanban", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
         { href: "/analyse/diagnostic", label: "Diagnostic des projets", icon: "Layers", profiles: ["admin", "direction", "cabinet"], entity: "cabinet" },
@@ -132,7 +168,58 @@ export const NAV: Record<AppCode, NavSection[]> = {
       ],
     },
   ],
+  // RH : les deux sociétés. La gestion (RH_GESTION) ; « Mon espace » et le guide, à tout compte lié à
+  // un dossier salarié (libre-service : congés, bulletins, demandes de son équipe).
+  rh: [
+    {
+      label: "Pilotage",
+      items: [
+        { href: "/rh", label: "Tableau de bord", icon: "LayoutDashboard", profiles: RH_GESTION },
+        { href: "/rh/guide", label: "Guide RH", icon: "Info" },
+      ],
+    },
+    {
+      label: "Personnel",
+      items: [
+        { href: "/rh/salaries", label: "Salariés", icon: "Users", profiles: RH_GESTION },
+        { href: "/rh/conges", label: "Absences et congés", icon: "Calendar", profiles: RH_GESTION },
+        { href: "/rh/avances", label: "Avances et prêts", icon: "HandCoins", profiles: RH_GESTION },
+      ],
+    },
+    {
+      label: "Paie",
+      items: [
+        { href: "/rh/paie", label: "Paie du mois", icon: "Wallet", profiles: RH_GESTION },
+        { href: "/rh/simulateur", label: "Simulateur de salaire", icon: "Calculator", profiles: RH_GESTION },
+      ],
+    },
+    {
+      label: "Mon espace",
+      items: [{ href: "/rh/moi", label: "Mon espace", icon: "Home" }],
+    },
+    {
+      label: "Administration",
+      items: [{ href: "/rh/parametres", label: "Paramètres RH", icon: "SlidersHorizontal", profiles: ["admin", "rh"] }],
+    },
+  ],
 };
+
+/**
+ * Accueil d'EGUITRA Finance selon les profils : le tableau de bord du dirigeant pour la finance et la
+ * direction ; pour le profil Achats seul, l'écran Achats et dépenses (le tableau de bord lui est fermé).
+ */
+export function accueilFinance(profiles: readonly Profile[]): string {
+  if (profiles.some((p) => FIN.includes(p))) return "/finance";
+  return profiles.includes("achats") ? "/finance/achats" : "/finance";
+}
+
+/**
+ * Accueil de NIMOVA · RH selon les profils : le tableau de bord pour la gestion (administration,
+ * direction, RH) ; « Mon espace » pour un compte en libre-service (dossier salarié lié, sans profil).
+ */
+export function accueilRh(profiles: readonly Profile[]): string {
+  return profiles.some((p) => RH_GESTION.includes(p)) ? "/rh" : "/rh/moi";
+}
 
 export function navFor(app: AppCode, profiles: Profile[], entity?: EntiteSociete | null): NavSection[] {
   return NAV[app]

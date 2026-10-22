@@ -1,4 +1,4 @@
-"""NIMOVA · Analyse de MB AxisPro Consulting (spécification, chapitre 6).
+"""NIMOVA · Analyse de MB AxisPro (spécification, chapitre 6).
 
 Jeu d'essai fictif : grille au format MB AxisPro (huit gates, trois domaines, sept critères, trois
 pièces), cinq dossiers en cours à des gates différents et un dossier clos, passages de gate datés au
@@ -18,7 +18,7 @@ from odoo.addons.eguitra_api.tests.common import ApiCase
 
 HEADER = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
           "exigence", "bancabilite", "livrable", "role", "regle", "seuil_attente", "seuil_go", "portee", "domaines",
-          "criteres")
+          "criteres", "compartiment")
 ROWS = [
     {"type": "gate", "code": "G0", "libelle": "Project Intake", "regle": "intake"},
     {"type": "gate", "code": "G1", "libelle": "Prequalification", "regle": "prequalification", "seuil_attente": "30",
@@ -32,10 +32,12 @@ ROWS = [
      "domaines": "DOM02"},
     {"type": "gate", "code": "G7", "libelle": "Financial close", "regle": "closing"},
     {"type": "domaine", "code": "DOM01", "libelle": "Marché et technique", "poids": "1",
-     "livrable": "Étude de marché à commander"},
-    {"type": "domaine", "code": "DOM02", "libelle": "Juridique et foncier", "poids": "1"},
+     "livrable": "Étude de marché à commander", "compartiment": "C3 — Marché et commercial"},
+    {"type": "domaine", "code": "DOM02", "libelle": "Juridique et foncier", "poids": "1",
+     "compartiment": "C1 — Foncier et autorisations"},
     {"type": "domaine", "code": "DOM03", "libelle": "Finances", "poids": "1",
-     "livrable": "Modèle financier et états financiers certifiés"},
+     "livrable": "Modèle financier et états financiers certifiés",
+     "compartiment": "C4 — Coûts et modélisation financière"},
     {"type": "critere", "code": "C001", "libelle": "Étude de marché", "domaine": "DOM01", "gate": "G1", "poids": "2",
      "critique": "oui", "exigence": "apd", "bancabilite": "oui"},
     {"type": "critere", "code": "C002", "libelle": "Foncier sécurisé", "domaine": "DOM02", "gate": "G1", "poids": "1",
@@ -385,9 +387,16 @@ class TestAnalyseCabinet(ApiCase):
         self.assertIn("cabinet.goulot.G2", [i["id"] for i in body["insights"]])
 
     def test_diagnostic(self):
+        c1 = self.policy.compartment_ids.filtered(lambda k: k.code == "C1")
+        self.b.assign(c1, self.awa)
         token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
         status, body = self._get("diagnostic", token)
         self.assertEqual(status, 200, body)
+        compartments = {c["code"]: c for c in body["compartments"]}
+        self.assertEqual(list(compartments), ["C1", "C3", "C4"], "Compartiments dans l'ordre de leurs codes")
+        self.assertEqual((compartments["C1"]["dossiers"], compartments["C1"]["unassigned"],
+                          compartments["C1"]["consultants"]), (5, 4, [{"name": "Awa Camara", "dossiers": 1}]))
+        self.assertEqual(compartments["C3"]["domains"], ["Marché et technique"])
         top = body["top_gaps"][0]
         # C006 exigé dans les 5 dossiers, en écart dans 4 : B incomplet, C et D non disponibles, E sans
         # preuve ; priorités 0,5 + 1 + 1 + 0,5 -> 0,75.

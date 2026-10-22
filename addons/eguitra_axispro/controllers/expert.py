@@ -229,6 +229,8 @@ def action_row(action, with_dossier=False, today_=None):
     row = {
         "id": action.id, "name": action.name, "description": action.description or None, "source": action.source,
         "criterion": action.criterion_id.code or None, "review_id": action.review_id.id or None,
+        "compartment": action.criterion_id.domain_id.compartment_id.code or None,
+        "compartment_name": action.criterion_id.domain_id.compartment_id.name or None,
         "risk_id": action.risk_id.id or None, "assignee": action.assignee, "user": action.user_id.name or None,
         "due_date": action.due_date, "state": action.state, "portal_visible": action.portal_visible,
         "porteur_comment": action.porteur_comment or None, "done_date": action.done_date,

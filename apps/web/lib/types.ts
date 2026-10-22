@@ -4,11 +4,13 @@ export type Profile =
   | "admin"
   | "direction"
   | "finance"
+  | "achats"
   | "exploitation"
   | "chantiers"
   | "immobilier"
   | "cabinet"
-  | "porteur";
+  | "porteur"
+  | "rh";
 
 export interface Company {
   id: number;

@@ -32,6 +32,7 @@ from odoo.addons.eguitra_finance.models.syscohada import OPENING_JOURNAL
 AAL_CODE = ACC_CODE.replace("aml.", "aal.")
 IN_SERVICE = ("service", "maintenance")
 ROUND_TRIP_TOLERANCE = 0.15
+FUEL_TOLERANCE = 0.4
 
 
 class EguitraTransportAnalysis(models.AbstractModel):
@@ -184,7 +185,8 @@ class EguitraTransportAnalysis(models.AbstractModel):
     @staticmethod
     def _empty_row(key, label):
         return {"key": key, "label": label, "rotations": 0, "volume": 0.0, "volume_loaded": 0.0, "revenue": 0.0,
-                "billed_amount": 0.0, "cost": 0.0, "declared_cost": 0.0, "taxes_rebilled": 0.0, "km": 0.0,
+                "billed_amount": 0.0, "cost": 0.0, "declared_cost": 0.0, "taxes_rebilled": 0.0, "standard_cost": 0.0,
+                "estimated_margin": 0.0, "km": 0.0,
                 "fuel_liters": 0.0, "fuel_km": 0.0, "revenue_per_km": None, "cost_per_km": None, "cost_per_liter": None,
                 "fuel_per_100km": None, "margin": 0.0, "margin_rate": None, "shortage": 0.0, "shortage_excess": 0.0,
                 "shortage_tolerated": 0.0, "shortage_rate": None, "shortage_value": 0.0, "shortage_deduction": 0.0,
@@ -240,6 +242,8 @@ class EguitraTransportAnalysis(models.AbstractModel):
             "vehicles": len(active), "deficit_vehicles": len(deficit),
             "deficit_loss": sum(r["net_result"] for r in deficit),
             "declared_cost": declared, "booked_cost": booked_total, "cost_gap": booked_total - declared,
+            "standard_cost": sum(r["standard_cost"] for r in vehicles),
+            "estimated_margin": sum(r["estimated_margin"] for r in vehicles),
             "shortage_excess": sum(r["shortage_excess"] for r in vehicles),
             "shortage_value": sum(r["shortage_value"] for r in vehicles),
         }
@@ -280,6 +284,17 @@ class EguitraTransportAnalysis(models.AbstractModel):
         check("route_without_distance", "Routes avec une distance",
               [r.name for r in routes.filtered(lambda r: not r._round_trip_km())],
               "Sans distance, les rotations n'ont pas de kilométrage : ni coût au km ni part de structure.")
+        # Carburant de référence : litres par km comparés à la médiane des routes renseignées.
+        ratios = {r: r._fuel_per_km() for r in routes}
+        known = sorted(v for v in ratios.values() if v)
+        median = known[len(known) // 2] if len(known) >= 3 else None
+        check("route_fuel_inconsistent",
+              f"Carburant de référence des routes cohérent (écart de {FUEL_TOLERANCE * 100:.0f} % au plus avec la "
+              "médiane au km)",
+              [f"{r.name} : {v:.2f} L/km pour {median:.2f} L/km en médiane".replace(".", ",")
+               for r, v in ratios.items() if v and median and abs(v - median) > FUEL_TOLERANCE * median],
+              "Un forfait de carburant trop bas gonfle la marge estimée de la route ; corrigez-le d'après les bons "
+              "de carburant.")
         Rotation = env["eguitra.transport.rotation"]
         open_rotations = Rotation.search([("company_id", "in", companies.ids), ("state", "in", ("draft", "done"))])
         check("over_capacity", "Volumes chargés dans la capacité des citernes",
