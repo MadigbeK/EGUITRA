@@ -370,6 +370,8 @@ douze). Logo du cabinet, titre, liste, cercle et marches restent en place. La ph
 bleu nuit pour la lecture. Comme pour NIMOVA, elle est servie en WebP de 22 à 96 Ko, avec un aperçu
 flou inscrit dans la page et un cache d'un an (`public/scenes/portail-20209020-*`). Les deux scènes
 partagent désormais le composant `PhotoScene` de `app/login/page.tsx`.
+En production le 22 octobre à 12 h 14 (version 20261022-1213, 9b95835), avec l'harmonisation des
+composants, l'Analyse en or bronze et les aplats.
 
 ## Reste à faire
 
