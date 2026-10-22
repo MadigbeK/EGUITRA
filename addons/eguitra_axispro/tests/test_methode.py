@@ -224,6 +224,7 @@ class TestMethodeDansLaPlateforme(ApiCase):
         cls._create_user("analyste", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
         # Second consultant : verrouille, force ou rouvre à la place de l'auteur (quatre yeux).
         cls._create_user("relecteur", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        cls._create_user("tiers", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
 
     def setUp(self):
         super().setUp()
@@ -623,3 +624,33 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertIn("forcer le passage du gate G1", body["message"])
         status, body = self.call("POST", path, reason, token=self._relecteur())
         self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), body)
+
+    def test_quatre_yeux_sur_les_donnees_de_decision(self):
+        """Hypothèses, fiche, modèle financier et pièces entrent dans la décision : qui n'a modifié
+        qu'une hypothèse ou l'état d'une pièce ne verrouille pas ; la nouvelle révision repart à vide."""
+        attachment = self.env["ir.attachment"].create({"name": "titre.pdf", "raw": b"%PDF-1.4 titre"})
+        piece = self.env["axispro.document"].create({"dossier_id": self.dossier.id, "name": "Titre foncier",
+                                                     "attachment_id": attachment.id})
+        status, body = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}", {"dd_red_flag": "no"},
+                                 token=self.token)
+        self.assertEqual(status, 200, body)
+        relecteur = self._relecteur()
+        status, body = self.call("PATCH", f"/axispro/documents/{piece.id}", {"state": "validated"}, token=relecteur)
+        self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        self.assertEqual(sorted(self.dossier.decision_inputs_by.mapped("login")), ["analyste", "relecteur"])
+        path = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        for token, what in ((self.token, "une hypothèse"), (relecteur, "l'état d'une pièce")):
+            status, body = self.call("POST", path, {"decision": "go", "lock": True}, token=token)
+            self.assertEqual(status, 403, f"Auteur de {what} : pas de verrou")
+            self.assertIn("données de décision", body["message"])
+        status, review = self.call("POST", path, {"decision": "go", "lock": True},
+                                   token=self.open_session("tiers", app="axispro")["access_token"])
+        self.assertEqual((status, review["state"]), (200, "locked"), review)
+
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self.token)
+        self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        self.assertFalse(self.dossier.decision_inputs_by, "La nouvelle révision repart d'une liste vide")
+        status, review = self.call("POST", path, {"decision": "go", "lock": True}, token=relecteur)
+        self.assertEqual((status, review["state"], review["revision"]), (200, "locked", 2), review)

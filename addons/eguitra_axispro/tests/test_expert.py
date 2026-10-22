@@ -96,7 +96,7 @@ class TestAxisproExpert(ApiCase):
         cls.promoter = cls.env["res.partner"].create({"name": "Briqueterie du Fouta"})
         cls.bank = cls.env["res.partner"].create({"name": "Banque de démonstration", "is_company": True})
         cls._create_user("expert", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
-        # Second consultant : rouvre la décision que l'expert a verrouillée (quatre yeux).
+        # Second consultant : verrouille la décision sur le modèle financier saisi par l'expert (quatre yeux).
         cls._create_user("expert.relecteur", "cabinet", company_id=cls.cabinet.id,
                          company_ids=[(6, 0, cls.cabinet.ids)])
 
@@ -161,9 +161,11 @@ class TestAxisproExpert(ApiCase):
         tri = next(c for c in criteria if c["code"] == "C003")
         self.assertEqual(tri["suggestion"]["status"], "met")
         self.assertIsNone(next(c for c in criteria if c["code"] == "C001")["suggestion"])
+        # Quatre yeux : l'expert a saisi le modèle financier, un second consultant verrouille.
+        relecteur = self.open_session("expert.relecteur", app="axispro")["access_token"]
         status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
                                    {"decision": "conditional", "conditions": "1. Lever les garanties\n- Signer le bail du site\n\n",
-                                    "lock": True}, token=self.token)
+                                    "lock": True}, token=relecteur)
         self.assertEqual(status, 200, review)
         snapshot = self.env["axispro.review"].browse(review["id"]).snapshot
         self.assertAlmostEqual(snapshot["financial"]["irr_project"], 28.6493, places=3)
@@ -173,8 +175,9 @@ class TestAxisproExpert(ApiCase):
         status, _b = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30},
                                token=self.token)
         self.assertEqual(status, 422, "Modèle financier figé par la décision verrouillée")
-        relecteur = self.open_session("expert.relecteur", app="axispro")["access_token"]
         status, _b = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=relecteur)
+        self.assertEqual(status, 403, "Celui qui a verrouillé ne rouvre pas")
+        status, _b = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self.token)
         self.assertEqual(status, 200, _b)
         status, _b = self.call("PATCH", f"/axispro/dossiers/{self.dossier.id}/plan", {"discount_rate": 30},
                                token=self.token)
