@@ -284,6 +284,21 @@ class TestAxispro(ApiCase):
             self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
             self.assertEqual(self.call("POST", path, {"body": "Encore"}, token=token)[0], 429, "Messages bornés par jour")
 
+    def test_messagerie_du_portail_fermee_sur_un_dossier_clos(self):
+        """Audit des rôles, à améliorer 8 : un dossier clos ne reçoit plus de message du porteur."""
+        dossier = self._dossier()
+        porteur = self._create_user("porteur.clos", "porteur", company_id=self.cabinet.id,
+                                    company_ids=[(6, 0, self.cabinet.ids)])
+        dossier.portal_user_ids = [(4, porteur.id)]
+        token = self.open_session("porteur.clos", app="portail")["access_token"]
+        path = f"/portail/dossiers/{dossier.id}/messages"
+        self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
+        dossier.state = "closed"
+        status, body = self.call("POST", path, {"body": "Encore une question"}, token=token)
+        self.assertEqual((status, body["message"]), (422, "Ce dossier est clos."))
+        status, messages = self.call("GET", path, token=token)
+        self.assertEqual((status, [m["body"] for m in messages]), (200, ["Bonjour"]), "Les échanges restent lisibles")
+
     def test_activites_du_cabinet(self):
         """Les services du cabinet sont des activités de MB AxisPro, proposées aux lignes de facture."""
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
