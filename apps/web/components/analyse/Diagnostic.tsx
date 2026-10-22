@@ -5,7 +5,7 @@ import { Badge, Card, DataTable, ErrorBox } from "@/components/ui";
 import { CarteChaleur, PetitsMultiples } from "@/components/analyse/charts";
 import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
-import type { CabinetDiagnostic } from "@/lib/analyse-types";
+import type { CabinetDiagnostic, CompartmentRow } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
 /** Faiblesses systémiques des projets : carte domaines × dossiers, critères manquants, knock-outs, preuves, progression. */
@@ -21,6 +21,75 @@ export function Diagnostic() {
 }
 
 const PRIORITE: Record<string, string> = { high: "Priorité haute", medium: "Priorité moyenne", low: "Priorité basse" };
+
+/** Couleur d'un score sur 100, aux seuils de priorité de la méthode (30, 50, 65). */
+function teinte(score: number | null) {
+  if (score === null) return "var(--color-line)";
+  return score < 30 ? "#c0302d" : score < 50 ? "#e25f35" : score < 65 ? "#df8f17" : "#8fbf2a";
+}
+
+/** Suivi par compartiment : retard et charge de chaque bloc d'expertise sur le portefeuille, consultants affectés. */
+function Compartiments({ rows }: { rows: CompartmentRow[] }) {
+  return (
+    <Card title="Par compartiment d'expertise" padded={false} actions={<span className="text-[12.5px] text-muted">Score moyen de la méthode, manques à traiter et consultants · outil de scoring du cabinet</span>}>
+      <DataTable
+        dense
+        rows={rows}
+        rowKey={(r) => r.code}
+        columns={[
+          {
+            key: "label",
+            label: "Compartiment",
+            render: (r) => (
+              <span className="flex items-start gap-2">
+                <span className="mt-px inline-flex flex-none items-center rounded-md border border-accent/25 bg-accent-doux px-1.5 py-px font-mono text-[11.5px] font-bold leading-4 text-accent">{r.code}</span>
+                <span className="min-w-0 font-medium text-ink">
+                  {r.label}
+                  <span className="block max-w-[46ch] text-[11.5px] font-normal leading-snug text-muted">{r.domains.join(" · ")}</span>
+                </span>
+              </span>
+            ),
+          },
+          {
+            key: "mean",
+            label: "Score moyen",
+            render: (r) => (
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <span className="h-1.5 w-20 overflow-hidden rounded-full bg-panel-3">
+                  <span className="n-pousser-x block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, r.mean ?? 0))}%`, background: teinte(r.mean) }} />
+                </span>
+                <span className="tabular text-[12px] text-ink-2">{r.mean === null ? "–" : fmtInt(r.mean)}</span>
+              </span>
+            ),
+          },
+          { key: "gaps", label: "Manques", align: "right", render: (r) => <span className="tabular">{fmtInt(r.gaps)}{r.gaps_per_dossier !== null && <span className="block text-[11px] text-muted">{r.gaps_per_dossier.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} par dossier</span>}</span> },
+          { key: "studies", label: "Études renseignées", align: "right", render: (r) => <span className="tabular">{fmtInt(r.studies)}</span> },
+          { key: "knockouts", label: "Knock-outs", align: "right", render: (r) => (r.knockouts ? <Badge tone="danger">{r.knockouts}</Badge> : <span className="text-muted">0</span>) },
+          {
+            key: "consultants",
+            label: "Consultants",
+            render: (r) => (
+              <span className="block max-w-[30ch] text-[12px] leading-snug">
+                {r.consultants.map((c, i) => (
+                  <span key={c.name} className="text-ink-2">
+                    {i > 0 && ", "}
+                    {c.name} <span className="text-muted">({c.dossiers})</span>
+                  </span>
+                ))}
+                {r.unassigned > 0 && (
+                  <span className="block text-warn" title={r.unassigned_dossiers.map((x) => x.reference ?? x.name).join(", ")}>
+                    {pluriel(r.unassigned, "dossier sans consultant", "dossiers sans consultant")}
+                  </span>
+                )}
+                {!r.consultants.length && !r.unassigned && <span className="text-muted">–</span>}
+              </span>
+            ),
+          },
+        ]}
+      />
+    </Card>
+  );
+}
 
 function Corps() {
   const [periode, setPeriode, query] = usePeriode();
@@ -88,6 +157,8 @@ function Corps() {
               <Vide titre="Aucune évaluation" hint="Les scores par domaine viennent des évaluations de la grille, dossier par dossier." />
             )}
           </Card>
+
+          {(d.compartments ?? []).length > 0 && <Compartiments rows={d.compartments ?? []} />}
 
           <div className="grid gap-5 xl:grid-cols-12">
             <Card title="Les critères qui manquent le plus souvent" className="xl:col-span-7" padded={false} actions={<span className="text-[12.5px] text-muted">Thèmes de formation ou de prestation à proposer</span>}>
