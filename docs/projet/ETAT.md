@@ -294,8 +294,25 @@ guide : `docs/guides/guide-rh.md` (et `word/Guide_rh.docx`).
 - **À faire valider par l'expert-comptable et la CNSS avant la première paie réelle** : taux et
   plafond CNSS, SMIG, traitement des indemnités, taxe d'apprentissage ou contribution de 1,5 % à la
   formation professionnelle selon l'effectif, comptes de paie (CNSS par défaut sur la racine 431).
-- Production : non demandée. Pour l'y mettre, ajouter `eguitra_rh` à `MODULES` d'`infra/release.sh`
-  (et à `infra/init-db.sh`), puis `release.sh` (le module s'installe par `-i`).
+- **Gestion commune aux deux sociétés** (remarque du gérant : « comme le cas des finances »), commits
+  200029c et 3fb7e95 : un seul service RH, mêmes listes et tableau de bord consolidé (filtre Société),
+  employeur légal choisi à l'embauche, une paie par société préparées ensemble, départements communs
+  (gérés par un compte ouvert aux deux sociétés, revue de sécurité de la session AxisPro) ou propres à
+  une société, responsable hiérarchique de l'une ou l'autre ; taux, barème, congés, heures, alertes et
+  comptes communs, numéro d'employeur CNSS, taxe de formation et journal propres à chaque société.
+  Écrans de gestion fermés au libre-service (renvoi vers Mon espace, 32680ba). L'application `rh`
+  n'est accordée que là où le module est installé (b215d21). 71 tests au vert (eguitra_rh,
+  eguitra_transport ; eguitra_api et eguitra_base au passage précédent). Recette mise à jour et
+  vérifiée (12 salariés des deux sociétés dans une liste, paie par société).
+- **Production (22 octobre, 10 h 30, carte blanche du gérant)** : version 20261022-1030 (32680ba),
+  `eguitra_rh` installé (ajouté à `MODULES` de `release.sh`, à `init-db.sh` et à `essai.sh`),
+  sauvegarde prise juste avant ; vide de données (19 rubriques, 9 types d'absence, 18 jours fériés) ;
+  contrôlé : noyau et applications sains, paramètres de connexion et grille AxisPro en vigueur
+  inchangés. La direction et l'administration voient
+  l'espace RH ; pour la personne chargée des RH, lui donner le profil « Ressources humaines »
+  (Administration > Utilisateurs) à la place du profil cabinet provisoire. Saisie des dossiers et des
+  congés possible dès maintenant ; **première paie réelle seulement après validation des taux** (point
+  ci-dessus).
 
 **22 octobre : ensembles gérés pour des propriétaires et coûts standard** (écarts 5.1 et 5.2 de
 l'analyse du logiciel actuel, sur l'accord du gérant : « poursuis »). `eguitra_transport` 19.0.1.3.0.
