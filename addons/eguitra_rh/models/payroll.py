@@ -4,12 +4,15 @@ Cycle : en préparation (bulletins recalculables, éléments variables saisis) -
 figés, imprimables, avances décomptées) -> comptabilisée (pièce en brouillon dans le journal des
 salaires, que la finance relit et comptabilise). Une paie se rouvre tant que la pièce n'est pas
 comptabilisée par la finance.
+
+Quatre yeux : la paie est validée par une autre personne que celles qui l'ont préparée (création,
+recalcul, saisie ou suppression d'éléments variables), retenues dans « Préparée par ».
 """
 
 from collections import defaultdict
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 from ..engine import Item, amount_in_words, compute
 from .employee import CATEGORIES, CONTRACTS, month_bounds
@@ -37,6 +40,10 @@ class EguitraRhPayroll(models.Model):
     move_id = fields.Many2one("account.move", "Écriture de paie", readonly=True, copy=False)
     validated_by = fields.Many2one("res.users", "Validée par", readonly=True)
     validated_at = fields.Datetime("Validée le", readonly=True)
+    prepared_by_ids = fields.Many2many(
+        "res.users", "eguitra_rh_payroll_preparer_rel", "payroll_id", "user_id", "Préparée par", readonly=True,
+        copy=False, help="Comptes qui ont créé ou recalculé la paie, ou saisi ses éléments variables : aucun d'eux "
+                         "ne la valide.")
 
     _month_unique = models.Constraint("unique(company_id, month)", "La paie de ce mois existe déjà.")
 
@@ -59,9 +66,22 @@ class EguitraRhPayroll(models.Model):
             if payroll.state != "draft":
                 raise UserError(f"{payroll.name} est validée : rouvrez-la pour la modifier.")
 
+    def _mark_prepared(self):
+        """Retient le compte qui prépare la paie (création, recalcul, éléments variables). Sous sudo,
+        env.user reste le compte connecté."""
+        user = self.env.user
+        todo = self.sudo().filtered(lambda p: user not in p.prepared_by_ids)
+        if todo:
+            todo.write({"prepared_by_ids": [fields.Command.link(user.id)]})
+
+    def _prepared_by(self, user):
+        self.ensure_one()
+        return user == self.create_uid or user in self.prepared_by_ids
+
     def action_compute(self):
         """Ajoute les salariés présents dans le mois, retire ceux qui n'y sont plus, recalcule tout."""
         self._check_draft()
+        self._mark_prepared()
         Payslip = self.env["eguitra.rh.payslip"]
         for payroll in self:
             start, end = month_bounds(payroll.month)
@@ -77,6 +97,9 @@ class EguitraRhPayroll(models.Model):
     def action_validate(self):
         self._check_draft()
         for payroll in self:
+            if payroll.sudo()._prepared_by(self.env.user):
+                raise AccessError("La paie doit être validée par une autre personne que celle qui l'a préparée "
+                                  "(création, calcul ou éléments variables).")
             if not payroll.payslip_ids:
                 raise UserError("Aucun bulletin : aucun salarié n'est sous contrat ce mois-là.")
             blocking = [f"{s.employee_id.name} : {a['message']}" for s in payroll.payslip_ids
@@ -251,6 +274,8 @@ class EguitraRhPayslip(models.Model):
     def _compute_slip(self):
         Holiday = self.env["eguitra.rh.holiday"]
         Leave = self.env["eguitra.rh.leave"].sudo()
+        # Tout recalcul d'un bulletin (éléments variables saisis ou supprimés compris) prépare la paie.
+        self.payroll_id.filtered(lambda p: p.state == "draft")._mark_prepared()
         for slip in self:
             if slip.payroll_id.state != "draft":
                 raise UserError("Bulletin d'une paie validée : rouvrez la paie pour le recalculer.")

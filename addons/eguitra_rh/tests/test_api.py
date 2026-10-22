@@ -12,6 +12,7 @@ class TestApiRh(ApiCase):
         super().setUpClass()
         cls.rh_user = cls._create_user("aminata.rh", "rh")
         cls.rh2_user = cls._create_user("binta.rh", "rh")
+        cls.dg_user = cls._create_user("dg.rh", "direction")
         cls.finance_user = cls._create_user("fatou.fin", "finance")
         cls.boss_user = cls._create_user("chef.atelier", "exploitation")
         cls.worker_user = cls._create_user("ousmane.chauffeur", "exploitation")
@@ -143,7 +144,10 @@ class TestApiRh(ApiCase):
         slip = next(s for s in payroll["payslips"] if s["employee"]["name"] == "Ousmane Chauffeur")
         status, _b = self.call("GET", f"/rh/me/payslips/{slip['id']}", token=token)
         self.assertEqual(status, 404, "Bulletin invisible tant que la paie n'est pas validée")
-        self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=rh)
+        # Quatre yeux : la paie préparée par la RH est validée par la direction.
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        status, validated = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual(status, 200, validated)
         status, mine = self.call("GET", f"/rh/me/payslips/{slip['id']}", token=token)
         self.assertEqual(status, 200, mine)
         boss_slip = next(s for s in payroll["payslips"] if s["employee"]["name"] == "Chef Atelier")
@@ -199,3 +203,57 @@ class TestApiRh(ApiCase):
         status, body = self.call("PATCH", f"/rh/employees/{own.id}", {"base_salary": 3_200_000,
                                                                        "salary_reason": "Revalorisation"}, token=other)
         self.assertEqual((status, body.get("base_salary")), (200, 3_200_000), body)
+
+    def test_validation_de_la_paie_par_une_autre_personne(self):
+        """Ni le compte qui a préparé la paie, ni celui qui l'a recalculée ou complétée d'éléments variables
+        ne la valide ; un autre compte RH ou la direction la valide."""
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        other = self.open_session("binta.rh", app="rh")["access_token"]
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
+        self.assertEqual(status, 200, payroll)
+        self.assertEqual((payroll["prepared_by"], payroll["can_validate"]), (["Aminata.Rh"], False))
+        validate = f"/rh/payrolls/{payroll['id']}/validate"
+        status, body = self.call("POST", validate, {}, token=rh)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", validate, {}, token=other)
+        self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Binta.Rh"), done)
+
+        # Rouverte puis complétée d'un élément variable : le compte qui l'a saisi ne la valide plus.
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}, token=rh)
+        self.assertEqual(status, 200, body)
+        status, meta = self.call("GET", "/rh/meta", token=other)
+        bonus = next(r["id"] for r in meta["rubrics"] if r["code"] == "RDT")
+        slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == self.worker.id)
+        status, body = self.call("POST", f"/rh/payslips/{slip}/inputs", {"rubric_id": bonus, "amount": 250_000},
+                                 token=other)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", validate, {}, token=other)
+        self.assertEqual(status, 403, body)
+
+        # La direction valide la paie, sans gagner d'autre droit d'écriture sur la RH.
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=dg)
+        self.assertEqual((status, detail["can_validate"], detail["can_write"]), (200, True, False), detail)
+        status, done = self.call("POST", validate, {}, token=dg)
+        self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
+        for method, path, payload in [
+            ("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}),
+            ("POST", f"/rh/payrolls/{payroll['id']}/account", {}),
+            ("POST", f"/rh/payrolls/{payroll['id']}/compute", {}),
+            ("POST", "/rh/payrolls", {"month": "2026-10-01"}),
+            ("POST", f"/rh/payslips/{slip}/inputs", {"rubric_id": bonus, "amount": 250_000}),
+            ("PATCH", f"/rh/employees/{self.worker.id}", {"base_salary": 9_000_000}),
+        ]:
+            status, body = self.call(method, path, payload, token=dg)
+            self.assertEqual(status, 403, (path, body))
+
+        # Recalculée par un autre compte que celui qui l'a créée : aucun des deux ne la valide.
+        status, october = self.call("POST", "/rh/payrolls", {"month": "2026-10-01"}, token=rh)
+        self.assertEqual(status, 200, october)
+        status, body = self.call("POST", f"/rh/payrolls/{october['id']}/compute", {}, token=other)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(sorted(body["prepared_by"]), ["Aminata.Rh", "Binta.Rh"])
+        for token in (rh, other):
+            status, body = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=token)
+            self.assertEqual(status, 403, body)

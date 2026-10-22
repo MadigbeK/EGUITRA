@@ -173,11 +173,18 @@ if not env["eguitra.rh.advance"].search_count([("employee_id", "=", drivers[2].i
 
 # ─── Paie du mois précédent, validée ────────────────────────────────────
 
+# Quatre yeux : la paie est validée par un autre compte que celui qui l'a préparée. Donnée de
+# démonstration : préparée par le compte d'administration de recette, validée (en sudo, sous son
+# identité) par le compte de test de la direction, sinon par le superutilisateur.
+validator = next((u for u in (user("test.dg"), env.ref("base.user_root")) if u and u != env.user), None)
 Payroll = env["eguitra.rh.payroll"]
 for company in (groupe, cabinet):
     if not Payroll.search_count([("company_id", "=", company.id), ("month", "=", previous)]):
         payroll = Payroll.with_company(company).prepare(company, previous)
-        payroll.action_validate()
+        if validator:
+            payroll.with_user(validator).sudo().action_validate()
+        else:
+            print(f"{payroll.name} ({company.name}) laissée en préparation : aucun second compte pour la valider.")
 
 env.cr.commit()
 print("Personnel de démonstration :", Employee.search_count([("name", "like", "(démo)")]), "salariés")

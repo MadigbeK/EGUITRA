@@ -1,6 +1,6 @@
 from datetime import date
 
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
@@ -83,6 +83,10 @@ class TestRh(FinanceDataMixin, TransactionCase):
             "bank_account": "GN01", "activity_account_id": cls.transport.id, "id_number": "CNI-1",
             "line_ids": [(0, 0, {"rubric_id": cls.env.ref("eguitra_rh.rubric_transport").id, "amount": 500_000})],
         })
+        # Quatre yeux : les paies préparées ici (superutilisateur) sont validées par un autre compte RH.
+        cls.valideur = cls.env["res.users"].with_context(no_reset_password=True).create(
+            {"name": "Valideur Paie", "login": "valideur.paie"})
+        cls.valideur._eguitra_set_profiles(["rh"])
 
     def _leave(self, emp, code, d1, d2, approve=True):
         leave = self.env["eguitra.rh.leave"].create({
@@ -161,7 +165,10 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.assertEqual(round(manual.amount), round(10 * 3_000_000 / 173.33 * 1.3), "Heures au taux horaire majoré")
         self.assertIn(manual, a.input_ids, "Les éléments saisis survivent au recalcul")
 
-        payroll.action_validate()
+        with self.assertRaisesRegex(AccessError, "autre personne"):
+            payroll.action_validate()  # compte qui a préparé et recalculé la paie
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual(payroll.validated_by, self.valideur)
         self.assertEqual(advance._remaining(), 300_000)
         with self.assertRaises(UserError):
             payroll.action_compute()
@@ -188,12 +195,12 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.env["eguitra.rh.advance"].create({"employee_id": emp.id, "amount": 1_000_000, "installment": 1_000_000,
                                                "first_month": SEPT})
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
-        with self.assertRaises(UserError):
-            payroll.action_validate()
+        with self.assertRaisesRegex(UserError, "Net à payer négatif"):
+            payroll.with_user(self.valideur).action_validate()
 
     def test_absence_apres_paie_validee(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
-        payroll.action_validate()
+        payroll.with_user(self.valideur).action_validate()
         leave = self._leave(self.alpha, "SS", date(2026, 9, 21), date(2026, 9, 21), approve=False)
         with self.assertRaises(UserError, msg="Une absence non payée ne s'approuve plus sur une paie validée"):
             leave.action_approve()

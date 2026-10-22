@@ -29,6 +29,14 @@ from .rh import _payroll_row
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+def can_validate(payroll):
+    """Quatre yeux : la RH, l'administration ou la direction valident une paie en préparation qu'elles
+    n'ont ni créée, ni recalculée, ni complétée d'éléments variables."""
+    user = request.env.user
+    return (payroll.state == "draft" and bool(set(READ) & set(user._eguitra_profiles()))
+            and not payroll.sudo()._prepared_by(user))
+
+
 def payroll_detail(payroll):
     return dict(
         _payroll_row(payroll),
@@ -37,7 +45,8 @@ def payroll_detail(payroll):
                      for g in payroll._by("activity")],
         by_department=payroll._by("department"),
         validated_by=payroll.validated_by.name or None, validated_at=payroll.validated_at or None,
-        can_write=can_write(),
+        prepared_by=payroll.sudo().prepared_by_ids.mapped("name"),
+        can_write=can_write(), can_validate=can_validate(payroll),
     )
 
 
@@ -119,9 +128,14 @@ class EguitraRhPaie(http.Controller):
     def compute_payroll(self, payroll_id, **_kw):
         return self._action(payroll_id, "action_compute")
 
-    @api_route("/rh/payrolls/<int:payroll_id>/validate", methods=("POST",), profiles=WRITE)
+    @api_route("/rh/payrolls/<int:payroll_id>/validate", methods=("POST",), profiles=READ)
     def validate_payroll(self, payroll_id, **_kw):
-        return self._action(payroll_id, "action_validate")
+        """Validée par un autre compte que ceux qui l'ont préparée (contrôle du modèle, sous l'identité du
+        compte connecté). La direction, qui ne fait que lire la paie, peut la valider : c'est son seul
+        droit d'écriture sur la RH, d'où l'écriture en sudo, limitée à cette route."""
+        payroll = get("eguitra.rh.payroll", payroll_id, "Paie")
+        payroll.sudo().action_validate()
+        return payroll_detail(payroll)
 
     @api_route("/rh/payrolls/<int:payroll_id>/reopen", methods=("POST",), profiles=WRITE)
     def reopen_payroll(self, payroll_id, **_kw):
