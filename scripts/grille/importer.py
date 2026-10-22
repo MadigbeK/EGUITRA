@@ -14,6 +14,10 @@ Lancement sur le serveur, depuis infra/ (classeur copié dans le conteneur, lu s
 
 Les dossiers ouverts gardent la version de grille en vigueur à leur ouverture ; seuls les nouveaux
 dossiers suivent la version mise en vigueur.
+
+Production sans grille : y importer la grille validée en recette, exportée par
+scripts/grille/exporter.py (codes, rattachements des pièces compris), avec ses réglages
+(GRILLE_REGLAGES='{...}', la ligne REGLAGES de l'export).
 """
 
 import os
@@ -30,6 +34,18 @@ with open(path, "rb") as handle:
     content = handle.read()
 policy = Policy.import_grid(company, os.environ.get("GRILLE_NOM") or "Grille d'évaluation AxisPro",
                             os.path.basename(path), content)
+# Réglages d'une grille exportée (scripts/grille/exporter.py, ligne REGLAGES) : seuils, contrôles,
+# DSCR et principes, que le format d'import ne porte pas.
+REGLAGES = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable", "dscr_target",
+            "weighting", "ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check", "notes")
+if os.environ.get("GRILLE_REGLAGES"):
+    import json
+
+    reglages = json.loads(os.environ["GRILLE_REGLAGES"])
+    inconnus = set(reglages) - set(REGLAGES)
+    assert not inconnus, f"Réglages inconnus : {', '.join(sorted(inconnus))}."
+    policy.write(reglages)
+    policy._check_thresholds()
 check = policy.integrity()
 print(f"VERSION\t{policy.version}\t{policy.name}")
 print(f"CONTENU\t{check['gates']} gates\t{check['compartments']} compartiments\t{check['domains']} domaines\t"
