@@ -32,6 +32,7 @@ from .common import (
     employee_row,
     get,
     int_or_false,
+    internal_only,
     leave_row,
     leave_type_row,
     number,
@@ -563,6 +564,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/holidays", profiles=None)
     def holidays(self, **kw):
+        internal_only()
         year = int_arg(kw, "year", today().year, 2000, 2100)
         holidays = request.env["eguitra.rh.holiday"].sudo().search([
             ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"),
@@ -588,6 +590,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/leaves/days", profiles=None)
     def leave_days(self, **kw):
+        internal_only()
         date_from = date_value(kw, "date_from")
         date_to = date_value(kw, "date_to")
         if not date_from or not date_to:
@@ -629,6 +632,7 @@ class EguitraRh(http.Controller):
         return leave_row(leave)
 
     def _decidable(self, leave_id):
+        internal_only()
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
         if leave and own_leave(leave):
             raise ApiError(403, "forbidden", OWN_LEAVE)
@@ -652,6 +656,7 @@ class EguitraRh(http.Controller):
 
     @api_route("/rh/leaves/<int:leave_id>/cancel", methods=("POST",), profiles=None)
     def cancel_leave(self, leave_id, **_kw):
+        internal_only()
         leave = request.env["eguitra.rh.leave"].sudo().browse(leave_id).exists()
         own = leave and own_leave(leave)
         # Sur sa propre absence, la RH suit la règle du salarié (quatre yeux).

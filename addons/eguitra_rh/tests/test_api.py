@@ -290,3 +290,23 @@ class TestApiRh(ApiCase):
         self.assertEqual((status, body.get("state")), (200, "approved"), body)
         status, body = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=dg)
         self.assertEqual((status, body.get("state")), (200, "approved"), body)
+
+    def test_porteur_refuse_sur_le_libre_service(self):
+        """Les routes ouvertes à tout compte connecté (Mon espace, jours fériés, décompte des jours)
+        refusent un compte du portail ; un compte interne sans profil RH les garde."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        if not cabinet:
+            self.skipTest("Pas de société du cabinet dans la base de test")
+        self._create_user("porteur.rh", "porteur", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
+        token = self.open_session("porteur.rh", app="portail")["access_token"]
+        week = "date_from=2026-09-07&date_to=2026-09-11"
+        for path in ("/rh/me", "/rh/holidays", f"/rh/leaves/days?{week}", "/rh/me/payslips/1"):
+            status, body = self.call("GET", path, token=token)
+            self.assertEqual(status, 403, (path, body))
+        status, body = self.call("POST", "/rh/me/leaves", {"type_id": 1, "date_from": "2026-09-07",
+                                                           "date_to": "2026-09-08"}, token=token)
+        self.assertEqual(status, 403, body)
+        worker = self.open_session("ousmane.chauffeur", app="rh")["access_token"]
+        for path in ("/rh/holidays", f"/rh/leaves/days?{week}"):
+            status, body = self.call("GET", path, token=worker)
+            self.assertEqual(status, 200, (path, body))

@@ -16,6 +16,13 @@ def today():
     return fields.Date.context_today(request.env.user)
 
 
+def internal_only():
+    """Routes ouvertes à tout compte connecté (libre-service, calendrier) : comptes internes seulement,
+    jamais un compte du portail (porteur de projet)."""
+    if request.env.user.share:
+        raise ApiError(403, "forbidden", "Accès réservé aux comptes internes.")
+
+
 def refuse_own(emp):
     """Quatre yeux : aucun compte, quel que soit son profil, ne modifie son propre dossier salarié, ses
     éléments fixes ou variables de paie, ni ses avances et prêts : un autre compte s'en charge."""
