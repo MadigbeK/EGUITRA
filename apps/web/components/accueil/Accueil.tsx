@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact, type PointerEvent as PointeurReact } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact, type PointerEvent as PointeurReact } from "react";
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
-import { rayonsDe, sansAccents, voisine, type Tuile } from "@/components/accueil/tuiles";
+import { rayonsDe, sansAccents, voisine, type Rayon, type Tuile } from "@/components/accueil/tuiles";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import { APPS, appFromPath, type AppCode } from "@/lib/config";
 import type { Me } from "@/lib/types";
@@ -26,6 +26,69 @@ async function alignerSociete(me: Me, app: AppCode, href: string) {
 
 /** Durée pendant laquelle les icônes jouent leur entrée (la vague des tuiles comprise). */
 const INTRO_MS = 3200;
+/** La même au retour sur l'accueil dans la session : la vague passe alors en raccourci. */
+const INTRO_RETOUR_MS = 2000;
+/** Au-delà, l'ouverture d'un module est lente : le voile se retire et l'accueil propose de réessayer. */
+const OUVERTURE_LENTE_MS = 8000;
+
+/** L'accueil a-t-il déjà joué sa vague complète dans cet onglet ? (Mémoire de la page, puis de l'onglet.) */
+const CLE_VU = "nimova-accueil-vu";
+let vuIci = false;
+
+function dejaVu(): boolean {
+  if (vuIci) return true;
+  try {
+    return window.sessionStorage.getItem(CLE_VU) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function marquerVu() {
+  vuIci = true;
+  try {
+    window.sessionStorage.setItem(CLE_VU, "1");
+  } catch {
+    // Stockage refusé (navigation privée, réglage du navigateur) : la mémoire de la page suffit.
+  }
+}
+
+const sansAbonnement = () => () => {};
+
+/**
+ * Retard d'une tuile dans la vague d'entrée. Les valeurs par défaut sont celles de la première
+ * ouverture ; au retour, l'accueil pose des variables plus courtes sur la page (rien ne change dans
+ * le rendu, donc rien ne diffère entre le serveur et le navigateur).
+ */
+const retard = (i: number, depart: number, variable = "--vague-depart") => `calc(var(${variable}, ${depart}ms) + ${i} * var(--vague-pas, 45ms))`;
+
+/**
+ * Application principale du compte, d'après ce que l'accueil en sait déjà : l'Analyse pour la
+ * direction, sinon l'application retenue à la connexion.
+ */
+function principale(me: Me, app: AppCode): string {
+  return me.profiles.includes("direction") && me.apps.includes("analyse") ? "analyse" : app;
+}
+
+/** Familles de l'accueil : l'application principale en tête, puis l'ordre habituel, les outils en fin. */
+function familles(rayons: Rayon[], tete: string): Rayon[] {
+  const premiere = rayons.find((r) => r.cle === tete);
+  return premiere ? [premiere, ...rayons.filter((r) => r !== premiere)] : rayons;
+}
+
+type Voile = { el: HTMLDivElement; entree: Animation };
+
+/** Retire le voile d'ouverture : il achève de couvrir l'écran, puis s'efface sur le module ouvert. */
+function retirerVoile(v: Voile | null) {
+  if (!v) return;
+  const effacer = () => {
+    const sortie = v.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-out", fill: "forwards" });
+    void sortie.finished.catch(() => undefined).then(() => v.el.remove());
+  };
+  void v.entree.finished.then(effacer, effacer);
+  // Filet : un voile n'attend jamais plus que son entrée et son effacement.
+  window.setTimeout(() => v.el.remove(), 1500);
+}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -35,35 +98,75 @@ function initials(name: string) {
 }
 
 /**
- * Accueil NIMOVA, à la manière de l'accueil d'Odoo : un fond clair, une grille d'applications.
- * Le mouvement porte l'écran : les tuiles arrivent en vague et leurs icônes s'animent, chaque tuile
- * s'incline sous le curseur, la grille glisse quand on cherche, la tuile choisie s'ouvre en plein
- * écran. Il suffit de taper pour chercher ; les flèches déplacent le focus d'une tuile à l'autre.
+ * Accueil NIMOVA, à la manière de l'accueil d'Odoo : un fond clair, une grille d'applications sans
+ * titre ni bandeau. Les tuiles sont rangées par application, l'application principale du compte en
+ * tête ; un écart et un petit repère à la couleur de l'application séparent les familles.
+ * Le mouvement porte l'écran : les tuiles arrivent en vague et leurs icônes s'animent (en raccourci
+ * quand on revient sur l'accueil), chaque tuile s'incline sous le curseur, la grille glisse quand on
+ * cherche, la tuile choisie s'ouvre en plein écran. Il suffit de taper pour chercher ; les flèches
+ * déplacent le focus d'une tuile à l'autre, d'une famille à la suivante.
  */
 export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const router = useRouter();
   const reduit = useMouvementReduit();
   const [q, setQ] = useState("");
   const [intro, setIntro] = useState(true);
+  const [lente, setLente] = useState<Tuile | null>(null);
   const champ = useRef<HTMLInputElement>(null);
   const page = useRef<HTMLDivElement>(null);
-  const grille = useRef<HTMLUListElement>(null);
+  const grille = useRef<HTMLDivElement>(null);
   const positions = useRef(new Map<string, DOMRect>());
-  const voile = useRef<HTMLDivElement | null>(null);
+  const voile = useRef<Voile | null>(null);
+  const minuteurLent = useRef<number | undefined>(undefined);
 
-  const tuiles = useMemo(() => rayonsDe(me, app).flatMap((r) => r.tuiles), [me, app]);
+  // Retour sur l'accueil : décidé une fois, à l'arrivée. Une page rendue par le serveur a déjà
+  // commencé sa vague complète (elle est peinte avant l'hydratation) : on ne la raccourcit pas.
+  const hydratation = useSyncExternalStore(sansAbonnement, () => false, () => true);
+  const [retour] = useState(() => !hydratation && dejaVu());
+
+  const rayons = useMemo(() => familles(rayonsDe(me, app), principale(me, app)), [me, app]);
+  const total = useMemo(() => rayons.reduce((n, r) => n + r.tuiles.length, 0), [rayons]);
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
-  const visibles = tuiles.filter((t) => mots.every((m) => sansAccents(`${t.libelle} ${t.motsCles}`).includes(m)));
+  const groupes: Array<Rayon & { debut: number }> = [];
+  let rang = 0;
+  for (const r of rayons) {
+    const tuiles = r.tuiles.filter((t) => mots.every((m) => sansAccents(`${t.libelle} ${t.motsCles}`).includes(m)));
+    if (!tuiles.length) continue;
+    groupes.push({ ...r, tuiles, debut: rang });
+    rang += tuiles.length;
+  }
+  const visibles = groupes.flatMap((g) => g.tuiles);
   const signature = visibles.map((t) => t.cle).join("|");
 
-  useEffect(() => {
-    const t = window.setTimeout(() => setIntro(false), INTRO_MS);
-    return () => window.clearTimeout(t);
-  }, []);
+  // Au retour, la vague garde son ordre mais passe en moins d'une seconde.
+  useLayoutEffect(() => {
+    marquerVu();
+    const el = page.current;
+    if (!retour || !el) return;
+    el.style.setProperty("--vague-pas", `${Math.min(14, Math.round(380 / Math.max(1, total - 1)))}ms`);
+    el.style.setProperty("--vague-depart", "0ms");
+    el.style.setProperty("--vague-depart-ic", "180ms");
+    el.style.setProperty("--vague-duree", "480ms");
+  }, [retour, total]);
 
-  // Le voile d'ouverture disparaît avec l'accueil.
-  useEffect(() => () => voile.current?.remove(), []);
+  // Fin de l'entrée : les icônes cessent de jouer, les tuiles quittent la vague (une tuile rendue par
+  // la recherche ne la rejoue pas). Une longue grille garde sa vague jusqu'à la dernière icône.
+  useEffect(() => {
+    const t = window.setTimeout(() => setIntro(false), retour ? INTRO_RETOUR_MS : Math.max(INTRO_MS, 420 + total * 45 + 1600));
+    return () => window.clearTimeout(t);
+  }, [retour, total]);
+
+  // Le voile d'ouverture part avec l'accueil, quand le module s'affiche : il achève de couvrir
+  // l'écran, puis s'efface sur le module.
+  useEffect(
+    () => () => {
+      window.clearTimeout(minuteurLent.current);
+      retirerVoile(voile.current);
+      voile.current = null;
+    },
+    [],
+  );
 
   // Comme sur Odoo : taper au clavier n'importe où ouvre la recherche.
   useEffect(() => {
@@ -117,43 +220,78 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
     el.style.setProperty("--ly", `${e.clientY}px`);
   }
 
-  // Ouverture : la tuile grandit jusqu'à couvrir l'écran, puis le module s'affiche.
-  function ouvrir(e: SourisReact<HTMLAnchorElement>, href: string) {
+  // Ouverture : la tuile grandit jusqu'à couvrir l'écran ; son icône y rejoue son entrée et, si le
+  // module tarde, son nom paraît avec une barre fine. Au-delà de huit secondes, le voile se retire
+  // et l'accueil propose de réessayer.
+  function ouvrir(e: SourisReact<HTMLAnchorElement>, t: Tuile) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    const aligne = alignerSociete(me, app, href);
+    setLente(null);
+    window.clearTimeout(minuteurLent.current);
+    minuteurLent.current = window.setTimeout(() => {
+      retirerVoile(voile.current);
+      voile.current = null;
+      setLente(t);
+    }, OUVERTURE_LENTE_MS);
+    const aligne = alignerSociete(me, app, t.href);
     const boite = e.currentTarget.querySelector<HTMLElement>(".tuile-boite");
     if (reduit || !boite) {
-      void aligne.then(() => router.push(href));
+      void aligne.then(() => router.push(t.href));
       return;
     }
     const r = boite.getBoundingClientRect();
+    const couleur = getComputedStyle(boite).getPropertyValue("--accent-vif").trim() || "#16a672";
     const v = document.createElement("div");
     v.setAttribute("aria-hidden", "true");
-    v.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:15px;background:#fff;z-index:100;display:grid;place-items:center;box-shadow:0 30px 80px -20px rgb(16 36 31 / .35);pointer-events:none`;
+    v.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:15px;background:#fff;z-index:100;display:grid;place-items:center;box-shadow:0 30px 80px -20px rgb(16 36 31 / .35);pointer-events:none;overflow:hidden`;
+    const contenu = document.createElement("div");
+    contenu.className = "flex flex-col items-center gap-4 text-center";
     const icone = boite.querySelector("svg")?.cloneNode(true) as SVGElement | undefined;
     if (icone) {
+      // Dans une « tuile qui joue », les pièces de l'icône rejouent leur entrée.
+      const cadre = document.createElement("span");
+      cadre.className = "tuile joue grid place-items-center";
       icone.style.width = "42px";
       icone.style.height = "42px";
-      v.appendChild(icone);
+      cadre.appendChild(icone);
+      contenu.appendChild(cadre);
+      icone.animate([{ transform: "scale(1)" }, { transform: "scale(1.5)" }], { duration: 520, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" });
     }
+    const etiquette = document.createElement("div");
+    etiquette.className = "flex flex-col items-center gap-1.5";
+    const nom = document.createElement("span");
+    nom.className = "font-display text-[16px] font-semibold text-ink";
+    nom.textContent = t.libelle;
+    const suite = document.createElement("span");
+    suite.className = "text-[12.5px] text-muted";
+    suite.textContent = "Ouverture en cours…";
+    const piste = document.createElement("span");
+    piste.className = "relative mt-2 block h-[2px] w-24 overflow-hidden rounded-full bg-line";
+    const fil = document.createElement("span");
+    fil.className = "absolute inset-y-0 left-0 w-1/3 rounded-full";
+    fil.style.background = couleur;
+    piste.appendChild(fil);
+    etiquette.append(nom, suite, piste);
+    contenu.appendChild(etiquette);
+    v.appendChild(contenu);
     document.body.appendChild(v);
-    voile.current?.remove();
-    voile.current = v;
-    v.animate(
+    retirerVoile(voile.current);
+    const entree = v.animate(
       [
         { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: "15px", background: "#ffffff" },
         { left: "0px", top: "0px", width: "100vw", height: "100vh", borderRadius: "0px", background: "#eef2ef" },
       ],
       { duration: 520, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
     );
-    icone?.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(2.6)", opacity: 0 }], { duration: 480, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" });
-    void Promise.all([aligne, new Promise((fin) => window.setTimeout(fin, 180))]).then(() => router.push(href));
-    window.setTimeout(() => v.remove(), 6000);
+    voile.current = { el: v, entree };
+    // Le nom ne paraît que si le module tarde : une ouverture rapide reste un simple geste.
+    etiquette.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 420, easing: "ease-out", fill: "backwards" });
+    fil.animate([{ transform: "translateX(-100%)" }, { transform: "translateX(300%)" }], { duration: 1100, delay: 420, iterations: Infinity, easing: "cubic-bezier(0.45,0,0.55,1)" });
+    void Promise.all([aligne, new Promise((fin) => window.setTimeout(fin, 180))]).then(() => router.push(t.href));
   }
 
-  // Flèches : le focus passe d'une tuile à sa voisine, en ligne comme en colonne.
-  function naviguer(e: ClavierReact<HTMLUListElement>) {
+  // Flèches : le focus passe d'une tuile à sa voisine, en ligne comme en colonne, et d'une famille à l'autre.
+  function naviguer(e: ClavierReact<HTMLDivElement>) {
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
     const liens = [...(grille.current?.querySelectorAll<HTMLAnchorElement>("a.tuile") ?? [])];
     const i = liens.indexOf(document.activeElement as HTMLAnchorElement);
@@ -222,13 +360,48 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
           </form>
         </div>
 
-        <ul ref={grille} onKeyDown={naviguer} className="grid grid-cols-3 gap-x-2 gap-y-7 sm:grid-cols-4 md:grid-cols-6">
-          {visibles.map((t, i) => (
-            <li key={t.cle} data-cle={t.cle} className="tuile-entree" style={{ "--d": `${120 + i * 45}ms` } as CSSProperties}>
-              <TuileModule t={t} premiere={Boolean(q) && i === 0} joue={intro && !q} delaiIntro={`${420 + i * 45}ms`} reduit={reduit} onOuvrir={ouvrir} />
-            </li>
-          ))}
-        </ul>
+        <div role="status" className="mx-auto max-w-md">
+          {lente && (
+            <p className="n-surgir mb-8 flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3 text-[13px] leading-snug text-ink-2 shadow-[0_2px_10px_-4px_rgb(16_36_31/0.18)]">
+              <span className="min-w-0 flex-1">L&apos;ouverture de « {lente.libelle} » prend plus de temps que prévu.</span>
+              <button type="button" onClick={() => window.location.assign(lente.href)} className="flex-none rounded-md font-semibold text-accent underline underline-offset-2 hover:text-accent-strong">
+                Réessayer
+              </button>
+            </p>
+          )}
+        </div>
+
+        {/* Familles : l'ordre, un écart de 28 px et un petit repère à la couleur de l'application. */}
+        <div ref={grille} onKeyDown={naviguer} className="space-y-7">
+          {groupes.map((g) => {
+            const famille = g.cle === "outils" ? undefined : g.cle;
+            return (
+              <div key={g.cle} role="group" data-app={famille} aria-labelledby={`famille-${g.cle}`}>
+                <h2
+                  id={`famille-${g.cle}`}
+                  className={cx(
+                    "mb-3 flex items-center gap-2 pl-[calc((100%_-_16px)/6_-_33px)] text-[12px] font-semibold leading-4 sm:pl-[calc((100%_-_24px)/8_-_33px)] md:pl-[calc((100%_-_40px)/12_-_33px)]",
+                    famille ? "text-accent-strong" : "text-muted",
+                  )}
+                  style={intro ? { animationName: "n-apparaitre", animationDuration: "var(--vague-duree, 760ms)", animationTimingFunction: "ease-out", animationFillMode: "backwards", animationDelay: retard(g.debut, 120) } : undefined}
+                >
+                  <span aria-hidden className={cx("h-[7px] w-[7px] flex-none rounded-full", famille ? "bg-accent-vif" : "bg-line-strong")} />
+                  {g.titre}
+                </h2>
+                <ul className="grid grid-cols-3 gap-x-2 gap-y-7 sm:grid-cols-4 md:grid-cols-6">
+                  {g.tuiles.map((t, n) => {
+                    const i = g.debut + n;
+                    return (
+                      <li key={t.cle} data-cle={t.cle} className={intro ? "tuile-entree" : undefined} style={intro ? ({ "--d": retard(i, 120), animationDuration: "var(--vague-duree, 760ms)" } as CSSProperties) : undefined}>
+                        <TuileModule t={t} premiere={Boolean(q) && i === 0} joue={intro && !q} delaiIntro={retard(i, 420, "--vague-depart-ic")} reduit={reduit} onOuvrir={ouvrir} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
         {visibles.length === 0 && <p className="n-apparaitre py-10 text-center text-[14px] text-muted">Aucun module ne correspond à « {q} ».</p>}
       </main>
     </div>
@@ -236,7 +409,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
 }
 
 /** Tuile : boîte blanche qui s'incline sous le curseur, reflet, icône vivante, libellé. */
-function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: Tuile; premiere: boolean; joue: boolean; delaiIntro: string; reduit: boolean; onOuvrir: (e: SourisReact<HTMLAnchorElement>, href: string) => void }) {
+function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: Tuile; premiere: boolean; joue: boolean; delaiIntro: string; reduit: boolean; onOuvrir: (e: SourisReact<HTMLAnchorElement>, t: Tuile) => void }) {
   const boite = useRef<HTMLSpanElement>(null);
 
   function incliner(e: PointeurReact<HTMLAnchorElement>) {
@@ -261,7 +434,7 @@ function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: T
   return (
     <Link
       href={t.href}
-      onClick={(e) => onOuvrir(e, t.href)}
+      onClick={(e) => onOuvrir(e, t)}
       onPointerMove={incliner}
       onPointerLeave={relacher}
       className={cx("tuile group flex flex-col items-center rounded-xl px-1 py-1 text-center outline-none", joue && "joue")}

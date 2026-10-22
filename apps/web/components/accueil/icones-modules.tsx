@@ -5,8 +5,12 @@
  * Elles sont vivantes : chaque pièce porte une classe de mouvement (`a-…`, voir globals.css) qui
  * joue à l'arrivée de l'accueil puis à chaque survol de la tuile. `--k` donne le rang d'une pièce
  * dans sa petite chorégraphie.
+ *
+ * La grille reste polychrome. Transport a ses propres dessins (jauge, tampon, route, citerne,
+ * flotte), où domine son ambre ; ses écrans qui reprennent un dessin d'une autre application le
+ * reprennent recoloré, pour qu'aucune tuile n'en double une autre.
  */
-import type { CSSProperties, ReactNode } from "react";
+import { Children, cloneElement, isValidElement, type CSSProperties, type ReactNode } from "react";
 
 const J = "#14a46c"; // jade
 const M = "#7fdcb4"; // vert d'eau
@@ -22,6 +26,9 @@ const T = "#17c3b2"; // lagon
 const V = "#b8872e"; // or bronze (Analyse)
 const VC = "#e6c47e"; // or clair
 const VF = "#6e4e15"; // bronze foncé
+const R = "#e08a1e"; // ambre (Transport)
+const RC = "#fbd29a"; // ambre clair
+const RF = "#8a4908"; // ambre foncé
 const B = "#ffffff";
 
 /** Rang dans la chorégraphie, et point fixe (en unités de la grille) pour les rotations. */
@@ -624,7 +631,113 @@ const DESSINS: Record<string, ReactNode> = {
       <path className="a-pop" style={k(4)} d="M34 11.2l2 2 3.6-4" stroke={F} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
+
+  /* Transport : ses dessins propres, l'ambre de l'application parmi les autres couleurs. */
+  /* Manquants : la jauge de la citerne, le niveau livré et l'écart jusqu'au repère du chargement. */
+  "tr-manquants": (
+    <>
+      <path d="M7 30A17 17 0 0 1 41 30" stroke={M} strokeWidth="7" fill="none" strokeLinecap="round" />
+      <path className="a-trace" style={k(0)} pathLength={1} d="M7 30A17 17 0 0 1 26.7 13.2" stroke={G} strokeWidth="7" fill="none" strokeLinecap="round" />
+      <path className="a-trace" style={k(2)} pathLength={1} d="M26.7 13.2A17 17 0 0 1 38.4 20.9" stroke={C} strokeWidth="7" fill="none" />
+      <path className="a-pop" style={k(3)} d="M34.1 23.6 43.4 17.7" stroke={F} strokeWidth="2.6" strokeLinecap="round" />
+      <path className="a-pivote" style={pivot(24, 30, 1)} d="M24 30 26 17.2" stroke={F} strokeWidth="3.6" strokeLinecap="round" />
+      <rect x="3" y="33" width="42" height="11" rx="5.5" fill={R} />
+      <rect className="a-pousse-x" style={k(2)} x="9" y="37" width="17" height="3" rx="1.5" fill={RC} />
+      <circle cx="24" cy="30" r="3.8" fill={F} />
+    </>
+  ),
+  /* Suivi des rotations : le bon de livraison et son tampon. */
+  "tr-livraison": (
+    <>
+      <rect x="4" y="5" width="28" height="38" rx="4.5" fill={RC} />
+      <rect className="a-pousse-x" style={k(0)} x="9" y="12" width="16" height="3.2" rx="1.6" fill={R} />
+      <rect className="a-pousse-x" style={k(1)} x="9" y="18.5" width="11" height="3.2" rx="1.6" fill={R} opacity=".65" />
+      <circle className="a-pop" style={k(3)} cx="31" cy="33" r="10" fill={J} stroke={B} strokeWidth="2.5" />
+      <path className="a-trace" style={k(4)} pathLength={1} d="M26.6 33.2l3.1 3.1 5.8-6.2" stroke={B} strokeWidth="2.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <g className="a-tombe" style={k(1)}>
+        <circle cx="38" cy="7.5" r="4.5" fill={C} />
+        <rect x="36.3" y="10.5" width="3.4" height="5.5" fill={F} />
+        <rect x="30" y="15.5" width="16" height="5.5" rx="2" fill={F} />
+      </g>
+    </>
+  ),
+  /* Routes et tarifs : la route qui file et sa borne kilométrique. */
+  "tr-routes": (
+    <>
+      <path d="M2 44 15 5h6l11 39Z" fill={F} />
+      <rect className="a-pop" style={k(1)} x="16.3" y="31" width="3.2" height="9" rx="1.2" fill={GC} />
+      <rect className="a-pop" style={k(2)} x="16.9" y="19" width="2.4" height="6" rx="1" fill={GC} />
+      <rect className="a-pop" style={k(3)} x="17.3" y="10" width="1.7" height="4" rx=".8" fill={GC} />
+      <g className="a-saute" style={k(2)}>
+        <path d="M33 44V30.5a6 6 0 0 1 12 0V44Z" fill={RC} />
+        <path d="M33 30.5a6 6 0 0 1 12 0v2.5H33Z" fill={C} />
+        <rect x="35.5" y="36" width="7" height="3" rx="1" fill={RF} />
+      </g>
+    </>
+  ),
+  /* Taxes spécifiques : la citerne et le sceau de la taxe. */
+  "tr-taxes": (
+    <>
+      <rect x="15" y="9.5" width="9" height="5" rx="2" fill={RF} />
+      <rect x="3" y="13" width="34" height="19" rx="9.5" fill={R} />
+      <rect className="a-pousse-x" style={k(1)} x="8" y="17.5" width="16" height="3.4" rx="1.7" fill={RC} />
+      <rect x="2" y="31" width="40" height="4" rx="2" fill={F} />
+      <circle cx="10.5" cy="38.5" r="5" fill={F} />
+      <circle cx="31.5" cy="38.5" r="5" fill={F} />
+      <circle cx="10.5" cy="38.5" r="1.8" fill={B} />
+      <circle cx="31.5" cy="38.5" r="1.8" fill={B} />
+      <circle className="a-pop" style={k(2)} cx="37" cy="13" r="9.5" fill={C} stroke={B} strokeWidth="2.5" />
+      <path className="a-pivote" style={pivot(37, 13, 3)} d="M40.6 8.8 33.4 17.2" stroke={B} strokeWidth="2.4" strokeLinecap="round" />
+      <circle className="a-pop" style={k(4)} cx="33.6" cy="9.8" r="1.9" fill={B} />
+      <circle className="a-pop" style={k(4)} cx="40.4" cy="16.2" r="1.9" fill={B} />
+    </>
+  ),
+  /* Flotte et chauffeurs : deux tracteurs vus de face, l'un derrière l'autre. */
+  "tr-flotte": (
+    <>
+      <g className="a-glisse" style={k(0)}>
+        <rect x="2.5" y="7" width="22" height="22" rx="4" fill={J} />
+        <rect x="2.5" y="7" width="22" height="3.5" rx="1.75" fill={F} />
+        <rect x="5" y="12.5" width="17" height="6.5" rx="1.5" fill={M} />
+      </g>
+      <g className="a-saute" style={k(1)}>
+        <rect x="13.5" y="20" width="3" height="7" rx="1.2" fill={F} />
+        <rect x="43.5" y="20" width="3" height="7" rx="1.2" fill={F} />
+        <rect x="17" y="13" width="26" height="27" rx="4.5" fill={R} />
+        <rect x="17" y="13" width="26" height="4.5" rx="2.25" fill={RF} />
+        {[24, 30, 36].map((x, n) => (
+          <circle key={x} className="a-pop" style={k(n + 2)} cx={x} cy="15.25" r="1.3" fill={GC} />
+        ))}
+        <rect x="19.5" y="19.5" width="10" height="8" rx="1.5" fill={S} />
+        <rect x="30.5" y="19.5" width="10" height="8" rx="1.5" fill={S} />
+        <rect x="24" y="30" width="12" height="7.5" rx="1.2" fill={RF} />
+        <rect x="26" y="32" width="8" height="1.3" rx=".65" fill={R} />
+        <rect x="26" y="34.6" width="8" height="1.3" rx=".65" fill={R} />
+        <circle className="a-allume" style={k(3)} cx="20.8" cy="33.5" r="2.2" fill={B} />
+        <circle className="a-allume" style={k(4)} cx="39.2" cy="33.5" r="2.2" fill={B} />
+        <rect x="15" y="38.5" width="30" height="4.5" rx="2.25" fill={F} />
+        <rect x="18" y="41.5" width="6" height="4.5" rx="1.6" fill={F} />
+        <rect x="36" y="41.5" width="6" height="4.5" rx="1.6" fill={F} />
+      </g>
+    </>
+  ),
 };
+
+/**
+ * Le même dessin dans d'autres couleurs : chaque couleur trouvée dans la table est remplacée, au
+ * remplissage comme au trait, les pièces et leur mouvement restent.
+ */
+function recolorer(noeud: ReactNode, table: Record<string, string>): ReactNode {
+  if (!isValidElement<{ fill?: string; stroke?: string; children?: ReactNode }>(noeud)) return noeud;
+  const { fill, stroke, children } = noeud.props;
+  const enfants = children === undefined ? undefined : Children.map(children, (c) => recolorer(c, table));
+  return cloneElement(noeud, { ...(fill && table[fill] ? { fill: table[fill] } : {}), ...(stroke && table[stroke] ? { stroke: table[stroke] } : {}) }, enfants);
+}
+
+// Les écrans de Transport qui partageaient un dessin le reprennent dans ses couleurs.
+DESSINS["tr-proprietaires"] = recolorer(DESSINS.financements, { [T]: R, [J]: F, [M]: RC });
+DESSINS["tr-rentabilite"] = recolorer(DESSINS.rentabilite, { [J]: R, [V]: F });
+DESSINS["tr-parametres"] = recolorer(DESSINS.parametres, { [F]: R, [G]: F });
 
 /** Icône d'un module par son adresse (et deux cas propres à l'accueil : réglages, Rotations). */
 const PAR_ADRESSE: Record<string, string> = {
@@ -648,14 +761,14 @@ const PAR_ADRESSE: Record<string, string> = {
   "/finance/fiscalite": "fiscalite",
   "/finance/clotures": "clotures",
   "/transport": "transport",
-  "/transport/rotations": "rotations",
-  "/transport/manquants": "alertes",
-  "/transport/rentabilite": "rentabilite",
-  "/transport/proprietaires": "financements",
-  "/transport/taxes": "fiscalite",
-  "/transport/flotte": "transport",
-  "/transport/routes": "an-transport",
-  "/transport/parametres": "parametres",
+  "/transport/rotations": "tr-livraison",
+  "/transport/manquants": "tr-manquants",
+  "/transport/rentabilite": "tr-rentabilite",
+  "/transport/proprietaires": "tr-proprietaires",
+  "/transport/taxes": "tr-taxes",
+  "/transport/flotte": "tr-flotte",
+  "/transport/routes": "tr-routes",
+  "/transport/parametres": "tr-parametres",
   "/finance/chantiers": "chantiers",
   "/finance/immobilier": "immobilier",
   "/axispro": "dossiers",

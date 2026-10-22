@@ -48,7 +48,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
   const boite = useRef<HTMLDivElement>(null);
   const bouton = useRef<HTMLButtonElement>(null);
   const panneau = useRef<HTMLDivElement>(null);
-  const voile = useRef<HTMLDivElement | null>(null);
+  const voile = useRef<{ el: HTMLDivElement; entree: Animation } | null>(null);
   const panneauId = useId();
   const rayons = useMemo(() => rayonsDe(me, app), [me, app]);
   const rang = useMemo(() => new Map(rayons.flatMap((r) => r.tuiles).map((t, i) => [t.cle, i])), [rayons]);
@@ -106,8 +106,19 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
     };
   }, [ouvert, fermer]);
 
-  // Le voile du passage vers l'accueil disparaît avec la coque.
-  useEffect(() => () => voile.current?.remove(), []);
+  // Le voile du passage vers l'accueil part avec la coque : il achève de couvrir l'écran, puis
+  // s'efface sur l'accueil qui fait entrer ses tuiles.
+  useEffect(
+    () => () => {
+      const v = voile.current;
+      voile.current = null;
+      if (!v) return;
+      const effacer = () => void v.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined).then(() => v.el.remove());
+      void v.entree.finished.then(effacer, effacer);
+      window.setTimeout(() => v.el.remove(), 1500);
+    },
+    [],
+  );
 
   function naviguer(e: ClavierReact<HTMLDivElement>) {
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
@@ -128,17 +139,18 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
     v.setAttribute("aria-hidden", "true");
     v.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:16px;background:#fff;z-index:100;pointer-events:none;box-shadow:0 30px 80px -20px rgb(16 36 31 / .35)`;
     document.body.appendChild(v);
-    voile.current?.remove();
-    voile.current = v;
-    v.animate(
+    voile.current?.el.remove();
+    const entree = v.animate(
       [
         { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: "16px", background: "#ffffff" },
         { left: "0px", top: "0px", width: "100vw", height: "100vh", borderRadius: "0px", background: "#f1f5f0" },
       ],
       { duration: 480, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
     );
+    voile.current = { el: v, entree };
     setEtat("ferme");
     window.setTimeout(() => router.push("/accueil"), 160);
+    // Filet : si l'accueil tarde, le voile ne reste pas sur la coque.
     window.setTimeout(() => v.remove(), 6000);
   }
 
@@ -183,8 +195,11 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
         >
           <div className="min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-2 pt-3">
             {rayons.map((r, ri) => (
-              <section key={r.cle} aria-label={r.titre} className={cx(ri > 0 && "mt-1.5 border-t border-line pt-3")}>
-                <h2 className="lanceur-titre px-2.5 pb-1.5 text-[12.5px] font-semibold text-muted" style={{ "--i": rang.get(r.tuiles[0]!.cle) ?? 0 } as CSSProperties}>
+              // Chaque famille à la couleur de son application, comme sur l'accueil ([data-app] de globals.css,
+              // Finance comprise : sous Transport ou RH, sa famille garde le jade).
+              <section key={r.cle} data-app={r.cle === "outils" ? undefined : r.cle} aria-label={r.titre} className={cx(ri > 0 && "mt-1.5 border-t border-line pt-3")}>
+                <h2 className={cx("lanceur-titre flex items-center gap-2 px-2.5 pb-1.5 text-[12.5px] font-semibold", r.cle === "outils" ? "text-muted" : "text-accent-strong")} style={{ "--i": rang.get(r.tuiles[0]!.cle) ?? 0 } as CSSProperties}>
+                  <span aria-hidden className={cx("h-1.5 w-1.5 flex-none rounded-full", r.cle === "outils" ? "bg-line-strong" : "bg-accent-vif")} />
                   {r.titre}
                 </h2>
                 <ul className="grid grid-cols-3 gap-0.5">

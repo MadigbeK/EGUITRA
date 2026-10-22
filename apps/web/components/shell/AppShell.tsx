@@ -8,10 +8,10 @@ import { AlertTriangle, Check, ChevronDown, Grid, ICONES, KeyRound, LogOut, Menu
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { Rosace } from "@/components/guilloche";
 import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
-import { APPS, ESPACES, type AppCode } from "@/lib/config";
-import { accueilFinance, accueilRh, navFor, type NavSection } from "@/lib/nav";
+import { APPS, ESPACES, appFromPath, type AppCode } from "@/lib/config";
+import { NAV, accueilFinance, accueilRh, navFor, type NavSection } from "@/lib/nav";
 import type { Company, Me } from "@/lib/types";
-import { PANNEAU, cx } from "@/components/ui";
+import { PANNEAU, Squelette, cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
 
@@ -63,6 +63,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   // Finance : équilibre de l'exercice dans la barre du haut, pastilles dans la navigation.
   const enTete = useEnTeteFinance(app, me);
   const badges = useMemo(() => pastilles(enTete), [enTete]);
+  // Retour au clic : une fine barre à la couleur de l'application pendant le changement d'écran.
+  const { barre, demarrer } = useProgression(pathname);
+  const progression = <div ref={barre} aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-[2.5px] origin-left bg-accent" style={{ opacity: 0, transform: "scaleX(0)" }} />;
 
   // La barre du haut se détache du contenu (liseré, flou) dès que la page défile.
   useEffect(() => {
@@ -137,6 +140,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
           Aller au contenu
         </a>
         <header className="no-print sticky top-0 z-30 border-b border-line bg-panel/95">
+          {progression}
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 md:px-8">
             <Link href={home} className="rounded-lg">
               <MarqueCabinet className="h-9 sm:h-10" />
@@ -184,6 +188,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
       )}
 
       <header className={cx("no-print sticky top-0 z-30 transition-[background-color,box-shadow] duration-300", defile ? "bg-bg/85 shadow-[0_1px_0_var(--line),0_12px_24px_-20px_rgb(16_36_31/0.35)] backdrop-blur-md" : "bg-bg")}>
+        {progression}
         <div className="flex h-[68px] items-center gap-2 px-3 sm:px-6 lg:px-8 xl:px-10">
           <button ref={menuButton} type="button" onClick={() => setOpen(true)} className="grid h-10 w-10 flex-none place-items-center rounded-xl text-ink-2 hover:bg-panel-3 lg:hidden" aria-label="Ouvrir le menu" aria-expanded={open}>
             <Menu className="h-5 w-5" />
@@ -217,7 +222,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
         </main>
       </div>
 
-      {recherche && <Recherche app={app} me={me} sections={sections} onClose={() => setRecherche(false)} onLogout={logout} />}
+      {recherche && <Recherche app={app} me={me} sections={sections} onClose={() => setRecherche(false)} onLogout={logout} onAller={(href) => demarrer(href.split(/[?#]/)[0] ?? href)} />}
     </div>
   );
 }
@@ -497,7 +502,7 @@ function sansAccents(s: string) {
 }
 
 /** Recherche d'écran (Ctrl+K) : on tape quelques lettres, Entrée ouvre l'écran. */
-function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me: Me; sections: NavSection[]; onClose: () => void; onLogout: () => void }) {
+function Recherche({ app, me, sections, onClose, onLogout, onAller }: { app: AppCode; me: Me; sections: NavSection[]; onClose: () => void; onLogout: () => void; onAller: (href: string) => void }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [index, setIndex] = useState(0);
@@ -507,6 +512,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
   const choix = useMemo<Choix[]>(() => {
     const aller = (href: string) => () => {
       onClose();
+      onAller(href);
       router.push(href);
     };
     const ecrans = sections.flatMap((s) => s.items.map((i) => ({ cle: i.href, libelle: i.label, rubrique: s.label, icone: ICONES[i.icon] ?? ICONES.LayoutDashboard!, aller: aller(i.href) })));
@@ -518,7 +524,7 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
       { cle: "sortie", libelle: "Se déconnecter", rubrique: "Compte", icone: LogOut, aller: onLogout },
     ];
     return [...ecrans, ...apps, ...compte];
-  }, [sections, me, app, onClose, onLogout, router]);
+  }, [sections, me, app, onClose, onLogout, onAller, router]);
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
   const filtres = choix.filter((c) => mots.every((m) => sansAccents(`${c.libelle} ${c.rubrique}`).includes(m)));
@@ -612,3 +618,174 @@ function Recherche({ app, me, sections, onClose, onLogout }: { app: AppCode; me:
   );
 }
 
+/* ─── Retour au clic : barre de progression et écran en chargement ──────── */
+
+/** Écrans dont le squelette (loading.tsx) est affiché : la barre attend leur contenu. */
+let squelettes = 0;
+const abonnesSquelettes = new Set<() => void>();
+
+function signalerSquelette(delta: 1 | -1) {
+  squelettes += delta;
+  abonnesSquelettes.forEach((rappel) => rappel());
+}
+
+/** Chemin d'un lien de l'application que l'on vient de suivre ; null pour un nouvel onglet, un autre site, un fichier. */
+function cheminDuClic(e: MouseEvent): string | null {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
+  const lien = (e.target as Element | null)?.closest?.("a[href]");
+  if (!(lien instanceof HTMLAnchorElement)) return null;
+  if ((lien.target && lien.target !== "_self") || lien.hasAttribute("download")) return null;
+  const url = new URL(lien.href, window.location.href);
+  if (url.origin !== window.location.origin || url.pathname.startsWith("/api/")) return null;
+  return url.pathname;
+}
+
+/**
+ * Fine barre en haut de l'écran, à la couleur de l'application, pendant un changement d'écran. Elle
+ * ne paraît que si l'attente dépasse 150 ms, avance vite puis ralentit, et se remplit quand l'écran
+ * arrive ; si l'écran arrive d'abord en squelette, elle attend son contenu. Elle part d'un clic sur
+ * un lien (menus, lanceur, liens des écrans) ou de la recherche. Mouvement réduit : elle paraît et
+ * disparaît sans glisser.
+ */
+function useProgression(pathname: string) {
+  const barre = useRef<HTMLDivElement>(null);
+  const chemin = useRef(pathname);
+  const etat = useRef<{ attente?: number; garde?: number; avance?: Animation; visible: boolean }>({ visible: false });
+
+  const finir = useCallback(() => {
+    const s = etat.current;
+    window.clearTimeout(s.attente);
+    window.clearTimeout(s.garde);
+    s.attente = undefined;
+    s.garde = undefined;
+    const el = barre.current;
+    if (!el || !s.visible) return;
+    s.visible = false;
+    if (s.avance) {
+      // La barre se remplit depuis l'endroit atteint (hors rendu, sa position ne peut être relevée).
+      try {
+        s.avance.commitStyles();
+      } catch {
+        el.style.transform = "scaleX(0.6)";
+      }
+      s.avance.cancel();
+      s.avance = undefined;
+    }
+    const remettre = () => {
+      if (etat.current.visible) return;
+      el.getAnimations().forEach((a) => a.cancel());
+      el.style.opacity = "0";
+      el.style.transform = "scaleX(0)";
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return remettre();
+    el.animate([{ transform: el.style.transform || "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: 200, easing: "ease-out", fill: "forwards" });
+    el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, delay: 160, easing: "ease-out", fill: "forwards" }).onfinish = remettre;
+  }, []);
+
+  const montrer = useCallback(() => {
+    const s = etat.current;
+    const el = barre.current;
+    if (!el) return;
+    el.getAnimations().forEach((a) => a.cancel());
+    s.visible = true;
+    el.style.opacity = "1";
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      el.style.transform = "scaleX(1)";
+      return;
+    }
+    el.style.transform = "scaleX(0)";
+    s.avance = el.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(0.92)" }], { duration: 9000, easing: "cubic-bezier(0.1, 0.75, 0.2, 1)", fill: "forwards" });
+  }, []);
+
+  const demarrer = useCallback(
+    (cible?: string) => {
+      if (cible !== undefined && cible === chemin.current) return;
+      const s = etat.current;
+      window.clearTimeout(s.garde);
+      // Filet : une navigation qui n'aboutit pas (erreur, lien sans suite) ne laisse pas la barre.
+      s.garde = window.setTimeout(finir, 15000);
+      if (s.visible || s.attente !== undefined) return;
+      s.attente = window.setTimeout(() => {
+        s.attente = undefined;
+        montrer();
+      }, 150);
+    },
+    [finir, montrer],
+  );
+
+  // L'écran demandé est là : la barre se remplit, sauf si un squelette attend encore son contenu.
+  useEffect(() => {
+    chemin.current = pathname;
+    if (squelettes === 0) finir();
+  }, [pathname, finir]);
+
+  useEffect(() => {
+    const surSquelette = () => (squelettes > 0 ? demarrer() : finir());
+    const surClic = (e: MouseEvent) => {
+      const cible = cheminDuClic(e);
+      if (cible) demarrer(cible);
+    };
+    abonnesSquelettes.add(surSquelette);
+    document.addEventListener("click", surClic);
+    if (squelettes > 0) demarrer();
+    const s = etat.current;
+    return () => {
+      abonnesSquelettes.delete(surSquelette);
+      document.removeEventListener("click", surClic);
+      window.clearTimeout(s.attente);
+      window.clearTimeout(s.garde);
+    };
+  }, [demarrer, finir]);
+
+  return { barre, demarrer };
+}
+
+/** Nom de l'écran demandé, d'après la navigation de son application (l'entrée la plus précise). */
+function nomEcran(pathname: string): string | null {
+  const app = appFromPath(pathname);
+  if (!app) return null;
+  let trouve: { href: string; label: string } | null = null;
+  for (const s of NAV[app]) {
+    for (const i of s.items) {
+      if ((pathname === i.href || pathname.startsWith(`${i.href}/`)) && (!trouve || i.href.length > trouve.href.length)) trouve = i;
+    }
+  }
+  return trouve?.label ?? null;
+}
+
+/**
+ * Écran en cours d'ouverture, prêt pour un loading.tsx : la forme de l'écran attendu paraît dès le
+ * clic, sans entrée animée ; à la place du sous-titre, le nom de l'écran qui s'ouvre. La barre du
+ * haut attend alors son contenu. Les loading.tsx ont été retirés le 22 octobre 2026 : avec eux, Next
+ * précharge les mises en page de chaque lien visible (un appel au noyau par tuile de l'accueil) et
+ * les redirections par profil passent après l'envoi de la page. À rebrancher quand ces deux effets
+ * auront été mesurés en recette.
+ */
+export function ChargementEcran() {
+  const pathname = usePathname();
+  const nom = nomEcran(pathname);
+  useEffect(() => {
+    signalerSquelette(1);
+    return () => signalerSquelette(-1);
+  }, []);
+  // Les blocs de la page entrent d'ordinaire en montant (.n-page) : le squelette, lui, est là d'emblée.
+  const fixe: CSSProperties = { animation: "none" };
+  return (
+    <div role="status">
+      <div className="mb-6" style={fixe}>
+        <Squelette className="h-8 w-[min(420px,72%)] sm:h-10" />
+        <p className="mt-2 text-sm leading-relaxed text-muted" style={{ animation: "n-apparaitre 280ms ease-out 450ms both" }}>
+          {nom ? `Ouverture de l'écran « ${nom} »…` : "Ouverture de l'écran…"}
+        </p>
+      </div>
+      <div aria-hidden className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" style={fixe}>
+        {[0, 1, 2, 3].map((n) => (
+          <Squelette key={n} className={cx("h-[114px]", n > 1 && "hidden sm:block")} />
+        ))}
+      </div>
+      <div aria-hidden className="mt-6" style={fixe}>
+        <Squelette className="h-[320px]" />
+      </div>
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact } from "react";
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { voisine } from "@/components/accueil/tuiles";
 import { ChevronDown } from "@/components/icons";
@@ -109,8 +109,9 @@ function pastilleDe(item: NavItem, badges?: Pastilles) {
 /**
  * Barre des rubriques, à la manière des menus d'Odoo : chaque rubrique ouvre un panneau de ses
  * écrans, avec leur icône illustrée et une ligne qui dit ce qu'on y trouve. Un fil d'or marque la
- * rubrique de l'écran ouvert ; une pastille blanche suit le curseur d'une rubrique à l'autre. Une
- * rubrique d'un seul écran est un lien direct.
+ * rubrique de l'écran ouvert ; il glisse vers la rubrique choisie dès le clic, sans attendre l'écran.
+ * Une pastille blanche suit le curseur d'une rubrique à l'autre. Une rubrique d'un seul écran est un
+ * lien direct.
  */
 export function BarreMenus({ sections, pathname, home, badges, className }: { sections: NavSection[]; pathname: string; home: string; badges?: Pastilles; className?: string }) {
   const [ouvert, setOuvert] = useState<string | null>(null);
@@ -118,10 +119,15 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
   const [survol, setSurvol] = useState<{ x: number; w: number } | null>(null);
   const [fil, setFil] = useState<{ x: number; w: number } | null>(null);
   const [place, setPlace] = useState<{ left: number; width: number } | null>(null);
+  // Écran demandé, pas encore affiché : le fil d'or s'y place dès le clic. L'écran affiché reste
+  // seul « courant » pour les lecteurs d'écran.
+  const [vise, setVise] = useState<string | null>(null);
   const barre = useRef<HTMLDivElement>(null);
   const panneau = useRef<HTMLDivElement>(null);
   const idBase = useId();
-  const active = sections.find((s) => s.items.some((i) => estActif(i, pathname, home)))?.label ?? null;
+  const rubriqueDe = (chemin: string) => sections.find((s) => s.items.some((i) => estActif(i, chemin, home)))?.label ?? null;
+  const courante = rubriqueDe(pathname);
+  const active = vise ? rubriqueDe(vise) ?? courante : courante;
   const section = sections.find((s) => s.label === ouvert) ?? null;
 
   const declencheur = useCallback((label: string | null) => (label ? barre.current?.querySelector<HTMLElement>(`[data-rubrique="${CSS.escape(label)}"]`) : null), []);
@@ -138,8 +144,23 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
     return () => window.removeEventListener("resize", mesurerFil);
   }, [mesurerFil]);
 
-  // Changer d'écran referme le menu.
-  useEffect(() => setOuvert(null), [pathname]);
+  // Changer d'écran referme le menu ; l'écran demandé est arrivé.
+  useEffect(() => {
+    setOuvert(null);
+    setVise(null);
+  }, [pathname]);
+
+  // Un écran demandé qui n'arrive pas (erreur, retour en arrière) ne retient pas le fil.
+  useEffect(() => {
+    if (!vise) return;
+    const t = window.setTimeout(() => setVise(null), 10000);
+    return () => window.clearTimeout(t);
+  }, [vise]);
+
+  function viser(e: SourisReact<HTMLElement>, href: string) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (href !== pathname) setVise(href);
+  }
 
   // Place du panneau : sous sa rubrique, sans sortir de l'écran ; largeur selon le nombre d'écrans.
   useLayoutEffect(() => {
@@ -247,7 +268,7 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
           if (s.items.length === 1) {
             const item = s.items[0]!;
             return (
-              <Link key={s.label} href={item.href} data-rubrique={s.label} aria-current={dedans ? "page" : undefined} onPointerEnter={() => suivre(s.label)} onKeyDown={(e) => clavierRubrique(e, s.label)} className={classe}>
+              <Link key={s.label} href={item.href} data-rubrique={s.label} aria-current={s.label === courante ? "page" : undefined} onClick={(e) => viser(e, item.href)} onPointerEnter={() => suivre(s.label)} onKeyDown={(e) => clavierRubrique(e, s.label)} className={classe}>
                 {item.label === s.label ? libelle : <span>{item.label}</span>}
               </Link>
             );
@@ -294,7 +315,10 @@ export function BarreMenus({ sections, pathname, home, badges, className }: { se
                     data-module
                     href={item.href}
                     aria-current={actif ? "page" : undefined}
-                    onClick={() => setOuvert(null)}
+                    onClick={(e) => {
+                      setOuvert(null);
+                      viser(e, item.href);
+                    }}
                     className={cx("tuile group flex items-start gap-3 rounded-xl p-3 outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent", actif ? "bg-accent-doux" : "hover:bg-panel-2 focus-visible:bg-panel-2", joue && "joue")}
                     style={{ "--d-intro": `${90 + n * 30}ms` } as CSSProperties}
                   >
