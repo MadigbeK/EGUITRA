@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Fuel, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Input, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
-import { parseNumber, type Ref, type Referentials, type RouteStandards, type TransportSettings } from "./types";
+import { fmtDate, fmtGNF, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtFixe } from "./commun";
+import { parseNumber, type Message, type Ref, type Referentials, type RouteStandards, type TransportSettings } from "./types";
 
 interface Tariff { id: number; partner: Ref; product: string | null; rate: number; shortage_tolerance: number | null; shortage_price: number | null }
 interface RouteRow extends RouteStandards { id: number; name: string; distance_km: number; distance_return_km: number | null; round_trip_km: number; round_trip_inconsistent: boolean; duration_days: number | null; default_rate: number; tariffs: Tariff[]; fuel_per_km: number | null }
@@ -15,22 +16,24 @@ export function RoutesTarifs() {
   const { data: routes, mutate } = useApi<RouteRow[]>("/transport/routes");
   const { data: ref } = useApi<Referentials>("/transport/referentials");
   const { data: settings } = useApi<TransportSettings>("/transport/settings");
-  const [message, setMessage] = useState<string | null>(null);
+  // Le message dit son état (réussite ou erreur) : la couleur du Transport n'en dit aucun.
+  const [message, setMessage] = useState<Message>(null);
+  const echec = (e: unknown) => setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
   const productLabel = (code: string | null) => (code ? ref?.products.find((p) => p.code === code)?.label ?? code : "Tous produits");
   const tariffs = (routes ?? []).flatMap((route) => route.tariffs.map((t) => ({ ...t, route: route.name })));
   function saveTerms(t: Tariff, body: Record<string, unknown>) {
     setMessage(null);
-    apiSend("PATCH", `/transport/tariffs/${t.id}`, body).then(() => { setMessage(`Conditions de manquant de ${t.partner.name} enregistrées.`); void mutate(); }).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"));
+    apiSend("PATCH", `/transport/tariffs/${t.id}`, body).then(() => { setMessage({ tone: "ok", text: `Conditions de manquant de ${t.partner.name} enregistrées.` }); void mutate(); }).catch(echec);
   }
   function patchRoute(route: RouteRow, body: Record<string, unknown>) {
     setMessage(null);
-    apiSend("PATCH", `/transport/routes/${route.id}`, body).then(() => void mutate()).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"));
+    apiSend("PATCH", `/transport/routes/${route.id}`, body).then(() => void mutate()).catch(echec);
   }
   const [r, setR] = useState({ name: "", distance_km: "", distance_return_km: "", duration_days: "", default_rate: "" });
   const [tariff, setTariff] = useState({ route_id: "", partner_id: "", product: "", rate: "" });
   return (
     <div className="space-y-6">
-      {message && <Notice>{message}</Notice>}
+      {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <Card title="Routes tarifées" padded={false}>
         <DataTable rows={routes ?? []} rowKey={(x) => x.id} columns={[
           { key: "name", label: "Route" },
@@ -42,10 +45,10 @@ export function RoutesTarifs() {
             </span>
           ) },
           { key: "duration_days", label: "Durée (j)", align: "right", render: (x) => <Input className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.duration_days ? String(x.duration_days).replace(".", ",") : ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== (x.duration_days ?? 0) && patchRoute(x, { duration_days: parseNumber(e.target.value) ?? 0 })} /> },
-          { key: "default_rate", label: "Tarif par m³", align: "right", render: (x) => fmtGNF(x.default_rate) },
+          { key: "default_rate", label: "Tarif par m³ (GNF)", align: "right", render: (x) => fmtInt(x.default_rate) },
           { key: "std_fuel_liters", label: "Carburant réf. (L)", align: "right", render: (x) => (
             <span className="inline-flex items-center gap-2">
-              {x.fuel_per_km !== null && <span className="text-[11.5px] text-muted" title="Litres par km parcouru, aller et retour">{fmtDec(x.fuel_per_km)} L/km</span>}
+              {x.fuel_per_km !== null && <span className="text-[11.5px] text-muted" title="Litres par km parcouru, aller et retour">{fmtFixe(x.fuel_per_km, 2)}{INSECABLE}L/km</span>}
               <Input className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.std_fuel_liters || ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== x.std_fuel_liters && patchRoute(x, { std_fuel_liters: parseNumber(e.target.value) ?? 0 })} />
             </span>
           ) },
@@ -53,7 +56,7 @@ export function RoutesTarifs() {
             key: k, label: { std_driver_bonus: "Prime de route", std_tolls: "Péages", std_other_costs: "Autres frais" }[k], align: "right" as const,
             render: (x: RouteRow) => <Input className="w-28 text-right font-mono" inputMode="numeric" defaultValue={x[k] || ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== x[k] && patchRoute(x, { [k]: parseNumber(e.target.value) ?? 0 })} />,
           })),
-          { key: "tariffs", label: "Tarifs clients", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${productLabel(t.product)})` : ""} : ${fmtShort(t.rate)}`).join(", ") || "–" },
+          { key: "tariffs", label: "Tarifs clients (GNF par m³)", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${productLabel(t.product)})` : ""} : ${fmtInt(t.rate)}`).join(", ") || "–" },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-6">
           <Input placeholder="Conakry - Siguiri" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} />
@@ -61,7 +64,7 @@ export function RoutesTarifs() {
           <Input placeholder="Aller-retour (km)" inputMode="numeric" value={r.distance_return_km} onChange={(e) => setR({ ...r, distance_return_km: e.target.value })} />
           <Input placeholder="Durée (jours)" inputMode="decimal" value={r.duration_days} onChange={(e) => setR({ ...r, duration_days: e.target.value })} />
           <Input placeholder="Tarif par m³ (GNF)" inputMode="numeric" value={r.default_rate} onChange={(e) => setR({ ...r, default_rate: e.target.value })} />
-          <Button variant="primary" disabled={!r.name} onClick={() => apiSend("POST", "/transport/routes", { name: r.name, distance_km: Number(r.distance_km) || 0, distance_return_km: Number(r.distance_return_km) || 0, duration_days: parseNumber(r.duration_days) ?? 0, default_rate: parseNumber(r.default_rate) ?? 0 }).then(() => { setR({ name: "", distance_km: "", distance_return_km: "", duration_days: "", default_rate: "" }); void mutate(); }).catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"))}>Ajouter la route</Button>
+          <Button variant="primary" disabled={!r.name} onClick={() => apiSend("POST", "/transport/routes", { name: r.name, distance_km: Number(r.distance_km) || 0, distance_return_km: Number(r.distance_return_km) || 0, duration_days: parseNumber(r.duration_days) ?? 0, default_rate: parseNumber(r.default_rate) ?? 0 }).then(() => { setR({ name: "", distance_km: "", distance_return_km: "", duration_days: "", default_rate: "" }); void mutate(); }).catch(echec)}>Ajouter la route</Button>
         </div>
       </Card>
       <PrixCarburant canEdit={Boolean(settings?.can_edit)} />
@@ -91,7 +94,7 @@ export function RoutesTarifs() {
           { key: "route", label: "Route" },
           { key: "partner", label: "Client", render: (t) => t.partner.name },
           { key: "product", label: "Produit", render: (t) => productLabel(t.product) },
-          { key: "rate", label: "Tarif par m³", align: "right", render: (t) => fmtGNF(t.rate) },
+          { key: "rate", label: "Tarif par m³ (GNF)", align: "right", render: (t) => fmtInt(t.rate) },
           { key: "shortage_tolerance", label: "Tolérance (%)", align: "right", render: (t) => <Input disabled={!settings?.can_edit} className="w-24 text-right font-mono" placeholder="–" defaultValue={t.shortage_tolerance === null ? "" : String(t.shortage_tolerance).replace(".", ",")} onBlur={(e) => { const v = parseNumber(e.target.value); if (v !== t.shortage_tolerance) saveTerms(t, { shortage_tolerance: v }); }} /> },
           { key: "shortage_price", label: "Prix du m³ manquant", align: "right", render: (t) => <Input disabled={!settings?.can_edit} className="w-36 text-right font-mono" placeholder="Prix du produit" defaultValue={t.shortage_price ? String(t.shortage_price) : ""} onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== (t.shortage_price ?? 0)) saveTerms(t, { shortage_price: v }); }} /> },
         ]} />
@@ -117,7 +120,7 @@ function PrixCarburant({ canEdit }: { canEdit: boolean }) {
     }
   }
   return (
-    <Card title="Prix du carburant" padded={false} actions={data ? <span className="inline-flex items-center gap-1.5 text-[13px] text-muted"><Fuel className="h-4 w-4" /> En vigueur : <span className="font-mono text-ink">{data.current ? `${fmtGNF(data.current)} / L` : "non renseigné"}</span></span> : undefined}>
+    <Card title="Prix du carburant" padded={false} actions={data ? <span className="inline-flex items-center gap-1.5 text-[13px] text-muted"><Fuel className="h-4 w-4" /> En vigueur : <span className="whitespace-nowrap font-mono text-ink">{data.current ? `${fmtGNF(data.current)}${INSECABLE}/${INSECABLE}L` : "non renseigné"}</span></span> : undefined}>
       <p className="px-5 pt-4 text-[13px] text-muted">
         Prix du litre appliqué aux forfaits de carburant des routes (coût standard). Une rotation prend le prix en vigueur à sa date de
         chargement ; validée, elle le garde : un nouveau prix ne réécrit pas les rotations passées.
@@ -125,7 +128,7 @@ function PrixCarburant({ canEdit }: { canEdit: boolean }) {
       {message && <div className="px-5 pt-3"><Notice tone="danger">{message}</Notice></div>}
       <DataTable rows={data?.items ?? []} rowKey={(x) => x.id} empty="Aucun prix enregistré." columns={[
         { key: "date_from", label: "À partir du", render: (x) => fmtDate(x.date_from) },
-        { key: "price", label: "Prix du litre", align: "right", render: (x) => fmtGNF(x.price) },
+        { key: "price", label: "Prix du litre (GNF)", align: "right", render: (x) => fmtInt(x.price) },
         { key: "note", label: "Source", render: (x) => x.note ?? "–" },
         { key: "actions", label: "", render: (x) => (canEdit ? <button type="button" title="Supprimer" className="text-muted hover:text-danger" onClick={() => void send("DELETE", `/transport/fuel-prices/${x.id}`)}><Trash2 className="h-4 w-4" /></button> : null) },
       ]} />

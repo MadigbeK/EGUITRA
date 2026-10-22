@@ -4,7 +4,9 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "@/components/icons";
 import { Badge, Card, DataTable, Etat, Field, Input, Kpi, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { tonEtat } from "@/lib/couleurs";
+import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, TauxMarge, fmtFixe, fmtVolume } from "./commun";
 import type { ProfitRow } from "./types";
 
 export interface Control { code: string; label: string; ok: boolean; count: number; items: string[]; hint: string }
@@ -55,7 +57,8 @@ interface Report {
 }
 
 const GROUPS = [{ value: "vehicle", label: "Ensemble routier" }, { value: "route", label: "Route" }, { value: "driver", label: "Chauffeur" }, { value: "client", label: "Client" }, { value: "month", label: "Mois" }];
-const signed = (v: number | null) => (v === null ? "–" : <span className={v < 0 ? "text-danger" : "text-ok"}>{fmtGNF(v)}</span>);
+/** Résultat signé, montant entier (l'unité est dans l'en-tête) : perte en alerte, gain favorable. */
+const signed = (v: number | null) => (v === null ? "–" : <span className={v < 0 ? "font-semibold text-danger" : "text-ok-texte"}>{fmtInt(v)}</span>);
 
 /** Rentabilité par trajet et par véhicule : coûts déclarés et comptabilisés, km, structure, résultat net. */
 export function Rentabilite() {
@@ -76,40 +79,41 @@ export function Rentabilite() {
       {ind && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi label="Chiffre d'affaires transport" value={fmtShort(ind.transport_revenue)} hint={ind.income_total === null ? "Rotations validées et facturées" : ind.revenue_share === null ? "Part du CA : produits non comptabilisés" : `${fmtPct(ind.revenue_share)} des produits de la période`} />
-          <Kpi label="Marge directe" value={fmtPct(ind.margin_rate)} tone={ind.below_threshold ? "warn" : "ok"} hint={`${fmtShort(ind.margin)}${ind.margin_threshold ? `, seuil ${fmtPct(ind.margin_threshold, 0)}` : ""}`} />
-          <Kpi label="Structure au km" value={ind.structure_per_km === null ? "–" : `${fmtInt(ind.structure_per_km)} GNF`} hint={`${fmtShort(ind.structure)} sur ${fmtInt(ind.km)} km ; ${ind.cost_per_km === null ? "–" : fmtInt(ind.cost_per_km)} GNF/km de coûts directs`} />
-          <Kpi label="Ensembles déficitaires" value={`${ind.deficit_vehicles} / ${ind.vehicles}`} tone={ind.deficit_vehicles ? "danger" : "ok"} hint={ind.deficit_vehicles ? `Perte cumulée ${fmtShort(ind.deficit_loss)} après structure` : `Résultat net ${fmtShort(ind.net_result)}`} />
+          <Kpi label="Marge directe" value={fmtPct(ind.margin_rate)} tone={!ind.margin_threshold || ind.margin_rate === null ? "neutral" : ind.below_threshold ? "warn" : "ok"} hint={`${fmtShort(ind.margin)}${ind.margin_threshold ? `, seuil ${fmtPct(ind.margin_threshold, 0)}` : ", seuil non fixé"}`} />
+          <Kpi label="Structure au km" value={ind.structure_per_km === null ? "–" : fmtGNF(ind.structure_per_km)} hint={`${fmtShort(ind.structure)} sur ${fmtInt(ind.km)}${INSECABLE}km ; ${ind.cost_per_km === null ? "–" : fmtInt(ind.cost_per_km)}${INSECABLE}GNF/km de coûts directs`} />
+          <Kpi label="Ensembles déficitaires" value={`${fmtInt(ind.deficit_vehicles)}${INSECABLE}/${INSECABLE}${fmtInt(ind.vehicles)}`} tone={ind.deficit_vehicles ? "danger" : "ok"} hint={ind.deficit_vehicles ? `Perte cumulée ${fmtShort(ind.deficit_loss)} après structure` : `Résultat net ${fmtShort(ind.net_result)}`} />
         </div>
       )}
       {ind && (
         <p className="text-[13px] text-muted">
           Coûts déclarés {fmtShort(ind.declared_cost)}
           {ind.booked_cost !== null ? `, comptabilisés sur l'axe Ensemble routier ${fmtShort(ind.booked_cost)} (écart ${fmtShort(ind.cost_gap)})` : ""}
-          {ind.fuel_per_100km !== null ? `, consommation ${fmtDec(ind.fuel_per_100km)} L/100 km` : ""}{ind.revenue_per_km !== null ? `, ${fmtInt(ind.revenue_per_km)} GNF de CA par km` : ""}.
+          {ind.fuel_per_100km !== null ? `, consommation ${fmtFixe(ind.fuel_per_100km, 1)}${INSECABLE}L/100${INSECABLE}km` : ""}{ind.revenue_per_km !== null ? `, ${fmtInt(ind.revenue_per_km)}${INSECABLE}GNF de CA par km` : ""}.
         </p>
       )}
       <Card padded={false}>
         {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data.rows} rowKey={(r, i) => `${r.key}-${i}`} empty="Aucune rotation validée sur la période." columns={[
             { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé" },
-            { key: "rotations", label: "Rot.", align: "right", render: (r) => String(r.rotations) },
+            { key: "rotations", label: "Rot.", align: "right", render: (r) => fmtInt(r.rotations) },
             { key: "km", label: "km", align: "right", render: (r) => fmtInt(r.km) },
-            { key: "volume", label: "Volume (m³)", align: "right", render: (r) => fmtDec(r.volume) },
-            { key: "revenue", label: "CA", align: "right", render: (r) => fmtShort(r.revenue) },
-            { key: "revenue_per_km", label: "CA/km", align: "right", render: (r) => fmtInt(r.revenue_per_km) },
-            { key: "standard_cost", label: "Coûts standard", align: "right", render: (r) => <span title="Forfaits des routes au prix du carburant de la date de chargement">{fmtShort(r.standard_cost)}</span> },
-            { key: "declared_cost", label: "Coûts déclarés", align: "right", render: (r) => fmtShort(r.declared_cost) },
+            { key: "volume", label: "Volume (m³)", align: "right", render: (r) => fmtVolume(r.volume) },
+            { key: "revenue", label: "CA (GNF)", align: "right", render: (r) => fmtInt(r.revenue) },
+            { key: "revenue_per_km", label: "CA/km (GNF)", align: "right", render: (r) => fmtInt(r.revenue_per_km) },
+            { key: "standard_cost", label: "Coûts standard (GNF)", align: "right", render: (r) => <span title="Forfaits des routes au prix du carburant de la date de chargement">{fmtInt(r.standard_cost)}</span> },
+            { key: "declared_cost", label: "Coûts déclarés (GNF)", align: "right", render: (r) => fmtInt(r.declared_cost) },
             ...(booked ? [
-              { key: "booked_cost", label: "Coûts comptabilisés", align: "right" as const, render: (r: ReportRow) => fmtShort(r.booked_cost) },
-              { key: "cost_gap", label: "Écart", align: "right" as const, render: (r: ReportRow) => <span className={(r.cost_gap ?? 0) > 0 ? "text-danger" : ""}>{fmtShort(r.cost_gap)}</span> },
+              { key: "booked_cost", label: "Coûts comptabilisés (GNF)", align: "right" as const, render: (r: ReportRow) => fmtInt(r.booked_cost) },
+              { key: "cost_gap", label: "Écart (GNF)", align: "right" as const, render: (r: ReportRow) => <span className={(r.cost_gap ?? 0) > 0 ? "text-danger" : ""}>{fmtInt(r.cost_gap)}</span> },
             ] : []),
-            { key: "cost_per_km", label: "Coût/km", align: "right", render: (r) => fmtInt(r.cost_per_km) },
-            { key: "cost_per_liter", label: "Coût/L", align: "right", render: (r) => fmtDec(r.cost_per_liter) },
-            { key: "fuel_per_100km", label: "L/100 km", align: "right", render: (r) => fmtDec(r.fuel_per_100km) },
-            { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span> },
-            { key: "structure", label: "Structure", align: "right", render: (r) => fmtShort(r.structure) },
-            { key: "net_result", label: "Résultat net", align: "right", render: (r) => signed(r.net_result) },
-            ...(booked ? [{ key: "booked_result", label: "Résultat (pièces)", align: "right" as const, render: (r: ReportRow) => signed(r.booked_result) }] : []),
+            { key: "cost_per_km", label: "Coût/km (GNF)", align: "right", render: (r) => fmtInt(r.cost_per_km) },
+            { key: "cost_per_liter", label: "Coût/L (GNF)", align: "right", render: (r) => fmtInt(r.cost_per_liter) },
+            { key: "fuel_per_100km", label: "L/100 km", align: "right", render: (r) => fmtFixe(r.fuel_per_100km, 1) },
+            { key: "margin", label: "Marge (GNF)", align: "right", render: (r) => <span className={r.margin < 0 ? "font-semibold text-danger" : ""}>{fmtInt(r.margin)}</span> },
+            { key: "margin_rate", label: "Taux", align: "right", render: (r) => <TauxMarge taux={r.margin_rate} minimum={ind?.margin_threshold ?? null} negative={r.margin < 0} /> },
+            { key: "structure", label: "Structure (GNF)", align: "right", render: (r) => fmtInt(r.structure) },
+            { key: "net_result", label: "Résultat net (GNF)", align: "right", render: (r) => signed(r.net_result) },
+            ...(booked ? [{ key: "booked_result", label: "Résultat des pièces (GNF)", align: "right" as const, render: (r: ReportRow) => signed(r.booked_result) }] : []),
           ]} />
         )}
       </Card>
@@ -150,7 +154,7 @@ function Ligne({ label, value, strong }: { label: string; value: number; strong?
   return (
     <div className={`flex items-baseline justify-between gap-4 border-b border-line/70 py-1 ${strong ? "font-semibold text-ink" : "text-ink-2"}`}>
       <span>{label}</span>
-      <span className="font-mono">{fmtGNF(value)}</span>
+      <span className="whitespace-nowrap font-mono">{fmtGNF(value)}</span>
     </div>
   );
 }
@@ -158,13 +162,13 @@ function Ligne({ label, value, strong }: { label: string; value: number; strong?
 export function Controles({ controls }: { controls: Control[] }) {
   const failing = controls.filter((c) => !c.ok);
   return (
-    <Card title="Contrôles de la flotte et des rotations" actions={failing.length ? <Badge tone="warn">{failing.length} à traiter</Badge> : <Badge tone="ok">Conforme</Badge>}>
+    <Card title="Contrôles de la flotte et des rotations" actions={failing.length ? <Badge tone="warn">{fmtInt(failing.length)} à traiter</Badge> : <Badge tone={tonEtat("Conforme")}>Conforme</Badge>}>
       <ul className="space-y-3 text-[13.5px]">
         {controls.map((c) => (
           <li key={c.code} className="flex items-start gap-3">
             {c.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-ok" /> : <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-warn" />}
             <div className="min-w-0">
-              <div className={c.ok ? "text-ink-2" : "font-semibold text-ink"}>{c.label}{c.ok ? "" : ` : ${c.count}`}</div>
+              <div className={c.ok ? "text-ink-2" : "font-semibold text-ink"}>{c.label}{c.ok ? "" : ` : ${fmtInt(c.count)}`}</div>
               {!c.ok && (
                 <>
                   <div className="mt-0.5 text-muted">{c.items.join(" ; ")}{c.count > c.items.length ? ` (et ${pluriel(c.count - c.items.length, "autre")})` : ""}</div>

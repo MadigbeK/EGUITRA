@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { tonEtat } from "@/lib/couleurs";
+import { fmtDate, fmtDec, fmtGNF, fmtInt, pluriel } from "@/lib/format";
 import type { Profile } from "@/lib/types";
+import { ETAT_ROTATION, INSECABLE, TauxMarge, fmtM3, fmtVolume } from "./commun";
 import { parseNumber, type Ref, type Referentials } from "./types";
 
 // Profils des routes du noyau (addons/eguitra_transport/controllers/transport.py) : saisie et validation
@@ -45,12 +47,25 @@ interface Rotation {
   invoice: { id: number; name: string | null } | null;
 }
 
-const STATE = { draft: ["Saisie", "warn"], done: ["Validée", "accent"], invoiced: ["Facturée", "ok"], cancelled: ["Annulée", "neutral"] } as const;
+/** Marge estimée : aucun frais saisi, la marge se lit sur le coût standard de la route. */
+const estimee = (r: Rotation) => !r.total_cost && Boolean(r.std_cost);
+
+/** Marge affichée sur la ligne : l'estimation tant qu'aucun frais n'est saisi. */
+const margeLue = (r: Rotation) => (estimee(r) ? r.estimated_margin : r.margin);
+
+/**
+ * Taux de la marge affichée, sur le montant de la rotation comme le taux du noyau ; sans montant
+ * (volume ou tarif manquant), il n'a pas de sens.
+ */
+const tauxLu = (r: Rotation) => (!r.revenue ? null : estimee(r) ? (r.estimated_margin / r.revenue) * 100 : r.margin_rate);
 
 /** Rotations : saisie, validation, facturation ; marge estimée tant qu'aucun frais n'est saisi. */
 export function Rotations() {
   const [state, setState] = useState("draft,done");
   const { data, error, mutate } = useApi<{ items: Rotation[]; total_count: number; totals: { revenue: number; margin: number; volume: number } }>(`/transport/rotations?state=${state}&limit=300`);
+  // Marge minimale de la règle d'alerte (Seuils et taux) : la liste ne la sert pas encore (demande au
+  // noyau). En attendant, le taux s'écrit sans être jugé, plutôt que d'appeler les chiffres du mois.
+  const minimum: number | null = null;
   const [selected, setSelected] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
@@ -85,7 +100,7 @@ export function Rotations() {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Field label="Statut">
-          <Select value={state} onChange={(e) => setState(e.target.value)} options={[{ value: "draft,done", label: "À traiter (saisies et validées)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "Validées, à facturer" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
+          <Select value={state} onChange={(e) => setState(e.target.value)} options={[{ value: "draft,done", label: "À traiter (saisies et à facturer)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
         </Field>
         {selection && (
           <div className="flex flex-wrap gap-2">
@@ -118,28 +133,41 @@ export function Rotations() {
             empty="Aucune rotation pour ce filtre."
             columns={[
               ...(selection ? [{ key: "sel", label: "", render: (r: Rotation) => <input type="checkbox" readOnly checked={selected.includes(r.id)} aria-label={`Sélectionner la rotation ${r.name ?? r.id}`} /> }] : []),
-              { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name ?? "–"}{r.source === "mobile" && <Smartphone className="ml-1 inline h-3 w-3 text-accent" />}</span> },
-              { key: "date_loading", label: "Chargement", render: (r) => fmtDate(r.date_loading) },
+              // Le téléphone avant le numéro, dans une case de largeur fixe : les numéros restent alignés.
+              { key: "name", label: "N°", render: (r) => (
+                <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-xs">
+                  <span className="inline-flex w-3 flex-none justify-center">{r.source === "mobile" && <Smartphone title="Saisie au téléphone" className="h-3 w-3 text-accent" />}</span>
+                  {r.name ?? "–"}
+                </span>
+              ) },
+              { key: "date_loading", label: "Chargement", render: (r) => <span className="whitespace-nowrap">{fmtDate(r.date_loading)}</span> },
               { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name, sortValue: (r) => r.vehicle.name },
               { key: "client", label: "Client", render: (r) => r.client.name, sortValue: (r) => r.client.name },
               { key: "route", label: "Route", render: (r) => r.route.name },
-              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => <span title={r.over_capacity ? `Chargé au-delà de la capacité (${fmtDec(r.capacity_liters / 1000)} m³)` : undefined} className={r.over_capacity ? "text-danger" : ""}>{fmtDec(r.volume_delivered || r.volume_loaded)}{r.over_capacity && <span className="sr-only">, chargé au-delà de la capacité ({fmtDec(r.capacity_liters / 1000)} m³)</span>}</span> },
-              { key: "shortage", label: "Manquant", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtDec(r.shortage)}<span className="sr-only">{r.shortage_excess > 0 ? `, ${fmtDec(r.shortage_excess)} m³ hors tolérance, ${fmtGNF(r.shortage_value)}` : ", dans la tolérance"}</span></span> : "–") },
-              { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
-              { key: "margin", label: "Marge", align: "right", render: (r) => (!r.total_cost && r.std_cost ? (
-                <span className="italic text-muted" title={`Marge estimée avec le coût standard de la route (${fmtGNF(r.std_cost)}) : aucun frais saisi`}>{fmtShort(r.estimated_margin)} est.</span>
-              ) : <span className={r.margin < 0 ? "text-danger" : ""}>{fmtShort(r.margin)} <span className="text-muted">({fmtPct(r.margin_rate, 0)})</span></span>) },
-              { key: "state", label: "Statut", render: (r) => <Badge tone={STATE[r.state][1]} vivant={r.state === "draft"}>{STATE[r.state][0]}</Badge> },
+              { key: "volume", label: "Livré (m³)", align: "right", sortValue: (r) => r.volume_delivered || r.volume_loaded, render: (r) => <VolumeLivre r={r} /> },
+              { key: "shortage", label: "Manquant (m³)", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtM3(r.shortage_excess)} hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtVolume(r.shortage)}<span className="sr-only">{r.shortage_excess > 0 ? `, ${fmtM3(r.shortage_excess)} hors tolérance, ${fmtGNF(r.shortage_value)}` : ", dans la tolérance"}</span></span> : <span className="text-muted">–</span>) },
+              { key: "revenue", label: "Montant (GNF)", align: "right", render: (r) => fmtInt(r.revenue) },
+              { key: "margin", label: "Marge (GNF)", align: "right", sortValue: margeLue, render: (r) => (estimee(r) ? (
+                <span className={cx("italic", r.estimated_margin < 0 ? "text-danger" : "text-muted")} title={`Marge estimée avec le coût standard de la route (${fmtGNF(r.std_cost)}) : aucun frais saisi`}>
+                  {fmtInt(r.estimated_margin)}
+                  <span aria-hidden className="ml-1 font-sans text-[11.5px]">est.</span>
+                  <span className="sr-only">, marge estimée : aucun frais saisi</span>
+                </span>
+              ) : <span className={r.margin < 0 ? "font-semibold text-danger" : ""}>{fmtInt(r.margin)}</span>) },
+              { key: "margin_rate", label: "Taux", align: "right", sortValue: tauxLu, render: (r) => <TauxMarge taux={tauxLu(r)} minimum={minimum} negative={margeLue(r) < 0} estime={estimee(r)} /> },
+              { key: "state", label: "Statut", sortValue: (r) => ETAT_ROTATION[r.state], render: (r) => <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge> },
             ]}
             footer={
               data.items.length > 0 ? (
                 <tr>
-                  <td className="px-3 py-2" colSpan={selection ? 6 : 5}>Total ({data.total_count})</td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtDec(data.totals.volume)}</td>
+                  <td className="whitespace-nowrap px-3 py-2" colSpan={selection ? 6 : 5}>Total ({fmtInt(data.total_count)})</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{fmtVolume(data.totals.volume)}</td>
                   <td />
-                  <td className="px-3 py-2 text-right font-mono">{fmtGNF(data.totals.revenue)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtShort(data.totals.margin)}</td>
-                  <td />
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{fmtInt(data.totals.revenue)}</td>
+                  <td className={cx("whitespace-nowrap px-3 py-2 text-right font-mono", data.totals.margin < 0 && "text-danger")} title="Somme des marges enregistrées : une rotation sans frais saisis y compte sans ses coûts, et non pour sa marge estimée">
+                    {fmtInt(data.totals.margin)}
+                  </td>
+                  <td colSpan={2} />
                 </tr>
               ) : undefined
             }
@@ -148,6 +176,31 @@ export function Rotations() {
       </Card>
       {creating && <RotationForm onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); }} />}
     </div>
+  );
+}
+
+/**
+ * Volume livré (à défaut, chargé), à deux décimales. Un volume nul passe en alerte : la rotation
+ * n'a ni montant ni marge tant qu'il n'est pas saisi. Un chargement au-delà de la capacité de
+ * l'ensemble est aussi en alerte.
+ */
+function VolumeLivre({ r }: { r: Rotation }) {
+  const volume = r.volume_delivered || r.volume_loaded;
+  if (!volume) {
+    return (
+      <span className="font-semibold text-danger">
+        <span className="mr-1.5 font-sans text-[12px]">volume manquant</span>
+        {fmtVolume(0)}
+      </span>
+    );
+  }
+  if (!r.over_capacity) return <>{fmtVolume(volume)}</>;
+  const capacite = fmtM3(r.capacity_liters / 1000);
+  return (
+    <span title={`Chargé au-delà de la capacité (${capacite})`} className="font-semibold text-danger">
+      {fmtVolume(volume)}
+      <span className="sr-only">, chargé au-delà de la capacité ({capacite})</span>
+    </span>
   );
 }
 
@@ -204,7 +257,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
             const vehicle = ref.vehicles.find((v) => String(v.id) === f.vehicle_id);
             const loaded = parseNumber(f.volume_loaded ?? "") ?? 0;
             return vehicle?.capacity_liters && loaded * 1000 > vehicle.capacity_liters ? (
-              <Notice tone="danger">Le volume chargé dépasse la capacité de {vehicle.name} ({fmtDec(vehicle.capacity_liters / 1000)} m³) : la rotation ne pourra pas être validée.</Notice>
+              <Notice tone="danger">Le volume chargé dépasse la capacité de {vehicle.name} ({fmtM3(vehicle.capacity_liters / 1000)}) : la rotation ne pourra pas être validée.</Notice>
             ) : null;
           })()}
           <GainEstime ref_={ref} f={f} />
@@ -240,7 +293,7 @@ function GainEstime({ ref_, f }: { ref_: Referentials; f: Record<string, string>
       </div>
       <div><div className="text-[12px] text-muted">Marge estimée</div><div className={`font-mono text-[15px] font-semibold ${revenue - standard < 0 ? "text-danger" : "text-ink"}`}>{fmtGNF(revenue - standard)}</div></div>
       <div className="text-[12px] leading-snug text-muted">
-        {route.std_fuel_liters ? `${fmtDec(route.std_fuel_liters)} L à ${fmtGNF(ref_.fuel_price ?? 0)}, prime, péages et autres forfaits. ` : "Aucun forfait de carburant pour cette route. "}
+        {route.std_fuel_liters ? `${fmtDec(route.std_fuel_liters)}${INSECABLE}L à ${fmtGNF(ref_.fuel_price ?? 0)}, prime, péages et autres forfaits. ` : "Aucun forfait de carburant pour cette route. "}
         Figé à la validation de la rotation.
       </div>
     </div>

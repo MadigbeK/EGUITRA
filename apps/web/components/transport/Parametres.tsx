@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select } from "@/components/ui";
+import { Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, Tag } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtInt } from "@/lib/format";
+import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
+import { INSECABLE } from "./commun";
 import { SHORTAGE_RULES, parseNumber, type AccountRef, type ClientTerms, type Message, type Product, type Ref, type ShortageRule, type TransportSettings } from "./types";
 
 /** Envoi d'une modification avec message de retour ; renvoie vrai si elle a réussi. */
@@ -30,7 +31,7 @@ export function Parametres() {
   if (!settings) return <Etat error={error} onRetry={() => mutate()} />;
   return (
     <div className="space-y-6">
-      {!settings.can_edit && <Notice tone="accent">Paramètres tenus par la finance : consultation seulement.</Notice>}
+      {!settings.can_edit && <Notice tone="neutral">Paramètres tenus par la finance : consultation seulement.</Notice>}
       <Manquants settings={settings} onSaved={() => void mutate()} />
       <RelevesProprietaires settings={settings} onSaved={() => void mutate()} />
       <ConditionsClients canEdit={settings.can_edit} />
@@ -77,11 +78,11 @@ function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
         <DataTable rows={data.taxes} rowKey={(t) => t.id} empty="Aucune taxe au barème." onRowClick={canEdit ? (t) => setEditing(t) : undefined} columns={[
           { key: "name", label: "Taxe", render: (t) => <span className={t.active ? "" : "text-muted line-through"}>{t.name}</span> },
           { key: "nature", label: "Nature", render: (t) => label(data.natures, t.nature) },
-          { key: "rate", label: "Taux", align: "right", render: (t) => `${t.base === "revenue" ? String(t.rate).replace(".", ",") : fmtInt(t.rate)} ${RATE_UNIT[t.base]}` },
+          { key: "rate", label: "Taux", align: "right", render: (t) => `${t.base === "revenue" ? fmtDec(t.rate) : fmtInt(t.rate)}${INSECABLE}${RATE_UNIT[t.base]}` },
           { key: "scope", label: "Portée", render: (t) => [t.products.map((p) => p.name).join(", ") || "Tous produits", t.routes.map((r) => r.name).join(", ") || "toutes routes"].join(" ; ") },
           { key: "period", label: "Période", render: (t) => (t.date_from || t.date_to ? `${t.date_from ? fmtDate(t.date_from) : "…"} – ${t.date_to ? fmtDate(t.date_to) : "…"}` : "Permanente") },
           { key: "account", label: "Compte", render: (t) => t.account?.code ?? "–" },
-          { key: "rebillable", label: "Refacturée", render: (t) => (t.rebillable ? <Badge tone="accent">{t.rebill_vat ? "Oui, avec TVA" : "Oui"}</Badge> : "Non") },
+          { key: "rebillable", label: "Refacturée", render: (t) => (t.rebillable ? <Tag>{t.rebill_vat ? "Oui, avec TVA" : "Oui"}</Tag> : "Non") },
         ]} />
       )}
       {editing && data && (
@@ -281,7 +282,7 @@ function Produits({ canEdit }: { canEdit: boolean }) {
           { key: "code", label: "Code", render: (p) => <span className="font-mono text-xs">{p.code}</span> },
           { key: "density_15", label: "Masse vol. à 15 °C (kg/m³)", align: "right", render: (p) => <Input disabled={!canEdit} className="w-28 text-right font-mono" defaultValue={p.density_15 ? String(p.density_15).replace(".", ",") : ""} onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== (p.density_15 ?? 0)) patch(p, { density_15: v }, "Masse volumique enregistrée."); }} /> },
           { key: "shortage_price", label: "Prix du m³ manquant (GNF)", align: "right", render: (p) => <Input disabled={!canEdit} className="w-40 text-right font-mono" defaultValue={p.shortage_price ? fmtInt(p.shortage_price) : ""} placeholder="À saisir" onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== p.shortage_price) patch(p, { shortage_price: v }, "Prix de valorisation enregistré."); }} /> },
-          { key: "shared", label: "Portée", render: (p) => (p.shared ? <Badge>Commun</Badge> : <Badge tone="accent">Société</Badge>) },
+          { key: "shared", label: "Portée", render: (p) => <Tag>{p.shared ? "Commun" : "Société"}</Tag> },
           { key: "active", label: "Actif", render: (p) => <input type="checkbox" disabled={!canEdit} checked={p.active} onChange={(e) => patch(p, { active: e.target.checked }, e.target.checked ? "Produit réactivé." : "Produit retiré des listes de saisie.")} /> },
         ]} />
       )}

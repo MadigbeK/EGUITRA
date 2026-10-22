@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select, Tag } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtShort } from "@/lib/format";
+import { tonEtat, type TonEtat } from "@/lib/couleurs";
+import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, fmtFixe, fmtVolume } from "./commun";
 import { OWNERSHIPS, parseNumber, type Message, type Ownership, type Ref, type TransportSettings } from "./types";
 
 interface MoveRef { id: number; name: string | null; state: string }
@@ -43,7 +45,12 @@ interface Statement {
 
 interface Rule { id: number; vehicle: Ref | null; ownership: Ownership | null; partner: Ref; rate: number; date_from: string | null; date_to: string | null; note: string | null; active: boolean; is_company: boolean }
 
-const STATE = { draft: ["Établi", "warn"], posted: ["Pièces préparées", "ok"] } as const;
+/**
+ * État d'un relevé : le mot, et son ton tant que la table commune ETAT_TON ne le connaît pas (un
+ * relevé établi attend ses pièces : à surveiller ; pièces préparées : favorable).
+ */
+const STATE: Record<Statement["state"], [string, TonEtat]> = { draft: ["Établi", "warn"], posted: ["Pièces préparées", "ok"] };
+const tonReleve = (state: Statement["state"]) => tonEtat(STATE[state][0], STATE[state][1]);
 const CATEGORY: Record<Ownership, string> = { own: "Ensembles propres", managed: "Ensembles gérés pour un propriétaire" };
 
 function monthBounds(month: string): { from: string; to: string } {
@@ -68,7 +75,7 @@ export function Proprietaires() {
     setMessage(null);
     try {
       const res = await apiSend<{ items: Statement[] }>("POST", "/transport/owner-statements", { date_from: from, date_to: to });
-      setMessage({ tone: "ok", text: `${res.items.length} relevé(s) établi(s) ou actualisé(s) pour ${month.split("-").reverse().join("/")}.` });
+      setMessage({ tone: "ok", text: `${pluriel(res.items.length, "relevé établi ou actualisé", "relevés établis ou actualisés")} pour ${month.split("-").reverse().join("/")}.` });
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Établissement impossible." });
@@ -97,11 +104,11 @@ export function Proprietaires() {
         )}
       </div>
       {data && data.vehicles.length === 0 && (
-        <Notice tone="accent">Aucun ensemble géré ni aucune règle de répartition : déclarez la propriété des ensembles (Flotte et chauffeurs) ou une règle ci-dessous.</Notice>
+        <Notice tone="neutral">Aucun ensemble géré ni aucune règle de répartition : déclarez la propriété des ensembles (Flotte et chauffeurs) ou une règle ci-dessous.</Notice>
       )}
       {items.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Chiffre d'affaires des ensembles" value={fmtShort(data?.totals.revenue)} hint={`${items.length} relevé(s)`} />
+          <Kpi label="Chiffre d'affaires des ensembles" value={fmtShort(data?.totals.revenue)} hint={pluriel(items.length, "relevé")} />
           <Kpi label="Commissions" value={fmtShort(data?.totals.commissions)} hint="Pourcentages du chiffre d'affaires brut" />
           <Kpi label="Part des propriétaires" value={fmtShort(owners)} tone={owners < 0 ? "danger" : "neutral"} hint={owners < 0 ? "Négative : charges non couvertes" : "À reverser"} />
           <Kpi label="Part de la société" value={fmtShort(data?.totals.operator_amount)} hint="Commissions perçues et résultat des ensembles propres" />
@@ -112,13 +119,13 @@ export function Proprietaires() {
           <DataTable rows={items} rowKey={(s) => s.id} onRowClick={(s) => setOpened(s.id)} empty="Aucun relevé établi pour ce mois." columns={[
             { key: "vehicle", label: "Ensemble", render: (s) => s.vehicle.name, sortValue: (s) => s.vehicle.name },
             { key: "owner", label: "Propriétaire", render: (s) => (s.ownership === "managed" ? s.owner?.name ?? "–" : <span className="text-muted">Propre</span>) },
-            { key: "rotation_count", label: "Rotations", align: "right" },
-            { key: "revenue", label: "Chiffre d'affaires", align: "right", render: (s) => fmtGNF(s.revenue) },
-            { key: "costs", label: "Charges", align: "right", render: (s) => fmtGNF(s.costs) },
-            { key: "margin", label: "Marge", align: "right", render: (s) => <span className={s.margin < 0 ? "text-danger" : ""}>{fmtGNF(s.margin)}</span> },
-            { key: "commissions", label: "Commissions", align: "right", render: (s) => fmtGNF(s.commissions) },
-            { key: "owner_amount", label: "Part du propriétaire", align: "right", render: (s) => <span className={s.owner_amount < 0 ? "font-semibold text-danger" : "font-semibold"}>{fmtGNF(s.owner_amount)}</span> },
-            { key: "state", label: "État", render: (s) => <Badge tone={STATE[s.state][1]}>{STATE[s.state][0]}</Badge> },
+            { key: "rotation_count", label: "Rotations", align: "right", render: (s) => fmtInt(s.rotation_count) },
+            { key: "revenue", label: "Chiffre d'affaires (GNF)", align: "right", render: (s) => fmtInt(s.revenue) },
+            { key: "costs", label: "Charges (GNF)", align: "right", render: (s) => fmtInt(s.costs) },
+            { key: "margin", label: "Marge (GNF)", align: "right", render: (s) => <span className={s.margin < 0 ? "font-semibold text-danger" : ""}>{fmtInt(s.margin)}</span> },
+            { key: "commissions", label: "Commissions (GNF)", align: "right", render: (s) => fmtInt(s.commissions) },
+            { key: "owner_amount", label: "Part du propriétaire (GNF)", align: "right", render: (s) => <span className={s.owner_amount < 0 ? "font-semibold text-danger" : "font-semibold"}>{fmtInt(s.owner_amount)}</span> },
+            { key: "state", label: "État", render: (s) => <Badge tone={tonReleve(s.state)}>{STATE[s.state][0]}</Badge> },
           ]} />
         )}
       </Card>
@@ -162,7 +169,7 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
         <div className="space-y-5">
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
-            <Badge tone={STATE[st.state][1]}>{STATE[st.state][0]}</Badge>
+            <Badge tone={tonReleve(st.state)}>{STATE[st.state][0]}</Badge>
             <span>{st.ownership === "managed" ? `Géré pour ${st.owner?.name ?? "–"}` : "Ensemble propre"}</span>
             <span>· du {fmtDate(st.date_from)} au {fmtDate(st.date_to)}</span>
             {st.computed_at && <span>· établi le {fmtDateTime(st.computed_at)}</span>}
@@ -179,9 +186,9 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
                       ? [["Charges comptabilisées sur l'ensemble", -st.booked_costs]]
                       : [["Frais des rotations", -st.rotation_costs], ["Manquants à charge", -st.shortage_cost], ["Charges mensuelles de l'ensemble", -st.vehicle_charges]]),
                   ].map(([label, value]) => (
-                    <tr key={String(label)} className="border-b border-line"><td className="py-1.5 text-ink-2">{label}</td><td className="py-1.5 text-right font-mono">{fmtGNF(value)}</td></tr>
+                    <tr key={String(label)} className="border-b border-line"><td className="py-1.5 text-ink-2">{label}</td><td className="whitespace-nowrap py-1.5 text-right font-mono">{fmtGNF(value)}</td></tr>
                   ))}
-                  <tr><td className="py-2 font-semibold text-ink">Marge de l&apos;ensemble</td><td className={`py-2 text-right font-mono font-semibold ${st.margin < 0 ? "text-danger" : ""}`}>{fmtGNF(st.margin)}</td></tr>
+                  <tr><td className="py-2 font-semibold text-ink">Marge de l&apos;ensemble</td><td className={`whitespace-nowrap py-2 text-right font-mono font-semibold ${st.margin < 0 ? "text-danger" : ""}`}>{fmtGNF(st.margin)}</td></tr>
                 </tbody>
               </table>
               <p className="mt-2 text-[12px] text-muted">
@@ -194,11 +201,11 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
                 <tbody>
                   {(st.lines ?? []).filter((l) => l.kind !== "charge").map((l) => (
                     <tr key={l.id} className="border-b border-line">
-                      <td className="py-1.5 text-ink-2">{l.name}{l.move && <span className="ml-2"><Badge tone="accent">{l.move.name ?? "Brouillon"}</Badge></span>}</td>
-                      <td className={`py-1.5 text-right font-mono ${l.kind === "owner" ? "font-semibold" : ""} ${l.amount < 0 ? "text-danger" : ""}`}>{fmtGNF(l.amount)}</td>
+                      <td className="py-1.5 text-ink-2">{l.name}{l.move && <span className="ml-2">{l.move.name ? <span className="whitespace-nowrap font-mono text-xs text-ink">{l.move.name}</span> : <Badge tone={tonEtat("Brouillon")}>Brouillon</Badge>}</span>}</td>
+                      <td className={`whitespace-nowrap py-1.5 text-right font-mono ${l.kind === "owner" ? "font-semibold" : ""} ${l.amount < 0 ? "text-danger" : ""}`}>{fmtGNF(l.amount)}</td>
                     </tr>
                   ))}
-                  <tr><td className="py-2 text-ink-2">Part de la société</td><td className="py-2 text-right font-mono">{fmtGNF(st.operator_amount)}</td></tr>
+                  <tr><td className="py-2 text-ink-2">Part de la société</td><td className="whitespace-nowrap py-2 text-right font-mono">{fmtGNF(st.operator_amount)}</td></tr>
                 </tbody>
               </table>
               {st.ownership === "managed" && st.owner_amount < 0 && (
@@ -211,22 +218,22 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
               <h3 className="mb-2 text-[14px] font-semibold text-ink">Charges mensuelles</h3>
               <DataTable dense rows={(st.lines ?? []).filter((l) => l.kind === "charge")} rowKey={(l) => l.id} columns={[
                 { key: "name", label: "Charge" },
-                { key: "monthly", label: "Mensuel", align: "right", render: (l) => fmtGNF(l.monthly) },
-                { key: "months", label: "Mois", align: "right", render: (l) => fmtDec(l.months) },
-                { key: "amount", label: "Montant", align: "right", render: (l) => fmtGNF(l.amount) },
+                { key: "monthly", label: "Mensuel (GNF)", align: "right", render: (l) => fmtInt(l.monthly) },
+                { key: "months", label: "Mois", align: "right", render: (l) => fmtFixe(l.months, 2) },
+                { key: "amount", label: "Montant (GNF)", align: "right", render: (l) => fmtInt(l.amount) },
               ]} />
             </section>
           )}
           <section>
             <h3 className="mb-2 text-[14px] font-semibold text-ink">Rotations validées ({st.rotation_count})</h3>
             <DataTable dense rows={st.rotations ?? []} rowKey={(r) => r.id} empty="Aucune rotation validée sur la période." columns={[
-              { key: "name", label: "N°", render: (r) => <span className="font-mono text-xs">{r.name}</span> },
-              { key: "date_loading", label: "Chargement", render: (r) => fmtDate(r.date_loading) },
+              { key: "name", label: "N°", render: (r) => <span className="whitespace-nowrap font-mono text-xs">{r.name}</span> },
+              { key: "date_loading", label: "Chargement", render: (r) => <span className="whitespace-nowrap">{fmtDate(r.date_loading)}</span> },
               { key: "route", label: "Route", render: (r) => r.route.name },
               { key: "client", label: "Client", render: (r) => r.client.name },
-              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => fmtDec(r.volume) },
-              { key: "revenue", label: "Montant", align: "right", render: (r) => fmtGNF(r.revenue) },
-              { key: "total_cost", label: "Frais déclarés", align: "right", render: (r) => fmtGNF(r.total_cost) },
+              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => fmtVolume(r.volume) },
+              { key: "revenue", label: "Montant (GNF)", align: "right", render: (r) => fmtInt(r.revenue) },
+              { key: "total_cost", label: "Frais déclarés (GNF)", align: "right", render: (r) => fmtInt(r.total_cost) },
             ]} />
           </section>
         </div>
@@ -280,8 +287,8 @@ function Regles({ canEdit }: { canEdit: boolean }) {
       {!rules ? <Etat error={error} onRetry={() => mutate()} /> : (
         <DataTable rows={rules} rowKey={(r) => r.id} empty="Aucune règle." columns={[
           { key: "target", label: "Porte sur", render: (r) => r.vehicle?.name ?? (r.ownership ? CATEGORY[r.ownership] : "–") },
-          { key: "partner", label: "Bénéficiaire", render: (r) => <span>{r.partner.name}{r.is_company && <span className="ml-2"><Badge tone="accent">Société</Badge></span>}</span> },
-          { key: "rate", label: "Taux", align: "right", render: (r) => `${String(r.rate).replace(".", ",")} %` },
+          { key: "partner", label: "Bénéficiaire", render: (r) => <span>{r.partner.name}{r.is_company && <span className="ml-2"><Tag>Société</Tag></span>}</span> },
+          { key: "rate", label: "Taux", align: "right", render: (r) => `${fmtDec(r.rate)}${INSECABLE}%` },
           { key: "period", label: "Période", render: (r) => (r.date_from || r.date_to ? `${r.date_from ? fmtDate(r.date_from) : "…"} au ${r.date_to ? fmtDate(r.date_to) : "…"}` : "Permanente") },
           { key: "note", label: "Fondement", render: (r) => r.note ?? "–" },
           { key: "actions", label: "", render: (r) => (canEdit ? <button type="button" title="Supprimer la règle" className="text-muted hover:text-danger" onClick={() => void remove(r)}><Trash2 className="h-4 w-4" /></button> : null) },

@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Field, Input, Modal, Notice, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtGNF } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtInt } from "@/lib/format";
 import { OWNERSHIPS, parseNumber, type Ownership, type Ref, type TransportSettings, type VehicleCharge } from "./types";
 
 interface Vehicle { id: number; name: string; tractor_plate: string | null; trailer_plate: string | null; brand: string | null; capacity_liters: number; driver: Ref | null; state: string; year: number | null; date_service: string | null; asset: Ref | null; ownership: Ownership; owner: Ref | null; charges: VehicleCharge[]; monthly_charges: number }
@@ -31,7 +31,7 @@ export function Flotte() {
         <DataTable rows={vehicles ?? []} rowKey={(x) => x.id} columns={[
           { key: "name", label: "Code" },
           { key: "tractor_plate", label: "Tracteur", render: (x) => x.tractor_plate ?? "–" },
-          { key: "capacity_liters", label: "Capacité (L)", align: "right", render: (x) => x.capacity_liters.toLocaleString("fr-FR") },
+          { key: "capacity_liters", label: "Capacité (L)", align: "right", render: (x) => fmtInt(x.capacity_liters) },
           { key: "year", label: "Année", align: "right", render: (x) => <Input className="w-20 text-right font-mono" defaultValue={x.year ?? ""} inputMode="numeric" onBlur={(e) => Number(e.target.value || 0) !== (x.year ?? 0) && void patch(`/transport/vehicles/${x.id}`, { year: Number(e.target.value || 0) }, () => void mutate())} /> },
           { key: "date_service", label: "Mise en service", render: (x) => <Input type="date" className="w-36" defaultValue={x.date_service ?? ""} onBlur={(e) => e.target.value !== (x.date_service ?? "") && void patch(`/transport/vehicles/${x.id}`, { date_service: e.target.value || null }, () => void mutate())} /> },
           { key: "asset", label: "Immobilisation", render: (x) => (settings?.can_edit && assets ? (
@@ -45,9 +45,11 @@ export function Flotte() {
               {x.ownership === "managed" && <PartnerPicker kind="supplier" value={x.owner} placeholder="Propriétaire…" onChange={(p) => void patch(`/transport/vehicles/${x.id}`, { owner_id: p?.id ?? null }, () => void mutate())} />}
             </div>
           ) : x.ownership === "managed" ? <span>Géré · {x.owner?.name ?? "–"}</span> : "Propre") },
-          { key: "monthly_charges", label: "Charges / mois", align: "right", render: (x) => (
+          { key: "monthly_charges", label: "Charges / mois (GNF)", align: "right", render: (x) => (
             <button type="button" className="font-mono underline decoration-dotted underline-offset-4 hover:text-accent" onClick={(e) => { e.stopPropagation(); setCharging(x); }}>
-              {x.monthly_charges ? fmtGNF(x.monthly_charges) : settings?.can_edit ? "Saisir" : "–"}
+              <span className="sr-only">Charges mensuelles de {x.name} : </span>
+              {x.monthly_charges ? fmtInt(x.monthly_charges) : settings?.can_edit ? "Saisir" : "–"}
+              {x.monthly_charges > 0 && <span className="sr-only"> GNF</span>}
             </button>
           ) },
         ]} />

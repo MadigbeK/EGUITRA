@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Download } from "@/components/icons";
 import { Button, Card, DataTable, Etat, Field, Input, Notice } from "@/components/ui";
 import { ApiError, apiDownload, useApi } from "@/lib/api-client";
-import { fmtGNF, fmtShort } from "@/lib/format";
+import { fmtGNF, fmtInt } from "@/lib/format";
 
 interface NatureRow { code: string; label: string; months: Record<string, number>; total: number; rebillable: number; lines: number }
 interface Statement {
@@ -42,32 +42,32 @@ export function Taxes() {
         <Button onClick={() => void exporter()}><Download className="h-4 w-4" /> Export XLSX</Button>
       </div>
       {message && <Notice tone="danger">{message}</Notice>}
-      <Card title="Taxes spécifiques par nature (rotations validées et facturées)" padded={false}>
+      <Card title="Taxes spécifiques par nature, en GNF (rotations validées et facturées)" padded={false}>
         {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable dense rows={data.natures} rowKey={(r) => r.code} empty="Aucune taxe spécifique sur la période : paramétrez le barème dans l'onglet Paramètres." columns={[
             { key: "label", label: "Nature" },
-            ...months.map((m) => ({ key: m, label: monthLabel(m), align: "right" as const, render: (r: NatureRow) => fmtShort(r.months[m]) })),
-            { key: "total", label: "Total", align: "right", render: (r) => <span className="font-semibold">{fmtGNF(r.total)}</span> },
-            { key: "rebillable", label: "dont refacturé", align: "right", render: (r) => fmtShort(r.rebillable) },
+            ...months.map((m) => ({ key: m, label: monthLabel(m), align: "right" as const, render: (r: NatureRow) => fmtInt(r.months[m]) })),
+            { key: "total", label: "Total", align: "right", render: (r) => <span className="font-semibold">{fmtInt(r.total)}</span> },
+            { key: "rebillable", label: "dont refacturé", align: "right", render: (r) => fmtInt(r.rebillable) },
           ]} footer={data.natures.length ? (
             <tr>
-              <td className="px-3 py-2">Total</td>
-              {months.map((m) => <td key={m} className="px-3 py-2 text-right font-mono">{fmtShort(data.totals.months[m])}</td>)}
-              <td className="px-3 py-2 text-right font-mono">{fmtGNF(data.totals.total)}</td>
-              <td className="px-3 py-2 text-right font-mono">{fmtShort(data.totals.rebillable)}</td>
+              <td className="whitespace-nowrap px-3 py-2">Total</td>
+              {months.map((m) => <td key={m} className="whitespace-nowrap px-3 py-2 text-right font-mono">{fmtInt(data.totals.months[m])}</td>)}
+              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{fmtInt(data.totals.total)}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{fmtInt(data.totals.rebillable)}</td>
             </tr>
           ) : undefined} />
         )}
       </Card>
       {data && data.booked.length > 0 && (
-        <Card title="Comptabilisé sur les comptes du barème" padded={false}>
+        <Card title="Comptabilisé sur les comptes du barème, en GNF" padded={false}>
           <p className="px-5 pt-4 text-[13px] text-muted">
             Pièces validées sur les comptes de charge des taxes ({fmtGNF(bookedTotal)}), face au barème ({fmtGNF(data.totals.total - data.totals.rebillable)} hors refacturation, {fmtGNF(data.totals.total)} en tout).
           </p>
           <DataTable dense rows={data.booked} rowKey={(b) => b.account.id} columns={[
             { key: "account", label: "Compte", render: (b) => `${b.account.code} ${b.account.name}` },
-            ...months.map((m) => ({ key: m, label: monthLabel(m), align: "right" as const, render: (b: Statement["booked"][number]) => fmtShort(b.months[m]) })),
-            { key: "total", label: "Total", align: "right", render: (b) => fmtGNF(b.total) },
+            ...months.map((m) => ({ key: m, label: monthLabel(m), align: "right" as const, render: (b: Statement["booked"][number]) => fmtInt(b.months[m]) })),
+            { key: "total", label: "Total", align: "right", render: (b) => fmtInt(b.total) },
           ]} />
         </Card>
       )}

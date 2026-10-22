@@ -4,7 +4,8 @@ import { CheckCircle2, Droplet, TriangleAlert } from "@/components/icons";
 import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
-import { fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { fmtM3 } from "./commun";
 
 /** Chiffres du mois : volume livré au compteur, état de la flotte, chiffre d'affaires, marge, à facturer, saisies. */
 export function Synthese() {
@@ -21,22 +22,23 @@ export function Synthese() {
               <div>
                 <h2 className="text-[16.5px] font-semibold text-ink">Volume livré ce mois</h2>
                 <p className="mt-0.5 text-[12.5px] text-muted">
-                  {summary.rotations} rotation{summary.rotations > 1 ? "s" : ""}, {fmtDec(summary.volume)} m³ au total
+                  {pluriel(summary.rotations, "rotation")}, {fmtM3(summary.volume)} au total
                 </p>
               </div>
-              <IconTile icon={Droplet} teinte="corail" />
+              {/* La goutte prend la couleur du Transport : le corail est celle de Rotations. */}
+              <IconTile icon={Droplet} teinte="accent" />
             </div>
             <Compteur value={summary.volume} unit="m³" className="mt-5 text-[42px] text-ink sm:text-[50px]" />
             {summary.shortage_excess.count > 0 && (
               <p className="mt-2 text-[13px] font-medium text-danger">
-                {fmtDec(summary.shortage_excess.volume)} m³ manquants au-delà de la tolérance sur {pluriel(summary.shortage_excess.count, "rotation")}
+                {fmtM3(summary.shortage_excess.volume)} manquants au-delà de la tolérance sur {pluriel(summary.shortage_excess.count, "rotation")}
                 {summary.shortage_excess.value ? `, ${fmtGNF(summary.shortage_excess.value)}` : ""}
               </p>
             )}
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-[13px]">
                 <span className="font-semibold text-ink-2">Flotte</span>
-                <span className="text-muted">{(summary.fleet.service ?? 0) + (summary.fleet.maintenance ?? 0) + (summary.fleet.off ?? 0)} ensembles</span>
+                <span className="text-muted">{pluriel((summary.fleet.service ?? 0) + (summary.fleet.maintenance ?? 0) + (summary.fleet.off ?? 0), "ensemble")}</span>
               </div>
               <Repartition
                 parts={[
@@ -44,7 +46,7 @@ export function Synthese() {
                   { key: "maintenance", label: "En maintenance", value: summary.fleet.maintenance ?? 0, color: ETATS.attention },
                   { key: "off", label: "Hors service", value: summary.fleet.off ?? 0, color: ETATS.alerte },
                 ]}
-                format={(v) => `${v}`}
+                format={fmtInt}
               />
             </div>
           </section>
@@ -53,13 +55,12 @@ export function Synthese() {
             <Kpi
               label="Marge du mois"
               value={fmtShort(summary.margin)}
-             
-             
               tone={summary.margin_rate === null || summary.margin_min === null ? "neutral" : sousMinimum ? "warn" : "ok"}
               hint={`Taux de marge ${fmtPct(summary.margin_rate)}, ${summary.margin_min !== null ? `minimum ${fmtPct(summary.margin_min, 0)}` : "seuil non fixé"}`}
             />
-            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} tone="accent" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
-            <Kpi label="Saisies à valider" value={String(summary.drafts)} tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
+            {/* « À facturer » : un état de travail, au trait neutre (ETAT_TON) ; la couleur du Transport ne dit pas d'état. */}
+            <Kpi label="À facturer" value={fmtShort(summary.to_invoice.amount)} tone="neutral" hint={pluriel(summary.to_invoice.count, "rotation validée", "rotations validées")} />
+            <Kpi label="Saisies à valider" value={fmtInt(summary.drafts)} tone={summary.drafts > 0 ? "warn" : "neutral"} hint="Rotations saisies au bureau ou au parc" />
           </div>
         </div>
       )}
@@ -80,7 +81,7 @@ export function Controles() {
             <li key={c.code} className="flex items-start gap-3 border-b border-line py-2.5">
               {c.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-ok" /> : <TriangleAlert className="mt-0.5 h-4 w-4 flex-none text-warn" />}
               <div className="min-w-0">
-                <p className="text-[13.5px] font-medium text-ink">{c.label}{!c.ok && <span className="ml-2 font-mono text-[12.5px] text-warn">{c.count}</span>}</p>
+                <p className="text-[13.5px] font-medium text-ink">{c.label}{!c.ok && <span className="ml-2 font-mono text-[12.5px] text-warn">{fmtInt(c.count)}</span>}</p>
                 {!c.ok && (
                   <>
                     <p className="mt-0.5 text-[12.5px] text-muted">{c.items.slice(0, 4).join(" ; ")}{c.count > 4 ? "…" : ""}</p>
