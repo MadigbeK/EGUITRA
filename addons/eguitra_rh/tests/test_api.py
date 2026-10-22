@@ -11,6 +11,8 @@ class TestApiRh(ApiCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.rh_user = cls._create_user("aminata.rh", "rh")
+        cls.rh2_user = cls._create_user("binta.rh", "rh")
+        cls.dg_user = cls._create_user("dg.rh", "direction")
         cls.finance_user = cls._create_user("fatou.fin", "finance")
         cls.boss_user = cls._create_user("chef.atelier", "exploitation")
         cls.worker_user = cls._create_user("ousmane.chauffeur", "exploitation")
@@ -20,6 +22,11 @@ class TestApiRh(ApiCase):
         cls.worker = Employee.create({"name": "Ousmane Chauffeur", "hire_date": date(2024, 1, 1),
                                       "base_salary": 2_000_000, "manager_id": cls.boss.id,
                                       "user_id": cls.worker_user.id})
+
+    def _own_dossier(self, user, name):
+        """Dossier salarié lié au compte (créé hors API : un compte ne se lie pas lui-même à un dossier)."""
+        return self.env["eguitra.rh.employee"].create({"name": name, "hire_date": date(2024, 1, 1),
+                                                      "base_salary": 3_000_000, "user_id": user.id})
 
     def test_gestion_par_la_rh(self):
         token = self.open_session("aminata.rh", app="rh")["access_token"]
@@ -120,7 +127,7 @@ class TestApiRh(ApiCase):
         self.assertEqual((leave["state"], leave["days"], leave["can_decide"]), ("submitted", 2, False))
 
         status, _b = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=token)
-        self.assertEqual(status, 404, "Pas d'approbation de sa propre demande")
+        self.assertEqual(status, 403, "Pas d'approbation de sa propre demande (refus explicite)")
         other = self.open_session("fatou.fin")["access_token"]
         status, _b = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=other)
         self.assertEqual(status, 404, "Ni par un tiers")
@@ -137,9 +144,216 @@ class TestApiRh(ApiCase):
         slip = next(s for s in payroll["payslips"] if s["employee"]["name"] == "Ousmane Chauffeur")
         status, _b = self.call("GET", f"/rh/me/payslips/{slip['id']}", token=token)
         self.assertEqual(status, 404, "Bulletin invisible tant que la paie n'est pas validée")
-        self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=rh)
+        # Quatre yeux : la paie préparée par la RH est validée par la direction.
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        status, validated = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual(status, 200, validated)
         status, mine = self.call("GET", f"/rh/me/payslips/{slip['id']}", token=token)
         self.assertEqual(status, 200, mine)
         boss_slip = next(s for s in payroll["payslips"] if s["employee"]["name"] == "Chef Atelier")
         status, _b = self.call("GET", f"/rh/me/payslips/{boss_slip['id']}", token=token)
         self.assertEqual(status, 404, "Jamais le bulletin d'un autre")
+
+    # ─── Quatre yeux ─────────────────────────────────────────────────────
+
+    def test_quatre_yeux_sur_son_propre_dossier(self):
+        """Un compte RH ne modifie ni son dossier, ni ses éléments fixes et variables, ni ses avances et
+        prêts : un autre compte RH s'en charge."""
+        own = self._own_dossier(self.rh_user, "Aminata RH")
+        token = self.open_session("aminata.rh", app="rh")["access_token"]
+        status, meta = self.call("GET", "/rh/meta", token=token)
+        self.assertEqual(status, 200, meta)
+        rubrics = {r["code"]: r["id"] for r in meta["rubrics"]}
+        for method, path, payload in [
+            ("PATCH", f"/rh/employees/{own.id}", {"base_salary": 9_000_000, "salary_reason": "Promotion"}),
+            ("PATCH", f"/rh/employees/{own.id}", {"fixed_lines": [{"rubric_id": rubrics["LOGT"], "amount": 5_000_000}]}),
+            ("POST", f"/rh/employees/{own.id}/exit", {"exit_date": "2026-12-31"}),
+            ("POST", "/rh/advances", {"employee_id": own.id, "amount": 2_000_000, "installment": 100_000,
+                                      "first_month": "2026-09-01"}),
+            ("POST", "/rh/employees", {"name": "Second dossier", "hire_date": "2026-01-05",
+                                       "user_id": self.rh_user.id}),
+        ]:
+            status, body = self.call(method, path, payload, token=token)
+            self.assertEqual(status, 403, (path, body))
+        own.invalidate_recordset()
+        self.assertEqual((own.base_salary, len(own.line_ids), own.exit_date), (3_000_000, 0, False))
+        self.assertFalse(self.env["eguitra.rh.advance"].search([("employee_id", "=", own.id)]))
+
+        other = self.open_session("binta.rh", app="rh")["access_token"]
+        status, advance = self.call("POST", "/rh/advances", {"employee_id": own.id, "amount": 600_000,
+                                                             "installment": 200_000, "first_month": "2026-09-01"},
+                                    token=other)
+        self.assertEqual(status, 200, advance)
+        status, body = self.call("POST", f"/rh/advances/{advance['id']}/cancel", {}, token=token)
+        self.assertEqual(status, 403, "Pas d'annulation de sa propre avance")
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=other)
+        self.assertEqual(status, 200, payroll)
+        own_slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == own.id)
+        worker_slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == self.worker.id)
+        bonus = {"rubric_id": rubrics["RDT"], "amount": 500_000}
+        status, body = self.call("POST", f"/rh/payslips/{own_slip}/inputs", bonus, token=token)
+        self.assertEqual(status, 403, body)
+        status, slip = self.call("POST", f"/rh/payslips/{own_slip}/inputs", bonus, token=other)
+        self.assertEqual(status, 200, slip)
+        manual = next(i["id"] for i in slip["inputs"] if i["source"] == "manual")
+        status, body = self.call("DELETE", f"/rh/payslips/{own_slip}/inputs/{manual}", token=token)
+        self.assertEqual(status, 403, body)
+        status, body = self.call("POST", f"/rh/payslips/{worker_slip}/inputs", bonus, token=token)
+        self.assertEqual(status, 200, "Les bulletins des autres restent saisis par la RH")
+        status, body = self.call("PATCH", f"/rh/employees/{own.id}", {"base_salary": 3_200_000,
+                                                                       "salary_reason": "Revalorisation"}, token=other)
+        self.assertEqual((status, body.get("base_salary")), (200, 3_200_000), body)
+
+    def test_validation_de_la_paie_par_la_direction(self):
+        """La RH prépare la paie, la direction la valide. La RH ne valide jamais ; un compte de « Préparée
+        par » (création, recalcul, éléments variables) non plus, administration comprise."""
+        self._create_user("admin.rh", "admin")
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        other = self.open_session("binta.rh", app="rh")["access_token"]
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        admin = self.open_session("admin.rh", app="rh")["access_token"]
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
+        self.assertEqual(status, 200, payroll)
+        self.assertEqual((payroll["prepared_by"], payroll["can_validate"]), (["Aminata.Rh"], False))
+        validate = f"/rh/payrolls/{payroll['id']}/validate"
+        for token in (rh, other):
+            status, body = self.call("POST", validate, {}, token=token)
+            self.assertEqual((status, body.get("message")), (403, "La paie est validée par la direction."), body)
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=other)
+        self.assertFalse(detail["can_validate"], "La RH ne valide pas, même la paie qu'elle n'a pas préparée")
+
+        # La direction valide la paie, sans gagner d'autre droit d'écriture sur la RH.
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=dg)
+        self.assertEqual((status, detail["can_validate"], detail["can_write"]), (200, True, False), detail)
+        status, done = self.call("POST", validate, {}, token=dg)
+        self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
+        status, meta = self.call("GET", "/rh/meta", token=rh)
+        bonus = next(r["id"] for r in meta["rubrics"] if r["code"] == "RDT")
+        slip = next(s["id"] for s in payroll["payslips"] if s["employee"]["id"] == self.worker.id)
+        for method, path, payload in [
+            ("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}),
+            ("POST", f"/rh/payrolls/{payroll['id']}/account", {}),
+            ("POST", f"/rh/payrolls/{payroll['id']}/compute", {}),
+            ("POST", "/rh/payrolls", {"month": "2026-10-01"}),
+            ("POST", f"/rh/payslips/{slip}/inputs", {"rubric_id": bonus, "amount": 250_000}),
+            ("PATCH", f"/rh/employees/{self.worker.id}", {"base_salary": 9_000_000}),
+        ]:
+            status, body = self.call(method, path, payload, token=dg)
+            self.assertEqual(status, 403, (path, body))
+
+        # L'administration, qui écrit aussi en RH, ne valide pas une paie qu'elle a complétée ou créée.
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/reopen", {}, token=rh)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", f"/rh/payslips/{slip}/inputs", {"rubric_id": bonus, "amount": 250_000},
+                                 token=admin)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", validate, {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", validate, {}, token=dg)
+        self.assertEqual((status, done.get("state")), (200, "validated"), done)
+        status, october = self.call("POST", "/rh/payrolls", {"month": "2026-10-01"}, token=admin)
+        self.assertEqual(status, 200, october)
+        status, body = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", f"/rh/payrolls/{october['id']}/validate", {}, token=dg)
+        self.assertEqual((status, done.get("state")), (200, "validated"), done)
+
+    def test_modifier_un_salaire_interdit_de_valider_la_paie(self):
+        """Un compte administration qui modifie le salaire d'un salarié pendant que la paie du mois est en
+        préparation ne valide pas cette paie ; la direction, qui n'a rien modifié, la valide."""
+        self._create_user("admin.rh", "admin")
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        admin = self.open_session("admin.rh", app="rh")["access_token"]
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
+        self.assertEqual(status, 200, payroll)
+        status, body = self.call("PATCH", f"/rh/employees/{self.worker.id}",
+                                 {"base_salary": 2_400_000, "salary_reason": "Revalorisation"}, token=admin)
+        self.assertEqual(status, 200, body)
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=admin)
+        self.assertEqual((status, "Admin.Rh" in detail["prepared_by"], detail["can_validate"]), (200, True, False),
+                         detail)
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
+
+    def test_annuler_une_absence_non_remuneree_interdit_de_valider_la_paie(self):
+        """Un compte administration qui annule l'absence non rémunérée d'un salarié pendant que la paie du
+        mois est en préparation ne valide pas cette paie ; la direction la valide."""
+        self._create_user("admin.rh", "admin")
+        unpaid = self.env["eguitra.rh.leave.type"].search([("code", "=", "SS")])
+        leave = self.env["eguitra.rh.leave"].create({"employee_id": self.worker.id, "type_id": unpaid.id,
+                                                     "date_from": date(2026, 9, 7), "date_to": date(2026, 9, 8)})
+        leave.action_approve()
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        admin = self.open_session("admin.rh", app="rh")["access_token"]
+        status, payroll = self.call("POST", "/rh/payrolls", {"month": "2026-09-01"}, token=rh)
+        self.assertEqual(status, 200, payroll)
+        status, body = self.call("POST", f"/rh/leaves/{leave.id}/cancel", {}, token=admin)
+        self.assertEqual((status, body.get("state")), (200, "cancelled"), body)
+        status, detail = self.call("GET", f"/rh/payrolls/{payroll['id']}", token=admin)
+        self.assertEqual((status, "Admin.Rh" in detail["prepared_by"], detail["can_validate"]), (200, True, False),
+                         detail)
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=admin)
+        self.assertEqual(status, 403, body)
+        self.assertIn("autre personne", body["message"])
+        status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual((status, done.get("state")), (200, "validated"), done)
+
+    def test_personne_n_approuve_sa_propre_absence(self):
+        """Ni la RH, ni la direction n'approuvent ou ne refusent leur propre absence, à la saisie comme en
+        décision ; chacune tranche celle de l'autre."""
+        own_rh = self._own_dossier(self.rh_user, "Aminata RH")
+        self._own_dossier(self.dg_user, "Directeur Général")
+        cp = self.env["eguitra.rh.leave.type"].search([("code", "=", "CP")]).id
+        monday = date.today() + timedelta(days=(7 - date.today().weekday()) % 7 or 7)
+        dates = {"type_id": cp, "date_from": str(monday), "date_to": str(monday + timedelta(days=1))}
+        rh = self.open_session("aminata.rh", app="rh")["access_token"]
+        status, body = self.call("POST", "/rh/leaves", dict(dates, employee_id=own_rh.id, approve=True, force=True),
+                                 token=rh)
+        self.assertEqual(status, 403, body)
+        self.assertFalse(self.env["eguitra.rh.leave"].search([("employee_id", "=", own_rh.id)]),
+                         "Demande non enregistrée")
+        status, leave = self.call("POST", "/rh/leaves", dict(dates, employee_id=own_rh.id), token=rh)
+        self.assertEqual((status, leave["state"], leave["can_decide"]), (200, "submitted", False), leave)
+        for action in ("approve", "refuse"):
+            status, body = self.call("POST", f"/rh/leaves/{leave['id']}/{action}", {"force": True, "reason": "Non"},
+                                     token=rh)
+            self.assertEqual(status, 403, body)
+
+        dg = self.open_session("dg.rh", app="rh")["access_token"]
+        status, mine = self.call("POST", "/rh/me/leaves", dates, token=dg)
+        self.assertEqual((status, mine["can_decide"]), (200, False), mine)
+        for action in ("approve", "refuse"):
+            status, body = self.call("POST", f"/rh/leaves/{mine['id']}/{action}", {"reason": "Non"}, token=dg)
+            self.assertEqual(status, 403, body)
+            self.assertIn("propre demande", body["message"])
+        status, body = self.call("POST", f"/rh/leaves/{mine['id']}/approve", {}, token=rh)
+        self.assertEqual((status, body.get("state")), (200, "approved"), body)
+        status, body = self.call("POST", f"/rh/leaves/{leave['id']}/approve", {}, token=dg)
+        self.assertEqual((status, body.get("state")), (200, "approved"), body)
+
+    def test_porteur_refuse_sur_le_libre_service(self):
+        """Les routes ouvertes à tout compte connecté (Mon espace, jours fériés, décompte des jours)
+        refusent un compte du portail ; un compte interne sans profil RH les garde."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        if not cabinet:
+            self.skipTest("Pas de société du cabinet dans la base de test")
+        self._create_user("porteur.rh", "porteur", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
+        token = self.open_session("porteur.rh", app="portail")["access_token"]
+        week = "date_from=2026-09-07&date_to=2026-09-11"
+        for path in ("/rh/me", "/rh/holidays", f"/rh/leaves/days?{week}", "/rh/me/payslips/1"):
+            status, body = self.call("GET", path, token=token)
+            self.assertEqual(status, 403, (path, body))
+        status, body = self.call("POST", "/rh/me/leaves", {"type_id": 1, "date_from": "2026-09-07",
+                                                           "date_to": "2026-09-08"}, token=token)
+        self.assertEqual(status, 403, body)
+        worker = self.open_session("ousmane.chauffeur", app="rh")["access_token"]
+        for path in ("/rh/holidays", f"/rh/leaves/days?{week}"):
+            status, body = self.call("GET", path, token=worker)
+            self.assertEqual(status, 200, (path, body))

@@ -9,10 +9,26 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 READ = ("admin", "direction", "rh")
 WRITE = ("admin", "rh")
 MANAGERS = {"admin", "direction", "rh"}
+OWN_LEAVE = "Vous ne pouvez pas trancher votre propre demande d'absence : un autre responsable s'en charge."
 
 
 def today():
     return fields.Date.context_today(request.env.user)
+
+
+def internal_only():
+    """Routes ouvertes à tout compte connecté (libre-service, calendrier) : comptes internes seulement,
+    jamais un compte du portail (porteur de projet)."""
+    if request.env.user.share:
+        raise ApiError(403, "forbidden", "Accès réservé aux comptes internes.")
+
+
+def refuse_own(emp):
+    """Quatre yeux : aucun compte, quel que soit son profil, ne modifie son propre dossier salarié, ses
+    éléments fixes ou variables de paie, ni ses avances et prêts : un autre compte s'en charge."""
+    if emp and emp.sudo().user_id == request.env.user:
+        raise ApiError(403, "forbidden", "Vous ne pouvez pas modifier votre propre dossier salarié ni vos "
+                                         "éléments de paie : un autre membre du service RH s'en charge.")
 
 
 def scope(kw=None):
@@ -114,14 +130,17 @@ def department_row(d):
             "headcount": headcount, "active": d.active}
 
 
+def own_leave(leave, user=None):
+    return leave.sudo().employee_id.user_id == (user or request.env.user)
+
+
 def can_decide(leave, user=None):
     """RH, direction ou administration de la société, ou responsable hiérarchique du salarié ; jamais sa
-    propre demande, sauf pour la direction et l'administration."""
+    propre demande, quel que soit le profil, direction et administration comprises (quatre yeux)."""
     user = user or request.env.user
-    profiles = set(user._eguitra_profiles())
-    own = leave.employee_id.user_id == user
-    if own and not profiles & {"admin", "direction"}:
+    if own_leave(leave, user):
         return False
+    profiles = set(user._eguitra_profiles())
     if profiles & MANAGERS and leave.company_id in user.company_ids:
         return True
     return bool(leave.employee_id.manager_id.user_id) and leave.employee_id.manager_id.user_id == user
