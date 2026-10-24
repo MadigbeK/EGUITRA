@@ -34,12 +34,12 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
     { titre: "Bankability", valeur: s.bankability, aide: "Critères pertinents pour la bancabilité" },
   ];
   const next = s.next_gate;
-  // Scores provisoires : la méthode recommande « À compléter » (critères des gates atteints encore à
-  // évaluer). Les anneaux restent, dans la couleur de l'application, celle d'une mesure sans verdict,
-  // au lieu de la couleur de leur classe ; le tampon neutre et l'avancement disent le provisoire.
-  const provisoire = s.recommendation === "pending" && s.assessed > 0;
-  // Le motif « à compléter » du noyau s'écrit « critère(s) » : même phrase, accordée ici.
-  const detail = provisoire && s.pending_in_scope > 0 ? `${pluriel(s.pending_in_scope, "critère des gates atteints reste", "critères des gates atteints restent")} à évaluer avant la recommandation.` : s.recommendation_detail;
+  // Scores provisoires : la plateforme retient « À compléter » (pending) tant que des critères des
+  // gates atteints restent à évaluer, alors que la méthode a déjà sa recommandation
+  // (method_recommendation, jamais pending). Les anneaux restent, dans la couleur de l'application,
+  // celle d'une mesure sans verdict, au lieu de la couleur de leur classe ; le tampon neutre et
+  // l'avancement disent le provisoire.
+  const provisoire = s.assessed > 0 && s.recommendation === "pending" && s.method_recommendation !== "pending";
   return (
     <div className="space-y-6">
       {bandeau}
@@ -71,8 +71,9 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
               <Badge tone={RECO[s.recommendation].tone}>{RECO[s.recommendation].label}</Badge>
               <span className="text-[12.5px] font-semibold text-muted">{s.classification}</span>
             </div>
-            <p className="text-[14px] text-ink-2">{detail}</p>
-            {s.recommendation === "pending" && s.method_recommendation !== "pending" && s.assessed > 0 && (
+            {/* Motif du noyau, déjà accordé au nombre : il s'affiche tel quel. */}
+            <p className="text-[14px] text-ink-2">{s.recommendation_detail}</p>
+            {provisoire && (
               <p className="text-[12.5px] text-muted">Si l&apos;évaluation s&apos;arrêtait là, la méthode recommanderait : <b>{RECO[s.method_recommendation].label}</b>.</p>
             )}
             {next ? <Blocages d={d} /> : <Notice tone="ok">Tous les gates sont franchis : financial close effectif.</Notice>}
@@ -209,18 +210,22 @@ function domainesTries(domaines: DomainScore[]) {
     .sort((a, b) => (a.score ?? Infinity) - (b.score ?? Infinity) || a.rang - b.rang);
 }
 
-/** Critères cités dans une ligne : les trois premiers par leur code et leur nom, puis le reste compté. */
-function citer(liste: CriterionBrief[]) {
-  const vus = liste.slice(0, 3).map((c) => `${c.code} ${c.name}`);
-  const reste = liste.length - vus.length;
+/**
+ * Critères cités dans une ligne : les `max` premiers par leur code et leur nom, puis le reste compté,
+ * avec `enPlus` critères comptés sans être nommés.
+ */
+function citer(liste: CriterionBrief[], max = 3, enPlus = 0) {
+  const vus = liste.slice(0, max).map((c) => `${c.code} ${c.name}`);
+  const reste = liste.length - vus.length + enPlus;
+  if (!vus.length) return "";
   return reste > 0 ? `${vus.join(", ")} et ${pluriel(reste, "autre")}` : vus.join(", ");
 }
 
 /**
  * Ce qui bloque le prochain gate, tiré du dossier déjà chargé : la décision calculée du gate et ses
- * motifs (la méthode), les critères des gates atteints encore à évaluer, les critères du gate
- * disponibles, puis les knock-outs actifs et les critères critiques manquants jusqu'à ce gate.
- * L'écran ne décide rien : il rassemble ce que le noyau a déjà établi.
+ * motifs (la méthode), les critères du gate encore à évaluer, les critères du gate disponibles, puis
+ * les knock-outs que sa règle oppose et les critères critiques manquants jusqu'à ce gate. L'écran ne
+ * décide rien : il rassemble ce que le noyau a déjà établi.
  */
 function Blocages({ d }: { d: DossierDetail }) {
   const titre = useId();
@@ -231,11 +236,21 @@ function Blocages({ d }: { d: DossierDetail }) {
   // Rang de chaque gate dans la grille, pour ne citer que ce qui précède ou concerne ce gate.
   const rang = new Map(s.gates.map((g) => [g.code, g.index]));
   const jusquIci = (c: CriterionBrief) => (rang.get(c.gate ?? "") ?? 0) <= next.index;
-  const ko = s.knockouts.filter(jusquIci);
+  const aEvaluer = next.pending ?? 0;
+  // Knock-outs que la règle du gate oppose : le noyau les compte (knockouts_blocking), la liste des
+  // knock-outs actifs en donne les noms. Tous quand le compte les couvre (règles APD et
+  // bancabilité) ; sinon ceux des gates jusqu'à celui-ci, que toute règle à knock-outs oppose, le
+  // reste (domaines propres au gate, règle de faisabilité) étant compté sans nom. Réponse antérieure
+  // au compte : ceux des gates jusqu'à celui-ci.
+  const avant = s.knockouts.filter(jusquIci);
+  const nKo = next.knockouts_blocking ?? avant.length;
+  const ko = nKo >= s.knockouts.length ? s.knockouts : avant.slice(0, nKo);
+  const koSansNom = Math.max(0, nKo - ko.length);
   const codesKo = new Set(s.knockouts.map((k) => k.code));
   const critiques = s.critical_open.filter((c) => !codesKo.has(c.code) && jusquIci(c));
   const indisponibles = next.criteria - next.available;
-  const releve = s.pending_in_scope > 0 || indisponibles > 0 || ko.length > 0 || critiques.length > 0;
+  const releve = aEvaluer > 0 || indisponibles > 0 || nKo > 0 || critiques.length > 0;
+  const nomsKo = citer(ko, ko.length, koSansNom);
   return (
     <section aria-labelledby={titre} className="rounded-xl border border-line bg-panel-2 px-3.5 py-3 text-[13px]">
       <h3 id={titre} className="text-[13.5px] font-semibold text-ink">
@@ -260,11 +275,11 @@ function Blocages({ d }: { d: DossierDetail }) {
       )}
       {releve && (
         <ul className="mt-2.5 space-y-1.5 border-t border-line pt-2.5 text-ink-2">
-          {s.pending_in_scope > 0 && (
+          {aEvaluer > 0 && (
             <li className="flex gap-2">
               <ListChecks aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none text-muted" />
               <span>
-                <b className="font-semibold text-ink">{pluriel(s.pending_in_scope, "critère")} à évaluer</b> dans les gates atteints
+                <b className="font-semibold text-ink">{pluriel(aEvaluer, "critère du gate", "critères du gate")} à évaluer</b>
               </span>
             </li>
           )}
@@ -276,11 +291,12 @@ function Blocages({ d }: { d: DossierDetail }) {
               </span>
             </li>
           )}
-          {ko.length > 0 && (
+          {nKo > 0 && (
             <li className="flex gap-2 text-danger">
               <ShieldAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 flex-none" />
               <span>
-                <b className="font-semibold">{pluriel(ko.length, "knock-out actif", "knock-outs actifs")}</b> jusqu&apos;à {next.code} : {citer(ko)}
+                <b className="font-semibold">{pluriel(nKo, "knock-out bloquant", "knock-outs bloquants")}</b> pour {next.code}
+                {nomsKo ? ` : ${nomsKo}` : ""}
               </span>
             </li>
           )}
