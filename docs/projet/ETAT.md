@@ -180,7 +180,8 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
   utilisateur `deploy`) ; à la première connexion : nouveau mot de passe et double authentification.
   Relancer le script avec la liste complète met à jour profils et sociétés sans toucher aux mots de
   passe existants.
-- 22 octobre, à la demande du gérant : la responsable RH reçoit le profil « Ressources humaines »,
+- 22 octobre, à la demande du gérant (confirmé ensuite : « oui Bintou Nimaga gère le personnel ») : la
+  responsable RH reçoit le profil « Ressources humaines »,
   ouvert aux deux sociétés (gestion RH commune), à la place du profil cabinet provisoire ; mot de
   passe inchangé. Liste du serveur mise à jour (copie de l'ancienne gardée à côté, `.bak`), script
   lancé sur ce seul compte.

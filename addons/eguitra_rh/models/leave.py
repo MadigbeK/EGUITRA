@@ -9,6 +9,8 @@ son auteur parmi les préparateurs des paies en préparation dont le mois la rec
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from ..engine import fmt_days
+
 
 class InsufficientBalance(UserError):
     """Solde de congés insuffisant : la RH peut approuver quand même (force)."""
@@ -64,7 +66,7 @@ class EguitraRhLeave(models.Model):
                 if not leave.days:
                     raise UserError("Aucun jour ouvrable dans cette période (dimanches et jours fériés exclus).")
                 if leave.type_id.max_days and leave.days > leave.type_id.max_days:
-                    raise UserError(f"{leave.type_id.name} : {leave.type_id.max_days:g} jours ouvrables au plus par demande.")
+                    raise UserError(f"{leave.type_id.name} : {fmt_days(leave.type_id.max_days)} jours ouvrables au plus par demande.")
                 employee = leave.employee_id
                 if leave.date_from < employee.hire_date or (employee.exit_date and leave.date_to > employee.exit_date):
                     raise UserError("L'absence sort de la période du contrat du salarié.")
@@ -122,7 +124,7 @@ class EguitraRhLeave(models.Model):
                 balance = leave.employee_id._leave_balance(leave.date_from)["balance"]
                 if balance - leave.days < 0:
                     raise InsufficientBalance(
-                        f"Solde de congés insuffisant : {balance:g} jour(s) acquis pour {leave.days:g} demandé(s).")
+                        f"Solde de congés insuffisant : {fmt_days(balance)} jour(s) acquis pour {fmt_days(leave.days)} demandé(s).")
             if not leave.type_id.paid and leave._locked_month():
                 raise UserError("La paie de ce mois est déjà validée : rouvrez-la avant d'approuver cette absence "
                                 "non rémunérée.")

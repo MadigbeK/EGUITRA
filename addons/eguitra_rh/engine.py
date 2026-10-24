@@ -23,6 +23,66 @@ def gnf(value):
     return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+# ─── Écriture des nombres dans les messages : la règle d'apps/web/lib/format.ts ────────────────
+# Milliers groupés par une espace fine insécable (comme Intl fr-FR), virgule décimale, espace
+# insécable avant l'unité ; milliards en « Md » invariable à deux décimales, millions entiers dès
+# 100 M et à une décimale en dessous, jamais de « k » ; jours à une décimale, ratios à deux.
+GROUPE = " "  # espace fine insécable (milliers)
+INSECABLE = " "  # espace insécable (avant l'unité)
+
+
+def _decimal_round(value, digits):
+    """Arrondi demi vers le haut à `digits` décimales, sans « -0 »."""
+    result = Decimal(str(value)).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
+    return abs(result) if result == 0 else result
+
+
+def fixe(value, digits):
+    """Nombre à `digits` décimales fixes, milliers groupés : « 1 365,46 », « 23,0 »."""
+    text = f"{_decimal_round(value, digits):,.{digits}f}"
+    return text.replace(",", GROUPE).replace(".", ",")
+
+
+def fmt_int(value):
+    """1 234 567"""
+    return fixe(gnf(value), 0)
+
+
+def fmt_gnf(value):
+    """1 234 567 GNF"""
+    return f"{fmt_int(value)}{INSECABLE}GNF"
+
+
+def fmt_short(value):
+    """Montant abrégé (chiffres clés, messages) : « 1,74 Md », « 384 M », « 7,0 M », « 224 050 »."""
+    a = abs(value)
+    if a >= 1e9 or gnf(a / 1e6) >= 1000:
+        return f"{fixe(gnf(value / 1e7) / 100, 2)}{INSECABLE}Md"
+    if gnf(a) >= 1e6:
+        if gnf(a / 1e5) >= 1000:
+            return f"{fixe(gnf(value / 1e6), 0)}{INSECABLE}M"
+        return f"{fixe(gnf(value / 1e5) / 10, 1)}{INSECABLE}M"
+    return fmt_int(value)
+
+
+def fmt_days(value):
+    """Durée en jours, toujours à une décimale : « 2,5 », « 23,0 »."""
+    return fixe(value, 1)
+
+
+def fmt_ratio(value):
+    """Ratio sans unité, toujours à deux décimales : « 1,25 »."""
+    return fixe(value, 2)
+
+
+def fmt_pct(value, digits=1, sign=False):
+    """« 12,5 % » (sign : « +12,5 % »)."""
+    text = fixe(value, digits)
+    if sign and _decimal_round(value, digits) > 0:
+        text = f"+{text}"
+    return f"{text}{INSECABLE}%"
+
+
 @dataclass
 class Params:
     cnss_employee_rate: float = 5.0

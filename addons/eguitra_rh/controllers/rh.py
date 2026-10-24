@@ -13,6 +13,7 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
+from ..engine import fmt_days
 from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASONS, MARITAL, PAYMENT_METHODS
 from ..models.leave import InsufficientBalance
 from ..models.payroll import of_month
@@ -203,7 +204,7 @@ class EguitraRh(http.Controller):
                     add("document", "warn", doc.expiry_date, emp, f"{doc.name} de {emp.name} à renouveler.", href)
             balance = emp._leave_balance(day)["balance"]
             if balance > settings.leave_days_per_month * 18:
-                add("leave_balance", "info", None, emp, f"{emp.name} cumule {balance:g} jours de congés : planifier "
+                add("leave_balance", "info", None, emp, f"{emp.name} cumule {fmt_days(balance)} jours de congés : planifier "
                     "des congés.", "/rh/conges")
             issues = emp._issues()
             if issues:

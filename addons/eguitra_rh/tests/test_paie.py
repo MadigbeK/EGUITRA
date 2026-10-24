@@ -6,7 +6,19 @@ from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
 
-from ..engine import Item, Params, amount_in_words, base_for_net, compute, rts_amount
+from ..engine import (
+    Item,
+    Params,
+    amount_in_words,
+    base_for_net,
+    compute,
+    fmt_days,
+    fmt_gnf,
+    fmt_pct,
+    fmt_ratio,
+    fmt_short,
+    rts_amount,
+)
 from ..models.leave import InsufficientBalance
 from ..models.payroll import of_month
 
@@ -62,6 +74,18 @@ class TestMoteur(TransactionCase):
         base = base_for_net(params, 2_000_000, build)
         self.assertGreaterEqual(compute(params, *build(base))["net"], 2_000_000)
         self.assertLess(compute(params, *build(base - 1))["net"], 2_000_000, "Le plus petit salaire qui donne ce net")
+
+    def test_ecriture_des_nombres(self):
+        """Même règle que l'application web (apps/web/lib/format.ts, fmtShort et suivants)."""
+        fine, nbsp = " ", " "
+        cases = {1_740_000_000: "1,74 Md", 6_000_000_000: "6,00 Md", 41_310_000_000: "41,31 Md",
+                 -11_550_000_000: "-11,55 Md", 999_600_000: "1,00 Md", 384_200_000: "384 M", 99_960_000: "100 M",
+                 7_040_000: "7,0 M", 224_050: "224 050", 0: "0"}
+        for value, expected in cases.items():
+            self.assertEqual(fmt_short(value), expected.replace(" M", nbsp + "M").replace(" ", fine), value)
+        self.assertEqual(fmt_gnf(3_281_250), f"3{fine}281{fine}250{nbsp}GNF")
+        self.assertEqual((fmt_days(2.5), fmt_days(23), fmt_ratio(1.256)), ("2,5", "23,0", "1,26"))
+        self.assertEqual((fmt_pct(25.44, sign=True), fmt_pct(-3.0, sign=True)), (f"+25,4{nbsp}%", f"-3,0{nbsp}%"))
 
     def test_nom_du_mois(self):
         self.assertEqual(of_month(date(2026, 10, 1)), "d'octobre 2026")

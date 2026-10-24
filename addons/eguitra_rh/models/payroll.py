@@ -16,7 +16,7 @@ from collections import defaultdict
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
-from ..engine import Item, amount_in_words, compute
+from ..engine import Item, amount_in_words, compute, fmt_pct
 from .employee import CATEGORIES, CONTRACTS, month_bounds
 
 MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
@@ -486,7 +486,7 @@ class EguitraRhPayslip(models.Model):
             found.append(("base_salary", "warn", "Salaire de base nul."))
         variation = self._net_variation()
         if variation is not None and abs(variation) > VARIATION_ALERT:
-            found.append(("variation", "info", f"Net en écart de {variation:+.0f} % avec le mois précédent."))
+            found.append(("variation", "info", f"Net en écart de {fmt_pct(variation, 1, sign=True)} avec le mois précédent."))
         return [{"code": c, "severity": s, "message": m} for c, s, m in found]
 
     def _ytd(self):
