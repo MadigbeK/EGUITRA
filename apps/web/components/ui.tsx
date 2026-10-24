@@ -697,14 +697,17 @@ export function Squelette({ className }: { className?: string }) {
 /** Erreur d'un appel, avec « Réessayer ». `titre` dit d'abord ce que l'échec laisse à l'écran. */
 export function ErrorBox({ error, onRetry, titre }: { error: unknown; onRetry?: () => void; titre?: ReactNode }) {
   const message = error instanceof Error ? error.message : "Une erreur est survenue.";
+  // Refus de droits (403) : le motif du serveur, sous un titre qui le dit ; réessayer n'y changerait rien.
+  const refus = typeof error === "object" && error !== null && (error as { status?: unknown }).status === 403;
+  const entete = titre ?? (refus ? "Non ouvert à votre profil" : null);
   return (
     <div role="alert" className="n-surgir flex items-start gap-3 rounded-xl border border-danger/15 bg-danger-doux px-4 py-3 text-sm text-danger">
       <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
       <div className="flex-1">
-        {titre && <div className="font-semibold">{titre}</div>}
+        {entete && <div className="font-semibold">{entete}</div>}
         {message}
       </div>
-      {onRetry && (
+      {onRetry && !refus && (
         <button type="button" onClick={() => onRetry()} className="font-semibold underline underline-offset-2">
           Réessayer
         </button>

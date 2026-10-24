@@ -27,7 +27,7 @@ export async function proxy(req: NextRequest) {
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
   const app =
     appFromPath(pathname) ??
-    (pathname.startsWith("/compte") ? (isAppCode(fromCookie) ? fromCookie : "finance") : null) ??
+    (pathname.startsWith("/compte") || pathname === "/acces-refuse" ? (isAppCode(fromCookie) ? fromCookie : "finance") : null) ??
     (pathname === "/accueil" ? accueilApp(fromCookie, host) : null);
   if (!app) return NextResponse.next();
 
@@ -56,5 +56,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/compte/:path*"],
+  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/compte/:path*", "/acces-refuse"],
 };

@@ -8,12 +8,14 @@ import { classesBouton } from "@/components/ui";
 import { APPS, appFromPath } from "@/lib/config";
 
 /**
- * Page d'incident (adresse inconnue, erreur d'un écran) : la route qui s'interrompt, un titre
- * clair, ce que l'on peut faire. Le lien ramène à l'accueil de l'application ouverte.
+ * Page d'incident (adresse inconnue, erreur d'un écran, accès refusé) : la route qui s'interrompt,
+ * un titre clair, ce que l'on peut faire. Le lien ramène à l'accueil de l'application ouverte, ou à
+ * `retour` quand cette application n'est justement pas ouverte au compte.
  */
-export function PageErreur({ code, titre, texte, actions }: { code: string; titre: string; texte: string; actions?: ReactNode }) {
+export function PageErreur({ code, titre, texte, actions, retour }: { code: string; titre: string; texte: string; actions?: ReactNode; retour?: { href: string; label: string } }) {
   const pathname = usePathname() ?? "/";
   const app = appFromPath(pathname) ?? "finance";
+  const lien = retour ?? { href: APPS[app].home, label: `Revenir à l'accueil de ${APPS[app].name.replace("NIMOVA · ", "")}` };
   return (
     <div data-app={app} className="flex min-h-[70vh] items-center justify-center px-5 py-16">
       <div className="w-full max-w-[520px] text-center">
@@ -34,8 +36,8 @@ export function PageErreur({ code, titre, texte, actions }: { code: string; titr
         </p>
         <div className="n-entree mt-7 flex flex-wrap justify-center gap-2" style={{ "--i": 5 } as CSSProperties}>
           {actions}
-          <Link href={APPS[app].home} className={classesBouton("primary")}>
-            Revenir à l&apos;accueil de {APPS[app].name.replace("NIMOVA · ", "")}
+          <Link href={lien.href} className={classesBouton("primary")}>
+            {lien.label}
           </Link>
         </div>
       </div>
