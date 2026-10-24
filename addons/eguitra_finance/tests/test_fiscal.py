@@ -115,7 +115,7 @@ class TestFiscalApi(FinanceDataMixin, ApiCase):
         for path in ("/finance/fiscal/vat/export", "/finance/fiscal/withholding/export"):
             response = self.url_open(f"/api/v1{path}?{period}&format=xlsx", headers=headers, timeout=60)
             self.assertEqual(response.status_code, 200, response.text[:300])
-            self.assertTrue(response.content.startswith(b"PK"))
+            self.assertMilliersGroupes(response.content)
         response = self.url_open(f"/api/v1/finance/fiscal/withholding/export?{period}&format=csv", headers=headers,
                                  timeout=60)
         text = response.content.decode("utf-8-sig")

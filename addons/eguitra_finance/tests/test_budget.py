@@ -176,4 +176,4 @@ class TestBudgetApi(FinanceDataMixin, ApiCase):
         response = self.url_open(f"/api/v1/finance/budgets/{self.budget['id']}/export",
                                  headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.content.startswith(b"PK"))
+        self.assertMilliersGroupes(response.content)

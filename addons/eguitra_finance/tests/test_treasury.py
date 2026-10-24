@@ -224,7 +224,7 @@ class TestBankReconciliationStatement(FinanceDataMixin, ApiCase):
             f"/api/v1/finance/treasury/{self.bank.id}/reconciliation-statement?date=2026-10-31&format=xlsx",
             headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.content.startswith(b"PK"))
+        self.assertMilliersGroupes(response.content)
 
         close = self.env["eguitra.period.close"]._get(self.company, date(2026, 10, 1))
         checks = {c["code"]: c for c in close._run_controls()}

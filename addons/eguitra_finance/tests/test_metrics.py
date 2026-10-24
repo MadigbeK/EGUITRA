@@ -53,7 +53,7 @@ class TestMetrics(FinanceDataMixin, TransactionCase):
         self.assertIn("706100", codes)
         csv_bytes = self.env["eguitra.report.engine"].to_csv(result)
         self.assertTrue(csv_bytes.startswith("﻿".encode()))
-        self.assertTrue(self.env["eguitra.report.engine"].to_xlsx(result, "Balance").startswith(b"PK"))
+        self.assertMilliersGroupes(self.env["eguitra.report.engine"].to_xlsx(result, "Balance"))
 
     def test_rapport_filtre_invalide(self):
         with self.assertRaises(ValueError):

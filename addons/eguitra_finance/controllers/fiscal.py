@@ -388,7 +388,7 @@ class EguitraFinanceFiscal(http.Controller):
             book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
             sheet = book.add_worksheet("Écritures")
             bold = book.add_format({"bold": True})
-            money = book.add_format({"num_format": "# ##0"})
+            money = book.add_format({"num_format": "#,##0"})
             day = book.add_format({"num_format": "dd/mm/yyyy"})
             sheet.write_row(0, 0, headers, bold)
             for r, row in enumerate(rows, start=1):

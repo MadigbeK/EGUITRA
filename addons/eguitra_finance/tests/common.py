@@ -1,3 +1,6 @@
+import io
+import re
+import zipfile
 from datetime import date
 
 from odoo import Command
@@ -5,6 +8,16 @@ from odoo import Command
 
 class FinanceDataMixin:
     """Jeu de données comptable minimal : un client, un fournisseur, une banque, une caisse."""
+
+    def assertMilliersGroupes(self, content):
+        """Classeur Excel : montants au format « #,##0 », qu'Excel écrit avec le séparateur du poste
+        (« 1 234 568 » en français) ; « # ##0 » n'est qu'une espace littérale (« 1234 568 »)."""
+        self.assertTrue(content.startswith(b"PK"))
+        with zipfile.ZipFile(io.BytesIO(content)) as book:
+            styles = book.read("xl/styles.xml").decode()
+        codes = re.findall(r'formatCode="([^"]*)"', styles)
+        self.assertIn("#,##0", codes, "Montants aux milliers groupés")
+        self.assertFalse([code for code in codes if "# ##" in code], codes)
 
     @classmethod
     def setup_finance_data(cls):

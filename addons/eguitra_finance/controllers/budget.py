@@ -291,7 +291,7 @@ class EguitraFinanceBudget(http.Controller):
         book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
         sheet = book.add_worksheet("Budget")
         head = book.add_format({"bold": True, "bg_color": "#10133A", "font_color": "#FFFFFF"})
-        money = book.add_format({"num_format": "# ##0"})
+        money = book.add_format({"num_format": "#,##0"})
         xlsx_row(sheet, 0, IMPORT_HEADERS, head)
         labels = dict(NATURES)
         for r, line in enumerate(budget.eguitra_line_ids, start=1):

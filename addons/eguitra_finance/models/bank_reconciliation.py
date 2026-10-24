@@ -154,8 +154,8 @@ class EguitraBankReconciliation(models.AbstractModel):
         title = book.add_format({"bold": True, "font_size": 14})
         head = book.add_format({"bold": True, "bg_color": "#10133A", "font_color": "#FFFFFF", "border": 1})
         bold = book.add_format({"bold": True})
-        money = book.add_format({"num_format": "# ##0"})
-        money_bold = book.add_format({"num_format": "# ##0", "bold": True, "top": 1})
+        money = book.add_format({"num_format": "#,##0"})
+        money_bold = book.add_format({"num_format": "#,##0", "bold": True, "top": 1})
         day = book.add_format({"num_format": "dd/mm/yyyy"})
         journal = data["journal"]
         xlsx_row(sheet, 0, [f"État de rapprochement, {journal['name']} (compte {journal['account']})"], title)

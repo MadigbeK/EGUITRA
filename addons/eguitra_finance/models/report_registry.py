@@ -424,9 +424,9 @@ class EguitraReportEngine(models.AbstractModel):
         book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
         sheet = book.add_worksheet(title[:31])
         bold = book.add_format({"bold": True, "bg_color": "#10133A", "font_color": "#FFFFFF", "border": 1})
-        money = book.add_format({"num_format": "# ##0"})
+        money = book.add_format({"num_format": "#,##0"})
         day = book.add_format({"num_format": "dd/mm/yyyy"})
-        total = book.add_format({"bold": True, "num_format": "# ##0", "top": 2})
+        total = book.add_format({"bold": True, "num_format": "#,##0", "top": 2})
         cols = result["columns"]
         sheet.write_row(0, 0, [c["label"] for c in cols], bold)
         for r, row in enumerate(result["rows"], start=1):
