@@ -371,6 +371,29 @@ l'analyse du logiciel actuel, sur l'accord du gérant : « poursuis »). `eguitr
   l'analyse).
 - Production : par `infra/release.sh` après validation du gérant (module transport à mettre à jour).
 
+**24 octobre : compléments du Transport demandés par le design du 22 octobre** (feu vert du gérant,
+relayé par la session Local ; en recette, pas en production : la session Local groupe la prochaine
+mise en production). Commits bdcc83f, b6237dd, 678ea88.
+- Liste des rotations : tri par le noyau sur toutes les colonnes (`sort`, « -clé » décroissant),
+  pages de cent, marge minimale de la règle d'alerte renvoyée avec la liste (le taux de chaque ligne
+  est jugé), taux de la marge estimée. Champs stockés pour trier ce que la ligne affiche : volume
+  facturable, marge et taux déclarés ou estimés (`eguitra_transport` 19.0.1.4.0, `-u` sur la recette).
+- Écriture des nombres : relevé du propriétaire (PDF), alertes et exports suivent la règle de
+  `apps/web/lib/format.ts` (`eguitra_transport/nombres.py`) ; durée des rotations à une décimale dans
+  l'export. Défaut des classeurs communs corrigé : « # ##0 » n'était qu'une espace littérale (Excel
+  écrivait « 1234 568 », vérifié dans Excel), remplacé par « #,##0 » dans
+  `eguitra_finance/controllers/exporting.py`. Le même format reste dans d'autres exports (budget,
+  fiscalité, rapprochement bancaire, états, AxisPro), signalés à leurs sessions.
+- Rotations mobile : délai de réponse facultatif dans `apiGet` et `apiSend` (8 s pour les listes,
+  20 s pour l'envoi), pastille « Réseau faible » sur le dernier échange réel (coupé ou lent), date du
+  dernier envoi gardée sur le téléphone, liste « Envoyées » qui ne reste plus en attente sans fin ;
+  cache `rotations-v7`. Vérifié sur la maquette (réseau ralenti dans le navigateur, retour à la
+  normale, date gardée après rechargement).
+- Tests : 58 d'`eguitra_transport` au vert sur la base jetable `eguitra_ci_transport`, puis les
+  classes touchées après le dernier correctif (liste, export, relevés : 15 tests). Recette : code
+  commité seul envoyé (2a0f7c2), `-u eguitra_transport,eguitra_finance`, noyau et application web
+  reconstruits ; 41 rotations recalculées, `rotations-v7` servi.
+
 **22 octobre : NIMOVA · Transport, application à part entière** (décision du gérant : « TRANSPORT est
 un module comme AxisPro Suite et Finance »).
 - Noyau : application `transport` dans `organisation.py` (profils administration, direction,
