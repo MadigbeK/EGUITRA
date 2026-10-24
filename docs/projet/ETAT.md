@@ -282,6 +282,12 @@ hors du dépôt (document du client, nom du mandat) : `infra/secrets/grille/` du
   production, avec `eguitra_rh`).
 - À demander au cabinet : le questionnaire Word de préqualification (14 sections, une par domaine,
   section 19 : fiche de synthèse), qui pourrait devenir le formulaire du porteur au portail.
+- 24 octobre, compléments du noyau demandés par le design du 22 octobre (commit f8154b0, en recette,
+  pas en production : la session Local groupe la prochaine mise en production) : messages accordés au
+  nombre dans tout le module (plus de « (s) », `scoring.pluriel`) ; par gate, critères encore à
+  évaluer (`pending`, `pending_in_scope`) et knock-outs actifs que sa règle oppose
+  (`knockouts_blocking`), pour le bloc « Ce qui bloque le prochain gate » ; liste des dossiers avec la
+  recommandation de la méthode et les critères à évaluer (score provisoire). 67 tests AxisPro au vert.
 
 **22 octobre : module RH (NIMOVA · RH)**, à la demande du gérant (« une gestion complète, simple et
 intelligente des ressources humaines », carte blanche). La paie était hors du périmètre de l'offre
