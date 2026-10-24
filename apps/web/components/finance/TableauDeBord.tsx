@@ -9,7 +9,7 @@ import { ETATS } from "@/lib/couleurs";
 import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
-import type { Dashboard } from "@/lib/finance-types";
+import { autresTresorerie, type Dashboard, type KpiSeries } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtJours, fmtMonth, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
@@ -36,8 +36,8 @@ const enDevise = (v: number, devise: string) => `${v.toLocaleString("fr-FR", { m
 /** Date du jour au format du noyau (« 2026-10-15 ») : Conakry vit à l'heure UTC. */
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
 
-/** Le mois de la date d'arrêté est-il clos, c'est-à-dire arrêté à son dernier jour ? */
-function moisClos(jour: string): boolean {
+/** La date d'arrêté est-elle le dernier jour de son mois ? */
+function finDeMois(jour: string): boolean {
   const [a, m, j] = jour.split("-").map(Number);
   if (!a || !m || !j) return false;
   return j === new Date(Date.UTC(a, m, 0)).getUTCDate();
@@ -48,6 +48,63 @@ function periodeEnCours(jour: string): string {
   const jj = jour.slice(8, 10);
   const mm = jour.slice(5, 7);
   return jj === "01" ? `le 01/${mm}, premier jour du mois` : `du 1er au ${jj}/${mm}, mois en cours`;
+}
+
+/** Mois « AAAA-MM » précédant celui d'une date « AAAA-MM-JJ ». */
+function moisPrecedent(jour: string): string {
+  const [a, m] = jour.split("-").map(Number);
+  if (!a || !m) return jour.slice(0, 7);
+  return new Date(Date.UTC(a, m - 2, 1)).toISOString().slice(0, 7);
+}
+
+/** Nom abrégé d'un mois « AAAA-MM », sans l'année : « sept. », « août ». */
+const nomMois = (mois: string) => fmtMonth(mois).split(" ")[0] ?? mois;
+
+/** « de sept. », « d'août » : « de » élidé devant une voyelle. */
+const de = (mot: string) => (/^[aeiouyàâéèêîôû]/i.test(mot) ? `d'${mot}` : `de ${mot}`);
+
+/** Période d'une suite de mois « AAAA-MM » : « De janv. à oct. 2026 », « D'avr. 2025 à mars 2026 », « Oct. 2026 ». */
+function periodeMois(premier: string, dernier: string): string {
+  const texte = premier === dernier ? fmtMonth(dernier) : `${de(premier.slice(0, 4) === dernier.slice(0, 4) ? nomMois(premier) : fmtMonth(premier))} à ${fmtMonth(dernier)}`;
+  return texte.charAt(0).toUpperCase() + texte.slice(1);
+}
+
+/**
+ * Chiffre d'affaires du mois face au mois précédent. Mois clôturé (month_closed) et arrêté à son
+ * dernier jour : comparaison au mois précédent entier. Sinon, avec la même période du mois précédent
+ * servie par le noyau : du 1er au même quantième, flèche comprise. Sans elle (noyau antérieur) : pas de
+ * flèche avant la fin du mois. `complet` : le mois affiché est entier et définitif.
+ */
+function comparaisonMois(d: Dashboard): { complet: boolean; delta: number | null | undefined; hint: string } {
+  const variation = (base: number) => (base ? ((d.revenue_month - base) / Math.abs(base)) * 100 : null);
+  const precedent = moisPrecedent(d.as_of);
+  if (d.month_closed === undefined) {
+    // Noyau antérieur : le mois est tenu pour clos à son dernier jour.
+    if (!finDeMois(d.as_of)) return { complet: false, delta: undefined, hint: periodeEnCours(d.as_of) };
+    const delta = variation(d.revenue_prev_month);
+    return { complet: true, delta, hint: delta === null ? "Pas de mois de comparaison" : "par rapport au mois précédent" };
+  }
+  // Un mois clôturé mais arrêté avant sa fin ne compte que ses premiers jours : même période.
+  if (d.month_closed && finDeMois(d.as_of)) {
+    return { complet: true, delta: variation(d.revenue_prev_month), hint: `mois clos · ${nomMois(precedent)} entier : ${fmtShort(d.revenue_prev_month)}` };
+  }
+  if (d.revenue_prev_month_to_date === undefined) return { complet: false, delta: undefined, hint: periodeEnCours(d.as_of) };
+  const jj = d.as_of.slice(8, 10);
+  const mm = d.as_of.slice(5, 7);
+  const periode = jj === "01" ? `le 01/${mm}` : `du 1er au ${jj}/${mm}`;
+  return { complet: false, delta: variation(d.revenue_prev_month_to_date), hint: `${periode} · même période ${de(nomMois(precedent))} : ${fmtShort(d.revenue_prev_month_to_date)}` };
+}
+
+/**
+ * Série d'un chiffre clé, alignée sur les mois de kpi_series ; un mois sans valeur calculable (null)
+ * est omis. Sans kpi_series (noyau antérieur), pas de série : la gravure reste décorative.
+ */
+function serieCle(s: KpiSeries | undefined, cle: "dso" | "bfr" | "debt" | "dscr"): number[] | undefined {
+  if (!s) return undefined;
+  return s.months.flatMap((_, i) => {
+    const v = s[cle][i];
+    return v === null || v === undefined ? [] : [v];
+  });
 }
 
 /** Précision faite de morceaux facultatifs, séparés par « · », avec une majuscule au début. */
@@ -212,23 +269,27 @@ function Attente() {
 }
 
 function DashboardBody({ d }: { d: Dashboard }) {
-  // Un mois en cours n'est pas comparé au mois précédent entier : pas de flèche avant sa clôture.
-  const clos = moisClos(d.as_of);
-  const variation = clos && d.revenue_prev_month ? ((d.revenue_month - d.revenue_prev_month) / Math.abs(d.revenue_prev_month)) * 100 : null;
+  // Un mois en cours se compare à la même période du mois précédent, jamais au mois précédent entier.
+  const ca = comparaisonMois(d);
   const aging = d.receivables.aging;
   const resultats = new Map(d.result_by_month.map((m) => [m.month, m.amount]));
   const mois = d.revenue_by_month.map((m) => m.month);
-  // Le dernier mois de la courbe est-il le mois en cours, encore partiel ?
-  const enCours = !clos && mois[mois.length - 1] === d.as_of.slice(0, 7);
+  const arrete = d.as_of.slice(0, 7);
+  // Le dernier mois de la courbe est-il le mois en cours, encore partiel ou pas encore clôturé ?
+  const enCours = !ca.complet && mois[mois.length - 1] === arrete;
   const caTrace = d.revenue_by_month.reduce((s, m) => s + m.amount, 0);
+  // Flux de trésorerie réels, sur la même fenêtre que le chiffre d'affaires : jusqu'au mois de l'arrêté.
+  const fluxReels = d.cash_monthly.months.filter((m) => m.month <= arrete);
+  const cashNet = fluxReels.reduce((s, m) => s + m.net, 0);
   const debutExercice = d.fiscal_year.start.slice(0, 7);
+  const series = d.kpi_series;
   // Billet : les comptes des journaux de banque et de caisse ne font pas toute la classe 5 (virements
-  // de fonds, crédits de trésorerie, comptes d'attente). Le reste est écrit, pour que la colonne
-  // s'additionne jusqu'à la trésorerie nette.
+  // de fonds, crédits de trésorerie, comptes d'attente). Les autres comptes sont écrits un à un, pour
+  // que la colonne s'additionne jusqu'à la trésorerie nette.
   const sommeComptes = d.cash_by_journal.reduce((s, c) => s + c.balance, 0);
-  const autres = d.cash - sommeComptes;
-  const avecAutres = Math.abs(autres) > 1;
-  const maxCompte = Math.max(1, ...d.cash_by_journal.map((c) => Math.abs(c.balance)), avecAutres ? Math.abs(autres) : 0);
+  const autres = autresTresorerie(d.cash, sommeComptes, d.cash_other);
+  const avecAutres = autres.comptes.length > 0 || autres.reste !== null;
+  const maxCompte = Math.max(1, ...d.cash_by_journal.map((c) => Math.abs(c.balance)), ...autres.comptes.map((c) => Math.abs(c.balance)), Math.abs(autres.reste ?? 0));
   const activites = [...d.by_activity].sort((a, b) => b.margin - a.margin).slice(0, 6);
   const parts = [...d.by_activity].filter((a) => a.income > 0).sort((a, b) => b.income - a.income);
   const th = d.thresholds;
@@ -258,7 +319,8 @@ function DashboardBody({ d }: { d: Dashboard }) {
             <div>
               <h2 className="text-[15px] font-semibold text-white">Trésorerie nette</h2>
               <p className="mt-1 text-[12.5px] leading-snug text-white/65">
-                {d.cash_by_journal.length} compte{d.cash_by_journal.length > 1 ? "s" : ""} de banque et caisse, au {fmtDate(d.as_of)}
+                {d.cash_by_journal.length} compte{d.cash_by_journal.length > 1 ? "s" : ""} de banque et caisse
+                {autres.comptes.length > 0 && `, ${pluriel(autres.comptes.length, "autre compte", "autres comptes")} de la classe 5`}, au {fmtDate(d.as_of)}
                 {th.cash_min ? `, seuil de sécurité ${fmtShort(th.cash_min)}` : ""}
               </p>
             </div>
@@ -294,15 +356,30 @@ function DashboardBody({ d }: { d: Dashboard }) {
                     </div>
                   </li>
                 ))}
-                {avecAutres && (
-                  <li>
-                    {/* Libellé honnête tant que le noyau ne détaille pas ce reste (585, 56, comptes d'attente) : le montant garde son signe. */}
+                {/* Autres comptes de la classe 5 (585, 56, valeurs à encaisser), en gris : le montant garde son signe. */}
+                {autres.comptes.map((c, i) => (
+                  <li key={`autre-${c.account_id}-${c.company}`}>
                     <div className="flex items-baseline justify-between gap-4 text-[13px] text-white/60">
-                      <span className="min-w-0">Autres comptes de trésorerie (classe 5)</span>
-                      <span className="whitespace-nowrap font-semibold tabular">{fmtGNF(autres)}</span>
+                      <span className="min-w-0 truncate max-sm:whitespace-normal">
+                        <span className="tabular">{c.code}</span> {c.name}
+                        {groupe && <span className="ml-2 text-[12px] text-white/55">{c.company}</span>}
+                      </span>
+                      <span className="whitespace-nowrap font-semibold tabular">{fmtGNF(c.balance)}</span>
                     </div>
                     <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-white/10">
-                      <div className="n-pousser-x h-full rounded-full bg-white/35" style={{ width: `${Math.max(2, (Math.abs(autres) / maxCompte) * 100)}%`, "--i": d.cash_by_journal.length } as CSSProperties} />
+                      <div className="n-pousser-x h-full rounded-full bg-white/35" style={{ width: `${Math.max(2, (Math.abs(c.balance) / maxCompte) * 100)}%`, "--i": d.cash_by_journal.length + i } as CSSProperties} />
+                    </div>
+                  </li>
+                ))}
+                {autres.reste !== null && (
+                  <li>
+                    {/* Reste non détaillé : tout le reste de la classe 5 sur un noyau antérieur, sinon un écart. */}
+                    <div className="flex items-baseline justify-between gap-4 text-[13px] text-white/60">
+                      <span className="min-w-0">{autres.detaille ? "Écart non détaillé (classe 5)" : "Autres comptes de trésorerie (classe 5)"}</span>
+                      <span className="whitespace-nowrap font-semibold tabular">{fmtGNF(autres.reste)}</span>
+                    </div>
+                    <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-white/10">
+                      <div className="n-pousser-x h-full rounded-full bg-white/35" style={{ width: `${Math.max(2, (Math.abs(autres.reste) / maxCompte) * 100)}%`, "--i": d.cash_by_journal.length + autres.comptes.length } as CSSProperties} />
                     </div>
                   </li>
                 )}
@@ -319,9 +396,9 @@ function DashboardBody({ d }: { d: Dashboard }) {
           <Kpi
             label="Chiffre d'affaires du mois"
             value={fmtShort(d.revenue_month)}
-            delta={clos ? variation : undefined}
-            hint={clos ? (variation === null ? "Pas de mois de comparaison" : "par rapport au mois précédent") : periodeEnCours(d.as_of)}
-            serie={clos ? d.revenue_by_month.map((m) => m.amount) : undefined}
+            delta={ca.delta}
+            hint={ca.hint}
+            serie={ca.complet ? d.revenue_by_month.map((m) => m.amount) : undefined}
           />
           <Kpi
             label="Chiffre d'affaires de l'exercice"
@@ -330,7 +407,14 @@ function DashboardBody({ d }: { d: Dashboard }) {
             hint={budgetCa ? `Budget ${fmtShort(budgetCa.budget)} · écart ${fmtPct(budgetCa.gap_pct)}` : "Aucun budget de produits"}
             serie={cumulExercice(d.revenue_by_month, debutExercice)}
           />
-          <Kpi label="Excédent brut d'exploitation" value={fmtShort(d.ebe_fy)} tone={d.ebe_fy < 0 ? "danger" : "neutral"} hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`} />
+          {/* EBE mensuel cumulé depuis l'ouverture de l'exercice : la gravure finit sur l'EBE de l'exercice affiché. */}
+          <Kpi
+            label="Excédent brut d'exploitation"
+            value={fmtShort(d.ebe_fy)}
+            tone={d.ebe_fy < 0 ? "danger" : "neutral"}
+            hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`}
+            serie={series ? cumulExercice(series.months.map((month, i) => ({ month, amount: series.ebe[i] ?? 0 })), debutExercice) : undefined}
+          />
           {/* Un résultat positif ne porte pas de sceau : il n'y a rien à surveiller. */}
           <Kpi
             label="Résultat net de l'exercice"
@@ -344,12 +428,14 @@ function DashboardBody({ d }: { d: Dashboard }) {
             value={fmtJours(wc.dso)}
             tone={wc.dso !== null && th.dso_target_days ? (wc.dso > th.dso_target_days ? "danger" : "ok") : "neutral"}
             hint={th.dso_target_days ? `Cible ${fmtJours(th.dso_target_days)} · créances échues ${fmtPct(wc.overdue_share_pct)}` : "Cible de recouvrement non fixée"}
+            serie={serieCle(series, "dso")}
           />
           <Kpi
             label="Couverture de la dette (DSCR)"
             value={fmtRatio(d.dscr)}
             tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
             hint={dscrMin ? `Minimum fixé : ${fmtRatio(dscrMin)}` : "Minimum : seuil non fixé"}
+            serie={serieCle(series, "dscr")}
           />
         </div>
       </div>
@@ -372,13 +458,14 @@ function DashboardBody({ d }: { d: Dashboard }) {
         ) : (
           <Kpi label="Réalisé contre budget cumulé" value="–" hint="Aucun budget pour l'exercice (Activités et budget)" />
         )}
-        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} hint={`Cycle ${fmtJours(wc.cycle)} · DPO ${fmtJours(wc.dpo)}`} />
+        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} hint={`Cycle ${fmtJours(wc.cycle)} · DPO ${fmtJours(wc.dpo)}`} serie={serieCle(series, "bfr")} />
         {/* La dette ne passe au rouge qu'avec des échéances impayées : leur montant est écrit. */}
         <Kpi
           label="Dette financière"
           value={fmtShort(d.debt.accounting_outstanding ?? d.debt.outstanding)}
           tone={d.debt.overdue > 0 ? "danger" : ecartEcheancier ? "warn" : "neutral"}
           hint={phrase([d.debt.overdue > 0 ? `dont ${fmtShort(d.debt.overdue)} échus` : null, `dette nette ${fmtShort(d.debt.net_debt)}`, `gearing ${fmtRatio(d.debt.gearing)}`, ecartEcheancier ? `écart échéancier ${fmtShort(d.debt.schedule_gap)}` : null])}
+          serie={serieCle(series, "debt")}
         />
       </div>
 
@@ -389,7 +476,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
           actions={
             mois.length > 0 && (
               <span className="text-[12.5px] text-muted">
-                {mois.length > 1 ? `${mois.length} derniers mois` : "Dernier mois"} : <span className="whitespace-nowrap font-semibold tabular text-ink">{fmtShort(caTrace)}</span> facturés
+                {periodeMois(mois[0]!, mois[mois.length - 1]!)} : <span className="whitespace-nowrap font-semibold tabular text-ink">{fmtShort(caTrace)}</span> facturés
               </span>
             )
           }
@@ -415,9 +502,16 @@ function DashboardBody({ d }: { d: Dashboard }) {
           title="Trésorerie en fin de mois"
           className="xl:col-span-6"
           actions={
-            <Link href="/finance/pilotage?onglet=tresorerie" className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
-              Flux mensuels <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              {fluxReels.length > 0 && (
+                <span className="text-[12.5px] text-muted">
+                  {periodeMois(fluxReels[0]!.month, fluxReels[fluxReels.length - 1]!.month)} : cash net <span className={cx("whitespace-nowrap font-semibold tabular", cashNet < 0 ? "text-danger" : "text-ink")}>{fmtShort(cashNet)}</span>
+                </span>
+              )}
+              <Link href="/finance/pilotage?onglet=tresorerie" className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
+                Flux mensuels <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
+            </span>
           }
         >
           <CourbeTresorerie data={d.cash_monthly} forecast={d.cash_forecast} />

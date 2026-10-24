@@ -7,8 +7,8 @@ import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, Field, FileBut
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
-import type { Account, AnalyticShare, CashAccount, Ref } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF, fmtShort, pluriel } from "@/lib/format";
+import { autresTresorerie, type Account, type AnalyticShare, type CashAccount, type Ref, type TreasuryPosition } from "@/lib/finance-types";
+import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 interface StLine {
   id: number;
@@ -57,26 +57,88 @@ const cle = (c: Candidate) => `${c.kind ?? "move_line"}-${c.id}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
 /**
- * Position de trésorerie : les comptes des journaux de banque et de caisse et leur somme. cash_min
- * (seuil de sécurité) n'est pas encore servi par /finance/treasury (demande au noyau) : tant qu'il
- * manque, le total ne porte un sceau que s'il est négatif.
+ * Chiffre principal de la position : la trésorerie nette de la classe 5 (cash), le chiffre du billet
+ * du tableau de bord. Un noyau antérieur ne sert que la somme des journaux de banque et de caisse
+ * (total) : elle reste alors le chiffre principal, sous son propre nom.
  */
-interface Position {
-  accounts: CashAccount[];
-  total: number;
-  as_of: string;
-  cash_min?: number | null;
+function chiffrePrincipal(p: TreasuryPosition): { label: string; montant: number; net: boolean } {
+  return p.cash === undefined ? { label: "Banques et caisses", montant: p.total, net: false } : { label: "Trésorerie nette", montant: p.cash, net: true };
 }
 
-/** Sceau du total, calculé et jamais fixe : alerte sous zéro ou sous le seuil de sécurité, conforme au-dessus d'un seuil fixé. */
-function tonTotal(p: Position): "danger" | "ok" | "neutral" {
-  const seuil = p.cash_min ?? null;
-  if (p.total < 0 || (seuil && p.total < seuil)) return "danger";
-  return seuil ? "ok" : "neutral";
+/**
+ * Sceau du chiffre principal, calculé et jamais fixe, d'après le seuil de sécurité (cash_min) : alerte
+ * sous zéro ou sous le seuil, vigilance à moins de 20 % au-dessus, conforme au-delà. Sans seuil fixé,
+ * seul un solde négatif porte un sceau. La précision le dit en toutes lettres.
+ */
+function etatTresorerie(montant: number, seuil: number | null): { tone: "danger" | "warn" | "ok" | "neutral"; texte: string } {
+  if (!seuil || seuil <= 0) return { tone: montant < 0 ? "danger" : "neutral", texte: "seuil de sécurité non fixé" };
+  if (montant < seuil) return { tone: "danger", texte: `sous le seuil de sécurité de ${fmtShort(seuil)}` };
+  if (montant < seuil * 1.2) return { tone: "warn", texte: `à moins de ${fmtPct(20, 0)} au-dessus du seuil de sécurité de ${fmtShort(seuil)}` };
+  return { tone: "ok", texte: `au-dessus du seuil de sécurité de ${fmtShort(seuil)}` };
+}
+
+/**
+ * Chiffre clé de la position. Un noyau antérieur ne sert pas le seuil : la précision n'en parle pas et
+ * seul un solde négatif porte un sceau.
+ */
+function ChiffrePosition({ p }: { p: TreasuryPosition }) {
+  const { label, montant, net } = chiffrePrincipal(p);
+  const etat = etatTresorerie(montant, p.cash_min ?? null);
+  const autres = net ? autresTresorerie(montant, p.total, p.cash_other).comptes.length : 0;
+  const comptes = net
+    ? `${pluriel(p.accounts.length, "compte")} de banque et caisse${autres ? `, ${pluriel(autres, "autre compte", "autres comptes")} de la classe 5` : ""}, au ${fmtDate(p.as_of)}`
+    : `${pluriel(p.accounts.length, "compte")} au ${fmtDate(p.as_of)}, hors autres comptes de trésorerie (classe 5)`;
+  return <Kpi label={label} value={fmtShort(montant)} hint={p.cash_min === undefined ? comptes : `${comptes} · ${etat.texte}`} tone={etat.tone} />;
+}
+
+/**
+ * Passage des banques et caisses à la trésorerie nette, comme sur le billet du tableau de bord : les
+ * autres comptes de la classe 5, un à un et en gris, puis le total, pour que la colonne s'additionne.
+ * Rien à écrire quand les journaux font toute la classe 5, ni sur un noyau antérieur qui ne sert pas cash.
+ */
+function PassageNet({ p }: { p: TreasuryPosition }) {
+  const cash = p.cash;
+  if (cash === undefined) return null;
+  const autres = autresTresorerie(cash, p.total, p.cash_other);
+  if (!autres.comptes.length && autres.reste === null) return null;
+  // Plusieurs sociétés : la société distingue deux comptes de même numéro.
+  const societes = new Set([...p.accounts.map((a) => a.company), ...autres.comptes.map((c) => c.company)]).size > 1;
+  return (
+    <section aria-label="Passage à la trésorerie nette" className={cx(FEUILLE, "mb-6 px-5 py-4")}>
+      <ul className="space-y-2 text-[13px]">
+        <li className="flex items-baseline justify-between gap-4">
+          <span className="min-w-0 font-medium text-ink-2">
+            Banques et caisses
+            <span className="ml-1.5 text-[12px] font-normal text-muted">{pluriel(p.accounts.length, "compte")}</span>
+          </span>
+          <span className={cx("whitespace-nowrap font-semibold tabular", p.total < 0 ? "text-danger" : "text-ink")}>{fmtGNF(p.total)}</span>
+        </li>
+        {autres.comptes.map((c) => (
+          <li key={`${c.account_id}-${c.company}`} className="flex items-baseline justify-between gap-4 text-muted">
+            <span className="min-w-0">
+              <span className="tabular">{c.code}</span> {c.name}
+              {societes && <span className="ml-1.5 text-[12px]">{c.company}</span>}
+            </span>
+            <span className="whitespace-nowrap font-semibold tabular">{fmtGNF(c.balance)}</span>
+          </li>
+        ))}
+        {autres.reste !== null && (
+          <li className="flex items-baseline justify-between gap-4 text-muted">
+            <span className="min-w-0">{autres.detaille ? "Écart non détaillé (classe 5)" : "Autres comptes de trésorerie (classe 5)"}</span>
+            <span className="whitespace-nowrap font-semibold tabular">{fmtGNF(autres.reste)}</span>
+          </li>
+        )}
+      </ul>
+      <div className="mt-3 flex items-baseline justify-between gap-4 border-t border-line pt-3 text-[13px]">
+        <span className="font-semibold text-ink">Trésorerie nette</span>
+        <span className={cx("whitespace-nowrap font-bold tabular", cash < 0 ? "text-danger" : "text-ink")}>{fmtGNF(cash)}</span>
+      </div>
+    </section>
+  );
 }
 
 export default function TreasuryPage() {
-  const { data: position, error, mutate: refreshPosition } = useApi<Position>("/finance/treasury");
+  const { data: position, error, mutate: refreshPosition } = useApi<TreasuryPosition>("/finance/treasury");
   const [journalId, setJournalId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"unreconciled" | "all">("unreconciled");
   const current = position?.accounts.find((a) => a.journal_id === journalId) ?? position?.accounts[0] ?? null;
@@ -118,13 +180,8 @@ export default function TreasuryPage() {
       {position && (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {/* Somme des comptes de banque et de caisse : la trésorerie nette du tableau de bord y ajoute les autres comptes de la classe 5. */}
-            <Kpi
-              label="Banques et caisses"
-              value={fmtShort(position.total)}
-              hint={`${pluriel(position.accounts.length, "compte")} au ${fmtDate(position.as_of)}, hors autres comptes de trésorerie (classe 5)`}
-              tone={tonTotal(position)}
-            />
+            {/* Trésorerie nette, même total que le billet du tableau de bord ; son détail suit les comptes. */}
+            <ChiffrePosition p={position} />
             {position.accounts.map((a) => {
               const choisi = current?.journal_id === a.journal_id;
               const I = a.type === "cash" ? Wallet : Landmark;
@@ -161,6 +218,7 @@ export default function TreasuryPage() {
               );
             })}
           </div>
+          <PassageNet p={position} />
           {current && (
             <Card title={`Opérations, ${current.name}`} padded={false}>
               {notice && (

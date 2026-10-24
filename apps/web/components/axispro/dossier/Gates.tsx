@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, FileCheck2, Flag, ShieldAlert } from "@/components/icons";
+import { ArrowRight, CheckCircle2, FileCheck2, Flag, ListChecks, ShieldAlert } from "@/components/icons";
 import { Badge, Button, Card, FEUILLE, Field, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { ApiError, apiSend } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
@@ -113,6 +113,12 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
                 <span>
                   {pluriel(g.available, "critère disponible", "critères disponibles")} sur {fmtInt(g.criteria)}
                 </span>
+                {/* Critères du gate encore à évaluer (compte du noyau ; absent d'une réponse antérieure). */}
+                {(g.pending ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 font-semibold text-ink-2">
+                    <ListChecks aria-hidden className="h-3.5 w-3.5 text-muted" /> {pluriel(g.pending ?? 0, "critère à évaluer", "critères à évaluer")}
+                  </span>
+                )}
                 {g.knockouts > 0 && <span className="font-semibold text-danger">{pluriel(g.knockouts, "knock-out")} du gate</span>}
                 {hyp.map((h) => (
                   <span key={h.key}>

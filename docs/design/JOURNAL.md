@@ -419,6 +419,17 @@ précédent, détail de la classe 5, séries des chiffres clés, seuil margin_mi
 rotations, pluriels des messages AxisPro, délais réseau de Rotations) sont transmises à la session
 fonctionnelle.
 
+## Écrans branchés sur les compléments du noyau (24 octobre 2026)
+
+Les sessions propriétaires ont servi ce que le design avait demandé (Finance a87b3ae et 08d1890,
+Transport b6237dd et 678ea88, AxisPro f8154b0). Branché côté écran : flèche du chiffre d'affaires
+du mois sur la même période du mois précédent (« même période de sept. : 2,14 Md ») ; détail des
+autres comptes de la classe 5 dans le billet et l'écran Trésorerie, qui tombent sur le même total ;
+sceau de trésorerie sur le seuil ; tendances gravées des EBE, DSO, BFR, dette et DSCR ; dans
+AxisPro, texte du noyau tel quel, critères à évaluer par gate, knock-outs bloquants nommés, score
+provisoire décidé par la méthode. La liste des rotations et Rotations avaient été branchées par la
+session Transport. La maquette d'API sert ces champs. Vérifié en version construite (Next 16.4.2).
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,

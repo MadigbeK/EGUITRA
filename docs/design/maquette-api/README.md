@@ -66,7 +66,9 @@ AxisPro et le portail s'ouvrent sur la société du cabinet.
 Les données contiennent volontairement les cas utiles au design : listes vides, noms très longs,
 factures échues et relances des trois niveaux, échéance de prêt en retard, rotation et chantier à marge
 négative, biens vacants, demande d'approbation rejetée, alerte bloquante (compte de passage 585 non
-soldé), dossier AxisPro en NO-GO sur un critère éliminatoire et dossier sans aucune évaluation.
+soldé, 180 M GNF au 15/10, qui avec 70 M de chèques à encaisser en 513 fait l'écart entre les journaux
+et la trésorerie nette), dossier AxisPro en NO-GO sur un critère éliminatoire et dossier sans aucune
+évaluation.
 
 AxisPro suit la version 3 de l'outil de scoring du cabinet : les grilles v2 (en vigueur) et v3 (brouillon,
 modifiable) ont huit compartiments C0 à C7, la v1 (archivée, dossiers clos) n'en a pas ; les gates G1 et

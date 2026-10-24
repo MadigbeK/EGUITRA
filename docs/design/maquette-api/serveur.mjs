@@ -626,6 +626,7 @@ const ACCOUNT_DEFS = [
   ["471000", "Débiteurs et créditeurs divers", "liability_current"],
   ["476000", "Charges constatées d'avance", "asset_prepayments"],
   ["485000", "Créances sur cessions d'immobilisations", "asset_current"],
+  ["513000", "Chèques à encaisser", "asset_current"],
   ["521110", "Banque du Golfe de Conakry, compte courant GNF", "asset_cash"],
   ["521120", "Banque Commerciale du Kaloum, compte GNF", "asset_cash"],
   ["521130", "Banque Commerciale du Kaloum, compte USD", "asset_cash"],
@@ -1167,7 +1168,10 @@ const BS = {
     stocks: 1150e6, advances: 210e6, prepaid: 120e6, fnp: 150e6, clientAdvances: 180e6, salariesDue: 40e6, withholding: 35e6, misc: 120e6, accrued: 45e6,
     capital: 6000e6, legal: 600e6, reserves: 1400e6,
     dividends: [{ date: "2024-06-28", amount: 3000e6 }, { date: "2025-06-30", amount: 3600e6 }, { date: "2026-06-30", amount: 4200e6 }],
-    transit: [{ from: "2026-10-14", amount: 250e6 }],
+    // Classe 5 hors journaux de banque et de caisse (détail cash_other) : virement interne non
+    // réceptionné (585) et chèques clients remis, à encaisser (513).
+    transit: [{ from: "2026-10-14", amount: 180e6 }],
+    cheques: [{ from: "2026-10-14", amount: 70e6 }],
     cashTarget: 4_380_000_000, ran0: 0, kR: 1, kP: 1,
   },
   2: {
@@ -1184,6 +1188,7 @@ const BS = {
     capital: 500e6, legal: 50e6, reserves: 120e6,
     dividends: [{ date: "2024-06-28", amount: 150e6 }, { date: "2025-06-30", amount: 440e6 }, { date: "2026-06-30", amount: 430e6 }],
     transit: [],
+    cheques: [],
     cashTarget: 268_000_000, ran0: 0, kR: 1, kP: 1,
   },
 };
@@ -1274,6 +1279,7 @@ function incomeTaxDue(cid, d) {
 }
 const provisionsAt = (cid, d) => sumPrefix(plRange([cid], "2024-01-01", d), ["691"]);
 const transitAt = (cid, d) => sum(BS[cid].transit.filter((t) => t.from <= d), (t) => t.amount);
+const chequesAt = (cid, d) => sum(BS[cid].cheques.filter((t) => t.from <= d), (t) => t.amount);
 function retentionAt(cid, d) {
   let total = 0;
   for (const ch of DB.chantiers.filter((c) => c.company_id === cid)) {
@@ -1318,6 +1324,7 @@ function bsAt(cid, d) {
   add("118000", -p.reserves);
   add("121000", -(p.ran0 + retainedAt(cid, d)));
   add("585000", transitAt(cid, d));
+  add("513000", chequesAt(cid, d));
   return out;
 }
 /** Balance complète d'une société à une date : bilan, résultat de l'exercice, trésorerie. */
@@ -1788,13 +1795,18 @@ function cashFlow(cids, from, to) {
 /* ─── Indicateurs du dirigeant (eguitra_finance.models.finance_metrics) ───── */
 
 const revenue = (cids, from, to) => round(revenueBetween(cids, from, to));
-const cashAt = (cids, d) => round(sum(cids, (cid) => classFive(balancesAt(cid, d))));
+// Arrondis au franc par société, en cumul pour les journaux : cash_by_journal + cash_other = cash au franc près.
+const cashAt = (cids, d) => sum(cids, (cid) => round(classFive(balancesAt(cid, d))));
 function cashByJournal(cids, d) {
   const rows = [];
   for (const cid of cids) {
     const balances = balancesAt(cid, d);
+    let exact = 0;
+    let shown = 0;
     for (const j of cashJournals(cid)) {
-      const balance = round(balances[j.account] || 0);
+      exact += balances[j.account] || 0;
+      const balance = round(exact) - shown;
+      shown += balance;
       const foreign = j.currency && j.currency !== "GNF";
       rows.push({
         journal_id: j.id, name: j.name, type: j.type, company: COMPANIES[cid].name, currency: j.currency || "GNF",
@@ -1804,6 +1816,20 @@ function cashByJournal(cids, d) {
   }
   return rows;
 }
+/** Comptes de la classe 5 hors journaux de banque et de caisse, à solde non nul (noyau : pilotage.cash_other). */
+function cashOther(cids, d) {
+  const rows = [];
+  for (const cid of cids) {
+    const journals = new Set(cashJournals(cid).map((j) => j.account));
+    for (const [code, balance] of Object.entries(balancesAt(cid, d))) {
+      if (!code.startsWith("5") || journals.has(code) || Math.abs(balance) < 0.5) continue;
+      rows.push({ account_id: ACCOUNT_BY_CODE.get(code)?.id ?? null, code, name: accountName(code), company: COMPANIES[cid].name, balance: round(balance) });
+    }
+  }
+  return rows.sort((a, b) => (a.company === b.company ? (a.code < b.code ? -1 : 1) : a.company < b.company ? -1 : 1));
+}
+/** Mois de la fenêtre commune des séries et des flux : du début de l'exercice au mois de l'arrêté. */
+const windowMonths = (fyStart, day) => Math.max((+day.slice(0, 4) - +fyStart.slice(0, 4)) * 12 + +day.slice(5, 7) - +fyStart.slice(5, 7) + 1, 1);
 function monthlySeries(cids, months, day, prefixes, sign = -1) {
   const start = addMonths(monthStart(day), -(months - 1));
   return Array.from({ length: months }, (_, i) => {
@@ -1994,10 +2020,12 @@ function activeAlerts(cids, day) {
  */
 const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
+/** Seuils des écrans (noyau : threshold_values) : ceux de la première société, trésorerie minimale du groupe sommée. */
 function seuilsTableau(cids) {
-  const th = Object.fromEntries(DB.thresholds.filter((t) => cids.includes(t.company_id) && t.active).map((t) => [t.code, t.value]));
+  const actifs = DB.thresholds.filter((t) => cids.includes(t.company_id) && t.active);
+  const th = Object.fromEntries(actifs.filter((t) => t.company_id === cids[0]).map((t) => [t.code, t.value]));
   return {
-    cash_min: th.cash_min || null,
+    cash_min: sum(actifs.filter((t) => t.code === "cash_min"), (t) => t.value) || null,
     dscr_min: th.dscr_min || 1.2,
     dso_target_days: th.dso_target_days || 60,
     receivable_overdue_share_pct: 30,
@@ -2101,7 +2129,10 @@ function complementTableau(cids, day, base) {
     working_capital, cash_monthly, cash_forecast, budget: null, transport: null,
     ledger: { date_from: fyStart, date_to: day, debit, credit: debit, difference: 0, balanced: true },
     expected_credit_loss: { total: pertes, rate_pct: rec.total ? (pertes / rec.total) * 100 : null, by_bucket: {}, rates: {} },
-    lock_date: null, decisions, questions,
+    lock_date: cids.map(lockDate).filter(Boolean).sort().pop() ?? null, decisions, questions,
+    // Clôture comptable du mois de l'arrêté faite pour chaque société couverte (fausse au 15/10).
+    month_closed: cids.every((cid) => (lockDate(cid) ?? "") >= monthEnd(day)),
+    cash_other: cashOther(cids, day),
     debt: { ...base.debt, accounting_outstanding: base.debt.outstanding, schedule_gap: 0, net_debt: round(base.debt.outstanding - base.cash), gearing: null },
     alerts: decisions,
   };
@@ -2116,6 +2147,9 @@ function dashboard(cids, day) {
   const debt = debtSummary(cids, day);
   const ebe12 = incomeStatement(cids, addDays(addMonths(day, -12), 1), day).totals.XD;
   const service = debt.service_last_12m || debt.service_next_12m;
+  // Même période du mois précédent : du 1er au même quantième, bornée à sa fin.
+  const pmToDate = minDate(addDays(pmStart, +day.slice(8, 10) - 1), pmEnd);
+  const fenetre = windowMonths(fyStart, day);
   const base = {
     companies: cids.map(companyRef),
     as_of: day,
@@ -2123,6 +2157,7 @@ function dashboard(cids, day) {
     revenue_fy: revenue(cids, fyStart, day),
     revenue_month: revenue(cids, mStart, day),
     revenue_prev_month: revenue(cids, pmStart, pmEnd),
+    revenue_prev_month_to_date: revenue(cids, pmStart, pmToDate),
     net_result_fy: statement.totals.XI,
     ebe_fy: statement.totals.XD,
     purchases_fy: round(purchasesBetween(cids, fyStart, day)),
@@ -2130,14 +2165,57 @@ function dashboard(cids, day) {
     cash_by_journal: cashByJournal(cids, day),
     receivables: openItems(cids, "receivable", day),
     payables: openItems(cids, "payable", day),
-    revenue_by_month: monthlySeries(cids, 12, day, ["70"]),
-    result_by_month: monthlySeries(cids, 12, day, ["6", "7", "8"]),
+    // Fenêtre commune avec cash_monthly : du début de l'exercice au mois de l'arrêté.
+    revenue_by_month: monthlySeries(cids, fenetre, day, ["70"]),
+    result_by_month: monthlySeries(cids, fenetre, day, ["6", "7", "8"]),
     by_activity: byAnalyticPlan(cids, "activite", fyStart, day),
     debt,
     dscr: service ? ebe12 / service : null,
     alerts: activeAlerts(cids, day),
   };
-  return { ...base, ...complementTableau(cids, day, base) };
+  const data = { ...base, ...complementTableau(cids, day, base) };
+  data.kpi_series = kpiSeries(cids, data);
+  return data;
+}
+
+/**
+ * Séries mensuelles des chiffres clés sur les mois de revenue_by_month (noyau : pilotage.kpi_series),
+ * à la fin de chaque mois (au jour de l'arrêté pour le mois en cours) : EBE du mois, DSO et BFR de
+ * l'exercice (soldes clients et fournisseurs du modèle), dette financière comptable (16, 17), DSCR sur
+ * douze mois. Le dernier point reprend le chiffre affiché ; null quand la valeur n'est pas calculable.
+ */
+function kpiSeries(cids, data) {
+  const day = data.as_of;
+  const fyStart = data.fiscal_year.start;
+  const months = data.revenue_by_month.map((m) => m.month);
+  const series = { months, ebe: [], dso: [], bfr: [], debt: [], dscr: [] };
+  for (const key of months) {
+    const start = `${key}-01`;
+    const end = minDate(monthEnd(start), day);
+    const balances = Object.entries(sumBalances(cids, end));
+    const of = (test) => sum(balances.filter(([code]) => test(code)), ([, v]) => v);
+    const receivables = of((code) => ACCOUNT_BY_CODE.get(code)?.type === "asset_receivable");
+    const payables = of((code) => ACCOUNT_BY_CODE.get(code)?.type === "liability_payable");
+    const sales = revenue(cids, fyStart, end) * 1.18;
+    const owed = debtSummary(cids, end);
+    const service = owed.service_last_12m || owed.service_next_12m;
+    series.ebe.push(incomeStatement(cids, start, end).totals.XD);
+    series.dso.push(sales > 0 ? (receivables / sales) * (daysBetween(fyStart, end) + 1) : null);
+    // BFR comme celui qu'affiche la maquette (working_capital, stocks à 0) : clients moins fournisseurs.
+    series.bfr.push(round(receivables + payables));
+    series.debt.push(round(sum(cids, (cid) => debtAt(cid, end).loan + debtAt(cid, end).lease)));
+    series.dscr.push(service ? incomeStatement(cids, addDays(addMonths(end, -12), 1), end).totals.XD / service : null);
+  }
+  const last = months.length - 1;
+  if (last >= 0) {
+    // L'EBE mensuel s'additionne en EBE de l'exercice ; la gravure finit sur les chiffres affichés.
+    series.ebe[last] = data.ebe_fy - sum(series.ebe.slice(0, last));
+    series.dso[last] = data.working_capital.dso;
+    series.bfr[last] = data.working_capital.bfr;
+    series.debt[last] = data.debt.accounting_outstanding;
+    series.dscr[last] = data.dscr;
+  }
+  return series;
 }
 
 function managementReport(cids, day) {
@@ -2524,7 +2602,8 @@ function seedEntries() {
   }
   od(1, "2026-09-30", "Reclassement du compte d'attente 471, encaissement non identifié", [{ account: "471000", debit: 12_500_000 }, { account: "411100", credit: 12_500_000, partner_id: 112 }]);
   od(1, "2026-10-06", "Écart de caisse constaté au parc de Matoto", [{ account: "658000", debit: 85_000 }, { account: "571200", credit: 85_000 }]);
-  od(1, "2026-10-14", "Virement Banque du Golfe vers Caisse du siège", [{ account: "585000", debit: 250e6 }, { account: "521110", credit: 250e6 }], "posted", 5);
+  od(1, "2026-10-14", "Virement Banque du Golfe vers Caisse du siège", [{ account: "585000", debit: 180e6 }, { account: "521110", credit: 180e6 }], "posted", 5);
+  od(1, "2026-10-14", "Chèques clients remis à la Banque du Golfe, à encaisser", [{ account: "513000", debit: 70e6 }, { account: "411100", credit: 70e6, partner_id: 101 }]);
   od(1, "2026-10-12", "Régularisation de TVA de septembre 2026", [{ account: "443100", debit: 41_300_000 }, { account: "445200", credit: 41_300_000 }], "draft");
   od(1, "2026-10-15", "Charges constatées d'avance, assurance flotte du 4e trimestre", [{ account: "476000", debit: 196e6 }, { account: "625200", credit: 196e6 }], "draft");
   for (const sit of DB.situations.filter((s) => s.state === "invoiced" && s.date >= "2026-08-01")) {
@@ -2558,7 +2637,7 @@ function seedStatementLines() {
   }
   add(1, 6, "2026-10-13", "COMMISSIONS SUR VIREMENTS EMIS", -126_500, null, false);
   add(1, 5, "2026-09-30", "VIREMENT SALAIRES SEPTEMBRE 2026", -round(((PL[1].get("2026-09") || {})["661100"] || 0) * 0.8));
-  add(1, 5, "2026-10-14", "VIREMENT INTERNE VERS CAISSE DU SIEGE", -250e6);
+  add(1, 5, "2026-10-14", "VIREMENT INTERNE VERS CAISSE DU SIEGE", -180e6);
   add(1, 6, "2026-09-15", "PAIEMENT TVA AOUT 2026 DGI", -312_400_000);
   add(1, 5, "2026-10-12", "VIR RECU REF 88412 SANS LIBELLE", 12_500_000, null, false);
   add(1, 7, "2026-09-18", "VIR RECU AERO SERVICES GBESSIA (DEMO) USD", 21_400);
@@ -2898,6 +2977,10 @@ function seedAnalytic() {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 const STATUS_VALUES = { met: 1, partial: 0.5, not_met: 0 };
+/** Nombre à la française (noyau : scoring.fnum) et forme accordée au nombre, singulier jusqu'à 1 (scoring.accord, scoring.pluriel). */
+const fnum = (v, digits = 1) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits }).replace(/\s/g, " "));
+const accord = (n, un, plusieurs = null) => (Math.abs(n) < 2 ? un : plusieurs || `${un}s`);
+const pluriel = (n, un, plusieurs = null) => `${fnum(n, Number.isInteger(n) ? 0 : 1)} ${accord(n, un, plusieurs)}`;
 const STATUSES = { not_assessed: "Non évalué", met: "Satisfait", partial: "Partiellement satisfait", not_met: "Non satisfait", na: "Sans objet" };
 const RECOMMENDATION_LABELS = { go: "GO", conditional: "GO sous conditions", no_go: "NO-GO", pending: "À compléter", postponed: "Ajourné" };
 
@@ -3223,6 +3306,34 @@ function scoring(dossier, gate = null) {
   const apd = borne(readiness - 4 * critical.length);
   const bankability = borne(readiness - 12 * knockouts.length - 3 * critical.length);
   const assessed = evals.filter((x) => x.e.status !== "not_assessed").length;
+  const pendingInScope = inScope.filter((x) => x.e.status === "not_assessed").length;
+  // Recommandation de la méthode, jamais « à compléter » : pendant la saisie, un critère non évalué des
+  // gates atteints y compte comme non disponible (score provisoire) ; ensuite, celle de la plateforme.
+  let methodRecommendation = recommendation;
+  if (recommendation === "pending") {
+    let mTotal = 0;
+    let mWeight = 0;
+    for (const domain of policy.domains) {
+      const list = inScope.filter((x) => x.c.domain_id === domain.id && (x.e.status in STATUS_VALUES || x.e.status === "not_assessed"));
+      const weight = sum(list, (x) => x.c.weight);
+      if (!weight) continue;
+      mTotal += (sum(list, (x) => (STATUS_VALUES[x.e.status] ?? 0) * x.c.weight) / weight) * 100 * domain.weight;
+      mWeight += domain.weight;
+    }
+    const provisional = mWeight ? mTotal / mWeight : 0;
+    methodRecommendation = provisional >= policy.go_threshold && !critical.length ? "go" : provisional >= policy.conditional_threshold ? "conditional" : "no_go";
+  }
+  // Motif accordé au nombre (noyau : dossier.scoring et scoring._recommendation).
+  let recommendationDetail;
+  if (recommendation === "pending") {
+    recommendationDetail = !assessed || !pendingInScope
+      ? "Évaluation à commencer : aucun critère n'est encore renseigné."
+      : `${pluriel(pendingInScope, "critère des gates atteints", "critères des gates atteints")} à évaluer avant la recommandation.`;
+  } else if (knockouts.length) {
+    recommendationDetail = `${pluriel(knockouts.length, "knock-out actif", "knock-outs actifs")} : aucune décision favorable possible avant leur levée.`;
+  } else if (recommendation === "go") recommendationDetail = `Readiness ${fnum(readiness)}/100, sans knock-out actif.`;
+  else if (recommendation === "conditional") recommendationDetail = `Readiness ${fnum(readiness)}/100 : poursuite sous conditions, gaps prioritaires à combler.`;
+  else recommendationDetail = `Readiness ${fnum(readiness)}/100 : dossier non instruisable en l'état.`;
   const docs = documentsStatus(dossier).filter((x) => x.required);
   const recus = docs.filter((x) => ["received", "validated"].includes(x.state)).length;
   const classification = bankability >= 80 ? "Projet bancable" : apd >= 70 ? "Prêt pour l'APD" : readiness >= 50 ? "Projet prometteur" : "Projet à structurer";
@@ -3243,22 +3354,34 @@ function scoring(dossier, gate = null) {
       owner: owner ? { id: owner.user_id, name: userName(owner.user_id) } : null,
     };
   });
-  // Décision de chaque gate : franchi avant le gate courant ; ensuite knock-out (NO-GO), critères à
-  // évaluer (HOLD), score des gates atteints ; une complétude sous le minimum du gate ramène à HOLD.
+  // Décision de chaque gate : franchi avant le gate courant ; ensuite knock-out que sa règle oppose
+  // (NO-GO), critères à évaluer (HOLD), score des gates atteints ; une complétude sous le minimum du
+  // gate ramène à HOLD.
   const domainName = (id) => policy.domains.find((dm) => dm.id === id)?.name ?? "";
+  // Knock-outs actifs que la règle de passage du gate oppose (noyau : scoring._blocking_knockouts).
+  const blockingOf = (g) => {
+    const rule = g.rule_code ?? "generic";
+    const upToGate = (x) => gateSeq(policy, x.c.gate_id) <= g.sequence;
+    if (rule === "prequalification" || rule === "generic") return knockouts.filter(upToGate);
+    if (rule === "feasibility") return knockouts.filter((x) => (g.domain_ids || []).includes(x.c.domain_id) || upToGate(x));
+    if (rule === "apd" || rule === "bankability") return knockouts;
+    return [];
+  };
   const gateRows = [...policy.gates].sort((a, b) => a.sequence - b.sequence).map((g) => {
     const inGate = evals.filter((x) => x.c.gate_id === g.id);
     const upTo = evals.filter((x) => gateSeq(policy, x.c.gate_id) <= g.sequence);
-    const kos = upTo.filter((x) => x.c.knockout && x.e.status === "not_met");
+    // Un gate franchi n'est plus jugé : aucun knock-out ne lui est opposé.
+    const evaluated = g.sequence >= (reached?.sequence ?? 0);
+    const kos = evaluated ? blockingOf(g) : [];
+    const pending = upTo.filter((x) => x.e.status === "not_assessed").length;
     let decision = "go";
     let motifs = ["Gate franchi : critères évalués, sans knock-out actif."];
-    if (g.sequence >= (reached?.sequence ?? 0)) {
+    if (evaluated) {
       const scored = upTo.filter((x) => x.e.status in STATUS_VALUES);
       const w = sum(scored, (x) => x.c.weight);
       const sc = w ? (sum(scored, (x) => STATUS_VALUES[x.e.status] * x.c.weight) / w) * 100 : 0;
-      const pending = upTo.filter((x) => x.e.status === "not_assessed").length;
       if (kos.length) [decision, motifs] = ["no_go", kos.map((x) => `Knock-out actif : ${x.c.name} (${domainName(x.c.domain_id)}).`)];
-      else if (pending) [decision, motifs] = ["hold", [`${pending} critère(s) des gates atteints à évaluer avant la décision.`]];
+      else if (pending) [decision, motifs] = ["hold", [`${pluriel(pending, "critère des gates atteints", "critères des gates atteints")} à évaluer avant la décision.`]];
       else if (sc >= policy.go_threshold) [decision, motifs] = ["go", [`Score des gates atteints ${Math.floor(sc)}/100, au moins ${policy.go_threshold}.`]];
       else if (sc >= policy.conditional_threshold) [decision, motifs] = ["conditional", [`Score des gates atteints ${Math.floor(sc)}/100, sous ${policy.go_threshold} : passage sous conditions.`]];
       else [decision, motifs] = ["hold", [`Score des gates atteints ${Math.floor(sc)}/100, sous ${policy.conditional_threshold}.`]];
@@ -3271,6 +3394,8 @@ function scoring(dossier, gate = null) {
     return {
       gate_id: g.id, code: g.code, name: g.name, index: g.sequence, rule: g.rule_code ?? "generic", decision, motifs, criteria: inGate.length,
       available: inGate.filter((x) => x.e.status === "met").length, knockouts: inGate.filter((x) => x.c.knockout && x.e.status === "not_met").length,
+      // Ce qui bloque ce gate : critères encore à évaluer (du gate, puis jusqu'à lui) et knock-outs actifs que sa règle oppose.
+      pending: inGate.filter((x) => x.e.status === "not_assessed").length, pending_in_scope: pending, knockouts_blocking: kos.length,
       entry_requirements: g.entry_requirements ?? null, deliverables: g.deliverables ?? null, exit_criteria: g.exit_criteria ?? null, min_completeness: g.min_completeness ?? null,
     };
   });
@@ -3279,7 +3404,7 @@ function scoring(dossier, gate = null) {
     global_score: globalScore, readiness, apd, bankability,
     completeness: evals.length ? (assessed / evals.length) * 100 : 0,
     dataroom_completeness: docs.length ? (recus / docs.length) * 100 : 0,
-    classification, recommendation_detail: "", method_recommendation: recommendation,
+    classification, recommendation_detail: recommendationDetail, method_recommendation: methodRecommendation,
     domains: domains.map((d) => ({ ...d, priority: d.score === null ? null : d.score < 30 ? "URGENTE" : d.score < 50 ? "ÉLEVÉE" : d.score < 65 ? "MOYENNE" : "FAIBLE" })),
     compartments,
     knockouts: knockouts.map((x) => ({ code: x.c.code, name: x.c.name, domain: null, gate: null })),
@@ -3287,7 +3412,7 @@ function scoring(dossier, gate = null) {
     critical_open: critical.map((x) => ({ code: x.c.code, name: x.c.name, domain: null, gate: null })),
     critical_missing_excl_ko: critical.length, requalified: [], gates: gateRows, next_gate: nextGate, anomalies: [],
     proofs: 0, gaps_open: evals.filter((x) => ["not_met", "partial", "not_assessed"].includes(x.e.status)).length,
-    documents_missing: docs.length - recus, pending_in_scope: inScope.filter((x) => x.e.status === "not_assessed").length,
+    documents_missing: docs.length - recus, pending_in_scope: pendingInScope,
     assessed, criteria: evals.length, recommendation,
     policy: { weighting: policy.weighting ?? "domain", ko_partial_blocks: Boolean(policy.ko_partial_blocks), evidence_check: Boolean(policy.evidence_check), exclude_na: policy.exclude_na !== false, expiry_check: Boolean(policy.expiry_check) },
     thresholds: { bankable: policy.threshold_bankable ?? 80, go: policy.go_threshold, conditional: policy.conditional_threshold, hold: policy.threshold_hold ?? 40, dscr: policy.dscr_target ?? 1.2 },
@@ -4286,8 +4411,10 @@ function addStatementLine(journal, values) {
   return line;
 }
 route("GET", "/finance/treasury", FIN_READ, (ctx) => {
-  const rows = cashByJournal(scopeCompanies(ctx), TODAY).map((r) => ({ ...r, unreconciled: DB.statementLines.filter((l) => l.journal_id === r.journal_id && !l.reconciled).length }));
-  return { accounts: rows, total: sum(rows, (r) => r.balance), as_of: TODAY };
+  const cids = scopeCompanies(ctx);
+  const rows = cashByJournal(cids, TODAY).map((r) => ({ ...r, unreconciled: DB.statementLines.filter((l) => l.journal_id === r.journal_id && !l.reconciled).length }));
+  // total : comptes des journaux ; cash : trésorerie nette de la classe 5 (total + cash_other) ; cash_min : seuil de sécurité.
+  return { accounts: rows, total: sum(rows, (r) => r.balance), as_of: TODAY, cash: cashAt(cids, TODAY), cash_other: cashOther(cids, TODAY), cash_min: seuilsTableau(cids).cash_min };
 });
 route("GET", "/finance/treasury/:id/lines", FIN_READ, (ctx) => {
   const j = treasuryJournal(ctx, ctx.params[0]);
@@ -5343,6 +5470,9 @@ route("GET", "/transport/referentials", TR_READ, (ctx) => {
     clients: [...clientIds].map(partnerRef).filter(Boolean).sort((a, b) => byFr(a.name, b.name)),
     products: PRODUCTS.map(([code, label]) => ({ code, label })),
     costs: COSTS.map(([code, label]) => ({ code, label })),
+    // Mesures facultatives du parc (Rotations) ; sans calcul des manquants à 15 °C, ni températures ni masse volumique.
+    volume_correction: false,
+    measures: [{ code: "fuel_liters", label: "Carburant (litres)" }],
   };
 });
 route("GET", "/transport/vehicles", TR_READ, (ctx) =>
@@ -5444,7 +5574,8 @@ route("GET", "/transport/rotations", TR_READ, (ctx) => {
   return {
     items: list.slice(offset, offset + limit).map(rotationRow), total_count: list.length, offset, limit,
     totals: { revenue: sum(list, (r) => r.revenue), margin: sum(list, (r) => r.margin), volume: round3(sum(list, (r) => r.volume_delivered)) },
-    margin_min: 15,
+    // Marge minimale de la règle d'alerte (Seuils et taux) ; null : règle éteinte ou seuil à 0.
+    margin_min: seuilsTableau([ctx.company]).transport_margin_min,
   };
 });
 route("GET", "/transport/rotations/:id", TR_READ, (ctx) => rotationRow(rotationOf(ctx, ctx.params[0])));
@@ -5514,7 +5645,7 @@ route("GET", "/transport/summary", TR_READ, (ctx) => {
   return {
     date_from: start, date_to: end, rotations: done.length, volume: round3(sum(done, (r) => r.volume_delivered)), revenue: rev, cost: sum(done, (r) => r.total_cost), margin,
     margin_rate: rev ? (margin / rev) * 100 : null, to_invoice: { count: toInvoice.length, amount: sum(toInvoice, (r) => r.revenue) },
-    margin_min: 15, shortage_excess: { count: 0, volume: 0, value: 0 },
+    margin_min: seuilsTableau([ctx.company]).transport_margin_min, shortage_excess: { count: 0, volume: 0, value: 0 },
     drafts: all.filter((r) => r.state === "draft").length,
     fleet: Object.fromEntries(["service", "maintenance", "off"].map((s) => [s, vehicles.filter((v) => v.state === s).length])),
   };
@@ -5820,8 +5951,8 @@ function policyPayload(p) {
       requirements: Object.fromEntries(Object.keys(AX_REQUIREMENTS).map((k) => [k, p.criteria.filter((c) => (c.requirement_type ?? "apd") === k).length])),
       links: 0, gates_without_criteria: p.gates.filter((g) => !p.criteria.some((c) => c.gate_id === g.id)).map((g) => g.code),
       notes: [
-        ...(koNotCritical.length ? [`${koNotCritical.length} critère(s) éliminatoire(s) non marqué(s) critique(s) : ${koNotCritical.map((c) => c.code).join(", ")}.`] : []),
-        ...(loose.length ? [`${loose.length} domaine(s) sans compartiment : ${loose.map((dm) => dm.name).join(", ")}.`] : []),
+        ...(koNotCritical.length ? [`${pluriel(koNotCritical.length, "critère éliminatoire non marqué critique", "critères éliminatoires non marqués critiques")} : ${koNotCritical.map((c) => c.code).join(", ")}.`] : []),
+        ...(loose.length ? [`${pluriel(loose.length, "domaine sans compartiment", "domaines sans compartiment")} : ${loose.map((dm) => dm.name).join(", ")}.`] : []),
       ],
     },
     gates: p.gates.map((g) => ({
@@ -5854,6 +5985,8 @@ function dossierSummary(d) {
     next_gate: score.next_gate ? { code: score.next_gate.code, name: score.next_gate.name, decision: score.next_gate.decision } : null,
     currency: { id: 1, name: "GNF", symbol: "GNF" },
     recommendation: score.recommendation, knockouts: score.knockouts.length, decision: d.decision,
+    // Recommandation de la méthode même pendant la saisie et critères des gates atteints à évaluer (score provisoire en liste).
+    method_recommendation: score.method_recommendation, pending_in_scope: score.pending_in_scope,
     progress: { assessed: score.assessed, criteria: score.criteria },
     documents: { due: due.length, received: due.filter((x) => ["received", "validated"].includes(x.state)).length, available: due.filter((x) => x.state !== "missing").length, total: due.length },
     policy_version: policy.version, revision: 0, locked: false, financial: null,
@@ -6166,7 +6299,7 @@ route("POST", "/axispro/dossiers/:id/advance-gate", AX_WRITE, (ctx) => {
   const policy = policyById(d.policy_id);
   const gate = policy.gates.find((g) => g.id === d.current_gate_id);
   const pending = evaluationsOf(d).filter((e) => criterionOf(policy, e.criterion_id)?.gate_id === gate.id && e.status === "not_assessed");
-  if (pending.length) throw businessRule(`${pending.length} critère(s) du gate ${gate.code} restent à évaluer.`);
+  if (pending.length) throw businessRule(`${pluriel(pending.length, "critère")} du gate ${gate.code} ${accord(pending.length, "reste", "restent")} à évaluer.`);
   if (scoring(d, gate).knockouts.length) throw businessRule("Un critère éliminatoire n'est pas satisfait : le dossier ne peut pas avancer.");
   const next = policy.gates.filter((g) => g.sequence > gate.sequence).sort((a, b) => a.sequence - b.sequence)[0];
   if (!next) throw businessRule("Le dossier est déjà au dernier gate.");

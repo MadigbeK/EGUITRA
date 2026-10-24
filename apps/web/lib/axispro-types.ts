@@ -100,7 +100,14 @@ export interface DossierSummary {
   completeness: number;
   dataroom_completeness: number;
   classification: string;
+  /** Recommandation de la plateforme : « À compléter » (pending) tant que l'évaluation n'a pas
+   * commencé ou que des critères des gates atteints restent à évaluer, celle de la méthode sinon. */
   recommendation: Recommendation;
+  /** Recommandation de la méthode, même pendant la saisie : jamais pending (un critère non évalué y
+   * compte comme non disponible). Absente des réponses antérieures au noyau qui la sert. */
+  method_recommendation?: Recommendation;
+  /** Critères des gates atteints encore à évaluer avant la recommandation. Absent des réponses antérieures. */
+  pending_in_scope?: number;
   next_gate: { code: string; name: string; decision: GateDecision } | null;
   knockouts: number;
   decision: Decision | null;
@@ -140,7 +147,14 @@ export interface GateResult {
   motifs: string[];
   criteria: number;
   available: number;
+  /** Knock-outs actifs dont le critère appartient à ce gate. */
   knockouts: number;
+  /** Ce qui bloque le gate, établi par le noyau (absent des réponses antérieures) : critères du gate
+   * encore à évaluer, critères à évaluer du premier gate jusqu'à celui-ci, et nombre de knock-outs
+   * actifs que sa règle de passage oppose (les noms se lisent dans Scoring.knockouts). */
+  pending?: number;
+  pending_in_scope?: number;
+  knockouts_blocking?: number;
   entry_requirements: string | null;
   deliverables: string | null;
   exit_criteria: string | null;
@@ -169,7 +183,9 @@ export interface Scoring {
   dataroom_completeness: number;
   classification: string;
   recommendation: Recommendation;
+  /** Motif de la recommandation, accordé au nombre par le noyau : s'affiche tel quel. */
   recommendation_detail: string;
+  /** Recommandation de la méthode, jamais pending : ce qu'elle dirait si l'évaluation s'arrêtait là. */
   method_recommendation: Recommendation;
   domains: DomainScore[];
   /** Vide pour une grille sans compartiments. */
@@ -185,6 +201,7 @@ export interface Scoring {
   proofs: number;
   gaps_open: number;
   documents_missing: number;
+  /** Critères des gates atteints (jusqu'au gate courant) encore à évaluer. */
   pending_in_scope: number;
   assessed: number;
   criteria: number;

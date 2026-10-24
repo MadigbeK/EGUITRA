@@ -26,12 +26,19 @@ function teinteScore(score: number | null) {
 const FAVORABLES: Recommendation[] = ["bankable", "apd_ready", "go"];
 
 /**
- * Score provisoire : la méthode recommande « À compléter » tant que des critères des gates atteints
- * restent à évaluer (le noyau compte un critère non évalué comme non disponible). L'écran ne fixe
- * aucun seuil à lui : il reprend cet état de la méthode.
+ * Score provisoire : la plateforme retient « À compléter » (pending) tant que des critères des gates
+ * atteints restent à évaluer, alors que la méthode a déjà sa recommandation (method_recommendation,
+ * qui n'est jamais pending : un critère non évalué y compte comme non disponible). Un dossier dont
+ * l'évaluation n'a pas commencé n'a pas de score. L'écran ne fixe aucun seuil à lui ; une réponse
+ * antérieure, sans method_recommendation, garde la seule recommandation de la plateforme.
  */
 function provisoire(d: DossierSummary) {
-  return d.recommendation === "pending" && d.progress.assessed > 0;
+  return d.progress.assessed > 0 && d.recommendation === "pending" && d.method_recommendation !== "pending";
+}
+
+/** Critères des gates atteints encore à évaluer avant la recommandation (0 dans une réponse antérieure). */
+function avantReco(d: DossierSummary) {
+  return d.pending_in_scope ?? 0;
 }
 
 /** Avancement de l'évaluation : « 10 / 111 évalués », accordé au nombre de critères évalués. */
@@ -39,12 +46,27 @@ function evalues(p: DossierSummary["progress"]) {
   return `${fmtInt(p.assessed)} / ${fmtInt(p.criteria)} ${p.assessed > 1 ? "évalués" : "évalué"}`;
 }
 
-/** Score provisoire : tampon neutre, sans la couleur de sa classe, le mot à la suite du nombre. */
-function ScoreProvisoire({ valeur }: { valeur: number }) {
+/**
+ * Score provisoire : tampon neutre, sans la couleur de sa classe, le mot à la suite du nombre ;
+ * l'infobulle dit ce que la méthode recommanderait si l'évaluation s'arrêtait là.
+ */
+function ScoreProvisoire({ d }: { d: DossierSummary }) {
+  const methode = d.method_recommendation ? ` Si l'évaluation s'arrêtait là, la méthode recommanderait : ${RECO[d.method_recommendation].label}.` : "";
   return (
-    <span title="Project Readiness Score provisoire : la méthode recommande « À compléter » tant que des critères des gates atteints restent à évaluer.">
-      <Badge tone="neutral">{note(valeur)} provisoire</Badge>
+    <span title={`Project Readiness Score provisoire : recommandation « ${RECO.pending.label} » tant que des critères des gates atteints restent à évaluer.${methode}`}>
+      <Badge tone="neutral">{note(d.readiness)} provisoire</Badge>
     </span>
+  );
+}
+
+/** « 12 à évaluer avant la recommandation », sous le dossier ; rien quand plus rien n'est à évaluer. */
+function AvantRecommandation({ d, className }: { d: DossierSummary; className?: string }) {
+  const n = avantReco(d);
+  if (n <= 0) return null;
+  return (
+    <p className={cx("text-[11.5px] leading-snug text-muted", className)}>
+      <b className="font-semibold tabular text-ink-2">{fmtInt(n)}</b> à évaluer avant la recommandation
+    </p>
   );
 }
 
@@ -238,8 +260,9 @@ function Tableau({ etapes, rows, rang }: { etapes: Gate[]; rows: DossierSummary[
 
 /**
  * Carte d'un dossier. Score établi : il s'affiche en haut, à la couleur de sa classe. Score
- * provisoire (la méthode recommande « À compléter ») : l'avancement prend sa place (« 10 / 111
- * évalués ») et le score suit en tampon neutre ; le pied dit ce qui reste à évaluer.
+ * provisoire (« À compléter » de la plateforme, la méthode ayant déjà sa recommandation) :
+ * l'avancement prend sa place (« 10 / 111 évalués ») et le score suit en tampon neutre ; sous la
+ * barre d'avancement, ce qui reste à évaluer avant la recommandation.
  */
 function CarteDossier({ d }: { d: DossierSummary }) {
   const { assessed, criteria } = d.progress;
@@ -259,7 +282,7 @@ function CarteDossier({ d }: { d: DossierSummary }) {
       <div className="mt-0.5 truncate text-[12.5px] text-muted">{d.promoter.name}</div>
       {assessed > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted">
-          {!etabli && <ScoreProvisoire valeur={d.readiness} />}
+          {!etabli && <ScoreProvisoire d={d} />}
           <span>APD <b className="tabular text-ink-2">{note(d.apd)}</b></span>
           <span>Bankability <b className="tabular text-ink-2">{note(d.bankability)}</b></span>
           {d.locked && (
@@ -282,6 +305,7 @@ function CarteDossier({ d }: { d: DossierSummary }) {
           <span className="font-semibold tabular text-ink-2">{etabli ? `${fmtInt(assessed)} / ${fmtInt(criteria)}` : `${fmtInt(Math.max(0, criteria - assessed))} à évaluer`}</span>
         </div>
         <ProgressBar value={evalue} tone={evalue >= 100 ? "ok" : "accent"} epaisseur={6} />
+        <AvantRecommandation d={d} className="mt-1.5" />
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-2.5">
         <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge>
@@ -341,7 +365,7 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
             !d.progress.assessed ? (
               <span className="text-muted">–</span>
             ) : provisoire(d) ? (
-              <ScoreProvisoire valeur={d.readiness} />
+              <ScoreProvisoire d={d} />
             ) : (
               <span className={cx("inline-block min-w-12 rounded-full px-2 py-0.5 text-center text-[12px] font-bold", teinteScore(d.readiness))}>{note(d.readiness)}</span>
             ),
@@ -349,7 +373,16 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
         // Scores partiels d'un dossier au score provisoire : en gris, comme le tampon qui les précède.
         { key: "apd", label: "APD", align: "right", sortValue: (d) => d.apd, render: (d) => (d.progress.assessed ? <span className={cx(provisoire(d) && "text-muted")}>{note(d.apd)}</span> : "–") },
         { key: "bankability", label: "Bankability", align: "right", sortValue: (d) => d.bankability, render: (d) => (d.progress.assessed ? <span className={cx(provisoire(d) && "text-muted")}>{note(d.bankability)}</span> : "–") },
-        { key: "recommendation", label: "Recommandation", render: (d) => <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge> },
+        {
+          key: "recommendation",
+          label: "Recommandation",
+          render: (d) => (
+            <div className="min-w-[9rem] max-w-[13rem]">
+              <Badge tone={RECO[d.recommendation].tone}>{RECO[d.recommendation].label}</Badge>
+              <AvantRecommandation d={d} className="mt-1" />
+            </div>
+          ),
+        },
         { key: "next_gate", label: "Prochain gate", render: (d) => (d.next_gate ? <span className="whitespace-nowrap text-[12.5px]">{d.next_gate.code} · {GATE_DECISION[d.next_gate.decision].label}</span> : "–") },
         { key: "irr", label: "TRI", align: "right", sortValue: (d) => d.financial?.irr_project ?? null, render: (d) => fmtPct(d.financial?.irr_project) },
         { key: "dscr", label: "DSCR min.", align: "right", sortValue: (d) => d.financial?.dscr_min ?? null, render: (d) => ratio(d.financial?.dscr_min) },
