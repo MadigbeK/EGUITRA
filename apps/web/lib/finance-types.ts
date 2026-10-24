@@ -219,6 +219,59 @@ export interface CashAccount {
   unreconciled?: number;
 }
 
+/**
+ * Compte de la classe 5 hors comptes des journaux de banque et de caisse (virements de fonds 585,
+ * crédits de trésorerie 56, valeurs à encaisser…), à solde non nul : avec les comptes des journaux,
+ * il fait la trésorerie nette (cash), ligne à ligne.
+ */
+export interface CashOtherAccount {
+  account_id: number;
+  code: string;
+  name: string;
+  company: string;
+  balance: number;
+}
+
+/**
+ * Séries mensuelles des chiffres clés, une valeur par mois de months (fenêtre commune : du début de
+ * l'exercice au mois de l'arrêté) : EBE du mois, DSO et BFR de l'exercice à la fin du mois, dette
+ * financière comptable, DSCR sur douze mois. Le dernier point vaut le chiffre affiché ; null quand la
+ * valeur n'est pas calculable (pas de ventes, pas de service de la dette).
+ */
+export interface KpiSeries {
+  months: string[];
+  ebe: number[];
+  dso: Array<number | null>;
+  bfr: number[];
+  debt: number[];
+  dscr: Array<number | null>;
+}
+
+/**
+ * Détail de la trésorerie nette sous les comptes des journaux (billet du tableau de bord, écran
+ * Trésorerie) : les autres comptes de la classe 5 à solde non nul, un à un, puis le reste non détaillé
+ * s'il dépasse 1 GNF (noyau antérieur sans cash_other), pour que la colonne s'additionne jusqu'à cash.
+ */
+export function autresTresorerie(cash: number, journaux: number, autres: CashOtherAccount[] | undefined): { comptes: CashOtherAccount[]; reste: number | null; detaille: boolean } {
+  const comptes = (autres ?? []).filter((c) => Math.abs(c.balance) >= 0.5);
+  const reste = cash - journaux - comptes.reduce((s, c) => s + c.balance, 0);
+  return { comptes, reste: Math.abs(reste) > 1 ? reste : null, detaille: autres !== undefined };
+}
+
+/** Position de trésorerie (/finance/treasury). Les champs facultatifs manquent aux noyaux antérieurs. */
+export interface TreasuryPosition {
+  /** Comptes des journaux de banque et de caisse. */
+  accounts: CashAccount[];
+  /** Somme des comptes des journaux. */
+  total: number;
+  as_of: string;
+  /** Trésorerie nette de la classe 5, le chiffre du billet du tableau de bord : total + cash_other. */
+  cash?: number;
+  cash_other?: CashOtherAccount[];
+  /** Seuil de sécurité ; null : seuil laissé à 0 (règle éteinte). */
+  cash_min?: number | null;
+}
+
 export interface Dashboard {
   companies: Ref[];
   as_of: string;
@@ -226,15 +279,21 @@ export interface Dashboard {
   revenue_fy: number;
   revenue_month: number;
   revenue_prev_month: number;
+  /** Même période du mois précédent : du 1er au même quantième (borné à sa fin). */
+  revenue_prev_month_to_date?: number;
   net_result_fy: number;
   ebe_fy: number;
   purchases_fy: number;
+  /** Trésorerie nette de la classe 5 : cash_by_journal + cash_other. */
   cash: number;
   cash_by_journal: CashAccount[];
+  cash_other?: CashOtherAccount[];
   receivables: OpenItems;
   payables: OpenItems;
+  /** Fenêtre commune avec cash_monthly : du début de l'exercice au mois de l'arrêté (douze derniers mois sur un noyau antérieur). */
   revenue_by_month: Array<{ month: string; amount: number }>;
   result_by_month: Array<{ month: string; amount: number }>;
+  kpi_series?: KpiSeries;
   by_activity: Array<{ analytic_account_id: number; name: string; income: number; expense: number; margin: number; margin_rate: number | null }>;
   debt: DebtSummary;
   dscr: number | null;
@@ -250,6 +309,8 @@ export interface Dashboard {
   ledger: { date_from: string; date_to: string; debit: number; credit: number; difference: number; balanced: boolean };
   expected_credit_loss: { total: number; rate_pct: number | null; by_bucket: Record<string, number>; rates: Record<string, number> };
   lock_date: string | null;
+  /** Clôture comptable du mois de l'arrêté faite pour chaque société couverte. */
+  month_closed?: boolean;
   decisions: Alert[];
   questions: Question[];
 }
