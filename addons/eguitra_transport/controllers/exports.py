@@ -48,8 +48,8 @@ class EguitraTransportExports(http.Controller):
                 rot.total_cost, rot.margin, rot.margin_rate, *[rot[f] for f, _l, _k in RATIOS],
                 rot.invoice_id.name or "",
             ])
-        # Totaux des seules colonnes additives (montants, volumes) ; pas des ratios (« / »).
-        additive = {i for i, (label, kind) in enumerate(columns) if kind in ("money", "number") and "/" not in label}
+        # Totaux des seules colonnes additives (montants, volumes, jours) ; pas des ratios (« / »).
+        additive = {i for i, (label, kind) in enumerate(columns) if kind in ("money", "number", "days") and "/" not in label}
         totals = ["TOTAL"] + [sum(r[i] or 0 for r in rows) if i in additive else None for i in range(1, len(columns))]
         sheet = {
             "title": "Rotations",
