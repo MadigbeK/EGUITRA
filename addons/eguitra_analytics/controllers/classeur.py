@@ -66,7 +66,7 @@ class _Writer:
                                      "valign": "top", "border": 1, "border_color": "#2B3A35"}),
             "text": book.add_format({"text_wrap": False, "valign": "top"}),
             "wrap": book.add_format({"text_wrap": True, "valign": "top"}),
-            "amount": book.add_format({"num_format": "# ##0;-# ##0", "valign": "top"}),
+            "amount": book.add_format({"num_format": "#,##0;-#,##0", "valign": "top"}),
             "pct": book.add_format({"num_format": "0.0", "valign": "top"}),
             "int": book.add_format({"num_format": "0", "valign": "top"}),
             "decimal": book.add_format({"num_format": "0.00", "valign": "top"}),

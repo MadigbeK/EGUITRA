@@ -118,8 +118,8 @@ def _plan_xlsx(dossier):
     book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
     head = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
     bold = book.add_format({"bold": True})
-    money = book.add_format({"num_format": "# ##0"})
-    money_bold = book.add_format({"num_format": "# ##0", "bold": True})
+    money = book.add_format({"num_format": "#,##0"})
+    money_bold = book.add_format({"num_format": "#,##0", "bold": True})
     ratio = book.add_format({"num_format": "0.00"})
     labels = analysis["labels"]
 
