@@ -8,6 +8,8 @@ présents (une synthèse n'est jamais que négative).
 
 import math
 
+from odoo.addons.eguitra_finance.formats import money_short
+
 SEVERITIES = ("critical", "high", "medium", "info", "positive")
 SEVERITY_WEIGHT = {"critical": 5.0, "high": 3.5, "medium": 2.0, "info": 1.0, "positive": 1.5}
 
@@ -41,16 +43,9 @@ def rank(items, limit=6):
 
 
 def gnf(value):
-    """Montant lisible en français : 1 234 567 890 -> « 1,23 Md GNF », 12 500 000 -> « 12,5 M GNF »."""
-    if value is None:
-        return "–"
-    sign = "-" if value < 0 else ""
-    value = abs(value)
-    for limit, suffix in ((1e9, "Md"), (1e6, "M"), (1e3, "k")):
-        if value >= limit:
-            text = f"{value / limit:,.2f}".rstrip("0").rstrip(".")
-            return f"{sign}{text.replace(',', ' ').replace('.', ',')} {suffix} GNF"
-    return f"{sign}{value:,.0f} GNF".replace(",", " ")
+    """Montant lisible, même règle que l'écran (eguitra_finance.formats.money_short) : 1 234 567 890 ->
+    « 1,23 Md GNF », 12 500 000 -> « 12,5 M GNF », 384 200 000 -> « 384 M GNF », 12 500 -> « 12 500 GNF »."""
+    return money_short(value)
 
 
 def pct(value, digits=1):

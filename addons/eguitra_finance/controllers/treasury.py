@@ -410,11 +410,17 @@ class EguitraFinanceTreasury(http.Controller):
     @api_route("/finance/treasury", profiles=FIN_READ)
     def position(self, **kw):
         comps = companies(kw)
-        rows = request.env["eguitra.finance.metrics"].sudo().cash_by_journal(comps, today())
+        metrics = request.env["eguitra.finance.metrics"].sudo()
+        day = today()
+        rows = metrics.cash_by_journal(comps, day)
         Line = request.env["account.bank.statement.line"].sudo()
         for row in rows:
             row["unreconciled"] = Line.search_count([("journal_id", "=", row["journal_id"]), ("is_reconciled", "=", False)])
-        return {"accounts": rows, "total": sum(r["balance"] for r in rows), "as_of": today()}
+        # total : comptes des journaux de banque et de caisse ; cash : trésorerie nette de la classe 5, le
+        # chiffre du billet du tableau de bord (total + cash_other) ; cash_min : seuil de sécurité.
+        return {"accounts": rows, "total": sum(r["balance"] for r in rows), "as_of": day,
+                "cash": metrics.cash(comps, day), "cash_other": metrics.cash_other(comps, day),
+                "cash_min": metrics.threshold_values(comps)["cash_min"]}
 
     @api_route("/finance/treasury/<int:journal_id>/lines", profiles=FIN_READ)
     def lines(self, journal_id, **kw):

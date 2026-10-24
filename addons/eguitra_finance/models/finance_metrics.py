@@ -228,6 +228,12 @@ class EguitraFinanceMetrics(models.AbstractModel):
         fy_start, fy_end = self.fiscal_year_bounds(main, today)
         m_start, m_end = month_bounds(today)
         pm_start, pm_end = month_bounds(m_start - timedelta(days=1))
+        # Même période du mois précédent (du 1er au même quantième, borné à sa fin) : un mois en cours se
+        # compare à elle, jamais au mois précédent entier.
+        pm_to_date = min(pm_start + timedelta(days=today.day - 1), pm_end)
+        # Fenêtre commune des séries mensuelles et des flux de trésorerie : du début de l'exercice au mois
+        # de l'arrêté.
+        window = (today.year - fy_start.year) * 12 + today.month - fy_start.month + 1
         receivables = self.open_items(companies, "asset_receivable", today)
         payables = self.open_items(companies, "liability_payable", today)
         activity_plan = self.env.ref("eguitra_base.analytic_plan_activite", raise_if_not_found=False)
@@ -246,6 +252,7 @@ class EguitraFinanceMetrics(models.AbstractModel):
             "revenue_fy": self.revenue(companies, fy_start, today),
             "revenue_month": self.revenue(companies, m_start, today),
             "revenue_prev_month": self.revenue(companies, pm_start, pm_end),
+            "revenue_prev_month_to_date": self.revenue(companies, pm_start, pm_to_date),
             "net_result_fy": statement["totals"].get("XI", 0.0),
             "ebe_fy": statement["totals"].get("XD", 0.0),
             "income_totals": statement["totals"],
@@ -254,8 +261,8 @@ class EguitraFinanceMetrics(models.AbstractModel):
             "cash_by_journal": self.cash_by_journal(companies, today),
             "receivables": receivables,
             "payables": payables,
-            "revenue_by_month": self.monthly_series(companies, 12, today, ["70"]),
-            "result_by_month": self.monthly_series(companies, 12, today, ["6", "7", "8"]),
+            "revenue_by_month": self.monthly_series(companies, max(window, 1), today, ["70"]),
+            "result_by_month": self.monthly_series(companies, max(window, 1), today, ["6", "7", "8"]),
             "by_activity": self.by_analytic_plan(companies, activity_plan, fy_start, today) if activity_plan else [],
             "debt": debt,
             "dscr": (ebe_12m / service_12m) if service_12m else None,

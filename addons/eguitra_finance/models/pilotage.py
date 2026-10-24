@@ -16,6 +16,7 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import api, models
 
+from ..formats import days, money_short, number
 from .finance_metrics import ACC_CODE, month_bounds
 from .syscohada import OPENING_JOURNAL
 
@@ -43,18 +44,14 @@ def _pct(part, whole):
 
 
 def _num(value, digits=1):
-    """12,5 (nombre à la française)."""
-    return f"{value:,.{digits}f}".replace(",", " ").replace(".", ",")
+    """12,5 (nombre à la française, arrondi comme l'écran)."""
+    return number(value, digits)
 
 
 def _money(value):
-    """Montant court : 1,25 Md GNF, 384 M GNF, 12 500 GNF."""
-    a = abs(value)
-    if a >= 1e9:
-        return f"{_num(value / 1e9, 2)} Md GNF"
-    if a >= 1e6:
-        return f"{_num(value / 1e6, 0)} M GNF"
-    return f"{_num(value, 0)} GNF"
+    """Montant court, même règle que l'écran (formats.money_short) : 1,25 Md GNF, 384 M GNF, 7,0 M GNF,
+    12 500 GNF."""
+    return money_short(value)
 
 
 def _de(word):
@@ -129,6 +126,90 @@ class EguitraFinancePilotage(models.AbstractModel):
             (list(companies.ids), accounts.ids, day),
         )
         return float(self.env.cr.fetchone()[0])
+
+    @api.model
+    def cash_other(self, companies, day):
+        """Comptes de la classe 5 hors comptes des journaux de banque et de caisse (virements de fonds
+        585, crédits de trésorerie 56, valeurs à encaisser…), à solde non nul : avec les comptes des
+        journaux, ils font la trésorerie nette du tableau de bord (cash), ligne à ligne."""
+        journal_accounts = self._treasury_accounts(companies)
+        self.env.flush_all()
+        self.env.cr.execute(
+            f"""SELECT aml.account_id, aml.company_id, COALESCE(SUM(aml.balance), 0)
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                 WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
+                   AND aml.date <= %(day)s AND {ACC_CODE} LIKE '5%%' AND NOT (aml.account_id = ANY(%(journal_accounts)s))
+              GROUP BY aml.account_id, aml.company_id
+                HAVING ABS(COALESCE(SUM(aml.balance), 0)) >= 0.5""",
+            {"companies": list(companies.ids), "day": day, "journal_accounts": journal_accounts.ids or [0]},
+        )
+        rows = self.env.cr.fetchall()
+        accounts = self.env["account.account"].sudo().browse([r[0] for r in rows])
+        names = {a.id: a for a in accounts}
+        result = []
+        for account_id, company_id, balance in rows:
+            company = self.env["res.company"].sudo().browse(company_id)
+            account = names[account_id].with_company(company)
+            result.append({"account_id": account_id, "code": account.code, "name": account.name,
+                           "company": company.name, "balance": float(balance)})
+        return sorted(result, key=lambda r: (r["company"], r["code"]))
+
+    @api.model
+    def kpi_series(self, companies, months, data):
+        """Séries mensuelles des chiffres clés, une valeur par mois de la fenêtre (fin de mois, ou jour
+        de l'arrêté pour le mois en cours) : EBE du mois, DSO et BFR de l'exercice à cette date, dette
+        financière comptable (16, 17) et DSCR (EBE des douze derniers mois / service de la dette). Le
+        dernier point reprend la valeur du chiffre clé, pour que la gravure finisse sur le nombre affiché.
+        None quand la valeur n'est pas calculable (pas de ventes, pas de service de la dette)."""
+        day = data["as_of"]
+        fy_start = data["fiscal_year"]["start"]
+        syscohada = self.env["eguitra.syscohada"]
+        Loan = self.env["eguitra.loan"]
+        if not months:
+            return {"months": [], "ebe": [], "dso": [], "bfr": [], "debt": [], "dscr": []}
+        first = date.fromisoformat(months[0] + "-01")
+        # EBE mensuel sur la fenêtre et les onze mois qui la précèdent (DSCR glissant sur douze mois).
+        ebe_by_month = {}
+        month = first - relativedelta(months=11)
+        while month.strftime("%Y-%m") <= months[-1]:
+            end = min(month_bounds(month)[1], day)
+            ebe_by_month[month.strftime("%Y-%m")] = syscohada.income_statement(companies, month, end)["totals"].get("XD", 0.0)
+            month += relativedelta(months=1)
+        keys = list(ebe_by_month)
+        series = {"months": months, "ebe": [], "dso": [], "bfr": [], "debt": [], "dscr": []}
+        self.env.flush_all()
+        for key in months:
+            start, end = month_bounds(date.fromisoformat(key + "-01"))
+            end = min(end, day)
+            self.env.cr.execute(
+                f"""SELECT COALESCE(SUM(CASE WHEN aa.account_type = 'asset_receivable' THEN aml.balance END), 0),
+                           COALESCE(SUM(CASE WHEN aa.account_type = 'liability_payable' THEN aml.balance END), 0),
+                           COALESCE(SUM(CASE WHEN {ACC_CODE} LIKE '3%%' THEN aml.balance END), 0),
+                           COALESCE(SUM(CASE WHEN {ACC_CODE} LIKE '16%%' OR {ACC_CODE} LIKE '17%%' THEN aml.balance END), 0)
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                     WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s) AND aml.date <= %(end)s""",
+                {"companies": list(companies.ids), "end": end},
+            )
+            receivables, payables, stocks, loans = (float(v) for v in self.env.cr.fetchone())
+            span = max((end - fy_start).days + 1, 1)
+            sales = self._invoiced_ttc(companies, "sale", fy_start, end) if end >= fy_start else 0.0
+            index = keys.index(key)
+            ebe_12m = sum(ebe_by_month[k] for k in keys[max(0, index - 11):index + 1])
+            debt = Loan.debt_summary(companies, end)
+            service = debt["service_last_12m"] or debt["service_next_12m"]
+            series["ebe"].append(ebe_by_month[key])
+            series["dso"].append(receivables / sales * span if sales > 0 else None)
+            series["bfr"].append(receivables + stocks + payables)
+            series["debt"].append(-loans)
+            series["dscr"].append(ebe_12m / service if service else None)
+        wc = data["working_capital"]
+        series["dso"][-1] = wc["dso"]
+        series["bfr"][-1] = wc["bfr"]
+        series["debt"][-1] = data["debt"].get("accounting_outstanding", series["debt"][-1])
+        series["dscr"][-1] = data["dscr"]
+        return series
 
     def _monthly_amounts(self, companies, date_from, date_to, prefixes):
         """Solde (débit - crédit) par mois AAAA-MM des comptes des préfixes."""
@@ -670,7 +751,12 @@ class EguitraFinancePilotage(models.AbstractModel):
             "ledger": self.ledger_totals(companies, fy_start, day),
             "expected_credit_loss": self.expected_credit_loss(companies, day, data["receivables"]["aging"]),
             "lock_date": max((d for d in companies.mapped("fiscalyear_lock_date") if d), default=None),
+            # Clôture comptable du mois de l'arrêté faite pour chaque société couverte.
+            "month_closed": all(c.fiscalyear_lock_date and c.fiscalyear_lock_date >= month_bounds(day)[1]
+                                for c in companies),
+            "cash_other": self.cash_other(companies, day),
         })
+        data["kpi_series"] = self.kpi_series(companies, [m["month"] for m in data["revenue_by_month"]], data)
         data["decisions"] = [a for a in data["alerts"] if a.get("status", "alert") == "alert"][:6]
         data["questions"] = self.questions(companies, data)
         return data
@@ -744,10 +830,10 @@ class EguitraFinancePilotage(models.AbstractModel):
         # 5. DSO
         dso = wc["dso"]
         target = th["dso_target_days"]
-        reading = f"Cible : {_num(target, 0)} jours. " if target else "Cible de recouvrement non fixée. "
+        reading = f"Cible : {days(target)}. " if target else "Cible de recouvrement non fixée. "
         if wc["daily_sales_ttc"]:
             reading += f"Chaque jour de retard immobilise environ {_money(wc['daily_sales_ttc'])}."
-        q("dso", "À quelle vitesse suis-je payé ?", "–" if dso is None else f"{_num(dso, 0)} jours",
+        q("dso", "À quelle vitesse suis-je payé ?", days(dso),
           "grey" if dso is None or not target else
           "green" if dso <= target else "orange" if dso <= target + 15 else "red", reading,
           unset=dso is not None and not target)
@@ -923,9 +1009,9 @@ class EguitraFinancePilotage(models.AbstractModel):
         if wc["overdue_share_pct"] is not None:
             text += f", dont {_num(wc['overdue_share_pct'])} % échues"
         if wc["dso"] is not None:
-            text += f" ; le délai moyen de recouvrement de {_num(wc['dso'], 0)} jours"
+            text += f" ; le délai moyen de recouvrement de {days(wc['dso'])}"
             if target:
-                text += f" {'dépasse' if wc['dso'] > target else 'respecte'} la cible de {_num(target, 0)} jours"
+                text += f" {'dépasse' if wc['dso'] > target else 'respecte'} la cible de {days(target)}"
         text += (f". Dettes fournisseurs échues : {_money(k['payables_overdue'])} ; besoin en fonds de roulement : "
                  f"{_money(wc['bfr'])}.")
         paragraphs.append(text)
