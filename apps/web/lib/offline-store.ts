@@ -59,8 +59,21 @@ export const cache = {
   clear: () => run("cache", "readwrite", (s) => s.clear()),
 };
 
+/**
+ * Date du dernier envoi réussi au bureau, gardée avec les listes de l'utilisateur : la barre d'état la
+ * montre dès l'ouverture, et elle disparaît avec elles (autre compte, déconnexion).
+ */
+export const dernierEnvoi = {
+  get: async (): Promise<Date | null> => {
+    const iso = await cache.get<string>("last_sync").catch(() => undefined);
+    const d = iso ? new Date(iso) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : null;
+  },
+  set: (d: Date) => cache.set("last_sync", d.toISOString()).catch(() => undefined),
+};
+
 /** Nom du cache du service worker (public/mobile-sw.js, constante VERSION). */
-const SHELL_CACHE = "rotations-v6";
+const SHELL_CACHE = "rotations-v7";
 
 /**
  * Les listes gardées sur le téléphone n'appartiennent qu'à un utilisateur : à l'ouverture par un autre

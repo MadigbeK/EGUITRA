@@ -4,7 +4,7 @@
  * Les appels à l'API ne sont jamais mis en cache ici : les saisies hors réseau vivent dans
  * IndexedDB et partent à la synchronisation.
  */
-const VERSION = "rotations-v6"; // aussi dans lib/offline-store.ts (effacé à la déconnexion)
+const VERSION = "rotations-v7"; // aussi dans lib/offline-store.ts (effacé à la déconnexion)
 const SHELL = "/mobile";
 
 self.addEventListener("install", (event) => {

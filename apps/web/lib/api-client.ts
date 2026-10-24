@@ -13,6 +13,22 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Pas de réponse dans le délai demandé (réseau faible) : la requête est abandonnée. Ce n'est pas une
+ * ApiError (aucune réponse du noyau) : l'appelant la traite comme une coupure du réseau.
+ */
+export class DelaiDepasse extends Error {
+  constructor(public delai: number) {
+    super("Le réseau ne répond pas à temps.");
+    this.name = "DelaiDepasse";
+  }
+}
+
+/** Options d'un appel. timeout : délai de réponse en millisecondes ; sans lui, l'appel attend le navigateur. */
+export interface AppelOptions {
+  timeout?: number;
+}
+
 /** Page où l'utilisateur au mot de passe provisoire choisit le sien. */
 const PAGE_MOT_DE_PASSE = "/compte/mot-de-passe";
 
@@ -43,18 +59,35 @@ async function parse(res: Response) {
   return body;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`/api/odoo${path}`, { headers: { Accept: "application/json", ...appHeader() } });
-  return (await parse(res)) as T;
+/**
+ * Requête à la passerelle et lecture de la réponse. Avec un délai, la requête (corps de la réponse
+ * compris) est abandonnée à son terme et l'appel lève DelaiDepasse ; sans délai, rien ne change.
+ */
+async function appeler(path: string, init: RequestInit, timeout?: number): Promise<unknown> {
+  if (!timeout) return parse(await fetch(`/api/odoo${path}`, init));
+  const abandon = new AbortController();
+  const minute = setTimeout(() => abandon.abort(), timeout);
+  try {
+    return await parse(await fetch(`/api/odoo${path}`, { ...init, signal: abandon.signal }));
+  } catch (e) {
+    if (abandon.signal.aborted) throw new DelaiDepasse(timeout);
+    throw e;
+  } finally {
+    clearTimeout(minute);
+  }
 }
 
-export async function apiSend<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api/odoo${path}`, {
+export async function apiGet<T>(path: string, options?: AppelOptions): Promise<T> {
+  return (await appeler(path, { headers: { Accept: "application/json", ...appHeader() } }, options?.timeout)) as T;
+}
+
+export async function apiSend<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", path: string, body?: unknown, options?: AppelOptions): Promise<T> {
+  const init: RequestInit = {
     method,
     headers: { "Content-Type": "application/json", Accept: "application/json", ...appHeader() },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  return (await parse(res)) as T;
+  };
+  return (await appeler(path, init, options?.timeout)) as T;
 }
 
 /** Envoi d'un fichier (pièce jointe, relevé bancaire) en multipart. */

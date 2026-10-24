@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Monogramme } from "@/components/brand";
-import { AlertTriangle, Check, CloudOff, Loader2, LogOut, Pencil, RefreshCw, Trash2, Truck } from "@/components/icons";
+import { AlertTriangle, Check, CloudOff, Loader2, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
 import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, classesBouton, cx, demanderConfirmation, tonEtat, useMouvementReduit } from "@/components/ui";
-import { ApiError, apiGet, apiSend } from "@/lib/api-client";
-import { cache, claimCache, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
+import { ApiError, DelaiDepasse, apiGet, apiSend } from "@/lib/api-client";
+import { cache, claimCache, dernierEnvoi, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
 import { INSECABLE, fmtDate, fmtInt, fmtM3, fmtVolume, pluriel } from "@/lib/format";
 
 interface Referentials {
@@ -76,6 +76,25 @@ interface Bilan {
   created: number;
   errors: number;
   echec: { reseau: boolean; message: string } | null;
+}
+
+/**
+ * Délais de réponse du bureau : 8 s pour une liste (la dernière connue reste affichée), 20 s pour un
+ * envoi de saisies (un envoi abandonné repart tel quel : le bureau reconnaît une saisie déjà reçue).
+ */
+const DELAI_LISTE = 8_000;
+const DELAI_ENVOI = 20_000;
+
+/** Au-delà, un échange réussi dit aussi un réseau faible. */
+const ECHANGE_LENT = 5_000;
+
+/**
+ * Dernier échange réel avec le bureau. Le navigateur dit « en ligne » dès qu'il a une liaison ; c'est
+ * l'échange qui dit si elle passe. ok : une réponse est arrivée (un refus du bureau compte).
+ */
+interface Echange {
+  ok: boolean;
+  lent: boolean;
 }
 
 /** Bouton d'enregistrement : au repos, pendant l'écriture sur le téléphone, puis 1,5 s de confirmation. */
@@ -246,6 +265,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const [refs, setRefs] = useState<Referentials | null | undefined>(undefined);
   const [items, setItems] = useState<QueuedRotation[]>([]);
   const [sent, setSent] = useState<SentRotation[] | null>(null);
+  // Ni liste gardée ni réponse du bureau : « Envoyées » le dit au lieu d'attendre sans fin.
+  const [sentIndisponible, setSentIndisponible] = useState(false);
+  const [echange, setEchange] = useState<Echange | null>(null);
   const [form, setForm] = useState<Form>(blank);
   const [showCosts, setShowCosts] = useState(false);
   const [notice, setNotice] = useState<RetourBandeau | null>(null);
@@ -267,6 +289,26 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
   const mine = items.filter((i) => i.user_id === me.id);
   const others = items.length - mine.length;
+  const faible = online && echange !== null && (!echange.ok || echange.lent);
+  const echecRef = useRef(false);
+
+  /** Appel au bureau qui note le dernier échange réel, pour la pastille (« Réseau faible »). */
+  const echanger = useCallback(async <T,>(appel: () => Promise<T>): Promise<T> => {
+    const debut = Date.now();
+    const noter = (ok: boolean) => {
+      echecRef.current = !ok;
+      setEchange({ ok, lent: Date.now() - debut > ECHANGE_LENT });
+    };
+    try {
+      const res = await appel();
+      noter(true);
+      return res;
+    } catch (e) {
+      // Une réponse du bureau (refus, session expirée) prouve que le réseau passe.
+      noter(e instanceof ApiError);
+      throw e;
+    }
+  }, []);
 
   useEffect(() => {
     vueRef.current = view;
@@ -305,27 +347,32 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       return;
     }
     try {
-      const fresh = keepReferentials(await apiGet<Referentials>("/transport/referentials"));
+      const fresh = keepReferentials(await echanger(() => apiGet<Referentials>("/transport/referentials", { timeout: DELAI_LISTE })));
       setRefs(fresh);
       await cache.set("referentials", fresh);
     } catch {
       if (!cached) setRefs(null);
     }
-  }, []);
+  }, [echanger]);
 
   const loadSent = useCallback(async () => {
     const cached = await cache.get<SentRotation[]>("sent").catch(() => undefined);
     if (cached) setSent(cached);
-    if (!navigator.onLine) return;
+    if (!navigator.onLine) {
+      if (!cached) setSentIndisponible(true);
+      return;
+    }
     try {
-      const res = await apiGet<{ items: SentRotation[] }>("/transport/rotations?limit=30");
+      const res = await echanger(() => apiGet<{ items: SentRotation[] }>("/transport/rotations?limit=30", { timeout: DELAI_LISTE }));
       const items = res.items.map(keepSent);
       setSent(items);
+      setSentIndisponible(false);
       await cache.set("sent", items);
     } catch {
-      /* hors réseau : on garde la dernière liste connue */
+      // Hors réseau ou réseau trop lent : la dernière liste connue reste affichée.
+      if (!cached) setSentIndisponible(true);
     }
-  }, []);
+  }, [echanger]);
 
   /**
    * Envoi des saisies en attente. `origine` dit qui le demande : « saisie » (l'enregistrement dit
@@ -344,9 +391,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     try {
       for (let i = 0; i < pending.length; i += 50) {
         const batch = pending.slice(i, i + 50);
-        const res = await apiSend<{ results: Array<{ client_uuid: string | null; status: "created" | "exists" | "error"; message?: string }> }>(
-          "POST", "/transport/sync", { rotations: batch.map((b) => ({ ...b.payload, client_uuid: b.client_uuid })) },
-        );
+        const res = await echanger(() => apiSend<{ results: Array<{ client_uuid: string | null; status: "created" | "exists" | "error"; message?: string }> }>(
+          "POST", "/transport/sync", { rotations: batch.map((b) => ({ ...b.payload, client_uuid: b.client_uuid })) }, { timeout: DELAI_ENVOI },
+        ));
         for (const r of res.results) {
           if (!r.client_uuid) continue;
           if (r.status === "error") {
@@ -359,7 +406,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           }
         }
       }
-      setLastSync(new Date());
+      const envoi = new Date();
+      setLastSync(envoi);
+      void dernierEnvoi.set(envoi);
       if (errors) {
         // Les refus du bureau gardent le bandeau du haut ; sur « Nouvelle », la barre le dit aussi.
         const texte = `${pluriel(errors, "saisie refusée : corrigez-la", "saisies refusées : corrigez-les")} dans « À envoyer ».`;
@@ -370,7 +419,10 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       }
     } catch (e) {
       const reseau = !(e instanceof ApiError);
-      echec = { reseau, message: e instanceof ApiError ? e.message : "Réseau indisponible : les saisies partiront au retour du réseau." };
+      const message = e instanceof ApiError ? e.message : e instanceof DelaiDepasse
+        ? "Réseau faible : le bureau n'a pas répondu à temps. Les saisies repartiront seules."
+        : "Réseau indisponible : les saisies partiront au retour du réseau.";
+      echec = { reseau, message };
       if (origine !== "saisie") signaler({ tone: "warn", text: echec.message, reseau });
     } finally {
       busy.current = false;
@@ -379,12 +431,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       void loadSent();
     }
     return { created, errors, echec };
-  }, [loadQueue, loadSent, me.id, annoncer, signaler]);
+  }, [loadQueue, loadSent, me.id, annoncer, signaler, echanger]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
     void (async () => {
       await claimCache(me.id); // listes d'un autre compte effacées avant tout affichage
+      setLastSync(await dernierEnvoi.get());
       void loadQueue();
       void loadRefs();
       void loadSent();
@@ -398,7 +451,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     const down = () => setOnline(false);
     window.addEventListener("online", up);
     window.addEventListener("offline", down);
-    const timer = window.setInterval(() => void sync(), 120_000);
+    // Toutes les deux minutes : envoi des saisies en attente ; sans rien à envoyer, après un échange
+    // manqué, la liste « Envoyées » sert de nouvel essai pour savoir si le réseau est revenu.
+    const timer = window.setInterval(() => {
+      void sync().then((bilan) => {
+        if (!bilan && echecRef.current) void loadSent();
+      });
+    }, 120_000);
     return () => {
       window.removeEventListener("online", up);
       window.removeEventListener("offline", down);
@@ -538,7 +597,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     ["envoyees", "Envoyées", null],
   ];
 
-  const reseau = syncing ? "Envoi en cours" : online ? "En ligne" : "Hors réseau";
+  const reseau = syncing ? "Envoi en cours" : !online ? "Hors réseau" : faible ? "Réseau faible" : "En ligne";
   const etiquettePastille = `${reseau}, ${aEnvoyer ? pluriel(aEnvoyer, "saisie à envoyer", "saisies à envoyer") : "rien à envoyer"}${lastSync ? `, dernier envoi ${quand(lastSync)}` : ""}. Ouvrir « À envoyer ».`;
 
   // Ligne d'état de la barre d'action, au repos : réseau, saisies en attente, dernier envoi.
@@ -546,6 +605,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     ? { icone: <Loader2 className="h-4 w-4 animate-spin text-muted" />, texte: "Envoi au bureau…" }
     : !online
       ? { icone: <CloudOff className="h-4 w-4 text-warn" />, texte: aEnvoyer ? `Hors réseau, ${aEnvoyer} à envoyer` : "Hors réseau : la saisie attendra le réseau" }
+      : faible
+        ? { icone: <Wifi className="h-4 w-4 text-warn" />, texte: aEnvoyer ? `Réseau faible, ${aEnvoyer} à envoyer${lastSync ? `, dernier envoi : ${quand(lastSync)}` : ""}` : "Réseau faible : l'envoi peut tarder" }
       : aEnvoyer
         ? { icone: <RefreshCw className="h-4 w-4 text-warn" />, texte: `${aEnvoyer} à envoyer${lastSync ? `, dernier envoi : ${quand(lastSync)}` : ""}` }
         : lastSync
@@ -565,13 +626,13 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
             <h1 className="font-display text-[19px] font-bold">Rotations</h1>
             <div className="truncate text-[13px] text-white/95">{me.name}</div>
           </div>
-          <span role="status" className="sr-only">{online ? "En ligne" : "Hors réseau : les saisies restent sur le téléphone."}</span>
+          <span role="status" className="sr-only">{!online ? "Hors réseau : les saisies restent sur le téléphone." : faible ? "Réseau faible : l'envoi peut tarder." : "En ligne"}</span>
           {/* Pastille du réseau : l'état et le nombre de saisies en attente ; un toucher ouvre « À envoyer ». */}
           <button type="button" onClick={() => ouvrir("attente")} aria-label={etiquettePastille} className="grid min-h-12 flex-none place-items-center rounded-full">
-            <span className={cx("inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 text-[13px] font-semibold", aEnvoyer ? "pr-1" : "pr-2.5", online ? "bg-white/15 text-white" : "bg-or text-foret")}>
-              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : online ? <span key={aEnvoyer} aria-hidden className={cx("h-2 w-2 rounded-full bg-menthe", aEnvoyer > 0 && "n-pouls")} style={aEnvoyer > 0 ? POULS : undefined} /> : <CloudOff className="h-3.5 w-3.5" />}
-              {syncing ? "Envoi…" : online ? "En ligne" : "Hors réseau"}
-              {aEnvoyer > 0 && <span key={`n${aEnvoyer}`} className={cx("n-surgir grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-compteur text-[12.5px] font-bold", online ? "bg-or text-foret" : "bg-foret text-white")}>{aEnvoyer}</span>}
+            <span className={cx("inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 text-[13px] font-semibold", aEnvoyer ? "pr-1" : "pr-2.5", online && !faible ? "bg-white/15 text-white" : "bg-or text-foret")}>
+              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : !online ? <CloudOff className="h-3.5 w-3.5" /> : faible ? <Wifi className="h-3.5 w-3.5" /> : <span key={aEnvoyer} aria-hidden className={cx("h-2 w-2 rounded-full bg-menthe", aEnvoyer > 0 && "n-pouls")} style={aEnvoyer > 0 ? POULS : undefined} />}
+              {syncing ? "Envoi…" : !online ? "Hors réseau" : faible ? "Réseau faible" : "En ligne"}
+              {aEnvoyer > 0 && <span key={`n${aEnvoyer}`} className={cx("n-surgir grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-compteur text-[12.5px] font-bold", online && !faible ? "bg-or text-foret" : "bg-foret text-white")}>{aEnvoyer}</span>}
             </span>
           </button>
           <button type="button" onClick={logout} aria-label="Se déconnecter" className="-mr-2 grid h-12 w-12 flex-none place-items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white">
@@ -712,7 +773,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
         {view === "envoyees" && (
           <div className="space-y-2">
             {!online && <Notice tone="warn">Hors réseau : dernière liste connue.</Notice>}
-            {sent === null ? <p role="status" className="py-8 text-center text-sm text-muted">Chargement des rotations…</p> : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : (
+            {sent === null ? (sentIndisponible
+              ? <Notice tone="warn">Liste indisponible : le bureau n&apos;a pas pu être joint. Elle s&apos;affichera au retour du réseau.</Notice>
+              : <p role="status" className="py-8 text-center text-sm text-muted">Chargement des rotations…</p>) : sent.length === 0 ? <p className="py-8 text-center text-sm text-muted">Aucune rotation.</p> : (
               <ul className={cx(FEUILLE, "divide-y divide-line px-4")}>
                 {sent.map((r) => (
                   <li key={r.id} className="flex items-start justify-between gap-3 py-3.5 text-sm">
