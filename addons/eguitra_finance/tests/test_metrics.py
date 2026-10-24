@@ -21,7 +21,9 @@ class TestMetrics(FinanceDataMixin, TransactionCase):
         self.assertEqual(data["payables"]["total"], 236_000_000)
         self.assertEqual(data["net_result_fy"], 800_000_000, "Résultat : 1 000 M de services moins 200 M de charges")
         self.assertEqual(data["revenue_by_month"][-1]["amount"], 1_000_000_000)
-        self.assertEqual(len(data["revenue_by_month"]), 12)
+        start = data["fiscal_year"]["start"]
+        self.assertEqual(len(data["revenue_by_month"]), (self.today.year - start.year) * 12 + self.today.month - start.month + 1,
+                         "Fenêtre commune avec les flux de trésorerie : du début de l'exercice au mois de l'arrêté")
 
     def test_compte_de_resultat_syscohada(self):
         statement = self.env["eguitra.syscohada"].income_statement(
