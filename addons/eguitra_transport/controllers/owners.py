@@ -11,6 +11,7 @@ from odoo.addons.eguitra_finance.controllers.exporting import export_meta, table
 
 from ..models.ownership import OWNERSHIPS
 from ..models.settings import OWNER_COST_BASES
+from ..nombres import fixe, fmt_money, fmt_rate, fmt_volume
 from .transport import ACCOUNTING, READ, SETTINGS, _get, _move_ref, _partner, _ref
 
 STATES = {"draft": "Établi", "posted": "Pièces préparées"}
@@ -18,7 +19,7 @@ KINDS = {"charge": "Charge de l'ensemble", "commission": "Commission", "owner": 
 
 
 def _money(value, currency="GNF"):
-    return f"{value:,.0f} {currency}".replace(",", " ")
+    return fmt_money(value, currency)
 
 
 def _day(value):
@@ -97,8 +98,8 @@ def statement_context(st):
                     ("Manquants à charge", m(-st.shortage_cost), False),
                     ("Charges mensuelles de l'ensemble", m(-st.vehicle_charges), False)]
     account.append(("Marge de l'ensemble", m(st.margin), True))
-    shares = [(line.partner_id.display_name, f"{line.rate:g} % du chiffre d'affaires brut".replace(".", ","),
-               m(line.amount)) for line in st.line_ids if line.kind == "commission"]
+    shares = [(line.partner_id.display_name, f"{fmt_rate(line.rate)} du chiffre d'affaires brut", m(line.amount))
+              for line in st.line_ids if line.kind == "commission"]
     shares.append((owner, "Résiduel de la marge", m(st.owner_amount)))
     if managed:
         label = f"Part de {owner}"
@@ -113,17 +114,17 @@ def statement_context(st):
         "header": [("Ensemble", st.vehicle_id.display_name),
                    ("Immatriculations", " / ".join(p for p in (st.vehicle_id.tractor_plate, st.vehicle_id.trailer_plate) if p) or "–"),
                    ("Propriétaire", owner), ("Exploitant", st.company_id.name),
-                   ("Rotations", str(st.rotation_count)), ("Volume livré", f"{st.volume:,.3f} m³".replace(",", " ").replace(".", ","))],
+                   ("Rotations", str(st.rotation_count)), ("Volume livré", fmt_volume(st.volume))],
         "account": account,
         "basis_note": (f"Base des charges : {dict(OWNER_COST_BASES).get(st.basis, '–').lower()}. "
                        f"Charges déclarées {m(st.declared_costs)}, "
                        f"charges comptabilisées {m(st.booked_costs)}."),
-        "charges": [(line.name, m(line.monthly), f"{line.months:.2f}".replace(".", ","), m(line.amount))
+        "charges": [(line.name, m(line.monthly), fixe(line.months, 2), m(line.amount))
                     for line in st.line_ids if line.kind == "charge"],
         "shares": shares, "result_label": label, "result": m(st.owner_amount), "result_negative": st.owner_amount < 0,
         "result_note": note,
         "rotations": [(r.name, _day(r.date_loading), r.route_id.display_name, r.partner_id.display_name,
-                       f"{(r.volume_delivered or r.volume_loaded):,.3f}".replace(",", " ").replace(".", ","),
+                       fmt_volume(r.volume_delivered or r.volume_loaded, unit=False),
                        m(r.revenue), m(r.total_cost)) for r in st.rotation_ids.sorted("date_loading")],
     }
 

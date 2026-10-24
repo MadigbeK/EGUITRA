@@ -31,6 +31,7 @@ from datetime import date, timedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
+from ..nombres import fmt_rate
 from .settings import OWNER_COST_BASES
 
 OWNERSHIPS = [("own", "Propre"), ("managed", "Géré pour un propriétaire")]
@@ -248,9 +249,8 @@ class EguitraTransportOwnerStatement(models.Model):
                     "months": months, "amount": amount}))
             names = {p.id: p.display_name for p in self.env["res.partner"].browse([c["partner_id"] for c in commission_lines])}
             for seq, line in enumerate(commission_lines, 100):
-                rate = f"{line['rate']:g}".replace(".", ",")
-                lines.append(Command.create(dict(line, sequence=seq, name=f"{names[line['partner_id']]} : {rate} % du "
-                                                                             "chiffre d'affaires brut")))
+                name = f"{names[line['partner_id']]} : {fmt_rate(line['rate'])} du chiffre d'affaires brut"
+                lines.append(Command.create(dict(line, sequence=seq, name=name)))
             lines.append(Command.create({"kind": "owner", "sequence": 1000, "partner_id": owner.id,
                                          "name": f"{owner.display_name} : résiduel de la marge", "amount": owner_amount}))
             st.write({

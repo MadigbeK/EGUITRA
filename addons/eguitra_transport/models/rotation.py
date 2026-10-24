@@ -48,7 +48,8 @@ TAX_TRIGGERS = {"volume_loaded", "volume_delivered", "route_id", "product_id", "
 
 
 def fmt_m3(value):
-    """12,345 m³ : volume à la française, trois décimales."""
+    """12,345 m³ : volume des libellés de facture, à trois décimales comme la quantité facturée (les
+    relevés et les messages écrivent deux décimales, nombres.fmt_volume)."""
     return f"{value:,.3f}".replace(",", " ").replace(".", ",") + " m³"
 
 

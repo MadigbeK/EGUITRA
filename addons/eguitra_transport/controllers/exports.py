@@ -15,7 +15,7 @@ STATES = {"draft": "Saisie", "done": "Validée", "invoiced": "Facturée", "cance
 # pneumatiques). Champs du modèle : un nom erroné lève une erreur au lieu de faire disparaître la colonne.
 RATIOS = [
     ("distance_km", "Distance (km)", "number"), ("fuel_liters", "Carburant (L)", "number"),
-    ("duration_days", "Durée (j)", "number"), ("revenue_per_km", "CA / km", "money"),
+    ("duration_days", "Durée (j)", "days"), ("revenue_per_km", "CA / km", "money"),
     ("cost_per_km", "Coût / km", "money"), ("cost_per_liter", "Coût / litre", "money"),
     ("fuel_per_100km", "L / 100 km", "number"),
 ]

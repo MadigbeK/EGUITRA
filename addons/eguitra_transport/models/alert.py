@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
-from .rotation import fmt_m3
+from ..nombres import fmt_money, fmt_volume
 
 
 class EguitraAlertThreshold(models.Model):
@@ -53,12 +53,12 @@ class EguitraAlertThreshold(models.Model):
             if rows and excess > (t.value or 0.0):
                 count = sum(r["excess_rotations"] for r in rows)
                 value = sum(r["shortage_value"] for r in rows)
-                worst = ", ".join(f"{r['label']} ({fmt_m3(r['shortage_excess'])})"
+                worst = ", ".join(f"{r['label']} ({fmt_volume(r['shortage_excess'])})"
                                   for r in sorted(rows, key=lambda r: -r["shortage_excess"])[:3])
-                valued = f", valorisés {value:,.0f} GNF".replace(",", " ") if value else ", non valorisés (prix du produit à saisir)"
+                valued = f", valorisés {fmt_money(value)}" if value else ", non valorisés (prix du produit à saisir)"
                 alerts.append(self._alert(
                     t, "Manquants au-delà de la tolérance",
-                    f"{count} rotation(s), {fmt_m3(excess)} hors tolérance sur 30 jours{valued}. Chauffeurs : {worst}.",
+                    f"{count} rotation(s), {fmt_volume(excess)} hors tolérance sur 30 jours{valued}. Chauffeurs : {worst}.",
                     excess, "/transport/manquants",
                 ))
         return alerts

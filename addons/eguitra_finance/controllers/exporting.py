@@ -4,7 +4,9 @@ période, date d'export), textes toujours écrits comme du texte (jamais une for
 Un tableau (« sheet ») est un dict : title, meta [(libellé, valeur)], columns [(libellé, type)],
 rows [[valeurs]], totals [valeurs] ou None, et facultativement styles (liste parallèle à rows :
 None, "total" ou "header" pour les lignes de regroupement). Types : text, money, number, percent,
-int, date.
+int, days (délai à une décimale), date. Milliers groupés par « #,##0 » : Excel l'écrit avec le
+séparateur du poste (« 1 234 568 » en français), alors que « # ##0 » n'est qu'une espace littérale
+(« 1234 568 »).
 """
 
 import csv
@@ -39,6 +41,8 @@ def _csv_value(value, kind):
         return f"{float(value):.0f}"
     if kind in ("number", "percent"):
         return f"{float(value):.2f}".replace(".", ",")
+    if kind == "days":
+        return f"{float(value):.1f}".replace(".", ",")
     if isinstance(value, (date, datetime)):
         return value.strftime("%d/%m/%Y")
     return csv_text(value)
@@ -75,19 +79,22 @@ def workbook(sheets):
     label = book.add_format({"bold": True, "font_color": "#555555"})
     head = book.add_format({"bold": True, "bg_color": "#10133A", "font_color": "#FFFFFF", "border": 1, "text_wrap": True})
     formats = {
-        None: {"money": book.add_format({"num_format": "# ##0"}), "int": book.add_format({"num_format": "0"}),
-               "number": book.add_format({"num_format": "# ##0.00"}), "percent": book.add_format({"num_format": "0.0"}),
+        None: {"money": book.add_format({"num_format": "#,##0"}), "int": book.add_format({"num_format": "0"}),
+               "number": book.add_format({"num_format": "#,##0.00"}), "percent": book.add_format({"num_format": "0.0"}),
+               "days": book.add_format({"num_format": "#,##0.0"}),
                "date": book.add_format({"num_format": "dd/mm/yyyy"}), "text": None},
-        "total": {"money": book.add_format({"bold": True, "num_format": "# ##0", "top": 2}),
+        "total": {"money": book.add_format({"bold": True, "num_format": "#,##0", "top": 2}),
                   "int": book.add_format({"bold": True, "num_format": "0", "top": 2}),
-                  "number": book.add_format({"bold": True, "num_format": "# ##0.00", "top": 2}),
+                  "number": book.add_format({"bold": True, "num_format": "#,##0.00", "top": 2}),
                   "percent": book.add_format({"bold": True, "num_format": "0.0", "top": 2}),
+                  "days": book.add_format({"bold": True, "num_format": "#,##0.0", "top": 2}),
                   "date": book.add_format({"bold": True, "num_format": "dd/mm/yyyy", "top": 2}),
                   "text": book.add_format({"bold": True, "top": 2})},
-        "header": {"money": book.add_format({"bold": True, "num_format": "# ##0", "bg_color": "#EEF0F6"}),
+        "header": {"money": book.add_format({"bold": True, "num_format": "#,##0", "bg_color": "#EEF0F6"}),
                    "int": book.add_format({"bold": True, "bg_color": "#EEF0F6"}),
-                   "number": book.add_format({"bold": True, "num_format": "# ##0.00", "bg_color": "#EEF0F6"}),
+                   "number": book.add_format({"bold": True, "num_format": "#,##0.00", "bg_color": "#EEF0F6"}),
                    "percent": book.add_format({"bold": True, "num_format": "0.0", "bg_color": "#EEF0F6"}),
+                   "days": book.add_format({"bold": True, "num_format": "#,##0.0", "bg_color": "#EEF0F6"}),
                    "date": book.add_format({"bold": True, "num_format": "dd/mm/yyyy", "bg_color": "#EEF0F6"}),
                    "text": book.add_format({"bold": True, "bg_color": "#EEF0F6"})},
     }
@@ -125,7 +132,7 @@ def workbook(sheets):
                 _cell(sheet, r, c, value, kind, formats["total"])
         sheet.freeze_panes(header_row + 1, 0)
         for c, (_c, kind) in enumerate(columns):
-            sheet.set_column(c, c, 16 if kind in ("money", "date", "number") else 10 if kind in ("int", "percent") else 30)
+            sheet.set_column(c, c, 16 if kind in ("money", "date", "number") else 10 if kind in ("int", "percent", "days") else 30)
     book.close()
     return out.getvalue()
 
