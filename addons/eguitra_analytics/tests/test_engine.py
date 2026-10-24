@@ -165,3 +165,18 @@ class TestBenford(BaseCase):
         self.assertEqual(benford.leading_digits(999_999.99), 9)
         self.assertEqual(benford.leading_digits(5.5, 2), 55)
         self.assertEqual(benford.first_two_digits([1000 * 10 ** (i / 250) for i in range(1000)])["n"], 1000)
+
+
+@tagged("post_install", "-at_install")
+class TestFormatsConstats(BaseCase):
+    """Constats du groupe : délais et montants écrits comme dans l'application web (format.ts)."""
+
+    def test_delais_a_une_decimale(self):
+        from ..engine.insights import gnf
+        from ..models.groupe import _days
+
+        self.assertEqual(_days(56.5), "56,5 jours")
+        self.assertEqual(_days(56), "56,0 jours", "Toujours une décimale, comme fmtJours")
+        self.assertEqual(_days(1.2), "1,2 jour")
+        self.assertEqual(_days(None), "–")
+        self.assertEqual(gnf(500_000), "500 000 GNF", "Jamais « k »")

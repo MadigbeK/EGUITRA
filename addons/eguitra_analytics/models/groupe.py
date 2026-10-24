@@ -31,6 +31,7 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import api, models
 
+from odoo.addons.eguitra_finance.formats import days
 from odoo.addons.eguitra_finance.models.analytic import ACTIVITY_PLAN, account_shares
 from odoo.addons.eguitra_finance.models.finance_metrics import ACC_CODE
 from odoo.addons.eguitra_finance.models.pilotage import DOUBTFUL_DAYS
@@ -94,9 +95,8 @@ def _num(value, digits=0):
 
 
 def _days(value):
-    if value is None:
-        return "–"
-    return f"{_num(value)} jour{'s' if abs(round(value)) >= 2 else ''}"
+    """Délai à une décimale, même règle que l'écran (eguitra_finance.formats.days) : « 56,5 jours »."""
+    return days(value)
 
 
 def _pct_of(part, whole):
