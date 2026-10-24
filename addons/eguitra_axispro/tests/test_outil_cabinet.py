@@ -374,3 +374,48 @@ class TestOutilDuCabinet(ApiCase):
                          "Le responsable confie et reprend les compartiments")
         status, body = self.call("POST", path, {"compartment_id": c3.id, "user_id": None}, token=responsable)
         self.assertEqual(status, 200, body)
+
+    def test_liste_et_ce_qui_bloque_le_prochain_gate(self):
+        self.policy.action_activate()
+        dossier = self.env["axispro.dossier"].create({
+            "name": "Rizerie", "promoter_id": self.promoter.id, "company_id": self.cabinet.id,
+            "sector": "Agro-industrie", "location": "Kankan", "consultant_id": self.responsable.id,
+        })
+        token = self.open_session("responsable3", app="axispro")["access_token"]
+        status, rows = self.call("GET", "/axispro/dossiers", token=token)
+        self.assertEqual(status, 200, rows)
+        row = next(r for r in rows if r["id"] == dossier.id)
+        self.assertEqual((row["recommendation"], row["method_recommendation"], row["pending_in_scope"]),
+                         ("pending", "no_go", 0), "Score provisoire : la méthode dit NO-GO, la plateforme « à compléter »")
+        status, body = self.call("GET", f"/axispro/dossiers/{dossier.id}", token=token)
+        self.assertEqual(status, 200, body)
+        gates = {g["code"]: g for g in body["scoring"]["gates"]}
+        self.assertEqual((gates["G1"]["pending"], gates["G1"]["pending_in_scope"], gates["G1"]["knockouts_blocking"]),
+                         (2, 2, 1), "Gate 1 : deux critères à évaluer, le knock-out du foncier")
+        self.assertEqual(gates["G3"]["knockouts_blocking"], 2, "APD : tous les knock-outs actifs")
+
+
+@tagged("post_install", "-at_install")
+class TestCeQuiBloqueEtPluriels(TransactionCase):
+    def test_ce_qui_bloque_chaque_gate(self):
+        criteria = [crit(1, gate=1, knockout=True), crit(2, gate=1), crit(3, gate=2, domain=2, knockout=True),
+                    crit(4, gate=3)]
+        gates = [gate(0, "intake"), gate(1, "prequalification"), gate(2, "feasibility", domain_ids=[2]),
+                 gate(3, "apd"), gate(4, "due_diligence")]
+        r = run(criteria, {1: "not_met", 3: "not_met", 4: "met"}, gates=gates)
+        rows = {g["code"]: (g["pending"], g["pending_in_scope"], g["knockouts_blocking"]) for g in r["gates"]}
+        self.assertEqual(rows, {"G0": (0, 0, 0), "G1": (1, 1, 1), "G2": (0, 1, 2), "G3": (0, 1, 2), "G4": (0, 1, 0)})
+
+    def test_messages_accordes(self):
+        from odoo.addons.eguitra_axispro import scoring
+
+        self.assertEqual(scoring.pluriel(0, "critère"), "0 critère")
+        self.assertEqual(scoring.pluriel(1, "critère du gate reste", "critères du gate restent"),
+                         "1 critère du gate reste")
+        self.assertEqual(scoring.pluriel(3, "knock-out actif", "knock-outs actifs"), "3 knock-outs actifs")
+        self.assertEqual(scoring.accord(1.5, "point"), "point")
+        r = run([crit(1, gate=1), crit(2, gate=1)], {1: "met"}, gates=[gate(1, "generic")])
+        self.assertEqual(r["gates"][0]["motifs"], ["1 critère du gate reste à évaluer."])
+        r = run([crit(1, gate=1, knockout=True), crit(2, gate=1, knockout=True)], {1: "not_met", 2: "not_met"})
+        self.assertTrue(r["recommendation_detail"].startswith("2 knock-outs actifs : "), r["recommendation_detail"])
+        self.assertNotIn("(s)", r["recommendation_detail"])

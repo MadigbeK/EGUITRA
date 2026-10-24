@@ -78,6 +78,16 @@ def fnum(value, digits=1):
     return text
 
 
+def accord(n, un, plusieurs=None):
+    """Forme accordée au nombre, sans le nombre : singulier jusqu'à 1 (« 0 critère », « 1,5 point »)."""
+    return un if abs(n) < 2 else (plusieurs or un + "s")
+
+
+def pluriel(n, un, plusieurs=None):
+    """Nombre suivi de sa forme accordée : « 1 critère », « 3 critères »."""
+    return f"{fnum(n, 0) if float(n).is_integer() else fnum(n)} {accord(n, un, plusieurs)}"
+
+
 def domain_priority(score):
     if score is None:
         return None
@@ -232,6 +242,11 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
             "decision": decision, "motifs": motifs, "criteria": len(in_gate),
             "available": sum(1 for x in in_gate if x["status"] == "met"),
             "knockouts": sum(1 for k in knockouts if k["gate_index"] == g["index"]),
+            # Ce qui bloque ce gate : critères encore à évaluer (du gate, puis jusqu'à lui) et
+            # knock-outs actifs que sa règle de passage oppose.
+            "pending": sum(1 for x in in_gate if x["entered"] == "not_assessed"),
+            "pending_in_scope": sum(1 for x in lines if x["gate_index"] <= g["index"] and x["entered"] == "not_assessed"),
+            "knockouts_blocking": len(_blocking_knockouts(g, knockouts)),
             "entry_requirements": g.get("entry_requirements"), "deliverables": g.get("deliverables"),
             "exit_criteria": g.get("exit_criteria"), "min_completeness": g.get("min_completeness"),
         })
@@ -287,6 +302,19 @@ def _gate(g, ctx):
     return decision, motifs
 
 
+def _blocking_knockouts(g, knockouts):
+    """Knock-outs actifs que la règle de passage du gate oppose (mêmes critères que _gate_rule)."""
+    rule, index = g["rule"], g["index"]
+    if rule in ("prequalification", "generic"):
+        return [x for x in knockouts if x["gate_index"] <= index]
+    if rule == "feasibility":
+        domains = set(g.get("domain_ids") or [])
+        return [x for x in knockouts if x["domain_id"] in domains or x["gate_index"] <= index]
+    if rule in ("apd", "bankability"):
+        return list(knockouts)
+    return []
+
+
 def _gate_rule(g, ctx):
     rule, lines, knockouts, p = g["rule"], ctx["lines"], ctx["knockouts"], ctx["policy"]
     hyp, fiche = ctx["context"].get("hyp", {}), ctx["context"].get("fiche", {})
@@ -326,7 +354,7 @@ def _gate_rule(g, ctx):
         return "go", [f"Aucun knock-out sur {names} ; {label} {fnum(r)}/100."]
     if rule == "apd":
         if knockouts:
-            return "no_go", [f"Zéro knock-out exigé à ce gate : {len(knockouts)} actif(s)."] + [f"· {x['name']}" for x in knockouts]
+            return "no_go", [f"Zéro knock-out exigé à ce gate : {pluriel(len(knockouts), 'actif')}."] + [f"· {x['name']}" for x in knockouts]
         if hold is not None and ctx["apd"] < hold:
             return "hold", [f"APD Readiness Score {fnum(ctx['apd'])}/100, seuil de passage {fnum(hold, 0)}."]
         return "go", [f"APD Readiness {fnum(ctx['apd'])}/100 et zéro knock-out actif : lancement APD possible."]
@@ -378,13 +406,14 @@ def _gate_rule(g, ctx):
         return "no_go", _ko_motifs(ko)
     pending = [x for x in lines if x["gate_index"] == g["index"] and x["entered"] == "not_assessed"]
     if pending:
-        return "hold", [f"{len(pending)} critère(s) du gate restent à évaluer."]
+        return "hold", [f"{pluriel(len(pending), 'critère du gate reste', 'critères du gate restent')} à évaluer."]
     return "go", ["Critères du gate évalués, aucun knock-out."]
 
 
 def _recommendation(p, readiness, apd, bankability, knockouts, gates):
     if knockouts:
-        return "no_go", f"{len(knockouts)} knock-out(s) actif(s) : aucune décision favorable possible avant leur levée."
+        return "no_go", (pluriel(len(knockouts), "knock-out actif", "knock-outs actifs")
+                         + " : aucune décision favorable possible avant leur levée.")
     by_rule = {g["rule"]: g for g in gates}
     g4, g3 = by_rule.get("bankability"), by_rule.get("apd")
     if bankability >= p["threshold_bankable"] and g4 and g4["decision"] == "go":

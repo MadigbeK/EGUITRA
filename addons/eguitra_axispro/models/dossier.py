@@ -344,8 +344,8 @@ class AxisproDossier(models.Model):
         if not r["assessed"]:
             recommendation, detail = "pending", "Évaluation à commencer : aucun critère n'est encore renseigné."
         elif pending:
-            recommendation, detail = "pending", (f"{pending} critère(s) des gates atteints à évaluer avant la "
-                                                 "recommandation.")
+            recommendation, detail = "pending", (f"{method.pluriel(pending, 'critère des gates atteints', 'critères des gates atteints')} "
+                                                 "à évaluer avant la recommandation.")
         else:
             recommendation, detail = r["recommendation"], r["recommendation_detail"]
         owners = {a.compartment_id.id: a.user_id for a in self.assignment_ids}

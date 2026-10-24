@@ -26,6 +26,8 @@ Ce que le classeur ne dit pas se déduit ou se reprend :
 import re
 import unicodedata
 
+from .scoring import accord
+
 RULE_KEYWORDS = (  # le premier trouvé l'emporte : « Structuration financière et Financial Close » ferme le mandat
     ("closing", ("financial close", "cloture financiere")),
     ("due_diligence", ("due diligence",)),
@@ -141,7 +143,7 @@ def parse_parameters(rows):
             if status == "non applicable":
                 settings["exclude_na"] = float(points) != 1.0
             elif status in POINTS and float(points) != POINTS[status]:
-                errors.append(f"Parametres : « {row[col_status]} » vaut {points} point(s) dans le classeur ; la "
+                errors.append(f"Parametres : « {row[col_status]} » vaut {points:g} {accord(float(points), 'point')} dans le classeur ; la "
                               f"méthode de la plateforme lui donne {POINTS[status]:g}.")
         if col_threshold is None or col_class is None or col_class >= len(row):
             continue

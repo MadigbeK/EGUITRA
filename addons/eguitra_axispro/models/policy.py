@@ -26,7 +26,7 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, workbook_
 
 from .. import grille_cabinet
 from ..engine import INDICATORS, suggest
-from ..scoring import DEFAULT_POLICY, REQUIREMENTS, RULES
+from ..scoring import DEFAULT_POLICY, REQUIREMENTS, RULES, accord, pluriel
 
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
@@ -104,19 +104,23 @@ class AxisproPolicy(models.Model):
         notes = []
         ko_not_critical = self.criterion_ids.filtered(lambda c: c.knockout and not c.critical)
         if ko_not_critical:
-            notes.append(f"{len(ko_not_critical)} critère(s) éliminatoire(s) non marqué(s) critique(s) : "
-                         + ", ".join(ko_not_critical.mapped("code")) + ".")
+            label = pluriel(len(ko_not_critical), "critère éliminatoire non marqué critique",
+                            "critères éliminatoires non marqués critiques")
+            notes.append(f"{label} : " + ", ".join(ko_not_critical.mapped("code")) + ".")
         orphan_docs = self.document_type_ids.filtered(lambda t: not t.criterion_ids)
         if orphan_docs and any(self.document_type_ids.mapped("criterion_ids")):
-            notes.append(f"{len(orphan_docs)} pièce(s) sans critère rattaché : " + ", ".join(orphan_docs.mapped("code")) + ".")
+            label = pluriel(len(orphan_docs), "pièce sans critère rattaché", "pièces sans critère rattaché")
+            notes.append(f"{label} : " + ", ".join(orphan_docs.mapped("code")) + ".")
         linked = self.document_type_ids.mapped("criterion_ids")
         unproven = self.criterion_ids - linked
         if linked and unproven:
-            notes.append(f"{len(unproven)} critère(s) sans pièce de data room rattachée.")
+            notes.append(pluriel(len(unproven), "critère sans pièce de data room rattachée",
+                                 "critères sans pièce de data room rattachée") + ".")
         empty_gates = self.gate_ids.filtered(lambda g: not self.criterion_ids.filtered(lambda c, g=g: c.gate_id == g))
         loose = self.domain_ids.filtered(lambda d: not d.compartment_id)
         if self.compartment_ids and loose:
-            notes.append(f"{len(loose)} domaine(s) sans compartiment : " + ", ".join(loose.mapped("name")) + ".")
+            label = pluriel(len(loose), "domaine sans compartiment", "domaines sans compartiment")
+            notes.append(f"{label} : " + ", ".join(loose.mapped("name")) + ".")
         return {
             "criteria": len(self.criterion_ids), "domains": len(self.domain_ids), "gates": len(self.gate_ids),
             "compartments": len(self.compartment_ids),
@@ -319,7 +323,8 @@ class AxisproPolicy(models.Model):
                     for c in _codes(row["criteres"]):
                         (linked if c in criteria else unknown).append(c)
                     if unknown:
-                        errors.append(f"Ligne {line_no} ({code}) : critère(s) inconnu(s) {', '.join(unknown)}.")
+                        errors.append(f"Ligne {line_no} ({code}) : {accord(len(unknown), 'critère inconnu', 'critères inconnus')} "
+                                      f"{', '.join(unknown)}.")
                         continue
                     self.env["axispro.document.type"].create({
                         "policy_id": policy.id, "code": code, "name": label, "sequence": seq,
@@ -335,7 +340,8 @@ class AxisproPolicy(models.Model):
         for code, (line_no, codes) in gate_domains.items():
             unknown = [c for c in codes if c not in domains]
             if unknown:
-                errors.append(f"Ligne {line_no} ({code}) : domaine(s) inconnu(s) {', '.join(unknown)}.")
+                errors.append(f"Ligne {line_no} ({code}) : {accord(len(unknown), 'domaine inconnu', 'domaines inconnus')} "
+                              f"{', '.join(unknown)}.")
             gates[code].domain_ids = [(6, 0, [domains[c].id for c in codes if c in domains])]
         if not policy.capex_criterion_id:
             capex = policy.criterion_ids.filtered(lambda c: _plain(c.name).startswith("capex detaille"))[:1]

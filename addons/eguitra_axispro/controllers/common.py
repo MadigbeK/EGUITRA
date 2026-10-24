@@ -41,6 +41,9 @@ def dossier_summary(d, result=None):
         "bankability": score["bankability"], "completeness": score["completeness"],
         "dataroom_completeness": score["dataroom_completeness"], "classification": score["classification"],
         "recommendation": score["recommendation"],
+        # Recommandation de la méthode même pendant la saisie (« à compléter » côté plateforme tant que
+        # pending_in_scope critères des gates atteints restent à évaluer) : score provisoire en liste.
+        "method_recommendation": score["method_recommendation"], "pending_in_scope": score["pending_in_scope"],
         "next_gate": {"code": next_gate["code"], "name": next_gate["name"], "decision": next_gate["decision"]}
         if next_gate else None,
         "knockouts": len(score["knockouts"]), "decision": d.decision or None,

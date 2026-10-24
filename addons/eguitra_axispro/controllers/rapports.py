@@ -20,7 +20,7 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text, workbook_rows,
 from ..engine import INDICATORS
 from ..models.dossier import HYPOTHESES, RECOMMENDATIONS, STATUSES
 from ..models.pilotage import ACTION_OPEN, ACTION_STATES, RISK_CATEGORIES, risk_level
-from ..scoring import DECISIONS, REQUIREMENTS, RULES, fnum
+from ..scoring import DECISIONS, REQUIREMENTS, RULES, fnum, pluriel
 from .common import dossier_detail
 
 READ = ("admin", "direction", "cabinet")
@@ -582,7 +582,8 @@ class EguitraAxisproRapports(http.Controller):
         if form.get("dry_run") != "1" and not errors:
             for evaluation, values in changes:
                 evaluation.write(values)
-            dossier.log("import", note=f"Import de la fiche d'évaluation « {upload.filename} » : {len(changes)} critère(s) "
+            dossier.log("import", note=f"Import de la fiche d'évaluation « {upload.filename} » : "
+                                       f"{pluriel(len(changes), 'critère')} "
                                        "mis à jour.")
         return {"applied": form.get("dry_run") != "1" and not errors, "changes": preview, "unknown": unknown,
                 "errors": errors, "scoring": dossier.scoring()}
