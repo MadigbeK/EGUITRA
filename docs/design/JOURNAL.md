@@ -426,9 +426,10 @@ fonctionnelle.
   tranchés (voir les décisions du 22 octobre).
 - Harmonisation des composants : faite le 22 octobre (section ci-dessus), sauf l'échelle des
   titres et des tailles de texte. Restent aussi les sceaux d'icône (`TUILE`) et les couleurs des
-  types d'événements du portail, encore en hexadécimal, et les listes « Chargement des listes » et
-  « Chargement des rotations » de Rotations mobile (hors `useApi`), qui attendent sans fin hors
-  réseau sans cache. Maquette d'API : ajouter les routes du portail réécrit (`/portail/espace`).
+  types d'événements du portail, encore en hexadécimal. Les listes « Chargement des listes » et
+  « Chargement des rotations » de Rotations mobile n'attendent plus sans fin (délai de 8 s et
+  message « Liste indisponible », 24 octobre). Maquette d'API : ajouter les routes du portail réécrit
+  (`/portail/espace`).
 - Documents émis au nom d'EGUITRA GROUP (factures, devis, relances, produits par le noyau) : logo
   officiel de la charte et vert empire #006C1B dans la mise en page des documents. C'est un réglage
   du noyau, à faire par la session fonctionnelle si le gérant le demande.
