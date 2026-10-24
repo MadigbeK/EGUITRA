@@ -97,10 +97,35 @@ class EguitraTransportRotation(models.Model):
                                        help="Montant facturable et taxes refacturées, moins le coût net des "
                                             "manquants et le coût standard.")
 
+    estimated_margin_rate = fields.Float("Taux de marge estimé (%)", compute="_compute_margin_or_estimate", store=True)
+    # Marge que la liste des rotations affiche et trie : l'estimation tant qu'aucun frais n'est saisi
+    # (et qu'un coût standard existe), la marge des frais déclarés ensuite.
+    margin_estimated = fields.Boolean("Marge estimée (aucun frais saisi)", compute="_compute_margin_or_estimate",
+                                      store=True)
+    margin_or_estimate = fields.Monetary("Marge (déclarée ou estimée)", compute="_compute_margin_or_estimate",
+                                         store=True)
+    margin_or_estimate_rate = fields.Float("Taux de marge (déclaré ou estimé, %)",
+                                           compute="_compute_margin_or_estimate", store=True)
+    billed_volume = fields.Float("Volume facturable (m³)", digits=(12, 3), compute="_compute_billed_volume",
+                                 store=True, help="Volume livré, à défaut le volume chargé.")
+
     @api.depends("revenue", "taxes_rebilled", "shortage_net_cost", "std_cost")
     def _compute_estimated_margin(self):
         for rot in self:
             rot.estimated_margin = rot.revenue + rot.taxes_rebilled - rot.shortage_net_cost - rot.std_cost
+
+    @api.depends("estimated_margin", "margin", "margin_rate", "revenue", "total_cost", "std_cost")
+    def _compute_margin_or_estimate(self):
+        for rot in self:
+            rot.estimated_margin_rate = (rot.estimated_margin / rot.revenue * 100) if rot.revenue else 0.0
+            rot.margin_estimated = not rot.total_cost and bool(rot.std_cost)
+            rot.margin_or_estimate = rot.estimated_margin if rot.margin_estimated else rot.margin
+            rot.margin_or_estimate_rate = rot.estimated_margin_rate if rot.margin_estimated else rot.margin_rate
+
+    @api.depends("volume_loaded", "volume_delivered")
+    def _compute_billed_volume(self):
+        for rot in self:
+            rot.billed_volume = rot.volume_delivered or rot.volume_loaded or 0.0
 
     def _standard_vals(self):
         self.ensure_one()

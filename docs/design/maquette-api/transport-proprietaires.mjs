@@ -31,6 +31,17 @@ export function standardOf(rot) {
   return std;
 }
 
+/** Marge que la liste affiche et trie (noyau : margin_or_estimate) : l'estimation tant qu'aucun frais n'est saisi. */
+export function marginShown(rot) {
+  const std = standardOf(rot);
+  const estimated = !rot.total_cost && Boolean(std.std_cost);
+  const estimatedRate = rot.revenue ? (std.estimated_margin / rot.revenue) * 100 : null;
+  return {
+    estimated_margin_rate: estimatedRate, margin_estimated: estimated,
+    margin: estimated ? std.estimated_margin : rot.margin, margin_rate: estimated ? estimatedRate ?? 0 : rot.margin_rate,
+  };
+}
+
 export const monthlyOf = (c) => (c.periodicity === "year" ? c.amount / 12 : c.amount);
 
 function monthsBetween(from, to) {

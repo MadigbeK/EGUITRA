@@ -43,6 +43,14 @@ MEASURES_15 = [("temperature_loaded", "Température au chargement (°C)"),
                ("temperature_delivered", "Température à la livraison (°C)"),
                ("density_15", "Masse volumique à 15 °C (kg/m³)")]
 VEHICLE_STATES = ("service", "maintenance", "off", "sold")
+# Tri de la liste des rotations (paramètre sort, « -clé » pour l'ordre décroissant) : colonnes de
+# l'écran et champ du modèle. Le volume est le volume facturable (livré, à défaut chargé), la marge
+# et son taux ceux qu'affiche la ligne (estimés tant qu'aucun frais n'est saisi).
+ROTATION_SORTS = {
+    "name": "name", "date_loading": "date_loading", "vehicle": "vehicle_id", "client": "partner_id",
+    "route": "route_id", "volume": "billed_volume", "shortage": "shortage", "revenue": "revenue",
+    "margin": "margin_or_estimate", "margin_rate": "margin_or_estimate_rate", "state": "state",
+}
 
 
 def _ref(record):
@@ -85,9 +93,30 @@ def _rotation_row(rot):
         "total_cost": rot.total_cost, "margin": rot.margin, "margin_rate": rot.margin_rate,
         "std_fuel_liters": rot.std_fuel_liters, "std_fuel_price": rot.std_fuel_price, "std_cost": rot.std_cost,
         "estimated_margin": rot.estimated_margin,
+        # Sans montant (volume ou tarif manquant), un taux n'a pas de sens : None.
+        "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
+        "margin_estimated": rot.margin_estimated,
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
     }
+
+
+def _rotation_order(sort):
+    """Ordre de la liste : « date_loading », « -margin »… ; plus récentes d'abord sans paramètre."""
+    if not sort:
+        return "date_loading desc, id desc"
+    key, desc = (sort[1:], True) if sort.startswith("-") else (sort, False)
+    if key not in ROTATION_SORTS:
+        raise ApiError(400, "invalid_parameter", "Tri inconnu.")
+    direction = "desc" if desc else "asc"
+    # Départage stable d'une page à l'autre : date de chargement puis identifiant.
+    tail = f"id {direction}" if key == "date_loading" else "date_loading desc, id desc"
+    return f"{ROTATION_SORTS[key]} {direction}, {tail}"
+
+
+def _margin_min():
+    """Marge minimale de la règle d'alerte (Seuils et taux) ; None : seuil à 0, la marge n'est pas jugée."""
+    return request.env["eguitra.finance.metrics"].sudo().threshold_values(request.env.company)["transport_margin_min"]
 
 
 def _product(data):
@@ -775,10 +804,14 @@ class EguitraTransport(http.Controller):
         if end:
             domain.append(("date_loading", "<=", end))
         Rotation = request.env["eguitra.transport.rotation"]
-        rots = Rotation.search(domain, limit=int_arg(kw, "limit", 100, 1, 1000), offset=int_arg(kw, "offset", 0, 0))
+        limit, offset = int_arg(kw, "limit", 100, 1, 1000), int_arg(kw, "offset", 0, 0)
+        rots = Rotation.search(domain, limit=limit, offset=offset, order=_rotation_order(kw.get("sort")))
         [(revenue, margin, volume)] = Rotation._read_group(domain, aggregates=["revenue:sum", "margin:sum", "volume_delivered:sum"])
         return {"items": [_rotation_row(r) for r in rots], "total_count": Rotation.search_count(domain),
-                "totals": {"revenue": revenue or 0.0, "margin": margin or 0.0, "volume": volume or 0.0}}
+                "offset": offset, "limit": limit,
+                "totals": {"revenue": revenue or 0.0, "margin": margin or 0.0, "volume": volume or 0.0},
+                # Marge minimale de la règle d'alerte, pour juger le taux de chaque ligne (comme /transport/summary).
+                "margin_min": _margin_min()}
 
     @api_route("/transport/rotations/<int:rotation_id>", profiles=READ)
     def rotation(self, rotation_id, **_kw):
@@ -857,9 +890,7 @@ class EguitraTransport(http.Controller):
         [(excess_count, excess, excess_value)] = Rotation._read_group(
             domain + [("shortage_excess", ">", 0)], aggregates=["__count", "shortage_excess:sum", "shortage_value:sum"]
         )
-        # Marge minimale de la règle d'alerte (Seuils et taux) ; None : seuil à 0, la marge n'est pas jugée.
-        margin_min = request.env["eguitra.finance.metrics"].sudo().threshold_values(request.env.company)[
-            "transport_margin_min"]
+        margin_min = _margin_min()
         return {
             "date_from": start, "date_to": end, "rotations": count, "volume": volume or 0.0, "revenue": revenue or 0.0,
             "cost": cost or 0.0, "margin": margin or 0.0, "margin_rate": (margin / revenue * 100) if revenue else None,

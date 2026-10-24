@@ -19,7 +19,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
-import { enregistrerProprietaires, fuelPriceAt, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
+import { enregistrerProprietaires, fuelPriceAt, marginShown, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
 const HOST = "127.0.0.1";
@@ -5259,7 +5259,31 @@ function rotationRow(rot) {
     rate: rot.rate, revenue: rot.revenue, costs: Object.fromEntries(COSTS.map(([c]) => [c, rot[c] || 0])), total_cost: rot.total_cost, margin: rot.margin, margin_rate: rot.margin_rate,
     note: rot.note, invoice: invoice ? { id: invoice.id, name: invoice.name ?? "/" } : null, client_uuid: rot.client_uuid,
     ...standardOf(rot),
+    estimated_margin_rate: marginShown(rot).estimated_margin_rate, margin_estimated: marginShown(rot).margin_estimated,
   };
+}
+
+/** Tri de la liste (paramètre sort du noyau, « -clé » pour l'ordre décroissant). */
+const ROTATION_SORTS = {
+  name: (r) => r.name || "", date_loading: (r) => r.date_loading, vehicle: (r) => simpleRef(DB.vehicles, r.vehicle_id)?.name || "",
+  client: (r) => partnerRef(r.partner_id)?.name || "", route: (r) => simpleRef(DB.routes, r.route_id)?.name || "",
+  volume: (r) => r.volume_delivered || r.volume_loaded || 0, shortage: (r) => r.shortage || 0, revenue: (r) => r.revenue || 0,
+  margin: (r) => marginShown(r).margin, margin_rate: (r) => marginShown(r).margin_rate, state: (r) => r.state,
+};
+function sortRotations(list, sort) {
+  const byDate = (a, b) => b.date_loading.localeCompare(a.date_loading) || b.id - a.id;
+  if (!sort) return list.sort(byDate);
+  const desc = sort.startsWith("-");
+  const key = desc ? sort.slice(1) : sort;
+  const value = ROTATION_SORTS[key];
+  if (!value) throw badParam("Tri inconnu.");
+  const dir = desc ? -1 : 1;
+  return list.sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    if (va === vb) return key === "date_loading" ? (a.id - b.id) * dir : byDate(a, b);
+    return (va > vb ? 1 : -1) * dir;
+  });
 }
 const companyRotations = (ctx) => DB.rotations.filter((r) => r.company_id === ctx.company);
 function rotationOf(ctx, id) {
@@ -5413,12 +5437,14 @@ route("GET", "/transport/rotations", TR_READ, (ctx) => {
   const list = companyRotations(ctx)
     .filter((r) => !states || states.includes(r.state))
     .filter((r) => ["vehicle_id", "partner_id", "route_id", "driver_id"].every((k) => !q[k] || r[k] === intArg(q, k)))
-    .filter((r) => (!start || r.date_loading >= start) && (!end || r.date_loading <= end))
-    .sort((a, b) => b.date_loading.localeCompare(a.date_loading) || b.id - a.id);
+    .filter((r) => (!start || r.date_loading >= start) && (!end || r.date_loading <= end));
+  sortRotations(list, q.sort);
   const offset = offsetOf(q);
+  const limit = limitOf(q, 100, 1000);
   return {
-    items: list.slice(offset, offset + limitOf(q, 100, 1000)).map(rotationRow), total_count: list.length,
+    items: list.slice(offset, offset + limit).map(rotationRow), total_count: list.length, offset, limit,
     totals: { revenue: sum(list, (r) => r.revenue), margin: sum(list, (r) => r.margin), volume: round3(sum(list, (r) => r.volume_delivered)) },
+    margin_min: 15,
   };
 });
 route("GET", "/transport/rotations/:id", TR_READ, (ctx) => rotationRow(rotationOf(ctx, ctx.params[0])));

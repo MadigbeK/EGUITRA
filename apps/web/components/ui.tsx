@@ -793,10 +793,24 @@ export interface Column<T> {
   className?: string;
 }
 
-export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty = "Aucune donnée.", dense }: { columns: Column<T>[]; rows: T[]; rowKey: (row: T, index: number) => string | number; footer?: ReactNode; onRowClick?: (row: T) => void; empty?: string; dense?: boolean }) {
-  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
+/** Tri d'un tableau : colonne et sens (1 croissant, -1 décroissant). */
+export interface Tri {
+  key: string;
+  dir: 1 | -1;
+}
+
+/**
+ * Tableau triable. Par défaut, il trie lui-même les lignes reçues ; avec `onSort`, le tri est
+ * commandé de l'extérieur (liste paginée triée par le noyau) : `sort` dit la colonne active et le
+ * tableau garde l'ordre des lignes reçues.
+ */
+export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty = "Aucune donnée.", dense, sort: sortCommande, onSort }: { columns: Column<T>[]; rows: T[]; rowKey: (row: T, index: number) => string | number; footer?: ReactNode; onRowClick?: (row: T) => void; empty?: string; dense?: boolean; sort?: Tri | null; onSort?: (tri: Tri) => void }) {
+  const [sortLocal, setSortLocal] = useState<Tri | null>(null);
+  const commande = onSort !== undefined;
+  const sort = commande ? (sortCommande ?? null) : sortLocal;
+  const setSort = (tri: Tri) => (onSort ? onSort(tri) : setSortLocal(tri));
   const sorted = useMemo(() => {
-    if (!sort) return rows;
+    if (commande || !sort) return rows;
     const col = columns.find((c) => c.key === sort.key);
     if (!col) return rows;
     const value = col.sortValue ?? ((r: T) => (r as Record<string, unknown>)[col.key] as string | number | null);
@@ -808,7 +822,7 @@ export function DataTable<T>({ columns, rows, rowKey, footer, onRowClick, empty 
       if (vb === null || vb === undefined) return -1;
       return (va > vb ? 1 : -1) * sort.dir;
     });
-  }, [rows, sort, columns]);
+  }, [rows, sort, columns, commande]);
 
   if (!rows.length) return <Empty title={empty} />;
   const pad = dense ? "px-3 py-1.5" : "px-3 py-3";

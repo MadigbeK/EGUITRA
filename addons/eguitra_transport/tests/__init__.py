@@ -6,3 +6,4 @@ from . import test_manquants
 from . import test_taxes
 from . import test_rentabilite
 from . import test_proprietaires
+from . import test_liste_rotations

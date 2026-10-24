@@ -3,7 +3,7 @@
     "summary": "Flotte, chauffeurs, routes et tarifs, produits, rotations, manquants et volumes à 15 °C, taxes "
                "spécifiques, facturation, rentabilité (coûts standard, déclarés, comptabilisés, structure), "
                "ensembles gérés pour des propriétaires (répartition, relevés), saisie mobile",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.4.0",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

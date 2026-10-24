@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCheck, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, cx } from "@/components/ui";
+import { CheckCheck, ChevronLeft, ChevronRight, FileText, Plus, Smartphone } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, cx, type Tri } from "@/components/ui";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDec, fmtGNF, fmtInt, pluriel } from "@/lib/format";
@@ -44,28 +44,45 @@ interface Rotation {
   margin_rate: number;
   std_cost: number;
   estimated_margin: number;
+  /** Taux de la marge estimée ; null sans montant. */
+  estimated_margin_rate: number | null;
+  /** Aucun frais saisi : la ligne montre la marge estimée sur le coût standard de la route. */
+  margin_estimated: boolean;
   invoice: { id: number; name: string | null } | null;
 }
 
-/** Marge estimée : aucun frais saisi, la marge se lit sur le coût standard de la route. */
-const estimee = (r: Rotation) => !r.total_cost && Boolean(r.std_cost);
+interface Liste {
+  items: Rotation[];
+  total_count: number;
+  offset: number;
+  totals: { revenue: number; margin: number; volume: number };
+  /** Marge minimale de la règle d'alerte (Seuils et taux) ; null : seuil à 0, le taux n'est pas jugé. */
+  margin_min: number | null;
+}
+
+/** Rotations par page ; le noyau trie et découpe la liste (tri des colonnes compris). */
+const PAGE = 100;
 
 /** Marge affichée sur la ligne : l'estimation tant qu'aucun frais n'est saisi. */
-const margeLue = (r: Rotation) => (estimee(r) ? r.estimated_margin : r.margin);
+const margeLue = (r: Rotation) => (r.margin_estimated ? r.estimated_margin : r.margin);
 
 /**
  * Taux de la marge affichée, sur le montant de la rotation comme le taux du noyau ; sans montant
  * (volume ou tarif manquant), il n'a pas de sens.
  */
-const tauxLu = (r: Rotation) => (!r.revenue ? null : estimee(r) ? (r.estimated_margin / r.revenue) * 100 : r.margin_rate);
+const tauxLu = (r: Rotation) => (!r.revenue ? null : r.margin_estimated ? r.estimated_margin_rate : r.margin_rate);
 
 /** Rotations : saisie, validation, facturation ; marge estimée tant qu'aucun frais n'est saisi. */
 export function Rotations() {
   const [state, setState] = useState("draft,done");
-  const { data, error, mutate } = useApi<{ items: Rotation[]; total_count: number; totals: { revenue: number; margin: number; volume: number } }>(`/transport/rotations?state=${state}&limit=300`);
-  // Marge minimale de la règle d'alerte (Seuils et taux) : la liste ne la sert pas encore (demande au
-  // noyau). En attendant, le taux s'écrit sans être jugé, plutôt que d'appeler les chiffres du mois.
-  const minimum: number | null = null;
+  // Plus récentes d'abord, comme le noyau sans tri demandé.
+  const [tri, setTri] = useState<Tri>({ key: "date_loading", dir: -1 });
+  const [page, setPage] = useState(0);
+  const { data, error, mutate } = useApi<Liste>(
+    `/transport/rotations?state=${state}&limit=${PAGE}&offset=${page * PAGE}&sort=${tri.dir === -1 ? "-" : ""}${tri.key}`,
+    { keepPreviousData: true },
+  );
+  const minimum = data?.margin_min ?? null;
   const [selected, setSelected] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
@@ -100,7 +117,7 @@ export function Rotations() {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Field label="Statut">
-          <Select value={state} onChange={(e) => setState(e.target.value)} options={[{ value: "draft,done", label: "À traiter (saisies et à facturer)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
+          <Select value={state} onChange={(e) => { setState(e.target.value); setPage(0); setSelected([]); }} options={[{ value: "draft,done", label: "À traiter (saisies et à facturer)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
         </Field>
         {selection && (
           <div className="flex flex-wrap gap-2">
@@ -129,6 +146,8 @@ export function Rotations() {
           <DataTable
             rows={rows}
             rowKey={(r) => r.id}
+            sort={tri}
+            onSort={(t) => { setTri(t); setPage(0); setSelected([]); }}
             onRowClick={selection ? (r) => setSelected((s) => (s.includes(r.id) ? s.filter((x) => x !== r.id) : [...s, r.id])) : undefined}
             empty="Aucune rotation pour ce filtre."
             columns={[
@@ -141,21 +160,21 @@ export function Rotations() {
                 </span>
               ) },
               { key: "date_loading", label: "Chargement", render: (r) => <span className="whitespace-nowrap">{fmtDate(r.date_loading)}</span> },
-              { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name, sortValue: (r) => r.vehicle.name },
-              { key: "client", label: "Client", render: (r) => r.client.name, sortValue: (r) => r.client.name },
+              { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name },
+              { key: "client", label: "Client", render: (r) => r.client.name },
               { key: "route", label: "Route", render: (r) => r.route.name },
-              { key: "volume", label: "Livré (m³)", align: "right", sortValue: (r) => r.volume_delivered || r.volume_loaded, render: (r) => <VolumeLivre r={r} /> },
+              { key: "volume", label: "Livré (m³)", align: "right", render: (r) => <VolumeLivre r={r} /> },
               { key: "shortage", label: "Manquant (m³)", align: "right", render: (r) => (r.shortage ? <span className={r.shortage_excess > 0 ? "font-semibold text-danger" : "text-muted"} title={r.shortage_excess > 0 ? `${fmtM3(r.shortage_excess)} hors tolérance, ${fmtGNF(r.shortage_value)}` : "Dans la tolérance"}>{fmtVolume(r.shortage)}<span className="sr-only">{r.shortage_excess > 0 ? `, ${fmtM3(r.shortage_excess)} hors tolérance, ${fmtGNF(r.shortage_value)}` : ", dans la tolérance"}</span></span> : <span className="text-muted">–</span>) },
               { key: "revenue", label: "Montant (GNF)", align: "right", render: (r) => fmtInt(r.revenue) },
-              { key: "margin", label: "Marge (GNF)", align: "right", sortValue: margeLue, render: (r) => (estimee(r) ? (
+              { key: "margin", label: "Marge (GNF)", align: "right", render: (r) => (r.margin_estimated ? (
                 <span className={cx("italic", r.estimated_margin < 0 ? "text-danger" : "text-muted")} title={`Marge estimée avec le coût standard de la route (${fmtGNF(r.std_cost)}) : aucun frais saisi`}>
                   {fmtInt(r.estimated_margin)}
                   <span aria-hidden className="ml-1 font-sans text-[11.5px]">est.</span>
                   <span className="sr-only">, marge estimée : aucun frais saisi</span>
                 </span>
               ) : <span className={r.margin < 0 ? "font-semibold text-danger" : ""}>{fmtInt(r.margin)}</span>) },
-              { key: "margin_rate", label: "Taux", align: "right", sortValue: tauxLu, render: (r) => <TauxMarge taux={tauxLu(r)} minimum={minimum} negative={margeLue(r) < 0} estime={estimee(r)} /> },
-              { key: "state", label: "Statut", sortValue: (r) => ETAT_ROTATION[r.state], render: (r) => <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge> },
+              { key: "margin_rate", label: "Taux", align: "right", render: (r) => <TauxMarge taux={tauxLu(r)} minimum={minimum} negative={margeLue(r) < 0} estime={r.margin_estimated} /> },
+              { key: "state", label: "Statut", render: (r) => <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge> },
             ]}
             footer={
               data.items.length > 0 ? (
@@ -173,9 +192,25 @@ export function Rotations() {
             }
           />
         )}
+        {data && data.total_count > PAGE && <Pages offset={data.offset} total={data.total_count} onPage={(p) => { setPage(p); setSelected([]); }} />}
       </Card>
       {creating && <RotationForm onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); }} />}
     </div>
+  );
+}
+
+/** Pages de la liste : « 101 à 200 sur 245 », précédentes et suivantes. */
+function Pages({ offset, total, onPage }: { offset: number; total: number; onPage: (page: number) => void }) {
+  const page = Math.floor(offset / PAGE);
+  const fin = Math.min(offset + PAGE, total);
+  return (
+    <nav aria-label="Pages des rotations" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-[13px] text-muted">
+      <span className="tabular">Rotations {fmtInt(offset + 1)} à {fmtInt(fin)} sur {fmtInt(total)}</span>
+      <div className="flex gap-2">
+        <Button size="sm" disabled={page === 0} onClick={() => onPage(page - 1)}><ChevronLeft className="h-4 w-4" /> Précédentes</Button>
+        <Button size="sm" disabled={fin >= total} onClick={() => onPage(page + 1)}>Suivantes <ChevronRight className="h-4 w-4" /></Button>
+      </div>
+    </nav>
   );
 }
 
