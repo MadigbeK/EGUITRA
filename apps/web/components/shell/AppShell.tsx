@@ -28,7 +28,7 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
 
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a" };
+const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a", hsseq: "#14a3c2" };
 
 /**
  * Accueil d'une application pour ce compte. Finance s'ouvre sur le premier écran que ses profils
@@ -283,7 +283,7 @@ function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
               aria-current={a === app ? "true" : undefined}
               className={cx("tuile group flex items-center gap-3 rounded-xl p-2.5 transition-colors", a === app ? "bg-accent-doux" : "hover:bg-panel-2")}
             >
-              <IconeModule cle={APPS[a].home} className="h-9 w-9 flex-none" />
+              <IconeModule cle={a} className="h-9 w-9 flex-none" />
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-semibold text-ink">{moduleOf(a)}</span>
                 <span className="block truncate text-[12.5px] text-muted">{APPS[a].tagline}</span>

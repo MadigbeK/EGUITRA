@@ -26,6 +26,11 @@ const ACHATS: Profile[] = ["achats"];
 const VALIDATION: Profile[] = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"];
 /** Profils qui gèrent l'espace RH (la direction lit et approuve ; l'administration et la RH écrivent). */
 export const RH_GESTION: Profile[] = ["admin", "direction", "rh"];
+/**
+ * Profils de l'espace HSSEQ : l'administration, la direction (Directeur général), le Responsable HSSEQ
+ * et l'exploitation (chef de parc). Le conducteur n'y entre pas : il passe par le téléphone.
+ */
+export const HSSEQ: Profile[] = ["admin", "direction", "hsseq", "exploitation"];
 
 /** Navigation par application ; chaque entrée n'apparaît qu'aux profils listés (offre, chapitre 3.4). */
 export const NAV: Record<AppCode, NavSection[]> = {
@@ -200,6 +205,23 @@ export const NAV: Record<AppCode, NavSection[]> = {
     {
       label: "Administration",
       items: [{ href: "/rh/parametres", label: "Paramètres RH", icon: "SlidersHorizontal", profiles: ["admin", "rh"] }],
+    },
+  ],
+  // HSSEQ, lot 1 (spécification HSSEQ, § 3 et § 12) : cockpit, événements, plan d'actions, contrôles.
+  // Les rubriques du lot 2 (risques, habilitations, conformité) s'ajouteront ici.
+  hsseq: [
+    {
+      label: "Pilotage",
+      items: [{ href: "/hsseq", label: "Cockpit", icon: "LayoutDashboard", profiles: HSSEQ }],
+    },
+    {
+      label: "Maîtrise des risques",
+      items: [
+        { href: "/hsseq/evenements", label: "Événements", icon: "ShieldAlert", profiles: HSSEQ },
+        // Tout compte interne responsable d'une action la met à jour, droits renvoyés par la fiche.
+        { href: "/hsseq/actions", label: "Plan d'actions", icon: "ListChecks", profiles: HSSEQ },
+        { href: "/hsseq/controles", label: "Contrôles", icon: "ShieldCheck", profiles: HSSEQ },
+      ],
     },
   ],
 };

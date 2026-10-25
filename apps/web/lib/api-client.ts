@@ -41,7 +41,7 @@ function onUnauthenticated() {
 /** Application de la page courante (premier segment du chemin), transmise à la passerelle. */
 function appHeader(): Record<string, string> {
   const app = window.location.pathname.split("/")[1] ?? "";
-  return ["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app) ? { "X-Eguitra-App": app } : {};
+  return ["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh", "hsseq"].includes(app) ? { "X-Eguitra-App": app } : {};
 }
 
 async function parse(res: Response) {

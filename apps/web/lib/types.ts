@@ -10,7 +10,11 @@ export type Profile =
   | "immobilier"
   | "cabinet"
   | "porteur"
-  | "rh";
+  | "rh"
+  /** Responsable HSSEQ : administration du module, enquêtes, dérogations, détail des alcootests. */
+  | "hsseq"
+  /** Conducteur : le téléphone seul (Rotations), sans accès à l'application web HSSEQ. */
+  | "conducteur";
 
 export interface Company {
   id: number;

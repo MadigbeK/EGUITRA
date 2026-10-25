@@ -19,7 +19,7 @@ type Etat = "ferme" | "ouvert" | "sortie";
 
 /** Module ouvert dans la page courante : l'accueil d'un espace ne s'active que sur lui-même. */
 function estOuvert(href: string, pathname: string) {
-  return href === "/finance" || href === "/axispro" || href === "/analyse" || href === "/rh" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
+  return href === "/finance" || href === "/axispro" || href === "/analyse" || href === "/rh" || href === "/hsseq" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 }
 
 /** Neuf points, comme le lanceur de Microsoft 365 ou de Google ; ils ondulent au survol. */
