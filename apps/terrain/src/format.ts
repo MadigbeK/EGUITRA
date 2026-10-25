@@ -58,11 +58,34 @@ export function aujourdhui(decalageJours = 0): string {
   return `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
 }
 
+/** « 25/10/2026 » devient « 2026-10-25 » ; date impossible (30/02) ou à venir : null. */
+export function lireDate(texte: string, aujourdhuiIso = aujourdhui()): string | null {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(texte.trim());
+  if (!m) return null;
+  const [j, mo, a] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(a, mo - 1, j);
+  if (d.getFullYear() !== a || d.getMonth() !== mo - 1 || d.getDate() !== j) return null;
+  const iso = `${a}-${deux(mo)}-${deux(j)}`;
+  return iso > aujourdhuiIso ? null : iso;
+}
+
 /** « 2026-10-25 » devient « 25/10/2026 ». */
 export function fmtDate(value: unknown): string {
   if (typeof value !== "string" || !value) return VIDE;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
+}
+
+/** « 05:44 » : heure locale d'un horodatage ISO. */
+export function heure(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? VIDE : `${deux(d.getHours())}:${deux(d.getMinutes())}`;
+}
+
+/** Durée écrite en mots courts : « 24 s », « 2 min 58 s ». */
+export function duree(secondes: number): string {
+  const s = Math.max(0, Math.round(secondes));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
 }
 
 /** « aujourd'hui 14:32 », « hier 18:05 », sinon « le 20/10 à 09:15 ». */

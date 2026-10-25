@@ -10,6 +10,10 @@ export function memoryStore(): Store {
   return {
     queue: {
       all: async () => [...queue.values()].map((i) => structuredCloneSimple(i)),
+      get: async (uuid) => {
+        const i = queue.get(uuid);
+        return i ? structuredCloneSimple(i) : undefined;
+      },
       put: async (item) => {
         queue.set(item.client_uuid, structuredCloneSimple(item));
       },

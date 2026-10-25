@@ -1,5 +1,5 @@
 import type { Referentials } from "../src/api/types";
-import { fmtDate, fmtInt, fmtM3, quand } from "../src/format";
+import { duree, fmtDate, fmtInt, fmtM3, lireDate, quand } from "../src/format";
 import { blank, controler, depasseCapacite, fromPayload, grouper, keepReferentials, num, toPayload } from "../src/rotations/form";
 import { claimCache, forgetDevice } from "../src/store/device";
 import { memoryStore } from "../src/store/memory";
@@ -95,5 +95,18 @@ describe("écriture française", () => {
     expect(quand(new Date(2026, 9, 25, 14, 32), maintenant)).toBe("aujourd'hui 14:32");
     expect(quand(new Date(2026, 9, 24, 18, 5), maintenant)).toBe("hier 18:05");
     expect(quand(new Date(2026, 9, 20, 9, 15), maintenant)).toBe("le 20/10 à 09:15");
+  });
+
+  it("lit une date tapée, refuse une date impossible ou à venir", () => {
+    expect(lireDate("25/10/2026", "2026-10-25")).toBe("2026-10-25");
+    expect(lireDate("3/9/2026", "2026-10-25")).toBe("2026-09-03");
+    expect(lireDate("30/02/2026", "2026-10-25")).toBeNull();
+    expect(lireDate("26/10/2026", "2026-10-25")).toBeNull();
+    expect(lireDate("2026-10-25", "2026-10-25")).toBeNull();
+  });
+
+  it("écrit les durées en mots courts", () => {
+    expect(duree(24)).toBe("24 s");
+    expect(duree(178)).toBe("2 min 58 s");
   });
 });

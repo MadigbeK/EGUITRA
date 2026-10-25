@@ -2,7 +2,7 @@ import { ApiError, DelaiDepasse, HorsReseau } from "../src/api/errors";
 import type { SyncResult } from "../src/api/types";
 import { memoryStore } from "../src/store/memory";
 import type { QueuedItem } from "../src/store/types";
-import { envoyerRotations, type Envoyeur } from "../src/sync/outbox";
+import { envoyerRotations, RECUE_AVANT_CORRECTION, type Envoyeur } from "../src/sync/outbox";
 
 const saisie = (n: number, user_id = 7): QueuedItem => ({
   client_uuid: `uuid-${String(n).padStart(3, "0")}`,
@@ -13,14 +13,19 @@ const saisie = (n: number, user_id = 7): QueuedItem => ({
   payload: { vehicle_id: 1, partner_id: 2, route_id: 3, volume_loaded: 36.5 },
 });
 
-/** Faux bureau : `repondre` reçoit les saisies de chaque envoi. */
-function envoyeur(repondre: (rotations: Array<Record<string, unknown>>) => SyncResult[] | Error) {
+/** Faux bureau : `repondre` reçoit les saisies de chaque envoi, `pendant` agit pendant l'envoi. */
+function envoyeur(
+  repondre: (rotations: Array<Record<string, unknown>>) => SyncResult[] | Error,
+  pendant?: (api: { numero: number }) => Promise<void>,
+) {
   const envois: Array<Array<Record<string, unknown>>> = [];
-  const api: Envoyeur = {
+  const api: Envoyeur & { numero: number } = {
+    numero: 1,
     appel: async <T,>(_m: string, path: string, opts?: { body?: unknown }) => {
       expect(path).toBe("/transport/sync");
       const rotations = (opts?.body as { rotations: Array<Record<string, unknown>> }).rotations;
       envois.push(rotations);
+      await pendant?.(api);
       const r = repondre(rotations);
       if (r instanceof Error) throw r;
       return { results: r } as T;
@@ -103,5 +108,62 @@ describe("envoyerRotations", () => {
     const { api } = envoyeur(() => new ApiError(403, "forbidden", "Accès non autorisé pour votre profil."));
     const bilan = await envoyerRotations(store, api, 7);
     expect(bilan?.echec).toEqual({ reseau: false, message: "Accès non autorisé pour votre profil." });
+  });
+
+  it("ne renvoie les saisies refusées que sur demande", async () => {
+    const store = memoryStore();
+    await store.queue.put({ ...saisie(1), status: "error", message: "Route inconnue." });
+    const { api, envois } = envoyeur(recues);
+    await expect(envoyerRotations(store, api, 7)).resolves.toBeNull();
+    expect(envois).toHaveLength(0);
+    await expect(envoyerRotations(store, api, 7, { refusees: true })).resolves.toMatchObject({ created: 1 });
+    expect(await store.queue.all()).toHaveLength(0);
+  });
+
+  it("une saisie supprimée pendant l'envoi ne revient pas, même refusée", async () => {
+    const store = memoryStore();
+    await store.queue.put(saisie(1));
+    const { api } = envoyeur(
+      () => [{ client_uuid: "uuid-001", status: "error", message: "Cette saisie a déjà été synchronisée." }],
+      async () => store.queue.remove("uuid-001"),
+    );
+    await envoyerRotations(store, api, 7);
+    expect(await store.queue.all()).toHaveLength(0);
+  });
+
+  it("une correction faite pendant l'envoi n'est ni perdue ni écrasée", async () => {
+    const store = memoryStore();
+    await store.queue.put(saisie(1));
+    await store.queue.put(saisie(2));
+    const corriger = async () => {
+      for (const n of [1, 2]) {
+        const s = saisie(n);
+        await store.queue.put({ ...s, payload: { ...s.payload, volume_loaded: 30 } });
+      }
+    };
+    const { api } = envoyeur(
+      () => [
+        { client_uuid: "uuid-001", status: "created", id: 10 },
+        { client_uuid: "uuid-002", status: "error", message: "Route inconnue." },
+      ],
+      corriger,
+    );
+    await expect(envoyerRotations(store, api, 7)).resolves.toMatchObject({ created: 1, errors: 0 });
+    const [premiere, seconde] = (await store.queue.all()).sort((a, b) => a.client_uuid.localeCompare(b.client_uuid));
+    // Reçue au bureau dans sa première version : la correction se fera au bureau.
+    expect(premiere).toMatchObject({ client_uuid: "uuid-001", status: "error", message: RECUE_AVANT_CORRECTION });
+    // Refusée dans sa première version, corrigée depuis : elle repartira corrigée.
+    expect(seconde).toMatchObject({ client_uuid: "uuid-002", status: "pending", payload: { volume_loaded: 30 } });
+  });
+
+  it("s'arrête quand la session change : rien ne part sous le jeton d'un autre compte", async () => {
+    const store = memoryStore();
+    for (let n = 1; n <= 120; n += 1) await store.queue.put(saisie(n));
+    const { api, envois } = envoyeur(recues, async (a) => {
+      a.numero += 1; // déconnexion pendant le premier lot
+    });
+    await envoyerRotations(store, api, 7);
+    expect(envois).toHaveLength(1);
+    expect(await store.queue.all()).toHaveLength(70);
   });
 });

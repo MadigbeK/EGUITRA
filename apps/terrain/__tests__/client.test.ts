@@ -198,4 +198,44 @@ describe("ApiClient", () => {
     expect(appels.at(-1)!.headers.Authorization).toBe("Bearer acces-1");
     expect(c.valeur).toBeNull();
   });
+
+  it("redemande aussitôt un renouvellement dont la réponse s'est perdue, avec le même jeton", async () => {
+    let premier = true;
+    const { appels, fetchFn } = bureau((a) => {
+      if (a.url !== "/auth/refresh") return { status: 200, body: { ok: 1 } };
+      if (premier) {
+        premier = false;
+        return "coupure";
+      }
+      return { status: 200, body: JETONS(2) };
+    });
+    const c = coffre("renouvellement-1");
+    const perdue = jest.fn();
+    const api = new ApiClient({ base: "", coffre: c, surSessionPerdue: perdue, fetchFn });
+    await expect(api.appel("GET", "/a")).resolves.toEqual({ ok: 1 });
+    const renouvellements = appels.filter((a) => a.url === "/auth/refresh");
+    expect(renouvellements.map((a) => (a.body as { refresh_token: string }).refresh_token)).toEqual(["renouvellement-1", "renouvellement-1"]);
+    expect(c.valeur).toBe("renouvellement-2");
+    expect(perdue).not.toHaveBeenCalled();
+  });
+
+  it("une réponse 401 qui ne vient pas de l'API (relais du réseau) garde la session", async () => {
+    const { fetchFn } = bureau(() => ({ status: 401, texte: "<html>Unauthorized</html>" }));
+    const c = coffre("renouvellement-1");
+    const perdue = jest.fn();
+    const api = new ApiClient({ base: "", coffre: c, surSessionPerdue: perdue, fetchFn });
+    await expect(api.appel("GET", "/a")).rejects.toMatchObject({ status: 401, code: "http_401" });
+    expect(perdue).not.toHaveBeenCalled();
+    expect(c.valeur).toBe("renouvellement-1");
+  });
+
+  it("change de numéro de session à chaque ouverture et à chaque oubli", async () => {
+    const { fetchFn } = bureau(() => ({ status: 200, body: {} }));
+    const api = new ApiClient({ base: "", coffre: coffre(), surSessionPerdue: jest.fn(), fetchFn });
+    const debut = api.numero;
+    await api.ouvrirSession(JETONS(1));
+    expect(api.numero).toBe(debut + 1);
+    await api.oublier();
+    expect(api.numero).toBe(debut + 2);
+  });
 });

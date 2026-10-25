@@ -28,6 +28,18 @@ interface Ligne {
   payload: string;
 }
 
+function versSaisie(r: Ligne): QueuedItem {
+  return {
+    client_uuid: r.client_uuid,
+    kind: r.kind,
+    user_id: r.user_id,
+    created_at: r.created_at,
+    status: r.status,
+    ...(r.message ? { message: r.message } : {}),
+    payload: JSON.parse(r.payload) as Record<string, unknown>,
+  };
+}
+
 let ouverture: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function base(): Promise<SQLite.SQLiteDatabase> {
@@ -54,15 +66,11 @@ export function sqliteStore(): Store {
     queue: {
       all: async () => {
         const rows = await (await base()).getAllAsync<Ligne>("SELECT * FROM queue ORDER BY created_at");
-        return rows.map((r) => ({
-          client_uuid: r.client_uuid,
-          kind: r.kind,
-          user_id: r.user_id,
-          created_at: r.created_at,
-          status: r.status,
-          ...(r.message ? { message: r.message } : {}),
-          payload: JSON.parse(r.payload) as Record<string, unknown>,
-        }));
+        return rows.map(versSaisie);
+      },
+      get: async (uuid) => {
+        const row = await (await base()).getFirstAsync<Ligne>("SELECT * FROM queue WHERE client_uuid = ?", uuid);
+        return row ? versSaisie(row) : undefined;
       },
       put: async (item) => {
         await (await base()).runAsync(

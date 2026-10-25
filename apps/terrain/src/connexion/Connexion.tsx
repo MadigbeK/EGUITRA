@@ -1,12 +1,12 @@
 import * as Linking from "expo-linking";
 import { useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type TextInputInstance } from "react-native";
+import { KeyboardAvoidingView, ScrollView, StyleSheet, View, type TextInputInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, DelaiDepasse } from "../api/errors";
 import { useSession } from "../auth/session";
 import { ENVIRONNEMENT, SIMULATION } from "../config";
 import { Bandeau, Bouton, Champ, Feuille, Texte } from "../ui/elements";
-import { couleurs, espaces } from "../ui/theme";
+import { espaces, marque } from "../ui/terrain";
 
 /** Message d'un échec de connexion : celui du bureau, ou ce que dit le réseau. */
 function messageConnexion(e: unknown): string {
@@ -42,11 +42,11 @@ export function Connexion() {
   const message = etape.nom === "connexion" ? etape.message : undefined;
 
   return (
-    <KeyboardAvoidingView style={styles.racine} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + espaces.xxl }]} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.racine} behavior="padding">
+      <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + espaces[8] }]} keyboardShouldPersistTaps="handled">
         <View style={styles.marque}>
-          <Texte variante="grandTitre" style={{ color: couleurs.creme }}>NIMOVA</Texte>
-          <Texte variante="fort" style={{ color: couleurs.menthe }}>Terrain{ENVIRONNEMENT ? `, ${ENVIRONNEMENT}` : ""}</Texte>
+          <Texte variante="titreFort" style={{ color: "#ffffff" }}>NIMOVA</Texte>
+          <Texte variante="libelle" style={{ color: marque.menthe }}>Terrain{ENVIRONNEMENT ? `, ${ENVIRONNEMENT}` : ""}</Texte>
         </View>
         <Feuille style={styles.carte}>
           {SIMULATION ? <Bandeau ton="attention" texte="Simulation : bureau fictif. Tout identifiant ouvre la session, mot de passe « faux » refusé." /> : null}
@@ -176,8 +176,8 @@ function NouveauMotDePasse({ envoi, onValider }: { envoi: boolean; onValider: (a
 }
 
 const styles = StyleSheet.create({
-  racine: { flex: 1, backgroundColor: couleurs.foret },
-  page: { flexGrow: 1, padding: espaces.l, gap: espaces.xl, alignItems: "center" },
+  racine: { flex: 1, backgroundColor: marque.foret },
+  page: { flexGrow: 1, padding: espaces[4], gap: espaces[6], alignItems: "center" },
   marque: { alignSelf: "center", maxWidth: 480, width: "100%", alignItems: "flex-start", gap: 2 },
   carte: { alignSelf: "center", maxWidth: 480, width: "100%" },
 });

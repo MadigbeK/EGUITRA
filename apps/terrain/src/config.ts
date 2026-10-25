@@ -18,6 +18,8 @@ export const SIMULATION = !API_URL && __DEV__;
  * Code d'application transmis au noyau (addons/eguitra_api/organisation.py, APPS) : celui de
  * Rotations, ouvert aux profils administrateur et exploitation, qui travaille dans la seule société
  * EGUITRA GROUP. Les longues durées de session hors réseau y sont réservées au profil exploitation.
+ * Le module HSSEQ (branche hsseq, session OTHER) ajoute au noyau l'application « terrain » (profils
+ * admin, hsseq, exploitation et conducteur) : passer à « terrain » une fois ce module intégré.
  */
 export const APP_CODE = "mobile";
 

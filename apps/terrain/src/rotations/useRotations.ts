@@ -28,12 +28,15 @@ export interface Avis {
  */
 export function useRotations(store: Store, api: ApiClient, userId: number) {
   const reseau = useNetworkState();
-  // Liaison inconnue au démarrage : on essaie, l'échange dira si elle passe.
-  const online = reseau.isInternetReachable ?? reseau.isConnected ?? true;
+  // La liaison seule, comme navigator.onLine au web. L'indicateur « Internet validé » d'Android reste
+  // faux derrière certains réseaux d'entreprise qui joignent pourtant le bureau : c'est l'échange qui
+  // dit si le réseau passe (« Réseau faible »). Liaison inconnue au démarrage : on essaie.
+  const online = reseau.isConnected ?? true;
   const onlineRef = useRef(online);
   onlineRef.current = online;
   const [refs, setRefs] = useState<Referentials | null | undefined>(undefined);
   const [items, setItems] = useState<QueuedItem[]>([]);
+  const [lectureImpossible, setLectureImpossible] = useState(false);
   const [sent, setSent] = useState<SentRotation[] | null>(null);
   const [sentIndisponible, setSentIndisponible] = useState(false);
   const [echange, setEchange] = useState<{ ok: boolean; lent: boolean } | null>(null);
@@ -41,6 +44,8 @@ export function useRotations(store: Store, api: ApiClient, userId: number) {
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [notice, setNotice] = useState<Avis | null>(null);
   const busy = useRef(false);
+  const encore = useRef(false);
+  const relance = useRef<() => Promise<Bilan | null>>(async () => null);
   const echecRef = useRef(false);
 
   const noter = useCallback((ok: boolean, debut: number) => {
@@ -66,10 +71,17 @@ export function useRotations(store: Store, api: ApiClient, userId: number) {
   );
 
   const loadQueue = useCallback(async () => {
-    const all = await store.queue.all().catch(() => [] as QueuedItem[]);
-    all.sort((a, b) => a.created_at.localeCompare(b.created_at));
-    setItems(all);
-    return all;
+    try {
+      const all = await store.queue.all();
+      all.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      setItems(all);
+      setLectureImpossible(false);
+      return all;
+    } catch {
+      // Base illisible : surtout ne pas dire « Toutes vos saisies ont été transmises ».
+      setLectureImpossible(true);
+      return [] as QueuedItem[];
+    }
   }, [store]);
 
   const loadRefs = useCallback(async () => {
@@ -99,17 +111,28 @@ export function useRotations(store: Store, api: ApiClient, userId: number) {
     }
   }, [api, store, echanger]);
 
-  /** Envoi des saisies en attente de l'utilisateur. Rien à envoyer, ou déjà en cours : null. */
+  /**
+   * Envoi des saisies en attente de l'utilisateur. Rien à envoyer, ou déjà en cours : null. Les
+   * saisies refusées ne repartent qu'à la demande (« Envoyer maintenant ») ou une fois corrigées.
+   */
   const sync = useCallback(
     async (origine: Origine = "auto"): Promise<Bilan | null> => {
-      if (busy.current || !onlineRef.current) return null;
-      if (!(await loadQueue()).some((i) => i.user_id === userId)) return null;
+      // Le verrou est posé avant toute attente : deux déclencheurs rapprochés (retour au premier plan
+      // et retour du réseau, minuteur et enregistrement) n'envoient jamais deux fois.
+      if (!onlineRef.current) return null;
+      if (busy.current) {
+        // Une saisie enregistrée pendant un envoi part juste après, sans attendre le minuteur.
+        encore.current = true;
+        return null;
+      }
       busy.current = true;
-      setSyncing(true);
+      encore.current = false;
       let bilan: Bilan | null = null;
       try {
+        if (!(await loadQueue()).some((i) => i.user_id === userId)) return null;
+        setSyncing(true);
         const debut = Date.now();
-        bilan = await envoyerRotations(store, api, userId);
+        bilan = await envoyerRotations(store, api, userId, { refusees: origine === "envoi" });
         if (!bilan) return null;
         noter(!bilan.echec?.reseau, debut);
         if (!bilan.echec) {
@@ -126,14 +149,19 @@ export function useRotations(store: Store, api: ApiClient, userId: number) {
         }
         return bilan;
       } finally {
-        busy.current = false;
         setSyncing(false);
         await loadQueue();
+        busy.current = false;
         if (bilan) void loadSent();
+        if (encore.current) {
+          encore.current = false;
+          setTimeout(() => void relance.current(), 0);
+        }
       }
     },
     [api, store, userId, noter, loadQueue, loadSent],
   );
+  relance.current = () => sync();
 
   useEffect(() => {
     void (async () => {
@@ -173,7 +201,7 @@ export function useRotations(store: Store, api: ApiClient, userId: number) {
   const faible = online && echange !== null && (!echange.ok || echange.lent);
 
   return {
-    online, faible, refs, mine, others: items.length - mine.length, sent, sentIndisponible, syncing, lastSync,
+    online, faible, refs, mine, others: items.length - mine.length, lectureImpossible, sent, sentIndisponible, syncing, lastSync,
     notice, setNotice, sync, loadQueue,
     enregistrer: async (item: QueuedItem) => {
       await store.queue.put(item);

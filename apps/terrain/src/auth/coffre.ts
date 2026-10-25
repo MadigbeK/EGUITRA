@@ -40,6 +40,32 @@ export const coffreJeton: Coffre = {
   },
 };
 
+const CLE_REVOQUER = "nimova.terrain.revoquer";
+
+/**
+ * Sessions fermées sans réseau (changement d'équipe au dépôt) : leur jeton de renouvellement attend
+ * ici d'être révoqué au bureau, au premier échange réussi. L'application ne s'en sert pour rien d'autre.
+ */
+export const aRevoquer = {
+  lire: async (): Promise<string[]> => {
+    try {
+      const liste = JSON.parse((await lire(CLE_REVOQUER)) ?? "[]") as unknown;
+      return Array.isArray(liste) ? liste.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  },
+  ajouter: async (jeton: string) => {
+    const liste = (await aRevoquer.lire()).filter((j) => j !== jeton);
+    await ecrire(CLE_REVOQUER, JSON.stringify([...liste, jeton].slice(-5)));
+  },
+  retirer: async (jeton: string) => {
+    const liste = (await aRevoquer.lire()).filter((j) => j !== jeton);
+    if (liste.length) await ecrire(CLE_REVOQUER, JSON.stringify(liste));
+    else await effacer(CLE_REVOQUER);
+  },
+};
+
 /** Ce que l'application garde de l'utilisateur pour s'ouvrir hors réseau. */
 export interface Utilisateur {
   id: number;

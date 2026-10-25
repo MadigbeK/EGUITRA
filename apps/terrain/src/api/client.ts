@@ -30,6 +30,15 @@ export interface OptionsClient {
 /** Le jeton d'accès est renouvelé un peu avant son échéance plutôt que refusé en route. */
 const MARGE = 30_000;
 
+/** Deux essais de renouvellement tiennent dans le délai de grâce du bureau (30 s). */
+const DELAI_RENOUVELLEMENT = 10_000;
+
+/**
+ * Refus du renouvellement qui finissent la session (addons/eguitra_api/controllers/auth.py). Toute
+ * autre réponse (un relais du réseau, une erreur passagère) la laisse ouverte.
+ */
+const SESSION_FINIE = new Set(["invalid_token", "token_reused", "session_expired", "app_forbidden", "unauthenticated"]);
+
 /**
  * Client de l'API pour l'application native. Le jeton d'accès (15 minutes) reste en mémoire ; le
  * jeton de renouvellement est au coffre et change à chaque usage : le noyau révoque toute la lignée
@@ -49,6 +58,11 @@ export class ApiClient {
   private access: string | null = null;
   private echeance = 0;
   private renouvellement: Promise<void> | null = null;
+  /**
+   * Numéro de la session ouverte sur l'appareil, changé à chaque ouverture et à chaque oubli. Un envoi
+   * commencé sous une session s'arrête si elle change : rien ne part sous le jeton d'un autre compte.
+   */
+  numero = 0;
 
   constructor(options: OptionsClient) {
     this.base = options.base;
@@ -65,8 +79,15 @@ export class ApiClient {
     this.echeance = this.maintenant() + jetons.access_expires_in * 1000;
   }
 
+  /** Nouvelle session (connexion) : les envois de la précédente s'arrêtent. */
+  async ouvrirSession(jetons: SessionTokens): Promise<void> {
+    this.numero += 1;
+    await this.ouvrir(jetons);
+  }
+
   /** Oublie la session sur l'appareil, sans prévenir le bureau. */
   async oublier(): Promise<void> {
+    this.numero += 1;
     this.access = null;
     this.echeance = 0;
     await this.coffre.effacer();
@@ -117,20 +138,32 @@ export class ApiClient {
       await this.perdre();
       throw new ApiError(401, "unauthenticated", SESSION_EXPIREE);
     }
+    const demander = () =>
+      this.envoyer<SessionTokens>("POST", "/auth/refresh", { body: { refresh_token: refresh }, timeout: DELAI_RENOUVELLEMENT }, null);
     let jetons: SessionTokens;
     try {
-      jetons = await this.envoyer<SessionTokens>("POST", "/auth/refresh", { body: { refresh_token: refresh } }, null);
+      try {
+        jetons = await demander();
+      } catch (e) {
+        // Réponse perdue : le bureau a peut-être déjà remplacé le jeton. Il accepte l'ancien encore
+        // 30 secondes (REUSE_GRACE_SECONDS), puis révoque toute la session : on redemande aussitôt.
+        if (!(e instanceof DelaiDepasse || e instanceof HorsReseau)) throw e;
+        jetons = await demander();
+      }
     } catch (e) {
       // Refus du bureau : la session est finie. Sans réseau, elle reste : les saisies attendent.
-      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) await this.perdre();
+      if (e instanceof ApiError && SESSION_FINIE.has(e.code)) await this.perdre();
       throw e;
     }
     await this.ouvrir(jetons);
   }
 
   private async perdre(): Promise<void> {
-    await this.oublier();
-    this.surSessionPerdue();
+    try {
+      await this.oublier();
+    } finally {
+      this.surSessionPerdue();
+    }
   }
 
   private async envoyer<T>(method: string, path: string, opts: OptionsAppel, jeton: string | null): Promise<T> {

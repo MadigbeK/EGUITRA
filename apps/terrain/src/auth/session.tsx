@@ -7,7 +7,7 @@ import { API_URL, APP_CODE, SIMULATION } from "../config";
 import { claimCache, forgetDevice } from "../store/device";
 import { openStore } from "../store";
 import type { Store } from "../store/types";
-import { coffreJeton, profilGarde, type Utilisateur } from "./coffre";
+import { aRevoquer, coffreJeton, profilGarde, type Utilisateur } from "./coffre";
 
 /**
  * Étapes de la session. La connexion suit celle de l'application web (apps/web/app/api/session) :
@@ -31,8 +31,12 @@ interface Session {
   validerCode(code: string): Promise<void>;
   activer(code: string): Promise<void>;
   changerMotDePasse(ancien: string, nouveau: string): Promise<void>;
-  /** Sans réseau, la session ne peut pas être fermée au bureau : rien n'est effacé (HorsReseau). */
-  seDeconnecter(): Promise<void>;
+  /**
+   * Fin de session au bureau, puis oubli sur l'appareil. Sans réseau, l'erreur remonte (HorsReseau)
+   * et rien n'est effacé, sauf `horsReseau` : la session est oubliée sur l'appareil et sa révocation
+   * part au premier échange réussi.
+   */
+  seDeconnecter(options?: { horsReseau?: boolean }): Promise<void>;
   /** Retour à l'identifiant (étape du code abandonnée). */
   recommencer(): void;
 }
@@ -46,6 +50,18 @@ export function useSession(): Session {
 }
 
 const utilisateur = (u: PublicUser): Utilisateur => ({ id: u.id, name: u.name, login: u.login });
+
+/** Révoque au bureau les sessions fermées sans réseau ; une coupure les garde pour la fois suivante. */
+async function revoquerEnAttente(api: ApiClient): Promise<void> {
+  for (const jeton of await aRevoquer.lire()) {
+    try {
+      await api.appel("POST", "/auth/logout", { auth: false, body: { refresh_token: jeton } });
+    } catch (e) {
+      if (!(e instanceof ApiError)) return;
+    }
+    await aRevoquer.retirer(jeton).catch(() => undefined);
+  }
+}
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [etape, setEtape] = useState<Etape>({ nom: "demarrage" });
@@ -71,23 +87,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (rep.status === "mfa_setup_required") {
         return setEtape({ nom: "activation", jeton: rep.setup_token, secret: rep.secret, uri: rep.otpauth_uri });
       }
-      await api.ouvrir(rep);
+      await api.ouvrirSession(rep);
       const user = utilisateur(rep.user);
       await profilGarde.ecrire(user);
       await claimCache(store, user.id);
       setEtape(rep.user.password_change_required ? { nom: "mot_de_passe", user } : { nom: "ouverte", user });
+      void revoquerEnAttente(api).catch(() => undefined);
     },
     [api, store],
   );
 
   // Démarrage : la session gardée s'ouvre tout de suite, puis le bureau confirme le profil s'il répond.
+  // Un coffre illisible (incident du Keystore) ramène à la connexion, jamais à un écran bloqué.
   useEffect(() => {
     let actif = true;
     void (async () => {
-      const user = (await api.aUneSession()) ? await profilGarde.lire() : null;
+      let user: Utilisateur | null = null;
+      try {
+        user = (await api.aUneSession()) ? await profilGarde.lire() : null;
+        if (!user) await api.oublier();
+      } catch {
+        user = null;
+        await api.oublier().catch(() => undefined);
+      }
       if (!actif) return;
       if (!user) {
-        await api.oublier();
         setEtape({ nom: "connexion" });
         return;
       }
@@ -99,6 +123,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await profilGarde.ecrire(utilisateur(me));
         if (me.password_change_required) setEtape({ nom: "mot_de_passe", user: utilisateur(me) });
         else setEtape({ nom: "ouverte", user: utilisateur(me) });
+        void revoquerEnAttente(api).catch(() => undefined);
       } catch {
         // Hors réseau : la session reste ouverte sur le profil gardé. Session perdue : déjà traitée.
       }
@@ -148,17 +173,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [api, store],
   );
 
-  const seDeconnecter = useCallback(async () => {
-    try {
-      await api.deconnecter();
-    } catch (e) {
-      // Session déjà fermée au bureau : on peut oublier l'appareil. Sans réseau : rien n'est effacé.
-      if (!(e instanceof ApiError && e.status === 401)) throw e;
-      await api.oublier();
-    }
-    await forgetDevice(store);
-    setEtape({ nom: "connexion" });
-  }, [api, store]);
+  const seDeconnecter = useCallback(
+    async ({ horsReseau = false }: { horsReseau?: boolean } = {}) => {
+      if (horsReseau) {
+        const jeton = await coffreJeton.lire().catch(() => null);
+        if (jeton) await aRevoquer.ajouter(jeton).catch(() => undefined);
+        await api.oublier();
+      } else {
+        try {
+          await api.deconnecter();
+        } catch (e) {
+          // Session déjà fermée au bureau : on peut oublier l'appareil. Sans réseau : rien n'est effacé.
+          if (!(e instanceof ApiError && e.status === 401)) throw e;
+          await api.oublier();
+        }
+      }
+      await forgetDevice(store);
+      setEtape({ nom: "connexion" });
+    },
+    [api, store],
+  );
 
   const recommencer = useCallback(() => setEtape({ nom: "connexion" }), []);
 

@@ -22,6 +22,8 @@ export interface QueuedItem {
 export interface Store {
   queue: {
     all(): Promise<QueuedItem[]>;
+    /** Une saisie relue en base : l'envoi n'agit que sur une saisie restée telle qu'il l'a envoyée. */
+    get(uuid: string): Promise<QueuedItem | undefined>;
     put(item: QueuedItem): Promise<void>;
     remove(uuid: string): Promise<void>;
   };
