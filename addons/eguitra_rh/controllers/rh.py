@@ -214,7 +214,7 @@ class EguitraRh(http.Controller):
             fitness = emp._fitness_state(day)
             if emp.driver_id and fitness in ("inapte", "echue", "inconnu"):
                 label = {"inapte": "inapte", "echue": "échue", "inconnu": "non renseignée"}[fitness]
-                add("fitness", "danger", emp.medical_fitness_until or None, emp,
+                add("fitness", "warn" if fitness == "inconnu" else "danger", emp.medical_fitness_until or None, emp,
                     f"Aptitude médicale de {emp.name} : {label}.", href)
             elif fitness == "apte" and emp.medical_fitness_until and \
                     (emp.medical_fitness_until - day).days <= settings.qualification_alert_days:
