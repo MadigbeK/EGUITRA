@@ -14,7 +14,7 @@ noyau intégrées (§12).
   saisie sur l'appareil) distinct de `synced_at` (posé par le serveur), photos en pièces jointes.
 
 Périmètre du lot 1 (§12 de la spécification) : cockpit de base, événements et enquêtes, plan
-d'actions, contrôles pré-départ et alcootest (citerne et benne), verrou V01 à V05, dérogations.
+d'actions, contrôles avant départ et alcootest (citerne et benne), verrou V01 à V05, dérogations.
 Registre des risques, écrans des habilitations, audits, motifs V06 à V09, rapport mensuel : lot 2.
 
 ## 1. Conventions
@@ -27,7 +27,7 @@ Registre des risques, écrans des habilitations, audits, motifs V06 à V09, rapp
 | Montants | GNF, entiers. |
 | Listes | `offset` (0), `limit` (50 par défaut, 500 au plus), `sort` (`key` ou `-key`). `counts` porte sur toute la sélection filtrée, pas sur la page. |
 | Société | Application de portée groupe (`entity: null`). Filtre `company_id` facultatif ; sans lui, toutes les sociétés du compte. |
-| Saisie de terrain | `client_uuid` (idempotence : un `client_uuid` déjà reçu renvoie l'objet existant en 200, sans doublon), `reported_at`, `offline` ; le serveur pose `synced_at`. Pas d'envoi groupé au lot 1 : NIMOVA Terrain rejoue sa file d'attente par les routes unitaires. |
+| Saisie de terrain | `client_uuid` (idempotence : un `client_uuid` déjà reçu renvoie l'objet existant en 200, sans doublon), `reported_at`, `offline` ; le serveur pose `synced_at`. Position à plat, aux noms des modèles du noyau : `latitude`, `longitude`, `gps_accuracy` (mètres), sur les événements et les contrôles. Pas d'envoi groupé au lot 1 : NIMOVA Terrain rejoue sa file d'attente par les routes unitaires. |
 | Droits | Chaque fiche renvoie `rights: { can_edit, can_close, can_approve }` pour le compte connecté et `transitions`, les transitions qu'il peut lancer maintenant. L'écran n'affiche que ces commandes ; le noyau refuse le reste. |
 | Journal | Création, modification, transition et lecture d'une donnée sensible journalisées (utilisateur, horodatage, valeur avant et après, §11). Une fiche close ne se rouvre que par le profil `hsseq`, avec motif. |
 | Véhicules | `vehicle_kind` (`tanker` : citerne ; `tipper` : benne) et `site_id` viennent de Transport ; mêmes noms dans HSSEQ. |
@@ -65,7 +65,7 @@ Liste retenue en entier par le noyau.
 | Profil | Qui | Ce qu'il fait dans HSSEQ |
 |---|---|---|
 | `hsseq` | Responsable HSSEQ | Classement, enquêtes, actions, grilles, seconde validation des dérogations, réouverture des fiches closes. Seul à lire le détail des alcootests. Ne demande pas de dérogation. |
-| `conducteur` | Conducteur (compte du salarié RH) | NIMOVA Terrain seule : contrôle pré-départ, alcootest, déclaration ; lit ses propres déclarations, ses contrôles, ses habilitations (lot 2). |
+| `conducteur` | Conducteur (compte du salarié RH) | NIMOVA Terrain seule : contrôle avant départ, alcootest, déclaration ; lit ses propres déclarations, ses contrôles, ses habilitations (lot 2). |
 | `exploitation` | Chef de parc (et responsable exploitation) | Déclare ; réalise les contrôles ; lève les non-conformités ; demande une dérogation (sa demande vaut première validation) ; lit les événements de son site et le cockpit. |
 | `direction` | Directeur général | Lecture intégrale (alcootest en statut seul) ; validation des actions coûteuses ; lecture du journal ; reçoit les notifications de criticité élevée et de dérogation. |
 | `rh` | Ressources humaines | Échéances des habilitations des personnes, en statut, sans détail médical. |
@@ -107,7 +107,7 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
 | `/hsseq/checks/nonconformities` | L | L | L | L (site) | non | non |
 | `POST /hsseq/checks/{id}/lift` | non | non | E | E (site) | non | non |
 | Alcootests : saisie | non | non | E | E | E (pour lui-même) | non |
-| Alcootests : lecture | statut | statut | détail | statut (site) | non | non |
+| Alcootests : lecture | statut | statut | détail | statut (site) | fait (propres) | non |
 | `POST /hsseq/lock/evaluate` | L | L | L | L | L (ses rotations) | non |
 | `GET /hsseq/lock/departures` | L | L | L | L (site) | non | non |
 | `/hsseq/lock/reasons` | L, E | L | L, E | L | non | non |
@@ -133,11 +133,12 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
 
 ### Confidentialité (§9.4, §11)
 
-- Alcootest : hors du profil `hsseq` (`admin` compris), on ne lit qu'un statut (`compliant`,
-  `non_compliant`, `not_done`), le jour et la rotation ; ni taux, ni appareil, ni heure précise, ni
-  auteur du test. La réponse porte `access: "status"` ou `access: "detail"`. Chaque lecture du détail
-  est journalisée ; données chiffrées au repos. La réponse à une saisie suit la même règle, y compris
-  pour qui a saisi.
+- Alcootest, trois niveaux de lecture. Profil `conducteur` : seulement `done` (test fait ou non) et
+  l'heure, aucun résultat (`access: "done"`). Profils `exploitation`, `direction` et `admin` : le
+  statut de conformité (`compliant`, `non_compliant`, `not_done`), le jour et la rotation, ni taux, ni
+  appareil, ni heure précise, ni auteur (`access: "status"`). Profil `hsseq` seul : le détail chiffré
+  (`access: "detail"`). Chaque lecture du détail est journalisée ; données chiffrées au repos. La
+  réponse à une saisie suit la même règle, y compris pour qui a saisi.
 - Motif V03 du verrou : `detail` nul hors du profil `hsseq`.
 - Habilitations et aptitude médicale : portées par le salarié RH (`eguitra.rh.qualification`) ;
   aptitude en statut seul (`fit`, `unfit`, `review`) partout, aucun motif médical servi par HSSEQ.
@@ -253,8 +254,8 @@ Paramètres : `period` (`month` par défaut, ou `12m`), `month` (`YYYY-MM`, mois
 | `frequency_rate` | Taux de fréquence (TF), 12 mois glissants, sans filtre de site | `rate` | down | ≤ 5,00 | Événements, RH |
 | `severity_rate` | Taux de gravité (TG), 12 mois glissants, sans filtre de site | `rate` | down | ≤ 0,20 | Événements, RH |
 | `road_accidents_per_mkm` | Accidents de la route par million de km, 12 mois glissants | `rate` | down | ≤ 1,50 | Événements, Transport |
-| `reporting_ratio` | (Presqu'accidents + situations dangereuses) ÷ accidents, 12 mois glissants | `ratio` | up | ≥ 10,00 | Événements |
-| `check_completion` | Contrôles pré-départ réalisés ÷ départs | `pct` | up | 100 % | NIMOVA Terrain, Transport |
+| `reporting_ratio` | (Presque-accidents + situations dangereuses) ÷ accidents, 12 mois glissants | `ratio` | up | ≥ 10,00 | Événements |
+| `check_completion` | Contrôles avant départ réalisés ÷ départs | `pct` | up | 100 % | NIMOVA Terrain, Transport |
 | `check_compliance` | Contrôles sans point critique non conforme ÷ contrôles | `pct` | up | ≥ 95 % | NIMOVA Terrain |
 | `breath_test_completion` | Alcootests réalisés ÷ départs | `pct` | up | 100 % | NIMOVA Terrain |
 | `breath_test_positives` | Alcootests positifs, sans nom | `count` | down | 0 | NIMOVA Terrain |
@@ -318,7 +319,7 @@ Valeurs : `type` ∈ `work_accident`, `road_accident`, `near_miss`, `hazard` (si
 
 ### `GET /hsseq/events/{id}`
 
-`Event` : la ligne, plus `description`, `location`, `gps` (`lat`, `lon`, `accuracy_m`), `source`
+`Event` : la ligne, plus `description`, `location`, `latitude`, `longitude`, `gps_accuracy` (mètres), `source`
 (`web`, `terrain`), `client_uuid`, `reported_at`, `synced_at`, `offline`, `people` (personnes en
 cause : `kind` `driver`, `employee` ou `third_party`, `id`, `name`, `role` `victim`, `driver`,
 `witness`, `perpetrator` ou `third_party`, `days_off`), `lost_time`, `days_lost`,
@@ -331,7 +332,7 @@ cause : `kind` `driver`, `employee` ou `third_party`, `id`, `name`, `role` `vict
 
 Déclaration du web ou de NIMOVA Terrain, corps `EventReport` : `client_uuid`, `type`, `title`,
 `description`, `occurred_at`, `reported_at`, `offline` obligatoires ; `domain` (déduit du type
-sinon), `location`, `gps`, `site_id`, `rotation_id`, `vehicle_id`, `people`. Les photos suivent par
+sinon), `location`, `latitude`, `longitude`, `gps_accuracy`, `site_id`, `rotation_id`, `vehicle_id`, `people`. Les photos suivent par
 `/hsseq/attachments` (`model: "event"`). Réponse : l'`Event` créé, statut `reported`, notes nulles.
 Le Responsable HSSEQ est notifié de toute déclaration.
 
@@ -400,7 +401,7 @@ Relances du responsable à J-7, à J0 puis chaque semaine de retard ; escalade a
 ## 7. Contrôles et non-conformités (§5)
 
 Grilles paramétrables (ajout, retrait, ordre, caractère bloquant) par `hsseq` et `admin`, une par
-nature et par type de véhicule. Au lot 1, pré-départ citerne et pré-départ benne, avec le paramétrage
+nature et par type de véhicule. Au lot 1, contrôle avant départ des citernes et des bennes, avec le paramétrage
 initial du §5 : huit points critiques par type, cinq points communs non bloquants. Le point
 « alcootest du conducteur négatif » est relié au formulaire d'alcootest (`linked_to: "breath_test"`) :
 il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 minutes de saisie
@@ -423,7 +424,7 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
   `comment`, `photos`), `signature`, `nonconformities`, `photos_missing` (vrai tant qu'une
   non-conformité du contrôle est sans photo), `rights`.
 - `POST /hsseq/checks` : `NewCheck` (`client_uuid`, `template_id`, `vehicle_id`, `rotation_id`,
-  `driver_id`, `reported_at`, `offline`, `duration_s`, `gps`, `answers` : `item_id`, `answer`,
+  `driver_id`, `reported_at`, `offline`, `duration_s`, `latitude`, `longitude`, `gps_accuracy`, `answers` : `item_id`, `answer`,
   `comment`, `signature`). `result` : `blocking` dès qu'un point bloquant est `not_ok`,
   `non_compliant` (avec réserves) pour un point non bloquant, `compliant` sinon. Chaque réponse
   `not_ok` ouvre une non-conformité.
@@ -451,11 +452,12 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
   `result` (`negative`, `positive`) si réalisé, `reading_mg_l`, `device`, `not_done_reason` sinon,
   `reported_at`, `offline`). Un conducteur ne saisit que pour lui-même. Un positif retire le conducteur
   de la rotation (`driver_removed`) : Transport doit en affecter un autre.
-- `GET /hsseq/breath-tests` : `date`, `date_from`, `date_to`, `rotation_id`, `driver_id`, `status`,
+- `GET /hsseq/breath-tests` (le conducteur : ses seuls tests) : `date`, `date_from`, `date_to`, `rotation_id`, `driver_id`, `status`,
   `site_id`, `offset`, `limit` → `Page<BreathTest>` (`counts` par statut).
 - `GET /hsseq/breath-tests/{id}` → `BreathTest`.
-- Réponses selon le profil : `BreathTestStatus` (`access: "status"` : `id`, `rotation`, `driver`,
-  `date`, `status`) pour tous ; `BreathTestDetail` (`access: "detail"`, en plus `performed`, `result`,
+- Réponses selon le profil : `BreathTestDone` (`access: "done"` : `id`, `rotation`, `driver`, `done`,
+  `done_at`) pour `conducteur` ; `BreathTestStatus` (`access: "status"` : `id`, `rotation`, `driver`,
+  `date`, `status`) pour `exploitation`, `direction` et `admin` ; `BreathTestDetail` (`access: "detail"`, en plus `performed`, `result`,
   `reading_mg_l`, `device`, `not_done_reason`, `performed_by`, `driver_removed`, `client_uuid`,
   `reported_at`, `synced_at`, `offline`) pour `hsseq` seul.
 
@@ -477,9 +479,9 @@ Entrée `{ "rotation_id": 1127 }`. Sortie `LockEvaluation` (§4.2 en anglais, pl
   "rotation_id": 1127,
   "allowed": false,
   "reasons": [{
-    "code": "V02", "label": "Point critique du contrôle pré-départ non conforme", "source": "NIMOVA Terrain",
+    "code": "V02", "label": "Point critique du contrôle avant départ non conforme", "source": "NIMOVA Terrain",
     "since": "2026-10-15T06:05:00Z", "waivable": true, "detail": "Plaques et étiquettes de danger en place",
-    "resolution": "Chef de parc après correction, photo obligatoire", "severity": "block", "waiver_id": null
+    "resolution": "Chef de parc après correction, photo obligatoire", "severity": "block", "pending": false, "waiver_id": null
   }],
   "active_waiver": null,
   "checked_at": "2026-10-15T07:31:12Z"
@@ -488,7 +490,7 @@ Entrée `{ "rotation_id": 1127 }`. Sortie `LockEvaluation` (§4.2 en anglais, pl
 
 | Code | Ouvert quand (lot 1) |
 |---|---|
-| V01 | Aucun contrôle pré-départ enregistré pour la rotation. |
+| V01 | Aucun contrôle avant départ enregistré pour la rotation. |
 | V02 | Une non-conformité d'un point bloquant reste ouverte sur le véhicule, d'une rotation à l'autre. |
 | V03 | Aucun alcootest du conducteur de la rotation, ou le dernier est non réalisé ou positif ; `detail` nul hors `hsseq`. |
 | V04 | Habilitation obligatoire du salarié lié au chauffeur (`eguitra.rh.qualification`) absente ou expirée à la date de chargement, ou aptitude `unfit`. |
@@ -498,6 +500,9 @@ Entrée `{ "rotation_id": 1127 }`. Sortie `LockEvaluation` (§4.2 en anglais, pl
 habilitation absente avant la date de mise en service) arrive en `warn` : il est affiché et transmis
 à Transport mais n'empêche pas le départ.
 
+`pending` : vrai pour un motif qui se lève par une saisie de terrain encore à faire, V01 (contrôle non
+fait) et V03 (alcootest non fait ou non réalisé) ; faux pour V02, V03 positif, V04 et V05.
+
 `allowed` est vrai quand aucun motif `block` n'est ouvert, ou quand chacun est couvert par une
 dérogation active de la rotation (`waiver_id`). `active_waiver` : `id`, `approved_by` (demandeur puis
 second valideur), `expires`, ou nul. `label`, `source` et `resolution` reprennent le tableau du §4 de
@@ -506,8 +511,10 @@ la spécification ; `detail` précise le cas. Chaque évaluation est journalisé
 ### `GET /hsseq/lock/departures`
 
 `date` (aujourd'hui par défaut), `site_id`, `vehicle_kind`, `blocked=1` → `Departures` (`date`,
-`total`, `allowed`, `blocked`, `items` : `rotation`, `vehicle`, `driver`, `site`, `evaluation`).
-Un départ du jour : rotation à charger ce jour-là, pas encore `en_route`.
+`total`, `allowed`, `blocked`, `items` : `rotation`, `vehicle`, `driver`, `site`, `evaluation`,
+`pending_checks_only`). Un départ du jour : rotation à charger ce jour-là, pas encore `en_route`.
+`pending_checks_only` est vrai quand toutes les reasons ouvertes du départ (non couvertes par une
+dérogation, au moins une) sont `pending` : l'écran affiche alors « À contrôler » au lieu de « Bloqué ».
 
 ### `/hsseq/lock/reasons`
 
@@ -617,3 +624,17 @@ Horodatage : `reported_at` (saisie) et `synced_at` (posé par le serveur).
    `PATCH /hsseq/sites/{id}` pour `admin` et `hsseq` ; entrée de menu « Paramètres » réservée à
    `admin` et `hsseq` : sites, grilles et motifs du verrou (§2, §3).
 4. Codes d'erreur : la liste du §1 est retenue en entier (§1).
+
+### Harmonisations des maquettes de terrain (25/10)
+
+1. Alcootest : le profil `conducteur` ne lit que `done` et l'heure, sans résultat ; le statut de
+   conformité pour `exploitation` (et la lecture intégrale de `direction` et `admin`) ; le détail
+   chiffré pour `hsseq` seul (§2, §8).
+2. Ton de criticité à l'écran : « Élevée » en alerte, « Significative » à surveiller, « Modérée » et
+   « Faible » neutres.
+3. Libellés affichés et libellés du noyau : « presque-accident », « contrôle avant départ » ; les clés de
+   l'API ne changent pas.
+4. `pending` sur chaque reason (V01 et V03 non faits) et `pending_checks_only` sur chaque départ de
+   `/hsseq/lock/departures` (§9).
+5. Position GPS à plat, aux noms des modèles du noyau : `latitude`, `longitude`, `gps_accuracy` (mètres),
+   sur les événements et les contrôles saisis au terrain (§1, §5, §7).

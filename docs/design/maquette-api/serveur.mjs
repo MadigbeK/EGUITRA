@@ -2,7 +2,8 @@
  * Maquette de l'API du noyau NIMOVA, pour le travail de design.
  *
  * Sert sur 127.0.0.1 les routes /api/v1/... qu'appellent EGUITRA Finance, AxisPro Suite, le
- * portail des porteurs de projets et l'application Rotations. Toutes les données sont fictives :
+ * portail des porteurs de projets, l'application Rotations et NIMOVA · HSSEQ (avec les formulaires
+ * de NIMOVA Terrain). Toutes les données sont fictives :
  * les sociétés tierces portent le suffixe « (démo) ». Outil de design seulement, à ne jamais
  * brancher sur la production ni sur la recette.
  *
@@ -439,8 +440,11 @@ const PROFILE_DEFS = [
   { code: "immobilier", name: "Immobilier", description: "Biens, baux, loyers et quittancement, patrimoine." },
   { code: "cabinet", name: "Cabinet AxisPro", description: "Dossiers de projets, évaluations, data room, comités, rapports, facturation des prestations." },
   { code: "porteur", name: "Porteur de projet", description: "Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet." },
+  { code: "hsseq", name: "Responsable HSSEQ", description: "Événements, enquêtes, actions, grilles de contrôle, dérogations au verrou, détail des alcootests." },
+  { code: "conducteur", name: "Conducteur", description: "NIMOVA Terrain : contrôle avant départ, alcootest, déclaration d'événement." },
 ];
-const APPS = ["finance", "transport", "axispro", "portail", "mobile", "analyse"];
+/** « terrain » : application native NIMOVA Terrain, ouverte à la connexion mais absente des espaces du web. */
+const APPS = ["finance", "transport", "axispro", "portail", "mobile", "analyse", "hsseq", "terrain"];
 /** Applications ouvertes à chaque profil (eguitra_api.models.res_users.APP_PROFILES). */
 const APP_PROFILES = {
   finance: ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"],
@@ -449,9 +453,13 @@ const APP_PROFILES = {
   mobile: ["admin", "exploitation"],
   transport: ["admin", "direction", "finance", "exploitation"],
   analyse: ["admin", "direction", "finance", "cabinet"],
+  hsseq: ["admin", "direction", "hsseq", "exploitation"],
+  terrain: ["hsseq", "exploitation", "conducteur"],
 };
 const INTERNAL = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet"];
 const appsFor = (profiles) => APPS.filter((app) => APP_PROFILES[app].some((p) => profiles.includes(p)));
+/** Applications du web (sans NIMOVA Terrain, que le web ne connaît pas). */
+const webAppsFor = (profiles) => appsFor(profiles).filter((app) => app !== "terrain");
 const sortProfiles = (profiles) => PROFILE_DEFS.map((p) => p.code).filter((c) => profiles.includes(c));
 
 const COMPANIES = {
@@ -473,7 +481,7 @@ const companyRef = (cid) => ({ id: cid, name: COMPANIES[cid].name });
 
 /** Comptes de la plateforme. Les identifiants spéciaux de la maquette choisissent l'utilisateur. */
 const USERS = [
-  { id: 2, login: "m.diallo", name: "Mariama Diallo", email: "m.diallo@eguitra.example", profiles: INTERNAL, companies: [1, 2], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T07:58:12Z" },
+  { id: 2, login: "m.diallo", name: "Mariama Diallo", email: "m.diallo@eguitra.example", profiles: [...INTERNAL, "hsseq"], companies: [1, 2], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T07:58:12Z" },
   { id: 5, login: "o.bangoura", name: "Ousmane Bangoura", email: "o.bangoura@eguitra.example", profiles: ["finance"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T08:21:40Z" },
   { id: 6, login: "k.sylla", name: "Kadiatou Sylla", email: "k.sylla@eguitra.example", profiles: ["finance"], companies: [1, 2], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-14T17:05:03Z" },
   { id: 8, login: "s.barry", name: "Saïdou Barry", email: "s.barry@eguitra.example", profiles: ["direction"], companies: [1, 2], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-13T19:42:51Z" },
@@ -482,7 +490,11 @@ const USERS = [
   { id: 11, login: "d.toure", name: "Djénabou Touré", email: "d.toure@eguitra.example", profiles: ["exploitation"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T07:31:18Z" },
   { id: 12, login: "parc", name: "Mamadou Bah", email: "parc.matoto@eguitra.example", profiles: ["exploitation"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T06:12:44Z" },
   { id: 13, login: "i.bangoura", name: "Ismaël Bangoura", email: null, profiles: ["exploitation"], companies: [1], company_id: 1, mfa: true, active: false, temp: false, last_login: "2026-04-30T16:11:00Z" },
-  { id: 15, login: "provisoire", name: "Fatoumata Camara", email: "f.camara@eguitra.example", profiles: INTERNAL, companies: [1, 2], company_id: 1, mfa: true, active: true, temp: true, last_login: null },
+  { id: 15, login: "provisoire", name: "Fatoumata Camara", email: "f.camara@eguitra.example", profiles: [...INTERNAL, "hsseq"], companies: [1, 2], company_id: 1, mfa: true, active: true, temp: true, last_login: null },
+  { id: 16, login: "hsseq", name: "Fanta Kourouma", email: "f.kourouma@eguitra.example", profiles: ["hsseq"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T06:51:09Z" },
+  { id: 17, login: "conducteur", name: "Amadou Oury Diallo", email: null, profiles: ["conducteur"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-14T17:21:40Z" },
+  { id: 18, login: "s.conde", name: "Sékou Condé", email: "parc.boffa@eguitra.example", profiles: ["exploitation"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-15T05:12:31Z" },
+  { id: 19, login: "a.diakite", name: "Alhassane Diakité", email: "a.diakite@eguitra.example", profiles: ["exploitation"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-14T16:02:57Z" },
   { id: 21, login: "cabinet", name: "Aïssatou Barry", email: "a.barry@axispro.example", profiles: ["cabinet"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-15T08:47:30Z" },
   { id: 22, login: "t.diallo", name: "Thierno Diallo", email: "t.diallo@axispro.example", profiles: ["cabinet"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-14T15:20:02Z" },
   { id: 23, login: "a.keita", name: "Aminata Keïta", email: "a.keita@axispro.example", profiles: ["cabinet"], companies: [2], company_id: 2, mfa: false, active: true, temp: true, last_login: null },
@@ -490,7 +502,7 @@ const USERS = [
   { id: 42, login: "nob.laiterie", name: "Néné Oumou Bah", email: "contact@laiterie-fouta.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-09-02T09:12:00Z" },
   { id: 43, login: "f.camara.peche", name: "Fodé Camara", email: "f.camara@pecheries-kamsar.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-09T18:27:41Z" },
 ];
-const SPECIAL_LOGINS = { porteur: 41, parc: 12, provisoire: 15, cabinet: 21 };
+const SPECIAL_LOGINS = { porteur: 41, parc: 12, provisoire: 15, cabinet: 21, hsseq: 16, conducteur: 17, boffa: 18, dg: 8 };
 const DEFAULT_USER_ID = 2;
 const userById = (id) => USERS.find((u) => u.id === id);
 const userName = (id) => userById(id)?.name ?? "Système";
@@ -768,6 +780,7 @@ const DB = {
   chantiers: [], situations: [], properties: [], leases: [],
   policies: [], dossiers: [], evaluations: [], documents: [], reviews: [], messages: [], timesheets: [],
   audit: [], accessLog: [], passwordChanged: new Set(), revokedRefresh: new Set(),
+  hsseq: null,
 };
 const IDS = { move: 1000, st: 5000, statement: 40, approval: 300, step: 900, reminder: 60, rotation: 0, situation: 0, lease: 20, property: 20, asset: 0, profile: 0, loan: 10, loanLine: 0, budget: 10, budgetItem: 0, attachment: 700, chantier: 10, vehicle: 30, driver: 30, route: 20, tariff: 20, rule: 20, review: 80, message: 400, timesheet: 600, document: 900, dossier: 20, policy: 3, analytic: 400, user: 60, partner: 300, audit: 9000 };
 const newId = (kind) => ++IDS[kind];
@@ -3748,6 +3761,7 @@ function seed() {
   seedThresholds();
   seedAdmin();
   calibrate();
+  seedHsseq();
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -3790,7 +3804,7 @@ const offsetOf = (q) => intArg(q, "offset", 0, 0);
 const randomPart = () => crypto.randomBytes(12).toString("hex");
 function publicUser(user, companyId = null) {
   return {
-    id: user.id, name: user.name, login: user.login, email: user.email ?? null, profiles: sortProfiles(user.profiles), apps: appsFor(user.profiles),
+    id: user.id, name: user.name, login: user.login, email: user.email ?? null, profiles: sortProfiles(user.profiles), apps: webAppsFor(user.profiles),
     company_id: companyId ?? user.company_id, companies: [...user.companies].sort((a, b) => a - b).map((id) => ({ id, name: COMPANIES[id].name, entity: COMPANIES[id].entity })),
     mfa_enabled: Boolean(user.mfa), password_change_required: passwordTemporary(user), lang: "fr_FR", tz: "Africa/Conakry",
   };
@@ -6508,6 +6522,1723 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
   const m = { id: newId("message"), dossier_id: d.id, author_id: ctx.user.id, from_promoter: true, body: String(body).slice(0, 5000), date: nowStamp(), internal: false };
   DB.messages.push(m);
   return messageRow(m);
+});
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * NIMOVA · HSSEQ (lot 1) : cockpit, événements, actions, contrôles, alcootests, verrou, dérogations
+ *
+ * Contrat : docs/design/hsseq-contrat.md ; types : apps/web/lib/hsseq-types.ts. Les citernes, leurs
+ * chauffeurs et leurs rotations sont ceux de Transport (par clé). Transport de la maquette ne connaît
+ * pas encore les bennes (vehicle_kind, décision 3 du noyau) : les six bennes de la base de Boffa, leurs
+ * conducteurs et leurs postes n'existent que dans cette partie. Les dates suivent la date de référence
+ * de la maquette ; une saisie de la séance prend l'heure réelle sur ce jour-là (hsNow).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const HS_READ = ["admin", "direction", "hsseq", "exploitation"];
+const HS_APP = [...HS_READ, "conducteur", "rh"];
+const HS_EVENT_READ = [...HS_READ, "conducteur"];
+const HS_FIELD = ["hsseq", "exploitation", "conducteur"];
+const HS_SETUP = ["admin", "hsseq"];
+/** Seuil d'une action coûteuse, validée par la direction avant démarrage (décision 8). */
+const HS_COSTLY = 50_000_000;
+/** Sites de rattachement des comptes d'exploitation (absent : tous les sites). */
+const HS_USER_SITES = { 12: [1], 18: [2] };
+/** Salariés RH liés à un compte conducteur (employee.user_id, employee.driver_id). */
+const HS_EMPLOYEES = [{ id: 501, user_id: 17, driver_id: 1 }];
+/** Photo de maquette : image PNG d'un pixel. */
+const HS_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
+const HS_LEVELS = [
+  { level: "low", min: 1, max: 3, investigation_days: null, method: null },
+  { level: "moderate", min: 4, max: 7, investigation_days: 15, method: "simple_analysis" },
+  { level: "significant", min: 8, max: 14, investigation_days: 7, method: "five_whys" },
+  { level: "high", min: 15, max: 25, investigation_days: 3, method: "cause_tree" },
+];
+/** Motifs du verrou (§4) : libellé, source, levée, types de véhicule, dérogeable, lot. */
+const HS_REASONS = {
+  V01: ["Contrôle avant départ non réalisé pour la rotation", "NIMOVA Terrain", "Réaliser le contrôle", ["tanker", "tipper"], false, 1],
+  V02: ["Point critique du contrôle avant départ non conforme", "NIMOVA Terrain", "Chef de parc après correction, photo obligatoire", ["tanker", "tipper"], true, 1],
+  V03: ["Alcootest non réalisé ou positif", "NIMOVA Terrain", "Responsable HSSEQ ; positif : conducteur retiré de la rotation", ["tanker", "tipper"], false, 1],
+  V04: ["Habilitation obligatoire expirée ou aptitude médicale « inapte »", "Habilitations (RH)", "Changer de conducteur", ["tanker", "tipper"], true, 1],
+  V05: ["Document du véhicule expiré (assurance, visite technique)", "Transport, fiche véhicule", "Responsable maintenance", ["tanker", "tipper"], true, 1],
+  V06: ["Barémage ou certificat d'étanchéité de la citerne expiré", "Transport, fiche véhicule", "Responsable maintenance", ["tanker"], true, 2],
+  V07: ["Charge déclarée supérieure à la charge utile autorisée", "Transport, ticket de pesée", "Chef de parc après délestage", ["tipper"], true, 2],
+  V08: ["Plan de trajet absent, circulation de nuit interdite ou temps de conduite dépassé", "Transport, rotation", "Responsable exploitation", ["tanker", "tipper"], true, 2],
+  V09: ["Véhicule immobilisé par un événement en cours d'enquête", "Événements", "Responsable HSSEQ", ["tanker", "tipper"], true, 2],
+};
+const HS_TYPES = { work_accident: "safety", road_accident: "safety", near_miss: "safety", hazard: "safety", spill: "environment", fire: "safety", security_breach: "security", product_quality: "quality", property_damage: "safety" };
+const HS_TYPE_LABELS = { work_accident: "Accident du travail", road_accident: "Accident de la route", near_miss: "Presque-accident", hazard: "Situation dangereuse", spill: "Déversement", fire: "Incendie, départ de feu", security_breach: "Atteinte à la sûreté", product_quality: "Manquant ou contamination", property_damage: "Dommage matériel" };
+const HS_STATUS_LABELS = { reported: "Déclaré", classified: "Classé", investigation: "En enquête", actions: "Actions en cours", closed: "Clôturé" };
+const HS_ACTION_LABELS = { todo: "À faire", in_progress: "En cours", to_verify: "À vérifier", closed: "Close", cancelled: "Annulée" };
+const HS_LEVEL_LABELS = { low: "Faible", moderate: "Modérée", significant: "Significative", high: "Élevée" };
+const HS_DOMAINS = ["safety", "health", "security", "environment", "quality"];
+const HS_DOC_LABELS = { insurance: "Assurance", inspection: "Visite technique", calibration: "Barémage", tightness: "Certificat d'étanchéité" };
+const HS_COST_KINDS = ["claim", "deductible", "downtime", "product_loss", "repair", "other"];
+const HS_CONTROL_LEVELS = ["elimination", "substitution", "engineering", "administrative", "ppe"];
+const HS_ORIGINS = ["event", "audit", "check", "risk", "review"];
+const HS_PROOFS = {
+  elimination: "Constat de suppression du danger, photos à l'appui",
+  substitution: "Bon de livraison du matériel de remplacement",
+  engineering: "Procès-verbal de réception des travaux et photos",
+  administrative: "Note de service signée et feuille d'émargement",
+  ppe: "Bons de remise des équipements signés",
+};
+
+let HS = null;
+const hsNow = () => `${TODAY}T${new Date().toISOString().slice(11, 19)}Z`;
+const hsAddMinutes = (iso, minutes) => `${new Date(Date.parse(iso) + minutes * 60000).toISOString().slice(0, 19)}Z`;
+const hsLevel = (c) => (c ? HS_LEVELS.find((l) => c >= l.min && c <= l.max)?.level ?? null : null);
+const hsUser = (id) => (id ? { id, name: userName(id) } : null);
+const hsVehicle = (id) => DB.vehicles.find((v) => v.id === id) ?? HS.tippers.find((v) => v.id === id) ?? null;
+const hsVehicleByName = (name) => DB.vehicles.find((v) => v.name === name) ?? HS.tippers.find((v) => v.name === name) ?? null;
+const hsKind = (v) => HS.kinds.get(v.id) ?? "tanker";
+const hsVehicleSite = (v) => (hsKind(v) === "tipper" ? 2 : 1);
+function hsVehicleRef(id) {
+  const v = hsVehicle(id);
+  return v ? { id: v.id, name: v.name, vehicle_kind: hsKind(v), plate: v.tractor_plate } : null;
+}
+const hsDriver = (id) => DB.drivers.find((d) => d.id === id) ?? HS.drivers.find((d) => d.id === id) ?? null;
+function hsDriverRef(id) {
+  const d = hsDriver(id);
+  return d ? { id: d.id, name: d.name } : null;
+}
+const hsRotation = (id) => (id ? DB.rotations.find((r) => r.id === id && r.company_id === 1) ?? HS.rotations.find((r) => r.id === id) ?? null : null);
+const hsRouteName = (r) => r.route_name ?? DB.routes.find((x) => x.id === r.route_id)?.name ?? null;
+const hsRotationRef = (r) => (r ? { id: r.id, name: r.name, date_loading: r.date_loading, route_name: hsRouteName(r) } : null);
+const hsSite = (id) => HS.sites.find((s) => s.id === id) ?? null;
+function hsSiteRef(id) {
+  const s = hsSite(id);
+  return s ? { id: s.id, name: s.name } : null;
+}
+/** Fin prévue d'une rotation : livraison, sinon chargement plus le temps de route (380 km par jour). */
+function hsRotationEnd(r) {
+  if (r.date_delivery) return r.date_delivery;
+  const km = DB.routes.find((x) => x.id === r.route_id)?.distance_km ?? 45;
+  return addDays(r.date_loading, Math.max(1, Math.ceil(km / 380)));
+}
+function hsRotationAt(vehicleId, date) {
+  const list = [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations].filter((r) => r.vehicle_id === vehicleId && r.date_loading <= date && r.state !== "cancelled");
+  return list.sort((a, b) => b.date_loading.localeCompare(a.date_loading) || b.id - a.id)[0] ?? null;
+}
+const hsDepartureRotations = (day) => [...DB.rotations.filter((r) => r.company_id === 1 && r.date_loading === day && r.state !== "cancelled"), ...HS.rotations.filter((r) => r.date_loading === day)];
+
+/* ─── Droits et périmètre ───────────────────────────────────────────────── */
+
+const hsIs = (ctx, profile) => ctx.user.profiles.includes(profile);
+const hsFull = (ctx) => hasProfile(ctx, ["admin", "direction", "hsseq"]);
+const hsSites = (ctx) => (hsFull(ctx) ? [] : HS_USER_SITES[ctx.user.id] ?? []);
+function hsSiteOk(ctx, siteId) {
+  const sites = hsSites(ctx);
+  return !sites.length || sites.includes(siteId);
+}
+const hsEmployee = (ctx) => HS_EMPLOYEES.find((e) => e.user_id === ctx.user.id) ?? null;
+const hsMyDriver = (ctx) => hsEmployee(ctx)?.driver_id ?? null;
+const hsCanSeeEvent = (ctx, e) => hsFull(ctx) || e.reported_by === ctx.user.id || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, e.site_id));
+const hsCanSeeAction = (ctx, a) => hsFull(ctx) || a.owner_id === ctx.user.id || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, a.site_id));
+const hsCanSeeCheck = (ctx, c) => hsFull(ctx) || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, c.site_id)) || (hsIs(ctx, "conducteur") && c.driver_id === hsMyDriver(ctx));
+const hsCanLift = (ctx, n) => hsIs(ctx, "hsseq") || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, n.site_id));
+const hsForbidden = (message = "Accès non autorisé pour votre profil.") => new ApiError(403, "forbidden", message);
+const hsRule = (code, message, extra = {}) => new ApiError(422, code, message, extra);
+/** Nombre facultatif d'un corps (position GPS) : nul s'il manque. */
+const hsNum = (v, name) => (v === undefined || v === null || v === "" ? null : numArg(v, name));
+
+/** Filtre commun des listes : société (seul EGUITRA GROUP a du transport), site, type de véhicule. */
+function hsFilter(ctx, q, siteId, kind) {
+  if (q.company_id && Number(q.company_id) !== 1) return false;
+  if (q.site_id && Number(q.site_id) !== siteId) return false;
+  if (q.vehicle_kind && kind && q.vehicle_kind !== kind) return false;
+  return true;
+}
+
+function hsPage(ctx, list, counts, row) {
+  const offset = offsetOf(ctx.query);
+  const limit = limitOf(ctx.query, 50, 500);
+  return { items: list.slice(offset, offset + limit).map(row), total_count: list.length, offset, limit, counts };
+}
+
+/* ─── Journal et pièces jointes ─────────────────────────────────────────── */
+
+function hsLog(model, id, by, action, field = null, oldValue = null, newValue = null, at = hsNow()) {
+  HS.log.push({ model, id, at, by, action, field, old_value: oldValue === null ? null : String(oldValue), new_value: newValue === null ? null : String(newValue) });
+}
+const hsHistoryRow = (l) => ({ at: l.at, by: hsUser(l.by), action: l.action, field: l.field, old_value: l.old_value, new_value: l.new_value });
+const hsHistory = (model, id) => HS.log.filter((l) => l.model === model && l.id === id).sort((a, b) => a.at.localeCompare(b.at)).map(hsHistoryRow);
+
+function hsAttach(model, objectId, by, name, mimetype, data, extra = {}) {
+  const a = { id: ++HS.seq.attachment, model, object_id: objectId, name, mimetype, size: data.length, is_photo: mimetype.startsWith("image/"), caption: null, created_at: hsNow(), created_by: by, client_uuid: null, ...extra };
+  HS.attachments.push(a);
+  HS.files.set(a.id, data);
+  return a;
+}
+const hsPhoto = (model, id, by, at, caption) => hsAttach(model, id, by, `photo-${model}-${id}-${HS.seq.attachment + 1}.png`, "image/png", HS_PNG, { created_at: at, caption });
+const hsAttachmentRow = (a) => ({ id: a.id, name: a.name, mimetype: a.mimetype, size: a.size, is_photo: a.is_photo, caption: a.caption, created_at: a.created_at, created_by: hsUser(a.created_by), url: `/hsseq/attachments/${a.id}/download` });
+const hsAttachments = (model, id, keep = () => true) => HS.attachments.filter((a) => a.model === model && a.object_id === id && keep(a)).map(hsAttachmentRow);
+
+/* ─── Contrôles et non-conformités ──────────────────────────────────────── */
+
+function hsTemplateRow(t) {
+  return { id: t.id, name: t.name, kind: t.kind, vehicle_kind: t.vehicle_kind, version: t.version, active: t.active, items: [...t.items].sort((a, b) => a.sequence - b.sequence), updated_at: t.updated_at, updated_by: hsUser(t.updated_by) };
+}
+
+/** Contrôle et ses non-conformités (une par réponse « not_ok »). */
+function hsCreateCheck(spec) {
+  const t = spec.template;
+  const v = hsVehicle(spec.vehicle_id);
+  const c = {
+    id: ++HS.seq.check, reference: `CTL/2026/${pad(HS.seq.check + 1200, 5)}`, template_id: t.id, kind: t.kind, vehicle_kind: t.vehicle_kind,
+    vehicle_id: v.id, rotation_id: spec.rotation_id ?? null, driver_id: spec.driver_id ?? null, performed_by: spec.performed_by, site_id: hsVehicleSite(v),
+    client_uuid: spec.client_uuid ?? null, reported_at: spec.reported_at, synced_at: spec.synced_at ?? spec.reported_at, offline: Boolean(spec.offline),
+    duration_s: spec.duration_s ?? null, latitude: spec.latitude ?? null, longitude: spec.longitude ?? null, gps_accuracy: spec.gps_accuracy ?? null, signature: spec.signature ?? null,
+    answers: t.items.map((it) => {
+      const a = spec.answers.find((x) => Number(x.item_id) === it.id);
+      return { item_id: it.id, label: it.label, blocking: it.blocking, answer: it.linked_to ? "na" : a?.answer ?? "na", comment: it.linked_to ? "Renseigné par l'alcootest" : a?.comment ?? null };
+    }),
+  };
+  c.result = c.answers.some((a) => a.answer === "not_ok" && a.blocking) ? "blocking" : c.answers.some((a) => a.answer === "not_ok") ? "non_compliant" : "compliant";
+  HS.checks.push(c);
+  for (const a of c.answers.filter((x) => x.answer === "not_ok")) {
+    HS.ncs.push({ id: ++HS.seq.nc, check_id: c.id, item_id: a.item_id, label: a.label, blocking: a.blocking, vehicle_id: c.vehicle_id, rotation_id: c.rotation_id, site_id: c.site_id, found_at: c.reported_at, comment: a.comment, status: "open", lifted_at: null, lifted_by: null, lift_comment: null, lift_photo_ids: [], action_id: null });
+  }
+  return c;
+}
+function hsNcRow(ctx, n) {
+  const c = HS.checks.find((x) => x.id === n.check_id);
+  const action = n.action_id ? HS.actions.find((a) => a.id === n.action_id) : null;
+  const photos = hsAttachments("nonconformity", n.id, (a) => !n.lift_photo_ids.includes(a.id));
+  return {
+    id: n.id, check: { id: c.id, reference: c.reference }, item: { id: n.item_id, label: n.label, blocking: n.blocking }, vehicle: hsVehicleRef(n.vehicle_id),
+    rotation: hsRotationRef(hsRotation(n.rotation_id)), site: hsSiteRef(n.site_id), found_at: n.found_at, comment: n.comment, photos, photos_missing: photos.length === 0,
+    status: n.status, lifted_at: n.lifted_at, lifted_by: hsUser(n.lifted_by), lift_comment: n.lift_comment,
+    lift_photos: HS.attachments.filter((a) => n.lift_photo_ids.includes(a.id)).map(hsAttachmentRow), action: action ? { id: action.id, reference: action.reference } : null,
+    rights: { can_edit: false, can_close: n.status === "open" && hsCanLift(ctx, n), can_approve: false },
+  };
+}
+function hsCheckLine(c) {
+  const ncs = HS.ncs.filter((n) => n.check_id === c.id);
+  const t = HS.templates.find((x) => x.id === c.template_id);
+  return {
+    id: c.id, reference: c.reference, template: { id: t.id, name: t.name }, kind: c.kind, vehicle_kind: c.vehicle_kind, vehicle: hsVehicleRef(c.vehicle_id),
+    rotation: hsRotationRef(hsRotation(c.rotation_id)), driver: hsDriverRef(c.driver_id), performed_by: hsUser(c.performed_by), site: hsSiteRef(c.site_id), result: c.result,
+    nonconformities_count: ncs.length, open_blocking: ncs.filter((n) => n.status === "open" && n.blocking).length, duration_s: c.duration_s,
+    client_uuid: c.client_uuid, reported_at: c.reported_at, synced_at: c.synced_at, offline: c.offline,
+  };
+}
+function hsCheckDetail(ctx, c) {
+  const ncs = HS.ncs.filter((n) => n.check_id === c.id).map((n) => hsNcRow(ctx, n));
+  const answers = c.answers.map((a) => ({ ...a, photos: ncs.find((n) => n.item.id === a.item_id)?.photos ?? [] }));
+  return {
+    ...hsCheckLine(c), latitude: c.latitude, longitude: c.longitude, gps_accuracy: c.gps_accuracy, answers, signature: c.signature, nonconformities: ncs, photos_missing: ncs.some((n) => n.photos_missing),
+    rights: { can_edit: hsIs(ctx, "hsseq"), can_close: ncs.some((n) => n.rights.can_close), can_approve: false },
+  };
+}
+
+/* ─── Alcootests ────────────────────────────────────────────────────────── */
+
+const hsTestStatus = (t) => (!t.performed ? "not_done" : t.result === "positive" ? "non_compliant" : "compliant");
+/** Trois niveaux (§9.4) : « fait » pour le conducteur, statut pour exploitation, direction et admin, détail pour hsseq. */
+function hsTestRow(ctx, t) {
+  if (!hasProfile(ctx, HS_READ)) return { access: "done", id: t.id, rotation: hsRotationRef(hsRotation(t.rotation_id)), driver: hsDriverRef(t.driver_id), done: t.performed, done_at: t.performed ? t.reported_at : null };
+  const base = { id: t.id, rotation: hsRotationRef(hsRotation(t.rotation_id)), driver: hsDriverRef(t.driver_id), date: t.reported_at.slice(0, 10), status: hsTestStatus(t) };
+  if (!hsIs(ctx, "hsseq")) return { access: "status", ...base };
+  return {
+    access: "detail", ...base, performed: t.performed, result: t.result, reading_mg_l: t.reading_mg_l, device: t.device, not_done_reason: t.not_done_reason,
+    performed_by: hsUser(t.performed_by), driver_removed: t.driver_removed, client_uuid: t.client_uuid, reported_at: t.reported_at, synced_at: t.synced_at, offline: t.offline,
+  };
+}
+const hsCanSeeTest = (ctx, t) => {
+  const r = hsRotation(t.rotation_id);
+  const v = r ? hsVehicle(r.vehicle_id) : null;
+  return hsFull(ctx) || (hsIs(ctx, "exploitation") && (!v || hsSiteOk(ctx, hsVehicleSite(v)))) || (hsIs(ctx, "conducteur") && t.driver_id === hsMyDriver(ctx));
+};
+
+/* ─── Verrou de départ ──────────────────────────────────────────────────── */
+
+const hsReasonSetting = (code) => HS.reasons.find((r) => r.code === code);
+function hsExpireWaivers() {
+  const now = hsNow();
+  for (const w of HS.waivers) if (w.status === "active" && w.expires && w.expires < now) w.status = "expired";
+}
+/** pending : motif levé par une saisie de terrain encore à faire (V01, V03 non faits). */
+function hsReason(code, since, detail, pending = false) {
+  const s = hsReasonSetting(code);
+  return { code, label: s.label, source: s.source, since, waivable: s.waivable, detail, resolution: s.resolution, severity: "block", pending, waiver_id: null };
+}
+/** Évaluation du §4.2 : motifs V01 à V05 actifs pour le type du véhicule et le site. */
+function hsEvaluate(ctx, rot) {
+  const v = hsVehicle(rot.vehicle_id);
+  const kind = hsKind(v);
+  const site = hsVehicleSite(v);
+  const on = (code) => {
+    const s = hsReasonSetting(code);
+    return s.active && s.vehicle_kinds.includes(kind) && !s.disabled_sites.includes(site);
+  };
+  const dayStart = stamp(rot.date_loading, 5, 0);
+  const hs = hsIs(ctx, "hsseq");
+  const reasons = [];
+  if (on("V01") && !HS.checks.some((c) => c.rotation_id === rot.id && c.kind === "pre_departure")) reasons.push(hsReason("V01", dayStart, null, true));
+  if (on("V02")) {
+    const open = HS.ncs.filter((n) => n.vehicle_id === v.id && n.blocking && n.status === "open").sort((a, b) => a.found_at.localeCompare(b.found_at));
+    if (open.length) reasons.push(hsReason("V02", open[0].found_at, open.map((n) => n.label).join(" ; ")));
+  }
+  if (on("V03")) {
+    const t = HS.tests.filter((x) => x.rotation_id === rot.id && x.driver_id === rot.driver_id).sort((a, b) => b.reported_at.localeCompare(a.reported_at))[0];
+    if (!t) reasons.push(hsReason("V03", dayStart, hs ? "Aucun alcootest pour le conducteur de la rotation" : null, true));
+    else if (!t.performed) reasons.push(hsReason("V03", t.reported_at, hs ? `Non réalisé : ${t.not_done_reason}` : null, true));
+    else if (t.result === "positive") reasons.push(hsReason("V03", t.reported_at, hs ? `Positif (${fnum(t.reading_mg_l, 2)} mg/L) à ${t.reported_at.slice(11, 16)} ; conducteur retiré de la rotation` : null));
+  }
+  if (on("V04")) {
+    const d = hsDriver(rot.driver_id);
+    if (d && (!d.license_expiry || d.license_expiry < rot.date_loading)) {
+      reasons.push(hsReason("V04", d.license_expiry ? `${addDays(d.license_expiry, 1)}T00:00:00Z` : dayStart, d.license_expiry ? `Permis de conduire de ${d.name} expiré le ${frDate(d.license_expiry)}` : `Aucun permis de conduire enregistré pour ${d.name}`));
+    }
+  }
+  if (on("V05")) {
+    const docs = HS.docs.filter((x) => x.vehicle_id === v.id && ["insurance", "inspection"].includes(x.kind) && x.expiry_date < rot.date_loading);
+    if (docs.length) reasons.push(hsReason("V05", `${addDays(docs[0].expiry_date, 1)}T00:00:00Z`, docs.map((x) => `${HS_DOC_LABELS[x.kind]} expirée le ${frDate(x.expiry_date)}`).join(" ; ")));
+  }
+  hsExpireWaivers();
+  const waivers = HS.waivers.filter((w) => w.rotation_id === rot.id && w.status === "active");
+  for (const r of reasons) r.waiver_id = waivers.find((w) => w.reason_code === r.code)?.id ?? null;
+  const w = waivers[0];
+  return {
+    rotation_id: rot.id, allowed: reasons.every((r) => r.severity !== "block" || r.waiver_id), reasons,
+    active_waiver: w ? { id: w.id, approved_by: w.approvals.map((a) => hsUser(a.by)), expires: w.expires } : null, checked_at: hsNow(),
+  };
+}
+function hsDepartures(ctx, day, q) {
+  const items = hsDepartureRotations(day)
+    .map((r) => ({ r, v: hsVehicle(r.vehicle_id) }))
+    .filter(({ v }) => v && hsFilter(ctx, q, hsVehicleSite(v), hsKind(v)) && hsSiteOk(ctx, hsVehicleSite(v)))
+    .sort((a, b) => a.v.name.localeCompare(b.v.name))
+    .map(({ r, v }) => {
+      const evaluation = hsEvaluate(ctx, r);
+      const open = evaluation.reasons.filter((x) => x.severity === "block" && !x.waiver_id);
+      return { rotation: hsRotationRef(r), vehicle: hsVehicleRef(v.id), driver: hsDriverRef(r.driver_id), site: hsSiteRef(hsVehicleSite(v)), evaluation, pending_checks_only: open.length > 0 && open.every((x) => x.pending) };
+    });
+  const blocked = items.filter((i) => !i.evaluation.allowed);
+  return { date: day, total: items.length, allowed: items.length - blocked.length, blocked: blocked.length, items: q.blocked === "1" ? blocked : items };
+}
+
+/* ─── Événements ────────────────────────────────────────────────────────── */
+
+const hsCriticality = (e) => (e.potential_severity && e.probability ? e.potential_severity * e.probability : null);
+const hsEventActions = (e) => HS.actions.filter((a) => a.origin === "event" && a.origin_id === e.id);
+const hsActionOpen = (a) => !["closed", "cancelled"].includes(a.status);
+const hsEventOverdue = (e) => Boolean(e.deadlines.investigation_due) && ["classified", "investigation"].includes(e.status) && e.deadlines.investigation_due < TODAY;
+function hsEventLine(e) {
+  const c = hsCriticality(e);
+  return {
+    id: e.id, reference: e.reference, title: e.title, type: e.type, domain: e.domain, status: e.status, occurred_at: e.occurred_at, site: hsSiteRef(e.site_id),
+    vehicle: e.vehicle_id ? hsVehicleRef(e.vehicle_id) : null, rotation: hsRotationRef(hsRotation(e.rotation_id)),
+    actual_severity: e.actual_severity, potential_severity: e.potential_severity, probability: e.probability, criticality: c, level: hsLevel(c),
+    reported_by: hsUser(e.reported_by), open_actions: hsEventActions(e).filter(hsActionOpen).length, investigation_due: e.deadlines.investigation_due,
+    investigation_overdue: hsEventOverdue(e), total_cost: sum(e.costs, (x) => x.amount),
+  };
+}
+function hsEventTransitions(ctx, e) {
+  if (!hsIs(ctx, "hsseq")) return [];
+  const actions = hsEventActions(e);
+  switch (e.status) {
+    case "reported":
+      return ["classify"];
+    case "classified":
+      return hsLevel(hsCriticality(e)) === "low" && !actions.length ? ["investigate", "close"] : ["investigate"];
+    case "investigation":
+      return e.investigation?.root_cause ? ["plan"] : [];
+    case "actions":
+      return actions.some(hsActionOpen) ? [] : ["close"];
+    default:
+      return ["reopen"];
+  }
+}
+function hsEventDetail(ctx, e) {
+  const transitions = hsEventTransitions(ctx, e);
+  const hs = hsIs(ctx, "hsseq");
+  const inv = e.investigation;
+  return {
+    ...hsEventLine(e), description: e.description, location: e.location, latitude: e.latitude, longitude: e.longitude, gps_accuracy: e.gps_accuracy, source: e.source, client_uuid: e.client_uuid, reported_at: e.reported_at,
+    synced_at: e.synced_at, offline: e.offline, people: e.people, lost_time: e.lost_time, days_lost: e.days_lost, vehicle_immobilized: e.vehicle_immobilized,
+    classified_at: e.classified_at, classified_by: hsUser(e.classified_by), closed_at: e.closed_at, closed_by: hsUser(e.closed_by),
+    investigation: inv
+      ? {
+          method: inv.method, team: inv.team_ids.map(hsUser), opened_at: inv.opened_at, due_date: inv.due_date, overdue: !inv.concluded_at && inv.due_date < TODAY,
+          concluded_at: inv.concluded_at, immediate_causes: inv.immediate_causes, whys: inv.whys, tree: inv.tree, factors_5m: inv.factors_5m,
+          root_cause: inv.root_cause, conclusion: inv.conclusion,
+        }
+      : null,
+    actions: hsEventActions(e).map(hsActionLine), costs: e.costs.map((c) => ({ ...c })), attachments: hsAttachments("event", e.id), notifications: e.notifications,
+    deadlines: e.deadlines, history: hsHistory("event", e.id), transitions,
+    rights: { can_edit: e.status !== "closed" && (hs || (e.reported_by === ctx.user.id && e.status === "reported")), can_close: transitions.includes("close"), can_approve: hs && ["reported", "classified", "investigation"].includes(e.status) },
+  };
+}
+const hsEmptyFactors = () => ({ environment: [], equipment: [], method: [], manpower: [], material: [] });
+function hsNotify(e, at) {
+  const level = hsLevel(hsCriticality(e));
+  if (level === "high") {
+    e.notifications.push({ recipient: "Saïdou Barry, Directeur général", channel: "email", sent_at: at, reason: "Criticité élevée : notification immédiate" });
+    e.notifications.push({ recipient: "Saïdou Barry, Directeur général", channel: "app", sent_at: at, reason: "Criticité élevée : notification immédiate" });
+  }
+  if (level === "high" || level === "significant") {
+    e.notifications.push({ recipient: "Fanta Kourouma, Responsable HSSEQ", channel: "email", sent_at: at, reason: `Criticité ${HS_LEVEL_LABELS[level].toLowerCase()} : enquête à ouvrir` });
+    e.notifications.push({ recipient: e.site_id === 2 ? "Sékou Condé, chef de parc de Boffa" : "Djénabou Touré, responsable exploitation", channel: "app", sent_at: at, reason: "Responsable métier de l'événement" });
+  }
+}
+/** Classement (§9.1) : criticité, niveau, échéance d'enquête, information du donneur d'ordre, notifications. */
+function hsClassify(e, by, at, values) {
+  Object.assign(e, values);
+  const level = hsLevel(hsCriticality(e));
+  const days = HS_LEVELS.find((l) => l.level === level)?.investigation_days ?? null;
+  e.status = "classified";
+  e.classified_at = at;
+  e.classified_by = by;
+  e.deadlines.investigation_due = days ? addDays(at.slice(0, 10), days) : null;
+  e.deadlines.client_notice_due = level === "high" ? addDays(at.slice(0, 10), 1) : null;
+  hsNotify(e, at);
+  hsLog("event", e.id, by, "Classement", "criticality", null, hsCriticality(e), at);
+}
+
+/* ─── Actions ───────────────────────────────────────────────────────────── */
+
+function hsActionOrigin(a) {
+  if (a.origin === "event") {
+    const e = HS.events.find((x) => x.id === a.origin_id);
+    return e ? { id: e.id, reference: e.reference, title: e.title } : null;
+  }
+  if (a.origin === "check") {
+    const c = HS.checks.find((x) => x.id === a.origin_id);
+    return c ? { id: c.id, reference: c.reference, title: `Contrôle avant départ de ${hsVehicle(c.vehicle_id)?.name ?? "?"}` } : null;
+  }
+  return null;
+}
+function hsActionCriticality(a) {
+  if (a.origin !== "event") return null;
+  const e = HS.events.find((x) => x.id === a.origin_id);
+  return e ? hsCriticality(e) : null;
+}
+function hsActionLine(a) {
+  const crit = hsActionCriticality(a);
+  const late = ["todo", "in_progress"].includes(a.status) && a.due_date < TODAY;
+  return {
+    id: a.id, reference: a.reference, description: a.description, origin: a.origin, origin_ref: hsActionOrigin(a), control_level: a.control_level, owner: hsUser(a.owner_id),
+    due_date: a.due_date, status: a.status, overdue: late, days_overdue: late ? daysBetween(a.due_date, TODAY) : 0, origin_criticality: crit,
+    verification_required: (crit ?? 0) >= 8, verification_date: a.verification_date, effective: a.effective, site: hsSiteRef(a.site_id),
+  };
+}
+function hsReminders(a) {
+  if (!["todo", "in_progress"].includes(a.status)) return [];
+  const list = [];
+  const before = addDays(a.due_date, -7);
+  if (before <= TODAY) list.push({ at: stamp(before, 7), kind: "d_minus_7" });
+  if (a.due_date <= TODAY) list.push({ at: stamp(a.due_date, 7), kind: "d0" });
+  for (let d = addDays(a.due_date, 7); d <= TODAY; d = addDays(d, 7)) list.push({ at: stamp(d, 7), kind: "weekly" });
+  if (daysBetween(a.due_date, TODAY) > 30) list.push({ at: stamp(addDays(a.due_date, 31), 7, 5), kind: "escalation" });
+  return list.sort((x, y) => x.at.localeCompare(y.at));
+}
+const hsNeedsApproval = (a) => (a.estimated_cost ?? 0) >= HS_COSTLY && !a.approved_at;
+function hsActionTransitions(ctx, a) {
+  const hs = hsIs(ctx, "hsseq");
+  const mine = hs || a.owner_id === ctx.user.id;
+  const t = [];
+  if (mine && a.status === "todo" && !hsNeedsApproval(a)) t.push("start");
+  if (mine && ["todo", "in_progress"].includes(a.status)) t.push("close");
+  if (hs && a.status === "to_verify" && a.verification_date && a.verification_date <= TODAY) t.push("verify");
+  if (hsIs(ctx, "direction") && hsNeedsApproval(a) && ["todo", "in_progress"].includes(a.status)) t.push("approve");
+  if (hs && hsActionOpen(a)) t.push("cancel");
+  if (hs && !hsActionOpen(a)) t.push("reopen");
+  return t;
+}
+function hsActionDetail(ctx, a) {
+  const transitions = hsActionTransitions(ctx, a);
+  return {
+    ...hsActionLine(a), expected_evidence: a.expected_evidence, evidence: hsAttachments("action", a.id), estimated_cost: a.estimated_cost,
+    management_approval: { required: (a.estimated_cost ?? 0) >= HS_COSTLY, approved_at: a.approved_at, approved_by: hsUser(a.approved_by) },
+    created_at: a.created_at, created_by: hsUser(a.created_by), done_at: a.done_at, verified_at: a.verified_at, verified_by: hsUser(a.verified_by),
+    verification_comment: a.verification_comment, closed_at: a.closed_at, reminders: hsReminders(a), history: hsHistory("action", a.id), transitions,
+    rights: { can_edit: (hsIs(ctx, "hsseq") || a.owner_id === ctx.user.id) && hsActionOpen(a), can_close: transitions.includes("close"), can_approve: transitions.includes("verify") || transitions.includes("approve") },
+  };
+}
+function hsNewAction(values) {
+  const a = {
+    id: ++HS.seq.action, reference: "", description: values.description, origin: values.origin, origin_id: values.origin_id ?? null, control_level: values.control_level,
+    owner_id: values.owner_id, due_date: values.due_date, status: values.status ?? "todo", expected_evidence: values.expected_evidence ?? HS_PROOFS[values.control_level],
+    estimated_cost: values.estimated_cost ?? null, approved_at: null, approved_by: null, created_at: values.created_at ?? hsNow(), created_by: values.created_by ?? 16,
+    done_at: null, verified_at: null, verified_by: null, verification_comment: null, effective: null, verification_date: null, closed_at: null, site_id: values.site_id ?? 1,
+  };
+  a.reference = `ACT/2026/${pad(a.id, 4)}`;
+  HS.actions.push(a);
+  return a;
+}
+
+/* ─── Dérogations ───────────────────────────────────────────────────────── */
+
+function hsWaiverRow(ctx, w) {
+  hsExpireWaivers();
+  const hs = hsIs(ctx, "hsseq");
+  const mine = w.requested_by === ctx.user.id;
+  const t = [];
+  if (hs && w.status === "pending_hsseq" && !mine) t.push("approve");
+  if (hs && w.status === "pending_hsseq") t.push("refuse");
+  if ((hs || mine) && ["pending_hsseq", "active"].includes(w.status)) t.push("cancel");
+  return {
+    id: w.id, reference: w.reference, rotation: hsRotationRef(hsRotation(w.rotation_id)), vehicle: hsVehicleRef(w.vehicle_id), site: hsSiteRef(w.site_id),
+    reason_code: w.reason_code, reason_label: hsReasonSetting(w.reason_code).label, justification: w.justification, requested_by: hsUser(w.requested_by),
+    requested_at: w.requested_at, approvals: w.approvals.map((a) => ({ level: a.level, role: a.role, by: hsUser(a.by), at: a.at })), status: w.status,
+    expires: w.expires, refusal_reason: w.refusal_reason, management_notified_at: w.management_notified_at, transitions: t,
+    rights: { can_edit: mine && w.status === "pending_hsseq", can_close: t.includes("cancel"), can_approve: t.includes("approve") },
+  };
+}
+const hsCanSeeWaiver = (ctx, w) => hsFull(ctx) || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, w.site_id));
+
+/* ─── Échéances ─────────────────────────────────────────────────────────── */
+
+function hsDeadlines(ctx, q) {
+  const horizon = intArg(q, "horizon", 30, 1, 365);
+  const limit = addDays(TODAY, horizon);
+  const items = [];
+  const personsOnly = !hasProfile(ctx, HS_READ) && hsIs(ctx, "rh");
+  if (q.kind !== "vehicle_document") {
+    for (const d of [...DB.drivers.filter((x) => x.company_id === 1 && x.active), ...HS.drivers]) {
+      if (!d.license_expiry || d.license_expiry > limit) continue;
+      const site = HS.driverSites.get(d.id) ?? 1;
+      if (!hsFilter(ctx, q, site, site === 2 ? "tipper" : "tanker") || !hsSiteOk(ctx, site)) continue;
+      items.push({ kind: "qualification", document_kind: null, subject: { type: "person", id: d.id, name: d.name }, label: "Permis de conduire poids lourd", expires_on: d.license_expiry, days_left: daysBetween(TODAY, d.license_expiry), expired: d.license_expiry < TODAY, reason_code: "V04", site: hsSiteRef(site) });
+    }
+  }
+  if (q.kind !== "qualification" && !personsOnly) {
+    for (const doc of HS.docs) {
+      const v = hsVehicle(doc.vehicle_id);
+      if (!v || v.state === "off" || doc.expiry_date > limit) continue;
+      const site = hsVehicleSite(v);
+      if (!hsFilter(ctx, q, site, hsKind(v)) || !hsSiteOk(ctx, site)) continue;
+      items.push({ kind: "vehicle_document", document_kind: doc.kind, subject: { type: "vehicle", id: v.id, name: v.name }, label: HS_DOC_LABELS[doc.kind], expires_on: doc.expiry_date, days_left: daysBetween(TODAY, doc.expiry_date), expired: doc.expiry_date < TODAY, reason_code: ["calibration", "tightness"].includes(doc.kind) ? "V06" : "V05", site: hsSiteRef(site) });
+    }
+  }
+  return { horizon_days: horizon, items: items.sort((a, b) => a.expires_on.localeCompare(b.expires_on) || a.subject.name.localeCompare(b.subject.name)) };
+}
+
+/* ─── Cockpit (§10) ─────────────────────────────────────────────────────── */
+
+const hsEventKind = (e) => {
+  const v = e.vehicle_id ? hsVehicle(e.vehicle_id) : null;
+  return v ? hsKind(v) : e.site_id === 2 ? "tipper" : "tanker";
+};
+/** Comptes d'événements d'un mois et d'un type de véhicule : historique avant 2026, données ensuite. */
+function hsEventCounts(month, kind) {
+  if (month < "2026-01") return HS.history.get(`${month}|${kind}`) ?? { lt: 0, days: 0, work: 0, road: 0, nm: 0 };
+  const list = HS.events.filter((e) => e.occurred_at.slice(0, 7) === month && hsEventKind(e) === kind);
+  return {
+    lt: list.filter((e) => e.type === "work_accident" && e.lost_time).length + list.filter((e) => e.type === "road_accident" && e.lost_time).length,
+    days: sum(list, (e) => e.days_lost),
+    work: list.filter((e) => e.type === "work_accident").length,
+    road: list.filter((e) => e.type === "road_accident").length,
+    nm: list.filter((e) => ["near_miss", "hazard"].includes(e.type)).length,
+  };
+}
+/** Heures travaillées (RH, par société et par mois, sans maille site : décision 5). */
+function hsHours(month, company) {
+  const r = makeRng(`hsseq-heures-${month}-${company}`);
+  return company === 2 ? Math.round(1900 * r.noise(0.05)) : Math.round(22000 * r.noise(0.04));
+}
+/** Kilomètres d'un mois : rotations de Transport pour les citernes, postes de la mine pour les bennes. */
+function hsKm(month, kind) {
+  if (kind === "tipper") return Math.round(48600 * makeRng(`hsseq-km-${month}`).noise(0.06) * (month === TODAY.slice(0, 7) ? PARTIAL : 1));
+  const rots = DB.rotations.filter((r) => r.company_id === 1 && r.state !== "cancelled" && r.date_loading.slice(0, 7) === month);
+  if (!rots.length) return Math.round(HS.avgTankerKm * makeRng(`hsseq-kmc-${month}`).noise(0.07));
+  return sum(rots, (r) => 2 * (DB.routes.find((x) => x.id === r.route_id)?.distance_km ?? 0));
+}
+/** Litres de gazole d'un mois (citernes : coût de carburant des rotations ÷ prix du litre). */
+function hsLiters(month, kind) {
+  const km = hsKm(month, kind);
+  if (kind === "tipper") return (km * 57 * makeRng(`hsseq-l-${month}`).noise(0.03)) / 100;
+  const rots = DB.rotations.filter((r) => r.company_id === 1 && r.state !== "cancelled" && r.date_loading.slice(0, 7) === month);
+  if (!rots.length) return (km * 44 * makeRng(`hsseq-lc-${month}`).noise(0.03)) / 100;
+  return sum(rots, (r) => r.fuel_cost / (r.date_loading >= "2026-06-01" ? 12500 : 12000));
+}
+function hsSynth(code, month, key, base, spread, min, max, digits = 1) {
+  const r = makeRng(`hsseq-${code}-${month}-${key}`);
+  const p = 10 ** digits;
+  return Math.round(Math.min(max, Math.max(min, base + (r.next() * 2 - 1) * spread)) * p) / p;
+}
+function hsIndicators(ctx, q, month, period) {
+  const months = monthKeys(addMonths(`${month}-01`, -11), `${month}-01`);
+  const company = q.company_id ? Number(q.company_id) : null;
+  const transport = company === null || company === 1;
+  const site = q.site_id ? Number(q.site_id) : null;
+  const kindFilter = q.vehicle_kind || (site === 1 ? "tanker" : site === 2 ? "tipper" : null);
+  const kinds = kindFilter ? [kindFilter] : ["tanker", "tipper"];
+  const key = `${kinds.join("+")}`;
+  const current = TODAY.slice(0, 7);
+  const window = (m) => monthKeys(addMonths(`${m}-01`, -11), `${m}-01`);
+  const counts = (m, k) => kinds.reduce((acc, kind) => {
+    const c = hsEventCounts(m, kind);
+    for (const f of Object.keys(acc)) acc[f] += c[f];
+    return acc;
+  }, { lt: 0, days: 0, work: 0, road: 0, nm: 0, ...k });
+  // TF et TG : société entière (heures de RH sans maille site), tous types de véhicule.
+  const companyCounts = (m) => ["tanker", "tipper"].reduce((acc, kind) => {
+    const c = hsEventCounts(m, kind);
+    acc.lt += c.lt;
+    acc.days += c.days;
+    return acc;
+  }, { lt: 0, days: 0 });
+  const hours12 = (m) => sum(window(m), (x) => (company === null ? hsHours(x, 1) + hsHours(x, 2) : hsHours(x, company)));
+  const rolling = (m, f) => sum(window(m), (x) => f(x));
+  // Départs, contrôles et alcootests du mois courant, d'après les données de la maquette.
+  const departures = [];
+  for (let d = `${current}-01`; d <= TODAY; d = addDays(d, 1)) {
+    for (const r of hsDepartureRotations(d)) {
+      const v = hsVehicle(r.vehicle_id);
+      if (v && kinds.includes(hsKind(v))) departures.push(r);
+    }
+  }
+  const checked = departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id));
+  const monthChecks = HS.checks.filter((c) => c.reported_at.slice(0, 7) === current && kinds.includes(c.vehicle_kind));
+  const monthTests = HS.tests.filter((t) => t.reported_at.slice(0, 7) === current && departures.some((r) => r.id === t.rotation_id));
+  const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const actionsDue = (m) => HS.actions.filter((a) => a.due_date.slice(0, 7) === m && a.due_date < TODAY && a.status !== "cancelled" && kinds.includes(hsSite(a.site_id)?.default_vehicle_kind ?? "tanker"));
+  const actionsVerified = (m) => HS.actions.filter((a) => a.verified_at && a.verified_at.slice(0, 7) === m && kinds.includes(hsSite(a.site_id)?.default_vehicle_kind ?? "tanker"));
+  const waiverList = (m) => HS.waivers.filter((w) => !["cancelled", "refused"].includes(w.status) && w.requested_at.slice(0, 7) === m && kinds.includes(hsKind(hsVehicle(w.vehicle_id))));
+  const driversValid = () => {
+    const list = [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].filter((d) => kinds.includes((HS.driverSites.get(d.id) ?? 1) === 2 ? "tipper" : "tanker"));
+    return pct(list.filter((d) => d.license_expiry && d.license_expiry >= TODAY).length, list.length);
+  };
+  const fuel = (m) => {
+    const km = sum(kinds, (k) => hsKm(m, k));
+    return km ? Math.round((sum(kinds, (k) => hsLiters(m, k)) / km) * 1000) / 10 : null;
+  };
+  const tankerShortage = (m) => {
+    const rots = DB.rotations.filter((r) => r.company_id === 1 && r.state !== "cancelled" && r.date_loading.slice(0, 7) === m && r.volume_delivered > 0);
+    if (!rots.length) return hsSynth("ecart-citerne", m, key, 1.4, 0.4, 0.5, 3, 2);
+    return Math.round((sum(rots, (r) => r.shortage) / sum(rots, (r) => r.volume_delivered)) * 100000) / 100;
+  };
+  const tipperVariance = (m) => {
+    const rots = HS.rotations.filter((r) => r.date_loading.slice(0, 7) === m && r.state === "done");
+    if (!rots.length) return hsSynth("ecart-benne", m, key, 6, 2, 2, 11, 2);
+    return Math.round((sum(rots, (r) => r.tonnage_loaded - r.tonnage_delivered) / sum(rots, (r) => r.tonnage_loaded)) * 100000) / 100;
+  };
+  const defs = [
+    ["frequency_rate", "Taux de fréquence", "rate", "down", 5, "Événements, RH", "Accidents du travail avec arrêt × 1 000 000 ÷ heures travaillées, 12 mois glissants", false,
+      (m) => Math.round(((rolling(m, (x) => (company === 2 ? 0 : companyCounts(x).lt)) * 1e6) / hours12(m)) * 100) / 100, "12 mois glissants ; heures de RH par société, sans filtre de site.", true],
+    ["severity_rate", "Taux de gravité", "rate", "down", 0.2, "Événements, RH", "Jours perdus × 1 000 ÷ heures travaillées, 12 mois glissants", false,
+      (m) => Math.round(((rolling(m, (x) => (company === 2 ? 0 : companyCounts(x).days)) * 1000) / hours12(m)) * 100) / 100, "12 mois glissants ; heures de RH par société, sans filtre de site.", true],
+    ["road_accidents_per_mkm", "Accidents de la route par million de km", "rate", "down", 1.5, "Événements, Transport", "Accidents de la route × 1 000 000 ÷ km parcourus, 12 mois glissants", true,
+      (m) => Math.round(((rolling(m, (x) => counts(x).road) * 1e6) / rolling(m, (x) => sum(kinds, (k) => hsKm(x, k)))) * 100) / 100, "12 mois glissants."],
+    ["reporting_ratio", "Taux de déclaration", "ratio", "up", 10, "Événements", "(Presque-accidents + situations dangereuses) ÷ accidents, 12 mois glissants", true,
+      (m) => {
+        const acc = rolling(m, (x) => counts(x).work + counts(x).road);
+        return acc ? Math.round((rolling(m, (x) => counts(x).nm) / acc) * 100) / 100 : null;
+      }, "12 mois glissants."],
+    ["check_completion", "Contrôles avant départ réalisés", "pct", "up", 100, "NIMOVA Terrain, Transport", "Contrôles réalisés ÷ départs", true,
+      (m) => (m === current ? pct(checked.length, departures.length) : hsSynth("ctl", m, key, 96, 3, 88, 100))],
+    ["check_compliance", "Conformité des contrôles", "pct", "up", 95, "NIMOVA Terrain", "Contrôles sans point critique non conforme ÷ contrôles réalisés", true,
+      (m) => (m === current ? pct(monthChecks.filter((c) => c.result !== "blocking").length, monthChecks.length) : hsSynth("conf", m, key, 94, 3.5, 85, 100))],
+    ["breath_test_completion", "Alcootests réalisés", "pct", "up", 100, "NIMOVA Terrain", "Alcootests réalisés ÷ départs", true,
+      (m) => (m === current ? pct(new Set(monthTests.filter((t) => t.performed).map((t) => t.rotation_id)).size, departures.length) : hsSynth("alc", m, key, 97, 3, 89, 100))],
+    ["breath_test_positives", "Alcootests positifs", "count", "down", 0, "NIMOVA Terrain", "Nombre de tests positifs, sans nom", true,
+      (m) => (m === current ? monthTests.filter((t) => t.result === "positive").length : makeRng(`hsseq-pos-${m}-${key}`).weighted([[0, 78], [1, 18], [2, 4]])), "Sans nom ni rotation."],
+    ["waivers", "Dérogations au verrou", "count", "down", period === "12m" ? 24 : 2, "Verrou", "Nombre de dérogations, par site et par motif", true, (m) => waiverList(m).length],
+    ["actions_on_time", "Actions dans les délais", "pct", "up", 90, "Actions", "Actions closes à l'échéance ÷ actions échues", true,
+      (m) => {
+        const due = actionsDue(m);
+        return due.length ? pct(due.filter((a) => a.done_at && a.done_at <= a.due_date).length, due.length) : hsSynth("delais", m, key, 86, 8, 60, 100);
+      }],
+    ["actions_effectiveness", "Efficacité des actions", "pct", "up", 80, "Actions", "Actions efficaces à J+90 ÷ actions vérifiées", true,
+      (m) => {
+        const done = actionsVerified(m);
+        return done.length ? pct(done.filter((a) => a.effective).length, done.length) : hsSynth("eff", m, key, 82, 10, 50, 100);
+      }],
+    ["qualifications_valid", "Habilitations à jour", "pct", "up", 100, "Habilitations RH", "Conducteurs actifs sans habilitation expirée ÷ conducteurs actifs", true,
+      (m) => (m === current ? driversValid() : hsSynth("hab", m, key, 96, 3, 88, 100)), "Permis de conduire au lot 1 ; autres habilitations avec RH."],
+    ["fuel_consumption", "Consommation", "l_100km", "down", 44, "Transport", "Litres consommés × 100 ÷ km parcourus", true, (m) => fuel(m)],
+    ["co2_emissions", "Émissions de CO₂", "kg_co2_km", "down", 1.18, "Transport", "Litres consommés × 2,68 kg ÷ km parcourus", true,
+      (m) => {
+        const f = fuel(m);
+        return f === null ? null : Math.round(((f * 2.68) / 100) * 100) / 100;
+      }],
+    ["tanker_shortage", "Écarts de livraison, citernes", "per_mille", "down", 1.5, "Transport", "Volume manquant ÷ volume livré, en ‰", true, (m) => (kinds.includes("tanker") ? tankerShortage(m) : null)],
+    ["tipper_variance", "Écarts de tonnage, bennes", "per_mille", "down", 5, "Transport", "Écart de tonnage ÷ tonnage chargé, en ‰", true, (m) => (kinds.includes("tipper") ? tipperVariance(m) : null)],
+  ];
+  return defs.map(([code, label, unit, direction, target, source, formula, siteScoped, fn, note = null, companyLevel = false]) => {
+    const series = months.map((m) => ({ month: m, value: transport || companyLevel ? fn(m) : null }));
+    const values = series.map((p) => p.value).filter((v) => v !== null);
+    let value = series[series.length - 1].value;
+    if (period === "12m" && !["rate", "ratio"].includes(unit)) {
+      value = !values.length ? null : unit === "count" ? sum(values) : Math.round((sum(values) / values.length) * 100) / 100;
+    }
+    let breakdown = null;
+    if (code === "waivers" && transport) {
+      const list = (period === "12m" ? months : [month]).flatMap(waiverList);
+      const bySite = groupBy(list, (w) => w.site_id);
+      const byReason = groupBy(list, (w) => w.reason_code);
+      breakdown = [
+        ...[...bySite].map(([id, ws]) => ({ axis: "site", key: String(id), label: hsSite(id)?.name ?? "?", value: ws.length })),
+        ...[...byReason].sort((a, b) => a[0].localeCompare(b[0])).map(([code2, ws]) => ({ axis: "reason", key: code2, label: hsReasonSetting(code2).label, value: ws.length })),
+      ];
+    }
+    const met = value === null || target === null ? null : direction === "down" ? value <= target : value >= target;
+    return { code, label, value, target, unit, direction, met, source, formula, series, breakdown, site_scoped: siteScoped, note: !siteScoped && site ? `${note} Filtre de site non appliqué.` : note };
+  });
+}
+
+/* ─── Données ───────────────────────────────────────────────────────────── */
+
+function seedHsseq() {
+  const r = makeRng("hsseq");
+  HS = DB.hsseq = {
+    sites: [
+      { id: 1, name: "Parc de Matoto", code: "MAT", company_id: 1, default_vehicle_kind: "tanker", yard_manager_ids: [12], active: true },
+      { id: 2, name: "Base minière de Boffa", code: "BOF", company_id: 1, default_vehicle_kind: "tipper", yard_manager_ids: [18], active: true },
+    ],
+    kinds: new Map(), tippers: [], drivers: [], driverSites: new Map(), rotations: [], docs: [], templates: [], checks: [], ncs: [], tests: [],
+    events: [], actions: [], waivers: [], attachments: [], files: new Map(), log: [], reasons: [], history: new Map(), avgTankerKm: 0,
+    seq: { check: 0, nc: 0, test: 0, event: 0, action: 0, waiver: 0, attachment: 0, cost: 0, site: 2, template: 2, item: 40 },
+  };
+  for (const v of DB.vehicles) HS.kinds.set(v.id, "tanker");
+  for (const d of DB.drivers) HS.driverSites.set(d.id, 1);
+
+  // Bennes de la base de Boffa et leurs conducteurs (Aboubacar Keïta vient de Transport).
+  const local = [
+    ["Sékouba Camara", "PL-2018-00502", "2027-04-30"],
+    ["Mamadou Saliou Diallo", "PL-2016-00319", "2026-11-05"],
+    ["Alpha Oumar Baldé", "PL-2020-00648", "2028-02-29"],
+    ["Moussa Kaba", "PL-2019-00561", "2027-12-31"],
+    ["Ibrahima Sory Bah", "PL-2021-00733", "2029-06-30"],
+  ];
+  for (const [name, license, expiry] of local) {
+    const d = { id: newId("driver"), company_id: 1, name, phone: null, license_number: license, license_expiry: expiry, active: true };
+    HS.drivers.push(d);
+    HS.driverSites.set(d.id, 2);
+  }
+  HS.driverSites.set(17, 2);
+  const tipperDrivers = [17, ...HS.drivers.map((d) => d.id)];
+  for (let i = 0; i < 6; i++) {
+    const v = { id: newId("vehicle"), company_id: 1, name: `EB-0${i + 1}`, tractor_plate: `RC 81${pad(i + 1)} C`, trailer_plate: null, brand: i < 4 ? "Sinotruk Howo 371, benne de 20 m³" : "Shacman X3000, benne de 20 m³", capacity_liters: 0, payload_tonnes: 30, driver_id: tipperDrivers[i], state: "service", active: true };
+    HS.tippers.push(v);
+    HS.kinds.set(v.id, "tipper");
+  }
+  // Postes de la mine : un par benne et par jour, trois tours de la fosse 3 au port de Dapilon.
+  let minSeq = 0;
+  for (let d = "2026-09-01"; d <= TODAY; d = addDays(d, 1)) {
+    for (const v of HS.tippers) {
+      const loaded = round3(3 * (28.6 + r.next() * 2.2));
+      const rot = { id: newId("rotation"), company_id: 1, name: null, state: d < TODAY ? "done" : "draft", date_loading: d, date_delivery: d, vehicle_id: v.id, driver_id: v.driver_id, route_id: null, route_name: "Fosse 3 de Boffa - Port de Dapilon", tonnage_loaded: loaded, tonnage_delivered: round3(loaded * (1 - 0.002 - r.next() * 0.008)) };
+      if (rot.state === "done") rot.name = `MIN/2026/${pad(++minSeq, 4)}`;
+      HS.rotations.push(rot);
+    }
+  }
+  const fullMonths = monthKeys("2026-01-01", addMonths(`${TODAY.slice(0, 7)}-01`, -1));
+  HS.avgTankerKm = Math.round(sum(fullMonths, (m) => hsKm(m, "tanker")) / fullMonths.length);
+  // Historique des comptes d'événements avant 2026 (séries du cockpit).
+  for (const m of monthKeys("2024-11-01", "2025-12-01")) {
+    for (const kind of ["tanker", "tipper"]) {
+      const h = makeRng(`hsseq-hist-${m}-${kind}`);
+      const lt = h.chance(kind === "tanker" ? 0.1 : 0.07) ? 1 : 0;
+      HS.history.set(`${m}|${kind}`, { lt, days: lt ? h.int(4, 28) : 0, work: lt + (h.chance(0.12) ? 1 : 0), road: h.chance(kind === "tanker" ? 0.22 : 0.1) ? 1 : 0, nm: h.int(0, kind === "tanker" ? 2 : 1) });
+    }
+  }
+
+  // Documents des véhicules (Transport : eguitra.transport.vehicle.document).
+  const docDate = (from, span) => addDays(from, r.int(0, span));
+  for (const v of [...DB.vehicles, ...HS.tippers]) {
+    const kinds = hsKind(v) === "tanker" ? ["insurance", "inspection", "calibration", "tightness"] : ["insurance", "inspection"];
+    for (const kind of kinds) HS.docs.push({ vehicle_id: v.id, kind, expiry_date: docDate("2026-11-20", 300) });
+  }
+  const setDoc = (name, kind, date) => {
+    const doc = HS.docs.find((x) => x.vehicle_id === hsVehicleByName(name).id && x.kind === kind);
+    doc.expiry_date = date;
+  };
+  setDoc("ER-08", "inspection", "2026-10-12");
+  setDoc("ER-02", "insurance", "2026-10-31");
+  setDoc("ER-11", "inspection", "2026-11-08");
+  setDoc("ER-14", "calibration", "2026-10-28");
+  setDoc("EB-03", "insurance", "2026-11-10");
+
+  // Paramétrage : motifs du verrou et grilles de contrôle avant départ (§5, paramétrage initial).
+  HS.reasons = Object.entries(HS_REASONS).map(([code, [label, source, resolution, kinds, waivable, lot]]) => ({ code, label, source, resolution, vehicle_kinds: kinds, waivable, lot, active: lot === 1, disabled_sites: [] }));
+  const common = ["Éclairage et feux de détresse", "Rétroviseurs et pare-brise", "Trousse de premiers secours", "Cales et triangles", "EPI du conducteur"];
+  const items = (start, blocking) => [...blocking, ...common.map((l) => [l, false])].map(([label, b, linked], i) => ({ id: start + i, label, blocking: b, sequence: (i + 1) * 10, linked_to: linked ?? null }));
+  HS.templates = [
+    { id: 1, name: "Contrôle avant départ, citerne", kind: "pre_departure", vehicle_kind: "tanker", version: 1, active: true, updated_at: "2026-09-29T10:00:00Z", updated_by: 16,
+      items: items(1, [["Freins et ralentisseur, essai statique", true], ["Pneumatiques : usure, pression, coupures", true], ["Vannes de fond fermées et plombées", true], ["Dômes et trous d'homme fermés, joints en état", true], ["Deux extincteurs plombés et à date", true], ["Kit antidéversement complet", true], ["Plaques et étiquettes de danger en place", true], ["Alcootest du conducteur négatif", true, "breath_test"]]) },
+    { id: 2, name: "Contrôle avant départ, benne", kind: "pre_departure", vehicle_kind: "tipper", version: 1, active: true, updated_at: "2026-09-29T10:00:00Z", updated_by: 16,
+      items: items(21, [["Freins et ralentisseur, essai statique", true], ["Pneumatiques : usure, pression, coupures", true], ["Benne abaissée et verrouillée, vérin sans fuite", true], ["Bâche en place et arrimée", true], ["Extincteur plombé et à date", true], ["Gyrophare, avertisseur de recul, fanion (accès site minier)", true], ["Ticket de pesée conforme à la charge utile", true], ["Alcootest du conducteur négatif", true, "breath_test"]]) },
+  ];
+
+  // Contrôles et alcootests des départs depuis le 1er octobre, puis ceux du jour (cas du verrou).
+  const rc = makeRng("hsseq-controles");
+  const template = (v) => HS.templates.find((t) => t.vehicle_kind === hsKind(v));
+  const performer = (v) => (v.id === 1 ? 17 : hsVehicleSite(v) === 2 ? 18 : 12);
+  const device = (v) => (hsVehicleSite(v) === 2 ? "Dräger Alcotest 6820, n° ARHK-0587" : "Dräger Alcotest 6820, n° ARHK-0412");
+  const addTest = (rot, v, at, result, reading, extra = {}) => {
+    HS.tests.push({ id: ++HS.seq.test, rotation_id: rot.id, driver_id: rot.driver_id, performed: result !== null, result, reading_mg_l: reading, device: result !== null ? device(v) : null, not_done_reason: null, performed_by: performer(v), driver_removed: result === "positive", client_uuid: rc.uuid(), reported_at: at, synced_at: at, offline: false, ...extra });
+  };
+  const addCheck = (rot, v, at, notOk = [], offline = false) => {
+    const t = template(v);
+    const synced = offline ? hsAddMinutes(at, rc.int(55, 150)) : hsAddMinutes(at, rc.int(0, 2));
+    const c = hsCreateCheck({
+      template: t, vehicle_id: v.id, rotation_id: rot.id, driver_id: rot.driver_id, performed_by: performer(v), reported_at: at, synced_at: synced, offline,
+      client_uuid: rc.uuid(), duration_s: rc.int(150, 255), ...(hsVehicleSite(v) === 2 ? { latitude: 10.1781, longitude: -14.0402, gps_accuracy: 9 } : { latitude: 9.5807, longitude: -13.6197, gps_accuracy: 6 }),
+      answers: t.items.map((it) => ({ item_id: it.id, answer: notOk.includes(it.label) ? "not_ok" : "ok", comment: notOk.includes(it.label) ? "Défaut constaté au contrôle." : null })),
+      signature: { name: hsDriver(rot.driver_id)?.name ?? "Conducteur", signed_at: at },
+    });
+    for (const n of HS.ncs.filter((x) => x.check_id === c.id)) hsPhoto("nonconformity", n.id, c.performed_by, hsAddMinutes(at, 1), `Constat : ${n.label}`);
+    return c;
+  };
+  let pastBlocking = null;
+  for (let d = "2026-10-01"; d < TODAY; d = addDays(d, 1)) {
+    for (const rot of hsDepartureRotations(d)) {
+      const v = hsVehicle(rot.vehicle_id);
+      if (rc.chance(0.025)) continue;
+      const t = template(v);
+      const at = hsVehicleSite(v) === 2 ? stamp(d, 5, rc.int(15, 55)) : stamp(d, rc.int(5, 6), rc.int(0, 59));
+      const notOk = [];
+      if (rc.chance(0.1)) notOk.push(rc.pick(t.items.filter((it) => !it.blocking)).label);
+      if (rc.chance(0.03)) notOk.push(rc.pick(t.items.filter((it) => it.blocking && !it.linked_to)).label);
+      const c = addCheck(rot, v, at, notOk, hsVehicleSite(v) === 2 ? rc.chance(0.6) : rc.chance(0.1));
+      for (const n of HS.ncs.filter((x) => x.check_id === c.id)) {
+        if (!n.blocking && rc.chance(0.3)) continue;
+        const liftAt = hsAddMinutes(at, rc.int(40, 120));
+        const photo = hsPhoto("nonconformity", n.id, c.performed_by, liftAt, "Après correction");
+        Object.assign(n, { status: "lifted", lifted_at: liftAt, lifted_by: c.performed_by, lift_comment: n.blocking ? "Pièce remplacée au parc avant le départ." : "Corrigé au parc.", lift_photo_ids: [photo.id] });
+        if (n.blocking && !pastBlocking) pastBlocking = { n, c, v };
+      }
+      if (!rc.chance(0.01)) addTest(rot, v, hsAddMinutes(at, -4), d === "2026-10-07" && !HS.tests.some((x) => x.result === "positive") && hsKind(v) === "tanker" && rot.driver_id !== 1 ? "positive" : "negative", 0);
+      else HS.tests.push({ id: ++HS.seq.test, rotation_id: rot.id, driver_id: rot.driver_id, performed: false, result: null, reading_mg_l: null, device: null, not_done_reason: "Appareil en panne, test refait au départ suivant", performed_by: performer(v), driver_removed: false, client_uuid: rc.uuid(), reported_at: hsAddMinutes(at, -4), synced_at: hsAddMinutes(at, -4), offline: false });
+    }
+  }
+  const positive = HS.tests.find((x) => x.result === "positive");
+  if (positive) positive.reading_mg_l = 0.18;
+  for (const rot of hsDepartureRotations(TODAY)) {
+    const v = hsVehicle(rot.vehicle_id);
+    const plan = { "ER-06": ["Plaques et étiquettes de danger en place"], "ER-09": null, "EB-03": ["Éclairage et feux de détresse"] };
+    const notOk = v.name in plan ? plan[v.name] : [];
+    if (notOk === null) continue;
+    const at = hsVehicleSite(v) === 2 ? stamp(TODAY, 5, 30 + v.id % 20) : stamp(TODAY, 6, 5 + (v.id % 4) * 5);
+    const c = addCheck(rot, v, at, notOk, v.name === "EB-03");
+    if (v.name === "EB-03") Object.assign(c, { reported_at: stamp(TODAY, 5, 48), synced_at: stamp(TODAY, 7, 12) });
+    addTest(rot, v, hsAddMinutes(at, -3), "negative", 0);
+    if (v.name === "EB-02") Object.assign(HS.tests[HS.tests.length - 1], { result: "positive", reading_mg_l: 0.32, driver_removed: true, reported_at: stamp(TODAY, 5, 41), synced_at: stamp(TODAY, 5, 43) });
+  }
+  // Photo de la non-conformité ouverte de EB-03 pas encore reçue (photos_missing).
+  const ebNc = HS.ncs.find((n) => n.status === "open" && hsVehicle(n.vehicle_id).name === "EB-03");
+  if (ebNc) HS.attachments = HS.attachments.filter((a) => !(a.model === "nonconformity" && a.object_id === ebNc.id));
+
+  // Événements (§7) : une vingtaine, de tous niveaux et de tous statuts.
+  const drv = (id, role, days = null) => ({ kind: "driver", id, name: hsDriver(id).name, role, days_off: days });
+  const defs = [
+    { type: "near_miss", at: "2026-01-28T06:10", veh: "ER-11", title: "Vanne de fond mal plombée découverte au contrôle de départ", desc: "Au contrôle de départ, la vanne de fond n° 2 de la citerne ER-11 n'était pas plombée et présentait du jeu. Fermeture et plombage refaits avant le départ ; aucun écoulement.", loc: "Parc de Matoto", sev: [1, 4, 2], status: "closed", closed: "2026-05-25T15:00",
+      inv: { whys: ["La vanne n'était pas plombée.", "Le plomb n'a pas été reposé après le dépotage de la veille.", "Le dépotage s'est terminé de nuit, sans le chef de quai.", "La fiche de dépotage ne prévoit pas de vérification des plombs.", "Le mode opératoire de dépotage n'a pas été revu depuis 2019."], root: "Mode opératoire de dépotage sans étape de vérification des plombs.", team: [16, 12] },
+      actions: [{ desc: "Ajouter la vérification et le relevé des plombs à la fiche de dépotage", lvl: "administrative", owner: 11, due: "2026-02-28", done: "2026-02-20", verified: ["2026-05-22", true], status: "closed" }] },
+    { type: "road_accident", at: "2026-02-20T15:40", veh: "ER-10", title: "Collision arrière à faible vitesse au péage de Kagbélén", desc: "En file d'attente au péage de Kagbélén, la citerne ER-10 a heurté à faible vitesse l'arrière d'un pick-up. Dégâts matériels légers, aucun blessé.", loc: "Péage de Kagbélén, RN1", sev: [2, 2, 2], status: "closed", closed: "2026-03-12T10:00", people: [[10, "driver"]],
+      costs: [["repair", "Pare-chocs et feu arrière du véhicule tiers", 6_400_000, "2026-03-02"]], inv: { root: "Distance de sécurité insuffisante en file d'attente." },
+      actions: [{ desc: "Causerie sécurité sur les distances en file d'attente aux péages", lvl: "administrative", owner: 12, due: "2026-03-15", done: "2026-03-10", status: "closed" }] },
+    { type: "work_accident", at: "2026-03-14T09:20", veh: "ER-05", title: "Coupure à la main lors du changement d'un joint de dôme", desc: "En remplaçant le joint du dôme n° 3, le conducteur s'est coupé la paume sur l'arête du collet. Soins sur place, reprise immédiate.", loc: "Atelier du parc de Matoto", sev: [2, 2, 3], status: "closed", closed: "2026-04-06T09:00", people: [[5, "victim", 0]],
+      inv: { root: "Gants de manutention non adaptés aux arêtes vives." },
+      actions: [{ desc: "Doter l'atelier de gants anti-coupure de niveau 5", lvl: "ppe", owner: 19, due: "2026-04-15", done: "2026-04-02", status: "closed" }] },
+    { type: "road_accident", at: "2026-05-17T14:35", veh: "ER-03", title: "Renversement de la citerne dans le virage de Tanènè", desc: "Sur la route de Boké, la citerne ER-03 chargée de 33 000 L de gasoil s'est couchée dans le virage de Tanènè après un freinage sur chaussée dégradée. Conducteur blessé à l'épaule, évacué au centre de santé de Boké. Environ 6 000 L répandus sur l'accotement, confinés avec la gendarmerie.", loc: "RN3, virage de Tanènè (préfecture de Boké)", pos: [10.6213, -14.2087, 15], sev: [5, 5, 3], status: "actions", people: [[3, "victim", 21]], lost: 21, immobilized: true, photos: 3, notified: "2026-05-18T08:30",
+      costs: [["claim", "Remorquage et remise en état de l'ensemble ER-03", 410_000_000, "2026-06-30"], ["deductible", "Franchise de l'assureur", 50_000_000, "2026-07-15"], ["product_loss", "6 000 L de gasoil perdus", 72_000_000, "2026-05-17"], ["downtime", "Immobilisation de l'ensemble ER-03", 38_000_000, "2026-09-30"]],
+      inv: { team: [16, 11, 19], causes: ["Freinage appuyé dans le virage", "Vitesse de 62 km/h à l'entrée du virage"], tree: [["Renversement de la citerne ER-03", null, "unusual_fact"], ["Freinage appuyé dans le virage", 1, "unusual_fact"], ["Vitesse de 62 km/h à l'entrée du virage, limite conseillée à 40", 2, "unusual_fact"], ["Nid-de-poule non signalé à l'entrée du virage", 2, "permanent_fact"], ["Citerne pleine, centre de gravité haut", 1, "permanent_fact"], ["Retard de 3 h au chargement, horaire de livraison maintenu", 3, "unusual_fact"], ["Aucun limiteur de vitesse sur l'ensemble", 3, "permanent_fact"]],
+        f5m: { environment: ["Chaussée dégradée, virage non signalé"], equipment: ["Pas de limiteur de vitesse"], method: ["Horaire de livraison maintenu malgré le retard au chargement"], manpower: ["Vitesse inadaptée au virage"], material: ["Citerne pleine, effet de vague"] },
+        root: "Vitesse inadaptée dans un virage dégradé, sans limiteur ni consigne de ralentissement sur la ligne de Boké.", conclusion: "Trois actions : limiteur de vitesse, formation à la conduite défensive, signalisation du virage." },
+      actions: [
+        { desc: "Installer un limiteur de vitesse réglé à 60 km/h sur les citernes de la ligne de Boké", lvl: "engineering", owner: 19, due: "2026-07-31", done: "2026-07-20", status: "to_verify", cost: 96_000_000, approved: "2026-06-02" },
+        { desc: "Former les seize conducteurs citerne à la conduite défensive sur route dégradée", lvl: "administrative", owner: 11, due: "2026-09-30", done: "2026-07-10", status: "to_verify" },
+        { desc: "Obtenir de la préfecture la signalisation du virage de Tanènè", lvl: "administrative", owner: 16, due: "2026-08-31", status: "in_progress" },
+      ] },
+    { type: "spill", at: "2026-05-26T08:00", veh: "ER-07", title: "Fuite d'huile moteur sur l'aire de lavage", desc: "Une vingtaine de litres d'huile moteur ont rejoint le caniveau de l'aire de lavage du parc de Matoto, le séparateur d'hydrocarbures étant saturé.", loc: "Aire de lavage du parc de Matoto", sev: [2, 2, 3], status: "closed", closed: "2026-06-22T11:00",
+      costs: [["other", "Absorbants et enlèvement des déchets souillés", 1_200_000, "2026-05-27"]], inv: { root: "Séparateur d'hydrocarbures non vidangé depuis 2024." },
+      actions: [{ desc: "Faire vidanger le séparateur tous les trois mois (contrat de maintenance)", lvl: "administrative", owner: 19, due: "2026-06-30", done: "2026-06-18", status: "closed" }] },
+    { type: "security_breach", at: "2026-06-03T02:15", veh: "ER-08", title: "Tentative de siphonnage de nuit sur l'aire de stationnement de Mamou", desc: "Vers 2 h, deux individus ont tenté de siphonner le réservoir de la citerne ER-08 stationnée sur l'aire non gardée de l'entrée de Mamou. Le conducteur, réveillé, a donné l'alerte ; environ 200 L perdus.", loc: "Aire de stationnement de l'entrée de Mamou", sev: [2, 3, 4], status: "actions", people: [[8, "driver"]],
+      costs: [["product_loss", "200 L de gasoil", 2_400_000, "2026-06-03"]], inv: { whys: ["Le réservoir était accessible de nuit.", "L'ensemble stationnait sur une aire non gardée.", "Aucune aire gardée n'est imposée sur la ligne de Labé."], root: "Aucune liste d'aires de stationnement gardées sur les lignes de l'intérieur." },
+      actions: [
+        { desc: "Imposer le stationnement de nuit sur les aires gardées de la liste validée", lvl: "administrative", owner: 11, due: "2026-06-30", done: "2026-06-25", verified: ["2026-09-25", true], status: "closed" },
+        { desc: "Poser des bouchons antisiphon sur les réservoirs des seize citernes", lvl: "engineering", owner: 19, due: "2026-07-15", done: "2026-07-05", verified: ["2026-10-05", false, "Deux tentatives réussies en septembre : les bouchons livrés ne tiennent pas sur les réservoirs MAN."], status: "in_progress", newDue: "2026-11-15" },
+      ] },
+    { type: "work_accident", at: "2026-07-09T05:50", veh: "ER-12", title: "Chute depuis la passerelle de la citerne à l'ouverture du dôme", desc: "En ouvrant le dôme n° 1 au dépôt de Conakry, le conducteur a glissé sur la passerelle mouillée et chuté d'environ 2,5 m. Fracture du poignet.", loc: "Dépôt de Conakry, poste de chargement n° 4", sev: [4, 4, 3], status: "actions", people: [[12, "victim", 38]], lost: 38, photos: 1,
+      inv: { team: [16, 12], whys: ["Le conducteur a glissé sur la passerelle.", "La passerelle était mouillée et sans garde-corps.", "Les citernes n'ont jamais été équipées de garde-corps.", "Le travail en hauteur n'est pas évalué au poste de chargement."], root: "Passerelles sans garde-corps et accès en hauteur sans harnais." },
+      actions: [
+        { desc: "Équiper les passerelles des citernes de garde-corps rabattables", lvl: "engineering", owner: 19, due: "2026-10-31", status: "in_progress", cost: 64_000_000, approved: "2026-08-05" },
+        { desc: "Interdire l'accès aux passerelles sans harnais au dépôt de Conakry", lvl: "administrative", owner: 12, due: "2026-07-31", done: "2026-07-30", status: "to_verify" },
+        { desc: "Remplacer les chaussures de sécurité par un modèle à semelle antidérapante", lvl: "ppe", owner: 12, due: "2026-09-15", status: "todo" },
+      ] },
+    { type: "hazard", at: "2026-08-05T10:00", veh: "ER-02", title: "Rétroviseur droit desserré", desc: "Rétroviseur droit de ER-02 desserré, resserré au parc avant le départ.", loc: "Parc de Matoto", sev: [1, 1, 2], status: "closed", closed: "2026-08-06T10:00" },
+    { type: "spill", at: "2026-08-22T07:15", veh: "ER-10", title: "Débordement au chargement : 300 L d'essence sur la dalle", desc: "Au dépôt de Conakry, la citerne ER-10 a débordé par le dôme n° 2 en fin de chargement. Environ 300 L d'essence répandus sur la dalle, absorbés avec le kit antidéversement.", loc: "Dépôt de Conakry, poste de chargement n° 2", sev: [2, 3, 3], status: "actions",
+      costs: [["product_loss", "300 L d'essence", 3_750_000, "2026-08-22"]], inv: { whys: ["La citerne a débordé.", "La jauge indiquait un niveau inférieur au niveau réel.", "Les jauges n'ont jamais été étalonnées depuis leur pose."], root: "Jauges de niveau non étalonnées depuis la mise en service.", f5m: { equipment: ["Jauge de niveau faussée"], method: ["Chargement arrêté à la jauge, sans contrôle visuel"] } },
+      actions: [{ desc: "Étalonner les jauges de niveau des seize citernes", lvl: "engineering", owner: 19, due: "2026-09-30", done: "2026-09-10", status: "to_verify" }] },
+    { type: "road_accident", at: "2026-09-12T11:30", veh: "ER-05", title: "Rétroviseur arraché en croisement à Coyah", desc: "Au croisement d'un camion-benne dans la traversée de Coyah, le rétroviseur gauche de ER-05 a été arraché.", loc: "Traversée de Coyah, RN1", sev: [2, 2, 2], status: "closed", closed: "2026-09-25T09:00",
+      costs: [["repair", "Rétroviseur et support", 2_900_000, "2026-09-14"]], inv: { root: "Chaussée rétrécie par des étals en bord de route." },
+      actions: [{ desc: "Signaler le rétrécissement à la mairie de Coyah et rappeler la vitesse en traversée", lvl: "administrative", owner: 11, due: "2026-09-30", done: "2026-09-22", status: "closed" }] },
+    { type: "fire", at: "2026-09-18T16:20", veh: "ER-06", title: "Départ de feu au frein de la remorque dans la descente de Mamou", desc: "Échauffement des freins de la remorque dans la descente de Kouroula ; flammes à la roue arrière gauche, éteintes par le conducteur avec l'extincteur de 9 kg. Citerne pleine de gasoil, pas de propagation.", loc: "Descente de Kouroula, RN1 (Mamou)", sev: [3, 5, 2], status: "actions", people: [[6, "driver"]], photos: 2,
+      costs: [["repair", "Garnitures, tambour et pneumatiques de la remorque", 18_500_000, "2026-09-24"]], inv: { whys: ["Les garnitures ont surchauffé.", "Le ralentisseur de la remorque ne fonctionnait pas.", "La panne n'a pas été relevée au contrôle de départ."], root: "Ralentisseur de la remorque hors service, non signalé au contrôle." },
+      actions: [
+        { desc: "Contrôler ralentisseurs et garnitures des remorques avant les lignes de Mamou et de Labé", lvl: "engineering", owner: 19, due: "2026-10-10", status: "in_progress" },
+        { desc: "Remplacer l'extincteur utilisé et revoir la dotation à deux extincteurs de 9 kg", lvl: "administrative", owner: 12, due: "2026-09-25", done: "2026-09-19", status: "to_verify" },
+      ] },
+    { type: "hazard", at: "2026-09-24T21:40", veh: "ER-07", title: "Citerne immobilisée de nuit sur la chaussée sans balisage", desc: "Panne de boîte de vitesses à Kouroussa : l'ensemble ER-07 est resté deux heures sur la chaussée, de nuit, sans triangles ni feux de détresse, la batterie étant déchargée.", loc: "RN1, sortie de Kouroussa", sev: [2, 4, 3], status: "investigation",
+      inv: { whys: ["Les triangles n'ont pas été posés.", "Ils n'étaient pas à bord de l'ensemble."] } },
+    { type: "property_damage", at: "2026-09-30T13:05", veh: "EB-01", title: "Perte de chargement sur la piste de la fosse 3", desc: "Une partie du chargement de bauxite a glissé de la benne EB-01 dans le virage de la piste de la fosse 3. Ticket de pesée : 34 t pour 30 t de charge utile.", loc: "Piste de la fosse 3, mine de Boffa", sev: [2, 4, 3], status: "actions", by: 18, people: [[17, "driver"]],
+      inv: { team: [16, 18], whys: ["La benne était surchargée.", "Le chargeur a rempli au godet sans contrôle de masse.", "Le pont-bascule ne bloque pas un départ en surcharge."], root: "Aucun blocage du départ au-delà de la charge utile au pont-bascule." },
+      actions: [
+        { desc: "Bloquer au pont-bascule le départ des bennes au-delà de 30 t", lvl: "engineering", owner: 18, due: "2026-10-20", status: "in_progress" },
+        { desc: "Rappeler la charge utile aux chefs de poste du chargeur", lvl: "administrative", owner: 18, due: "2026-10-05", done: "2026-10-03", status: "to_verify" },
+      ] },
+    { type: "product_quality", at: "2026-10-02T10:30", veh: "ER-14", title: "Manquant de 410 L à la livraison de Kamsar", desc: "À la livraison chez Bauxite Atlantique Kamsar (démo), le jaugeage du client fait apparaître 410 L de moins que le bon de chargement ; plombs intacts.", loc: "Kamsar, dépôt du client", sev: [2, 2, 3], status: "investigation",
+      inv: { causes: ["Écart entre la jauge du dépôt de Conakry et celle du client"] } },
+    { type: "near_miss", at: "2026-10-05T07:20", veh: "EB-04", title: "Recul sans avertisseur sonore sur la plateforme de chargement", desc: "Un agent de pointage s'est trouvé à 2 m de la benne EB-04 en marche arrière ; l'avertisseur de recul ne fonctionnait pas.", loc: "Plateforme de chargement, fosse 3", sev: [1, 5, 2], status: "classified", by: 18 },
+    { type: "near_miss", at: "2026-10-08T15:45", veh: "EB-03", title: "Benne levée à moins d'un mètre d'une ligne électrique au port de Dapilon", desc: "Au point de déversement n° 2 du port de Dapilon, la benne levée de EB-03 est passée à moins d'un mètre d'une ligne électrique basse ; pas de contact. Point de déversement n° 2 fermé sur-le-champ.", loc: "Port de Dapilon, point de déversement n° 2", pos: [10.2952, -14.4218, 8], sev: [1, 5, 3], status: "investigation", by: 18, photos: 2, classified: "2026-10-08T18:00", notified: "2026-10-09T09:30",
+      inv: { team: [16, 18], tree: [["Benne levée à moins d'un mètre de la ligne", null, "unusual_fact"], ["Benne levée avant l'arrêt complet au point n° 2", 1, "unusual_fact"], ["Ligne électrique basse au-dessus du point n° 2", 1, "permanent_fact"]] } },
+    { type: "work_accident", domain: "health", at: "2026-10-10T13:00", veh: "ER-16", title: "Malaise du conducteur à l'arrêt de Kouroussa (coup de chaleur)", desc: "Pendant la pause de Kouroussa, le conducteur a fait un malaise attribué à la chaleur ; repos de deux heures, reprise de la route accompagné.", loc: "Kouroussa, aire de repos", sev: [3, 3, 2], status: "investigation", people: [[16, "victim", 0]] },
+    { type: "hazard", at: "2026-10-12T09:00", veh: "ER-13", title: "Extincteur périmé relevé lors d'un contrôle routier", desc: "Au contrôle de gendarmerie de Kindia, l'un des deux extincteurs de ER-13 était périmé depuis août.", loc: "Poste de contrôle de Kindia", sev: [1, 2, 2], status: "classified" },
+    { type: "near_miss", at: "2026-10-13T16:50", veh: "ER-02", title: "Dérapage sur chaussée glissante après l'averse à Kindia", desc: "Dérapage de la remorque dans la descente de Kindia, juste après une averse ; le conducteur a repris le contrôle sans sortie de route.", loc: "Descente de Kindia, RN1", status: "reported", people: [[2, "driver"]] },
+    { type: "hazard", at: "2026-10-14T08:30", veh: "ER-15", title: "Trousse de premiers secours incomplète", desc: "Au contrôle de départ de ER-15, la trousse de premiers secours ne contenait plus de pansements compressifs.", loc: "Parc de Matoto", sev: [1, 1, 3], status: "classified", classified: "2026-10-14T11:00" },
+    { type: "near_miss", at: "2026-10-14T17:05", veh: "ER-01", title: "Freinage d'urgence à Kagbélén : moto coupant la route", desc: "Une moto a coupé la route à la sortie de Kagbélén ; freinage d'urgence de la citerne pleine, sans contact ni blessé.", loc: "Sortie de Kagbélén, RN1", pos: [9.6551, -13.4972, 11], status: "reported", by: 17, terrain: ["2026-10-14T17:20:00Z", "2026-10-14T19:05:00Z"], photos: 1, people: [[1, "driver"]] },
+    { type: "hazard", at: "2026-10-15T06:30", site: 2, title: "Piste d'accès à la fosse 3 ravinée par les pluies", desc: "Ornières de 40 cm sur la piste d'accès à la fosse 3 après les pluies de la nuit ; deux bennes ont touché le fond.", loc: "Piste d'accès à la fosse 3, mine de Boffa", pos: [10.1866, -14.0311, 7], status: "reported", by: 18, terrain: ["2026-10-15T06:42:00Z", "2026-10-15T07:58:00Z"], photos: 1 },
+  ];
+  defs.sort((a, b) => a.at.localeCompare(b.at));
+  const order = ["reported", "classified", "investigation", "actions", "closed"];
+  for (const d of defs) {
+    const v = d.veh ? hsVehicleByName(d.veh) : null;
+    const rot = v ? hsRotationAt(v.id, d.at.slice(0, 10)) : null;
+    const occurred = `${d.at}:00Z`;
+    const by = d.by ?? 12;
+    const e = {
+      id: ++HS.seq.event, reference: `EVT/2026/${pad(HS.seq.event, 4)}`, title: d.title, type: d.type, domain: d.domain ?? HS_TYPES[d.type], status: "reported", occurred_at: occurred,
+      site_id: d.site ?? (v ? hsVehicleSite(v) : 1), vehicle_id: v?.id ?? null, rotation_id: rot?.id ?? null, actual_severity: null, potential_severity: null, probability: null,
+      reported_by: by, description: d.desc, location: d.loc ?? null, latitude: d.pos?.[0] ?? null, longitude: d.pos?.[1] ?? null, gps_accuracy: d.pos?.[2] ?? null, source: d.terrain ? "terrain" : "web", client_uuid: d.terrain ? r.uuid() : null,
+      reported_at: d.terrain ? d.terrain[0] : hsAddMinutes(occurred, 50), synced_at: d.terrain ? d.terrain[1] : hsAddMinutes(occurred, 50), offline: Boolean(d.terrain),
+      people: (d.people ?? []).map(([id, role, days]) => drv(id, role, days ?? null)), lost_time: (d.lost ?? 0) > 0, days_lost: d.lost ?? 0, vehicle_immobilized: Boolean(d.immobilized),
+      classified_at: null, classified_by: null, closed_at: null, closed_by: null, investigation: null,
+      costs: (d.costs ?? []).map(([kind, label, amount, date]) => ({ id: ++HS.seq.cost, kind, label, amount, date, finance_move: null })), notifications: [],
+      deadlines: { investigation_due: null, client_notice_due: null, client_notified_at: null },
+    };
+    HS.events.push(e);
+    hsLog("event", e.id, by, "Déclaration", null, null, null, e.reported_at);
+    e.notifications.push({ recipient: "Fanta Kourouma, Responsable HSSEQ", channel: "app", sent_at: e.synced_at, reason: "Nouvelle déclaration" });
+    for (let i = 0; i < (d.photos ?? 0); i++) hsPhoto("event", e.id, by, e.synced_at, i === 0 ? "Vue d'ensemble" : `Détail ${i}`);
+    const step = order.indexOf(d.status);
+    if (step >= 1) {
+      const level = hsLevel(d.sev[1] * d.sev[2]);
+      const classifiedAt = d.classified ? `${d.classified}:00Z` : level === "high" ? hsAddMinutes(occurred, 180) : stamp(addDays(d.at.slice(0, 10), 1), 9, 0);
+      hsClassify(e, 16, classifiedAt, { actual_severity: d.sev[0], potential_severity: d.sev[1], probability: d.sev[2] });
+      if (d.notified) e.deadlines.client_notified_at = `${d.notified}:00Z`;
+    }
+    if (step >= 2 && !(step === 4 && !d.inv)) {
+      const level = hsLevel(hsCriticality(e));
+      const inv = d.inv ?? {};
+      e.investigation = {
+        method: HS_LEVELS.find((l) => l.level === level)?.method ?? "simple_analysis", team_ids: inv.team ?? [16, e.site_id === 2 ? 18 : 12], opened_at: e.classified_at,
+        due_date: e.deadlines.investigation_due ?? addDays(e.classified_at.slice(0, 10), 15), concluded_at: null, immediate_causes: inv.causes ?? [], whys: inv.whys ?? [],
+        tree: (inv.tree ?? []).map(([label, parent, kind], i) => ({ id: i + 1, label, parent_id: parent, kind })), factors_5m: { ...hsEmptyFactors(), ...(inv.f5m ?? {}) },
+        root_cause: step >= 3 ? inv.root ?? null : null, conclusion: step >= 3 ? inv.conclusion ?? null : null,
+      };
+      e.status = "investigation";
+      hsLog("event", e.id, 16, "Ouverture de l'enquête", "status", "classified", "investigation", e.classified_at);
+      if (step >= 3) {
+        e.investigation.concluded_at = stamp(minDate(addDays(e.investigation.due_date, -1), TODAY), 16, 0);
+        e.status = "actions";
+        hsLog("event", e.id, 16, "Passage aux actions", "status", "investigation", "actions", e.investigation.concluded_at);
+      }
+    }
+    for (const x of d.actions ?? []) {
+      const a = hsNewAction({ description: x.desc, origin: "event", origin_id: e.id, control_level: x.lvl, owner_id: x.owner, due_date: x.due, status: x.status, estimated_cost: x.cost ?? null, created_at: e.investigation?.concluded_at ?? e.classified_at, site_id: e.site_id });
+      hsLog("action", a.id, 16, "Création", null, null, null, a.created_at);
+      if (x.approved) Object.assign(a, { approved_at: stamp(x.approved, 10), approved_by: 8 });
+      if (x.done) {
+        a.done_at = x.done;
+        hsAttach("action", a.id, a.owner_id, `preuve-${a.reference.replaceAll("/", "-")}.pdf`, "application/pdf", pdfBuffer(`Preuve de réalisation ${a.reference}`, [a.description, `Réalisée le ${frDate(x.done)}`, "", "Fichier de maquette : données fictives."]), { created_at: stamp(x.done, 16) });
+        if ((hsCriticality(e) ?? 0) >= 8) a.verification_date = addDays(x.done, 90);
+        hsLog("action", a.id, a.owner_id, "Clôture avec preuve", "status", "in_progress", a.verification_date ? "to_verify" : "closed", stamp(x.done, 16));
+      }
+      if (x.verified) {
+        Object.assign(a, { verified_at: stamp(x.verified[0], 11), verified_by: 16, effective: x.verified[1], verification_comment: x.verified[2] ?? "Aucune récidive constatée depuis la réalisation." });
+        hsLog("action", a.id, 16, "Vérification d'efficacité", "effective", null, x.verified[1] ? "oui" : "non", a.verified_at);
+      }
+      if (x.status === "closed") a.closed_at = a.verified_at ?? stamp(x.done, 17);
+      if (x.newDue) Object.assign(a, { due_date: x.newDue, done_at: null, verification_date: null });
+    }
+    if (d.status === "closed") {
+      e.status = "closed";
+      e.closed_at = `${d.closed}:00Z`;
+      e.closed_by = 16;
+      hsLog("event", e.id, 16, "Clôture", "status", step >= 3 ? "actions" : "classified", "closed", e.closed_at);
+    }
+  }
+  // Actions issues de contrôles : non-conformité bloquante du jour (ER-06) et défaut d'une benne.
+  const er06 = HS.ncs.find((n) => n.status === "open" && n.blocking);
+  if (er06) {
+    const a = hsNewAction({ description: "Poser une étiquette de danger n° 33/1203 neuve sur ER-06", origin: "check", origin_id: er06.check_id, control_level: "administrative", owner_id: 12, due_date: TODAY, status: "in_progress", created_at: hsAddMinutes(er06.found_at, 20), created_by: 12, site_id: 1 });
+    er06.action_id = a.id;
+  }
+  if (ebNc) {
+    const a = hsNewAction({ description: "Réparer l'éclairage de gabarit de EB-03", origin: "check", origin_id: ebNc.check_id, control_level: "engineering", owner_id: 19, due_date: "2026-10-20", status: "todo", created_at: stamp(TODAY, 7, 30), created_by: 18, site_id: 2 });
+    ebNc.action_id = a.id;
+  }
+  if (pastBlocking) {
+    const { n, c, v } = pastBlocking;
+    const day = c.reported_at.slice(0, 10);
+    const a = hsNewAction({ description: `Rechercher l'origine du défaut « ${n.label} » sur ${v.name}`, origin: "check", origin_id: c.id, control_level: "engineering", owner_id: 19, due_date: addDays(day, 7), status: "closed", created_at: stamp(day, 9), created_by: 16, site_id: c.site_id });
+    Object.assign(a, { done_at: addDays(day, 3), closed_at: stamp(addDays(day, 3), 17) });
+    hsAttach("action", a.id, 19, `preuve-${a.reference.replaceAll("/", "-")}.pdf`, "application/pdf", pdfBuffer(`Preuve de réalisation ${a.reference}`, [a.description, "", "Fichier de maquette : données fictives."]), { created_at: a.closed_at });
+    n.action_id = a.id;
+  }
+
+  // Dérogations (§4.1) : historique de l'année et une demande du jour en attente du Responsable HSSEQ.
+  const waiver = (vehicle, date, reason, justification, status, extra = {}) => {
+    const v = hsVehicleByName(vehicle);
+    const rot = hsRotationAt(v.id, date);
+    const yard = hsVehicleSite(v) === 2 ? 18 : 12;
+    const at = extra.at ?? stamp(date, 6, 40);
+    const w = {
+      id: ++HS.seq.waiver, reference: `DER/2026/${pad(HS.seq.waiver, 4)}`, rotation_id: rot.id, vehicle_id: v.id, site_id: hsVehicleSite(v), reason_code: reason, justification,
+      requested_by: yard, requested_at: at, approvals: [{ level: 1, role: "yard_manager", by: yard, at }], status, expires: null, refusal_reason: null, management_notified_at: null,
+    };
+    if (["active", "expired"].includes(status)) {
+      const approved = hsAddMinutes(at, 25);
+      w.approvals.push({ level: 2, role: "hsseq_manager", by: 16, at: approved });
+      Object.assign(w, { expires: `${hsRotationEnd(rot)}T23:59:00Z`, management_notified_at: approved });
+    }
+    if (status === "refused") w.refusal_reason = extra.refusal;
+    HS.waivers.push(w);
+    hsLog("waiver", w.id, yard, "Demande et première validation", null, null, null, at);
+    if (w.approvals[1]) hsLog("waiver", w.id, 16, "Seconde validation", "status", "pending_hsseq", "active", w.approvals[1].at);
+    return w;
+  };
+  waiver("ER-05", "2026-02-11", "V05", "Assurance renouvelée le 10/02, attestation en cours d'édition chez l'assureur ; reçu de paiement à bord.", "expired");
+  waiver("ER-09", "2026-04-03", "V02", "Joint du dôme n° 3 suintant ; compartiment n° 3 laissé vide pour ce chargement, joint changé au retour.", "expired");
+  waiver("ER-13", "2026-06-19", "V04", "Permis renouvelé, titre provisoire du 18/06 à bord en attendant la carte.", "expired");
+  waiver("ER-02", "2026-08-27", "V05", "Visite technique expirée le 26/08, rendez-vous au centre de contrôle le 29/08.", "refused", { refusal: "Pas de départ avec une visite technique expirée : passer d'abord au centre de contrôle." });
+  waiver("EB-02", "2026-09-14", "V02", "Bâche déchirée sur un mètre ; trajet de 45 km sur piste privée de la mine, chargement humide.", "expired");
+  const cancelled = waiver("ER-15", "2026-10-09", "V05", "Attestation d'assurance attendue dans la matinée.", "cancelled");
+  hsLog("waiver", cancelled.id, 12, "Annulation", "status", "pending_hsseq", "cancelled", stamp("2026-10-09", 9, 5));
+  waiver("EB-05", "2026-10-12", "V02", "Fanion arraché par une branche, fanion de remplacement posé au port de Dapilon.", "expired");
+  const er06rot = hsDepartureRotations(TODAY).find((x) => hsVehicle(x.vehicle_id).name === "ER-06");
+  if (er06rot) {
+    const at = stamp(TODAY, 6, 40);
+    const w = { id: ++HS.seq.waiver, reference: `DER/2026/${pad(HS.seq.waiver, 4)}`, rotation_id: er06rot.id, vehicle_id: er06rot.vehicle_id, site_id: 1, reason_code: "V02",
+      justification: "Étiquette de danger n° 33/1203 arrachée côté droit ; plaques orange en place à l'avant et à l'arrière. Étiquette neuve disponible au dépôt de Kindia, pose prévue à l'arrêt de 10 h.",
+      requested_by: 12, requested_at: at, approvals: [{ level: 1, role: "yard_manager", by: 12, at }], status: "pending_hsseq", expires: null, refusal_reason: null, management_notified_at: null };
+    HS.waivers.push(w);
+    hsLog("waiver", w.id, 12, "Demande et première validation", null, null, null, at);
+  }
+}
+
+/* ─── Routes ────────────────────────────────────────────────────────────── */
+
+function hsSiteRow(s) {
+  return { id: s.id, name: s.name, code: s.code, company: companyRef(s.company_id), default_vehicle_kind: s.default_vehicle_kind, yard_managers: s.yard_manager_ids.map(hsUser), active: s.active };
+}
+function hsSiteValues(s, data) {
+  for (const key of ["name", "code"]) if (key in data) s[key] = String(data[key] || "").trim();
+  if ("company_id" in data) {
+    if (!COMPANY_IDS.includes(Number(data.company_id))) throw badParam("Société inconnue.");
+    s.company_id = Number(data.company_id);
+  }
+  if ("default_vehicle_kind" in data) {
+    if (!["tanker", "tipper"].includes(data.default_vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+    s.default_vehicle_kind = data.default_vehicle_kind;
+  }
+  if ("yard_manager_ids" in data) {
+    const ids = (data.yard_manager_ids || []).map(Number);
+    if (ids.some((id) => !userById(id)?.profiles.includes("exploitation"))) throw hsRule("invalid_parameter", "Un chef de parc est un compte du profil Exploitation.", { fields: ["yard_manager_ids"] });
+    s.yard_manager_ids = ids;
+  }
+  if ("active" in data) s.active = Boolean(data.active);
+  if (!s.name || !s.code) throw new ApiError(400, "missing_fields", "Champs obligatoires manquants.", { fields: ["name", "code"].filter((k) => !s[k]) });
+}
+route("GET", "/hsseq/sites", HS_APP, () => HS.sites.map(hsSiteRow));
+route("POST", "/hsseq/sites", HS_SETUP, (ctx) => {
+  const s = { id: ++HS.seq.site, name: "", code: "", company_id: 1, default_vehicle_kind: "tanker", yard_manager_ids: [], active: true };
+  hsSiteValues(s, ctx.body);
+  if (HS.sites.some((x) => x.code === s.code)) throw new ApiError(409, "conflict", "Ce code de site existe déjà.");
+  HS.sites.push(s);
+  return hsSiteRow(s);
+});
+route("PATCH", "/hsseq/sites/:id", HS_SETUP, (ctx) => {
+  const s = hsSite(ctx.params[0]);
+  if (!s) throw notFound("Site introuvable.");
+  hsSiteValues(s, ctx.body);
+  return hsSiteRow(s);
+});
+
+route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
+  const vehicles = [...DB.vehicles.filter((v) => v.company_id === 1 && v.state !== "off"), ...HS.tippers];
+  const owners = USERS.filter((u) => u.active && u.companies.includes(1) && u.profiles.some((p) => ["admin", "direction", "hsseq", "exploitation"].includes(p))).sort((a, b) => byFr(a.name, b.name));
+  return {
+    sites: HS.sites.filter((s) => s.active).map(hsSiteRow),
+    vehicles: vehicles.map((v) => ({ ...hsVehicleRef(v.id), site_id: hsVehicleSite(v), driver_id: v.driver_id, payload_tonnes: v.payload_tonnes ?? null })),
+    drivers: [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].map((d) => ({ id: d.id, name: d.name, site_id: HS.driverSites.get(d.id) ?? 1 })).sort((a, b) => byFr(a.name, b.name)),
+    owners: owners.map((u) => ({ id: u.id, name: u.name })),
+    criticality_thresholds: HS_LEVELS,
+    costly_action_threshold: HS_COSTLY,
+    me: { profiles: ctx.user.profiles.filter((p) => HS_APP.includes(p)), site_ids: hsSites(ctx), employee_id: hsEmployee(ctx)?.id ?? null, driver_id: hsMyDriver(ctx) },
+  };
+});
+
+route("GET", "/hsseq/cockpit", HS_READ, (ctx) => {
+  const q = ctx.query;
+  const period = q.period === "12m" ? "12m" : "month";
+  if (q.month && !/^\d{4}-\d{2}$/.test(q.month)) throw badParam("Mois invalide : month.");
+  const month = q.month && q.month <= TODAY.slice(0, 7) ? q.month : TODAY.slice(0, 7);
+  if (q.vehicle_kind && !["tanker", "tipper"].includes(q.vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+  const next5 = `${addMonths(`${month}-01`, 1).slice(0, 7)}-05`;
+  const frozen = month < TODAY.slice(0, 7) && next5 <= TODAY;
+  const first = period === "12m" ? addMonths(`${month}-01`, -11) : `${month}-01`;
+  const overdue = HS.actions.filter((a) => hsCanSeeAction(ctx, a) && ["todo", "in_progress"].includes(a.status) && a.due_date < TODAY && hsFilter(ctx, q, a.site_id, hsSite(a.site_id)?.default_vehicle_kind));
+  const events = HS.events.filter((e) => hsCanSeeEvent(ctx, e) && hsFilter(ctx, q, e.site_id, hsEventKind(e)));
+  return {
+    period: { type: period, month, date_from: first, date_to: minDate(monthEnd(`${month}-01`), TODAY), label: period === "12m" ? `${monthLabel(first)} à ${monthLabel(`${month}-01`)}` : monthLabel(`${month}-01`), frozen, frozen_on: frozen ? next5 : null },
+    filters: { company_id: q.company_id ? Number(q.company_id) : null, site_id: q.site_id ? Number(q.site_id) : null, vehicle_kind: q.vehicle_kind || null },
+    referentials: { companies: ctx.user.companies.map(companyRef), sites: HS.sites.map((s) => ({ id: s.id, name: s.name })) },
+    hours_basis: "presence",
+    indicators: hsIndicators(ctx, q, month, period),
+    blocked_departures: hsDepartures(ctx, TODAY, { ...q, blocked: "1" }),
+    overdue_actions: { total: overdue.length, items: overdue.map(hsActionLine).sort((a, b) => b.days_overdue - a.days_overdue).slice(0, 8) },
+    deadlines: hsDeadlines(ctx, { ...q, horizon: "30" }),
+    events: {
+      to_classify: events.filter((e) => e.status === "reported").length,
+      overdue_investigations: events.filter(hsEventOverdue).length,
+      high_open: events.filter((e) => e.status !== "closed" && hsLevel(hsCriticality(e)) === "high").length,
+    },
+    iso_maturity: null,
+    computed_at: `${TODAY}T06:00:00Z`,
+  };
+});
+route("GET", "/hsseq/deadlines", ["admin", "direction", "hsseq", "exploitation", "rh"], (ctx) => hsDeadlines(ctx, ctx.query));
+
+/* Événements */
+function hsEventOf(ctx, id) {
+  const e = HS.events.find((x) => x.id === id);
+  if (!e || !hsCanSeeEvent(ctx, e)) throw notFound("Événement introuvable.");
+  return e;
+}
+const HS_EVENT_SORTS = { occurred_at: (e) => e.occurred_at, criticality: (e) => hsCriticality(e) ?? 0, reference: (e) => e.reference, status: (e) => ["reported", "classified", "investigation", "actions", "closed"].indexOf(e.status) };
+function hsSort(list, sort, sorts, def) {
+  const s = sort || def;
+  const desc = s.startsWith("-");
+  const value = sorts[desc ? s.slice(1) : s];
+  if (!value) throw badParam("Tri inconnu.");
+  return list.sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    return (va === vb ? b.id - a.id : va > vb ? 1 : -1) * (va === vb ? 1 : desc ? -1 : 1);
+  });
+}
+function hsEventList(ctx) {
+  const q = ctx.query;
+  const statuses = q.status ? q.status.split(",") : null;
+  const from = dateArg(q, "date_from");
+  const to = dateArg(q, "date_to");
+  const s = (q.search || "").toLowerCase();
+  return HS.events.filter((e) =>
+    hsCanSeeEvent(ctx, e) && hsFilter(ctx, q, e.site_id, hsEventKind(e)) && (!statuses || statuses.includes(e.status)) && (!q.type || e.type === q.type) && (!q.domain || e.domain === q.domain)
+    && (!q.level || hsLevel(hsCriticality(e)) === q.level) && (!q.vehicle_id || e.vehicle_id === intArg(q, "vehicle_id")) && (!q.rotation_id || e.rotation_id === intArg(q, "rotation_id"))
+    && (!from || e.occurred_at.slice(0, 10) >= from) && (!to || e.occurred_at.slice(0, 10) <= to) && (q.overdue_investigation !== "1" || hsEventOverdue(e))
+    && (!s || [e.reference, e.title, e.location ?? ""].some((x) => x.toLowerCase().includes(s))));
+}
+route("GET", "/hsseq/events", HS_EVENT_READ, (ctx) => {
+  const list = hsSort(hsEventList(ctx), ctx.query.sort, HS_EVENT_SORTS, "-occurred_at");
+  const byStatus = { reported: 0, classified: 0, investigation: 0, actions: 0, closed: 0 };
+  const byLevel = { low: 0, moderate: 0, significant: 0, high: 0, unclassified: 0 };
+  for (const e of list) {
+    byStatus[e.status]++;
+    byLevel[hsLevel(hsCriticality(e)) ?? "unclassified"]++;
+  }
+  return hsPage(ctx, list, { by_status: byStatus, by_level: byLevel, overdue_investigations: list.filter(hsEventOverdue).length }, hsEventLine);
+});
+route("GET", "/hsseq/events/export.xlsx", HS_READ, (ctx) => {
+  const list = hsSort(hsEventList(ctx), ctx.query.sort, HS_EVENT_SORTS, "-occurred_at");
+  const rows = list.map((e) => [e.reference, e.occurred_at.slice(0, 16).replace("T", " "), HS_TYPE_LABELS[e.type], e.title, hsSite(e.site_id)?.name ?? "", e.vehicle_id ? hsVehicle(e.vehicle_id).name : "", hsCriticality(e) ?? "", HS_LEVEL_LABELS[hsLevel(hsCriticality(e))] ?? "Non classé", HS_STATUS_LABELS[e.status], sum(e.costs, (c) => c.amount)]);
+  return fileReply(xlsxBuffer([{ name: "Événements", rows: [["Référence", "Survenu le (UTC)", "Type", "Titre", "Site", "Véhicule", "Criticité", "Niveau", "Statut", "Coût (GNF)"], ...rows] }]), XLSX, `evenements_hsseq_${TODAY}.xlsx`);
+});
+route("GET", "/hsseq/events/:id", HS_EVENT_READ, (ctx) => hsEventDetail(ctx, hsEventOf(ctx, ctx.params[0])));
+route("GET", "/hsseq/events/:id/report.pdf", HS_READ, (ctx) => {
+  const e = hsEventOf(ctx, ctx.params[0]);
+  const inv = e.investigation;
+  const lines = [
+    `${HS_TYPE_LABELS[e.type]}, survenu le ${frDate(e.occurred_at.slice(0, 10))} à ${e.occurred_at.slice(11, 16)} (UTC)`,
+    `Lieu : ${e.location ?? "-"}   Site : ${hsSite(e.site_id)?.name ?? "-"}   Véhicule : ${e.vehicle_id ? hsVehicle(e.vehicle_id).name : "-"}`,
+    `Criticité : ${hsCriticality(e) ?? "non classé"} (${HS_LEVEL_LABELS[hsLevel(hsCriticality(e))] ?? "-"})   Statut : ${HS_STATUS_LABELS[e.status]}`,
+    "", "Description", e.description, "",
+    "Enquête", inv ? `Méthode : ${{ simple_analysis: "analyse simple", five_whys: "5 Pourquoi", cause_tree: "arbre des causes" }[inv.method]}, échéance le ${frDate(inv.due_date)}` : "Pas d'enquête.",
+    ...(inv?.whys ?? []).map((w, i) => `Pourquoi ${i + 1} : ${w}`),
+    ...(inv?.tree ?? []).map((n) => `Fait ${n.id}${n.parent_id ? ` (cause de ${n.parent_id})` : ""} : ${n.label}`),
+    inv?.root_cause ? `Cause racine : ${inv.root_cause}` : "",
+    "", "Actions", ...hsEventActions(e).map((a) => `${a.reference} : ${a.description} (${HS_ACTION_LABELS[a.status]}, échéance ${frDate(a.due_date)})`),
+    "", `Coûts : ${fmtInt(sum(e.costs, (c) => c.amount))} GNF`, "", "Fichier de maquette : données fictives.",
+  ];
+  return fileReply(pdfBuffer(`Rapport d'enquête ${e.reference}`, lines.filter((l) => l !== null)), "application/pdf", `rapport_${e.reference.replaceAll("/", "-")}.pdf`);
+});
+function hsEventValues(ctx, e, data, creating = false) {
+  for (const key of ["title", "description", "location"]) if (key in data) e[key] = data[key] ? String(data[key]).slice(0, key === "description" ? 4000 : 200) : null;
+  if ("occurred_at" in data) {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(data.occurred_at))) throw badParam("Horodatage invalide : occurred_at.");
+    e.occurred_at = String(data.occurred_at);
+  }
+  if ("type" in data && (creating || hsIs(ctx, "hsseq") || e.status === "reported")) {
+    if (!(data.type in HS_TYPES)) throw badParam("Type d'événement inconnu.");
+    e.type = data.type;
+  }
+  if ("domain" in data && data.domain) {
+    if (!HS_DOMAINS.includes(data.domain)) throw badParam("Domaine inconnu.");
+    e.domain = data.domain;
+  }
+  for (const key of ["latitude", "longitude", "gps_accuracy"]) if (key in data) e[key] = hsNum(data[key], key);
+  if (data.vehicle_id) {
+    const v = hsVehicle(Number(data.vehicle_id));
+    if (!v) throw hsRule("invalid_parameter", "Véhicule inconnu.", { fields: ["vehicle_id"] });
+    e.vehicle_id = v.id;
+    e.site_id = hsVehicleSite(v);
+  }
+  if (data.rotation_id) {
+    if (!hsRotation(Number(data.rotation_id))) throw hsRule("invalid_parameter", "Rotation inconnue.", { fields: ["rotation_id"] });
+    e.rotation_id = Number(data.rotation_id);
+  }
+  if (data.site_id) {
+    if (!hsSite(Number(data.site_id))) throw hsRule("invalid_parameter", "Site inconnu.", { fields: ["site_id"] });
+    e.site_id = Number(data.site_id);
+  }
+  if (Array.isArray(data.people)) {
+    e.people = data.people.map((p) => {
+      const kind = ["driver", "employee", "third_party"].includes(p.kind) ? p.kind : "third_party";
+      const name = kind === "driver" ? hsDriver(Number(p.id))?.name : kind === "employee" ? userName(Number(p.id)) : p.name;
+      return { kind, id: kind === "third_party" ? null : Number(p.id), name: name || "Personne non nommée", role: ["victim", "driver", "witness", "perpetrator", "third_party"].includes(p.role) ? p.role : "witness", days_off: p.days_off ?? null };
+    });
+  }
+  if (hsIs(ctx, "hsseq") && !creating) {
+    for (const key of ["actual_severity", "potential_severity", "probability"]) if (key in data && e.status !== "reported") e[key] = hsScore(data[key], key);
+    if ("lost_time" in data) e.lost_time = Boolean(data.lost_time);
+    if ("days_lost" in data) e.days_lost = Math.max(0, Number.parseInt(data.days_lost, 10) || 0);
+    if ("vehicle_immobilized" in data) e.vehicle_immobilized = Boolean(data.vehicle_immobilized);
+  }
+}
+function hsScore(v, name) {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 5) throw hsRule("invalid_parameter", `Note de 1 à 5 attendue : ${name}.`, { fields: [name] });
+  return n;
+}
+route("POST", "/hsseq/events", ["admin", "direction", "hsseq", "exploitation", "conducteur"], (ctx) => {
+  const b = ctx.body;
+  requireFields(b, "client_uuid", "type", "title", "description", "occurred_at", "reported_at", "offline");
+  const existing = HS.events.find((e) => e.client_uuid && e.client_uuid === String(b.client_uuid));
+  if (existing) return hsEventDetail(ctx, existing);
+  const now = hsNow();
+  const e = {
+    id: ++HS.seq.event, reference: "", title: "", type: "hazard", domain: null, status: "reported", occurred_at: now, site_id: (hsSites(ctx)[0] ?? 1), vehicle_id: null, rotation_id: null,
+    actual_severity: null, potential_severity: null, probability: null, reported_by: ctx.user.id, description: "", location: null, latitude: null, longitude: null, gps_accuracy: null, source: ctx.app === "terrain" || !hasProfile(ctx, HS_READ) ? "terrain" : "web",
+    client_uuid: String(b.client_uuid).slice(0, 64), reported_at: String(b.reported_at), synced_at: now, offline: Boolean(b.offline), people: [], lost_time: false, days_lost: 0,
+    vehicle_immobilized: false, classified_at: null, classified_by: null, closed_at: null, closed_by: null, investigation: null, costs: [], notifications: [],
+    deadlines: { investigation_due: null, client_notice_due: null, client_notified_at: null },
+  };
+  hsEventValues(ctx, e, b, true);
+  e.domain = e.domain ?? HS_TYPES[e.type];
+  e.reference = `EVT/2026/${pad(e.id, 4)}`;
+  e.notifications.push({ recipient: "Fanta Kourouma, Responsable HSSEQ", channel: "app", sent_at: now, reason: "Nouvelle déclaration" });
+  HS.events.push(e);
+  hsLog("event", e.id, ctx.user.id, "Déclaration");
+  return hsEventDetail(ctx, e);
+});
+route("PATCH", "/hsseq/events/:id", HS_EVENT_READ, (ctx) => {
+  const e = hsEventOf(ctx, ctx.params[0]);
+  if (!hsEventDetail(ctx, e).rights.can_edit) throw hsForbidden("Cette fiche ne se modifie plus avec votre profil.");
+  const before = hsCriticality(e);
+  hsEventValues(ctx, e, ctx.body);
+  hsLog("event", e.id, ctx.user.id, "Modification", before !== hsCriticality(e) ? "criticality" : null, before !== hsCriticality(e) ? before : null, before !== hsCriticality(e) ? hsCriticality(e) : null);
+  return hsEventDetail(ctx, e);
+});
+route("PUT", "/hsseq/events/:id/investigation", ["hsseq"], (ctx) => {
+  const e = hsEventOf(ctx, ctx.params[0]);
+  if (e.status !== "investigation" || !e.investigation) throw hsRule("invalid_transition", "L'enquête ne se modifie qu'au statut « enquête ».");
+  const b = ctx.body;
+  const inv = e.investigation;
+  const strings = (v, max = 20) => (Array.isArray(v) ? v.map((x) => String(x).slice(0, 500)).filter(Boolean).slice(0, max) : []);
+  if ("method" in b) {
+    if (!["simple_analysis", "five_whys", "cause_tree"].includes(b.method)) throw badParam("Méthode inconnue.");
+    inv.method = b.method;
+  }
+  if ("team_ids" in b) inv.team_ids = (b.team_ids || []).map(Number).filter((id) => userById(id));
+  if ("immediate_causes" in b) inv.immediate_causes = strings(b.immediate_causes);
+  if ("whys" in b) inv.whys = strings(b.whys, 5);
+  if ("tree" in b) inv.tree = (b.tree || []).slice(0, 60).map((n, i) => ({ id: Number(n.id) || i + 1, label: String(n.label || "").slice(0, 300), parent_id: n.parent_id ? Number(n.parent_id) : null, kind: n.kind === "permanent_fact" ? "permanent_fact" : "unusual_fact" }));
+  if ("factors_5m" in b) for (const k of Object.keys(hsEmptyFactors())) if (k in (b.factors_5m || {})) inv.factors_5m[k] = strings(b.factors_5m[k]);
+  for (const key of ["root_cause", "conclusion"]) if (key in b) inv[key] = b[key] ? String(b[key]).slice(0, 2000) : null;
+  hsLog("event", e.id, ctx.user.id, "Enquête mise à jour");
+  return hsEventDetail(ctx, e);
+});
+route("POST", "/hsseq/events/:id/costs", ["hsseq"], (ctx) => {
+  const e = hsEventOf(ctx, ctx.params[0]);
+  const [kind, label, amount, date] = requireFields(ctx.body, "kind", "label", "amount", "date");
+  if (!HS_COST_KINDS.includes(kind)) throw badParam("Nature de coût inconnue.");
+  if (!isDate(String(date))) throw badParam("Date invalide : date.");
+  const c = { id: ++HS.seq.cost, kind, label: String(label).slice(0, 200), amount: Math.round(numArg(amount, "amount")), date: String(date), finance_move: ctx.body.finance_move_id ? { id: Number(ctx.body.finance_move_id), name: moveById(Number(ctx.body.finance_move_id))?.name ?? "Pièce comptable" } : null };
+  e.costs.push(c);
+  hsLog("event", e.id, ctx.user.id, "Ajout d'un coût", "total_cost", null, sum(e.costs, (x) => x.amount));
+  return hsEventDetail(ctx, e);
+});
+route("DELETE", "/hsseq/events/:id/costs/:id", ["hsseq"], (ctx) => {
+  const e = hsEventOf(ctx, ctx.params[0]);
+  if (!e.costs.some((c) => c.id === ctx.params[1])) throw notFound("Coût introuvable.");
+  e.costs = e.costs.filter((c) => c.id !== ctx.params[1]);
+  hsLog("event", e.id, ctx.user.id, "Retrait d'un coût", "total_cost", null, sum(e.costs, (x) => x.amount));
+  return hsEventDetail(ctx, e);
+});
+route("POST", "/hsseq/events/:id/:action", ["hsseq"], (ctx) => {
+  const e = hsEventOf(ctx, ctx.params[0]);
+  const action = ctx.params[1];
+  const b = ctx.body;
+  const now = hsNow();
+  if (!["classify", "investigate", "plan", "close", "reopen"].includes(action)) throw notFound("Transition inconnue.");
+  if (!hsEventTransitions(ctx, e).includes(action)) {
+    if (action === "close" && e.status === "actions") throw hsRule("actions_open", "Toutes les actions de l'événement doivent être closes ou annulées avant sa clôture.");
+    if (action === "plan" && e.status === "investigation") throw hsRule("root_cause_missing", "Renseignez la cause racine avant de passer aux actions.");
+    throw hsRule("invalid_transition", `Transition impossible depuis le statut « ${HS_STATUS_LABELS[e.status]} ».`);
+  }
+  if (action === "classify") {
+    requireFields(b, "type", "domain", "actual_severity", "potential_severity", "probability");
+    if (!(b.type in HS_TYPES)) throw badParam("Type d'événement inconnu.");
+    if (!HS_DOMAINS.includes(b.domain)) throw badParam("Domaine inconnu.");
+    hsClassify(e, ctx.user.id, now, {
+      type: b.type, domain: b.domain, actual_severity: hsScore(b.actual_severity, "actual_severity"), potential_severity: hsScore(b.potential_severity, "potential_severity"),
+      probability: hsScore(b.probability, "probability"), lost_time: "lost_time" in b ? Boolean(b.lost_time) : e.lost_time, days_lost: "days_lost" in b ? Math.max(0, Number(b.days_lost) || 0) : e.days_lost,
+      vehicle_immobilized: Boolean(b.vehicle_immobilized),
+    });
+  } else if (action === "investigate") {
+    const level = hsLevel(hsCriticality(e));
+    const method = b.method ?? HS_LEVELS.find((l) => l.level === level)?.method ?? "simple_analysis";
+    if (!["simple_analysis", "five_whys", "cause_tree"].includes(method)) throw badParam("Méthode inconnue.");
+    e.investigation = { method, team_ids: (b.team_ids || [ctx.user.id]).map(Number), opened_at: now, due_date: e.deadlines.investigation_due ?? addDays(TODAY, 15), concluded_at: null, immediate_causes: [], whys: [], tree: [], factors_5m: hsEmptyFactors(), root_cause: null, conclusion: null };
+    e.status = "investigation";
+    hsLog("event", e.id, ctx.user.id, "Ouverture de l'enquête", "status", "classified", "investigation");
+  } else if (action === "plan") {
+    e.investigation.concluded_at = now;
+    e.status = "actions";
+    hsLog("event", e.id, ctx.user.id, "Passage aux actions", "status", "investigation", "actions");
+  } else if (action === "close") {
+    const before = e.status;
+    Object.assign(e, { status: "closed", closed_at: now, closed_by: ctx.user.id });
+    hsLog("event", e.id, ctx.user.id, "Clôture", "status", before, "closed");
+  } else {
+    if (!b.reason || String(b.reason).trim().length < 5) throw hsRule("reason_required", "Indiquez le motif de la réouverture.", { fields: ["reason"] });
+    e.status = hsEventActions(e).length ? "actions" : e.investigation ? "investigation" : "classified";
+    Object.assign(e, { closed_at: null, closed_by: null });
+    hsLog("event", e.id, ctx.user.id, `Réouverture : ${String(b.reason).slice(0, 300)}`, "status", "closed", e.status);
+  }
+  return hsEventDetail(ctx, e);
+});
+
+/* Actions */
+function hsActionOf(ctx, id) {
+  const a = HS.actions.find((x) => x.id === id);
+  if (!a || !hsCanSeeAction(ctx, a)) throw notFound("Action introuvable.");
+  return a;
+}
+const HS_ACTION_SORTS = { due_date: (a) => a.due_date, reference: (a) => a.reference, status: (a) => ["todo", "in_progress", "to_verify", "closed", "cancelled"].indexOf(a.status), days_overdue: (a) => hsActionLine(a).days_overdue };
+function hsActionList(ctx) {
+  const q = ctx.query;
+  const statuses = q.status ? q.status.split(",") : null;
+  const s = (q.search || "").toLowerCase();
+  return HS.actions.filter((a) => {
+    const line = hsActionLine(a);
+    return hsCanSeeAction(ctx, a) && hsFilter(ctx, q, a.site_id, hsSite(a.site_id)?.default_vehicle_kind) && (!statuses || statuses.includes(a.status)) && (!q.origin || a.origin === q.origin)
+      && (!q.owner_id || a.owner_id === intArg(q, "owner_id")) && (q.mine !== "1" || a.owner_id === ctx.user.id) && (q.overdue !== "1" || line.overdue)
+      && (!q.due_before || a.due_date <= q.due_before) && (!q.event_id || (a.origin === "event" && a.origin_id === intArg(q, "event_id")))
+      && (!s || [a.reference, a.description].some((x) => x.toLowerCase().includes(s)));
+  });
+}
+route("GET", "/hsseq/actions", HS_READ, (ctx) => {
+  const list = hsSort(hsActionList(ctx), ctx.query.sort, HS_ACTION_SORTS, "due_date");
+  const byStatus = { todo: 0, in_progress: 0, to_verify: 0, closed: 0, cancelled: 0 };
+  for (const a of list) byStatus[a.status]++;
+  return hsPage(ctx, list, { by_status: byStatus, overdue: list.filter((a) => hsActionLine(a).overdue).length, verifications_due: list.filter((a) => a.status === "to_verify" && a.verification_date <= TODAY).length }, hsActionLine);
+});
+route("GET", "/hsseq/actions/export.xlsx", HS_READ, (ctx) => {
+  const list = hsSort(hsActionList(ctx), ctx.query.sort, HS_ACTION_SORTS, "due_date");
+  const rows = list.map((a) => { const l = hsActionLine(a); return [a.reference, a.description, l.origin_ref?.reference ?? "", userName(a.owner_id), a.due_date, HS_ACTION_LABELS[a.status], l.overdue ? l.days_overdue : 0, a.verification_date ?? "", a.effective === null ? "" : a.effective ? "Oui" : "Non"]; });
+  return fileReply(xlsxBuffer([{ name: "Actions", rows: [["Référence", "Action", "Origine", "Responsable", "Échéance", "Statut", "Jours de retard", "Vérification à J+90", "Efficace"], ...rows] }]), XLSX, `actions_hsseq_${TODAY}.xlsx`);
+});
+route("GET", "/hsseq/actions/:id", HS_READ, (ctx) => hsActionDetail(ctx, hsActionOf(ctx, ctx.params[0])));
+function hsActionValues(ctx, a, data, creating = false) {
+  const hs = hsIs(ctx, "hsseq");
+  if ("description" in data) a.description = String(data.description || "").slice(0, 1000);
+  if ("expected_evidence" in data) a.expected_evidence = String(data.expected_evidence || "").slice(0, 500);
+  if ("control_level" in data) {
+    if (!HS_CONTROL_LEVELS.includes(data.control_level)) throw badParam("Niveau de maîtrise inconnu.");
+    a.control_level = data.control_level;
+  }
+  if ("estimated_cost" in data) a.estimated_cost = data.estimated_cost === null || data.estimated_cost === "" ? null : Math.round(numArg(data.estimated_cost, "estimated_cost"));
+  if ((creating || hs) && "owner_id" in data) {
+    if (!userById(Number(data.owner_id))) throw hsRule("invalid_parameter", "Responsable inconnu.", { fields: ["owner_id"] });
+    a.owner_id = Number(data.owner_id);
+  }
+  if ((creating || hs) && "due_date" in data) {
+    if (!isDate(String(data.due_date))) throw badParam("Date invalide : due_date.");
+    a.due_date = String(data.due_date);
+  }
+}
+route("POST", "/hsseq/actions", ["hsseq"], (ctx) => {
+  const b = ctx.body;
+  requireFields(b, "origin", "description", "control_level", "owner_id", "due_date", "expected_evidence");
+  if (!HS_ORIGINS.includes(b.origin)) throw badParam("Origine inconnue.");
+  let site = 1;
+  if (b.origin === "event") {
+    const e = HS.events.find((x) => x.id === Number(b.origin_id));
+    if (!e) throw hsRule("invalid_parameter", "Événement d'origine introuvable.", { fields: ["origin_id"] });
+    site = e.site_id;
+  } else if (b.origin === "check") {
+    const c = HS.checks.find((x) => x.id === Number(b.origin_id));
+    if (!c) throw hsRule("invalid_parameter", "Contrôle d'origine introuvable.", { fields: ["origin_id"] });
+    site = c.site_id;
+  }
+  const a = hsNewAction({ description: "", origin: b.origin, origin_id: b.origin_id ? Number(b.origin_id) : null, control_level: b.control_level, owner_id: Number(b.owner_id), due_date: TODAY, created_by: ctx.user.id, site_id: site });
+  hsActionValues(ctx, a, b, true);
+  hsLog("action", a.id, ctx.user.id, "Création");
+  return hsActionDetail(ctx, a);
+});
+route("PATCH", "/hsseq/actions/:id", HS_READ, (ctx) => {
+  const a = hsActionOf(ctx, ctx.params[0]);
+  if (!hsActionDetail(ctx, a).rights.can_edit) throw hsForbidden("Seuls le responsable de l'action et le Responsable HSSEQ la mettent à jour.");
+  const before = a.due_date;
+  hsActionValues(ctx, a, ctx.body);
+  hsLog("action", a.id, ctx.user.id, "Mise à jour", before !== a.due_date ? "due_date" : null, before !== a.due_date ? before : null, before !== a.due_date ? a.due_date : null);
+  return hsActionDetail(ctx, a);
+});
+route("POST", "/hsseq/actions/:id/:action", HS_READ, (ctx) => {
+  const a = hsActionOf(ctx, ctx.params[0]);
+  const action = ctx.params[1];
+  const b = ctx.body;
+  const now = hsNow();
+  if (!["start", "close", "verify", "approve", "cancel", "reopen"].includes(action)) throw notFound("Transition inconnue.");
+  const allowed = hsActionTransitions(ctx, a);
+  if (!allowed.includes(action)) {
+    if (action === "start" && a.status === "todo" && hsNeedsApproval(a) && (hsIs(ctx, "hsseq") || a.owner_id === ctx.user.id)) throw hsRule("approval_required", "Action coûteuse : la validation de la direction précède le démarrage.");
+    if (action === "verify" && a.status === "to_verify" && hsIs(ctx, "hsseq")) throw hsRule("verification_too_early", `La vérification d'efficacité se fait à partir du ${frDate(a.verification_date)} (J+90).`);
+    if (["start", "close", "verify", "approve", "cancel", "reopen"].includes(action) && !hsIs(ctx, "hsseq") && a.owner_id !== ctx.user.id && !(action === "approve" && hsIs(ctx, "direction"))) throw hsForbidden();
+    throw hsRule("invalid_transition", `Transition impossible depuis le statut « ${HS_ACTION_LABELS[a.status]} ».`);
+  }
+  const before = a.status;
+  if (action === "start") a.status = "in_progress";
+  else if (action === "close") {
+    if (!HS.attachments.some((x) => x.model === "action" && x.object_id === a.id)) throw hsRule("proof_required", "Joignez une preuve de réalisation avant de clore l'action.");
+    a.done_at = TODAY;
+    if (hsActionLine(a).verification_required) Object.assign(a, { status: "to_verify", verification_date: addDays(TODAY, 90) });
+    else Object.assign(a, { status: "closed", closed_at: now });
+  } else if (action === "verify") {
+    if (typeof b.effective !== "boolean") throw new ApiError(400, "missing_fields", "Champs obligatoires manquants.", { fields: ["effective"] });
+    Object.assign(a, { verified_at: now, verified_by: ctx.user.id, effective: b.effective, verification_comment: b.comment ? String(b.comment).slice(0, 1000) : null });
+    if (b.effective) Object.assign(a, { status: "closed", closed_at: now });
+    else {
+      if (!isDate(String(b.new_due_date || ""))) throw new ApiError(400, "missing_fields", "Nouvelle échéance obligatoire pour une action inefficace.", { fields: ["new_due_date"] });
+      Object.assign(a, { status: "in_progress", due_date: String(b.new_due_date), done_at: null, verification_date: null });
+    }
+  } else if (action === "approve") Object.assign(a, { approved_at: now, approved_by: ctx.user.id });
+  else {
+    if (!b.reason || String(b.reason).trim().length < 5) throw hsRule("reason_required", "Indiquez le motif.", { fields: ["reason"] });
+    a.status = action === "cancel" ? "cancelled" : "in_progress";
+    if (action === "reopen") Object.assign(a, { closed_at: null, done_at: null });
+  }
+  hsLog("action", a.id, ctx.user.id, { start: "Démarrage", close: "Clôture avec preuve", verify: "Vérification d'efficacité", approve: "Validation de la direction", cancel: "Annulation", reopen: "Réouverture" }[action], "status", before, a.status);
+  return hsActionDetail(ctx, a);
+});
+
+/* Contrôles */
+route("GET", "/hsseq/checks/templates", [...HS_READ, "conducteur"], (ctx) => {
+  const q = ctx.query;
+  return HS.templates.filter((t) => (!q.vehicle_kind || t.vehicle_kind === q.vehicle_kind) && (!q.kind || t.kind === q.kind) && (q.active === undefined || String(t.active) === q.active)).map(hsTemplateRow);
+});
+function hsTemplateValues(t, data) {
+  if ("name" in data) t.name = String(data.name || "").slice(0, 120);
+  if ("kind" in data) {
+    if (!["pre_departure", "unloading", "mine_site"].includes(data.kind)) throw badParam("Nature de contrôle inconnue.");
+    t.kind = data.kind;
+  }
+  if ("vehicle_kind" in data) {
+    if (!["tanker", "tipper"].includes(data.vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+    t.vehicle_kind = data.vehicle_kind;
+  }
+  if ("active" in data) t.active = Boolean(data.active);
+  if (Array.isArray(data.items)) {
+    t.items = data.items.map((it, i) => ({ id: it.id && t.items.some((x) => x.id === Number(it.id)) ? Number(it.id) : ++HS.seq.item, label: String(it.label || "").slice(0, 200), blocking: Boolean(it.blocking), sequence: Number(it.sequence) || (i + 1) * 10, linked_to: it.linked_to === "breath_test" ? "breath_test" : null }));
+    if (t.items.some((it) => !it.label)) throw new ApiError(400, "missing_fields", "Chaque point porte un libellé.", { fields: ["items"] });
+  }
+  if (!t.name) throw new ApiError(400, "missing_fields", "Champs obligatoires manquants.", { fields: ["name"] });
+}
+route("POST", "/hsseq/checks/templates", HS_SETUP, (ctx) => {
+  const t = { id: ++HS.seq.template, name: "", kind: "pre_departure", vehicle_kind: "tanker", version: 1, active: true, items: [], updated_at: hsNow(), updated_by: ctx.user.id };
+  hsTemplateValues(t, ctx.body);
+  HS.templates.push(t);
+  return hsTemplateRow(t);
+});
+route("PATCH", "/hsseq/checks/templates/:id", HS_SETUP, (ctx) => {
+  const t = HS.templates.find((x) => x.id === ctx.params[0]);
+  if (!t) throw notFound("Grille introuvable.");
+  hsTemplateValues(t, ctx.body);
+  Object.assign(t, { version: t.version + 1, updated_at: hsNow(), updated_by: ctx.user.id });
+  return hsTemplateRow(t);
+});
+route("GET", "/hsseq/checks/nonconformities", HS_READ, (ctx) => {
+  const q = ctx.query;
+  const list = HS.ncs.filter((n) => hsSiteOk(ctx, n.site_id) && hsFilter(ctx, q, n.site_id, hsKind(hsVehicle(n.vehicle_id))) && (!q.status || n.status === q.status) && (q.blocking !== "1" || n.blocking) && (!q.vehicle_id || n.vehicle_id === intArg(q, "vehicle_id")))
+    .sort((a, b) => b.found_at.localeCompare(a.found_at));
+  return hsPage(ctx, list, { open: list.filter((n) => n.status === "open").length, blocking_open: list.filter((n) => n.status === "open" && n.blocking).length }, (n) => hsNcRow(ctx, n));
+});
+route("GET", "/hsseq/checks", [...HS_READ, "conducteur"], (ctx) => {
+  const q = ctx.query;
+  const from = dateArg(q, "date_from");
+  const to = dateArg(q, "date_to");
+  const list = HS.checks.filter((c) => hsCanSeeCheck(ctx, c) && hsFilter(ctx, q, c.site_id, c.vehicle_kind) && (!from || c.reported_at.slice(0, 10) >= from) && (!to || c.reported_at.slice(0, 10) <= to)
+    && ["vehicle_id", "rotation_id", "driver_id"].every((k) => !q[k] || c[k] === intArg(q, k)) && (!q.result || c.result === q.result))
+    .sort((a, b) => b.reported_at.localeCompare(a.reported_at) || b.id - a.id);
+  const departures = [];
+  for (let d = from ?? `${TODAY.slice(0, 7)}-01`; d <= (to ?? TODAY) && d <= TODAY; d = addDays(d, 1)) {
+    for (const r of hsDepartureRotations(d)) {
+      const v = hsVehicle(r.vehicle_id);
+      if (v && hsFilter(ctx, q, hsVehicleSite(v), hsKind(v)) && hsSiteOk(ctx, hsVehicleSite(v))) departures.push(r);
+    }
+  }
+  const byResult = { compliant: 0, non_compliant: 0, blocking: 0 };
+  for (const c of list) byResult[c.result]++;
+  return hsPage(ctx, list, { by_result: byResult, departures: departures.length, departures_checked: departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id)).length }, hsCheckLine);
+});
+function hsCheckOf(ctx, id) {
+  const c = HS.checks.find((x) => x.id === id);
+  if (!c || !hsCanSeeCheck(ctx, c)) throw notFound("Contrôle introuvable.");
+  return c;
+}
+route("GET", "/hsseq/checks/:id", [...HS_READ, "conducteur"], (ctx) => hsCheckDetail(ctx, hsCheckOf(ctx, ctx.params[0])));
+route("POST", "/hsseq/checks", HS_FIELD, (ctx) => {
+  const b = ctx.body;
+  requireFields(b, "client_uuid", "template_id", "vehicle_id", "reported_at", "offline", "answers");
+  const existing = HS.checks.find((c) => c.client_uuid === String(b.client_uuid));
+  if (existing) return hsCheckDetail(ctx, existing);
+  const t = HS.templates.find((x) => x.id === Number(b.template_id) && x.active);
+  if (!t) throw hsRule("invalid_parameter", "Grille inconnue ou inactive.", { fields: ["template_id"] });
+  const v = hsVehicle(Number(b.vehicle_id));
+  if (!v) throw hsRule("invalid_parameter", "Véhicule inconnu.", { fields: ["vehicle_id"] });
+  if (hsKind(v) !== t.vehicle_kind) throw hsRule("vehicle_kind_mismatch", `La grille « ${t.name} » ne s'applique pas à ${v.name}.`);
+  if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Ce véhicule n'est pas rattaché à votre site.");
+  const rot = b.rotation_id ? hsRotation(Number(b.rotation_id)) : null;
+  if (b.rotation_id && !rot) throw hsRule("invalid_parameter", "Rotation inconnue.", { fields: ["rotation_id"] });
+  if (!Array.isArray(b.answers)) throw badParam("Réponses invalides.");
+  const values = new Map(b.answers.map((a) => [Number(a.item_id), a]));
+  const missing = t.items.filter((it) => !it.linked_to && !["ok", "not_ok", "na"].includes(values.get(it.id)?.answer)).map((it) => String(it.id));
+  if (missing.length) throw hsRule("incomplete_answers", "Chaque point de la grille attend une réponse.", { fields: missing });
+  const driverId = hsIs(ctx, "conducteur") && !hsIs(ctx, "hsseq") && !hsIs(ctx, "exploitation") ? hsMyDriver(ctx) : b.driver_id ? Number(b.driver_id) : rot?.driver_id ?? v.driver_id;
+  const c = hsCreateCheck({
+    template: t, vehicle_id: v.id, rotation_id: rot?.id ?? null, driver_id: driverId, performed_by: ctx.user.id, reported_at: String(b.reported_at), synced_at: hsNow(), offline: Boolean(b.offline),
+    client_uuid: String(b.client_uuid).slice(0, 64), duration_s: b.duration_s ? Number(b.duration_s) : null, latitude: hsNum(b.latitude, "latitude"), longitude: hsNum(b.longitude, "longitude"), gps_accuracy: hsNum(b.gps_accuracy, "gps_accuracy"),
+    answers: b.answers.map((a) => ({ item_id: Number(a.item_id), answer: a.answer, comment: a.comment ? String(a.comment).slice(0, 500) : null })),
+    signature: b.signature?.name ? { name: String(b.signature.name).slice(0, 120), signed_at: String(b.reported_at) } : null,
+  });
+  hsLog("check", c.id, ctx.user.id, "Contrôle saisi", "result", null, c.result);
+  return hsCheckDetail(ctx, c);
+});
+route("POST", "/hsseq/checks/:id/lift", ["hsseq", "exploitation"], (ctx) => {
+  const c = hsCheckOf(ctx, ctx.params[0]);
+  const [ncId, comment] = requireFields(ctx.body, "nonconformity_id", "comment");
+  const n = HS.ncs.find((x) => x.id === Number(ncId) && x.check_id === c.id);
+  if (!n) throw notFound("Non-conformité introuvable dans ce contrôle.");
+  if (n.status !== "open") throw hsRule("invalid_transition", "Cette non-conformité est déjà levée.");
+  if (!hsCanLift(ctx, n)) throw hsForbidden("Seuls le chef de parc du site et le Responsable HSSEQ lèvent une non-conformité.");
+  const ids = (ctx.body.attachment_ids || []).map(Number).filter((id) => HS.attachments.some((a) => a.id === id && a.model === "nonconformity" && a.object_id === n.id));
+  if (!ids.length) throw hsRule("photo_missing", "Joignez une photo de la correction à la non-conformité avant de la lever.", { fields: ["attachment_ids"] });
+  Object.assign(n, { status: "lifted", lifted_at: hsNow(), lifted_by: ctx.user.id, lift_comment: String(comment).slice(0, 1000), lift_photo_ids: ids });
+  hsLog("check", c.id, ctx.user.id, `Levée de la non-conformité « ${n.label} »`, "status", "open", "lifted");
+  return hsCheckDetail(ctx, c);
+});
+
+/* Alcootests */
+function hsTestOf(ctx, id) {
+  const t = HS.tests.find((x) => x.id === id);
+  if (!t || !hsCanSeeTest(ctx, t)) throw notFound("Alcootest introuvable.");
+  return t;
+}
+route("GET", "/hsseq/breath-tests", [...HS_READ, "conducteur"], (ctx) => {
+  const q = ctx.query;
+  const date = dateArg(q, "date");
+  const from = dateArg(q, "date_from");
+  const to = dateArg(q, "date_to");
+  const list = HS.tests.filter((t) => {
+    const r = hsRotation(t.rotation_id);
+    const v = r ? hsVehicle(r.vehicle_id) : null;
+    const day = t.reported_at.slice(0, 10);
+    return hsCanSeeTest(ctx, t) && (!v || hsFilter(ctx, q, hsVehicleSite(v), hsKind(v))) && (!date || day === date) && (!from || day >= from) && (!to || day <= to)
+      && (!q.rotation_id || t.rotation_id === intArg(q, "rotation_id")) && (!q.driver_id || t.driver_id === intArg(q, "driver_id")) && (!q.status || !hasProfile(ctx, HS_READ) || hsTestStatus(t) === q.status);
+  }).sort((a, b) => b.reported_at.localeCompare(a.reported_at));
+  const counts = hasProfile(ctx, HS_READ) ? { compliant: 0, non_compliant: 0, not_done: 0 } : { done: 0, not_done: 0 };
+  for (const t of list) {
+    if (hasProfile(ctx, HS_READ)) counts[hsTestStatus(t)]++;
+    else counts[t.performed ? "done" : "not_done"]++;
+  }
+  if (hsIs(ctx, "hsseq")) hsLog("breath_test", 0, ctx.user.id, "Lecture du détail de la liste", null, null, `${list.length} tests`);
+  return hsPage(ctx, list, counts, (t) => hsTestRow(ctx, t));
+});
+route("GET", "/hsseq/breath-tests/:id", [...HS_READ, "conducteur"], (ctx) => {
+  const t = hsTestOf(ctx, ctx.params[0]);
+  if (hsIs(ctx, "hsseq")) hsLog("breath_test", t.id, ctx.user.id, "Lecture du détail");
+  return hsTestRow(ctx, t);
+});
+route("POST", "/hsseq/breath-tests", HS_FIELD, (ctx) => {
+  const b = ctx.body;
+  requireFields(b, "client_uuid", "driver_id", "performed", "reported_at", "offline");
+  const existing = HS.tests.find((t) => t.client_uuid === String(b.client_uuid));
+  if (existing) return hsTestRow(ctx, existing);
+  const driverId = Number(b.driver_id);
+  if (!hsDriver(driverId)) throw hsRule("invalid_parameter", "Conducteur inconnu.", { fields: ["driver_id"] });
+  if (hsIs(ctx, "conducteur") && !hsIs(ctx, "hsseq") && !hsIs(ctx, "exploitation") && driverId !== hsMyDriver(ctx)) throw hsForbidden("Un conducteur ne saisit l'alcootest que pour lui-même.");
+  const rot = b.rotation_id ? hsRotation(Number(b.rotation_id)) : null;
+  if (b.rotation_id && !rot) throw hsRule("invalid_parameter", "Rotation inconnue.", { fields: ["rotation_id"] });
+  const performed = Boolean(b.performed);
+  if (performed && !["negative", "positive"].includes(b.result)) throw new ApiError(400, "missing_fields", "Résultat obligatoire pour un test réalisé.", { fields: ["result"] });
+  if (!performed && !b.not_done_reason) throw new ApiError(400, "missing_fields", "Motif obligatoire pour un test non réalisé.", { fields: ["not_done_reason"] });
+  const t = {
+    id: ++HS.seq.test, rotation_id: rot?.id ?? null, driver_id: driverId, performed, result: performed ? b.result : null, reading_mg_l: performed && b.reading_mg_l !== undefined && b.reading_mg_l !== null ? Number(b.reading_mg_l) : performed ? 0 : null,
+    device: b.device ? String(b.device).slice(0, 120) : null, not_done_reason: performed ? null : String(b.not_done_reason).slice(0, 300), performed_by: ctx.user.id,
+    driver_removed: performed && b.result === "positive", client_uuid: String(b.client_uuid).slice(0, 64), reported_at: String(b.reported_at), synced_at: hsNow(), offline: Boolean(b.offline),
+  };
+  HS.tests.push(t);
+  hsLog("breath_test", t.id, ctx.user.id, "Saisie d'un alcootest");
+  return hsTestRow(ctx, t);
+});
+
+/* Verrou */
+route("POST", "/hsseq/lock/evaluate", ["admin", "direction", "hsseq", "exploitation", "conducteur"], (ctx) => {
+  const [id] = requireFields(ctx.body, "rotation_id");
+  const rot = hsRotation(Number(id));
+  if (!rot) throw notFound("Rotation introuvable.");
+  if (!hasProfile(ctx, HS_READ) && rot.driver_id !== hsMyDriver(ctx)) throw hsForbidden("Un conducteur n'évalue que ses propres rotations.");
+  return hsEvaluate(ctx, rot);
+});
+route("GET", "/hsseq/lock/departures", HS_READ, (ctx) => {
+  const day = dateArg(ctx.query, "date", TODAY);
+  if (ctx.query.vehicle_kind && !["tanker", "tipper"].includes(ctx.query.vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+  return hsDepartures(ctx, day, ctx.query);
+});
+route("GET", "/hsseq/lock/reasons", HS_READ, () => HS.reasons.map((r) => ({ ...r })));
+route("PATCH", "/hsseq/lock/reasons", HS_SETUP, (ctx) => {
+  const [code] = requireFields(ctx.body, "code");
+  const s = hsReasonSetting(code);
+  if (!s) throw notFound("Motif inconnu.");
+  if (ctx.body.active === true && s.lot === 2) throw hsRule("not_in_lot_1", `${code} relève du lot 2 : le noyau ne l'évalue pas encore.`);
+  if ("active" in ctx.body) s.active = Boolean(ctx.body.active);
+  if (Array.isArray(ctx.body.disabled_sites)) s.disabled_sites = ctx.body.disabled_sites.map(Number).filter((id) => hsSite(id));
+  return { ...s };
+});
+
+/* Dérogations */
+function hsWaiverOf(ctx, id) {
+  const w = HS.waivers.find((x) => x.id === id);
+  if (!w || !hsCanSeeWaiver(ctx, w)) throw notFound("Dérogation introuvable.");
+  return w;
+}
+route("GET", "/hsseq/waivers", HS_READ, (ctx) => {
+  const q = ctx.query;
+  hsExpireWaivers();
+  const statuses = q.status ? q.status.split(",") : null;
+  const from = dateArg(q, "date_from");
+  const to = dateArg(q, "date_to");
+  const list = HS.waivers.filter((w) => hsCanSeeWaiver(ctx, w) && hsFilter(ctx, q, w.site_id, hsKind(hsVehicle(w.vehicle_id))) && (!statuses || statuses.includes(w.status)) && (!q.reason_code || w.reason_code === q.reason_code)
+    && (!q.rotation_id || w.rotation_id === intArg(q, "rotation_id")) && (!from || w.requested_at.slice(0, 10) >= from) && (!to || w.requested_at.slice(0, 10) <= to))
+    .sort((a, b) => b.requested_at.localeCompare(a.requested_at));
+  const counts = { pending_hsseq: 0, active: 0, expired: 0, refused: 0, cancelled: 0 };
+  for (const w of list) counts[w.status]++;
+  return hsPage(ctx, list, counts, (w) => hsWaiverRow(ctx, w));
+});
+route("GET", "/hsseq/waivers/:id", HS_READ, (ctx) => hsWaiverRow(ctx, hsWaiverOf(ctx, ctx.params[0])));
+route("POST", "/hsseq/waivers", ["exploitation"], (ctx) => {
+  const [rotationId, code, justification] = requireFields(ctx.body, "rotation_id", "reason_code", "justification");
+  const rot = hsRotation(Number(rotationId));
+  if (!rot) throw notFound("Rotation introuvable.");
+  const v = hsVehicle(rot.vehicle_id);
+  if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Seul un chef de parc du site de la rotation demande une dérogation.");
+  const s = hsReasonSetting(code);
+  if (!s) throw badParam("Motif inconnu.");
+  if (!s.waivable) throw hsRule("not_waivable", `${code} n'est jamais dérogeable.`);
+  if (!hsEvaluate(ctx, rot).reasons.some((r) => r.code === code)) throw hsRule("reason_not_open", `${code} n'est pas ouvert pour cette rotation.`);
+  if (HS.waivers.some((w) => w.rotation_id === rot.id && w.reason_code === code && ["pending_hsseq", "active"].includes(w.status))) throw new ApiError(409, "conflict", "Une dérogation est déjà demandée ou active pour cette rotation et ce motif.");
+  if (String(justification).trim().length < 10) throw hsRule("reason_required", "La justification écrite est obligatoire.", { fields: ["justification"] });
+  const at = hsNow();
+  const w = { id: ++HS.seq.waiver, reference: "", rotation_id: rot.id, vehicle_id: v.id, site_id: hsVehicleSite(v), reason_code: code, justification: String(justification).slice(0, 2000), requested_by: ctx.user.id, requested_at: at, approvals: [{ level: 1, role: "yard_manager", by: ctx.user.id, at }], status: "pending_hsseq", expires: null, refusal_reason: null, management_notified_at: null };
+  w.reference = `DER/2026/${pad(w.id, 4)}`;
+  HS.waivers.push(w);
+  hsLog("waiver", w.id, ctx.user.id, "Demande et première validation");
+  return hsWaiverRow(ctx, w);
+});
+route("POST", "/hsseq/waivers/:id/approve", ["hsseq"], (ctx) => {
+  const w = hsWaiverOf(ctx, ctx.params[0]);
+  if (w.status !== "pending_hsseq") throw hsRule("invalid_transition", "Cette dérogation n'attend plus de validation.");
+  if (w.requested_by === ctx.user.id) throw hsRule("four_eyes", "La seconde validation revient à une autre personne que le demandeur.");
+  const at = hsNow();
+  w.approvals.push({ level: 2, role: "hsseq_manager", by: ctx.user.id, at });
+  Object.assign(w, { status: "active", expires: `${hsRotationEnd(hsRotation(w.rotation_id))}T23:59:00Z`, management_notified_at: at });
+  hsLog("waiver", w.id, ctx.user.id, "Seconde validation", "status", "pending_hsseq", "active");
+  return hsWaiverRow(ctx, w);
+});
+route("POST", "/hsseq/waivers/:id/refuse", ["hsseq"], (ctx) => {
+  const w = hsWaiverOf(ctx, ctx.params[0]);
+  if (w.status !== "pending_hsseq") throw hsRule("invalid_transition", "Cette dérogation n'attend plus de validation.");
+  if (!ctx.body.reason || String(ctx.body.reason).trim().length < 5) throw hsRule("reason_required", "Indiquez le motif du refus.", { fields: ["reason"] });
+  Object.assign(w, { status: "refused", refusal_reason: String(ctx.body.reason).slice(0, 1000) });
+  hsLog("waiver", w.id, ctx.user.id, "Refus", "status", "pending_hsseq", "refused");
+  return hsWaiverRow(ctx, w);
+});
+route("POST", "/hsseq/waivers/:id/cancel", ["hsseq", "exploitation"], (ctx) => {
+  const w = hsWaiverOf(ctx, ctx.params[0]);
+  if (!hsWaiverRow(ctx, w).transitions.includes("cancel")) throw w.requested_by !== ctx.user.id && !hsIs(ctx, "hsseq") ? hsForbidden("Seuls le demandeur et le Responsable HSSEQ annulent une dérogation.") : hsRule("invalid_transition", "Cette dérogation ne s'annule plus.");
+  const before = w.status;
+  w.status = "cancelled";
+  hsLog("waiver", w.id, ctx.user.id, "Annulation", "status", before, "cancelled");
+  return hsWaiverRow(ctx, w);
+});
+
+/* Pièces jointes et journal */
+const HS_ATTACH_MODELS = { event: (ctx, id) => hsEventOf(ctx, id), action: (ctx, id) => hsActionOf(ctx, id), check: (ctx, id) => hsCheckOf(ctx, id), waiver: (ctx, id) => hsWaiverOf(ctx, id),
+  nonconformity: (ctx, id) => {
+    const n = HS.ncs.find((x) => x.id === id);
+    if (!n) throw notFound("Non-conformité introuvable.");
+    hsCheckOf(ctx, n.check_id);
+    return n;
+  } };
+route("POST", "/hsseq/attachments", [...HS_READ, "conducteur"], (ctx) => {
+  const fields = ctx.multipart().fields;
+  const model = fields.model;
+  const id = Number.parseInt(fields.id || "", 10);
+  if (!(model in HS_ATTACH_MODELS) || !Number.isFinite(id)) throw new ApiError(400, "missing_fields", "La pièce se rattache à une fiche : model et id obligatoires.", { fields: ["model", "id"] });
+  HS_ATTACH_MODELS[model](ctx, id);
+  if (fields.client_uuid) {
+    const existing = HS.attachments.find((a) => a.client_uuid === fields.client_uuid);
+    if (existing) return hsAttachmentRow(existing);
+  }
+  const file = uploadedFile(ctx, 8 * 1048576, "Pièce jointe");
+  const mimetype = detectType(file.data);
+  if (!["image/jpeg", "image/png", "application/pdf"].includes(mimetype)) throw new ApiError(415, "unsupported_type", "Formats acceptés : JPEG, PNG ou PDF.");
+  const a = hsAttach(model, id, ctx.user.id, checkedName(file.filename, mimetype, "piece"), mimetype, file.data, { caption: fields.caption ? String(fields.caption).slice(0, 200) : null, client_uuid: fields.client_uuid || null });
+  hsLog(model === "nonconformity" ? "check" : model, model === "nonconformity" ? HS.ncs.find((n) => n.id === id).check_id : id, ctx.user.id, `Pièce jointe : ${a.name}`);
+  return hsAttachmentRow(a);
+});
+function hsAttachmentOf(ctx, id) {
+  const a = HS.attachments.find((x) => x.id === id);
+  if (!a) throw notFound("Pièce introuvable.");
+  HS_ATTACH_MODELS[a.model](ctx, a.object_id);
+  return a;
+}
+route("GET", "/hsseq/attachments/:id/download", [...HS_READ, "conducteur"], (ctx) => {
+  const a = hsAttachmentOf(ctx, ctx.params[0]);
+  return fileReply(HS.files.get(a.id), a.mimetype, a.name);
+});
+route("DELETE", "/hsseq/attachments/:id", [...HS_READ, "conducteur"], (ctx) => {
+  const a = hsAttachmentOf(ctx, ctx.params[0]);
+  if (a.created_by !== ctx.user.id && !hsIs(ctx, "hsseq")) throw hsForbidden("Seuls l'auteur et le Responsable HSSEQ retirent une pièce.");
+  const parent = HS_ATTACH_MODELS[a.model](ctx, a.object_id);
+  if (["closed", "cancelled", "lifted", "expired", "refused"].includes(parent.status) || (a.model === "nonconformity" && parent.lift_photo_ids.includes(a.id))) throw hsRule("invalid_transition", "La fiche est close : la pièce ne se retire plus.");
+  HS.attachments = HS.attachments.filter((x) => x.id !== a.id);
+  HS.files.delete(a.id);
+  return { status: "ok" };
+});
+route("GET", "/hsseq/log", ["direction", "hsseq"], (ctx) => {
+  const q = ctx.query;
+  const from = dateArg(q, "date_from");
+  const to = dateArg(q, "date_to");
+  const list = HS.log.filter((l) => (!q.model || l.model === q.model) && (!q.id || l.id === intArg(q, "id")) && (!from || l.at.slice(0, 10) >= from) && (!to || l.at.slice(0, 10) <= to))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  return hsPage(ctx, list, {}, (l) => ({ model: l.model, id: l.id, ...hsHistoryRow(l) }));
 });
 
 /* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */
