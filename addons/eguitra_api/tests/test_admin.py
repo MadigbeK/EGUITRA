@@ -16,6 +16,13 @@ class TestAdmin(ApiCase):
         self.assertEqual("rh" in admin._eguitra_apps(), "eguitra.rh.employee" in self.env,
                          "L'espace RH n'existe que là où son module est installé")
 
+    def test_applications_hsseq_selon_leur_module(self):
+        admin = self.env["res.users"].search([("login", "=", "aissatou")])
+        installed = "eguitra.hsseq.event" in self.env
+        for app in ("hsseq", "terrain"):
+            self.assertEqual(app in admin._eguitra_apps(), installed,
+                             f"L'application {app} n'existe que là où le module HSSEQ est installé")
+
     def test_profil_requis(self):
         session = self.open_session("fatou")
         status, body = self.call("GET", "/admin/users", token=session["access_token"])
@@ -28,9 +35,14 @@ class TestAdmin(ApiCase):
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual(status, 200)
         self.assertEqual([p["code"] for p in profils], ["admin", "direction", "finance", "achats", "exploitation",
-                                                        "chantiers", "immobilier", "cabinet", "rh", "porteur"])
+                                                        "chantiers", "immobilier", "cabinet", "rh", "hsseq",
+                                                        "conducteur", "porteur"])
         rh = next(p for p in profils if p["code"] == "rh")
         self.assertEqual((rh["name"], rh["entity"]), ("Ressources humaines", None), "Profil commun aux deux sociétés")
+        hsseq = next(p for p in profils if p["code"] == "hsseq")
+        self.assertEqual((hsseq["name"], hsseq["entity"]), ("Responsable HSSEQ", None), "Profil commun aux deux sociétés")
+        conducteur = next(p for p in profils if p["code"] == "conducteur")
+        self.assertEqual((conducteur["name"], conducteur["entity"]), ("Conducteur", None))
         achats = next(p for p in profils if p["code"] == "achats")
         self.assertEqual((achats["name"], achats["entity"]), ("Achats", None), "Profil commun aux deux sociétés")
         self.assertIn("pièces d'achat", achats["description"])
@@ -51,7 +63,9 @@ class TestAdmin(ApiCase):
         self.assertEqual(user["login"], "ibrahima")
         self.assertEqual(user["profiles"], ["exploitation"])
         self.assertTrue(user["password_change_required"])
-        self.assertEqual(sorted(user["apps"]), ["finance", "mobile", "transport"])
+        # HSSEQ (web) et NIMOVA Terrain s'ouvrent aussi au chef de parc, là où leur module est installé.
+        hsseq_apps = ["hsseq", "terrain"] if "eguitra.hsseq.event" in self.env else []
+        self.assertEqual(sorted(user["apps"]), sorted(["finance", "mobile", "transport", *hsseq_apps]))
 
         status, _b = self.call("POST", "/admin/users", {
             "name": "Doublon", "login": "ibrahima", "password": "Provisoire-2026", "profiles": ["finance"],

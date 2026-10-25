@@ -14,12 +14,17 @@ DEFAULT_TTL = {
     "access": 15 * 60,
     "refresh": 12 * 3600,
     "refresh_mobile": 30 * 24 * 3600,  # saisie au parc, souvent sans réseau
+    "refresh_terrain": 30 * 24 * 3600,  # NIMOVA Terrain : formulaires remplis sans réseau
     # Durée totale d'une session, renouvellements compris : au-delà, nouvelle connexion.
     "session": 7 * 24 * 3600,
     "session_mobile": 90 * 24 * 3600,
+    "session_terrain": 90 * 24 * 3600,
     "mfa": 5 * 60,
     "mfa_setup": 10 * 60,
 }
+
+# Applications de saisie hors réseau -> profils qui bénéficient des longues durées (et eux seuls).
+LONG_SESSION_PROFILES = {"mobile": {"exploitation"}, "terrain": {"exploitation", "conducteur"}}
 
 
 def hash_token(raw):
@@ -70,9 +75,10 @@ class EguitraApiToken(models.Model):
 
     @api.model
     def _ttl_for(self, user, kind, app=None):
-        """Les longues durées de Rotations (saisie hors réseau) sont réservées au profil exploitation seul :
-        un compte doté d'autres droits, administrateur compris, garde les durées ordinaires."""
-        if app == "mobile" and set(user._eguitra_profiles()) - {"exploitation"}:
+        """Les longues durées de Rotations et de NIMOVA Terrain (saisie hors réseau) sont réservées aux
+        profils de terrain (exploitation, et conducteur pour NIMOVA Terrain) : un compte doté d'autres
+        droits, administrateur compris, garde les durées ordinaires."""
+        if app in LONG_SESSION_PROFILES and set(user._eguitra_profiles()) - LONG_SESSION_PROFILES[app]:
             app = None
         return self._ttl(kind, app)
 

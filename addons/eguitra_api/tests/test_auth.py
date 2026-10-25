@@ -210,6 +210,19 @@ class TestAuth(ApiCase):
         self.assertLessEqual(self.open_session("aissatou", app="mobile")["refresh_expires_in"], 12 * 3600,
                              "Un administrateur garde la durée ordinaire dans Rotations")
 
+    def test_longue_session_de_nimova_terrain_reservee_au_terrain(self):
+        Token = self.env["eguitra.api.token"]
+        conducteur = self._create_user("lamine", "conducteur")
+        parc = self._create_user("sekou", "exploitation")
+        hsseq = self._create_user("kadiatou", "hsseq")
+        for user in (conducteur, parc):
+            self.assertGreater(Token._ttl_for(user, "refresh", "terrain"), 29 * 24 * 3600)
+            self.assertGreater(Token._ttl_for(user, "session", "terrain"), 89 * 24 * 3600)
+        self.assertLessEqual(Token._ttl_for(hsseq, "refresh", "terrain"), 12 * 3600,
+                             "Le responsable HSSEQ garde la durée ordinaire dans NIMOVA Terrain")
+        self.assertLessEqual(Token._ttl_for(conducteur, "refresh", "mobile"), 12 * 3600,
+                             "Rotations reste réservée à l'exploitation pour les longues durées")
+
     def test_blocage_par_adresse(self):
         self._create_user("mariama", "finance")
 

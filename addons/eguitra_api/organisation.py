@@ -14,6 +14,8 @@ Le département finance tient leurs deux comptabilités, séparément, dans la m
 - Rotations (saisie mobile des rotations) ne sert qu'EGUITRA GROUP.
 - Analyse (NIMOVA · Analyse) sert les deux sociétés, avec des analyses propres à chacune : celles du
   groupe sous /analyse/groupe/, celles du cabinet sous /analyse/cabinet/.
+- HSSEQ (NIMOVA · HSSEQ) sert les deux sociétés ; ses formulaires de terrain passent par l'application
+  native NIMOVA Terrain, qui ne sert qu'EGUITRA GROUP (le transport) et n'a aucun écran web.
 
 Un compte reçoit des profils (eguitra_base, PROFILE_GROUPS) et des sociétés ; ses applications en
 découlent : un profil peut tout ouvrir (administration, direction) ou une seule application.
@@ -40,6 +42,13 @@ APPS = {
     # model : l'application n'existe que là où son module est installé (la production peut recevoir le
     # code sans l'installer).
     "rh": {"profiles": {"admin", "direction", "rh"}, "entity": None, "model": "eguitra.rh.employee"},
+    # HSSEQ (NIMOVA · HSSEQ) : santé, sécurité, sûreté, environnement et qualité, pour les deux sociétés.
+    "hsseq": {"profiles": {"admin", "direction", "hsseq", "exploitation"}, "entity": None,
+              "model": "eguitra.hsseq.event"},
+    # NIMOVA Terrain : application native des formulaires de terrain d'HSSEQ (contrôle pré-départ,
+    # alcootest, déclaration), sans écran web ; seule application du profil conducteur.
+    "terrain": {"profiles": {"admin", "hsseq", "exploitation", "conducteur"}, "entity": "groupe",
+                "model": "eguitra.hsseq.event"},
 }
 
 # Préfixe des routes de l'API -> société servie par le module : ses routes refusent de travailler
