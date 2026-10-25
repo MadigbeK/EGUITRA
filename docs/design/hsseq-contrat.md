@@ -56,7 +56,7 @@ Registre des risques, écrans des habilitations, audits, motifs V06 à V09, rapp
 | `not_in_lot_1` | 422 | Activation d'un motif du lot 2 (V06 à V09), pas encore évalué. |
 | `unsupported_type` | 415 | Pièce jointe hors des formats acceptés (contrôle de `eguitra_api/files.py`). |
 
-Les six premiers codes sont fixés par le noyau ; les suivants sont proposés sous ces noms.
+Liste retenue en entier par le noyau.
 
 ## 2. Profils, droits et confidentialité
 
@@ -74,6 +74,9 @@ Les six premiers codes sont fixés par le noyau ; les suivants sont proposés so
 Les responsables maintenance et qualité n'ont pas de profil propre : tout compte interne désigné
 responsable d'une action la lit et la met à jour (droits portés par la fiche). Le profil `auditeur`
 (lecture seule bornée en périmètre et en durée) viendra au lot 2.
+
+Menu : une entrée « Paramètres », réservée à `admin` et `hsseq`, regroupe les sites, les grilles de
+contrôle et les motifs du verrou.
 
 Sites (`eguitra.hsseq.site`) : nom, code, société, `default_vehicle_kind`, chefs de parc (comptes
 `exploitation` rattachés). Un compte `exploitation` rattaché à des sites ne lit que leurs objets ; un
@@ -108,6 +111,8 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
 | `POST /hsseq/lock/evaluate` | L | L | L | L | L (ses rotations) | non |
 | `GET /hsseq/lock/departures` | L | L | L | L (site) | non | non |
 | `/hsseq/lock/reasons` | L, E | L | L, E | L | non | non |
+| `GET /hsseq/sites` | L | L | L | L | L | L |
+| `POST /hsseq/sites`, `PATCH /hsseq/sites/{id}` | E | non | E | non | non | non |
 | Dérogations : liste, fiche | L | L | L | L (site) | non | non |
 | Dérogations : demande | non | non | non | E (site) | non | non |
 | Dérogations : validation, refus | non | non | E | non | non | non |
@@ -147,7 +152,7 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
 ```json
 {
   "sites": [{ "id": 1, "name": "Parc de Matoto", "code": "MAT", "company": { "id": 1, "name": "EGUITRA GROUP SARLU" },
-              "default_vehicle_kind": "tanker", "yard_managers": [{ "id": 12, "name": "Mamadou Bah" }] }],
+              "default_vehicle_kind": "tanker", "yard_managers": [{ "id": 12, "name": "Mamadou Bah" }], "active": true }],
   "vehicles": [{ "id": 6, "name": "ER-06", "vehicle_kind": "tanker", "plate": "RC 6014 A", "site_id": 1, "driver_id": 6, "payload_tonnes": null }],
   "drivers": [{ "id": 6, "name": "Lamine Barry", "site_id": 1 }],
   "owners": [{ "id": 19, "name": "Alhassane Diakité" }],
@@ -160,6 +165,14 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
 Personnes : habilitations et aptitude sur le salarié RH, relié au chauffeur de Transport par
 `employee.driver_id` et au compte par `employee.user_id` ; le compte `conducteur` est celui du
 salarié (`me.employee_id`, `me.driver_id`).
+
+### Sites : `/hsseq/sites`
+
+- `GET /hsseq/sites` (tous les profils de l'application) → `HsseqSite[]` : `id`, `name`, `code`,
+  `company`, `default_vehicle_kind`, `yard_managers`, `active`.
+- `POST /hsseq/sites` et `PATCH /hsseq/sites/{id}` (`admin`, `hsseq`) : `{ name, code, company_id,
+  default_vehicle_kind, yard_manager_ids, active }` ; un chef de parc est un compte `exploitation`.
+  Réponse : le `HsseqSite`. Écran : « Paramètres », avec les grilles et les motifs du verrou.
 
 ### Criticité (§9.1)
 
@@ -407,26 +420,29 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
   `vehicle_id`, `rotation_id`, `driver_id`, `result` (`compliant`, `non_compliant`, `blocking`),
   `offset`, `limit` → `Page<CheckLine, CheckCounts>` (`by_result`, `departures`, `departures_checked`).
 - `GET /hsseq/checks/{id}` → `Check` : réponses point par point (`answer` ∈ `ok`, `not_ok`, `na`,
-  `comment`, `photos`), `signature`, `nonconformities`, `photos_missing`, `rights`.
+  `comment`, `photos`), `signature`, `nonconformities`, `photos_missing` (vrai tant qu'une
+  non-conformité du contrôle est sans photo), `rights`.
 - `POST /hsseq/checks` : `NewCheck` (`client_uuid`, `template_id`, `vehicle_id`, `rotation_id`,
   `driver_id`, `reported_at`, `offline`, `duration_s`, `gps`, `answers` : `item_id`, `answer`,
   `comment`, `signature`). `result` : `blocking` dès qu'un point bloquant est `not_ok`,
   `non_compliant` (avec réserves) pour un point non bloquant, `compliant` sinon. Chaque réponse
   `not_ok` ouvre une non-conformité.
-- Photos : la pièce jointe se dépose rattachée à une fiche (§11). NIMOVA Terrain envoie donc le
-  contrôle, puis une photo par réponse `not_ok` (`model: "check"`, `id` du contrôle, `item_id` du
-  point). `photos_missing` compte les réponses `not_ok` encore sans photo ; l'écran les signale.
+- Photos : le noyau accepte le contrôle sans ses photos, la pièce se déposant rattachée à une fiche
+  (§11). NIMOVA Terrain envoie le contrôle, puis au moins une photo par non-conformité
+  (`model: "nonconformity"`, `id` de la non-conformité). Chaque non-conformité porte
+  `photos_missing` tant qu'aucune photo n'y est rattachée, et le contrôle aussi tant qu'il en reste
+  une ; l'écran les signale. Une non-conformité bloquante compte pour V02 avec ou sans photo.
 
 ### Non-conformités
 
 - `GET /hsseq/checks/nonconformities` : `status` (`open`, `lifted`), `blocking=1`, `site_id`,
   `vehicle_id`, `offset`, `limit` → `Page<Nonconformity>` (`counts` : `open`, `blocking_open`).
   Une non-conformité : `id`, `check`, `item` (`id`, `label`, `blocking`), `vehicle`, `rotation`,
-  `site`, `found_at`, `comment`, `photos`, `status` (`open`, `lifted`), `lifted_at`, `lifted_by`,
+  `site`, `found_at`, `comment`, `photos`, `photos_missing`, `status` (`open`, `lifted`), `lifted_at`, `lifted_by`,
   `lift_comment`, `lift_photos`, `action`, `rights`.
 - `POST /hsseq/checks/{id}/lift` (`{id}` : le contrôle) : `{ nonconformity_id, comment,
-  attachment_ids }`. Le chef de parc lève après correction ; pour un point bloquant, au moins une photo
-  de la correction (déposée avant, `model: "nonconformity"`), sinon `photo_missing`. Lève V02 quand il
+  attachment_ids }`. Le chef de parc lève après correction ; la levée exige au moins une photo de la
+  correction, déposée avant sur la non-conformité (`model: "nonconformity"`), sinon `photo_missing`. Lève V02 quand il
   ne reste aucune non-conformité bloquante ouverte sur le véhicule. Réponse : le `Check` à jour.
 
 ## 8. Alcootests : `/hsseq/breath-tests` (§4 V03, §9.4)
@@ -448,7 +464,8 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
 Évaluation côté serveur, sans contournement possible depuis un client (§4, §11). Côté Transport :
 nouvel état `en_route` de la rotation, posé par `action_depart` (`POST /transport/rotations/{id}/depart`),
 qui appelle l'évaluation dans la même transaction. Un refus répond 422 `departure_blocked` avec
-`blockers` : `{ code, label, source, since, waivable, severity }`. Au lot 1, motifs V01 à V05 ; V06 à
+`blockers` : `{ code, label, source, since, waivable, severity }`, `severity` valant `block` ou `warn`,
+rien d'autre ; les motifs propres à Transport (T01) y figurent aussi, T01 en `block`. Au lot 1, motifs V01 à V05 ; V06 à
 V09 sont déclarés au paramétrage mais inactifs.
 
 ### `POST /hsseq/lock/evaluate`
@@ -462,7 +479,7 @@ Entrée `{ "rotation_id": 1127 }`. Sortie `LockEvaluation` (§4.2 en anglais, pl
   "reasons": [{
     "code": "V02", "label": "Point critique du contrôle pré-départ non conforme", "source": "NIMOVA Terrain",
     "since": "2026-10-15T06:05:00Z", "waivable": true, "detail": "Plaques et étiquettes de danger en place",
-    "resolution": "Chef de parc après correction, photo obligatoire", "waiver_id": null
+    "resolution": "Chef de parc après correction, photo obligatoire", "severity": "block", "waiver_id": null
   }],
   "active_waiver": null,
   "checked_at": "2026-10-15T07:31:12Z"
@@ -477,7 +494,11 @@ Entrée `{ "rotation_id": 1127 }`. Sortie `LockEvaluation` (§4.2 en anglais, pl
 | V04 | Habilitation obligatoire du salarié lié au chauffeur (`eguitra.rh.qualification`) absente ou expirée à la date de chargement, ou aptitude `unfit`. |
 | V05 | Assurance (`insurance`) ou visite technique (`inspection`) du véhicule expirée à la date de chargement. |
 
-`allowed` est vrai quand aucun motif n'est ouvert, ou quand chaque motif ouvert est couvert par une
+`severity` : les motifs V01 à V09 sont toujours `block`. Un avertissement HSSEQ (par exemple une
+habilitation absente avant la date de mise en service) arrive en `warn` : il est affiché et transmis
+à Transport mais n'empêche pas le départ.
+
+`allowed` est vrai quand aucun motif `block` n'est ouvert, ou quand chacun est couvert par une
 dérogation active de la rotation (`waiver_id`). `active_waiver` : `id`, `approved_by` (demandeur puis
 second valideur), `expires`, ou nul. `label`, `source` et `resolution` reprennent le tableau du §4 de
 la spécification ; `detail` précise le cas. Chaque évaluation est journalisée.
@@ -527,8 +548,8 @@ indicateurs. Jamais sur V01 ni V03 (`not_waivable`).
 ### `/hsseq/attachments`
 
 - `POST /hsseq/attachments` (multipart) : `file`, `model` (`event`, `action`, `check`, `nonconformity`,
-  `waiver`) et `id` de la fiche, obligatoires ; `item_id` (point d'un contrôle), `caption`,
-  `client_uuid` (idempotence) facultatifs. Toute pièce est rattachée à une fiche HSSEQ dès le dépôt.
+  `waiver`) et `id` de la fiche, obligatoires ; `caption`, `client_uuid` (idempotence) facultatifs. Les
+  photos d'un contrôle se rattachent à ses non-conformités. Toute pièce est rattachée à une fiche HSSEQ dès le dépôt.
   Formats contrôlés par `eguitra_api/files.py` (JPEG, PNG, PDF ; signature du contenu), 8 Mo au plus ;
   photos compressées sur l'appareil. Réponse `Attachment` : `id`, `name`, `mimetype`, `size`,
   `is_photo`, `caption`, `created_at`, `created_by`, `url`.
@@ -583,10 +604,16 @@ Décisions de la session OTHER sur les questions posées, reportées dans les se
 
 Horodatage : `reported_at` (saisie) et `synced_at` (posé par le serveur).
 
-### Points encore à préciser
+### Réponses aux derniers points (25/10)
 
-- Valeurs de `severity` dans les `blockers` de Transport.
-- Photos d'un contrôle : l'envoi après la fiche (`photos_missing`, §7) découle du dépôt rattaché ;
-  le noyau confirme-t-il que le contrôle est accepté sans ses photos, signalées ensuite ?
-- Écran et route du paramétrage des sites par `admin` (aucune route HSSEQ nommée au lot 1).
-- Codes d'erreur proposés au §1 au-delà des six fixés.
+1. `severity` vaut `block` ou `warn`, rien d'autre. Les motifs HSSEQ sont toujours `block` ; un
+   avertissement HSSEQ (habilitation absente avant la date de mise en service) arrive en `warn` ; T01
+   de Transport est `block` (§9).
+2. Photos : le noyau accepte le contrôle sans ses photos ; chaque non-conformité porte `photos_missing`
+   tant qu'aucune photo n'y est rattachée, et le contrôle aussi tant qu'il en reste une ; une
+   non-conformité bloquante compte pour V02 avec ou sans photo ; la levée exige une photo
+   (`photo_missing`) (§7).
+3. Sites : `GET /hsseq/sites` pour tous les profils de l'application ; `POST /hsseq/sites` et
+   `PATCH /hsseq/sites/{id}` pour `admin` et `hsseq` ; entrée de menu « Paramètres » réservée à
+   `admin` et `hsseq` : sites, grilles et motifs du verrou (§2, §3).
+4. Codes d'erreur : la liste du §1 est retenue en entier (§1).
