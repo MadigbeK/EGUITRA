@@ -4,6 +4,7 @@ from . import fleet
 from . import tax
 from . import rotation
 from . import standard
+from . import official_rate
 from . import ownership
 from . import analysis
 from . import alert
