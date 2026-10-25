@@ -57,6 +57,23 @@ class TestSocle(TransactionCase):
         self.assertEqual(rh._eguitra_profiles(), ["rh"])
         self.assertFalse(rh.has_group("account.group_account_invoice"), "La RH ne saisit pas de pièces comptables")
 
+        hsseq = Users.create({
+            "name": "HSSEQ Test",
+            "login": "hsseq.socle",
+            "group_ids": [(4, self.env.ref("eguitra_base.group_profile_hsseq").id)],
+        })
+        self.assertEqual(hsseq._eguitra_profiles(), ["hsseq"])
+        self.assertFalse(hsseq.has_group("account.group_account_invoice"), "Le responsable HSSEQ ne saisit pas de pièces")
+
+        conducteur = Users.create({
+            "name": "Conducteur Test",
+            "login": "conducteur.socle",
+            "group_ids": [(4, self.env.ref("eguitra_base.group_profile_conducteur").id)],
+        })
+        self.assertEqual(conducteur._eguitra_profiles(), ["conducteur"])
+        self.assertFalse(conducteur.share, "Le conducteur est un compte interne (salarié), pas un compte du portail")
+        self.assertFalse(conducteur.has_group("account.group_account_readonly"))
+
         admin = Users.create({
             "name": "Admin Test",
             "login": "admin.test",

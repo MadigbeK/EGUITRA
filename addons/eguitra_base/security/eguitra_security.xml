@@ -86,6 +86,21 @@
         <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
 
+    <record id="group_profile_hsseq" model="res.groups">
+        <field name="name">Responsable HSSEQ</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Santé, sécurité, sûreté, environnement et qualité : classement des événements et enquêtes, plan d'actions, grilles de contrôle, seconde validation des dérogations au verrou de départ, réouverture des fiches closes. Seul profil à lire le détail des alcootests.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Conducteur : l'application de terrain NIMOVA Terrain seule (téléphone), aucune application web. -->
+    <record id="group_profile_conducteur" model="res.groups">
+        <field name="name">Conducteur</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">NIMOVA Terrain seule, sur téléphone : contrôle pré-départ, alcootest et déclaration d'événement pour lui-même, lecture de ses propres saisies et de ses habilitations.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
     <record id="group_profile_admin" model="res.groups">
         <field name="name">Administration</field>
         <field name="privilege_id" ref="privilege_eguitra_profiles"/>

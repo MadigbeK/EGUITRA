@@ -11,6 +11,8 @@ PROFILE_GROUPS = {
     "immobilier": "eguitra_base.group_profile_immobilier",
     "cabinet": "eguitra_base.group_profile_cabinet",
     "rh": "eguitra_base.group_profile_rh",
+    "hsseq": "eguitra_base.group_profile_hsseq",
+    "conducteur": "eguitra_base.group_profile_conducteur",
     "porteur": "eguitra_base.group_profile_porteur",
 }
 
