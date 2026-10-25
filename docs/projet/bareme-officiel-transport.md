@@ -94,3 +94,42 @@ Pour la suite, ces données à saisir rendraient les autres indicateurs calculab
 - heures d'arrivée et de départ au dépôt et chez le client (temps d'attente) ;
 - voyages planifiés ;
 - interventions de maintenance.
+
+## 4. Préparation du module HSSEQ (contrat avec la session HSSEQ)
+
+La spécification de la direction générale (NIMOVA_HSSEQ_Specifications_v1.0, 24 octobre 2026) demande au
+Transport : le profil du véhicule, les documents à échéance, les tonnages, et un statut « en route »
+derrière un verrou évalué par le serveur. Le Transport fournit les données et les crochets ; les motifs
+V01 à V09, leur paramétrage et les dérogations restent dans le module HSSEQ.
+
+- Ensemble :
+  - `vehicle_kind` : citerne (`tanker`) ou benne (`tipper`) ;
+  - `payload_tonnes` : charge utile ;
+  - documents `eguitra.transport.vehicle.document`, avec historique : assurance (`insurance`), visite
+    technique (`inspection`), barémage (`calibration`) et certificat d'étanchéité (`tightness`) d'une
+    citerne ; numéro, délivré par, valable du, `expiry_date`, pièce jointe.
+- Aides pour HSSEQ :
+  - `vehicle._expired_documents(on_date, kinds=None)` et `vehicle._missing_documents(kinds=None)` : ses
+    motifs V05 et V06 ;
+  - `rotation._overload()` : tonnes au-delà de la charge utile, d'après le ticket de pesée ; son motif V07.
+- Rotation :
+  - état « en route » entre « saisie » et « validée » ;
+  - `action_depart` (POST `/transport/rotations/<id>/depart`, profils qui saisissent les rotations) ;
+  - un départ refusé répond 422 `departure_blocked` avec la liste `blockers` ;
+  - trace du départ : `departed_at`, `departed_by`, `departure_log` (avertissements et motifs dérogés).
+- Crochets :
+  - `_departure_blockers()` : le Transport n'y met que T01, ensemble en maintenance, hors service ou
+    cédé ;
+  - `_departure_waived()` : liste des motifs dérogés, pour la trace du départ ;
+  - `_validation_blockers()` : appelé à la validation ; HSSEQ y exige le départ des rotations chargées
+    après sa mise en service.
+- Format d'un motif : `{code, label, source, since, waivable, severity}`, severity `block` ou `warn`.
+- Le départ se donne en ligne : l'application Rotations ne le met pas en file d'attente hors réseau.
+
+Écrans :
+- Flotte et chauffeurs : profil, charge utile, documents et pièces jointes, état des documents.
+- Rotations :
+  - filtre « En route » ;
+  - commande « Départ en route » : les motifs de refus s'affichent ;
+  - pesée d'une benne dans le formulaire.
+- Contrôle « Documents des ensembles en service à jour » : vigilance, jamais bloquant.

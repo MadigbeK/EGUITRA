@@ -1,16 +1,18 @@
 """API Transport : flotte, routes et tarifs, rotations, facturation, rentabilité, synchronisation mobile."""
 
+import base64
 import io
 import logging
 
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
-from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
+from odoo.addons.eguitra_api.files import ACCEPTED, XLSX_OPTIONS, checked_name, detect_type, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
+from ..blocking import RotationBlocked
 from ..models.fleet_safety import DOCUMENT_KINDS, VEHICLE_KINDS
 from ..models.official_rate import DEPOTS, gap_pct, slug
 from ..models.ownership import OWNERSHIPS, PERIODICITIES
@@ -25,6 +27,7 @@ READ = ("admin", "direction", "finance", "exploitation")
 WRITE = ("admin", "finance", "exploitation")
 SETTINGS = ("admin", "finance")
 MAX_SYNC = 200
+MAX_DOCUMENT = 15 * 1024 * 1024
 
 ROTATION_FIELDS = (
     "date_loading", "date_delivery", "date_return", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
@@ -100,6 +103,7 @@ def _rotation_row(rot):
         "weight_tare": rot.weight_tare or None, "weight_net": rot.weight_net or None, "over_payload": rot.over_payload,
         "vehicle_kind": rot.vehicle_id.vehicle_kind or None,
         "departure_blockers": rot._departure_blockers() if rot.state == "draft" else [],
+        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by),
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
         **_rotation_official(rot),
@@ -237,9 +241,11 @@ def _tariff_row(t):
 
 
 def _document_row(doc):
-    return {"id": doc.id, "kind": doc.kind, "kind_label": dict(DOCUMENT_KINDS)[doc.kind], "name": doc.name or None,
-            "reference": doc.reference or None, "issuer": doc.issuer or None, "date_issue": doc.date_issue or None,
-            "date_expiry": doc.date_expiry, "state": doc._state(), "note": doc.note or None}
+    attachment = doc.sudo().attachment_id
+    return {"id": doc.id, "kind": doc.kind, "kind_label": dict(DOCUMENT_KINDS)[doc.kind],
+            "reference": doc.reference or None, "issuer": doc.issuer or None, "date_start": doc.date_start or None,
+            "expiry_date": doc.expiry_date, "state": doc._state(), "note": doc.note or None,
+            "attachment": {"id": attachment.id, "name": attachment.name} if attachment else None}
 
 
 def _official_ref(line):
@@ -371,7 +377,7 @@ class EguitraTransport(http.Controller):
         return {
             "vehicles": [{"id": v.id, "name": v.name, "tractor_plate": v.tractor_plate, "capacity_liters": v.capacity_liters,
                           "driver_id": v.driver_id.id or None, "state": v.state, "vehicle_kind": v.vehicle_kind,
-                          "payload_tons": v.payload_tons or None} for v in vehicles],
+                          "payload_tonnes": v.payload_tonnes or None} for v in vehicles],
             "drivers": [{"id": d.id, "name": d.name, "phone": d.phone} for d in env["eguitra.transport.driver"].search([])],
             "routes": [{"id": r.id, "name": r.name, "distance_km": r.distance_km, "default_rate": r.default_rate,
                         "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids],
@@ -401,7 +407,7 @@ class EguitraTransport(http.Controller):
              "asset": _ref(v.sudo().asset_id), "active": v.active,
              "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
              "monthly_charges": sum(c._monthly() for c in v.charge_ids),
-             "vehicle_kind": v.vehicle_kind, "payload_tons": v.payload_tons or None,
+             "vehicle_kind": v.vehicle_kind, "payload_tonnes": v.payload_tonnes or None,
              "documents": [_document_row(d) for d in v.document_ids], "document_issues": v._document_issues()}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
@@ -433,23 +439,8 @@ class EguitraTransport(http.Controller):
             if data["vehicle_kind"] not in dict(VEHICLE_KINDS):
                 raise ApiError(400, "invalid_parameter", "Profil d'ensemble inconnu.")
             values["vehicle_kind"] = data["vehicle_kind"]
-        if "payload_tons" in data:
-            values["payload_tons"] = as_float(data["payload_tons"] or 0, "payload_tons")
-        if "documents" in data:
-            # Les documents sont renvoyés en entier, comme les charges ; le parc les tient à jour.
-            commands = [(5, 0, 0)]
-            for d in data["documents"] or []:
-                if d.get("kind") not in dict(DOCUMENT_KINDS):
-                    raise ApiError(400, "invalid_parameter", "Nature de document inconnue.")
-                expiry = parse_date(d, "date_expiry")
-                if not expiry:
-                    raise ApiError(400, "invalid_parameter", "Date d'expiration du document manquante.")
-                commands.append((0, 0, {
-                    "kind": d["kind"], "name": d.get("name") or False, "reference": d.get("reference") or False,
-                    "issuer": d.get("issuer") or False, "date_issue": parse_date(d, "date_issue") or False,
-                    "date_expiry": expiry, "note": d.get("note") or False,
-                }))
-            values["document_ids"] = commands
+        if "payload_tonnes" in data:
+            values["payload_tonnes"] = as_float(data["payload_tonnes"] or 0, "payload_tonnes")
         if {"ownership", "owner_id", "charges"} & set(data) and not _is_finance():
             raise ApiError(403, "forbidden", "Propriété et charges d'un ensemble relèvent de la finance.")
         if "ownership" in data:
@@ -474,18 +465,85 @@ class EguitraTransport(http.Controller):
             values["charge_ids"] = commands
         return values
 
+    @staticmethod
+    def _document_commands(vehicle, documents):
+        """Documents renvoyés en entier : un document cité par son id est mis à jour, un nouveau est créé,
+        un document absent de la liste est retiré. Un renouvellement s'ajoute : l'ancien reste à l'historique."""
+        commands, seen = [], set()
+        for d in documents or []:
+            if d.get("kind") not in dict(DOCUMENT_KINDS):
+                raise ApiError(400, "invalid_parameter", "Nature de document inconnue.")
+            expiry = parse_date(d, "expiry_date")
+            if not expiry:
+                raise ApiError(400, "invalid_parameter", "Date d'expiration du document manquante.")
+            line = {"kind": d["kind"], "reference": d.get("reference") or False, "issuer": d.get("issuer") or False,
+                    "date_start": parse_date(d, "date_start") or False, "expiry_date": expiry,
+                    "note": d.get("note") or False}
+            if d.get("id"):
+                doc = vehicle.document_ids.filtered(lambda x, i=int(d["id"]): x.id == i)
+                if not doc:
+                    raise ApiError(422, "business_rule", "Document inconnu pour cet ensemble.")
+                seen.add(doc.id)
+                commands.append((1, doc.id, line))
+            else:
+                commands.append((0, 0, line))
+        return commands + [(2, doc.id) for doc in vehicle.document_ids if doc.id not in seen]
+
     @api_route("/transport/vehicles", methods=("POST",), profiles=WRITE)
     def create_vehicle(self, **_kw):
         data = read_json()
         require(data, "name")
         vehicle = request.env["eguitra.transport.vehicle"].create(self._vehicle_values(data))
+        if "documents" in data:
+            vehicle.write({"document_ids": self._document_commands(vehicle, data["documents"])})
         return {"id": vehicle.id, "name": vehicle.name}
 
     @api_route("/transport/vehicles/<int:vehicle_id>", methods=("PATCH",), profiles=WRITE)
     def update_vehicle(self, vehicle_id, **_kw):
         vehicle = _get("eguitra.transport.vehicle", vehicle_id, "Ensemble routier")
-        vehicle.write(self._vehicle_values(read_json()))
+        data = read_json()
+        vehicle.write(self._vehicle_values(data))
+        if "documents" in data:
+            vehicle.write({"document_ids": self._document_commands(vehicle, data["documents"])})
         return {"status": "ok"}
+
+    @api_route("/transport/vehicles/<int:vehicle_id>/documents/<int:document_id>/file", methods=("POST",),
+               profiles=WRITE)
+    def upload_document_file(self, vehicle_id, document_id, **_kw):
+        """Pièce jointe d'un document (attestation, procès-verbal) : format reconnu au contenu, 15 Mo au plus."""
+        doc = self._vehicle_document(vehicle_id, document_id)
+        upload = request.httprequest.files.get("file")
+        if not upload:
+            raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
+        content = upload.read(MAX_DOCUMENT + 1)
+        if len(content) > MAX_DOCUMENT:
+            raise ApiError(413, "too_large", "Fichier trop volumineux (15 Mo maximum).")
+        mimetype = detect_type(content)
+        if not mimetype:
+            raise ApiError(415, "unsupported_type", f"Pièce jointe au format {ACCEPTED}.")
+        doc.attachment_id = request.env["ir.attachment"].create({
+            "name": checked_name(upload.filename, mimetype, "document"), "datas": base64.b64encode(content),
+            "res_model": doc._name, "res_id": doc.id, "mimetype": mimetype,
+        })
+        return _document_row(doc)
+
+    @api_route("/transport/vehicles/<int:vehicle_id>/documents/<int:document_id>/file", profiles=READ)
+    def download_document_file(self, vehicle_id, document_id, **_kw):
+        attachment = self._vehicle_document(vehicle_id, document_id).sudo().attachment_id
+        if not attachment:
+            raise ApiError(404, "not_found", "Pièce jointe introuvable.")
+        return request.make_response(base64.b64decode(attachment.datas), headers=[
+            ("Content-Type", attachment.mimetype or "application/octet-stream"),
+            ("Content-Disposition", content_disposition(attachment.name)), ("Cache-Control", "no-store"),
+        ])
+
+    @staticmethod
+    def _vehicle_document(vehicle_id, document_id):
+        vehicle = _get("eguitra.transport.vehicle", vehicle_id, "Ensemble routier")
+        doc = vehicle.document_ids.filtered(lambda d: d.id == document_id)
+        if not doc:
+            raise ApiError(404, "not_found", "Document introuvable.")
+        return doc
 
     @api_route("/transport/drivers", profiles=READ)
     def drivers(self, **_kw):
@@ -942,7 +1000,7 @@ class EguitraTransport(http.Controller):
     @api_route("/transport/rotations/<int:rotation_id>", methods=("PATCH",), profiles=WRITE)
     def update_rotation(self, rotation_id, **_kw):
         rot = _get("eguitra.transport.rotation", rotation_id, "Rotation")
-        if rot.state not in ("draft", "done"):
+        if rot.state not in ("draft", "en_route", "done"):
             raise ApiError(422, "business_rule", "Seule une rotation saisie ou validée se modifie.")
         rot.write(_rotation_values(read_json()))
         return _rotation_row(rot)
@@ -950,10 +1008,16 @@ class EguitraTransport(http.Controller):
     @api_route("/transport/rotations/<int:rotation_id>/<string:action>", methods=("POST",), profiles=WRITE)
     def rotation_action(self, rotation_id, action, **_kw):
         rot = _get("eguitra.transport.rotation", rotation_id, "Rotation")
-        handlers = {"validate": rot.action_validate, "cancel": rot.action_cancel, "reset": rot.action_reset}
+        handlers = {"validate": rot.action_validate, "cancel": rot.action_cancel, "reset": rot.action_reset,
+                    "depart": rot.action_depart}
         if action not in handlers:
             raise ApiError(404, "not_found", "Action inconnue.")
-        handlers[action]()
+        try:
+            handlers[action]()
+        except RotationBlocked as e:
+            # Départ ou validation refusés : la liste des motifs ouverts, pour l'écran et l'application.
+            error = "departure_blocked" if action == "depart" else "validation_blocked"
+            raise ApiError(422, error, str(e.args[0]), blockers=e.blockers) from e
         return _rotation_row(rot)
 
     @api_route("/transport/rotations/validate", methods=("POST",), profiles=WRITE)
@@ -1011,6 +1075,7 @@ class EguitraTransport(http.Controller):
             "to_invoice": {"count": to_invoice_count, "amount": to_invoice or 0.0},
             "shortage_excess": {"count": excess_count, "volume": excess or 0.0, "value": excess_value or 0.0},
             "drafts": Rotation.search_count([("state", "=", "draft")]),
+            "en_route": Rotation.search_count([("state", "=", "en_route")]),
             "fleet": {s: request.env["eguitra.transport.vehicle"].search_count([("state", "=", s)])
                       for s in VEHICLE_STATES},
         }
