@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Download, FileUp, Pencil, Plus, ShieldAlert, ShieldCheck, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Segmented, Select, Textarea, cx, demanderConfirmation, type Tone } from "@/components/ui";
-import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt, fmtJours, fmtPct, fmtRatio, pluriel } from "@/lib/format";
 import {
   QUALIFICATION_STATE_LABELS,
@@ -538,6 +538,21 @@ export function HabilitationsSecurite() {
   const { data: securite, error: erreurSecurite, mutate: rafraichirSecurite } = useApi<SafetySummary>(avecSociete("/rh/safety", societe));
   const { data: matrice, error: erreurMatrice, mutate: rafraichirMatrice } = useApi<QualificationMatrix>(avecSociete(`/rh/qualifications/matrix?drivers_only=${conducteurs}`, societe));
   const plusieurs = (meta?.companies.length ?? 0) > 1;
+  const [reprise, setReprise] = useState(false);
+  const [telechargement, setTelechargement] = useState(false);
+  const [erreurModele, setErreurModele] = useState<string | null>(null);
+
+  async function modele() {
+    setTelechargement(true);
+    setErreurModele(null);
+    try {
+      await apiDownload(avecSociete(`/rh/qualifications/template?drivers_only=${conducteurs}`, societe), "reprise_habilitations.xlsx");
+    } catch (e) {
+      setErreurModele(messageErreur(e));
+    } finally {
+      setTelechargement(false);
+    }
+  }
 
   return (
     <div>
@@ -585,25 +600,139 @@ export function HabilitationsSecurite() {
           </>
         )}
       </Etat>
+      {erreurModele && (
+        <div className="mb-4">
+          <Notice tone="danger">{erreurModele}</Notice>
+        </div>
+      )}
       <Card
         padded={false}
         title="Matrice des habilitations"
         actions={
-          <Segmented
-            value={conducteurs}
-            onChange={setConducteurs}
-            options={[
-              { key: "1", label: "Conducteurs seulement" },
-              { key: "0", label: "Tout le personnel" },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              value={conducteurs}
+              onChange={setConducteurs}
+              options={[
+                { key: "1", label: "Conducteurs seulement" },
+                { key: "0", label: "Tout le personnel" },
+              ]}
+            />
+            <Button size="sm" loading={telechargement} onClick={modele} title="Classeur rempli de ce qui est déjà connu, à compléter puis importer">
+              <Download className="h-4 w-4" /> Modèle de reprise
+            </Button>
+            {meta?.can_write && (
+              <Button size="sm" onClick={() => setReprise(true)}>
+                <FileUp className="h-4 w-4" /> Importer
+              </Button>
+            )}
+          </div>
         }
       >
         <Etat data={matrice} error={erreurMatrice} onRetry={() => rafraichirMatrice()} label="Chargement de la matrice…">
           {(m) => <Matrice matrice={m} meta={meta} plusieurs={plusieurs} />}
         </Etat>
       </Card>
+      {reprise && (
+        <ImportReprise
+          onClose={() => setReprise(false)}
+          onDone={() => {
+            rafraichirMatrice();
+            rafraichirSecurite();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+interface ResultatReprise {
+  created: number;
+  updated: number;
+  fitness: number;
+  unchanged: number;
+}
+
+/** Reprise des habilitations et des aptitudes par le classeur modèle (tout ou rien). */
+function ImportReprise({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [fichier, setFichier] = useState<File | null>(null);
+  const [resultat, setResultat] = useState<ResultatReprise | null>(null);
+  const [erreur, setErreur] = useState<{ message: string; lignes: string[] } | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+  async function importer() {
+    if (!fichier) return;
+    setEnvoi(true);
+    setErreur(null);
+    setResultat(null);
+    try {
+      const form = new FormData();
+      form.append("file", fichier);
+      setResultat(await apiUpload<ResultatReprise>("/rh/qualifications/import", form));
+      onDone();
+    } catch (e) {
+      setErreur({ message: messageErreur(e), lignes: e instanceof ApiError ? ((e.body as { errors?: string[] }).errors ?? []) : [] });
+    } finally {
+      setEnvoi(false);
+    }
+  }
+  return (
+    <Modal
+      open
+      title="Importer la reprise des habilitations"
+      onClose={onClose}
+      footer={
+        resultat ? (
+          <Button variant="primary" onClick={onClose}>
+            Fermer
+          </Button>
+        ) : (
+          <Button variant="primary" loading={envoi} disabled={!fichier} onClick={importer}>
+            Importer
+          </Button>
+        )
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-muted">
+          Partez du « Modèle de reprise » : il contient une rangée par conducteur et par habilitation, et une rangée d&apos;aptitude par conducteur, déjà remplies de ce qui est connu. Complétez les dates (JJ/MM/AAAA), la référence et l&apos;organisme ; laissez vide une habilitation que le salarié n&apos;a pas. Une expiration vide est calculée depuis l&apos;obtention.
+        </p>
+        <p className="text-muted">Rien n&apos;est enregistré si une rangée est en erreur. Les justificatifs se déposent ensuite sur chaque fiche.</p>
+        {erreur && (
+          <Notice tone="danger">
+            <div>{erreur.message}</div>
+            {erreur.lignes.length > 0 && (
+              <ul className="mt-1 list-disc pl-5">
+                {erreur.lignes.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            )}
+          </Notice>
+        )}
+        {resultat && (
+          <Notice tone="ok">
+            {resultat.created + resultat.updated + resultat.fitness === 0
+              ? "Rien de nouveau : le classeur reprend ce qui est déjà enregistré."
+              : [
+                  resultat.created ? pluriel(resultat.created, "habilitation ajoutée", "habilitations ajoutées") : null,
+                  resultat.updated ? pluriel(resultat.updated, "habilitation mise à jour", "habilitations mises à jour") : null,
+                  resultat.fitness ? pluriel(resultat.fitness, "aptitude mise à jour", "aptitudes mises à jour") : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ") + "."}
+          </Notice>
+        )}
+        {!resultat && (
+          <input
+            type="file"
+            accept=".xlsx"
+            aria-label="Classeur de reprise"
+            onChange={(e) => setFichier(e.target.files?.[0] ?? null)}
+            className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2"
+          />
+        )}
+      </div>
+    </Modal>
   );
 }
 

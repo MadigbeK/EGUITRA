@@ -168,7 +168,9 @@ sans jamais un justificatif ni un détail médical.
   `_hsseq_indicators` (taux de fréquence : accidents avec arrêt × 1 000 000 ÷ heures ; taux de gravité :
   jours perdus × 1 000 ÷ heures).
 - **API RH** : `/rh/qualifications` (liste, création, modification, suppression, justificatif),
-  `/rh/qualifications/matrix`, `/rh/qualification-types`, `/rh/ppe`, `/rh/safety` ; aptitude par
+  `/rh/qualifications/template` et `/rh/qualifications/import` (reprise par classeur : feuilles
+  « Habilitations » et « Aptitude » préremplies, réimport tout ou rien, mise à jour d'une habilitation
+  de même salarié, même type et même date d'obtention ou d'expiration), `/rh/qualifications/matrix`, `/rh/qualification-types`, `/rh/ppe`, `/rh/safety` ; aptitude par
   PATCH `/rh/employees/<id>` ; `/rh/me` renvoie au conducteur ses habilitations et son aptitude.
   Quatre yeux : personne ne gère ses propres habilitations ni son aptitude.
 - **Échéancier** : habilitations et aptitudes à J-30 (à traiter) et J-7 (urgent), expirées (urgent) ;

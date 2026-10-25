@@ -3,8 +3,8 @@ habilitations des salariés (conducteurs surtout), aptitude médicale en statut 
 protection individuelle remis, heures réellement travaillées et absences pour accident du travail.
 
 Ces données vivent ici ; HSSEQ n'en lit que des statuts, côté serveur, par les méthodes « _hsseq_ »
-ci-dessous (jamais un justificatif, jamais un détail médical : l'aptitude n'est qu'« apte » ou
-« inapte » avec sa date de validité). Le verrou de départ V04 d'HSSEQ s'appuie sur
+ci-dessous (jamais un justificatif, jamais un détail médical : l'aptitude n'est qu'« apte », « apte
+avec réserve » ou « inapte » avec sa date de validité). Le verrou de départ V04 d'HSSEQ s'appuie sur
 _hsseq_driver_status : habilitation obligatoire pour les conducteurs expirée ou absente, aptitude
 « inapte » ou échue ; une aptitude non renseignée est un avertissement, pas un motif.
 """

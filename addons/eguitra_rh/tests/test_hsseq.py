@@ -1,8 +1,12 @@
+import io
 from datetime import date, timedelta
+
+from dateutil.relativedelta import relativedelta
 
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
+from odoo.addons.eguitra_api.files import XLSX
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
 
@@ -172,3 +176,78 @@ class TestHsseqApi(ApiCase):
         self.assertEqual({q["code"] for q in me["qualifications"] if q["state"] == "absente"}, set(MANDATORY))
         status, _b = self.call("GET", "/rh/qualifications/matrix", token=token)
         self.assertEqual(status, 403, "La matrice est réservée à la gestion")
+
+    def _classeur(self, habilitations, aptitudes):
+        import openpyxl
+
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.title = "Habilitations"
+        sheet.append(["Matricule", "Salarié", "Société", "Code habilitation", "Habilitation", "Obtenue le",
+                      "Expire le", "Référence", "Délivrée par"])
+        for row in habilitations:
+            sheet.append(row)
+        sheet = book.create_sheet("Aptitude")
+        sheet.append(["Matricule", "Salarié", "Société", "Aptitude", "Visite le", "Valable jusqu'au"])
+        for row in aptitudes:
+            sheet.append(row)
+        out = io.BytesIO()
+        book.save(out)
+        return out.getvalue()
+
+    def _importer(self, token, content):
+        response = self.url_open("/api/v1/rh/qualifications/import", method="POST", timeout=60,
+                                 files={"file": ("reprise.xlsx", io.BytesIO(content), XLSX)},
+                                 headers={"Authorization": f"Bearer {token}", "X-Eguitra-App": "test"})
+        return response.status_code, response.json()
+
+    def test_reprise_par_classeur(self):
+        import openpyxl
+
+        token = self.open_session("rh.securite", app="rh")["access_token"]
+        response = self.url_open("/api/v1/rh/qualifications/template", timeout=60,
+                                 headers={"Authorization": f"Bearer {token}", "X-Eguitra-App": "test"})
+        self.assertEqual(response.status_code, 200, response.text[:300])
+        book = openpyxl.load_workbook(io.BytesIO(response.content), read_only=True)
+        self.assertEqual(book.sheetnames, ["Habilitations", "Aptitude", "Notice"])
+        rows = list(book["Habilitations"].iter_rows(values_only=True))
+        codes = {r[3] for r in rows[1:] if r[0] == self.worker.matricule}
+        self.assertTrue(set(MANDATORY) <= codes, "Une rangée par type d'habilitation pour chaque conducteur")
+        self.assertNotIn(self.own.matricule, {r[0] for r in rows[1:]}, "Conducteurs seulement par défaut")
+
+        m, day = self.worker.matricule, date.today()
+        obtained = day - timedelta(days=60)
+        content = self._classeur([
+            [m, None, None, "PERMIS", None, date(2020, 3, 1), date(2030, 3, 1), "P-1", "Préfecture"],
+            [m.lower(), None, None, "conduite_defensive", None, obtained.strftime("%d/%m/%Y"), None, None, None],
+            [m, None, None, "MATIERES_DANGEREUSES", None, "2025-06-01", "2030-05-31", None, None],
+            [m, None, None, "SECOURISME", None, None, None, None, None],
+        ], [[m, None, None, "Apte avec réserve", day - timedelta(days=30), day + timedelta(days=330)]])
+        status, result = self._importer(token, content)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result, {"created": 3, "updated": 0, "fitness": 1, "unchanged": 0})
+        self.env.invalidate_all()
+        defensive = self.worker.qualification_ids.filtered(lambda q: q.type_id.code == "CONDUITE_DEFENSIVE")
+        self.assertEqual(defensive.expiry_date, obtained + relativedelta(months=24, days=-1),
+                         "Expiration calculée par la durée du type")
+        self.assertEqual(self.worker.medical_fitness, "apte_reserve")
+        status, matrix = self.call("GET", "/rh/qualifications/matrix", token=token)
+        row = next(r for r in matrix["rows"] if r["employee"]["id"] == self.worker.id)
+        self.assertFalse(row["blocking"], row["reasons"])
+
+        status, again = self._importer(token, content)
+        self.assertEqual((status, again), (200, {"created": 0, "updated": 0, "fitness": 0, "unchanged": 4}),
+                         "Réimporter le même classeur ne crée rien")
+
+        before = self.env["eguitra.rh.qualification"].search_count([])
+        status, body = self._importer(token, self._classeur([
+            ["ZZ-9999", None, None, "PERMIS", None, "01/01/2025", None, None, None],
+            [m, None, None, "INCONNU", None, "01/01/2025", None, None, None],
+            [m, None, None, "SECOURISME", None, "31/02/2025", None, None, None],
+            [self.own.matricule, None, None, "SECOURISME", None, "01/01/2025", None, None, None],
+            [m, None, None, "SECOURISME", None, "01/01/2025", None, None, None],
+        ], [[m, None, None, "Bon pour le service", None, None]]))
+        self.assertEqual(status, 422, body)
+        self.assertEqual(len(body["errors"]), 5, body["errors"])
+        self.assertIn("rien n'est enregistré", body["message"])
+        self.assertEqual(self.env["eguitra.rh.qualification"].search_count([]), before, "Tout ou rien")

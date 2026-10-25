@@ -135,6 +135,12 @@ chaque expiration (délais réglables dans les paramètres). Chaque conducteur v
 « Mon espace ». **Saisissez les habilitations de tous les conducteurs avant la mise en service du
 verrou HSSEQ** : sans elles, aucun départ n'est autorisé.
 
+Pour une première saisie en nombre, « Modèle de reprise » donne un classeur avec une rangée par
+conducteur et par habilitation, et une rangée d'aptitude par conducteur, déjà remplies de ce qui est
+connu. Complétez les dates (JJ/MM/AAAA), la référence et l'organisme, puis « Importer » : rien n'est
+enregistré tant qu'une rangée est en erreur, et chaque erreur est indiquée avec sa ligne. Réimporter le
+même classeur ne crée pas de doublon. Les justificatifs se déposent ensuite sur chaque fiche.
+
 ## Mon espace (tous les salariés)
 
 Chaque salarié lié à un compte NIMOVA y trouve son dossier résumé, son solde de congés, ses demandes
