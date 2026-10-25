@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCheck, ChevronLeft, ChevronRight, FileText, Plus, Smartphone } from "@/components/icons";
+import { CheckCheck, ChevronLeft, ChevronRight, FileText, Plus, Smartphone, Truck } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, cx, type Tri } from "@/components/ui";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
@@ -20,7 +20,7 @@ const FACTURATION: Profile[] = ["admin", "finance"];
 interface Rotation {
   id: number;
   name: string | null;
-  state: "draft" | "done" | "invoiced" | "cancelled";
+  state: "draft" | "en_route" | "done" | "invoiced" | "cancelled";
   source: "office" | "mobile";
   date_loading: string;
   vehicle: Ref;
@@ -74,7 +74,7 @@ const tauxLu = (r: Rotation) => (!r.revenue ? null : r.margin_estimated ? r.esti
 
 /** Rotations : saisie, validation, facturation ; marge estimée tant qu'aucun frais n'est saisi. */
 export function Rotations() {
-  const [state, setState] = useState("draft,done");
+  const [state, setState] = useState("draft,en_route,done");
   // Plus récentes d'abord, comme le noyau sans tri demandé.
   const [tri, setTri] = useState<Tri>({ key: "date_loading", dir: -1 });
   const [page, setPage] = useState(0);
@@ -93,11 +93,23 @@ export function Rotations() {
   const rows = data?.items ?? [];
   const chosen = rows.filter((r) => selected.includes(r.id));
 
-  async function run(action: "validate" | "invoice") {
+  async function run(action: "validate" | "invoice" | "depart") {
     setMessage(null);
     try {
-      if (action === "validate") {
-        await apiSend("POST", "/transport/rotations/validate", { ids: chosen.filter((r) => r.state === "draft").map((r) => r.id) });
+      if (action === "depart") {
+        // Départ évalué par le serveur, rotation par rotation : un refus dit ses motifs.
+        const refus: string[] = [];
+        for (const r of chosen.filter((x) => x.state === "draft")) {
+          try {
+            await apiSend("POST", `/transport/rotations/${r.id}/depart`);
+          } catch (e) {
+            const motifs = e instanceof ApiError ? (e.body as { blockers?: Array<{ label: string; severity: string }> }).blockers : undefined;
+            refus.push(motifs?.length ? motifs.filter((m) => m.severity === "block").map((m) => m.label).join(" ") : `${r.name ?? r.vehicle.name} : ${e instanceof ApiError ? e.message : "départ impossible"}`);
+          }
+        }
+        setMessage(refus.length ? { tone: "danger", text: `Départ refusé. ${refus.join(" ")}` } : { tone: "ok", text: "Rotations parties en route." });
+      } else if (action === "validate") {
+        await apiSend("POST", "/transport/rotations/validate", { ids: chosen.filter((r) => r.state === "draft" || r.state === "en_route").map((r) => r.id) });
         setMessage({ tone: "ok", text: "Rotations validées." });
       } else {
         const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
@@ -117,12 +129,17 @@ export function Rotations() {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Field label="Statut">
-          <Select value={state} onChange={(e) => { setState(e.target.value); setPage(0); setSelected([]); }} options={[{ value: "draft,done", label: "À traiter (saisies et à facturer)" }, { value: "draft", label: "Saisies à valider" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,done,invoiced,cancelled", label: "Toutes" }]} />
+          <Select value={state} onChange={(e) => { setState(e.target.value); setPage(0); setSelected([]); }} options={[{ value: "draft,en_route,done", label: "À traiter (saisies, en route, à facturer)" }, { value: "draft", label: "Saisies à valider" }, { value: "en_route", label: "En route" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,en_route,done,invoiced,cancelled", label: "Toutes" }]} />
         </Field>
         {selection && (
           <div className="flex flex-wrap gap-2">
             {saisie && (
-              <Button disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("validate")}>
+              <Button disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("depart")}>
+                <Truck className="h-4 w-4" /> Départ en route
+              </Button>
+            )}
+            {saisie && (
+              <Button disabled={!chosen.some((r) => r.state === "draft" || r.state === "en_route")} onClick={() => run("validate")}>
                 <CheckCheck className="h-4 w-4" /> Valider la sélection
               </Button>
             )}
@@ -299,8 +316,8 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
             const vehicle = ref.vehicles.find((v) => String(v.id) === f.vehicle_id);
             const loaded = parseNumber(f.volume_loaded ?? "") ?? 0;
             const net = (parseNumber(f.weight_gross ?? "") ?? 0) - (parseNumber(f.weight_tare ?? "") ?? 0);
-            if (vehicle?.payload_tons && f.weight_gross && f.weight_tare && net > vehicle.payload_tons) {
-              return <Notice tone="danger">Le poids net ({fmtDec(net)}{INSECABLE}t) dépasse la charge utile de {vehicle.name} ({fmtDec(vehicle.payload_tons)}{INSECABLE}t).</Notice>;
+            if (vehicle?.payload_tonnes && f.weight_gross && f.weight_tare && net > vehicle.payload_tonnes) {
+              return <Notice tone="danger">Le poids net ({fmtDec(net)}{INSECABLE}t) dépasse la charge utile de {vehicle.name} ({fmtDec(vehicle.payload_tonnes)}{INSECABLE}t).</Notice>;
             }
             return vehicle?.capacity_liters && loaded * 1000 > vehicle.capacity_liters ? (
               <Notice tone="danger">Le volume chargé dépasse la capacité de {vehicle.name} ({fmtM3(vehicle.capacity_liters / 1000)}) : la rotation ne pourra pas être validée.</Notice>

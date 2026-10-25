@@ -10,7 +10,7 @@ from odoo.addons.eguitra_finance.controllers.exporting import export_meta, table
 from ..models.rotation import COSTS
 from .transport import READ
 
-STATES = {"draft": "Saisie", "done": "Validée", "invoiced": "Facturée", "cancelled": "Annulée"}
+STATES = {"draft": "Saisie", "en_route": "En route", "done": "Validée", "invoiced": "Facturée", "cancelled": "Annulée"}
 # Kilométrage et ratios de la rotation (rentabilité au kilomètre), après les frais (COSTS, dont les
 # pneumatiques). Champs du modèle : un nom erroné lève une erreur au lieu de faire disparaître la colonne.
 RATIOS = [

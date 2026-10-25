@@ -15,7 +15,7 @@ export { INSECABLE, fmtFixe, fmtM3, fmtVolume } from "@/lib/format";
  * validée attend sa facture : elle s'écrit « À facturer », au trait neutre, pour ne pas se confondre
  * avec « Facturée » dans la vue « Toutes ».
  */
-export const ETAT_ROTATION = { draft: "Saisie", done: "À facturer", invoiced: "Facturée", cancelled: "Annulée" } as const;
+export const ETAT_ROTATION = { draft: "Saisie", en_route: "En route", done: "À facturer", invoiced: "Facturée", cancelled: "Annulée" } as const;
 
 /** Le minimum écrit comme il est réglé : « 15 % », « 12,5 % ». */
 function fmtMinimum(minimum: number): string {

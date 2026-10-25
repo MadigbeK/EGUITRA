@@ -345,7 +345,7 @@ class EguitraTransportAnalysis(models.AbstractModel):
 
         check("vehicle_documents",
               "Documents des ensembles en service à jour (assurance, visite technique ; barémage et étanchéité des citernes)",
-              [issue["message"] for v in in_service for issue in v._document_issues()],
+              [issue["label"] for v in in_service for issue in v._document_issues()],
               "Un document manquant ou expiré s'opposera au départ de l'ensemble ; renouvelez-le (Flotte et chauffeurs).")
         check("vehicle_without_asset", "Ensembles en service rattachés à une immobilisation",
               [v.name for v in in_service.sudo().filtered(lambda v: not v.asset_id)],
@@ -377,7 +377,8 @@ class EguitraTransportAnalysis(models.AbstractModel):
               "Un forfait de carburant trop bas gonfle la marge estimée de la route ; corrigez-le d'après les bons "
               "de carburant.")
         Rotation = env["eguitra.transport.rotation"]
-        open_rotations = Rotation.search([("company_id", "in", companies.ids), ("state", "in", ("draft", "done"))])
+        open_rotations = Rotation.search([("company_id", "in", companies.ids),
+                                          ("state", "in", ("draft", "en_route", "done"))])
         self._check_official_rates(companies, routes, open_rotations, check)
         check("over_capacity", "Volumes chargés dans la capacité des citernes",
               [f"{r._label()} : {r.volume_loaded:g} m³ pour {r.vehicle_id.capacity_liters / 1000:g} m³".replace(".", ",")

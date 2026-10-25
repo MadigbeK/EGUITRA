@@ -15,7 +15,7 @@ export interface Product {
 }
 
 export interface Referentials {
-  vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string; vehicle_kind?: VehicleKind; payload_tons?: number | null }>;
+  vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string; vehicle_kind?: VehicleKind; payload_tonnes?: number | null }>;
   drivers: Array<{ id: number; name: string; phone: string | null }>;
   routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number }> } & RouteStandards>;
   clients: Ref[];
@@ -59,24 +59,23 @@ export const VEHICLE_KINDS: Array<{ value: VehicleKind; label: string }> = [{ va
 /** Document d'un ensemble à échéance (assurance, visite technique, barémage, étanchéité). */
 export interface VehicleDocument {
   id?: number;
-  kind: "insurance" | "technical_inspection" | "calibration" | "tightness" | "other";
-  name: string | null;
+  kind: "insurance" | "inspection" | "calibration" | "tightness";
   reference: string | null;
   issuer: string | null;
-  date_issue: string | null;
-  date_expiry: string;
+  date_start: string | null;
+  expiry_date: string;
   state?: "valid" | "expiring" | "expired";
+  attachment?: { id: number; name: string } | null;
 }
 export const DOCUMENT_KINDS: Array<{ value: VehicleDocument["kind"]; label: string }> = [
   { value: "insurance", label: "Assurance" },
-  { value: "technical_inspection", label: "Visite technique" },
+  { value: "inspection", label: "Visite technique" },
   { value: "calibration", label: "Barémage de la citerne" },
   { value: "tightness", label: "Certificat d'étanchéité de la citerne" },
-  { value: "other", label: "Autre document" },
 ];
 
-/** Motif qui s'oppose au départ d'une rotation : bloquant, ou simple vigilance. */
-export interface DepartureIssue { code: string; message: string; severity: "block" | "warn" }
+/** Motif qui s'oppose au départ d'une rotation (format commun avec le module HSSEQ) : bloquant, ou vigilance. */
+export interface DepartureIssue { code: string; label: string; source?: string; since?: string | null; waivable?: boolean; severity: "block" | "warn" }
 
 /** Destination du barème officiel du transport des hydrocarbures (tarif en GNF par litre). */
 export interface OfficialRate {

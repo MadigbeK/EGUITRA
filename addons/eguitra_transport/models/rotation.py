@@ -75,7 +75,8 @@ class EguitraTransportRotation(models.Model):
                               help="Généré par l'application mobile : une saisie synchronisée deux fois n'est créée qu'une fois.")
     source = fields.Selection([("office", "Bureau"), ("mobile", "Application mobile")], default="office")
     state = fields.Selection(
-        [("draft", "Saisie"), ("done", "Validée"), ("invoiced", "Facturée"), ("cancelled", "Annulée")],
+        [("draft", "Saisie"), ("en_route", "En route"), ("done", "Validée"), ("invoiced", "Facturée"),
+         ("cancelled", "Annulée")],
         default="draft", required=True, index=True,
     )
     date_loading = fields.Date("Chargement", required=True, default=fields.Date.context_today)
@@ -360,7 +361,7 @@ class EguitraTransportRotation(models.Model):
 
     def _apply_tax_rules(self):
         """Lignes de taxe du barème en vigueur à la date de chargement (rotations saisies ou validées)."""
-        rotations = self.filtered(lambda r: r.state in ("draft", "done"))
+        rotations = self.filtered(lambda r: r.state in ("draft", "en_route", "done"))
         if not rotations:
             return
         Line = self.env["eguitra.transport.rotation.tax"]
@@ -403,7 +404,7 @@ class EguitraTransportRotation(models.Model):
 
     def action_validate(self):
         for rot in self:
-            if rot.state != "draft":
+            if rot.state not in ("draft", "en_route"):
                 continue
             if not (rot.volume_loaded or rot.volume_delivered):
                 raise UserError(f"Rotation {rot._label()} : volume chargé ou livré requis.")

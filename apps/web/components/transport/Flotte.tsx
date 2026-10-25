@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Field, Input, Modal, Notice, Select } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { ApiError, apiDownload, apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt, pluriel } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { DOCUMENT_KINDS, OWNERSHIPS, VEHICLE_KINDS, parseNumber, type DepartureIssue, type Ownership, type Ref, type TransportSettings, type VehicleCharge, type VehicleDocument, type VehicleKind } from "./types";
@@ -13,7 +13,7 @@ interface Vehicle {
   id: number; name: string; tractor_plate: string | null; trailer_plate: string | null; brand: string | null; capacity_liters: number;
   driver: Ref | null; state: string; year: number | null; date_service: string | null; asset: Ref | null; ownership: Ownership; owner: Ref | null;
   charges: VehicleCharge[]; monthly_charges: number;
-  vehicle_kind: VehicleKind; payload_tons: number | null; documents: VehicleDocument[]; document_issues: DepartureIssue[];
+  vehicle_kind: VehicleKind; payload_tonnes: number | null; documents: VehicleDocument[]; document_issues: DepartureIssue[];
 }
 
 // Profils de la route d'écriture des ensembles (WRITE) : le parc tient les documents à jour.
@@ -44,7 +44,7 @@ export function Flotte() {
           { key: "tractor_plate", label: "Tracteur", render: (x) => x.tractor_plate ?? "–" },
           { key: "vehicle_kind", label: "Profil", render: (x) => <Select disabled={!saisie} value={x.vehicle_kind} onChange={(e) => void patch(`/transport/vehicles/${x.id}`, { vehicle_kind: e.target.value }, () => void mutate())} options={VEHICLE_KINDS} /> },
           { key: "capacity_liters", label: "Capacité (L)", align: "right", render: (x) => fmtInt(x.capacity_liters) },
-          { key: "payload_tons", label: "Charge utile (t)", align: "right", render: (x) => <Input disabled={!saisie} className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.payload_tons ? String(x.payload_tons).replace(".", ",") : ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== (x.payload_tons ?? 0) && void patch(`/transport/vehicles/${x.id}`, { payload_tons: parseNumber(e.target.value) ?? 0 }, () => void mutate())} /> },
+          { key: "payload_tonnes", label: "Charge utile (t)", align: "right", render: (x) => <Input disabled={!saisie} className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.payload_tonnes ? String(x.payload_tonnes).replace(".", ",") : ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== (x.payload_tonnes ?? 0) && void patch(`/transport/vehicles/${x.id}`, { payload_tonnes: parseNumber(e.target.value) ?? 0 }, () => void mutate())} /> },
           { key: "documents", label: "Documents", render: (x) => <EtatDocuments vehicle={x} onOpen={() => setDocumenting(x)} /> },
           { key: "year", label: "Année", align: "right", render: (x) => <Input className="w-20 text-right font-mono" defaultValue={x.year ?? ""} inputMode="numeric" onBlur={(e) => Number(e.target.value || 0) !== (x.year ?? 0) && void patch(`/transport/vehicles/${x.id}`, { year: Number(e.target.value || 0) }, () => void mutate())} /> },
           { key: "date_service", label: "Mise en service", render: (x) => <Input type="date" className="w-36" defaultValue={x.date_service ?? ""} onBlur={(e) => e.target.value !== (x.date_service ?? "") && void patch(`/transport/vehicles/${x.id}`, { date_service: e.target.value || null }, () => void mutate())} /> },
@@ -103,7 +103,7 @@ export function Flotte() {
 function EtatDocuments({ vehicle, onOpen }: { vehicle: Vehicle; onOpen: () => void }) {
   const bloquants = vehicle.document_issues.filter((i) => i.severity === "block").length;
   const vigilance = vehicle.document_issues.length - bloquants;
-  const titre = vehicle.document_issues.map((i) => i.message).join("\n") || "Documents exigés à jour";
+  const titre = vehicle.document_issues.map((i) => i.label).join("\n") || "Documents exigés à jour";
   return (
     <button type="button" title={titre} className="inline-flex items-center gap-1.5" onClick={(e) => { e.stopPropagation(); onOpen(); }}>
       {bloquants ? <Badge tone="danger">{pluriel(bloquants, "manquant ou expiré", "manquants ou expirés")}</Badge> : vigilance ? <Badge tone="warn">{pluriel(vigilance, "à renouveler", "à renouveler")}</Badge> : <Badge tone="ok">À jour</Badge>}
@@ -122,7 +122,7 @@ function DocumentsModal({ vehicle, canEdit, onClose, onSaved }: { vehicle: Vehic
     setBusy(true);
     setError(null);
     try {
-      await apiSend("PATCH", `/transport/vehicles/${vehicle.id}`, { documents: lines.filter((l) => l.date_expiry).map(({ kind, name, reference, issuer, date_issue, date_expiry }) => ({ kind, name, reference, issuer, date_issue, date_expiry })) });
+      await apiSend("PATCH", `/transport/vehicles/${vehicle.id}`, { documents: lines.filter((l) => l.expiry_date).map(({ id, kind, reference, issuer, date_start, expiry_date }) => ({ id, kind, reference, issuer, date_start, expiry_date })) });
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
@@ -139,21 +139,48 @@ function DocumentsModal({ vehicle, canEdit, onClose, onSaved }: { vehicle: Vehic
           Exigés pour {vehicle.vehicle_kind === "tipper" ? "une benne" : "une citerne"} : {requis}. Un document manquant ou expiré s&apos;opposera au départ de l&apos;ensemble ;
           il est à renouveler dans les 30 jours qui précèdent son expiration.
         </p>
-        {vehicle.document_issues.length > 0 && <Notice tone={vehicle.document_issues.some((i) => i.severity === "block") ? "danger" : "warn"}>{vehicle.document_issues.map((i) => i.message).join(" ")}</Notice>}
+        {vehicle.document_issues.length > 0 && <Notice tone={vehicle.document_issues.some((i) => i.severity === "block") ? "danger" : "warn"}>{vehicle.document_issues.map((i) => i.label).join(" ")}</Notice>}
         {lines.map((l, i) => (
           <div key={i} className="grid grid-cols-2 items-end gap-2 md:grid-cols-12">
             <Field label="Document" className="md:col-span-3"><Select disabled={!canEdit} value={l.kind} onChange={(e) => set(i, { kind: e.target.value as VehicleDocument["kind"] })} options={DOCUMENT_KINDS} /></Field>
             <Field label="Numéro" className="md:col-span-2"><Input disabled={!canEdit} value={l.reference ?? ""} onChange={(e) => set(i, { reference: e.target.value || null })} /></Field>
             <Field label="Délivré par" className="md:col-span-3"><Input disabled={!canEdit} value={l.issuer ?? ""} placeholder="Assureur, centre de visite…" onChange={(e) => set(i, { issuer: e.target.value || null })} /></Field>
-            <Field label="Délivré le" className="md:col-span-2"><Input disabled={!canEdit} type="date" value={l.date_issue ?? ""} onChange={(e) => set(i, { date_issue: e.target.value || null })} /></Field>
-            <Field label="Valable jusqu'au" className="md:col-span-2"><Input disabled={!canEdit} type="date" value={l.date_expiry} onChange={(e) => set(i, { date_expiry: e.target.value })} /></Field>
+            <Field label="Valable à partir du" className="md:col-span-2"><Input disabled={!canEdit} type="date" value={l.date_start ?? ""} onChange={(e) => set(i, { date_start: e.target.value || null })} /></Field>
+            <Field label="Valable jusqu'au" className="md:col-span-2"><Input disabled={!canEdit} type="date" value={l.expiry_date} onChange={(e) => set(i, { expiry_date: e.target.value })} /></Field>
+            {l.id ? <PieceDocument vehicleId={vehicle.id} doc={l} canEdit={canEdit} onDone={(a) => set(i, { attachment: a })} /> : null}
             {canEdit && <button type="button" title="Retirer" className="mb-2 text-muted hover:text-danger" onClick={() => setLines(lines.filter((_l, j) => j !== i))}><Trash2 className="h-4 w-4" /></button>}
           </div>
         ))}
-        {canEdit && <Button onClick={() => setLines([...lines, { kind: "insurance", name: null, reference: null, issuer: null, date_issue: null, date_expiry: "" }])}><Plus className="h-4 w-4" /> Ajouter un document</Button>}
+        {canEdit && <Button onClick={() => setLines([...lines, { kind: "insurance", reference: null, issuer: null, date_start: null, expiry_date: "" }])}><Plus className="h-4 w-4" /> Ajouter un document</Button>}
+        <p className="text-[12px] text-muted">Un renouvellement s&apos;ajoute comme un nouveau document : l&apos;ancien reste à l&apos;historique. La pièce jointe se joint au document une fois enregistré.</p>
         {!lines.length && <p className="text-[13px] text-muted">Aucun document enregistré.</p>}
       </div>
     </Modal>
+  );
+}
+
+/** Pièce jointe d'un document enregistré : la lire, ou en joindre une (PDF, image). */
+function PieceDocument({ vehicleId, doc, canEdit, onDone }: { vehicleId: number; doc: VehicleDocument; canEdit: boolean; onDone: (a: VehicleDocument["attachment"]) => void }) {
+  const [erreur, setErreur] = useState<string | null>(null);
+  const chemin = `/transport/vehicles/${vehicleId}/documents/${doc.id}/file`;
+  return (
+    <div className="col-span-2 flex flex-wrap items-center gap-3 text-[12.5px] md:col-span-12">
+      {doc.attachment ? <button type="button" className="text-accent hover:underline" onClick={() => void apiDownload(chemin, doc.attachment!.name)}>{doc.attachment.name}</button> : <span className="text-muted">Aucune pièce jointe</span>}
+      {canEdit && (
+        <label className="cursor-pointer text-accent hover:underline">
+          {doc.attachment ? "Remplacer" : "Joindre la pièce"}
+          <input type="file" className="sr-only" accept="application/pdf,image/jpeg,image/png" onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append("file", file);
+            setErreur(null);
+            apiUpload<VehicleDocument>(chemin, form).then((row) => onDone(row.attachment ?? null)).catch((err) => setErreur(err instanceof ApiError ? err.message : "Envoi impossible."));
+          }} />
+        </label>
+      )}
+      {erreur && <span className="text-danger">{erreur}</span>}
+    </div>
   );
 }
 
