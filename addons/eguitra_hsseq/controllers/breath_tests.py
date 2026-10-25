@@ -17,6 +17,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json
 from ..models.common import BREATH_STATUSES
 from .common import (
     FIELD,
+    HSSEQ,
     client_uuid,
     companies,
     date_value,
@@ -51,6 +52,8 @@ def access_level():
 
 
 def can_read(test):
+    if not test.active and not is_hsseq():
+        return False  # test annulé : connu du seul profil hsseq
     scope = scope_level()
     if scope == "all":
         return True
@@ -77,7 +80,8 @@ def breath_row(test, access=None, log=True):
                 device=test.device or None, not_done_reason=test.not_done_reason or None,
                 performed_by=user_ref(test.performed_by), driver_removed=test.driver_removed,
                 client_uuid=test.client_uuid or None, reported_at=test.reported_at, synced_at=test.synced_at,
-                offline=test.offline)
+                offline=test.offline, cancelled=not test.active, cancel_reason=test.cancel_reason or None,
+                cancelled_by=user_ref(test.cancelled_by), cancelled_at=test.cancelled_at or None)
 
 
 class EguitraHsseqBreathTests(http.Controller):
@@ -151,11 +155,21 @@ class EguitraHsseqBreathTests(http.Controller):
         domain = self._domain(kw)
         offset, limit, order = page_args(kw, "-reported_at", {"reported_at": "reported_at", "date": "test_date"})
         Test = request.env["eguitra.hsseq.breath.test"].sudo()
+        if is_hsseq() and str(kw.get("cancelled", "")).lower() in ("1", "true"):
+            Test = Test.with_context(active_test=False)
+            domain.append(("active", "=", False))
         rows = Test.search(domain, offset=offset, limit=limit, order=order)
         access = access_level()
         counts = {} if access == "done" else {
             "by_status": {code: Test.search_count(domain + [("status", "=", code)]) for code, _l in BREATH_STATUSES}}
         return page([breath_row(t, access) for t in rows], Test.search_count(domain), offset, limit, counts)
+
+    @hsseq_route("/hsseq/breath-tests/<int:test_id>/cancel", methods=("POST",), profiles=HSSEQ)
+    def cancel(self, test_id, **_kw):
+        """Annulation d'un alcootest saisi par erreur, par le seul profil hsseq, motif écrit obligatoire."""
+        test = get("eguitra.hsseq.breath.test", test_id, "Alcootest")
+        test.action_cancel(read_json().get("reason"))
+        return breath_row(test, log=False)
 
     @hsseq_route("/hsseq/breath-tests/<int:test_id>", profiles=READ)
     def test(self, test_id, **_kw):

@@ -15,7 +15,8 @@ from .common import BREATH_RESULTS, BREATH_STATUSES, HsseqError
 
 DETAIL_GROUP = "eguitra_base.group_profile_hsseq"
 # Champs du détail, réservés au profil hsseq (exclus aussi de la piste d'audit lue par l'administration).
-DETAIL_FIELDS = ("performed", "result", "reading_mg_l", "device", "not_done_reason", "performed_by", "driver_removed")
+DETAIL_FIELDS = ("performed", "result", "reading_mg_l", "device", "not_done_reason", "performed_by", "driver_removed",
+                 "cancel_reason")
 
 
 class EguitraHsseqBreathTest(models.Model):
@@ -41,6 +42,11 @@ class EguitraHsseqBreathTest(models.Model):
     not_done_reason = fields.Char("Motif du test non réalisé", groups=DETAIL_GROUP)
     performed_by = fields.Many2one("res.users", "Réalisé par", groups=DETAIL_GROUP)
     driver_removed = fields.Boolean("Conducteur retiré de la rotation", groups=DETAIL_GROUP)
+    # Annulation d'un test saisi par erreur (profil hsseq seul) : le test sort du verrou et des indicateurs.
+    active = fields.Boolean(default=True)
+    cancel_reason = fields.Text("Motif de l'annulation", groups=DETAIL_GROUP)
+    cancelled_by = fields.Many2one("res.users", "Annulé par", groups=DETAIL_GROUP)
+    cancelled_at = fields.Datetime("Annulé le", groups=DETAIL_GROUP)
     status = fields.Selection(BREATH_STATUSES, "Statut", compute="_compute_status", store=True, index=True)
     test_date = fields.Date("Jour du test", compute="_compute_test_date", store=True, index=True)
     client_uuid = fields.Char("Identifiant de saisie", copy=False, index=True)
@@ -98,6 +104,25 @@ class EguitraHsseqBreathTest(models.Model):
             test.write({"rotation_id": rotation.id, "site_id": rotation.vehicle_id.site_id.id or test.site_id.id})
             test._journal("attach", note=f"Rattaché à la rotation {rotation.name}")
             test._remove_driver(rotation)
+
+    def action_cancel(self, reason):
+        """Annulation d'un test saisi par erreur, avec motif ; le conducteur retiré par un positif est rétabli
+        sur la rotation encore saisie (si elle n'en a pas reçu un autre)."""
+        self.ensure_one()
+        test = self.sudo()
+        if not test.active:
+            raise HsseqError("invalid_transition", "Cet alcootest est déjà annulé.")
+        if not (reason or "").strip():
+            raise HsseqError("reason_required", "Le motif de l'annulation est obligatoire.", fields=["reason"])
+        before = test.status
+        test.write({"active": False, "cancel_reason": reason.strip(), "cancelled_by": self.env.uid,
+                    "cancelled_at": fields.Datetime.now()})
+        test._journal("cancel", field="status", old=before, new="cancelled", note=reason.strip())
+        rotation = test.rotation_id
+        if test.driver_removed and rotation and rotation.state == "draft" and not rotation.driver_id:
+            rotation.write({"driver_id": test.driver_id.id})
+            test._journal("driver_restored", note=f"Conducteur rétabli sur la rotation {rotation.name}")
+        return True
 
     def _done(self):
         self.ensure_one()

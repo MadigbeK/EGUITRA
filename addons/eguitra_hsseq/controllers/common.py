@@ -309,7 +309,8 @@ def existing_by_uuid(model, client_uuid):
     """Saisie déjà reçue (idempotence) : renvoyée telle quelle à son auteur ; à un autre compte, refusée."""
     if not client_uuid:
         return None
-    record = request.env[model].sudo().search([("client_uuid", "=", client_uuid)], limit=1)
+    record = request.env[model].sudo().with_context(active_test=False).search([("client_uuid", "=", client_uuid)],
+                                                                              limit=1)
     if not record:
         return None
     author = record.reported_by if "reported_by" in record._fields else \
