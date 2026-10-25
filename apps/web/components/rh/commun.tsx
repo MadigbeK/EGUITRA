@@ -11,7 +11,7 @@ import { LogoSociete } from "@/components/brand";
 import { Check, X } from "@/components/icons";
 import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, type Tone } from "@/components/ui";
 import { ApiError, apiGet, apiSend, useApi } from "@/lib/api-client";
-import { fmtDec } from "@/lib/format";
+import { fmtDec, lireNombre } from "@/lib/format";
 import {
   LEAVE_STATE_LABELS,
   PAYROLL_STATE_LABELS,
@@ -82,10 +82,12 @@ export function messageErreur(e: unknown): string {
   return e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Une erreur est survenue.";
 }
 
-/** « 1 250 000 », « 1 250 000,5 » ou « 1250000 » vers un nombre (vide : 0). */
+/**
+ * « 1 250 000 », « 1 250 000,5 » ou « 1250000 » vers un nombre (vide : 0). Une saisie illisible
+ * (« 1.500.000 ») vaut aussi 0 : le formulaire la refuse avant l'envoi avec nombreIllisible.
+ */
 export function nombre(v: string): number {
-  const n = Number(v.replace(/[\s  ]/g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
+  return lireNombre(v) ?? 0;
 }
 
 /** Libellé d'une option d'une liste du noyau, à défaut le code. */

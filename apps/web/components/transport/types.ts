@@ -100,10 +100,5 @@ export interface ProfitRow {
 /** Message affiché en tête d'un écran après une action. */
 export type Message = { tone: "ok" | "danger"; text: string } | null;
 
-/** Nombre saisi à la française (espaces, virgule) ; vide : null. */
-export function parseNumber(value: string): number | null {
-  const v = value.replace(/\s/g, "").replace(",", ".");
-  if (!v) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
+/** Nombre saisi à la française ; vide ou illisible : null (voir lireNombre de lib/format.ts). */
+export { lireNombre as parseNumber } from "@/lib/format";

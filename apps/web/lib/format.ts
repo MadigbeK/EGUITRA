@@ -25,6 +25,34 @@ function fixe(r: number, d: 0 | 1 | 2): string {
   return fixes[d]!.format(r === 0 ? 0 : r);
 }
 
+/** Message sous un champ dont la saisie n'est pas un nombre lisible (voir lireNombre). */
+export const AIDE_NOMBRE = "Nombre illisible : écrivez par exemple 750 000 ou 2,5.";
+
+/**
+ * Nombre saisi dans un champ, à la française : espaces ignorés (y compris insécables), virgule
+ * décimale. Un point n'est lu comme décimale que seul et suivi d'un, de deux ou de plus de trois
+ * chiffres (« 2.5 », « 39.75 ») : « 12.500 » ou « 2.500.000 » sont ambigus (point des milliers) et
+ * refusés, pour ne jamais diviser un montant par mille. Rend null si le champ est vide ou illisible :
+ * l'écran signale une saisie illisible avec nombreIllisible et AIDE_NOMBRE, et bloque l'envoi, au lieu
+ * d'enregistrer 0.
+ */
+export function lireNombre(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const v = (value ?? "").replace(/[\s  ]/g, "");
+  if (!v) return null;
+  let texte: string;
+  if (/^[+-]?(\d+(,\d*)?|,\d+)$/.test(v)) texte = v.replace(",", ".");
+  else if (/^[+-]?\d+\.(\d{1,2}|\d{4,})$/.test(v)) texte = v;
+  else return null;
+  const n = Number(texte);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Saisie non vide qui n'est pas un nombre lisible (« 2.500.000 », « 30 j », « 1,3x »). */
+export function nombreIllisible(value: string | null | undefined): boolean {
+  return !!(value ?? "").trim() && lireNombre(value) === null;
+}
+
 export function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
