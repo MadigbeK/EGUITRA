@@ -5,6 +5,7 @@ Les comptes de contrepartie, la TVA et l'échéance sont déduits par le noyau �
 """
 
 import base64
+import math
 
 from odoo import Command, fields, http
 from odoo.http import content_disposition, request
@@ -211,6 +212,18 @@ def _invoice_lines(data, move_type, partner=None):
             values["analytic_distribution"] = dist
         commands.append(Command.create(values))
     return commands
+
+
+def _partial_amount(value):
+    """Montant d'un règlement partiel : nombre positif lisible, sinon refus (400). Un montant vide ou
+    illisible (saisie « 750 000,00 » mal lue, envoyée nulle) ne doit jamais régler tout le reste dû."""
+    if value in (None, "") or isinstance(value, bool):
+        raise ApiError(400, "invalid_parameter", "Règlement partiel : indiquez le montant réglé.", fields=["amount"])
+    amount = as_float(value, "amount")
+    if not math.isfinite(amount) or amount <= 0:
+        raise ApiError(400, "invalid_parameter", "Le montant du règlement doit être un nombre positif.",
+                       fields=["amount"])
+    return amount
 
 
 def _commitment(value, move_type, partner):
@@ -541,14 +554,17 @@ class EguitraFinanceMoves(http.Controller):
 
     @api_route("/finance/moves/<int:move_id>/payments", methods=("POST",), profiles=FIN_WRITE)
     def register_payment(self, move_id, **_kw):
+        """Règlement d'une pièce validée. Sans montant, tout le reste dû est réglé. Un règlement partiel
+        (montant transmis, ou partial=true) exige un montant positif lisible : un montant absent, nul,
+        négatif ou illisible est refusé (400), au lieu de régler tout le reste dû."""
         move = _move(move_id)
         data = read_json()
         (journal_id,) = require(data, "journal_id")
         if move.state != "posted" or move.payment_state not in ("not_paid", "partial"):
             raise ApiError(422, "business_rule", "Cette pièce n'attend pas de règlement.")
         values = {"journal_id": int(journal_id), "payment_date": parse_date(data, "date", today())}
-        if data.get("amount"):
-            values["amount"] = as_float(data["amount"], "amount")
+        if "amount" in data or data.get("partial"):
+            values["amount"] = _partial_amount(data.get("amount"))
         if data.get("memo"):
             values["communication"] = str(data["memo"])[:200]
         mode = request.env["eguitra.payment.mode"]

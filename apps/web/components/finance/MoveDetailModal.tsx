@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Wallet, XCircle } from "@/components/icons";
-import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
+import { CHAMP_INVALIDE, montantDevise, nombreDevise } from "./communPieces";
 import { MoveForm } from "./MoveForm";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
-import { fmtDate, fmtGNF } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
+
+type Message = { tone: "danger" | "ok" | "accent"; text: string };
 
 /**
  * Fiche d'une pièce : lignes, statut, règlement, impression, pièces jointes, avoir ; un brouillon d'achat se
@@ -28,17 +31,27 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
   const [disputeReason, setDisputeReason] = useState("");
   const { data: modes } = useApi<Array<{ id: number; name: string }>>(paying ? "/finance/payment-modes" : null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ tone: "danger" | "ok"; text: string } | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
 
-  async function act(name: string, fn: () => Promise<unknown>) {
+  /**
+   * Action sur la pièce, puis relecture de la fiche. Rend vrai si le noyau l'a acceptée : un panneau
+   * (règlement, litige) ne se referme qu'après un succès, sans quoi l'erreur perdrait son contexte.
+   */
+  async function act<T>(name: string, fn: () => Promise<T>, succes?: (resultat: T) => Message | null): Promise<boolean> {
     setBusy(name);
     setMessage(null);
     try {
-      await fn();
-      await mutate();
+      let resultat: T;
+      try {
+        resultat = await fn();
+      } catch (e) {
+        setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Action impossible : vérifiez la connexion, puis réessayez." });
+        return false;
+      }
+      if (succes) setMessage(succes(resultat));
       onChanged();
-    } catch (e) {
-      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Action impossible." });
+      await mutate().catch(() => undefined);
+      return true;
     } finally {
       setBusy(null);
     }
@@ -56,6 +69,30 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Suppression impossible." });
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Montant d'un règlement partiel, lu à la française ; vide : tout le reste dû. Une saisie illisible
+  // (« 750.000,00 ») ou nulle bloque l'envoi au lieu de partir vide et de régler toute la pièce.
+  const montantSaisi = lireNombre(amount);
+  const erreurMontant = nombreIllisible(amount) ? AIDE_NOMBRE : montantSaisi !== null && montantSaisi <= 0 ? "Le montant réglé doit être positif." : undefined;
+
+  async function regler(m: MoveDetail) {
+    const ok = await act(
+      "pay",
+      () =>
+        apiSend<MoveDetail>("POST", `/finance/moves/${m.id}/payments`, {
+          journal_id: Number(journalId),
+          // partial : le noyau refuse un règlement partiel dont le montant manquerait, au lieu de tout régler.
+          ...(montantSaisi !== null ? { amount: montantSaisi, partial: true } : {}),
+          date: payDate,
+          payment_mode_id: modeId ? Number(modeId) : undefined,
+        }),
+      () => ({ tone: "ok", text: "Règlement enregistré." }),
+    );
+    if (ok) {
+      setPaying(false);
+      setAmount("");
     }
   }
 
@@ -171,30 +208,19 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               <Field label="Mode de paiement">
                 <Select value={modeId} onChange={(e) => setModeId(e.target.value)} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
               </Field>
-              <Field label="Montant" hint={`Reste : ${fmtGNF(move.amount_residual)}`}>
-                <Input inputMode="numeric" className="text-right font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(Math.round(move.amount_residual ?? 0))} />
+              <Field
+                label="Montant"
+                hint={montantSaisi === null ? `Vide : tout le reste dû, ${montantDevise(move.amount_residual, move.currency)}` : `Reste dû : ${montantDevise(move.amount_residual, move.currency)}`}
+                error={erreurMontant}
+              >
+                <Input inputMode="decimal" aria-invalid={Boolean(erreurMontant)} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={nombreDevise(move.amount_residual, move.currency)} />
               </Field>
-              <Field label="Date">
-                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+              <Field label="Date" error={payDate ? undefined : "Indiquez la date du règlement."}>
+                <Input type="date" required value={payDate} onChange={(e) => setPayDate(e.target.value)} />
               </Field>
               <div className="flex items-end">
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  disabled={!journalId}
-                  loading={busy === "pay"}
-                  onClick={() =>
-                    act("pay", () =>
-                      apiSend("POST", `/finance/moves/${move.id}/payments`, {
-                        journal_id: Number(journalId),
-                        amount: amount ? Number(amount.replace(/\s/g, "")) : undefined,
-                        date: payDate,
-                        payment_mode_id: modeId ? Number(modeId) : undefined,
-                      }),
-                    ).then(() => setPaying(false))
-                  }
-                >
-                  Enregistrer le règlement
+                <Button variant="primary" className="w-full" disabled={!journalId || !payDate || Boolean(erreurMontant)} loading={busy === "pay"} onClick={() => void regler(move)}>
+                  {montantSaisi !== null ? "Enregistrer le règlement" : move.move_type.startsWith("out_") ? "Encaisser tout le reste dû" : "Régler tout le reste dû"}
                 </Button>
               </div>
             </div>
@@ -247,7 +273,17 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               ) : disputing ? (
                 <span className="inline-flex items-center gap-2">
                   <Input className="w-64" placeholder="Motif du litige" aria-label="Motif du litige" value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} />
-                  <Button loading={busy === "dispute"} disabled={!disputeReason.trim()} onClick={() => act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: true, reason: disputeReason })).then(() => setDisputing(false))}>
+                  <Button
+                    loading={busy === "dispute"}
+                    disabled={!disputeReason.trim()}
+                    onClick={() =>
+                      void act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: true, reason: disputeReason })).then((ok) => {
+                        if (!ok) return;
+                        setDisputing(false);
+                        setDisputeReason("");
+                      })
+                    }
+                  >
                     Déclarer
                   </Button>
                 </span>
