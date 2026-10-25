@@ -2,12 +2,16 @@
 """Disponibilité mensuelle de la production, calculée sur le journal de la supervision.
 
 monitor.sh inscrit un contrôle toutes les 5 minutes dans ~/eguitra/logs/monitor.log (gardé 13 mois,
-voir monitor-install.sh). Un créneau de 5 minutes est indisponible si le contrôle signale le noyau ou
-les applications web de la production sans réponse, ou l'un de leurs conteneurs (db, odoo, web)
-arrêté ; il est sans signal si aucun contrôle n'a été inscrit (serveur arrêté, par exemple) et
-compte alors comme indisponible. Les maintenances déclarées sont exclues du calcul : une ligne par
-maintenance dans ~/eguitra/logs/maintenances.txt, « AAAA-MM-JJ HH:MM AAAA-MM-JJ HH:MM motif »
-(heure de Conakry). Engagement de l'offre : 99,5 % par mois, hors maintenances programmées.
+voir monitor-install.sh). Un créneau de 5 minutes est indisponible si le contrôle signale le noyau, les
+applications web ou un accès public (HTTPS, par le proxy) de la production sans réponse, ou l'un de
+leurs conteneurs (db, odoo, web, caddy) arrêté ; il est sans signal si aucun contrôle n'a été inscrit
+(serveur arrêté, par exemple) et compte alors comme indisponible. Seules les maintenances programmées,
+annoncées au client 48 heures à l'avance, sont exclues du calcul : une ligne par maintenance dans
+~/eguitra/logs/maintenances.txt, « AAAA-MM-JJ HH:MM AAAA-MM-JJ HH:MM motif » (heure de Conakry),
+écrite par release.sh --annoncee. Les autres interventions (mise en production non annoncée ou en
+échec) sont inscrites dans ~/eguitra/logs/interventions.txt, au même format : elles comptent dans le
+calcul et sont rappelées dans le compte rendu. Engagement de l'offre : 99,5 % par mois, hors
+maintenances programmées.
 
     infra/availability-report.py            mois précédent
     infra/availability-report.py 2026-11    mois donné
@@ -26,7 +30,9 @@ from datetime import datetime, timedelta
 LOGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
 STEP = timedelta(minutes=5)
 TARGET = 99.5
-PRODUCTION = re.compile(r"production : (noyau|applications web) sans réponse|service (db|odoo|web) (arrêté|:)")
+PRODUCTION = re.compile(
+    r"production : (noyau|applications web|accès public \S+) sans réponse|service (db|odoo|web|caddy) (arrêté|:)"
+)
 
 
 def month_bounds(arg):
@@ -47,9 +53,9 @@ def journal_lines():
             yield from f
 
 
-def maintenances():
+def maintenances(name="maintenances.txt"):
     windows = []
-    path = os.path.join(LOGS, "maintenances.txt")
+    path = os.path.join(LOGS, name)
     if os.path.exists(path):
         for line in open(path, encoding="utf-8"):
             parts = line.split()
@@ -109,6 +115,10 @@ def main():
     ]
     if windows:
         lines += ["## Maintenances programmées", ""] + [f"- du {b:%d/%m %H:%M} au {f:%d/%m %H:%M} : {r}" for b, f, r in windows] + [""]
+    others = [w for w in maintenances("interventions.txt") if w[1] > start and w[0] < end]
+    if others:
+        lines += ["## Interventions comptées dans la disponibilité", ""]
+        lines += [f"- du {b:%d/%m %H:%M} au {f:%d/%m %H:%M} : {r}" for b, f, r in others] + [""]
     if incidents:
         lines += ["## Incidents relevés", ""]
         previous = None

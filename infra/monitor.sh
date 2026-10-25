@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Supervision du serveur, toutes les 5 minutes (crontab de l'utilisateur deploy, voir monitor-install.sh) :
-# conteneurs des deux environnements en marche et en bonne santé, API des noyaux, applications web,
-# espace disque, sauvegardes de la production, test de restauration mensuel et trimestriel à un
-# instant donné, double authentification exigée en production. Chaque contrôle réussi appelle la
+# conteneurs des deux environnements et du proxy en marche et en bonne santé, API des noyaux,
+# applications web, accès publics en HTTPS et validité des certificats, espace disque, sauvegardes de
+# la production, test de restauration mensuel et trimestriel à un instant donné, double
+# authentification exigée en production. Chaque contrôle réussi appelle la
 # sonde externe HEARTBEAT_URL (facultative), qui alerte si le serveur ne donne plus signe de vie.
 # Une alerte part au changement d'état (panne, retour à la normale), à chaque nouveau problème, et
 # toutes les 6 heures tant que la panne dure, vers ALERT_WEBHOOK_URL (JSON {"text": …} : Slack, Teams,
 # Google Chat) et/ou ALERT_NTFY_URL (texte brut, application ntfy sur téléphone). Les écarts connus
-# (double authentification suspendue, copie hors site absente) sont rappelés une fois par jour sans
-# compter comme une panne. Journal : ~/eguitra/logs/monitor.log.
+# (double authentification suspendue, copie hors site absente, pas de serveur d'envoi de courriel,
+# redémarrage du système en attente, mise à jour mensuelle des images en retard) sont rappelés une fois
+# par jour sans compter comme une panne. Journal : ~/eguitra/logs/monitor.log.
 set -uo pipefail
 cd "$(dirname "$0")"
 set -a; . ./.env; set +a
@@ -18,7 +20,7 @@ STATE=$LOG_DIR/monitor.state
 mkdir -p "$LOG_DIR"
 problems=()
 
-for service in db odoo web backup db-recette odoo-recette web-recette; do
+for service in db odoo web backup db-recette odoo-recette web-recette caddy; do
   status=$(docker compose ps --format '{{.State}} {{.Health}}' "$service" 2>/dev/null | head -1)
   case "$status" in
     "running healthy" | "running ") ;;
@@ -31,6 +33,25 @@ curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8069/api/v1/health 2>/dev/
 curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3000/login 2>/dev/null || problems+=("production : applications web sans réponse")
 curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8169/api/v1/health 2>/dev/null || problems+=("recette : noyau sans réponse")
 curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3100/login 2>/dev/null || problems+=("recette : applications web sans réponse")
+# Accès publics par le proxy, en HTTPS : une panne du proxy, du pare-feu ou d'un certificat ne se voit
+# pas sur 127.0.0.1. Un certificat se renouvelle seul 30 jours avant son échéance : à moins de 14 jours,
+# le renouvellement échoue.
+for name in FINANCE_DOMAIN AXISPRO_DOMAIN PORTAIL_DOMAIN RECETTE_DOMAIN; do
+  domain=${!name:-}
+  case "$domain" in "" | *.localhost) continue ;; esac
+  env=production
+  [ "$name" = RECETTE_DOMAIN ] && env=recette
+  if ! curl -fsS --max-time 15 -o /dev/null "https://$domain/login" 2>/dev/null; then
+    problems+=("$env : accès public $domain sans réponse")
+    continue
+  fi
+  end=$(echo | timeout 10 openssl s_client -connect "$domain:443" -servername "$domain" 2>/dev/null \
+    | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+  if [ -n "$end" ]; then
+    days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+    (( days < 14 )) && problems+=("$env : certificat de $domain valable encore $days jours (renouvellement en échec)")
+  fi
+done
 disk=$(df --output=pcent / | tail -1 | tr -dc '0-9')
 (( disk >= 85 )) && problems+=("disque plein à ${disk} %")
 backup=$(docker compose exec -T backup check.sh 2>/dev/null) || problems+=("sauvegardes : ${backup:-contrôle impossible}")
@@ -48,7 +69,14 @@ warnings=()
 # gérant pendant la prise en main des comptes, à rétablir avant la reprise des données réelles.
 mfa=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$ODOO_DB" -Atc   "select value from ir_config_parameter where key = 'eguitra_api.mfa_required'" 2>/dev/null | tr -d '[:space:]')
 [ "$mfa" = "0" ] && warnings+=("production : double authentification désactivée (eguitra_api.mfa_required = 0)")
-[ -z "${RCLONE_REMOTE:-}" ] && warnings+=("sauvegardes : copie hors site non configurée (RCLONE_REMOTE)")
+# La copie hors site se configure dans backup.env (lu par le conteneur des sauvegardes), pas dans .env.
+offsite=$(sed -n 's/^RCLONE_REMOTE=//p' backup.env 2>/dev/null | tail -1 | tr -d "\"' ")
+[ -z "$offsite" ] && warnings+=("sauvegardes : copie hors site non configurée (RCLONE_REMOTE dans infra/backup.env)")
+[ -z "${SMTP_HOST:-}" ] && warnings+=("courriel : aucun serveur d'envoi (SMTP_HOST), les relances ne partent pas par courriel")
+# Le système se met à jour seul chaque nuit, sans redémarrage (setup-vps.sh) ; les images, chaque mois.
+[ -f /var/run/reboot-required ] && warnings+=("système : redémarrage en attente après des mises à jour de sécurité (à programmer et annoncer 48 heures à l'avance)")
+security=$(cat "$LOG_DIR/maj-securite.ok" 2>/dev/null || echo 0)
+(( $(date +%s) - security > 35 * 86400 )) && warnings+=("images : mise à jour de sécurité mensuelle en retard (infra/maj-securite.sh)")
 
 now=$(date +%s)
 read -r last_state last_alert last_signature last_warning < "$STATE" 2>/dev/null \
@@ -65,7 +93,7 @@ else
   message="EGUITRA $host : retour à la normale"
   signature=-
 fi
-echo "$(date '+%F %T') $state ${problems[*]:-}${warnings[*]:+ | avertissements : ${warnings[*]}}" >> "$LOG_DIR/monitor.log"
+echo "$(date '+%F %T') $state $(IFS=';'; echo "${problems[*]:-}")${warnings[*]:+ | avertissements : $(IFS=';'; echo "${warnings[*]}")}" >> "$LOG_DIR/monitor.log"
 if [ "$state" = ok ] && [ -n "${HEARTBEAT_URL:-}" ]; then
   curl -fsS --max-time 10 -o /dev/null "$HEARTBEAT_URL" 2>/dev/null || true
 fi
