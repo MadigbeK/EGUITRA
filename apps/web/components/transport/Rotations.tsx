@@ -252,7 +252,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
       const body: Record<string, unknown> = { ...f, validate };
       for (const k of ["vehicle_id", "partner_id", "route_id", "driver_id"]) if (f[k]) body[k] = Number(f[k]);
       if (!f.date_return) delete body.date_return;
-      for (const k of ["volume_loaded", "volume_delivered", "rate", "distance_km", ...(ref?.measures ?? []).map((m) => m.code), ...(ref?.costs.map((c) => c.code) ?? [])]) {
+      for (const k of ["volume_loaded", "volume_delivered", "rate", "distance_km", "weight_gross", "weight_tare", ...(ref?.measures ?? []).map((m) => m.code), ...(ref?.costs.map((c) => c.code) ?? [])]) {
         if (f[k]) body[k] = parseNumber(f[k]) ?? 0;
         else delete body[k];
       }
@@ -287,10 +287,21 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
             {(ref.measures ?? []).map((m) => (
               <Field key={m.code} label={m.label}><Input inputMode="decimal" className="font-mono" value={f[m.code] ?? ""} onChange={set(m.code)} /></Field>
             ))}
+            {ref.vehicles.find((v) => String(v.id) === f.vehicle_id)?.vehicle_kind === "tipper" && (
+              <>
+                <Field label="Ticket de pesée"><Input value={f.weigh_ticket ?? ""} onChange={set("weigh_ticket")} /></Field>
+                <Field label="Poids brut (t)"><Input inputMode="decimal" className="font-mono" value={f.weight_gross ?? ""} onChange={set("weight_gross")} /></Field>
+                <Field label="Poids à vide (t)"><Input inputMode="decimal" className="font-mono" value={f.weight_tare ?? ""} onChange={set("weight_tare")} /></Field>
+              </>
+            )}
           </div>
           {(() => {
             const vehicle = ref.vehicles.find((v) => String(v.id) === f.vehicle_id);
             const loaded = parseNumber(f.volume_loaded ?? "") ?? 0;
+            const net = (parseNumber(f.weight_gross ?? "") ?? 0) - (parseNumber(f.weight_tare ?? "") ?? 0);
+            if (vehicle?.payload_tons && f.weight_gross && f.weight_tare && net > vehicle.payload_tons) {
+              return <Notice tone="danger">Le poids net ({fmtDec(net)}{INSECABLE}t) dépasse la charge utile de {vehicle.name} ({fmtDec(vehicle.payload_tons)}{INSECABLE}t).</Notice>;
+            }
             return vehicle?.capacity_liters && loaded * 1000 > vehicle.capacity_liters ? (
               <Notice tone="danger">Le volume chargé dépasse la capacité de {vehicle.name} ({fmtM3(vehicle.capacity_liters / 1000)}) : la rotation ne pourra pas être validée.</Notice>
             ) : null;

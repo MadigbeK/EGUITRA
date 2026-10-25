@@ -42,6 +42,11 @@ def fmt_volume(value, unit=True):
     return f"{fixe(value, 2)}{INSECABLE}m³" if unit else fixe(value, 2)
 
 
+def pluriel(n, un, plusieurs=None):
+    """« 1 rotation », « 3 rotations » (jamais « rotation(s) »)."""
+    return f"{fmt_int(n)} {un if abs(n) <= 1 else plusieurs or un + 's'}"
+
+
 def fmt_pct(value, digits=1, sign=False):
     """« 12,5 % » ; sign : « +12,5 % » pour un écart."""
     text = fixe(value, digits)

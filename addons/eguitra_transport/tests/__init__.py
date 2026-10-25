@@ -8,3 +8,4 @@ from . import test_rentabilite
 from . import test_proprietaires
 from . import test_liste_rotations
 from . import test_bareme
+from . import test_flotte_securite

@@ -1,5 +1,6 @@
-"""19.0.1.5.0 : barème officiel du transport des hydrocarbures (arrêté A/2019/816/MH). Piste d'audit
-étendue aux deux nouveaux modèles. Redémarrer le noyau ensuite (module d'audit)."""
+"""19.0.1.5.0 : barème officiel du transport des hydrocarbures (arrêté A/2019/816/MH), documents des
+ensembles à échéance. Piste d'audit étendue aux nouveaux modèles. Redémarrer le noyau ensuite (module
+d'audit)."""
 
 from odoo import SUPERUSER_ID, api
 

@@ -343,6 +343,10 @@ class EguitraTransportAnalysis(models.AbstractModel):
             checks.append({"code": code, "label": label, "ok": not items, "count": len(items),
                            "items": items[:20], "hint": hint})
 
+        check("vehicle_documents",
+              "Documents des ensembles en service à jour (assurance, visite technique ; barémage et étanchéité des citernes)",
+              [issue["message"] for v in in_service for issue in v._document_issues()],
+              "Un document manquant ou expiré s'opposera au départ de l'ensemble ; renouvelez-le (Flotte et chauffeurs).")
         check("vehicle_without_asset", "Ensembles en service rattachés à une immobilisation",
               [v.name for v in in_service.sudo().filtered(lambda v: not v.asset_id)],
               "Rattachez la fiche d'immobilisation (Flotte) : ses dotations entrent dans la structure du transport.")

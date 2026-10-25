@@ -11,6 +11,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
+from ..models.fleet_safety import DOCUMENT_KINDS, VEHICLE_KINDS
 from ..models.official_rate import DEPOTS, gap_pct, slug
 from ..models.ownership import OWNERSHIPS, PERIODICITIES
 from ..models.rotation import COSTS, ENTRY_COSTS
@@ -28,7 +29,7 @@ MAX_SYNC = 200
 ROTATION_FIELDS = (
     "date_loading", "date_delivery", "date_return", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
     "temperature_loaded", "temperature_delivered", "density_15", "vcf_loaded", "vcf_delivered",
-    "fuel_liters", "distance_km",
+    "fuel_liters", "distance_km", "weigh_ticket", "weight_gross", "weight_tare",
     # « specific_taxes » (saisies de l'application mobile, reprise) vaut forfait hors barème.
     *[c for c, _l in COSTS], "specific_taxes_manual",
 )
@@ -95,6 +96,10 @@ def _rotation_row(rot):
         "std_fuel_liters": rot.std_fuel_liters, "std_fuel_price": rot.std_fuel_price, "std_cost": rot.std_cost,
         "estimated_margin": rot.estimated_margin,
         # Sans montant (volume ou tarif manquant), un taux n'a pas de sens : None.
+        "weigh_ticket": rot.weigh_ticket or None, "weight_gross": rot.weight_gross or None,
+        "weight_tare": rot.weight_tare or None, "weight_net": rot.weight_net or None, "over_payload": rot.over_payload,
+        "vehicle_kind": rot.vehicle_id.vehicle_kind or None,
+        "departure_blockers": rot._departure_blockers() if rot.state == "draft" else [],
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
         **_rotation_official(rot),
@@ -180,7 +185,7 @@ def _rotation_values(data):
         value = data[key]
         if key.startswith("date"):
             values[key] = parse_date(data, key)
-        elif key in ("delivery_note", "note"):
+        elif key in ("delivery_note", "note", "weigh_ticket"):
             values[key] = value or False
         else:
             values[key] = as_float(value or 0, key)
@@ -229,6 +234,12 @@ def _tariff_row(t):
     return {"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None, "product_id": t.product_id.id or None,
             "rate": t.rate, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
             "shortage_price": t.shortage_price or None, "official_gap": _gap(t._official_gap()[1])}
+
+
+def _document_row(doc):
+    return {"id": doc.id, "kind": doc.kind, "kind_label": dict(DOCUMENT_KINDS)[doc.kind], "name": doc.name or None,
+            "reference": doc.reference or None, "issuer": doc.issuer or None, "date_issue": doc.date_issue or None,
+            "date_expiry": doc.date_expiry, "state": doc._state(), "note": doc.note or None}
 
 
 def _official_ref(line):
@@ -359,7 +370,8 @@ class EguitraTransport(http.Controller):
             [("customer_rank", ">", 0), ("parent_id", "=", False)], limit=500)
         return {
             "vehicles": [{"id": v.id, "name": v.name, "tractor_plate": v.tractor_plate, "capacity_liters": v.capacity_liters,
-                          "driver_id": v.driver_id.id or None, "state": v.state} for v in vehicles],
+                          "driver_id": v.driver_id.id or None, "state": v.state, "vehicle_kind": v.vehicle_kind,
+                          "payload_tons": v.payload_tons or None} for v in vehicles],
             "drivers": [{"id": d.id, "name": d.name, "phone": d.phone} for d in env["eguitra.transport.driver"].search([])],
             "routes": [{"id": r.id, "name": r.name, "distance_km": r.distance_km, "default_rate": r.default_rate,
                         "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids],
@@ -388,7 +400,9 @@ class EguitraTransport(http.Controller):
              # L'immobilisation se lit pour tous (le parc voit si l'ensemble est rattaché), se choisit par la finance.
              "asset": _ref(v.sudo().asset_id), "active": v.active,
              "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
-             "monthly_charges": sum(c._monthly() for c in v.charge_ids)}
+             "monthly_charges": sum(c._monthly() for c in v.charge_ids),
+             "vehicle_kind": v.vehicle_kind, "payload_tons": v.payload_tons or None,
+             "documents": [_document_row(d) for d in v.document_ids], "document_issues": v._document_issues()}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
 
@@ -415,6 +429,27 @@ class EguitraTransport(http.Controller):
             values["asset_id"] = asset.id or False
         if "active" in data:
             values["active"] = bool(data["active"])
+        if "vehicle_kind" in data:
+            if data["vehicle_kind"] not in dict(VEHICLE_KINDS):
+                raise ApiError(400, "invalid_parameter", "Profil d'ensemble inconnu.")
+            values["vehicle_kind"] = data["vehicle_kind"]
+        if "payload_tons" in data:
+            values["payload_tons"] = as_float(data["payload_tons"] or 0, "payload_tons")
+        if "documents" in data:
+            # Les documents sont renvoyés en entier, comme les charges ; le parc les tient à jour.
+            commands = [(5, 0, 0)]
+            for d in data["documents"] or []:
+                if d.get("kind") not in dict(DOCUMENT_KINDS):
+                    raise ApiError(400, "invalid_parameter", "Nature de document inconnue.")
+                expiry = parse_date(d, "date_expiry")
+                if not expiry:
+                    raise ApiError(400, "invalid_parameter", "Date d'expiration du document manquante.")
+                commands.append((0, 0, {
+                    "kind": d["kind"], "name": d.get("name") or False, "reference": d.get("reference") or False,
+                    "issuer": d.get("issuer") or False, "date_issue": parse_date(d, "date_issue") or False,
+                    "date_expiry": expiry, "note": d.get("note") or False,
+                }))
+            values["document_ids"] = commands
         if {"ownership", "owner_id", "charges"} & set(data) and not _is_finance():
             raise ApiError(403, "forbidden", "Propriété et charges d'un ensemble relèvent de la finance.")
         if "ownership" in data:
