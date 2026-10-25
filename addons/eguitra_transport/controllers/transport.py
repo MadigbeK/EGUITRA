@@ -3,6 +3,7 @@
 import base64
 import io
 import logging
+from contextlib import contextmanager
 
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
@@ -66,7 +67,8 @@ def _move_ref(move):
     return {"id": move.id, "name": move.name if move.name and move.name != "/" else None, "state": move.state} if move else None
 
 
-def _rotation_row(rot):
+def _rotation_row(rot, detail=False, official=None):
+    """Ligne de rotation ; detail : avec les motifs qui s'opposent au départ (fiche, pas la liste)."""
     return {
         "id": rot.id, "name": rot.name if rot.name != "/" else None, "state": rot.state, "source": rot.source,
         "date_loading": rot.date_loading, "date_delivery": rot.date_delivery, "date_return": rot.date_return,
@@ -102,11 +104,11 @@ def _rotation_row(rot):
         "weigh_ticket": rot.weigh_ticket or None, "weight_gross": rot.weight_gross or None,
         "weight_tare": rot.weight_tare or None, "weight_net": rot.weight_net or None, "over_payload": rot.over_payload,
         "vehicle_kind": rot.vehicle_id.vehicle_kind or None,
-        "departure_blockers": rot._departure_blockers() if rot.state == "draft" else [],
+        "departure_blockers": rot._departure_blockers() if detail and rot.state == "draft" else None,
         "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by),
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
-        **_rotation_official(rot),
+        **_rotation_official(rot, official),
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
         # Saisie par le compte connecté : il ne la valide pas lui-même (validation par un autre compte).
@@ -114,9 +116,27 @@ def _rotation_row(rot):
     }
 
 
-def _rotation_official(rot):
-    line, gap = rot._official_gap()
+def _rotation_official(rot, cache=None):
+    """Tarif officiel à la date de chargement et écart du tarif de la rotation ; cache : par route et date."""
+    if cache is None:
+        line, gap = rot._official_gap()
+    else:
+        key = (rot.route_id.id, rot.date_loading)
+        if key not in cache:
+            cache[key] = rot._official_gap()[0]
+        line = cache[key]
+        gap = gap_pct(rot.rate, line)
     return {"official_rate": _official_ref(line), "official_rate_gap": _gap(gap)}
+
+
+@contextmanager
+def _blockers(action):
+    """Départ ou validation refusés : 422 avec la liste des motifs ouverts, pour l'écran et l'application."""
+    try:
+        yield
+    except RotationBlocked as e:
+        error = "departure_blocked" if action == "depart" else "validation_blocked"
+        raise ApiError(422, error, str(e.args[0]), blockers=e.blockers) from e
 
 
 def _rotation_order(sort):
@@ -471,8 +491,12 @@ class EguitraTransport(http.Controller):
     def _document_commands(vehicle, documents):
         """Documents renvoyés en entier : un document cité par son id est mis à jour, un nouveau est créé,
         un document absent de la liste est retiré. Un renouvellement s'ajoute : l'ancien reste à l'historique."""
+        if not isinstance(documents or [], list):
+            raise ApiError(400, "invalid_parameter", "Liste de documents attendue.")
         commands, seen = [], set()
         for d in documents or []:
+            if not isinstance(d, dict):
+                raise ApiError(400, "invalid_parameter", "Document attendu sous forme d'objet.")
             if d.get("kind") not in dict(DOCUMENT_KINDS):
                 raise ApiError(400, "invalid_parameter", "Nature de document inconnue.")
             expiry = parse_date(d, "expiry_date")
@@ -482,7 +506,11 @@ class EguitraTransport(http.Controller):
                     "date_start": parse_date(d, "date_start") or False, "expiry_date": expiry,
                     "note": d.get("note") or False}
             if d.get("id"):
-                doc = vehicle.document_ids.filtered(lambda x, i=int(d["id"]): x.id == i)
+                try:
+                    wanted = int(d["id"])
+                except (TypeError, ValueError) as e:
+                    raise ApiError(400, "invalid_parameter", "Identifiant de document invalide.") from e
+                doc = vehicle.document_ids.filtered(lambda x, i=wanted: x.id == i)
                 if not doc:
                     raise ApiError(422, "business_rule", "Document inconnu pour cet ensemble.")
                 seen.add(doc.id)
@@ -523,10 +551,12 @@ class EguitraTransport(http.Controller):
         mimetype = detect_type(content)
         if not mimetype:
             raise ApiError(415, "unsupported_type", f"Pièce jointe au format {ACCEPTED}.")
+        previous = doc.sudo().attachment_id
         doc.attachment_id = request.env["ir.attachment"].create({
             "name": checked_name(upload.filename, mimetype, "document"), "datas": base64.b64encode(content),
             "res_model": doc._name, "res_id": doc.id, "mimetype": mimetype,
         })
+        previous.unlink()  # la pièce remplacée ne reste pas rattachée au document
         return _document_row(doc)
 
     @api_route("/transport/vehicles/<int:vehicle_id>/documents/<int:document_id>/file", profiles=READ)
@@ -985,7 +1015,8 @@ class EguitraTransport(http.Controller):
         limit, offset = int_arg(kw, "limit", 100, 1, 1000), int_arg(kw, "offset", 0, 0)
         rots = Rotation.search(domain, limit=limit, offset=offset, order=_rotation_order(kw.get("sort")))
         [(revenue, margin, volume)] = Rotation._read_group(domain, aggregates=["revenue:sum", "margin:sum", "volume_delivered:sum"])
-        return {"items": [_rotation_row(r) for r in rots], "total_count": Rotation.search_count(domain),
+        official = {}  # tarif officiel par route et date de chargement, lu une fois pour la page
+        return {"items": [_rotation_row(r, official=official) for r in rots], "total_count": Rotation.search_count(domain),
                 "offset": offset, "limit": limit,
                 "totals": {"revenue": revenue or 0.0, "margin": margin or 0.0, "volume": volume or 0.0},
                 # Marge minimale de la règle d'alerte, pour juger le taux de chaque ligne (comme /transport/summary).
@@ -993,7 +1024,7 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/rotations/<int:rotation_id>", profiles=READ)
     def rotation(self, rotation_id, **_kw):
-        return _rotation_row(_get("eguitra.transport.rotation", rotation_id, "Rotation"))
+        return _rotation_row(_get("eguitra.transport.rotation", rotation_id, "Rotation"), detail=True)
 
     @api_route("/transport/rotations", methods=("POST",), profiles=WRITE)
     def create_rotation(self, **_kw):
@@ -1001,8 +1032,9 @@ class EguitraTransport(http.Controller):
         require(data, "vehicle_id", "partner_id", "route_id")
         rot = request.env["eguitra.transport.rotation"].create(_rotation_values(data))
         if data.get("validate"):
-            rot.action_validate()
-        return _rotation_row(rot)
+            with _blockers("validate"):
+                rot.action_validate()
+        return _rotation_row(rot, detail=True)
 
     @api_route("/transport/rotations/<int:rotation_id>", methods=("PATCH",), profiles=WRITE)
     def update_rotation(self, rotation_id, **_kw):
@@ -1019,19 +1051,16 @@ class EguitraTransport(http.Controller):
                     "depart": rot.action_depart}
         if action not in handlers:
             raise ApiError(404, "not_found", "Action inconnue.")
-        try:
+        with _blockers(action):
             handlers[action]()
-        except RotationBlocked as e:
-            # Départ ou validation refusés : la liste des motifs ouverts, pour l'écran et l'application.
-            error = "departure_blocked" if action == "depart" else "validation_blocked"
-            raise ApiError(422, error, str(e.args[0]), blockers=e.blockers) from e
-        return _rotation_row(rot)
+        return _rotation_row(rot, detail=True)
 
     @api_route("/transport/rotations/validate", methods=("POST",), profiles=WRITE)
     def validate_many(self, **_kw):
         ids = [int(i) for i in read_json().get("ids") or []]
         rots = request.env["eguitra.transport.rotation"].browse(ids).exists()
-        rots.action_validate()
+        with _blockers("validate"):
+            rots.action_validate()
         return [_rotation_row(r) for r in rots]
 
     @api_route("/transport/invoice", methods=("POST",), profiles=("admin", "finance"))
@@ -1051,6 +1080,8 @@ class EguitraTransport(http.Controller):
         """Rentabilité : coûts déclarés et comptabilisés, km, structure, résultat net, indicateurs, contrôles."""
         end = parse_date(kw, "date_to", today())
         start = parse_date(kw, "date_from", end.replace(month=1, day=1))
+        if start > end:
+            raise ApiError(400, "invalid_parameter", "Période attendue : date_from avant date_to.")
         group = kw.get("group", "vehicle")
         if group not in ("vehicle", "route", "driver", "client", "month"):
             raise ApiError(400, "invalid_parameter", "Regroupement inconnu.")

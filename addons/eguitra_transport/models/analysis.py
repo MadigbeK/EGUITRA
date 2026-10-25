@@ -276,7 +276,7 @@ class EguitraTransportAnalysis(models.AbstractModel):
         fleet = Vehicle.search([("company_id", "in", companies.ids), ("state", "!=", "sold")])
         base = [("company_id", "in", companies.ids), ("date_loading", ">=", date_from), ("date_loading", "<=", date_to)]
         rotations = Rotation.search(base + [("state", "in", ("done", "invoiced"))])
-        days = (date_to - date_from).days + 1
+        days = max(1, (date_to - date_from).days + 1)
         filled = rotations.filtered(lambda r: r.vehicle_id.capacity_liters and r.volume_loaded)
         timed = rotations.filtered(lambda r: (r.date_return or r.date_delivery) and r.route_id.duration_days)
         on_time = timed.filtered(lambda r: r.duration_days <= r.route_id.duration_days)
@@ -343,10 +343,12 @@ class EguitraTransportAnalysis(models.AbstractModel):
             checks.append({"code": code, "label": label, "ok": not items, "count": len(items),
                            "items": items[:20], "hint": hint})
 
+        # Ensembles dont le parc a commencé à saisir les documents : avant, tous seraient « non renseignés ».
         check("vehicle_documents",
               "Documents des ensembles en service à jour (assurance, visite technique ; barémage et étanchéité des citernes)",
-              [issue["label"] for v in in_service for issue in v._document_issues()],
-              "Un document manquant ou expiré s'opposera au départ de l'ensemble ; renouvelez-le (Flotte et chauffeurs).")
+              [issue["label"] for v in in_service.filtered("document_ids") for issue in v._document_issues()],
+              "Renouvelez les documents expirés ou à échéance et complétez les manquants (Flotte et chauffeurs). Le "
+              "module HSSEQ en fera des motifs de départ.")
         check("vehicle_without_asset", "Ensembles en service rattachés à une immobilisation",
               [v.name for v in in_service.sudo().filtered(lambda v: not v.asset_id)],
               "Rattachez la fiche d'immobilisation (Flotte) : ses dotations entrent dans la structure du transport.")

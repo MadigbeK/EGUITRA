@@ -41,6 +41,7 @@ class EguitraTransportVehicleDocument(models.Model):
     _name = "eguitra.transport.vehicle.document"
     _description = "Document d'un ensemble routier"
     _order = "vehicle_id, kind, expiry_date desc, id desc"
+    _rec_names_search = ["reference", "vehicle_id"]
 
     vehicle_id = fields.Many2one("eguitra.transport.vehicle", "Ensemble", required=True, ondelete="cascade", index=True)
     company_id = fields.Many2one(related="vehicle_id.company_id", store=True, index=True)
@@ -58,6 +59,13 @@ class EguitraTransportVehicleDocument(models.Model):
             if doc.date_start and doc.expiry_date < doc.date_start:
                 raise ValidationError("La date d'expiration précède la date de début de validité.")
 
+    @api.depends("kind", "vehicle_id.name", "expiry_date")
+    def _compute_display_name(self):
+        labels = dict(DOCUMENT_KINDS)
+        for doc in self:
+            expiry = f" jusqu'au {doc.expiry_date:%d/%m/%Y}" if doc.expiry_date else ""
+            doc.display_name = f"{labels.get(doc.kind, '')} de {doc.vehicle_id.name or ''}{expiry}"
+
     def _state(self, day=None):
         """« valid », « expiring » (dans les 30 jours) ou « expired » à une date (aujourd'hui par défaut)."""
         self.ensure_one()
@@ -73,6 +81,11 @@ class EguitraTransportVehicle(models.Model):
     vehicle_kind = fields.Selection(VEHICLE_KINDS, "Profil", default="tanker", required=True)
     payload_tonnes = fields.Float("Charge utile (t)", digits=(8, 2), help="Poids de chargement autorisé.")
     document_ids = fields.One2many("eguitra.transport.vehicle.document", "vehicle_id", "Documents")
+
+    @api.constrains("payload_tonnes")
+    def _check_payload(self):
+        if any(v.payload_tonnes < 0 for v in self):
+            raise ValidationError("La charge utile ne peut pas être négative.")
 
     def _latest_documents(self):
         """Document le plus récent (dernière expiration) de chaque nature."""
@@ -131,7 +144,7 @@ class EguitraTransportVehicle(models.Model):
 class EguitraTransportRotation(models.Model):
     _inherit = "eguitra.transport.rotation"
 
-    weigh_ticket = fields.Char("Ticket de pesée")
+    weigh_ticket = fields.Char("Ticket de pesée", copy=False)
     weight_gross = fields.Float("Poids brut (t)", digits=(10, 3))
     weight_tare = fields.Float("Poids à vide (t)", digits=(10, 3))
     weight_net = fields.Float("Poids net (t)", digits=(10, 3), compute="_compute_weight", store=True)
@@ -150,6 +163,8 @@ class EguitraTransportRotation(models.Model):
     @api.constrains("weight_gross", "weight_tare")
     def _check_weights(self):
         for rot in self:
+            if rot.weight_gross < 0 or rot.weight_tare < 0:
+                raise ValidationError("Un poids du ticket de pesée ne peut pas être négatif.")
             if rot.weight_gross and rot.weight_tare and rot.weight_tare > rot.weight_gross:
                 raise ValidationError("Le poids à vide dépasse le poids brut du ticket de pesée.")
 
@@ -206,7 +221,9 @@ class EguitraTransportRotation(models.Model):
         return super().action_validate()
 
     def action_reset(self):
-        # Retour en saisie d'une rotation partie : le départ sera à redonner (la piste d'audit garde l'ancien).
+        # Une rotation en route remise en saisie n'est pas partie : son départ est effacé et sera à redonner
+        # (la piste d'audit garde l'ancien). Une rotation validée ou annulée remise en saisie pour correction
+        # garde la trace de son départ : elle est réellement partie, la revalider n'exige pas un second départ.
         en_route = self.filtered(lambda r: r.state == "en_route")
         en_route.write({"state": "draft", "departed_at": False, "departed_by": False, "departure_log": False})
         return super().action_reset()
