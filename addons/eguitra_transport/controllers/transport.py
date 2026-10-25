@@ -98,6 +98,8 @@ def _rotation_row(rot):
         "margin_estimated": rot.margin_estimated,
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
+        # Saisie par le compte connecté : il ne la valide pas lui-même (validation par un autre compte).
+        "created_by": rot.create_uid.name or None, "self_entered": rot.create_uid == rot.env.user,
     }
 
 

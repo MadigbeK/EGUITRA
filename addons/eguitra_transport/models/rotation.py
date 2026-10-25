@@ -405,6 +405,11 @@ class EguitraTransportRotation(models.Model):
         for rot in self:
             if rot.state != "draft":
                 continue
+            # Décision du gérant (22/10/2026) : une rotation est validée par un autre compte que celui qui
+            # l'a saisie, car elle fonde les manquants imputés aux chauffeurs. La reprise et les tâches du
+            # noyau (superutilisateur) n'y sont pas soumises.
+            if not self.env.su and rot.create_uid == self.env.user:
+                raise UserError(f"Rotation {rot._label()} : vous l'avez saisie ; elle se valide par un autre compte.")
             if not (rot.volume_loaded or rot.volume_delivered):
                 raise UserError(f"Rotation {rot._label()} : volume chargé ou livré requis.")
             if not rot.rate:

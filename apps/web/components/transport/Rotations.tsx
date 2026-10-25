@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCheck, ChevronLeft, ChevronRight, FileText, Plus, Smartphone } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, cx, type Tri } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, Textarea, cx, demanderConfirmation, type Tri } from "@/components/ui";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDec, fmtGNF, fmtInt, pluriel } from "@/lib/format";
@@ -49,6 +49,23 @@ interface Rotation {
   /** Aucun frais saisi : la ligne montre la marge estimée sur le coût standard de la route. */
   margin_estimated: boolean;
   invoice: { id: number; name: string | null } | null;
+  created_by: string | null;
+  /** Saisie par le compte connecté : elle se valide par un autre compte (décision du gérant). */
+  self_entered: boolean;
+}
+
+/** Rotation complète (GET /transport/rotations/<id>) : dates, mesures, frais et note en plus. */
+interface RotationDetail extends Rotation {
+  date_delivery: string | null;
+  date_return: string | null;
+  distance_km: number;
+  fuel_liters: number;
+  temperature_loaded: number | null;
+  temperature_delivered: number | null;
+  density_15: number | null;
+  costs: Record<string, number>;
+  specific_taxes_manual: number;
+  note: string | null;
 }
 
 interface Liste {
@@ -85,20 +102,25 @@ export function Rotations() {
   const minimum = data?.margin_min ?? null;
   const [selected, setSelected] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
+  const [ouverte, setOuverte] = useState<number | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const saisie = useAutorise(SAISIE);
   const facturation = useAutorise(FACTURATION);
-  // Sans commande à appliquer (direction), la sélection n'a pas d'objet : ni case ni clic sur la ligne.
+  // Sans commande à appliquer (direction), la sélection n'a pas d'objet : pas de case à cocher.
   const selection = saisie || facturation;
   const rows = data?.items ?? [];
   const chosen = rows.filter((r) => selected.includes(r.id));
+  // Une rotation se valide par un autre compte que celui qui l'a saisie.
+  const validables = chosen.filter((r) => r.state === "draft" && !r.self_entered);
+  const siennes = chosen.filter((r) => r.state === "draft" && r.self_entered).length;
+  const basculer = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   async function run(action: "validate" | "invoice") {
     setMessage(null);
     try {
       if (action === "validate") {
-        await apiSend("POST", "/transport/rotations/validate", { ids: chosen.filter((r) => r.state === "draft").map((r) => r.id) });
-        setMessage({ tone: "ok", text: "Rotations validées." });
+        await apiSend("POST", "/transport/rotations/validate", { ids: validables.map((r) => r.id) });
+        setMessage({ tone: "ok", text: `${pluriel(validables.length, "rotation validée", "rotations validées")}.${siennes ? ` ${pluriel(siennes, "rotation saisie par vous reste", "rotations saisies par vous restent")} à valider par un autre compte.` : ""}` });
       } else {
         const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
         const claims = res.claims.length ? ` ${pluriel(res.claims.length, "créance sur chauffeur", "créances sur chauffeur")} en opérations diverses, à valider dans Journaux et OD.` : "";
@@ -122,7 +144,7 @@ export function Rotations() {
         {selection && (
           <div className="flex flex-wrap gap-2">
             {saisie && (
-              <Button disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("validate")}>
+              <Button disabled={!validables.length} onClick={() => run("validate")} title={siennes && !validables.length ? "Vos propres saisies se valident par un autre compte" : undefined}>
                 <CheckCheck className="h-4 w-4" /> Valider la sélection
               </Button>
             )}
@@ -148,10 +170,13 @@ export function Rotations() {
             rowKey={(r) => r.id}
             sort={tri}
             onSort={(t) => { setTri(t); setPage(0); setSelected([]); }}
-            onRowClick={selection ? (r) => setSelected((s) => (s.includes(r.id) ? s.filter((x) => x !== r.id) : [...s, r.id])) : undefined}
+            // La ligne ouvre la fiche (compléter, corriger, annuler) ; la case à cocher sélectionne.
+            onRowClick={(r) => setOuverte(r.id)}
             empty="Aucune rotation pour ce filtre."
             columns={[
-              ...(selection ? [{ key: "sel", label: "", render: (r: Rotation) => <input type="checkbox" readOnly checked={selected.includes(r.id)} aria-label={`Sélectionner la rotation ${r.name ?? r.id}`} /> }] : []),
+              ...(selection ? [{ key: "sel", label: "", render: (r: Rotation) => (
+                <input type="checkbox" checked={selected.includes(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => basculer(r.id)} aria-label={`Sélectionner la rotation ${r.name ?? r.id}`} />
+              ) }] : []),
               // Le téléphone avant le numéro, dans une case de largeur fixe : les numéros restent alignés.
               { key: "name", label: "N°", render: (r) => (
                 <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-xs">
@@ -195,7 +220,157 @@ export function Rotations() {
         {data && data.total_count > PAGE && <Pages offset={data.offset} total={data.total_count} onPage={(p) => { setPage(p); setSelected([]); }} />}
       </Card>
       {creating && <RotationForm onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); }} />}
+      {ouverte !== null && <RotationFiche id={ouverte} saisie={saisie} onClose={() => setOuverte(null)} onChanged={() => { setSelected([]); void mutate(); }} />}
     </div>
+  );
+}
+
+const DATES = ["date_loading", "date_delivery", "date_return"] as const;
+const NOMBRES = ["volume_loaded", "volume_delivered", "rate", "distance_km"] as const;
+
+/** Valeurs de la fiche en texte, pour le formulaire ; un champ non renseigné reste vide. */
+function valeursFiche(r: RotationDetail, ref: Referentials | undefined): Record<string, string> {
+  const texte = (v: number | null | undefined) => (v ? String(v) : "");
+  const f: Record<string, string> = {
+    driver_id: r.driver ? String(r.driver.id) : "",
+    delivery_note: r.delivery_note ?? "",
+    note: r.note ?? "",
+  };
+  for (const k of DATES) f[k] = r[k] ?? "";
+  for (const k of NOMBRES) f[k] = texte(r[k]);
+  for (const m of ref?.measures ?? []) f[m.code] = texte((r as unknown as Record<string, number | null>)[m.code]);
+  for (const c of ref?.costs ?? []) f[c.code] = texte(r.costs[c.code]);
+  return f;
+}
+
+/**
+ * Fiche d'une rotation : détail, correction tant qu'elle n'est pas facturée (volume livré, bon de
+ * livraison, frais…), validation par un autre compte que celui qui l'a saisie, annulation et remise
+ * en saisie. Seuls les champs modifiés partent au noyau : un champ non touché garde son calcul
+ * (tarif du client, distance de la route).
+ */
+function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie: boolean; onClose: () => void; onChanged: () => void }) {
+  const { data: r, error, mutate } = useApi<RotationDetail>(`/transport/rotations/${id}`);
+  const { data: ref } = useApi<Referentials>("/transport/referentials");
+  const [f, setF] = useState<Record<string, string> | null>(null);
+  const [init, setInit] = useState<Record<string, string>>({});
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const modifiable = saisie && !!r && (r.state === "draft" || r.state === "done");
+
+  useEffect(() => {
+    if (!r || !ref) return;
+    const v = valeursFiche(r, ref);
+    setInit(v);
+    setF(v);
+  }, [r, ref]);
+
+  const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...(x ?? {}), [k]: e.target.value }));
+  const changes = f ? Object.keys(f).filter((k) => f[k] !== init[k]) : [];
+
+  async function agir(appel: () => Promise<RotationDetail>) {
+    setBusy(true);
+    setErreur(null);
+    try {
+      await mutate(await appel(), { revalidate: false });
+      onChanged();
+    } catch (e) {
+      setErreur(e instanceof ApiError ? e.message : "Action impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function enregistrer() {
+    if (!f) return;
+    const body: Record<string, unknown> = {};
+    for (const k of changes) {
+      if ((DATES as readonly string[]).includes(k)) {
+        if (f[k]) body[k] = f[k];
+      } else if (k === "driver_id") {
+        if (f[k]) body[k] = Number(f[k]);
+      } else if (k === "delivery_note" || k === "note") {
+        body[k] = f[k];
+      } else {
+        body[k] = parseNumber(f[k] ?? "") ?? 0;
+      }
+    }
+    void agir(() => apiSend<RotationDetail>("PATCH", `/transport/rotations/${id}`, body));
+  }
+
+  async function action(code: "validate" | "cancel" | "reset") {
+    if (code === "cancel" && !(await demanderConfirmation(`Annuler la rotation ${r?.name ?? ""} ? Elle ne sera ni facturée ni comptée.`, { action: "Annuler la rotation", danger: true }))) return;
+    void agir(() => apiSend<RotationDetail>("POST", `/transport/rotations/${id}/${code}`));
+  }
+
+  const titre = r ? `Rotation ${r.name ?? "en saisie"}` : "Rotation";
+  return (
+    <Modal open wide title={titre} onClose={onClose} footer={r && saisie ? (
+      <>
+        {(r.state === "done" || r.state === "cancelled") && <Button loading={busy} onClick={() => action("reset")}>Remettre en saisie</Button>}
+        {modifiable && <Button variant="danger" loading={busy} onClick={() => action("cancel")}>Annuler la rotation</Button>}
+        {modifiable && <Button loading={busy} disabled={!changes.length} onClick={enregistrer}>Enregistrer</Button>}
+        {r.state === "draft" && (
+          <Button variant="primary" loading={busy} disabled={r.self_entered || changes.length > 0} onClick={() => action("validate")}
+            title={r.self_entered ? "Vous l'avez saisie : elle se valide par un autre compte" : changes.length ? "Enregistrez d'abord les modifications" : undefined}>
+            Valider
+          </Button>
+        )}
+      </>
+    ) : undefined}>
+      {!r || !ref ? (
+        <Etat error={error} onRetry={() => mutate()} />
+      ) : (
+        <div className="space-y-4">
+          {erreur && <Notice tone="danger">{erreur}</Notice>}
+          <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+            <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge>
+            <span>{r.source === "mobile" ? "Saisie au téléphone" : "Saisie au bureau"}{r.created_by ? ` par ${r.created_by}` : ""}</span>
+            {r.invoice && <span>· Facture {r.invoice.name ?? "en brouillon"}</span>}
+          </div>
+          {r.state === "draft" && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : elle se valide par un autre compte.</Notice>}
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13.5px] md:grid-cols-4">
+            {[
+              ["Ensemble", `${r.vehicle.name}`],
+              ["Client", r.client.name],
+              ["Route", r.route.name],
+              ["Produit", r.product_label],
+              ["Manquant", r.shortage ? `${fmtVolume(r.shortage)} m³${r.shortage_excess > 0 ? `, dont ${fmtM3(r.shortage_excess)} hors tolérance (${fmtGNF(r.shortage_value)})` : ", dans la tolérance"}` : "aucun"],
+              ["Montant", fmtGNF(r.revenue)],
+              ["Marge", r.margin_estimated ? `${fmtGNF(r.estimated_margin)} (estimée)` : fmtGNF(r.margin)],
+              ["Tarif appliqué", `${fmtGNF(r.rate)} le m³`],
+            ].map(([k, v]) => (
+              <div key={k}><dt className="text-[12px] text-muted">{k}</dt><dd className="text-ink">{v}</dd></div>
+            ))}
+          </dl>
+          {f && (
+            <fieldset disabled={!modifiable} className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <Field label="Chargement"><Input type="date" value={f.date_loading} onChange={set("date_loading")} /></Field>
+                <Field label="Livraison"><Input type="date" value={f.date_delivery} onChange={set("date_delivery")} /></Field>
+                <Field label="Retour au dépôt"><Input type="date" value={f.date_return} onChange={set("date_return")} /></Field>
+                <Field label="Chauffeur"><Select value={f.driver_id} onChange={set("driver_id")} placeholder="–" options={ref.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
+                <Field label="Volume chargé (m³)"><Input inputMode="decimal" value={f.volume_loaded} onChange={set("volume_loaded")} /></Field>
+                <Field label="Volume livré (m³)"><Input inputMode="decimal" value={f.volume_delivered} onChange={set("volume_delivered")} /></Field>
+                <Field label="Bon de livraison"><Input value={f.delivery_note} onChange={set("delivery_note")} /></Field>
+                <Field label="Tarif (m³)"><Input inputMode="numeric" value={f.rate} onChange={set("rate")} /></Field>
+                <Field label="Distance parcourue (km)"><Input inputMode="numeric" value={f.distance_km} onChange={set("distance_km")} /></Field>
+                {(ref.measures ?? []).map((m) => (
+                  <Field key={m.code} label={m.label}><Input inputMode="decimal" className="font-mono" value={f[m.code]} onChange={set(m.code)} /></Field>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+                {ref.costs.map((c) => (
+                  <Field key={c.code} label={c.label}><Input inputMode="numeric" className="font-mono" value={f[c.code]} onChange={set(c.code)} /></Field>
+                ))}
+              </div>
+              <Field label="Note"><Textarea rows={2} value={f.note} onChange={set("note")} /></Field>
+            </fieldset>
+          )}
+          {r.state === "invoiced" && <p className="text-[12.5px] text-muted">Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire.</p>}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -245,11 +420,11 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
-  async function submit(validate: boolean) {
+  async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = { ...f, validate };
+      const body: Record<string, unknown> = { ...f };
       for (const k of ["vehicle_id", "partner_id", "route_id", "driver_id"]) if (f[k]) body[k] = Number(f[k]);
       if (!f.date_return) delete body.date_return;
       for (const k of ["volume_loaded", "volume_delivered", "rate", "distance_km", ...(ref?.measures ?? []).map((m) => m.code), ...(ref?.costs.map((c) => c.code) ?? [])]) {
@@ -265,7 +440,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
     }
   }
   return (
-    <Modal open wide title="Nouvelle rotation" onClose={onClose} footer={<><Button loading={busy} onClick={() => submit(false)} disabled={!f.vehicle_id || !f.partner_id || !f.route_id}>Enregistrer</Button><Button variant="primary" loading={busy} onClick={() => submit(true)} disabled={!f.vehicle_id || !f.partner_id || !f.route_id}>Enregistrer et valider</Button></>}>
+    <Modal open wide title="Nouvelle rotation" onClose={onClose} footer={<><span className="mr-auto text-[12.5px] text-muted">La validation revient à un autre compte que celui qui saisit.</span><Button variant="primary" loading={busy} onClick={() => submit()} disabled={!f.vehicle_id || !f.partner_id || !f.route_id}>Enregistrer</Button></>}>
       {!ref ? (
         <Etat error={erreurChargement} onRetry={() => majReferentiels()} />
       ) : (

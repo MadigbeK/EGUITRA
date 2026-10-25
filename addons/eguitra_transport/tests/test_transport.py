@@ -129,6 +129,35 @@ class TestTransport(TransportCase):
         self.assertEqual([r["status"] for r in body["results"]], ["error", "error"],
                          "Saisie illisible, ou ensemble d'une autre société : refusées sans bloquer le lot")
 
+    def test_fiche_rotation_validee_par_un_autre_compte(self):
+        """Décision du gérant (22/10/2026) : la rotation saisie par un agent est validée par un autre compte.
+        La fiche complète, corrige, annule et remet en saisie une rotation après sa création."""
+        agent = self.open_session("ibrahima")["access_token"]
+        saisie = {"vehicle_id": self.truck.id, "partner_id": self.customer.id, "route_id": self.route.id,
+                  "product": "gasoil", "volume_loaded": 40, "date_loading": self.today.isoformat()}
+        status, rot = self.call("POST", "/transport/rotations", saisie, token=agent)
+        self.assertEqual(status, 200, rot)
+        self.assertTrue(rot["self_entered"])
+        status, body = self.call("POST", f"/transport/rotations/{rot['id']}/validate", {}, token=agent)
+        self.assertEqual(status, 422, "L'agent ne valide pas sa propre saisie")
+        status, body = self.call("POST", "/transport/rotations", dict(saisie, validate=True), token=agent)
+        self.assertEqual(status, 422, "Ni à l'enregistrement")
+        status, body = self.call("PATCH", f"/transport/rotations/{rot['id']}",
+                                 {"volume_delivered": 39.7, "delivery_note": "BL-2026-118"}, token=agent)
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["volume_delivered"], body["delivery_note"]), (39.7, "BL-2026-118"))
+        other = self.open_session("fatou")["access_token"]
+        status, body = self.call("GET", f"/transport/rotations/{rot['id']}", token=other)
+        self.assertEqual(status, 200, body)
+        self.assertFalse(body["self_entered"])
+        status, body = self.call("POST", f"/transport/rotations/{rot['id']}/validate", {}, token=other)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["state"], "done")
+        status, body = self.call("POST", f"/transport/rotations/{rot['id']}/cancel", {}, token=agent)
+        self.assertEqual((status, body.get("state")), (200, "cancelled"), body)
+        status, body = self.call("POST", f"/transport/rotations/{rot['id']}/reset", {}, token=agent)
+        self.assertEqual((status, body.get("state")), (200, "draft"), body)
+
     def test_api_facturation_reservee_finance(self):
         rot = self._rotation()
         rot.action_validate()
