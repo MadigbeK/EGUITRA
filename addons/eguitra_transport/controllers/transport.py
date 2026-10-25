@@ -692,11 +692,15 @@ class EguitraTransport(http.Controller):
             # tarif de la liste le supprime, ce que seule la finance peut faire.
             kept = {(t.partner_id.id, t.product_id.id): t for t in (route.tariff_ids if route else [])}
             finance = _is_finance()
-            commands, seen = [], set()
+            commands, seen, couples = [], set(), set()
             for t in data["tariffs"] or []:
                 product = _product(t).id if (t.get("product") or t.get("product_id")) else False
                 line = {"partner_id": int(t["partner_id"]), "product_id": product,
                         "rate": as_float(t.get("rate", 0), "rate")}
+                if (line["partner_id"], product) in couples:
+                    raise ApiError(400, "invalid_parameter",
+                                   "Un seul tarif par client et par produit sur une route : le nouveau remplace l'ancien.")
+                couples.add((line["partner_id"], product))
                 if finance:
                     line.update(_tariff_terms(t))
                 previous = kept.get((line["partner_id"], product))

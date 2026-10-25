@@ -1,4 +1,4 @@
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import tagged
 
 from .common import TransportCase
@@ -36,6 +36,24 @@ class TestDroitsTarifs(TransportCase):
             {"partner_id": self.customer.id, "product": "gasoil", "rate": 1_200_000}]}, token=finance)
         self.assertEqual(status, 200, body)
         self.assertEqual(self.route.tariff_ids, tariff)
+
+    def test_tarif_renegocie_remplace_l_ancien(self):
+        """C6 : un nouveau tarif du même client et du même produit remplace l'ancien ; les rotations
+        suivantes prennent le nouveau tarif."""
+        tariff = self.route.tariff_ids
+        token = self.open_session("ibrahima")["access_token"]
+        status, body = self.call("PATCH", f"/transport/routes/{self.route.id}", {"tariffs": [
+            {"partner_id": self.customer.id, "product": "gasoil", "rate": 1_200_000},
+            {"partner_id": self.customer.id, "product": "gasoil", "rate": 1_350_000}]}, token=token)
+        self.assertEqual(status, 400, "Deux tarifs du même couple dans la même demande")
+        status, body = self.call("PATCH", f"/transport/routes/{self.route.id}", {"tariffs": [
+            {"partner_id": self.customer.id, "product": "gasoil", "rate": 1_350_000}]}, token=token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual((self.route.tariff_ids, tariff.rate), (tariff, 1_350_000))
+        self.assertEqual(self._rotation().rate, 1_350_000, "La rotation suivante prend le tarif renégocié")
+        with self.assertRaises(ValidationError):
+            self.env["eguitra.transport.tariff"].create({"route_id": self.route.id, "partner_id": self.customer.id,
+                                                         "product_id": tariff.product_id.id, "rate": 1_000_000})
 
     def test_lignes_de_taxe_recalculees_par_le_systeme(self):
         self.env["eguitra.transport.tax"].create({"name": "Taxe de roulage", "nature": "road", "base": "delivered",
