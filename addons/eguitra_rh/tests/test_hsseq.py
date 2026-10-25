@@ -66,6 +66,10 @@ class TestHsseq(FinanceDataMixin, TransactionCase):
         self.assertEqual((status["fitness"], status["blocking"]), ("inapte", True))
         self.emp.write({"medical_fitness": "apte", "medical_fitness_until": self.day - timedelta(days=1)})
         self.assertIn("Aptitude médicale échue.", Employee._hsseq_driver_status(self.driver, self.day)["reasons"])
+        self.emp.write({"medical_fitness": "apte_reserve", "medical_fitness_until": self.day + timedelta(days=90)})
+        status = Employee._hsseq_driver_status(self.driver, self.day)
+        self.assertEqual((status["fitness"], status["blocking"]), ("apte_reserve", False))
+        self.assertIn("Aptitude médicale avec réserve.", status["warnings"])
         self.emp.medical_fitness = False
         status = Employee._hsseq_driver_status(self.driver, self.day)
         self.assertFalse(status["blocking"], "Aptitude non renseignée : avertissement, pas motif V04")
@@ -103,8 +107,13 @@ class TestHsseq(FinanceDataMixin, TransactionCase):
         valideur._eguitra_set_profiles(["direction"])
         payroll.with_user(valideur).action_validate()
         settings = self.env["eguitra.rh.settings"]._get(self.company)
-        hours = Employee._hsseq_worked_hours(self.company, sept, date(2026, 9, 30))
+        worked = Employee._hsseq_worked_hours(self.company, sept, date(2026, 9, 30))
+        hours = worked["hours"]
         self.assertAlmostEqual(hours, round(settings.monthly_hours * len(payroll.payslip_ids), 1), delta=0.2)
+        self.assertEqual((worked["basis"], [m["basis"] for m in worked["months"]]), ("paid", ["paid"]),
+                         "Heures payées d'une paie validée")
+        october = Employee._hsseq_worked_hours(self.company, date(2026, 10, 1), date(2026, 10, 31))
+        self.assertEqual(october["basis"], "presence", "Sans paie validée : estimation par la présence")
 
         accident = self.env["eguitra.rh.leave"].create({
             "employee_id": self.emp.id, "type_id": self.env.ref("eguitra_rh.leave_work_accident").id,

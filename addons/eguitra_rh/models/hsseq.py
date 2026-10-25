@@ -17,7 +17,7 @@ from odoo.exceptions import UserError
 from .employee import month_bounds
 
 STATES = [("valide", "Valide"), ("a_renouveler", "À renouveler"), ("expiree", "Expirée"), ("absente", "Absente")]
-FITNESS = [("apte", "Apte"), ("inapte", "Inapte")]
+FITNESS = [("apte", "Apte"), ("apte_reserve", "Apte avec réserve"), ("inapte", "Inapte")]
 PPE_ITEMS = [("casque", "Casque"), ("chaussures", "Chaussures de sécurité"), ("gants", "Gants"),
              ("gilet", "Gilet haute visibilité"), ("lunettes", "Lunettes de protection"),
              ("combinaison", "Combinaison"), ("masque", "Masque respiratoire"), ("bouchons", "Protection auditive"),
@@ -117,7 +117,8 @@ class EguitraRhEmployee(models.Model):
     ppe_issue_ids = fields.One2many("eguitra.rh.ppe.issue", "employee_id", "EPI remis")
 
     def _fitness_state(self, day=None):
-        """« apte », « inapte », « echue » (aptitude dépassée) ou « inconnu »."""
+        """« apte », « apte_reserve » (sans détail : la réserve reste chez le médecin), « inapte »,
+        « echue » (aptitude dépassée) ou « inconnu »."""
         self.ensure_one()
         day = day or fields.Date.context_today(self)
         if not self.medical_fitness:
@@ -126,7 +127,7 @@ class EguitraRhEmployee(models.Model):
             return "inapte"
         if self.medical_fitness_until and self.medical_fitness_until < day:
             return "echue"
-        return "apte"
+        return self.medical_fitness
 
     def _qualification_rows(self, day=None):
         """Habilitations du salarié par type : la plus récente de chaque type, plus les types obligatoires
@@ -172,12 +173,14 @@ class EguitraRhEmployee(models.Model):
         elif fitness == "inconnu":
             # La spécification ne bloque que l'inaptitude : une aptitude non saisie est signalée.
             warnings.append("Aptitude médicale non renseignée.")
+        elif fitness == "apte_reserve":
+            warnings.append("Aptitude médicale avec réserve.")
         for row in quals:
             if row["mandatory"] and row["state"] in ("expiree", "absente"):
                 reasons.append(f"{row['name']} : {'expirée' if row['state'] == 'expiree' else 'absente'}.")
         return {
             "employee_id": employee.id,
-            "fitness": "apte" if fitness == "apte" else ("inapte" if fitness == "inapte" else "inconnu"),
+            "fitness": fitness if fitness in ("apte", "apte_reserve", "inapte") else "inconnu",
             "fitness_until": employee.medical_fitness_until or None,
             "qualifications": [{k: r[k] for k in ("code", "name", "mandatory", "state", "expiry")} for r in quals],
             "blocking": bool(reasons),
@@ -206,7 +209,7 @@ class EguitraRhEmployee(models.Model):
             result.append({"employee_id": qual.employee_id.id, "driver_id": qual.employee_id.driver_id.id or None,
                            "kind": "qualification", "code": qual.type_id.code, "name": qual.type_id.name,
                            "expiry": qual.expiry_date, "days_left": (qual.expiry_date - day).days})
-        for emp in current.filtered(lambda e: e.medical_fitness == "apte" and e.medical_fitness_until
+        for emp in current.filtered(lambda e: e.medical_fitness in ("apte", "apte_reserve") and e.medical_fitness_until
                                     and e.medical_fitness_until <= limit):
             result.append({"employee_id": emp.id, "driver_id": emp.driver_id.id or None, "kind": "fitness",
                            "code": "APTITUDE", "name": "Aptitude médicale", "expiry": emp.medical_fitness_until,
@@ -217,11 +220,15 @@ class EguitraRhEmployee(models.Model):
     def _hsseq_worked_hours(self, companies, date_from, date_to):
         """Heures réellement travaillées sur la période : mois de paie validée, jours payés au prorata de
         l'horaire mensuel plus heures supplémentaires saisies ; mois sans paie validée, estimation par la
-        présence (jours ouvrables sous contrat, absences déduites)."""
+        présence (jours ouvrables sous contrat, absences déduites). Faute de pointage, ce sont des heures
+        payées : la base de chaque mois (« paid » ou « presence ») est rendue pour l'afficher.
+
+        :return: {"hours": float, "basis": "paid" | "presence", "months": [{"month", "hours", "basis"}]}
+        """
         Payslip = self.env["eguitra.rh.payslip"].sudo()
         Holiday = self.env["eguitra.rh.holiday"]
         Leave = self.env["eguitra.rh.leave"].sudo()
-        total = 0.0
+        months = {}
         for company in companies:
             settings = self.env["eguitra.rh.settings"]._get(company)
             hours_month = settings.monthly_hours or 173.33
@@ -233,20 +240,26 @@ class EguitraRhEmployee(models.Model):
                                         ("payroll_id.state", "!=", "draft")])
                 month_days = Holiday._working_days(company, start, end) or 1
                 share = Holiday._working_days(company, first, last) / month_days
+                entry = months.setdefault(month, {"month": month, "hours": 0.0, "basis": "paid"})
                 if slips:
                     for slip in slips:
                         overtime = sum(i.quantity for i in slip.input_ids if i.rubric_id.input == "hours")
-                        total += (slip.worked_days / (slip.month_days or month_days)) * hours_month * share + overtime * share
+                        entry["hours"] += (slip.worked_days / (slip.month_days or month_days)) * hours_month * share \
+                            + overtime * share
                 else:
+                    entry["basis"] = "presence"
                     for emp in self.sudo()._active_in(company, first, last):
                         a, b = max(emp.hire_date, first), min(emp.exit_date or last, last)
                         days = Holiday._working_days(company, a, b)
                         for leave in Leave.search([("employee_id", "=", emp.id), ("state", "=", "approved"),
                                                    ("date_from", "<=", b), ("date_to", ">=", a)]):
                             days -= Holiday._working_days(company, max(leave.date_from, a), min(leave.date_to, b))
-                        total += max(days, 0) / month_days * hours_month
+                        entry["hours"] += max(days, 0) / month_days * hours_month
                 month = end + timedelta(days=1)
-        return round(total, 1)
+        rows = [dict(m, hours=round(m["hours"], 1)) for _key, m in sorted(months.items())]
+        return {"hours": round(sum(m["hours"] for m in months.values()), 1),
+                "basis": "paid" if rows and all(m["basis"] == "paid" for m in rows) else "presence",
+                "months": rows}
 
     @api.model
     def _hsseq_work_accidents(self, companies, date_from, date_to):
@@ -262,10 +275,11 @@ class EguitraRhEmployee(models.Model):
     @api.model
     def _hsseq_indicators(self, companies, date_from, date_to):
         """Taux de fréquence et de gravité (accidents du travail avec arrêt, jours perdus, heures travaillées)."""
-        hours = self._hsseq_worked_hours(companies, date_from, date_to)
+        worked = self._hsseq_worked_hours(companies, date_from, date_to)
+        hours = worked["hours"]
         accidents = self._hsseq_work_accidents(companies, date_from, date_to)
         lost = sum(a["lost_days"] for a in accidents)
-        return {"worked_hours": hours, "accidents": len(accidents), "lost_days": lost,
+        return {"worked_hours": hours, "hours_basis": worked["basis"], "accidents": len(accidents), "lost_days": lost,
                 "frequency_rate": round(len(accidents) * 1_000_000 / hours, 2) if hours else None,
                 "severity_rate": round(lost * 1000 / hours, 2) if hours else None}
 

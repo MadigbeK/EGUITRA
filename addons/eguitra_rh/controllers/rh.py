@@ -50,7 +50,7 @@ from .common import (
 MAX_FILE = 20 * 1024 * 1024
 EMPLOYEE_TEXT = ("job_title", "birth_place", "nationality", "id_number", "cnss_number", "phone", "email", "address",
                  "emergency_contact", "emergency_phone", "bank_name", "bank_account", "mobile_money")
-SELECTIONS = {"medical_fitness": ("apte", "inapte"), "gender": ("homme", "femme"), "marital_status": dict(MARITAL), "category": dict(CATEGORIES),
+SELECTIONS = {"medical_fitness": ("apte", "apte_reserve", "inapte"), "gender": ("homme", "femme"), "marital_status": dict(MARITAL), "category": dict(CATEGORIES),
               "contract_type": dict(CONTRACTS), "payment_method": dict(PAYMENT_METHODS)}
 
 

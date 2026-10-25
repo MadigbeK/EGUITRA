@@ -559,9 +559,10 @@ export type QualificationState = "valide" | "a_renouveler" | "expiree" | "absent
 export const QUALIFICATION_STATE_LABELS: Record<QualificationState, string> = {
   valide: "Valide", a_renouveler: "À renouveler", expiree: "Expirée", absente: "Absente",
 };
-export type FitnessStatus = "apte" | "inapte";
+/** apte_reserve : apte avec réserve, sans détail (la réserve reste chez le médecin). */
+export type FitnessStatus = "apte" | "apte_reserve" | "inapte";
 /** echue : aptitude dépassée ; a_renouveler : visite à programmer (J-30) ; inconnu : non renseignée. */
-export type FitnessState = "apte" | "a_renouveler" | "inapte" | "echue" | "inconnu";
+export type FitnessState = "apte" | "apte_reserve" | "a_renouveler" | "inapte" | "echue" | "inconnu";
 export type PpeItem = "casque" | "chaussures" | "gants" | "gilet" | "lunettes" | "combinaison" | "masque" | "bouchons" | "harnais" | "autre";
 
 export interface QualificationType {
@@ -650,6 +651,8 @@ export interface SafetySummary {
   date_from: string;
   date_to: string;
   worked_hours: number;
+  /** paid : heures payées des bulletins validés ; presence : estimation par la présence (pas de pointage). */
+  hours_basis: "paid" | "presence";
   accidents: number;
   lost_days: number;
   /** Accidents du travail avec arrêt × 1 000 000 ÷ heures travaillées. */
