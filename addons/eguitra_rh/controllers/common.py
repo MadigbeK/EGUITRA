@@ -232,4 +232,15 @@ def employee_detail(emp):
         leaves=[leave_row(leave) for leave in leaves],
         payslips=[payslip_row(s) for s in payslips],
         advances=[advance_row(a) for a in advances],
+        **_safety_detail(emp, day),
     )
+
+
+def _safety_detail(emp, day):
+    """Habilitations, aptitude médicale (statut seul) et EPI remis du dossier."""
+    from .hsseq import fitness_row, ppe_row, qualification_row
+
+    quals = request.env["eguitra.rh.qualification"].search([("employee_id", "=", emp.id)])
+    ppe = request.env["eguitra.rh.ppe.issue"].search([("employee_id", "=", emp.id)])
+    return {"fitness": fitness_row(emp, day), "qualifications": [qualification_row(q, day) for q in quals],
+            "qualification_status": emp._qualification_rows(day), "ppe": [ppe_row(p) for p in ppe]}

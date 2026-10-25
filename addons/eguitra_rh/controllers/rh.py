@@ -15,6 +15,7 @@ from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 from ..engine import fmt_days
 from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASONS, MARITAL, PAYMENT_METHODS
+from ..models.hsseq import PPE_ITEMS
 from ..models.leave import InsufficientBalance
 from ..models.payroll import of_month
 from .common import (
@@ -49,7 +50,7 @@ from .common import (
 MAX_FILE = 20 * 1024 * 1024
 EMPLOYEE_TEXT = ("job_title", "birth_place", "nationality", "id_number", "cnss_number", "phone", "email", "address",
                  "emergency_contact", "emergency_phone", "bank_name", "bank_account", "mobile_money")
-SELECTIONS = {"gender": ("homme", "femme"), "marital_status": dict(MARITAL), "category": dict(CATEGORIES),
+SELECTIONS = {"medical_fitness": ("apte", "inapte"), "gender": ("homme", "femme"), "marital_status": dict(MARITAL), "category": dict(CATEGORIES),
               "contract_type": dict(CONTRACTS), "payment_method": dict(PAYMENT_METHODS)}
 
 
@@ -197,6 +198,28 @@ class EguitraRh(http.Controller):
                 add("contract_end", "danger" if late else "warn", emp.contract_end, emp,
                     f"{'Contrat échu' if late else 'Fin de contrat'} de {emp.name} : renouveler, embaucher ou "
                     "enregistrer la sortie.", href)
+            # Habilitations et aptitude : alerte à J-30, urgente à J-7, puis expirée (verrou V04 d'HSSEQ).
+            for row in emp._qualification_rows(day):
+                if row["expiry"]:
+                    left = (row["expiry"] - day).days
+                    if left < 0:
+                        add("qualification", "danger", row["expiry"], emp, f"{row['name']} de {emp.name} expirée.", href)
+                    elif left <= settings.qualification_urgent_days:
+                        add("qualification", "danger", row["expiry"], emp,
+                            f"{row['name']} de {emp.name} expire dans {left} jour(s).", href)
+                    elif left <= settings.qualification_alert_days:
+                        add("qualification", "warn", row["expiry"], emp, f"{row['name']} de {emp.name} à renouveler.", href)
+                elif row["state"] == "absente":
+                    add("qualification", "danger", None, emp, f"{row['name']} absente pour le conducteur {emp.name}.", href)
+            fitness = emp._fitness_state(day)
+            if emp.driver_id and fitness in ("inapte", "echue", "inconnu"):
+                label = {"inapte": "inapte", "echue": "échue", "inconnu": "non renseignée"}[fitness]
+                add("fitness", "danger", emp.medical_fitness_until or None, emp,
+                    f"Aptitude médicale de {emp.name} : {label}.", href)
+            elif fitness == "apte" and emp.medical_fitness_until and \
+                    (emp.medical_fitness_until - day).days <= settings.qualification_alert_days:
+                add("fitness", "warn", emp.medical_fitness_until, emp,
+                    f"Visite d'aptitude de {emp.name} à programmer.", href)
             for doc in emp.document_ids.filtered("expiry_date"):
                 if doc.expiry_date < day:
                     add("document", "danger", doc.expiry_date, emp, f"{doc.name} de {emp.name} expiré.", href)
@@ -259,6 +282,11 @@ class EguitraRh(http.Controller):
             "categories": options(CATEGORIES), "contract_types": options(CONTRACTS),
             "marital_statuses": options(MARITAL), "payment_methods": options(PAYMENT_METHODS),
             "exit_reasons": options(EXIT_REASONS), "document_kinds": options(DOCUMENT_KINDS),
+            "qualification_types": [{"id": t.id, "code": t.code, "name": t.name, "validity_months": t.validity_months,
+                                     "mandatory_for_drivers": t.mandatory_for_drivers, "needs_document": t.needs_document,
+                                     "active": t.active}
+                                    for t in env["eguitra.rh.qualification.type"].with_context(active_test=False).search([])],
+            "ppe_items": options(PPE_ITEMS),
             "employees": [dict(emp_ref(e), company_id=e.company_id.id) for e in actives],
             "users": [{"id": u.id, "name": u.name, "login": u.login,
                        "company_ids": [c for c in u.company_ids.ids if c in companies.ids]} for u in users],
@@ -300,7 +328,8 @@ class EguitraRh(http.Controller):
                 if value and value not in allowed:
                     raise ApiError(400, "invalid_parameter", f"Valeur inconnue : {key}.")
                 values[key] = value
-        for key in ("hire_date", "contract_end", "trial_end", "birth_date", "leave_initial_date"):
+        for key in ("hire_date", "contract_end", "trial_end", "birth_date", "leave_initial_date",
+                    "medical_fitness_date", "medical_fitness_until"):
             if key in data:
                 values[key] = date_value(data, key)
         for key in ("base_salary", "leave_initial"):
@@ -532,7 +561,8 @@ class EguitraRh(http.Controller):
                 target[key] = number(data, key)
                 if target[key] < 0:
                     raise ApiError(422, "business_rule", "Les taux et montants des paramètres sont positifs.")
-        for key in ("trial_alert_days", "contract_alert_days", "document_alert_days"):
+        for key in ("trial_alert_days", "contract_alert_days", "document_alert_days", "qualification_alert_days",
+                    "qualification_urgent_days"):
             if key in data:
                 values[key] = int(number(data, key))
         for key in ("training_tax_label", "cnss_employer_number"):
@@ -723,6 +753,7 @@ def _settings_row(s):
         "training_tax_label": s.training_tax_label or "", "leave_days_per_month": s.leave_days_per_month,
         "monthly_hours": s.monthly_hours, "rotation_bonus": s.rotation_bonus, "trial_alert_days": s.trial_alert_days,
         "contract_alert_days": s.contract_alert_days, "document_alert_days": s.document_alert_days,
+        "qualification_alert_days": s.qualification_alert_days, "qualification_urgent_days": s.qualification_urgent_days,
         "cnss_employer_number": s.cnss_employer_number or None,
         "accounts": {"salary": s.account_salary or "", "social_charges": s.account_social_charges or "",
                      "payroll_taxes": s.account_payroll_taxes or "", "training_tax": s.account_training_tax or "",
