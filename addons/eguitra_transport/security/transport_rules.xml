@@ -40,6 +40,11 @@
         <field name="model_id" ref="model_eguitra_transport_vehicle_charge"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_vehicle_document_company" model="ir.rule">
+        <field name="name">Documents des ensembles : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_vehicle_document"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_share_rule_company" model="ir.rule">
         <field name="name">Règles de répartition : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_transport_share_rule"/>
