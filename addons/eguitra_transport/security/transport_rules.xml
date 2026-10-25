@@ -25,6 +25,11 @@
         <field name="model_id" ref="model_eguitra_transport_product"/>
         <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_tariff_company" model="ir.rule">
+        <field name="name">Tarifs des clients : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_tariff"/>
+        <field name="domain_force">[('route_id.company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_tax_company" model="ir.rule">
         <field name="name">Taxes spécifiques : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_transport_tax"/>
@@ -38,6 +43,11 @@
     <record id="rule_vehicle_charge_company" model="ir.rule">
         <field name="name">Charges des ensembles : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_transport_vehicle_charge"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_vehicle_document_company" model="ir.rule">
+        <field name="name">Documents des ensembles : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_vehicle_document"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
     <record id="rule_share_rule_company" model="ir.rule">

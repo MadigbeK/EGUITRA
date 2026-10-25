@@ -7,6 +7,8 @@ AUDITED_MODELS = [
     "eguitra.transport.rotation", "eguitra.transport.tariff", "eguitra.transport.product", "eguitra.transport.tax",
     "eguitra.transport.vehicle.charge", "eguitra.transport.share.rule", "eguitra.transport.owner.statement",
     "eguitra.transport.fuel.price", "eguitra.transport.rotation.tax", "eguitra.transport.owner.statement.line",
+    "eguitra.transport.official.scale", "eguitra.transport.official.rate",
+    "eguitra.transport.vehicle.document",
 ]
 
 

@@ -75,7 +75,8 @@ class EguitraTransportRotation(models.Model):
                               help="Généré par l'application mobile : une saisie synchronisée deux fois n'est créée qu'une fois.")
     source = fields.Selection([("office", "Bureau"), ("mobile", "Application mobile")], default="office")
     state = fields.Selection(
-        [("draft", "Saisie"), ("done", "Validée"), ("invoiced", "Facturée"), ("cancelled", "Annulée")],
+        [("draft", "Saisie"), ("en_route", "En route"), ("done", "Validée"), ("invoiced", "Facturée"),
+         ("cancelled", "Annulée")],
         default="draft", required=True, index=True,
     )
     date_loading = fields.Date("Chargement", required=True, default=fields.Date.context_today)
@@ -360,11 +361,13 @@ class EguitraTransportRotation(models.Model):
 
     def _apply_tax_rules(self):
         """Lignes de taxe du barème en vigueur à la date de chargement (rotations saisies ou validées)."""
-        rotations = self.filtered(lambda r: r.state in ("draft", "done"))
+        rotations = self.filtered(lambda r: r.state in ("draft", "en_route", "done"))
         if not rotations:
             return
-        Line = self.env["eguitra.transport.rotation.tax"]
-        rotations.tax_line_ids.unlink()
+        # Lignes calculées par le barème des taxes, jamais saisies : le système les recalcule (le droit de
+        # modifier la rotation est déjà vérifié ; le parc ne supprime pas lui-même de ligne de taxe).
+        Line = self.env["eguitra.transport.rotation.tax"].sudo()
+        rotations.tax_line_ids.sudo().unlink()
         rules = self.env["eguitra.transport.tax"].search([("company_id", "in", rotations.company_id.ids)])
         values = [
             tax._line_vals(rot)
@@ -403,7 +406,7 @@ class EguitraTransportRotation(models.Model):
 
     def action_validate(self):
         for rot in self:
-            if rot.state != "draft":
+            if rot.state not in ("draft", "en_route"):
                 continue
             # Décision du gérant (22/10/2026) : une rotation est validée par un autre compte que celui qui
             # l'a saisie, car elle fonde les manquants imputés aux chauffeurs. La reprise et les tâches du
