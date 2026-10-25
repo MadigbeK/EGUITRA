@@ -22,7 +22,7 @@ umask 022  # le code figé doit rester lisible par l'utilisateur odoo des conten
 
 RELEASES=releases
 KEEP=5
-MODULES=eguitra_base,eguitra_api,eguitra_finance,eguitra_approval,eguitra_transport,eguitra_chantier,eguitra_immobilier,eguitra_axispro,eguitra_analytics,eguitra_portail,eguitra_rh
+MODULES=eguitra_base,eguitra_api,eguitra_finance,eguitra_approval,eguitra_transport,eguitra_chantier,eguitra_immobilier,eguitra_axispro,eguitra_analytics,eguitra_portail,eguitra_rh,eguitra_hsseq
 mkdir -p "$RELEASES" ../logs
 
 current() { readlink "$RELEASES/current" 2>/dev/null || true; }
