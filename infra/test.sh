@@ -46,9 +46,21 @@ LOG=$(mktemp)
 "${ODOO[@]}" "${CONF[@]}" -d "$CI" --db-filter "^$CI\$" -u "$MODS" --test-enable --test-tags "${TAGS%,}" \
   --stop-after-init --workers 0 --log-level=test 2>&1 | tee -a "$LOG" | grep -E " (ERROR|CRITICAL) |FAIL|Ran |tests? in " || true
 
-if grep -qE " (ERROR|CRITICAL) " "$LOG"; then
+# Le verdict s'arrête à la ligne de résultat des tests : les erreurs écrites ensuite viennent des
+# requêtes reçues pendant l'arrêt du serveur de test (contrôle de santé du conteneur, curseur déjà
+# fermé) et ne disent rien des modules. Sans ligne de résultat, les tests n'ont pas tourné.
+FIN=$(grep -n "odoo.tests.result:" "$LOG" | tail -1 | cut -d: -f1)
+if [ -z "$FIN" ]; then
+  echo "ÉCHEC : aucun résultat de tests (journal complet : $LOG)"
+  exit 1
+fi
+if head -n "$FIN" "$LOG" | grep -qE " (ERROR|CRITICAL) " \
+  || ! sed -n "${FIN}p" "$LOG" | grep -qE " 0 failed, 0 error\(s\) of "; then
   echo "ÉCHEC : voir les erreurs ci-dessus (journal complet : $LOG)"
   exit 1
+fi
+if tail -n "+$((FIN + 1))" "$LOG" | grep -qE " (ERROR|CRITICAL) "; then
+  echo "(erreurs après la fin des tests, à l'arrêt du serveur de test : sans effet sur le verdict)"
 fi
 echo "SUCCÈS : $(grep -cE 'Starting .*\.test_' "$LOG") tests exécutés sans erreur"
 rm -f "$LOG"
