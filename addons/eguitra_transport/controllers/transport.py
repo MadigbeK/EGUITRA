@@ -908,7 +908,12 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/sync", methods=("POST",), profiles=WRITE)
     def sync(self, **_kw):
-        """Rotations saisies hors réseau : chaque saisie porte un identifiant unique (idempotence)."""
+        """Rotations saisies hors réseau : chaque saisie porte un identifiant unique (idempotence).
+
+        Une saisie déjà reçue répond « exists », sauf si le téléphone la renvoie corrigée (« correction » :
+        l'agent l'a modifiée après un premier envoi dont la réponse s'est perdue, ou pendant un envoi) : le
+        brouillon est alors mis à jour (« updated ») s'il est encore en saisie, saisi par ce compte et pas
+        retouché au bureau depuis ; sinon il reste tel quel et le bureau le corrige depuis sa fiche."""
         items = read_json().get("rotations") or []
         if not isinstance(items, list) or len(items) > MAX_SYNC:
             raise ApiError(400, "invalid_parameter", f"Liste de rotations invalide ({MAX_SYNC} au plus par envoi).")
@@ -925,7 +930,7 @@ class EguitraTransport(http.Controller):
             # Recherche sous les droits de l'agent : une saisie d'une autre société n'est pas révélée.
             existing = Rotation.search([("client_uuid", "=", uuid)], limit=1)
             if existing:
-                results.append({"client_uuid": uuid, "status": "exists", "id": existing.id})
+                results.append(self._sync_existing(existing, item, uuid))
                 continue
             missing = [k for k in ("vehicle_id", "partner_id", "route_id") if not item.get(k)]
             if missing:
@@ -945,3 +950,33 @@ class EguitraTransport(http.Controller):
                 _logger.exception("Synchronisation mobile : saisie %s rejetée", uuid)
                 results.append({"client_uuid": uuid, "status": "error", "message": "Saisie invalide."})
         return {"results": results}
+
+    def _sync_existing(self, rot, item, uuid):
+        """Réponse à une saisie déjà reçue (voir sync) : « exists », ou correction du brouillon de son auteur."""
+        exists = {"client_uuid": uuid, "status": "exists", "id": rot.id, "state": rot.state}
+        if not item.get("correction"):
+            return exists
+        user = request.env.user
+        # Retouchée au bureau (dernière écriture d'un autre compte), validée, facturée ou annulée, ou saisie
+        # par un autre compte : la correction du téléphone n'écrase rien.
+        if rot.state != "draft" or rot.create_uid != user or rot.write_uid != user:
+            return dict(exists, message="Déjà reçue au bureau, qui l'a traitée ou modifiée : la correction n'y est "
+                                        "pas portée. Faites corriger la rotation au bureau, depuis sa fiche.")
+        if any(not item.get(k) for k in ("vehicle_id", "partner_id", "route_id")):
+            return {"client_uuid": uuid, "status": "error", "message": "Ensemble, client et route sont obligatoires."}
+        try:
+            with request.env.cr.savepoint():
+                before = (rot.partner_id, rot.route_id, rot.product_id, rot.vehicle_id)
+                rot.write(_rotation_values(item))
+                # Comme à la création : tarif du client et de la route, chauffeur habituel de l'ensemble.
+                if (rot.partner_id, rot.route_id, rot.product_id) != before[:3]:
+                    rot.rate = rot.route_id._rate_for(rot.partner_id, rot.product_id)
+                if rot.vehicle_id != before[3] and not item.get("driver_id"):
+                    rot.driver_id = rot.vehicle_id.driver_id
+        except (ApiError, UserError, ValidationError) as e:
+            message = e.message if isinstance(e, ApiError) else str(e.args[0])
+            return {"client_uuid": uuid, "status": "error", "message": message}
+        except Exception:  # noqa: BLE001 - une correction défectueuse ne bloque pas les autres saisies
+            _logger.exception("Synchronisation mobile : correction de la saisie %s rejetée", uuid)
+            return {"client_uuid": uuid, "status": "error", "message": "Correction invalide."}
+        return {"client_uuid": uuid, "status": "updated", "id": rot.id}
