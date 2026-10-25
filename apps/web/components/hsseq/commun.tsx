@@ -94,6 +94,15 @@ const TON_CRITICITE: Readonly<Record<string, TonEtat>> = {
 /** Mots propres à HSSEQ absents de ETAT_TON. */
 const TON_HSSEQ: Readonly<Record<string, TonEtat>> = {
   "Non classé": "neutral",
+  // Cockpit et paramètres.
+  "Sous surveillance": "warn",
+  "Sous 7 jours": "warn",
+  "Sans donnée": "neutral",
+  "Inactif": "neutral",
+  // Plan d'actions et contrôles.
+  "Escaladée": "danger",
+  "Photo manquante": "warn",
+  "Photos manquantes": "warn",
   // Événements.
   Déclaré: "warn",
   Classé: "neutral",

@@ -5611,6 +5611,30 @@ route("POST", "/transport/rotations/validate", TR_WRITE, (ctx) => {
   for (const rot of rots) validateRotation(rot);
   return rots.map(rotationRow);
 });
+/**
+ * Départ d'une rotation (contrat HSSEQ, §9 et décision 1) : état « en_route », réservé au chef de parc
+ * (exploitation, sites de la rotation). Le verrou s'évalue comme POST /hsseq/lock/evaluate (hsEvaluate) :
+ * un motif « block » ouvert sans dérogation active refuse le départ en 422 departure_blocked, avec les
+ * blockers (avertissements compris). Déclarée avant /:action, qui prendrait sinon « depart ».
+ */
+route("POST", "/transport/rotations/:id/depart", ["exploitation"], (ctx) => {
+  const rot = hsRotation(ctx.params[0]);
+  if (!rot) throw notFound("Rotation introuvable.");
+  const v = hsVehicle(rot.vehicle_id);
+  if (!v || !hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Seul un chef de parc du site de la rotation la fait partir.");
+  if (rot.state === "en_route") throw hsRule("invalid_transition", "La rotation est déjà en route.");
+  if (rot.state !== "draft") throw hsRule("invalid_transition", "Seule une rotation prévue, pas encore partie ni validée, peut partir.");
+  const evaluation = hsEvaluate(ctx, rot);
+  if (!evaluation.allowed) {
+    const blockers = evaluation.reasons.filter((r) => !r.waiver_id).map(({ code, label, source, since, waivable, severity }) => ({ code, label, source, since, waivable, severity }));
+    const codes = blockers.filter((b) => b.severity === "block").map((b) => b.code).join(", ");
+    throw hsRule("departure_blocked", `Départ refusé par le verrou : ${codes}.`, { blockers });
+  }
+  rot.state = "en_route";
+  rot.departed_at = hsNow();
+  if (DB.rotations.includes(rot)) return rotationRow(rot);
+  return { id: rot.id, name: rot.name, state: rot.state, date_loading: rot.date_loading, vehicle: hsVehicleRef(v.id), driver: hsDriverRef(rot.driver_id), route_name: hsRouteName(rot), departed_at: rot.departed_at };
+});
 route("POST", "/transport/rotations/:id/:action", TR_WRITE, (ctx) => {
   const rot = rotationOf(ctx, ctx.params[0]);
   const action = ctx.params[1];
@@ -6541,6 +6565,8 @@ const HS_FIELD = ["hsseq", "exploitation", "conducteur"];
 const HS_SETUP = ["admin", "hsseq"];
 /** Seuil d'une action coûteuse, validée par la direction avant démarrage (décision 8). */
 const HS_COSTLY = 50_000_000;
+/** Fenêtres du rattachement automatique d'une saisie à la rotation (heures), paramétrables. */
+const HS_WINDOWS = { check_window_hours: 12, breath_test_window_hours: 4 };
 /** Sites de rattachement des comptes d'exploitation (absent : tous les sites). */
 const HS_USER_SITES = { 12: [1], 18: [2] };
 /** Salariés RH liés à un compte conducteur (employee.user_id, employee.driver_id). */
@@ -6762,8 +6788,40 @@ function hsReason(code, since, detail, pending = false) {
   const s = hsReasonSetting(code);
   return { code, label: s.label, source: s.source, since, waivable: s.waivable, detail, resolution: s.resolution, severity: "block", pending, waiver_id: null };
 }
+/**
+ * Rattachement automatique (§9 du contrat) : à l'évaluation d'une rotation pas encore partie, le
+ * dernier contrôle avant départ du véhicule et le dernier alcootest du conducteur saisis sans rotation
+ * dans leur fenêtre (12 h, 4 h) lui sont rattachés. Une saisie rattachée ne compte jamais pour une autre.
+ */
+function hsAutoAttach(ctx, rot) {
+  if (!["draft", "en_route"].includes(rot.state)) return;
+  const ref = rot.date_loading === TODAY ? hsNow() : `${rot.date_loading}T23:59:59Z`;
+  const within = (at, hours) => at <= ref && Date.parse(ref) - Date.parse(at) <= hours * 3600000;
+  const latest = (list) => list.sort((a, b) => b.reported_at.localeCompare(a.reported_at))[0];
+  if (!HS.checks.some((c) => c.rotation_id === rot.id && c.kind === "pre_departure")) {
+    const c = latest(HS.checks.filter((x) => x.rotation_id === null && x.kind === "pre_departure" && x.vehicle_id === rot.vehicle_id && within(x.reported_at, HS_WINDOWS.check_window_hours)));
+    if (c) {
+      c.rotation_id = rot.id;
+      for (const n of HS.ncs.filter((x) => x.check_id === c.id)) n.rotation_id = rot.id;
+      hsLog("check", c.id, ctx.user.id, "Rattachement automatique à la rotation", "rotation_id", null, rot.id);
+    }
+  }
+  if (!HS.tests.some((t) => t.rotation_id === rot.id && t.driver_id === rot.driver_id)) {
+    const t = latest(HS.tests.filter((x) => x.rotation_id === null && x.driver_id === rot.driver_id && within(x.reported_at, HS_WINDOWS.breath_test_window_hours)));
+    if (t) {
+      t.rotation_id = rot.id;
+      hsLog("breath_test", t.id, ctx.user.id, "Rattachement automatique à la rotation", "rotation_id", null, rot.id);
+    }
+  }
+}
+/** Toutes les reasons ouvertes (bloquantes, sans dérogation) sont des saisies de terrain à faire. */
+function hsPendingOnly(evaluation) {
+  const open = evaluation.reasons.filter((x) => x.severity === "block" && !x.waiver_id);
+  return open.length > 0 && open.every((x) => x.pending);
+}
 /** Évaluation du §4.2 : motifs V01 à V05 actifs pour le type du véhicule et le site. */
 function hsEvaluate(ctx, rot) {
+  hsAutoAttach(ctx, rot);
   const v = hsVehicle(rot.vehicle_id);
   const kind = hsKind(v);
   const site = hsVehicleSite(v);
@@ -6805,14 +6863,15 @@ function hsEvaluate(ctx, rot) {
   };
 }
 function hsDepartures(ctx, day, q) {
+  // Une rotation partie (en_route) ne figure plus parmi les départs à autoriser.
   const items = hsDepartureRotations(day)
+    .filter((r) => r.state !== "en_route")
     .map((r) => ({ r, v: hsVehicle(r.vehicle_id) }))
     .filter(({ v }) => v && hsFilter(ctx, q, hsVehicleSite(v), hsKind(v)) && hsSiteOk(ctx, hsVehicleSite(v)))
     .sort((a, b) => a.v.name.localeCompare(b.v.name))
     .map(({ r, v }) => {
       const evaluation = hsEvaluate(ctx, r);
-      const open = evaluation.reasons.filter((x) => x.severity === "block" && !x.waiver_id);
-      return { rotation: hsRotationRef(r), vehicle: hsVehicleRef(v.id), driver: hsDriverRef(r.driver_id), site: hsSiteRef(hsVehicleSite(v)), evaluation, pending_checks_only: open.length > 0 && open.every((x) => x.pending) };
+      return { rotation: hsRotationRef(r), vehicle: hsVehicleRef(v.id), driver: hsDriverRef(r.driver_id), site: hsSiteRef(hsVehicleSite(v)), evaluation, pending_checks_only: hsPendingOnly(evaluation) };
     });
   const blocked = items.filter((i) => !i.evaluation.allowed);
   return { date: day, total: items.length, allowed: items.length - blocked.length, blocked: blocked.length, items: q.blocked === "1" ? blocked : items };
@@ -7569,6 +7628,7 @@ route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
     owners: owners.map((u) => ({ id: u.id, name: u.name })),
     criticality_thresholds: HS_LEVELS,
     costly_action_threshold: HS_COSTLY,
+    ...HS_WINDOWS,
     me: { profiles: ctx.user.profiles.filter((p) => HS_APP.includes(p)), site_ids: hsSites(ctx), employee_id: hsEmployee(ctx)?.id ?? null, driver_id: hsMyDriver(ctx) },
   };
 });
@@ -8105,6 +8165,24 @@ route("POST", "/hsseq/lock/evaluate", ["admin", "direction", "hsseq", "exploitat
   if (!rot) throw notFound("Rotation introuvable.");
   if (!hasProfile(ctx, HS_READ) && rot.driver_id !== hsMyDriver(ctx)) throw hsForbidden("Un conducteur n'évalue que ses propres rotations.");
   return hsEvaluate(ctx, rot);
+});
+/** Rotations du jour (draft, en_route) du compte : le conducteur les siennes, le chef de parc celles de ses sites. */
+route("GET", "/hsseq/me/rotations", ["admin", "hsseq", "exploitation", "conducteur"], (ctx) => {
+  const day = dateArg(ctx.query, "date", TODAY);
+  const all = hasProfile(ctx, ["admin", "hsseq"]);
+  const driver = hsMyDriver(ctx);
+  return hsDepartureRotations(day)
+    .filter((r) => ["draft", "en_route"].includes(r.state))
+    .map((r) => ({ r, v: hsVehicle(r.vehicle_id) }))
+    .filter(({ r, v }) => v && (all || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, hsVehicleSite(v))) || (driver !== null && r.driver_id === driver)))
+    .sort((a, b) => a.v.name.localeCompare(b.v.name))
+    .map(({ r, v }) => {
+      const evaluation = hsEvaluate(ctx, r);
+      return {
+        id: r.id, name: r.name, date_loading: r.date_loading, state: r.state, vehicle: { id: v.id, name: v.name, vehicle_kind: hsKind(v) }, site: hsSiteRef(hsVehicleSite(v)),
+        lock: { allowed: evaluation.allowed, pending_checks_only: hsPendingOnly(evaluation), reasons: evaluation.reasons },
+      };
+    });
 });
 route("GET", "/hsseq/lock/departures", HS_READ, (ctx) => {
   const day = dateArg(ctx.query, "date", TODAY);

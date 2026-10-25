@@ -120,6 +120,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/transport", label: "Tableau de bord", icon: "LayoutDashboard" },
         { href: "/transport/rotations", label: "Rotations", icon: "Truck" },
+        // Verrou de départ HSSEQ : le noyau répond 403 aux autres profils.
+        { href: "/transport/departs", label: "Départs du jour", icon: "Lock", profiles: ["admin", "direction", "exploitation"] },
         { href: "/transport/manquants", label: "Manquants", icon: "Droplet" },
       ],
     },
@@ -221,7 +223,12 @@ export const NAV: Record<AppCode, NavSection[]> = {
         // Tout compte interne responsable d'une action la met à jour, droits renvoyés par la fiche.
         { href: "/hsseq/actions", label: "Plan d'actions", icon: "ListChecks", profiles: HSSEQ },
         { href: "/hsseq/controles", label: "Contrôles", icon: "ShieldCheck", profiles: HSSEQ },
+        { href: "/hsseq/derogations", label: "Dérogations", icon: "BadgeCheck", profiles: HSSEQ },
       ],
+    },
+    {
+      label: "Administration",
+      items: [{ href: "/hsseq/parametres", label: "Paramètres", icon: "SlidersHorizontal", profiles: ["admin", "hsseq"] }],
     },
   ],
 };

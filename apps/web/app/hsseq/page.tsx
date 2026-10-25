@@ -1,10 +1,18 @@
-import { PageHeader } from "@/components/ui";
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Cockpit } from "@/components/hsseq/cockpit/Cockpit";
+import { Loading } from "@/components/ui";
 
-/** Cockpit de NIMOVA · HSSEQ : place provisoire, en attendant l'écran du lot 1. */
+export const metadata: Metadata = { title: "Cockpit" };
+
+/**
+ * Cockpit de NIMOVA · HSSEQ (lot 1). Les filtres sont lus dans l'adresse de la page : le cockpit
+ * attend qu'elle soit connue avant son premier rendu.
+ */
 export default function Page() {
   return (
-    <div>
-      <PageHeader title="Cockpit HSSEQ" subtitle="En préparation." />
-    </div>
+    <Suspense fallback={<Loading label="Chargement du cockpit…" />}>
+      <Cockpit />
+    </Suspense>
   );
 }

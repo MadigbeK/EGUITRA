@@ -867,6 +867,7 @@ const PAR_ADRESSE: Record<string, string> = {
   "/transport/flotte": "tr-flotte",
   "/transport/routes": "tr-routes",
   "/transport/parametres": "tr-parametres",
+  "/transport/departs": "clotures",
   "/finance/chantiers": "chantiers",
   "/finance/immobilier": "immobilier",
   "/axispro": "dossiers",
@@ -916,6 +917,8 @@ const PAR_ADRESSE: Record<string, string> = {
   "/hsseq/evenements": "hs-evenements",
   "/hsseq/actions": "hs-actions",
   "/hsseq/controles": "hs-controles",
+  "/hsseq/derogations": "valider",
+  "/hsseq/parametres": "parametres",
 };
 
 export function IconeModule({ cle, className }: { cle: string; className?: string }) {
