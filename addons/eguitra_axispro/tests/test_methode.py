@@ -463,7 +463,8 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertIn("SOMMAIRE.csv", archive.namelist())
         self.assertTrue(any(n.startswith("A. Foncier/D001_") for n in archive.namelist()), archive.namelist())
         # En test, le noyau rend les rapports en HTML (sans wkhtmltopdf) : le gabarit est exercé.
-        for path, text in (("report.pdf", "Recommandation"), ("pieces.pdf", "Pièces attendues")):
+        policy = f"{self.dossier.policy_id.name}, version {self.dossier.policy_id.version}"
+        for path, text in (("report.pdf", "Recommandation"), ("pieces.pdf", "Pièces attendues"), ("pieces.pdf", policy)):
             response = self.url_open(f"/api/v1/axispro/dossiers/{self.dossier.id}/{path}", headers=headers, timeout=60)
             self.assertEqual(response.status_code, 200, response.text[:500])
             self.assertIn(text, response.content.decode(errors="ignore"), path)
