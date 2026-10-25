@@ -122,6 +122,34 @@ for emp, kind, label, expiry in [(drivers[0], "permis", "Permis C", TODAY + time
     if not emp.document_ids.filtered(lambda d, label=label: d.name == label):
         env["eguitra.rh.document"].create({"employee_id": emp.id, "kind": kind, "name": label, "expiry_date": expiry})
 
+# Habilitations, aptitude (statut seul) et EPI des chauffeurs, pour la matrice et le verrou V04 d'HSSEQ :
+# Alpha Diallo à jour, Mamady Keïta avec la conduite défensive à renouveler et l'aptitude à revoir sous
+# 7 jours, Ousmane Bangoura avec les matières dangereuses expirées (départ refusé).
+Driver = env["eguitra.transport.driver"]
+QualType = {t.code: t for t in env["eguitra.rh.qualification.type"].search([])}
+for index, emp in enumerate(drivers):
+    if not emp.driver_id:
+        emp.driver_id = (Driver.search([("company_id", "=", groupe.id), ("name", "=", emp.name)], limit=1)
+                         or Driver.create({"company_id": groupe.id, "name": emp.name}))
+    if not emp.qualification_ids:
+        plan = {
+            0: {"PERMIS": 900, "CONDUITE_DEFENSIVE": 400, "MATIERES_DANGEREUSES": 1200, "SECOURISME": 300},
+            1: {"PERMIS": 700, "CONDUITE_DEFENSIVE": 20, "MATIERES_DANGEREUSES": 800},
+            2: {"PERMIS": 1500, "CONDUITE_DEFENSIVE": 500, "MATIERES_DANGEREUSES": -12, "ACCES_SITE_MINIER": 60},
+        }[index]
+        for code, days in plan.items():
+            env["eguitra.rh.qualification"].create({
+                "employee_id": emp.id, "type_id": QualType[code].id, "obtained_date": TODAY - relativedelta(years=2),
+                "expiry_date": TODAY + timedelta(days=days), "reference": f"{code[:3]}-{emp.matricule}",
+                "issuer": "Démonstration"})
+    if not emp.medical_fitness:
+        emp.write({"medical_fitness": "apte", "medical_fitness_date": TODAY - relativedelta(months=11),
+                   "medical_fitness_until": TODAY + timedelta(days=(200, 6, 150)[index])})
+    if not emp.ppe_issue_ids:
+        for item in ("casque", "chaussures", "gilet"):
+            env["eguitra.rh.ppe.issue"].create({"employee_id": emp.id, "item": item, "date": TODAY - relativedelta(months=4),
+                                                "renewal_date": TODAY + relativedelta(months=8), "acknowledged": True})
+
 # ─── MB AxisPro Consulting ─────────────────────────────────────────────────────────
 
 cabinet_d = department(cabinet, "Conseil et accompagnement")
@@ -166,6 +194,9 @@ leave(conducteur, "PERM", monday + timedelta(days=8), monday + timedelta(days=8)
 previous = TODAY.replace(day=1) - relativedelta(months=1)
 leave(drivers[2], "ABSI", previous + timedelta(days=(7 - previous.weekday()) % 7 + 2),
       previous + timedelta(days=(7 - previous.weekday()) % 7 + 2))
+# Accident du travail du mois précédent (taux de fréquence et de gravité d'HSSEQ).
+leave(chef_parc, "AT", previous + timedelta(days=(7 - previous.weekday()) % 7 + 1),
+      previous + timedelta(days=(7 - previous.weekday()) % 7 + 3))
 
 if not env["eguitra.rh.advance"].search_count([("employee_id", "=", drivers[2].id)]):
     env["eguitra.rh.advance"].create({"employee_id": drivers[2].id, "kind": "avance", "amount": 1_200_000,

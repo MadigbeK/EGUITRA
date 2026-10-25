@@ -95,6 +95,9 @@ export interface Meta {
   payment_methods: Option<PaymentMethod>[];
   exit_reasons: Option<ExitReason>[];
   document_kinds: Option<DocumentKind>[];
+  /** Référentiel des habilitations (HSSEQ). */
+  qualification_types: QualificationType[];
+  ppe_items: Option<PpeItem>[];
   /** Salariés actifs des deux sociétés (choix du responsable hiérarchique, qui peut être de l'autre société). */
   employees: Array<Ref & { matricule: string; company_id: number }>;
   /** Comptes NIMOVA internes ; company_ids : sociétés auxquelles chacun est ouvert (un compte se lie à un salarié d'une de ces sociétés). */
@@ -188,6 +191,13 @@ export interface Employee extends EmployeeRow {
   leaves: Leave[];
   payslips: PayslipRow[];
   advances: Advance[];
+  /** Aptitude médicale en statut seul (jamais de détail médical). */
+  fitness: Fitness;
+  /** Habilitations saisies (toutes, y compris remplacées). */
+  qualifications: Qualification[];
+  /** Statut par type : la plus récente de chaque type, plus les obligatoires absentes d'un conducteur. */
+  qualification_status: QualificationStatus[];
+  ppe: PpeIssue[];
 }
 
 /** Corps de POST /rh/employees et PATCH /rh/employees/<id> (champs partiels en PATCH). */
@@ -231,6 +241,10 @@ export interface EmployeeInput {
   note?: string | null;
   /** Motif d'un changement du salaire de base (historique). */
   salary_reason?: string | null;
+  /** Aptitude médicale : statut seul, date de la visite et date de validité. */
+  medical_fitness?: FitnessStatus | null;
+  medical_fitness_date?: string | null;
+  medical_fitness_until?: string | null;
 }
 
 /* ─── Absences : GET /rh/leaves, GET /rh/leaves/balances ──────────────── */
@@ -443,6 +457,9 @@ export interface Settings {
   trial_alert_days: number;
   contract_alert_days: number;
   document_alert_days: number;
+  /** Alertes des habilitations et aptitudes : J-30 (à renouveler) et J-7 (urgente). */
+  qualification_alert_days: number;
+  qualification_urgent_days: number;
   cnss_employer_number: string | null;
   accounts: {
     salary: string;
@@ -463,7 +480,7 @@ export interface Holiday { id: number; date: string; name: string }
 /* ─── Tableau de bord : GET /rh/summary ───────────────────────────────── */
 
 export interface RhAlert {
-  kind: "trial_end" | "contract_end" | "document" | "leave_balance" | "payroll" | "missing_data" | "birthday" | "anniversary";
+  kind: "trial_end" | "contract_end" | "document" | "leave_balance" | "payroll" | "missing_data" | "birthday" | "anniversary" | "qualification" | "fitness";
   severity: AlertSeverity;
   date: string | null;
   employee: Ref | null;
@@ -531,4 +548,121 @@ export interface MySpace {
   team_upcoming: Leave[];
   /** Le compte gère-t-il aussi l'espace RH (profil RH, direction, administration) ? */
   manages_rh: boolean;
+  /** Ses habilitations par type et son statut d'aptitude (le conducteur les consulte, sans les modifier). */
+  qualifications: QualificationStatus[];
+  fitness: Fitness | null;
+}
+
+/* ─── Habilitations, aptitude, EPI (données lues par NIMOVA · HSSEQ) ─────── */
+
+export type QualificationState = "valide" | "a_renouveler" | "expiree" | "absente";
+export const QUALIFICATION_STATE_LABELS: Record<QualificationState, string> = {
+  valide: "Valide", a_renouveler: "À renouveler", expiree: "Expirée", absente: "Absente",
+};
+/** apte_reserve : apte avec réserve, sans détail (la réserve reste chez le médecin). */
+export type FitnessStatus = "apte" | "apte_reserve" | "inapte";
+/** echue : aptitude dépassée ; a_renouveler : visite à programmer (J-30) ; inconnu : non renseignée. */
+export type FitnessState = "apte" | "apte_reserve" | "a_renouveler" | "inapte" | "echue" | "inconnu";
+export type PpeItem = "casque" | "chaussures" | "gants" | "gilet" | "lunettes" | "combinaison" | "masque" | "bouchons" | "harnais" | "autre";
+
+export interface QualificationType {
+  id: number;
+  code: string;
+  name: string;
+  /** 0 : sans échéance. Propose l'expiration (obtention + durée) à la saisie. */
+  validity_months: number;
+  /** Absente ou expirée : le conducteur ne peut pas partir (verrou V04 d'HSSEQ). */
+  mandatory_for_drivers: boolean;
+  needs_document: boolean;
+  active: boolean;
+}
+
+export interface Qualification {
+  id: number;
+  employee: Ref & { matricule: string };
+  type: Ref & { code: string };
+  obtained_date: string | null;
+  expiry_date: string | null;
+  reference: string | null;
+  issuer: string | null;
+  note: string | null;
+  has_file: boolean;
+  state: QualificationState;
+}
+
+/** Corps de POST /rh/qualifications (PATCH : mêmes champs sauf employee_id et type_id). */
+export interface QualificationInput {
+  employee_id: number;
+  type_id: number;
+  obtained_date?: string | null;
+  /** Vide : obtention + durée de validité du type. */
+  expiry_date?: string | null;
+  reference?: string | null;
+  issuer?: string | null;
+  note?: string | null;
+}
+
+export interface QualificationStatus {
+  code: string;
+  name: string;
+  mandatory: boolean;
+  state: QualificationState;
+  expiry: string | null;
+  qualification_id: number | null;
+}
+
+export interface Fitness {
+  status: FitnessStatus | null;
+  state: FitnessState;
+  date: string | null;
+  until: string | null;
+}
+
+export interface PpeIssue {
+  id: number;
+  employee: Ref & { matricule: string };
+  item: PpeItem;
+  description: string | null;
+  size: string | null;
+  quantity: number;
+  date: string;
+  renewal_date: string | null;
+  acknowledged: boolean;
+  note: string | null;
+}
+
+/** GET /rh/qualifications/matrix?drivers_only=1|0&company_id= */
+export interface QualificationMatrix {
+  types: QualificationType[];
+  rows: Array<{
+    employee: Ref & { matricule: string; company_id: number };
+    driver: Ref | null;
+    fitness: Fitness;
+    /** Par code de type ; un code absent : aucune habilitation de ce type. */
+    cells: Record<string, { state: QualificationState; expiry: string | null; id: number | null }>;
+    /** Conducteur dont le départ serait refusé (motif V04 d'HSSEQ), et pourquoi. */
+    blocking: boolean;
+    reasons: string[];
+  }>;
+}
+
+/** GET /rh/safety?date_from=&date_to=&company_id= (12 mois glissants par défaut). */
+export interface SafetySummary {
+  date_from: string;
+  date_to: string;
+  worked_hours: number;
+  /** paid : heures payées des bulletins validés ; presence : estimation par la présence (pas de pointage). */
+  hours_basis: "paid" | "presence";
+  accidents: number;
+  lost_days: number;
+  /** Accidents du travail avec arrêt × 1 000 000 ÷ heures travaillées. */
+  frequency_rate: number | null;
+  /** Jours perdus × 1 000 ÷ heures travaillées. */
+  severity_rate: number | null;
+  drivers: number;
+  drivers_up_to_date: number;
+  /** Conducteurs actifs sans motif V04 ÷ conducteurs actifs, en %. */
+  up_to_date_rate: number | null;
+  /** Habilitations et aptitudes qui expirent dans les 30 jours ou sont expirées. */
+  expiring: Array<{ employee: Ref & { matricule: string }; employee_id: number; driver_id: number | null; kind: "qualification" | "fitness"; code: string; name: string; expiry: string; days_left: number }>;
 }
