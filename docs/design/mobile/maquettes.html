@@ -1,0 +1,1300 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NIMOVA Terrain, maquettes HSSEQ</title>
+<!-- Seule ressource externe : les deux polices de la charte (repli système si elles manquent). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@600;700;800&family=Funnel+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/*
+ * Maquettes cliquables de NIMOVA Terrain (Expo, Android d'abord), parcours HSSEQ.
+ * Système : docs/design/mobile/systeme-terrain.md. Les mesures sont en dp (1 px CSS = 1 dp ici) :
+ * téléphone 390 × 844, tablette 1024 × 768, barres système Android comprises.
+ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:"Funnel Sans","Segoe UI",system-ui,sans-serif;background:#e4eae6;color:#10241f;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ─── Page de présentation (hors système) ─────────────────────────────── */
+.page{display:grid;grid-template-columns:292px minmax(0,1fr);min-height:100vh}
+.menu{position:sticky;top:0;height:100vh;overflow:auto;background:#142f29;color:#dfe9e3;padding:20px 14px 28px}
+.marque{display:flex;gap:12px;align-items:center;margin:0 4px 18px}
+.marque b{display:block;font:700 18px/1.15 "Funnel Display","Funnel Sans",sans-serif;color:#fff}
+.marque span{font-size:13px;color:#a5e6c2}
+.reglages{display:grid;gap:10px;margin-bottom:20px;padding:12px;border-radius:10px;background:rgb(255 255 255/.06)}
+.reglage{display:grid;gap:5px}
+.reglage>span{font-size:12.5px;color:#b9cbc2}
+.segm{display:flex;gap:3px;padding:3px;border-radius:8px;background:rgb(0 0 0/.28)}
+.segm button{flex:1;padding:6px 4px;border-radius:6px;font-size:12.5px;color:#dfe9e3;text-align:center;white-space:nowrap}
+.segm button[aria-pressed="true"]{background:#d3aa5b;color:#142f29;font-weight:600}
+.parcours h2{display:flex;gap:8px;align-items:baseline;margin:0 4px;font:600 15px/1.3 "Funnel Display","Funnel Sans",sans-serif;color:#fff}
+.parcours h2 i{font-style:normal;color:#d3aa5b}
+.parcours p{margin:2px 4px 6px 22px;font-size:12.5px;color:#a9bdb3}
+.parcours ol{list-style:none;display:grid;gap:1px;margin-bottom:14px}
+.parcours li button{width:100%;padding:6px 10px 6px 22px;border-radius:6px;font-size:13.5px;color:#d5e2db}
+.parcours li button:hover{background:rgb(255 255 255/.07)}
+.parcours li button[aria-current="step"]{background:rgb(165 230 194/.17);color:#fff;font-weight:600}
+.menu-pied{margin:8px 4px 0;font-size:12.5px;line-height:1.45;color:#a9bdb3}
+.menu-pied code{color:#e6c47e;font-size:12px}
+.scene{display:flex;flex-wrap:wrap;align-items:flex-start;gap:28px;padding:28px;min-width:0;overflow-x:auto}
+.appareil{flex:none;padding:11px;border-radius:46px;background:#0d1412;box-shadow:0 30px 60px -30px rgb(16 36 31/.55),inset 0 0 0 1px #2c3a35}
+.appareil.tab{padding:16px;border-radius:28px}
+.notes{flex:1 1 300px;max-width:420px;min-width:280px;padding:18px 20px;border-radius:10px;background:#f9f8f5;box-shadow:0 0 0 1px rgb(16 36 31/.05),0 16px 32px -22px rgb(16 36 31/.26);font-size:14px;line-height:1.5}
+.notes h2{font:700 19px/1.25 "Funnel Display","Funnel Sans",sans-serif;margin-bottom:2px}
+.notes .qui{color:#5c6e66;margin-bottom:12px}
+.notes h3{font:600 13px/1.3 "Funnel Sans",sans-serif;color:#344a42;margin:14px 0 4px}
+.notes ul{padding-left:18px;display:grid;gap:5px}
+.notes .retour-geste{margin-top:14px;padding:8px 10px;border-radius:8px;background:#eef2ef;color:#344a42;font-size:13px}
+.notes .retour-geste b{color:#10241f}
+.notes .astuce{margin-top:12px;font-size:13px;color:#5c6e66}
+
+/* ─── Écran : jetons du terrain ───────────────────────────────────────── */
+.ecran{
+  --f-titre:"Funnel Display","Funnel Sans","Segoe UI",system-ui,sans-serif;
+  --f-texte:"Funnel Sans","Segoe UI",system-ui,sans-serif;
+  position:relative;display:flex;flex-direction:column;width:390px;height:844px;overflow:hidden;border-radius:36px;
+  background:var(--t-fond);color:var(--t-encre);font-family:var(--f-texte);font-size:17px;line-height:1.4;font-variant-numeric:tabular-nums lining-nums}
+.appareil.tab .ecran{width:1024px;height:768px;border-radius:12px}
+/* Plein soleil : fond clair, encre presque noire, 7:1 au moins pour tout texte. */
+.ecran[data-mode="soleil"]{
+  --t-fond:#e9eeeb;--t-surface:#ffffff;--t-surface-2:#f1f4f2;--t-filet:#d3ddd7;--t-filet-fort:#b4c2ba;--t-trait:#4f625a;
+  --t-encre:#0b1a16;--t-encre-2:#1f312b;--t-second:#3a4a44;
+  --t-ok:#0a5c3d;--t-ok-plein:#0a5c3d;--t-ok-sur:#ffffff;--t-ok-doux:#e6f6ed;
+  --t-danger:#9e2420;--t-danger-texte:#8a1d1a;--t-danger-plein:#9e2420;--t-danger-sur:#ffffff;--t-danger-doux:#fde6e3;
+  --t-warn:#6b4300;--t-warn-trait:#8a5700;--t-warn-doux:#fdf0d5;
+  --t-voile:rgb(11 26 22/.55);--t-ombre:0 -10px 24px -18px rgb(11 26 22/.45);--t-systeme:#ffffff;--t-systeme-encre:#1f312b;
+  --t-entete-fin:#142f29;--t-entete-encre:#ffffff}
+/* Nuit de cabine : luminance basse pour ne pas éblouir, contrastes gardés. */
+.ecran[data-mode="nuit"]{
+  --t-fond:#0a1210;--t-surface:#111c18;--t-surface-2:#18251f;--t-filet:#26352f;--t-filet-fort:#33453e;--t-trait:#6f857b;
+  --t-encre:#e3ebe7;--t-encre-2:#c3d1ca;--t-second:#a9bbb2;
+  --t-ok:#7fdcb0;--t-ok-plein:#155a3a;--t-ok-sur:#e6f4ec;--t-ok-doux:#12301f;
+  --t-danger:#ff9d94;--t-danger-texte:#ff9d94;--t-danger-plein:#86231f;--t-danger-sur:#ffe9e6;--t-danger-doux:#3a1715;
+  --t-warn:#f5c66b;--t-warn-trait:#f5c66b;--t-warn-doux:#33270c;
+  --t-voile:rgb(0 0 0/.65);--t-ombre:0 -10px 24px -18px rgb(0 0 0/.8);--t-systeme:#0a1210;--t-systeme-encre:#c3d1ca;
+  --t-entete-fin:#0a1210;--t-entete-encre:#e3ebe7}
+/* Couleur du module : pétrole pour HSSEQ, latérite pour Rotations. Elle ne dit jamais un état. */
+.app[data-module="hsseq"]{--t-accent:#0a6e86;--t-accent-texte:#075668;--t-accent-plein:#075668;--t-accent-sur:#ffffff;--t-accent-doux:#e2f2f6;--t-entete-1:#075668;--t-entete-2:#063f4c}
+.app[data-module="rotations"]{--t-accent:#b83e16;--t-accent-texte:#983210;--t-accent-plein:#983210;--t-accent-sur:#ffffff;--t-accent-doux:#fdebe4;--t-entete-1:#983210;--t-entete-2:#7a2a10}
+.ecran[data-mode="nuit"] .app[data-module="hsseq"]{--t-accent:#3fb6d1;--t-accent-texte:#6fd0e6;--t-accent-plein:#0b4b5a;--t-accent-sur:#e2f6fb;--t-accent-doux:#0c2a31;--t-entete-1:#0b3f4c;--t-entete-2:#082c35}
+.ecran[data-mode="nuit"] .app[data-module="rotations"]{--t-accent:#ff8a63;--t-accent-texte:#ff9b74;--t-accent-plein:#7a2a10;--t-accent-sur:#fff1ea;--t-accent-doux:#35170c;--t-entete-1:#5e200b;--t-entete-2:#3f1608}
+.ecran :focus-visible{outline:3px solid var(--t-encre);outline-offset:2px}
+
+/* ─── Barres système Android ──────────────────────────────────────────── */
+.statut{flex:none;display:flex;align-items:center;justify-content:space-between;height:24px;padding:0 16px 0 20px;font:500 13px/1 "Segoe UI",Roboto,system-ui,sans-serif;color:var(--t-entete-encre);background:var(--t-entete-1)}
+.statut.noir{background:#000;color:#fff}
+.statut.foret{background:#142f29;color:#fff}
+.statut .droite{display:flex;align-items:center;gap:6px}
+.statut svg{display:block}
+.nav-sys{flex:none;display:flex;align-items:center;justify-content:space-around;height:48px;padding:0 48px;background:var(--t-systeme);color:var(--t-systeme-encre);border-top:1px solid var(--t-filet)}
+.nav-sys.noir{background:#000;color:#e8ece9;border-color:#000}
+.nav-sys.foret{background:#142f29;color:#dfe9e3;border-color:#142f29}
+.nav-sys button{display:grid;place-items:center;width:64px;height:44px;border-radius:22px}
+.nav-sys button:hover{background:rgb(128 128 128/.15)}
+.nav-sys.kiosque{justify-content:flex-start;padding-left:24px}
+
+/* ─── Application ─────────────────────────────────────────────────────── */
+.app{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:var(--t-fond)}
+.ic{width:24px;height:24px;flex:none}
+.ic.s20{width:20px;height:20px}.ic.s28{width:28px;height:28px}.ic.s32{width:32px;height:32px}.ic.s40{width:40px;height:40px}.ic.s56{width:56px;height:56px}
+
+/* En-tête de terrain : dégradé de marque qui part de la couleur forte du module (texte blanc à 7:1),
+   le pli en tuile sur les écrans d'accueil, en filigrane partout. */
+.entete{position:relative;flex:none;display:flex;align-items:center;gap:10px;height:64px;padding:0 8px 0 16px;overflow:hidden;color:var(--t-entete-encre);background:linear-gradient(135deg,var(--t-entete-1) 0%,var(--t-entete-2) 62%,var(--t-entete-fin) 140%)}
+.entete.avec-retour{padding-left:4px}
+.entete .filigrane{position:absolute;right:96px;top:-30px;width:120px;height:120px;opacity:.1;pointer-events:none}
+.entete .tuile{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:12px;background:rgb(255 255 255/.14)}
+.entete .haut{display:grid;place-items:center;width:56px;height:56px;flex:none;border-radius:28px}
+.entete .haut:hover{background:rgb(255 255 255/.1)}
+.entete .titres{position:relative;min-width:0;flex:1;line-height:1.15}
+.entete h1{font:700 19px/1.15 var(--f-titre);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entete .sous{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pastille{position:relative;display:grid;place-items:center;min-height:56px;min-width:56px;flex:none;border-radius:28px}
+.pastille>span{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:18px;font-size:15px;font-weight:600;white-space:nowrap}
+.pastille .ligne{background:rgb(255 255 255/.15);color:#fff}
+.ecran[data-mode="nuit"] .pastille .ligne{color:#e3ebe7}
+.pastille .alerte{background:#d3aa5b;color:#0b1a16}
+.pastille .point{width:9px;height:9px;border-radius:50%;background:#a5e6c2}
+.pastille .nb{display:grid;place-items:center;min-width:24px;height:24px;margin-right:-6px;padding:0 6px;border-radius:12px;background:#142f29;color:#fff;font:700 15px/1 var(--f-titre)}
+.utilisateur-btn{display:flex;align-items:center;gap:10px;min-height:56px;padding:4px 14px 4px 6px;border-radius:28px;background:rgb(255 255 255/.12);text-align:left;line-height:1.15}
+.utilisateur-btn b{display:block;font-size:15px}
+.utilisateur-btn span.r{font-size:15px;opacity:.95}
+
+/* Contenu qui défile entre l'en-tête et la barre d'action. */
+.defile{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.defile.bas{justify-content:flex-end}
+.feuille{background:var(--t-surface);border-radius:14px;padding:16px}
+.titre-fort{font:700 30px/1.1 var(--f-titre);letter-spacing:-.01em}
+.titre{font:700 24px/1.15 var(--f-titre)}
+.section{font:700 19px/1.2 var(--f-titre);margin-top:4px}
+.libelle{font-weight:600;font-size:17px}
+.second{color:var(--t-second)}
+.service{font-size:15px;font-weight:600;line-height:20px;color:var(--t-second)}
+.texte-ok{color:var(--t-ok)}.texte-danger{color:var(--t-danger-texte)}.texte-warn{color:var(--t-warn)}.texte-accent{color:var(--t-accent-texte)}
+.ligne-flex{display:flex;align-items:center;gap:12px}
+.espace{flex:1}
+.w100{width:100%}
+
+/* Boutons : 64 dp pour l'action principale, 56 dp au moins partout. */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:64px;padding:0 20px;border-radius:12px;border:2px solid transparent;font:600 18px/1.2 var(--f-texte);text-align:center;transition:transform 80ms,filter 80ms}
+.btn:active{transform:scale(.98);filter:brightness(.92)}
+.btn-56{min-height:56px;font-size:17px;padding:0 16px}
+.btn-plein{background:var(--t-accent-plein);color:var(--t-accent-sur)}
+.btn-trait{background:var(--t-surface);color:var(--t-encre);border-color:var(--t-trait)}
+.btn-danger{background:var(--t-danger-plein);color:var(--t-danger-sur)}
+.btn-danger-trait{background:var(--t-surface);color:var(--t-danger-texte);border-color:var(--t-danger)}
+.btn-ok{background:var(--t-ok-plein);color:var(--t-ok-sur)}
+.btn[disabled]{background:var(--t-surface-2);color:var(--t-second);border-color:var(--t-filet-fort);cursor:not-allowed;transform:none;filter:none}
+.btn-rond{display:grid;place-items:center;width:56px;height:56px;border-radius:28px;color:#fff;background:rgb(255 255 255/.12)}
+
+/* Barre d'action basse : un état d'une ligne, puis l'action principale sous le pouce. */
+.barre{flex:none;padding:10px 16px 12px;background:var(--t-surface);border-top:1.5px solid var(--t-filet-fort);box-shadow:var(--t-ombre)}
+.barre .etat{display:flex;align-items:flex-start;gap:8px;min-height:20px;margin-bottom:8px;font-size:15px;font-weight:600;line-height:20px;color:var(--t-second)}
+.barre .etat .ic{width:20px;height:20px}
+.barre .etat.ok{color:var(--t-ok)}.barre .etat.danger{color:var(--t-danger-texte)}.barre .etat.warn{color:var(--t-warn)}
+.barre .actions{display:flex;gap:12px}
+.barre .actions>*{flex:1}
+.barre .actions>.fixe{flex:none}
+.barre .actions.pile{flex-direction:column}
+
+/* Tampons d'état : rayon 4, filet, le mot en toutes lettres ; plein pour ce qui demande une action. */
+.tampon{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border:1.5px solid;border-radius:4px;font-size:15px;font-weight:600;line-height:20px;white-space:nowrap}
+.tampon .ic{width:16px;height:16px}
+.tampon.ok{color:var(--t-ok);border-color:var(--t-ok)}
+.tampon.neutre{color:var(--t-encre-2);border-color:var(--t-trait)}
+.tampon.warn{color:var(--t-warn);border-color:var(--t-warn-trait);background:var(--t-warn-doux)}
+.tampon.danger{color:var(--t-danger-texte);border-color:var(--t-danger);background:var(--t-danger-doux)}
+.code{display:inline-grid;place-items:center;min-width:44px;height:28px;padding:0 6px;border-radius:4px;background:var(--t-encre);color:var(--t-surface);font:700 15px/1 var(--f-titre);letter-spacing:.02em}
+.etiquette{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--t-encre-2)}
+.etiquette .ic{width:20px;height:20px}
+
+/* Rotation du jour et tâches. */
+.rot-tete{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.rot-dl{display:grid;gap:6px;margin-top:12px;padding-top:12px;border-top:1.5px solid var(--t-filet)}
+.rot-dl div{display:grid;grid-template-columns:104px 1fr;gap:8px}
+.rot-dl dt{font-size:15px;font-weight:600;color:var(--t-second);line-height:24px}
+.rot-dl dd{font-weight:500}
+.liste{display:grid;gap:10px}
+.tache{display:flex;align-items:center;gap:12px;width:100%;min-height:76px;padding:12px 8px 12px 12px;border-radius:14px;background:var(--t-surface);text-align:left}
+.tache .pic{display:grid;place-items:center;width:48px;height:48px;flex:none;border-radius:12px;background:var(--t-accent-doux);color:var(--t-accent-texte)}
+.app[data-module="rotations"] .tache .pic.hsseq{background:#e2f2f6;color:#075668}
+.ecran[data-mode="nuit"] .app[data-module="rotations"] .tache .pic.hsseq{background:#0c2a31;color:#6fd0e6}
+.tache .corps{flex:1;min-width:0}
+.tache .corps .libelle{display:block}
+.tache .corps .sous{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:4px;font-size:15px;font-weight:600;color:var(--t-second)}
+.tache .chev{color:var(--t-second)}
+.tache.declarer{border:2px dashed var(--t-trait)}
+
+/* Progression et minuteur discret. */
+.progression{flex:none;display:grid;gap:8px;padding:10px 16px 12px;background:var(--t-surface);border-bottom:1.5px solid var(--t-filet)}
+.progression .ligne-flex{justify-content:space-between}
+.progression .compte{font-size:15px;font-weight:600;color:var(--t-encre-2)}
+.minuteur{display:inline-flex;align-items:center;gap:5px;font-size:15px;font-weight:600;color:var(--t-second)}
+.minuteur .ic{width:18px;height:18px}
+.segments{display:flex;gap:8px}
+.segments .groupe{display:flex;gap:3px}
+.segments .groupe.crit{flex:7}.segments .groupe.nb{flex:5}
+.seg{flex:1;height:8px;border-radius:2px;background:var(--t-filet-fort)}
+.seg.fait{background:var(--t-accent)}
+.seg.nc{background:var(--t-danger)}
+.seg.courant{background:var(--t-encre)}
+
+/* Point de contrôle : deux réponses géantes, sous le pouce. */
+.precedent{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;border-radius:12px;background:var(--t-surface);font-size:15px;font-weight:600;color:var(--t-encre-2)}
+.precedent .ic{width:20px;height:20px}
+.precedent .c{color:var(--t-ok)}.precedent .n{color:var(--t-danger)}
+.precedent span.txt{flex:1;min-width:0}
+.titre-point{font:700 30px/1.12 var(--f-titre);letter-spacing:-.01em}
+.consigne{font-size:17px;color:var(--t-encre-2)}
+.zone-pouce{flex:none;padding:12px 16px 16px;background:var(--t-fond)}
+.cnc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cnc .choix{--marque:var(--t-surface);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:104px;border-radius:14px;border:2.5px solid;background:var(--t-surface);font:700 19px/1.1 var(--f-texte);transition:transform 80ms}
+.cnc .choix:active{transform:scale(.98)}
+.cnc .choix.c{order:2;color:var(--t-ok);border-color:var(--t-ok)}
+.cnc .choix.nc{order:1;color:var(--t-danger-texte);border-color:var(--t-danger)}
+.main-gauche .cnc .choix.c{order:1}.main-gauche .cnc .choix.nc{order:2}
+.cnc .choix.c[aria-pressed="true"]{--marque:var(--t-ok-plein);background:var(--t-ok-plein);color:var(--t-ok-sur);border-color:var(--t-ok-plein)}
+.cnc .choix.nc[aria-pressed="true"]{--marque:var(--t-danger-plein);background:var(--t-danger-plein);color:var(--t-danger-sur);border-color:var(--t-danger-plein)}
+.cnc .choix .ic{width:32px;height:32px}
+.cnc.compact .choix{flex-direction:row;min-height:56px;gap:8px;font-size:17px}
+.cnc.compact .choix .ic{width:22px;height:22px}
+.ligne-nb{display:grid;gap:8px;padding:12px;border-radius:14px;background:var(--t-surface)}
+
+/* Photo obligatoire. */
+.puces{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.puce{min-height:56px;padding:6px 12px;border-radius:12px;border:2px solid var(--t-trait);background:var(--t-surface);font-weight:600;text-align:center}
+.puce[aria-pressed="true"]{border-color:var(--t-encre);background:var(--t-encre);color:var(--t-surface)}
+.photo-requise{display:flex;align-items:center;gap:14px;width:100%;min-height:104px;padding:16px;border-radius:14px;border:2.5px dashed var(--t-danger);background:var(--t-danger-doux);color:var(--t-danger-texte);text-align:left}
+.photo-requise b{display:block;font-size:19px}
+.photo-requise span{display:block;font-size:15px;font-weight:600;color:var(--t-encre-2)}
+.photo-jointe{display:flex;gap:14px;align-items:center;padding:10px;border-radius:14px;background:var(--t-surface)}
+.vignette{flex:none;width:120px;height:90px;border-radius:10px;overflow:hidden;background:#3b3f3c}
+.vignette svg{display:block;width:100%;height:100%}
+.vignette.grande{width:100%;height:160px}
+.phrase{padding:12px 14px;border-radius:12px;background:var(--t-surface);font-style:italic;color:var(--t-encre-2)}
+
+/* Appareil photo et lecture de badge. */
+.camera{flex:1;display:flex;flex-direction:column;background:#000;color:#fff}
+.cam-haut{display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px}
+.cam-haut p{flex:1;font-weight:600}
+.viseur{position:relative;flex:1;margin:0 12px;border-radius:14px;overflow:hidden;background:#1b1f1e}
+.viseur>svg{position:absolute;inset:0;width:100%;height:100%}
+.coin{position:absolute;width:36px;height:36px;border:4px solid #fff}
+.coin.hg{top:18px;left:18px;border-right:0;border-bottom:0}.coin.hd{top:18px;right:18px;border-left:0;border-bottom:0}
+.coin.bg{bottom:18px;left:18px;border-right:0;border-top:0}.coin.bd{bottom:18px;right:18px;border-left:0;border-top:0}
+.cam-aide{padding:12px 20px 4px;text-align:center;font-size:15px;font-weight:600;color:#e8ece9}
+.cam-bas{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:12px 24px 18px}
+.cam-bas .g{justify-self:start}.cam-bas .d{justify-self:end}
+.declencheur{width:84px;height:84px;border-radius:50%;background:#fff;box-shadow:0 0 0 5px #000,0 0 0 9px #fff}
+.declencheur:active{transform:scale(.95)}
+.sans-photo{min-height:56px;padding:0 14px;border-radius:12px;border:2px solid #9aa9a2;color:#fff;font-weight:600}
+
+/* Pavé numérique et cases de code (dessin du compteur). */
+.pave{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.touche{display:grid;place-items:center;min-height:64px;border-radius:12px;border:2px solid var(--t-filet-fort);background:var(--t-surface);font:600 28px/1 var(--f-titre);color:var(--t-encre)}
+.touche:active{background:var(--t-surface-2)}
+.touche.fn{font:600 17px/1.1 var(--f-texte)}
+.masque{display:flex;align-items:center;justify-content:center;gap:14px;min-height:76px;padding:0 16px;border-radius:14px;border:2px solid var(--t-trait);background:var(--t-surface);font:700 30px/1 var(--f-titre);letter-spacing:.1em}
+.masque.vide{font:600 17px/1.2 var(--f-texte);letter-spacing:0;color:var(--t-second)}
+.cases{display:flex;gap:10px;justify-content:center}
+.case{display:grid;place-items:center;width:60px;height:72px;border-radius:10px;background:#0f2520;color:#fff;box-shadow:inset 0 -4px 0 #d3aa5b;font:700 34px/1 var(--f-titre)}
+.case.vide{color:transparent}
+
+/* Écran de verrou et motifs. */
+.verrou-tete{display:flex;gap:14px;align-items:flex-start;padding:16px;border-radius:14px;border:2.5px solid}
+.verrou-tete.danger{border-color:var(--t-danger);background:var(--t-danger-doux)}
+.verrou-tete.warn{border-color:var(--t-warn-trait);background:var(--t-warn-doux)}
+.verrou-tete.ok{border-color:var(--t-ok);background:var(--t-ok-doux)}
+.verrou-tete .ic{width:40px;height:40px}
+.verrou-tete.danger .ic{color:var(--t-danger-texte)}.verrou-tete.warn .ic{color:var(--t-warn)}.verrou-tete.ok .ic{color:var(--t-ok)}
+.verrou-tete h2{font:700 30px/1.1 var(--f-titre)}
+.motif{display:grid;gap:10px;padding:14px 16px 16px;border-radius:14px;background:var(--t-surface);border:1.5px solid var(--t-filet-fort)}
+.motif h3{font:700 19px/1.2 var(--f-texte)}
+.motif .entete-motif{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.qui-leve{display:flex;align-items:center;gap:12px;padding-top:10px;border-top:1.5px solid var(--t-filet)}
+.btn.appel{flex:none;width:64px;min-height:56px;padding:0}
+.avatar{display:grid;place-items:center;width:44px;height:44px;flex:none;border-radius:50%;background:var(--t-accent-doux);color:var(--t-accent-texte);font:700 16px/1 var(--f-titre)}
+
+/* Déclaration : le type en un geste, le plus fréquent au plus près du pouce. */
+.types{display:grid;gap:12px}
+.type{display:flex;align-items:center;gap:16px;width:100%;min-height:120px;padding:16px 18px;border-radius:16px;border:2.5px solid var(--t-accent);background:var(--t-surface);text-align:left}
+.type .ic{width:40px;height:40px;color:var(--t-accent-texte)}
+.type b{display:block;font:700 22px/1.15 var(--f-titre);color:var(--t-encre)}
+.type span{display:block;margin-top:4px;font-size:15px;font-weight:600;color:var(--t-second)}
+.type.accident{border-color:var(--t-danger)}
+.type.accident .ic{color:var(--t-danger-texte)}
+.gps{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--t-surface)}
+.gps .ic{color:var(--t-accent-texte)}
+.micro{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:72px;border-radius:14px;border:2.5px solid var(--t-accent);background:var(--t-accent-doux);color:var(--t-accent-texte);font:700 19px/1.2 var(--f-texte)}
+.champ{min-height:56px;padding:14px;border-radius:12px;border:2px solid var(--t-trait);background:var(--t-surface);color:var(--t-second)}
+
+/* Confirmation pleine (enregistré, fait). */
+.confirme{display:grid;justify-items:start;gap:8px;padding:20px 18px;border-radius:16px;background:var(--t-ok-doux);border:2.5px solid var(--t-ok)}
+.confirme .ic{width:56px;height:56px;color:var(--t-ok)}
+.attention{display:flex;gap:12px;padding:14px 16px;border-radius:14px;background:var(--t-warn-doux);border:2px solid var(--t-warn-trait);color:var(--t-encre)}
+.attention .ic{color:var(--t-warn)}
+.info{display:flex;gap:12px;padding:14px 16px;border-radius:14px;background:var(--t-surface);color:var(--t-encre-2)}
+.info .ic{color:var(--t-accent-texte)}
+.urgence{display:grid;gap:12px;padding:16px;border-radius:16px;background:var(--t-danger-doux);border:2.5px solid var(--t-danger)}
+
+/* Signature. */
+.signature{position:relative;display:block;width:100%;height:230px;border-radius:14px;border:2px solid var(--t-trait);background:var(--t-surface)}
+.signature .base{position:absolute;left:24px;right:24px;bottom:56px;border-top:2px dashed var(--t-filet-fort)}
+.signature .aide{position:absolute;left:0;right:0;bottom:20px;text-align:center;font-size:15px;font-weight:600;color:var(--t-second)}
+.signature svg{position:absolute;inset:0;width:100%;height:100%}
+
+/* File d'envoi. */
+.envoi{display:grid;gap:8px;padding:14px 16px;border-radius:14px;background:var(--t-surface)}
+.envoi .horo{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:15px;font-weight:600;color:var(--t-second)}
+.envoi .horo b{color:var(--t-encre)}
+
+/* ─── Tablette ────────────────────────────────────────────────────────── */
+.tab-corps{flex:1;min-height:0;display:grid;grid-template-columns:400px 1fr}
+.tab-gauche{min-height:0;overflow-y:auto;padding:16px;display:grid;align-content:start;gap:14px;border-right:1.5px solid var(--t-filet-fort)}
+.tab-droite{min-height:0;display:flex;flex-direction:column}
+.tab-detail{flex:1;min-height:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+.tab-droite .barre{padding:12px 24px 14px}
+.tab-droite .barre .actions{justify-content:flex-end}
+.tab-droite .barre .actions>*{flex:none;min-width:240px}
+.registre{display:grid;grid-template-columns:1fr 1fr;border-radius:14px;background:var(--t-surface)}
+.registre>div{padding:10px 14px}
+.registre>div:nth-child(odd){border-right:1.5px solid var(--t-filet)}
+.registre>div:nth-child(-n+2){border-bottom:1.5px solid var(--t-filet)}
+.registre b{display:block;font:700 28px/1.1 var(--f-titre)}
+.registre b small{font:600 17px var(--f-texte);color:var(--t-second)}
+.filtres{display:flex;gap:8px;flex-wrap:wrap}
+.filtre{min-height:56px;padding:0 14px;border-radius:12px;border:2px solid var(--t-trait);background:var(--t-surface);font-weight:600}
+.filtre[aria-pressed="true"]{background:var(--t-encre);color:var(--t-surface);border-color:var(--t-encre)}
+.flotte{display:grid;gap:8px}
+.vehicule{display:grid;gap:4px;width:100%;padding:12px 14px;border-radius:14px;background:var(--t-surface);border:2px solid transparent;text-align:left}
+.vehicule[aria-current="true"]{border-color:var(--t-accent)}
+.vehicule .l1{display:flex;align-items:center;gap:10px}
+.vehicule .l1 b{font:700 19px/1.2 var(--f-titre)}
+.vehicule .l2{font-size:15px;font-weight:600;color:var(--t-second)}
+.vehicule .l3{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.detail-tete{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.deux{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.carte-etat{padding:12px 14px;border-radius:14px;background:var(--t-surface)}
+.voile{position:absolute;inset:0;background:var(--t-voile);z-index:5}
+.modale{position:absolute;z-index:6;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;width:660px;max-height:672px;border-radius:20px;overflow:hidden;background:var(--t-fond);box-shadow:0 28px 70px -24px rgb(0 0 0/.6)}
+.modale header{padding:18px 24px 14px;background:var(--t-surface);border-bottom:1.5px solid var(--t-filet)}
+.modale .corps{flex:1;min-height:0;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;gap:14px}
+.modale .barre{padding:12px 24px 16px}
+.case-motif{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:10px 14px;border-radius:12px;border:2px solid var(--t-trait);background:var(--t-surface);text-align:left}
+.case-motif .coche{display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:6px;border:2.5px solid var(--t-encre);color:var(--t-surface)}
+.case-motif[aria-checked="true"] .coche{background:var(--t-encre)}
+.case-motif[aria-checked="true"]{border-color:var(--t-encre)}
+.case-motif .coche.rond{border-radius:50%}
+.case-motif[aria-checked="true"] .coche.rond{background:var(--t-surface)}
+.puce-radio{width:16px;height:16px;border-radius:50%;background:var(--t-encre)}
+.non-derogeable{display:flex;gap:12px;padding:12px 14px;border-radius:12px;background:var(--t-surface-2);border:2px solid var(--t-filet-fort);color:var(--t-encre-2)}
+.zone-texte{min-height:104px;padding:12px 14px;border-radius:12px;border:2px solid var(--t-trait);background:var(--t-surface);color:var(--t-encre)}
+.regles{display:grid;gap:6px;font-size:15px;font-weight:600;color:var(--t-encre-2)}
+.regles div{display:flex;gap:10px;align-items:flex-start}
+.regles .ic{width:20px;height:20px;color:var(--t-accent-texte)}
+.nav-tab{display:grid;gap:6px}
+.nav-tab h3{font-size:15px;font-weight:700;color:var(--t-second);margin:6px 2px 0}
+.nav-item{display:grid;gap:4px;width:100%;padding:12px 14px;border-radius:14px;background:var(--t-surface);border:2px solid transparent;text-align:left}
+.nav-item[aria-current="true"]{border-color:var(--t-accent)}
+.nav-item .l1{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.citation{padding:14px 16px;border-radius:12px;background:var(--t-surface);border-left:0;font-size:17px;color:var(--t-encre)}
+.matrice{display:grid;grid-template-columns:24px repeat(5,37px);gap:3px;align-items:center;justify-items:center;font-size:15px;font-weight:600}
+.matrice .m{display:grid;place-items:center;width:37px;height:34px;border-radius:4px;color:var(--t-encre-2)}
+.matrice .z1{background:var(--t-surface)}.matrice .z2{background:var(--t-surface-2)}.matrice .z3{background:var(--t-warn-doux)}.matrice .z4{background:var(--t-danger-doux)}
+.matrice .ici{background:var(--t-danger-plein);color:var(--t-danger-sur);font-weight:700}
+.matrice .axe{color:var(--t-second)}
+.effets{display:grid;gap:8px}
+.effet{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--t-surface)}
+.effet p{flex:1}
+
+/* Écran de verrouillage de la tablette partagée. */
+.verrouillage{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;background:#142f29;color:#eef5f1}
+.verrouillage .gauche{padding:32px 36px;display:flex;flex-direction:column;gap:20px;border-right:1px solid rgb(255 255 255/.1)}
+.verrouillage .droite{padding:32px 48px;display:flex;flex-direction:column;gap:18px;justify-content:center}
+.verrouillage h2{font:700 30px/1.15 var(--f-titre);color:#fff}
+.verrouillage .doux{color:#c7d8cf;font-size:17px}
+.gens{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.qui-tuile{display:grid;justify-items:center;gap:6px;min-height:128px;padding:12px 8px;border-radius:14px;background:rgb(255 255 255/.07);border:2.5px solid transparent;text-align:center;color:#eef5f1}
+.qui-tuile[aria-pressed="true"]{border-color:#d3aa5b;background:rgb(255 255 255/.12)}
+.qui-tuile .avatar{width:52px;height:52px;background:#d3aa5b;color:#142f29;font-size:18px}
+.qui-tuile b{font-size:16px;line-height:1.15}
+.qui-tuile span{font-size:15px;color:#c7d8cf;line-height:1.15}
+.verrouillage .touche{background:rgb(255 255 255/.08);border-color:rgb(255 255 255/.22);color:#fff}
+.verrouillage .btn-trait{background:transparent;color:#fff;border-color:#9fb8ac}
+.verrouillage .pied{margin-top:auto;font-size:15px;color:#c7d8cf}
+.lecteur{position:relative;height:330px;border-radius:16px;overflow:hidden;background:#0b0f0e}
+.lecteur svg{position:absolute;inset:0;width:100%;height:100%}
+</style>
+</head>
+<body>
+<div class="page">
+  <aside class="menu" id="menu" aria-label="Parcours et réglages"></aside>
+  <main class="scene">
+    <div class="appareil" id="appareil"><div class="ecran" id="ecran" data-mode="soleil"></div></div>
+    <section class="notes" id="notes" aria-live="polite"></section>
+  </main>
+</div>
+<noscript><p style="padding:24px">Ces maquettes ont besoin de JavaScript pour passer d’un écran à l’autre.</p></noscript>
+<script>
+"use strict";
+
+/* ─── Icônes : grille de 24, trait de 2 au terrain, extrémités franches (charte) ─── */
+const CH = {
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  croix:'<path d="M6 6l12 12M18 6L6 18"/>',
+  camera:'<path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.5"/>',
+  micro:'<path d="M9.5 3.5h5v10h-5z"/><path d="M6 11.5a6 6 0 0012 0M12 17.5V21M8.5 21h7"/>',
+  lieu:'<path d="M12 21s-6.5-6.4-6.5-11.2a6.5 6.5 0 0113 0C18.5 14.6 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.3"/>',
+  cadenas:'<path d="M5.5 10.5h13v10h-13z"/><path d="M8.5 10.5V7.5a3.5 3.5 0 017 0v3"/>',
+  tel:'<path d="M5 3.5h4l1.8 4.6-2.4 1.6a11.5 11.5 0 005.9 5.9l1.6-2.4 4.6 1.8v4a1.5 1.5 0 01-1.5 1.5A16.5 16.5 0 013.5 5 1.5 1.5 0 015 3.5z"/>',
+  nuage:'<path d="M7 18.5h10.5a4 4 0 00.5-7.97A6 6 0 006.6 9.3 4.6 4.6 0 007 18.5z"/><path d="M3 3l18 18"/>',
+  wifi:'<path d="M2.5 9.2a13.5 13.5 0 0119 0M5.6 12.6a9 9 0 0112.8 0M8.7 16a4.6 4.6 0 016.6 0"/><path d="M11 19h2v2h-2z" fill="currentColor" stroke="none"/>',
+  horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  chevron:'<path d="M9.5 6l6 6-6 6"/>',
+  haut:'<path d="M20 12H5M11 5.5L4.5 12l6.5 6.5"/>',
+  changer:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M15.5 10h6M19 7.5l2.5 2.5-2.5 2.5"/>',
+  qr:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 20h2M20 14v2"/>',
+  stylo:'<path d="M4 20l1-4.5L15.5 5l3.5 3.5L8.5 19z"/><path d="M13.5 7l3.5 3.5"/>',
+  alerte:'<path d="M12 3.5l9.5 17h-19z"/><path d="M12 10v5M12 17v1.8"/>',
+  citerne:'<path d="M2.5 7.5H13a2.5 2.5 0 012.5 2.5v5.5h-13z"/><path d="M15.5 11h3.2l2.8 3v1.5h-6"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/>',
+  souffle:'<path d="M8.5 8h7v13h-7z"/><path d="M11 8V3h2v5"/><path d="M10.5 11h3v3h-3z"/>',
+  envoi:'<path d="M12 16V4.5M7 9.5l5-5 5 5M4 20h16"/>',
+  refaire:'<path d="M19.5 12a7.5 7.5 0 11-2.2-5.3"/><path d="M19.5 4v4.5H15"/>',
+  bouclier:'<path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/>',
+  lampe:'<path d="M8.5 3h7l-1.5 6h-4z"/><path d="M10 9h4v12h-4z"/>',
+  effacer:'<path d="M9 5h12v14H9l-6.5-7z"/><path d="M12.5 9l5 6M17.5 9l-5 6"/>',
+  file:'<path d="M4 6h16M4 12h16M4 18h10"/>',
+  info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.5v1.8"/>',
+  danger:'<path d="M12 3.5l9.5 17h-19z"/><path d="M12 10v5M12 17v1.8"/>',
+  personne:'<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20.5a7.5 7.5 0 0115 0"/>',
+  enquete:'<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>',
+  pneu:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/>',
+};
+const ic = (n, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter" aria-hidden="true">${CH[n]}</svg>`;
+/* Formes d'état de la charte : disque pour conforme, triangle pour à surveiller, losange pour alerte. */
+const disque = (cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><path d="M7 12.4l3.3 3.3L17.2 8.8" fill="none" stroke="var(--marque,#fff)" stroke-width="2.4"/></svg>`;
+const losange = (cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.2L22.8 12 12 22.8 1.2 12z" fill="currentColor"/><path d="M8.7 8.7l6.6 6.6M15.3 8.7l-6.6 6.6" stroke="var(--marque,#fff)" stroke-width="2.4"/></svg>`;
+const triangle = (cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8L23 21.5H1z" fill="currentColor"/><path d="M12 8.5v6.5M12 16.8v2.2" stroke="var(--marque,#fff)" stroke-width="2.4"/></svg>`;
+
+/* Le pli : ruban plié en N, montants clairs, diagonale d'or (components/brand.tsx). */
+const pli = (cls = "") => `<svg class="${cls}" viewBox="6 6 52 52" aria-hidden="true"><rect x="10" y="10" width="12" height="44" fill="#f1f6f2"/><rect x="42" y="10" width="12" height="44" fill="#f1f6f2"/><polygon points="10,10 22,10 54,54 42,54" fill="#d3aa5b"/><polygon points="10,10 22,10 22,26.5" fill="#e6c47e"/><polygon points="42,37.5 54,54 42,54" fill="#e6c47e"/></svg>`;
+const pliTrait = `<svg class="filigrane" viewBox="6 6 52 52" aria-hidden="true"><polygon points="10,10 22,10 42,37.5 42,10 54,10 54,54 42,54 22,26.5 22,54 10,54" fill="none" stroke="#fff" stroke-width="1.6"/></svg>`;
+/* Icône du module HSSEQ : casque jaune sécurité sur le pétrole. */
+const casque = (t = 40) => `<svg width="${t}" height="${t}" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0a6e86"/><path d="M14 40a18 18 0 0136 0z" fill="#f2b705"/><path d="M29 22.6h6V40h-6z" fill="#cf9b00"/><path d="M8 40h48v6.5H8z" fill="#f2b705"/></svg>`;
+
+/* ─── Photos dessinées (aucune image externe) ─── */
+function photoPneu(coupure = true) {
+  const boulons = [0, 1, 2, 3, 4, 5].map((k) => { const a = k * Math.PI / 3; return `<circle cx="${(120 + 22 * Math.cos(a)).toFixed(1)}" cy="${(84 + 22 * Math.sin(a)).toFixed(1)}" r="3.2" fill="#2c302e"/>`; }).join("");
+  return `<svg viewBox="0 0 240 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="240" height="160" fill="#5c6762"/><rect y="122" width="240" height="38" fill="#3d4440"/><circle cx="120" cy="84" r="68" fill="#1b1e1d"/><circle cx="120" cy="84" r="62" fill="none" stroke="#2d3230" stroke-width="9" stroke-dasharray="7 6"/><circle cx="120" cy="84" r="36" fill="${coupure ? "#8a918c" : "#a7aea9"}"/><circle cx="120" cy="84" r="13" fill="#3a3f3c"/>${boulons}${coupure ? '<path d="M66 44l18 12-6 8 15 7" fill="none" stroke="#d8cfb8" stroke-width="4"/><path d="M66 44l18 12-6 8 15 7" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="1.5"/>' : '<path d="M68 40a66 66 0 0122-18" stroke="#3b413e" stroke-width="5" fill="none"/>'}</svg>`;
+}
+function photoRampe() {
+  return `<svg viewBox="0 0 240 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="240" height="160" fill="#8a9792"/><rect x="0" y="0" width="240" height="40" fill="#a9b6b1"/><rect y="106" width="240" height="54" fill="#4b524f"/><path d="M0 108h240" stroke="#f2b705" stroke-width="3" stroke-dasharray="14 10"/><rect x="14" y="34" width="66" height="72" fill="#5d6764"/><rect x="20" y="44" width="54" height="7" fill="#b4bdb9"/><rect x="20" y="58" width="54" height="7" fill="#b4bdb9"/><text x="47" y="96" font-size="15" font-family="sans-serif" font-weight="700" fill="#f2b705" text-anchor="middle">3</text><rect x="108" y="58" width="112" height="46" rx="20" fill="#d5dbd8"/><rect x="118" y="100" width="94" height="10" fill="#7d8581"/><circle cx="134" cy="114" r="11" fill="#1d201f"/><circle cx="196" cy="114" r="11" fill="#1d201f"/><rect x="200" y="66" width="10" height="5" fill="#c0302d"/><circle cx="94" cy="72" r="6" fill="#f2b705"/><rect x="89" y="78" width="10" height="24" fill="#e06a2c"/><rect x="89" y="102" width="4" height="8" fill="#2c302e"/><rect x="95" y="102" width="4" height="8" fill="#2c302e"/></svg>`;
+}
+function qrBadge() {
+  const m = ["111111101", "100000101", "101110100", "101110111", "100000001", "111111101", "001010100", "110101011", "101011101"];
+  let r = "";
+  m.forEach((l, y) => [...l].forEach((c, x) => { if (c === "1") r += `<rect x="${8 + x * 9}" y="${8 + y * 9}" width="9" height="9"/>`; }));
+  return `<svg viewBox="0 0 400 330" aria-hidden="true"><rect width="400" height="330" fill="#0b0f0e"/><g transform="translate(130 70) rotate(-4)"><rect width="150" height="190" rx="10" fill="#f9f8f5"/><rect width="150" height="34" rx="10" fill="#0a6e86"/><rect y="24" width="150" height="10" fill="#0a6e86"/><g transform="translate(30 50)" fill="#0b1a16">${r}</g><rect x="22" y="150" width="106" height="9" fill="#5c6e66"/><rect x="40" y="166" width="70" height="7" fill="#9aa9a2"/></g><g fill="none" stroke="#fff" stroke-width="5"><path d="M110 50h-30v30M290 50h30v30M110 280h-30v-30M290 280h30v-30"/></g></svg>`;
+}
+const SIGNATURE_TRACE = `<svg viewBox="0 0 358 230" aria-hidden="true"><path d="M34 150c10-46 26-82 38-80 14 2-4 74 6 76 12 2 26-60 40-58 12 2 4 54 16 54 14 0 22-40 36-40 10 0 8 34 20 34 16 0 26-56 44-54 14 2 6 48 20 48 12 0 18-14 30-14M70 168c60-6 140-10 230-6" fill="none" stroke="var(--t-encre)" stroke-width="3"/></svg>`;
+
+/* ─── Données fictives crédibles ─── */
+const CRIT = [
+  { l: "Freins et ralentisseur", d: "Essai à l’arrêt : frein de service, frein de parc et ralentisseur tiennent.", def: ["Frein de service", "Frein de parc", "Ralentisseur", "Autre"] },
+  { l: "Pneumatiques", d: "Usure, pression et coupures, sur le tracteur et sur la citerne.", def: ["Usure", "Pression", "Coupure", "Autre"] },
+  { l: "Vannes de fond", d: "Fermées et plombées.", def: ["Ouverte", "Plomb absent", "Fuite", "Autre"] },
+  { l: "Dômes et trous d’homme", d: "Fermés, joints en bon état.", def: ["Mal fermé", "Joint abîmé", "Fuite", "Autre"] },
+  { l: "Extincteurs", d: "Deux extincteurs plombés et à date.", def: ["Manquant", "Plomb absent", "Date dépassée", "Autre"] },
+  { l: "Kit antidéversement", d: "Complet et rangé à sa place.", def: ["Incomplet", "Absent", "Abîmé", "Autre"] },
+  { l: "Plaques et étiquettes de danger", d: "En place et lisibles, sur les côtés et à l’arrière.", def: ["Manquante", "Illisible", "Mauvais produit", "Autre"] },
+];
+const NB = ["Éclairage et feux de détresse", "Rétroviseurs et pare-brise", "Trousse de premiers secours", "Cales et triangles", "EPI du conducteur"];
+const FLOTTE = [
+  { id: "CT-07", pl: "RC 4417 AB", cond: "Ousmane Camara", h: "06:30", dest: "Kindia", ctrl: "fait", nc: 1, alco: "fait", dep: "bloque", profil: "Citerne" },
+  { id: "CT-03", pl: "RC 2981 AC", cond: "Ibrahima Sow", h: "06:00", dest: "Mamou", ctrl: "fait", nc: 0, alco: "fait", dep: "route", profil: "Citerne" },
+  { id: "BN-02", pl: "RC 9915 AB", cond: "Karim Bangoura", h: "06:45", dest: "Carrière de Dubréka", ctrl: "fait", nc: 0, alco: "fait", dep: "autorise", profil: "Benne" },
+  { id: "CT-15", pl: "RC 5402 AB", cond: "Thierno Diallo", h: "07:00", dest: "Kankan", ctrl: "fait", nc: 1, alco: "fait", dep: "bloque", profil: "Citerne" },
+  { id: "CT-11", pl: "RC 7350 AA", cond: "Alpha Oumar Bah", h: "07:15", dest: "Coyah", ctrl: "fait", nc: 0, alco: "fait", dep: "autorise", profil: "Citerne" },
+  { id: "CT-12", pl: "RC 1186 AD", cond: "Mamadi Kourouma", h: "07:30", dest: "Boké", ctrl: "afaire", nc: 0, alco: "afaire", dep: "attente", profil: "Citerne" },
+  { id: "CT-04", pl: "RC 3310 AC", cond: "Abdoulaye Keïta", h: "07:45", dest: "Labé", ctrl: "afaire", nc: 0, alco: "fait", dep: "attente", profil: "Citerne" },
+  { id: "CT-09", pl: "RC 8824 AA", cond: "Moussa Soumah", h: "08:00", dest: "Kindia", ctrl: "afaire", nc: 0, alco: "afaire", dep: "attente", profil: "Citerne" },
+  { id: "CT-18", pl: "RC 6047 AD", cond: "Lamine Sylla", h: "08:30", dest: "Forécariah", ctrl: "afaire", nc: 0, alco: "afaire", dep: "attente", profil: "Citerne" },
+];
+const GENS = [
+  { k: "fatoumata", i: "FB", n: "Fatoumata Bangoura", r: "Chef de parc" },
+  { k: "aissatou", i: "AB", n: "Aïssatou Barry", r: "Responsable HSSEQ" },
+  { k: "mohamed", i: "MS", n: "Mohamed Sylla", r: "Responsable maintenance" },
+  { k: "ousmane", i: "OC", n: "Ousmane Camara", r: "Conducteur" },
+  { k: "ibrahima", i: "IS", n: "Ibrahima Sow", r: "Conducteur" },
+  { k: "alpha", i: "AO", n: "Alpha Oumar Bah", r: "Conducteur" },
+];
+
+/* ─── État de la maquette ─── */
+function etatInitial() {
+  return {
+    ecran: "a1", hist: [], mode: "soleil", main: "droite", reseau: "hors", echelle: "reelle",
+    ctrl: { i: 0, rep: [], defaut: {}, photo: {}, phrase: {}, nb: [null, null, null, null, null], nbPhoto: {}, signe: false, enregistre: false, voirConformes: false },
+    alco: { fait: false, saisie: "" },
+    decl: { type: null, photo: false, texte: false, faite: false },
+    envoye: false, appel: null,
+    tab: { sel: "CT-07", leve: false, photoApres: false, fait: "Pneu remplacé", derog: "aucune", v05: true, filtre: "tous", modale: null },
+    verrou: { qui: "fatoumata", pin: "", mode: "code", message: "" },
+    f: { sel: "d1", d1: "attente", d2: "attente", code: "", immob: false, modale: null },
+    depart: "aucun", retourGeste: "",
+  };
+}
+let S = etatInitial();
+
+/* ─── Petits composants ─── */
+const tampon = (mot, ton = "neutre", forme = "") => `<span class="tampon ${ton}">${forme}${mot}</span>`;
+const pluriel = (n, un, plusieurs) => `${n} ${n > 1 ? plusieurs : un}`;
+function heureDe(sec) { const m = Math.floor(sec / 60), s = sec % 60; return `${m}:${String(s).padStart(2, "0")}`; }
+function tempsControle() { const pos = Math.min(S.ctrl.i, 7); let s = 9 + pos * 15; if (S.ctrl.photo[1] && pos > 1) s += 26; if (S.ecran === "a6") s = 141; return s; }
+
+function pastille() {
+  const n = fileAttente().filter((e) => !e.envoye).length;
+  const r = S.reseau;
+  const mot = r === "ligne" ? "En ligne" : r === "faible" ? "Réseau faible" : "Hors réseau";
+  const icone = r === "ligne" ? '<span class="point"></span>' : r === "faible" ? ic("wifi", "s20") : ic("nuage", "s20");
+  const label = `${mot}, ${n ? pluriel(n, "saisie à envoyer", "saisies à envoyer") : "rien à envoyer"}. Ouvrir la file d’envoi.`;
+  return `<button class="pastille" data-go="a10" aria-label="${label}"><span class="${r === "ligne" ? "ligne" : "alerte"}">${icone}${mot}${n ? `<span class="nb">${n}</span>` : ""}</span></button>`;
+}
+function entete({ titre, sous = "", retour = false, droite = null }) {
+  const gauche = retour
+    ? `<button class="haut" data-act="retour" aria-label="Revenir">${ic("haut")}</button>`
+    : `<span class="tuile">${pli("ic")}</span>`;
+  return `<header class="entete${retour ? " avec-retour" : ""}">${pliTrait}${gauche}<div class="titres"><h1>${titre}</h1>${sous ? `<p class="sous">${sous}</p>` : ""}</div>${droite ?? pastille()}</header>`;
+}
+function bouton(o) {
+  const attrs = [o.go ? `data-go="${o.go}"` : "", o.act ? `data-act="${o.act}"` : "", o.arg !== undefined ? `data-arg="${o.arg}"` : "", o.off ? "disabled" : "", o.label ? `aria-label="${o.label}"` : ""].join(" ");
+  return `<button class="btn ${o.style ?? "btn-plein"} ${o.cls ?? ""}" ${attrs}>${o.ic ? ic(o.ic) : ""}${o.t}</button>`;
+}
+function barre({ etat = "", ton = "", icone = "", actions = [], pile = false }) {
+  return `<footer class="barre"><p class="etat ${ton}" role="status">${icone ? ic(icone) : ""}<span>${etat}</span></p><div class="actions${pile ? " pile" : ""}">${actions.map(bouton).join("")}</div></footer>`;
+}
+function cnc(taille, cle, valeur, aria) {
+  const compact = taille === "compact";
+  return `<div class="cnc${compact ? " compact" : ""}" role="group" aria-label="${aria}">
+    <button class="choix nc" aria-pressed="${valeur === "nc"}" data-act="${cle.act}" data-arg="${cle.arg}nc">${losange()}Non conforme</button>
+    <button class="choix c" aria-pressed="${valeur === "c"}" data-act="${cle.act}" data-arg="${cle.arg}c">${disque()}Conforme</button>
+  </div>`;
+}
+function progression() {
+  const crit = CRIT.map((_, k) => {
+    let c = "";
+    if (S.ecran === "a6" || k < S.ctrl.i) c = S.ctrl.rep[k] === "nc" ? "nc" : "fait";
+    else if (k === S.ctrl.i) c = "courant";
+    return `<span class="seg ${c}"></span>`;
+  }).join("");
+  const nb = NB.map((_, k) => { const v = S.ctrl.nb[k]; return `<span class="seg ${v === "nc" ? "nc" : v ? "fait" : ""}"></span>`; }).join("");
+  const faits = S.ecran === "a6" ? 7 + S.ctrl.nb.filter(Boolean).length : S.ctrl.i;
+  const compte = S.ecran === "a6" ? "Points non bloquants" : `Point ${S.ctrl.i + 1} sur 12`;
+  return `<div class="progression"><div class="ligne-flex"><span class="compte">${compte}</span><span class="minuteur" aria-label="Temps passé : ${heureDe(tempsControle())}">${ic("horloge")}${heureDe(tempsControle())}</span></div><div class="segments" role="progressbar" aria-label="Points remplis" aria-valuemin="0" aria-valuemax="12" aria-valuenow="${faits}"><span class="groupe crit">${crit}</span><span class="groupe nb">${nb}</span></div></div>`;
+}
+function fileAttente() {
+  const f = [];
+  if (S.ctrl.enregistre) f.push({ t: "Contrôle avant départ, CT-07", saisi: "05:44", detail: "1 photo, 180 Ko après compression", envoye: S.envoye });
+  if (S.alco.fait) f.push({ t: "Alcootest", saisi: "05:47", detail: "Résultat chiffré sur le téléphone", envoye: S.envoye });
+  if (S.decl.faite) f.push({ t: "Déclaration : presque-accident", saisi: "05:58", detail: "1 photo, position relevée", envoye: S.envoye });
+  return f;
+}
+const avatar = (ini) => `<span class="avatar" aria-hidden="true">${ini}</span>`;
+
+/* ─── Écrans du téléphone ─── */
+function journee() {
+  const cf = S.ctrl.enregistre, af = S.alco.fait;
+  const action = !cf ? { t: "Commencer le contrôle", go: "a2" } : !af ? { t: "Faire l’alcootest", go: "b1" } : { t: "Demander le départ", act: "depart", ic: "envoi" };
+  const etat = !cf ? "Prochaine étape : le contrôle avant départ." : !af ? "Prochaine étape : l’alcootest." : "Le bureau vérifie le départ avant que vous partiez.";
+  return {
+    app: "tel", module: "rotations", h: !cf ? "05:40" : !af ? "05:45" : "06:11",
+    html: `${entete({ titre: "Ma journée", sous: "Ousmane Camara" })}
+    <div class="defile">
+      <section class="feuille">
+        <div class="rot-tete"><div><p class="service">Rotation ROT-0418, lundi 26/10</p><h2 class="titre-fort">CT-07</h2><p class="second">RC 4417 AB, citerne 36 000 L</p></div>${tampon("Citerne")}</div>
+        <dl class="rot-dl"><div><dt>Trajet</dt><dd>Dépôt SGP vers Kindia, 135 km</dd></div><div><dt>Chargement</dt><dd>06:30, rampe 2, gasoil</dd></div></dl>
+      </section>
+      <h2 class="section">Avant de partir</h2>
+      <div class="liste">
+        <button class="tache" data-go="${cf ? "a9" : "a2"}"><span class="pic hsseq">${ic("bouclier", "s28")}</span><span class="corps"><span class="libelle">Contrôle avant départ</span><span class="sous">${cf ? tampon("Fait", "ok") + tampon("Bloquant", "danger") + "1 point critique" : tampon("À faire") + "12 points, moins de 4 min"}</span></span><span class="chev">${ic("chevron")}</span></button>
+        <button class="tache" data-go="${af ? "b3" : "b1"}"><span class="pic hsseq">${ic("souffle", "s28")}</span><span class="corps"><span class="libelle">Alcootest</span><span class="sous">${af ? tampon("Fait", "ok") + "à 05:47" : tampon("À faire") + "Éthylotest du dépôt"}</span></span><span class="chev">${ic("chevron")}</span></button>
+      </div>
+      <button class="tache declarer" data-go="c1"><span class="pic hsseq">${ic("alerte", "s28")}</span><span class="corps"><span class="libelle">Déclarer</span><span class="sous">Danger, presque-accident : 30 secondes, même hors réseau</span></span><span class="chev">${ic("chevron")}</span></button>
+    </div>
+    ${barre({ etat, actions: [action] })}`,
+  };
+}
+
+const ECRANS = {
+  a1: () => ({ ...journee(), titre: "Ma journée", qui: "Conducteur, téléphone Android de service", notes: [
+    "Rotation du jour pré-remplie depuis Transport : le conducteur ne ressaisit ni camion ni trajet.",
+    "Les formulaires HSSEQ portent l’icône pétrole ; l’écran d’accueil garde la latérite de Rotations.",
+    "La barre basse propose toujours la prochaine étape : contrôle, puis alcootest, puis départ.",
+    "« Déclarer » reste à un geste depuis l’accueil, hors de la barre d’action pour éviter un toucher par erreur.",
+  ], composants: ["En-tête de terrain (§ 3.1)", "Barre d’action basse (§ 3.2)", "Tampon d’état (§ 3.6)", "Pastille réseau (§ 3.7)"] }),
+
+  a2: () => ({ app: "tel", module: "hsseq", h: "05:41", titre: "Le camion pré-rempli", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Contrôle", sous: "Avant départ, CT-07", retour: true })}
+    <div class="defile">
+      <p class="libelle">Vérifiez que c’est bien votre camion.</p>
+      <section class="feuille"><p class="service">Véhicule de la rotation</p><h2 class="titre-fort" style="font-size:40px">CT-07</h2><p>Tracteur RC 4417 AB</p><p>Citerne 36 000 L, 3 compartiments</p>
+        <dl class="rot-dl"><div><dt>Rotation</dt><dd>ROT-0418, vers Kindia</dd></div><div><dt>Chargement</dt><dd>06:30, rampe 2</dd></div></dl></section>
+      <section class="info">${ic("info")}<p>Grille citerne : 7 points critiques, puis 5 points non bloquants. L’alcootest se remplit par son propre formulaire.</p></section>
+      ${bouton({ t: "Ce n’est pas mon camion", style: "btn-trait", cls: "btn-56", act: "info", arg: "La liste des camions du dépôt s’ouvre ; le choix est signalé au chef de parc." })}
+    </div>
+    ${barre({ etat: "Objectif : moins de 4 minutes. Le minuteur mesure, il ne presse pas.", icone: "horloge", actions: [{ t: "Commencer le contrôle", act: "debut" }] })}`,
+    notes: ["Véhicule et rotation viennent de Transport : une seule confirmation, en un toucher.", "« Ce n’est pas mon camion » est dans le contenu, loin de l’action principale.", "Le retour Android ramène à « Ma journée » ; rien n’est encore saisi."],
+    composants: ["Barre d’action basse (§ 3.2)"] }),
+
+  a3: () => {
+    const i = S.ctrl.i, p = CRIT[i], prev = i > 0 ? S.ctrl.rep[i - 1] : null;
+    return { app: "tel", module: "hsseq", h: `05:4${Math.min(1 + Math.floor(i / 3), 3)}`, titre: "Point critique", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "Contrôle", sous: "Avant départ, CT-07", retour: true })}${progression()}
+      <div class="defile">
+        ${i > 0 ? `<div class="precedent"><span class="${prev === "nc" ? "n" : "c"}">${prev === "nc" ? losange() : disque()}</span><span class="txt">${CRIT[i - 1].l} : ${prev === "nc" ? "non conforme" : "conforme"}</span><button class="btn btn-trait btn-56" data-act="corriger">Corriger</button></div>` : ""}
+        <p class="etiquette">${ic("cadenas")}Point critique : un défaut bloque le départ</p>
+        <h2 class="titre-point">${p.l}</h2>
+        <p class="consigne">${p.d}</p>
+      </div>
+      <div class="zone-pouce">${cnc("grand", { act: "rep", arg: "" }, S.ctrl.rep[i], `${p.l}, point ${i + 1} sur 12`)}</div>`,
+      notes: ["Un point par écran : un libellé lisible à bout de bras, deux réponses de 104 dp dans le tiers bas.", "« Conforme » à droite sous le pouce droit ; le réglage « main gauche » inverse les deux boutons.", "Toucher « Conforme » remplit le bouton, vibre brièvement et passe au point suivant ; le point précédent reste affiché avec « Corriger ».", "Forme et mot portent la réponse : disque pour conforme, losange pour non conforme, jamais la couleur seule."],
+      composants: ["Point de contrôle (§ 3.3)", "Progression et minuteur (§ 3.5)"], astuce: "Touchez « Non conforme » sur « Pneumatiques » (point 2) pour voir la photo exigée." };
+  },
+
+  a4: () => {
+    const i = S.ctrl.i, p = CRIT[i], photo = S.ctrl.photo[i];
+    return { app: "tel", module: "hsseq", h: "05:42", titre: "Non conforme : photo exigée", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "Contrôle", sous: "Avant départ, CT-07", retour: true })}${progression()}
+      <div class="defile">
+        <div class="ligne-flex">${tampon("Non conforme", "danger")}<span class="espace"></span><button class="btn btn-trait btn-56" data-act="changer-rep">Changer la réponse</button></div>
+        <h2 class="titre-point">${p.l}</h2>
+        <p class="libelle">Qu’est-ce qui ne va pas ?</p>
+        <div class="puces">${p.def.map((d) => `<button class="puce" aria-pressed="${S.ctrl.defaut[i] === d}" data-act="defaut" data-arg="${d}">${d}</button>`).join("")}</div>
+        ${photo
+          ? `<div class="photo-jointe"><div class="vignette">${photoPneu()}</div><div style="display:grid;gap:8px"><p class="libelle texte-ok">Photo jointe</p><p class="service">Prise à 05:42, 180 Ko</p><button class="btn btn-trait btn-56" data-act="photo">Reprendre</button></div></div>`
+          : `<button class="photo-requise" data-act="photo">${ic("camera", "s40")}<span><b>Photo obligatoire</b><span>Montrez le défaut de près. Touchez ici ou le bouton du bas.</span></span></button>`}
+        ${S.ctrl.phrase[i] ? `<p class="phrase">« Coupure profonde au flanc, roue arrière gauche de la citerne. »</p>` : bouton({ t: "Ajouter une phrase (facultatif)", style: "btn-trait", cls: "btn-56", ic: "micro", act: "phrase-nc" })}
+      </div>
+      ${photo
+        ? barre({ etat: "Photo jointe : le point bloquera le départ (V02).", ton: "ok", icone: "check", actions: [{ t: "Continuer", act: "suite-nc" }] })
+        : barre({ etat: "Photo obligatoire pour une non-conformité.", ton: "danger", icone: "camera", actions: [{ t: "Prendre la photo", act: "photo", ic: "camera" }] })}`,
+      notes: ["Sur une non-conformité, la photo est exigée (spécification § 5) : « Continuer » n’apparaît qu’une fois la photo jointe.", "Les défauts courants sont proposés en gros boutons ; la phrase est facultative, dictée ou tapée.", "« Changer la réponse » est en haut, loin de l’action principale.", "La photo reste dans l’application (pas dans la galerie), compressée à 200 Ko environ."],
+      composants: ["Photo obligatoire (§ 3.4)", "Tampon d’état (§ 3.6)"] };
+  },
+
+  a5: () => camera({ titre: `Photo : ${CRIT[S.ctrl.i].l.toLowerCase()}`, scene: photoPneu(), act: "declencher", aide: "Cadrez le défaut de près, puis touchez le déclencheur.", h: "05:42" }, "Prise de photo",
+    ["Appareil photo dans l’application (expo-camera) : la photo n’entre pas dans la galerie du téléphone.", "Déclencheur de 84 dp centré en bas ; la lampe à gauche pour les cabines et les nuits.", "Le retour Android ferme l’appareil photo sans rien perdre."]),
+
+  a6: () => {
+    const reste = S.ctrl.nb.filter((v) => !v).length;
+    const photosManquantes = S.ctrl.nb.some((v, k) => v === "nc" && !S.ctrl.nbPhoto[k]);
+    const pret = reste === 0 && !photosManquantes;
+    return { app: "tel", module: "hsseq", h: "05:43", titre: "Points non bloquants", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "Contrôle", sous: "Avant départ, CT-07", retour: true })}${progression()}
+      <div class="defile">
+        <p class="service">Ces points ne bloquent pas le départ. Un défaut se signale quand même, avec une photo.</p>
+        ${NB.map((l, k) => `<div class="ligne-nb"><p class="libelle">${l}</p>${cnc("compact", { act: "nb", arg: `${k}:` }, S.ctrl.nb[k], l)}${S.ctrl.nb[k] === "nc" ? (S.ctrl.nbPhoto[k] ? `<p class="service texte-ok">Photo jointe à 05:43</p>` : bouton({ t: "Prendre la photo", style: "btn-danger-trait", cls: "btn-56", ic: "camera", act: "nb-photo", arg: k })) : ""}</div>`).join("")}
+      </div>
+      ${barre({ etat: pret ? "Tous les points sont remplis." : reste ? `Encore ${pluriel(reste, "point", "points")} à remplir.` : "Une photo manque.", ton: pret ? "ok" : "", actions: [{ t: "Voir le récapitulatif", go: "a7", off: !pret }] })}`,
+      notes: ["Liste courte pour les points non bloquants : deux réponses de 56 dp par ligne.", "Le bouton du bas reste visible mais inactif tant qu’un point manque, et la ligne d’état dit combien.", "Une non-conformité non bloquante exige aussi sa photo."],
+      composants: ["Point de contrôle, forme compacte (§ 3.3)", "Barre d’action basse (§ 3.2)"] };
+  },
+
+  a7: () => ({ app: "tel", module: "hsseq", h: "05:44", titre: "Récapitulatif", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Récapitulatif", sous: "CT-07, ROT-0418", retour: true })}
+    <div class="defile">
+      <section class="feuille"><p class="service">Contrôle de CT-07</p><p class="titre">12 points en 2 min 58 s</p></section>
+      <section class="urgence"><p class="ligne-flex texte-danger libelle">${losange()} 1 point critique non conforme</p>
+        <div class="photo-jointe" style="background:transparent;padding:0"><div class="vignette">${photoPneu()}</div><div><p class="libelle">Pneumatiques</p><p class="service">Coupure, photo jointe</p></div></div>
+        <p>Ce point bloque le départ (V02). Le chef de parc le lève après réparation, avec une photo.</p>
+        ${bouton({ t: "Appeler Fatoumata Bangoura", style: "btn-trait", cls: "btn-56", ic: "tel", act: "appel", arg: "Fatoumata Bangoura, chef de parc" })}
+      </section>
+      <section class="feuille"><button class="ligne-flex w100" style="min-height:48px" aria-expanded="${S.ctrl.voirConformes}" data-act="voir-conformes"><span class="texte-ok">${disque()}</span><span class="libelle espace">11 points conformes</span><span class="service">${S.ctrl.voirConformes ? "Masquer" : "Voir"}</span></button>
+        ${S.ctrl.voirConformes ? `<ul style="margin:8px 0 0 36px;display:grid;gap:4px">${[...CRIT.filter((_, k) => k !== 1).map((c) => c.l), ...NB].map((l) => `<li>${l}</li>`).join("")}</ul>` : ""}</section>
+      <section class="tache" style="cursor:default"><span class="pic">${ic("souffle", "s28")}</span><span class="corps"><span class="libelle">Alcootest</span><span class="sous">${S.alco.fait ? tampon("Fait", "ok") : tampon("À faire")}Formulaire à part</span></span></section>
+    </div>
+    ${barre({ etat: "Votre signature engage le contrôle.", icone: "stylo", actions: [{ t: "Signer", go: "a8", ic: "stylo" }] })}`,
+    notes: ["Le récapitulatif met la non-conformité en tête, avec sa conséquence (V02) et qui peut la lever.", "Le chef de parc est joignable d’un toucher ; les conformes sont repliés.", "Le point « alcootest » de la grille n’affiche qu’un statut : il est rempli par le formulaire Alcootest (écart relevé dans le système, § 8)."],
+    composants: ["Tampon d’état (§ 3.6)", "Barre d’action basse (§ 3.2)"] }),
+
+  a8: () => ({ app: "tel", module: "hsseq", h: "05:44", titre: "Signature", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Signature", sous: "Contrôle de CT-07", retour: true })}
+    <div class="defile">
+      <p class="libelle">Je certifie avoir contrôlé ce camion moi-même, ce matin.</p>
+      <button class="signature" data-act="signer" aria-label="${S.ctrl.signe ? "Signature tracée" : "Zone de signature : tracez votre signature"}"><span class="base"></span>${S.ctrl.signe ? SIGNATURE_TRACE : `<span class="aide">Signez ici avec le doigt</span>`}</button>
+      <div class="ligne-flex">${bouton({ t: "Effacer", style: "btn-trait", cls: "btn-56", act: "effacer-sig", off: !S.ctrl.signe })}${bouton({ t: "Signer avec mon code", style: "btn-trait", cls: "btn-56 espace", act: "signer-code" })}</div>
+      <p class="service">Avec des gants, signez avec votre code personnel : il vaut signature, avec l’heure et votre nom.</p>
+    </div>
+    ${barre({ etat: S.ctrl.signe ? "Signé à 05:44." : "Signez pour enregistrer le contrôle.", ton: S.ctrl.signe ? "ok" : "", icone: S.ctrl.signe ? "check" : "", actions: [{ t: "Enregistrer le contrôle", act: "enregistrer", off: !S.ctrl.signe }] })}`,
+    notes: ["Zone de signature large (358 × 230 dp), ligne de base marquée.", "Équivalent sans tracé : le code personnel, pour les gants et pour l’accessibilité.", "« Enregistrer » reste inactif tant que la signature manque ; la ligne d’état le dit."],
+    composants: ["Signature (§ 3.10)", "Barre d’action basse (§ 3.2)"], astuce: "Touchez la zone de signature pour la tracer." }),
+
+  a9: () => {
+    const hors = S.reseau === "hors" && !S.envoye;
+    return { app: "tel", module: "hsseq", h: S.envoye ? "06:03" : "05:44", titre: "Enregistré hors réseau", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "Contrôle", sous: "Avant départ, CT-07" })}
+      <div class="defile">
+        <section class="confirme">${disque()}<h2 class="titre-fort">Contrôle enregistré</h2><p>Saisi à 05:44 sur le téléphone, signé.</p></section>
+        ${S.envoye
+          ? `<section class="info">${ic("check")}<p>Envoyé au bureau à 06:03. Le chef de parc a reçu la non-conformité.</p></section>`
+          : hors
+            ? `<section class="attention">${ic("nuage")}<p><b>Hors réseau.</b> Le contrôle partira seul dès que le réseau passe. Rien à refaire.</p></section>`
+            : `<section class="info">${ic("envoi")}<p>Envoi au bureau en cours.</p></section>`}
+        <section class="envoi"><p class="libelle">Contrôle avant départ, CT-07</p><div class="horo"><span>Saisi</span><b>05:44</b><span>Envoi</span><b>${S.envoye ? "06:03" : "en attente"}</b></div>${S.envoye ? tampon("Envoyé", "ok") : tampon("En attente", "warn")}</section>
+      </div>
+      ${barre({ pile: true, actions: [{ t: "Voir la file d’envoi", style: "btn-trait", go: "a10", cls: "btn-56" }, { t: "Retour à ma journée", go: "a1" }] })}`,
+      notes: ["La confirmation tient lieu de reçu : ce qui est fait, quand, et ce qui reste (l’envoi).", "L’heure de saisie (05:44) reste distincte de l’heure d’envoi (spécification § 11).", "Après un enregistrement, le retour Android ramène à « Ma journée », jamais dans le formulaire envoyé."],
+      composants: ["Pastille réseau et file d’envoi (§ 3.7)", "Tampon d’état (§ 3.6)"], astuce: "Passez le réseau sur « En ligne » dans les réglages pour voir l’envoi partir." };
+  },
+
+  a10: () => {
+    const f = fileAttente(), attente = f.filter((e) => !e.envoye).length;
+    return { app: "tel", module: "rotations", h: S.envoye ? "06:03" : "05:46", titre: "File d’envoi", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "File d’envoi", sous: attente ? pluriel(attente, "saisie à envoyer", "saisies à envoyer") : "Tout est envoyé", retour: true })}
+      <div class="defile">
+        <p class="service">Les saisies restent sur le téléphone jusqu’à l’envoi. L’heure de saisie est gardée, même si l’envoi part plus tard.</p>
+        ${f.length ? f.map((e) => `<section class="envoi"><div class="ligne-flex"><p class="libelle espace">${e.t}</p>${e.envoye ? tampon("Envoyé", "ok") : tampon("En attente", "warn")}</div><div class="horo"><span>Saisi</span><b>${e.saisi}</b><span>Envoi</span><b>${e.envoye ? "06:03" : "en attente"}</b></div><p class="service">${e.detail}</p></section>`).join("") : `<p class="libelle">Rien à envoyer.</p>`}
+      </div>
+      ${barre({ etat: S.reseau === "hors" ? "Hors réseau : l’envoi partira seul au retour du réseau." : attente ? (S.reseau === "faible" ? "Réseau faible : l’envoi peut prendre du temps." : "Réseau disponible.") : "Dernier envoi à 06:03.", ton: S.reseau === "hors" ? "warn" : "", icone: S.reseau === "hors" ? "nuage" : "", actions: [{ t: "Envoyer maintenant", act: "envoyer", ic: "envoi", off: S.reseau === "hors" || !attente }] })}`,
+      notes: ["La file d’envoi est commune à toute l’application (SQLite) : rotations, contrôles, alcootests, déclarations.", "Chaque saisie montre ses deux heures ; les photos partent après la fiche.", "« Envoyer maintenant » est inactif hors réseau, avec la raison dans la ligne d’état ; l’envoi automatique continue en arrière-plan."],
+      composants: ["Pastille réseau et file d’envoi (§ 3.7)"] };
+  },
+
+  b1: () => ({ app: "tel", module: "hsseq", h: "05:45", titre: "Consignes", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Alcootest", sous: "Ousmane Camara", retour: true })}
+    <div class="defile">
+      <section class="feuille"><dl class="rot-dl" style="margin:0;padding:0;border:0"><div><dt>Conducteur</dt><dd>Ousmane Camara</dd></div><div><dt>Rotation</dt><dd>ROT-0418, CT-07</dd></div><div><dt>Appareil</dt><dd>Éthylotest ETH-02, étalonné le 02/10</dd></div></dl></section>
+      <h2 class="section">Avant de souffler</h2>
+      <ol class="feuille" style="display:grid;gap:10px;padding-left:40px"><li>Attendez 15 minutes sans manger, boire ni fumer.</li><li>Mettez un embout neuf, soufflez longuement.</li><li>Tapez le chiffre affiché par l’appareil.</li></ol>
+      <section class="info">${ic("cadenas")}<p>Le résultat chiffré n’est lu que par le Responsable HSSEQ. Sur ce téléphone, vous verrez seulement « Fait ».</p></section>
+    </div>
+    ${barre({ actions: [{ t: "Saisir le résultat", go: "b2" }] })}`,
+    notes: ["Conducteur, rotation et appareil sont pré-remplis.", "Les étapes sont numérotées parce qu’elles forment une suite.", "La confidentialité est dite avant la saisie, en une phrase (spécification § 9.4)."],
+    composants: ["Barre d’action basse (§ 3.2)"] }),
+
+  b2: () => {
+    const n = S.alco.saisie.length;
+    return { app: "tel", module: "hsseq", h: "05:47", titre: "Saisie masquée", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "Alcootest", sous: "Ousmane Camara", retour: true })}
+      <div class="defile">
+        <p class="libelle">Tapez le chiffre affiché par l’éthylotest.</p>
+        <div class="masque${n ? "" : " vide"}" role="status" aria-label="${n ? pluriel(n, "caractère saisi, masqué", "caractères saisis, masqués") : "Rien de saisi"}">${n ? "●".repeat(n) : "Rien de saisi"}</div>
+        <p class="service">Le chiffre reste masqué. Il est chiffré sur le téléphone, puis envoyé au seul Responsable HSSEQ.</p>
+        <div class="pave">${["1", "2", "3", "4", "5", "6", "7", "8", "9", ","].map((k) => `<button class="touche" data-act="touche" data-arg="${k}">${k}</button>`).join("")}<button class="touche" data-act="touche" data-arg="0">0</button><button class="touche fn" data-act="corr" aria-label="Effacer le dernier caractère">${ic("effacer", "s28")}</button></div>
+      </div>
+      ${barre({ actions: [{ t: "Enregistrer l’alcootest", act: "alco-ok", off: !n }] })}`,
+      notes: ["Pavé de 64 dp propre à l’application : pas de clavier système, pas de suggestion, pas de copie.", "Chaque chiffre s’affiche en point ; aucun bouton « afficher ». La valeur ne va jamais dans la base locale : elle reste dans le coffre du téléphone jusqu’à l’envoi.", "Avec un éthylotest connecté (Bluetooth), cet écran devient « Lecture de l’appareil » et rien n’est tapé."],
+      composants: ["Saisie masquée (§ 3.13)"] };
+  },
+
+  b3: () => ({ app: "tel", module: "hsseq", h: "05:47", titre: "Fait", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Alcootest", sous: "Ousmane Camara" })}
+    <div class="defile">
+      <section class="confirme">${disque()}<h2 class="titre-fort">Alcootest fait</h2><p>Fait à 05:47 avec l’éthylotest ETH-02.</p></section>
+      <section class="info">${ic("cadenas")}<p>Le résultat ne s’affiche pas sur ce téléphone. Il part chiffré au Responsable HSSEQ.</p></section>
+    </div>
+    ${barre({ actions: [{ t: "Retour à ma journée", go: "a1" }] })}`,
+    notes: ["Le conducteur ne voit que « Fait » : aucun chiffre, aucun « négatif », aucune couleur qui le trahirait.", "Le même statut s’affiche au chef de parc ; seul le Responsable HSSEQ ouvre le détail, consultation journalisée."],
+    composants: ["Tampon d’état (§ 3.6)", "Saisie masquée (§ 3.13)"] }),
+
+  c1: () => ({ app: "tel", module: "hsseq", h: "05:58", titre: "Type en un geste", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Déclarer", sous: "Moins de 30 secondes", retour: true })}
+    <div class="defile bas">
+      <div class="ligne-flex"><p class="libelle espace">Que s’est-il passé ?</p><span class="minuteur">${ic("horloge")}0:03</span></div>
+      <div class="types">
+        <button class="type accident" data-act="type" data-arg="accident">${ic("alerte")}<span><b>Accident</b><span>Blessure, dégât, fuite ou feu</span></span></button>
+        <button class="type" data-act="type" data-arg="situation">${triangle()}<span><b>Situation dangereuse</b><span>Un danger que d’autres vont rencontrer</span></span></button>
+        <button class="type" data-act="type" data-arg="presque">${ic("bouclier")}<span><b>Presque-accident</b><span>Rien n’est arrivé, mais c’était juste</span></span></button>
+      </div>
+    </div>`,
+    notes: ["Trois types en un geste, en tuiles de 120 dp ; le plus fréquent (presque-accident) est le plus bas, sous le pouce.", "Aucune gravité demandée au conducteur : le Responsable HSSEQ classe ensuite.", "Hors réseau, la déclaration part dans la file comme les autres saisies.", "Véhicule en mouvement (vitesse GPS), l’écran demande de s’arrêter avant de déclarer."],
+    composants: ["Déclaration en un geste (§ 3.14)", "Progression et minuteur (§ 3.5)"] }),
+
+  c1b: () => ({ app: "tel", module: "hsseq", h: "05:58", titre: "Accident : d’abord les secours", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Déclarer", sous: "Accident", retour: true })}
+    <div class="defile">
+      <section class="urgence"><p class="ligne-flex texte-danger">${losange("s32")}<span class="titre">D’abord la sécurité</span></p><p>Quelqu’un est blessé, il y a une fuite ou un feu ? Mettez-vous à l’abri, puis appelez.</p>
+        ${bouton({ t: "Appeler les secours du dépôt", style: "btn-danger", ic: "tel", act: "appel", arg: "les secours du dépôt (numéro paramétré par site)" })}
+        ${bouton({ t: "Appeler le chef de parc", style: "btn-trait", ic: "tel", act: "appel", arg: "Fatoumata Bangoura, chef de parc" })}</section>
+      <p class="service">La déclaration peut attendre : vous la reprendrez ici, rien n’est perdu.</p>
+    </div>
+    ${barre({ actions: [{ t: "Continuer la déclaration", go: "c2" }] })}`,
+    notes: ["Pour un accident, l’appel passe avant la saisie : deux boutons d’appel de 64 dp.", "Le numéro d’urgence est paramétré par site et gardé hors réseau."],
+    composants: ["Alertes de criticité (§ 3.12)", "Déclaration en un geste (§ 3.14)"] }),
+
+  c2: () => camera({ titre: "Photo du danger", scene: photoRampe(), act: "decl-photo", aide: "Une photo aide à comprendre. Ne la prenez jamais au volant.", h: "05:58", sansPhoto: true }, "Photo",
+    ["Même appareil photo que le contrôle ; ici la photo est conseillée, pas exigée.", "« Sans photo » à droite, aussi grand que les autres boutons."]),
+
+  c3: () => {
+    const t = { presque: "Presque-accident", situation: "Situation dangereuse", accident: "Accident" }[S.decl.type ?? "presque"];
+    return { app: "tel", module: "hsseq", h: "05:58", titre: "Une phrase, position relevée", qui: "Conducteur, téléphone",
+      html: `${entete({ titre: "Déclarer", sous: t, retour: true })}
+      <div class="defile">
+        <div class="ligne-flex">${tampon(t, S.decl.type === "accident" ? "danger" : "neutre")}<span class="espace"></span><span class="minuteur">${ic("horloge")}0:${S.decl.texte ? "21" : "12"}</span></div>
+        ${S.decl.photo ? `<div class="vignette grande">${photoRampe()}</div>` : `<p class="service">Sans photo.</p>`}
+        <div class="gps">${ic("lieu", "s28")}<div><p class="libelle">Dépôt SGP, Conakry (Kaloum)</p><p class="service">Position relevée à 05:58, à 8 m près</p></div></div>
+        <p class="libelle">Dites ce qui s’est passé, en une phrase.</p>
+        ${S.decl.texte
+          ? `<p class="phrase">« Une citerne a reculé sans guide vers la rampe 3, un agent de quai a dû s’écarter. »</p>${bouton({ t: "Recommencer", style: "btn-trait", cls: "btn-56", ic: "micro", act: "dicter" })}`
+          : `<button class="micro" data-act="dicter">${ic("micro", "s28")}Toucher pour dicter</button><div class="champ">Ou tapez votre phrase</div>`}
+      </div>
+      ${barre({ etat: "Rien d’autre à remplir : le Responsable HSSEQ classera la déclaration.", actions: [{ t: "Envoyer la déclaration", act: "decl-envoyer", ic: "envoi", off: !S.decl.texte && !S.decl.photo }] })}`,
+      notes: ["Position GPS relevée sans geste (expo-location), avec sa précision ; sans signal, la dernière position connue et son heure.", "Dictée en un toucher (toucher pour commencer, toucher pour arrêter), ou phrase tapée.", "Une photo ou une phrase suffit pour envoyer : objectif sous 30 secondes."],
+      composants: ["Déclaration en un geste (§ 3.14)"], astuce: "Touchez « Toucher pour dicter » pour remplir la phrase." };
+  },
+
+  c4: () => ({ app: "tel", module: "hsseq", h: "05:58", titre: "Enregistrée", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Déclarer", sous: "Merci" })}
+    <div class="defile">
+      <section class="confirme">${disque()}<h2 class="titre-fort">Déclaration enregistrée</h2><p>En 24 secondes, à 05:58.</p></section>
+      ${S.reseau === "hors" ? `<section class="attention">${ic("nuage")}<p>Elle partira dès que le réseau passe.</p></section>` : ""}
+      <section class="info">${ic("info")}<p>Le Responsable HSSEQ la classe ; vous serez prévenu de la suite. Chaque presque-accident déclaré aide à éviter un accident.</p></section>
+    </div>
+    ${barre({ actions: [{ t: "Terminé", go: "a1" }] })}`,
+    notes: ["Le temps passé est rendu au conducteur : la déclaration est courte, il le voit.", "Les retours d’expérience diffusés ensuite aux conducteurs sont anonymisés (spécification § 9.4)."],
+    composants: ["Pastille réseau et file d’envoi (§ 3.7)"] }),
+
+  d1: () => ({ ...journee(), titre: "Demander le départ", qui: "Conducteur, téléphone",
+    notes: ["Contrôle et alcootest faits : la barre basse propose « Demander le départ ».", "Le téléphone demande, le serveur décide : le verrou s’évalue toujours côté serveur (spécification § 4)."],
+    composants: ["Barre d’action basse (§ 3.2)", "Tampon d’état (§ 3.6)"] }),
+
+  d2: () => ({ app: "tel", module: "hsseq", h: "06:12", titre: "Départ bloqué", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Départ", sous: "CT-07, ROT-0418", retour: true })}
+    <div class="defile">
+      <section class="verrou-tete danger">${ic("cadenas")}<div><h2>Départ bloqué</h2><p>2 motifs à lever avant de partir.</p></div></section>
+      ${motif("V02", "Un point critique est non conforme", "Pneumatiques : coupure, signalée à 05:44. Levée après réparation, avec photo.", "FB", "Fatoumata Bangoura", "chef de parc", "Fatoumata Bangoura, chef de parc")}
+      ${motif("V05", "Un document du camion est expiré", "Visite technique, expirée le 24/10.", "MS", "Mohamed Sylla", "responsable maintenance", "Mohamed Sylla, responsable maintenance")}
+    </div>
+    ${barre({ etat: "Vérifié à 06:12. Seul le bureau autorise le départ.", icone: "refaire", actions: [{ t: "Vérifier à nouveau", act: "depart", ic: "refaire" }] })}`,
+    notes: ["Chaque motif dit, en mots simples, ce qui bloque, depuis quand, et qui peut le lever, avec un bouton d’appel.", "Le code (V02, V05) est montré pour parler le même langage que le chef de parc, jamais seul.", "Le motif V03 s’écrirait « Alcootest : voir le Responsable HSSEQ », sans dire s’il manque ou s’il est positif.", "Aucune mention de dérogation côté conducteur : c’est au chef de parc de la demander."],
+    composants: ["Écran de verrou (§ 3.8)"], astuce: "Faites les parcours e et f (levée, dérogation) puis « Vérifier à nouveau » : le départ s’autorise." }),
+
+  d3: () => ({ app: "tel", module: "hsseq", h: "06:12", titre: "Hors réseau", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Départ", sous: "CT-07, ROT-0418", retour: true })}
+    <div class="defile">
+      <section class="verrou-tete warn">${ic("nuage")}<div><h2>Départ non vérifié</h2><p>Hors réseau, le bureau ne peut pas vérifier le départ.</p></div></section>
+      <section class="feuille"><p class="service">Dernière réponse du bureau, à 06:12</p><p class="libelle">Départ bloqué, 2 motifs : V02 et V05.</p></section>
+      <section class="info">${ic("info")}<p>Le téléphone ne décide jamais seul d’un départ. Approchez-vous du wifi du dépôt ou demandez au chef de parc de vérifier sur sa tablette.</p></section>
+    </div>
+    ${barre({ etat: "Nouvel essai automatique dès que le réseau passe.", ton: "warn", icone: "nuage", actions: [{ t: "Réessayer", act: "depart", ic: "refaire" }] })}`,
+    notes: ["Sans réseau, aucun verdict local : l’écran montre la dernière réponse du bureau avec son heure, jamais « autorisé ».", "Le seul geste qui dépend du réseau dans toute l’application est la demande de départ ; l’écran le dit."],
+    composants: ["Écran de verrou (§ 3.8)", "Pastille réseau (§ 3.7)"] }),
+
+  d4: () => ({ app: "tel", module: "hsseq", h: S.depart === "route" ? "06:37" : "06:36", titre: "Départ autorisé", qui: "Conducteur, téléphone",
+    html: `${entete({ titre: "Départ", sous: "CT-07, ROT-0418", retour: true })}
+    <div class="defile">
+      <section class="verrou-tete ok">${disque("s40")}<div><h2>${S.depart === "route" ? "En route" : "Départ autorisé"}</h2><p>${S.depart === "route" ? "Rotation en route depuis 06:37. Bonne route." : "Vérifié par le bureau à 06:36."}</p></div></section>
+      <article class="motif"><div class="entete-motif"><span class="code">V02</span>${tampon("Levée", "ok")}</div><p class="libelle">Pneumatiques</p><p class="service">Levé par Fatoumata Bangoura à 06:24 : pneu remplacé, photo jointe.</p></article>
+      <article class="motif"><div class="entete-motif"><span class="code">V05</span>${tampon("Sous dérogation", "warn")}</div><p class="libelle">Visite technique expirée</p><p class="service">Dérogation pour cette seule rotation, jusqu’à l’arrivée à Kindia. Validée par Fatoumata Bangoura puis Aïssatou Barry.</p></article>
+    </div>
+    ${barre({ etat: S.depart === "route" ? "Rotation en route." : "Tous les motifs sont levés ou couverts.", ton: "ok", icone: "check", actions: [{ t: S.depart === "route" ? "Retour à ma journée" : "Partir : passer en route", act: S.depart === "route" ? undefined : "partir", go: S.depart === "route" ? "a1" : undefined }] })}`,
+    notes: ["Un motif levé et un motif sous dérogation se distinguent par leur tampon et par leur phrase.", "La dérogation expire à la fin de la rotation : le conducteur le lit en clair.", "Le passage « en route » repasse par le verrou côté serveur."],
+    composants: ["Écran de verrou (§ 3.8)", "Demande de dérogation (§ 3.9)"] }),
+
+  /* ─── Tablette du chef de parc ─── */
+  e1: () => verrouillage("Ouvrir la tablette par code", ["Tablette partagée en mode kiosque : l’écran de verrouillage ne se quitte que par un code personnel ou un badge QR.", "Les personnes habituées de la tablette sont proposées ; une tuile de 128 dp, puis le code dans les cases du compteur.", "Verrouillage automatique après 2 minutes sans geste, avec un préavis de 20 secondes ; rien de la session précédente ne reste affiché.", "Le retour Android n’a pas d’effet ici (seul bouton système en kiosque)."]),
+
+  e2: () => tabletteChef("Flotte du jour"),
+  e3: () => tabletteChef("Lever une non-conformité"),
+  e4: () => tabletteChef("Non-conformité levée"),
+  e5: () => tabletteChef("Demander une dérogation"),
+  e6: () => tabletteChef("Dérogation demandée"),
+  e7: () => verrouillage("Changer d’utilisateur par badge", ["« Changer d’utilisateur » ferme la session de Fatoumata Bangoura : la tablette revient à l’écran de verrouillage.", "Lecture du badge QR par la caméra avant de la tablette ; le code reste possible.", "Le badge seul ne suffit pas pour valider une dérogation : le code est redemandé à la validation."]),
+
+  f1: () => tabletteHsseq("Dérogations à valider"),
+  f2: () => tabletteHsseq("Seconde validation par code"),
+  f3: () => tabletteHsseq("Alerte de criticité élevée"),
+  f4: () => tabletteHsseq("Véhicule immobilisé"),
+};
+
+function motif(code, titre, detail, ini, nom, role, appel) {
+  return `<article class="motif"><div class="entete-motif"><span class="code">${code}</span><h3>${titre}</h3></div><p class="second">${detail}</p>
+    <div class="qui-leve"><p class="espace">Lève ce motif : <b>${nom}</b>, ${role}</p><button class="btn btn-trait appel" data-act="appel" data-arg="${appel}" aria-label="Appeler ${nom}">${ic("tel")}</button></div></article>`;
+}
+
+function camera(o, titre, notes) {
+  return { app: "tel", module: "hsseq", h: o.h, titre, qui: "Conducteur, téléphone", noir: true, notes, composants: ["Photo obligatoire (§ 3.4)"],
+    html: `<div class="camera"><div class="cam-haut"><p>${o.titre}</p><button class="btn-rond" data-act="retour" aria-label="Fermer l’appareil photo">${ic("croix")}</button></div>
+      <div class="viseur">${o.scene}<span class="coin hg"></span><span class="coin hd"></span><span class="coin bg"></span><span class="coin bd"></span></div>
+      <p class="cam-aide">${o.aide}</p>
+      <div class="cam-bas"><button class="btn-rond g" aria-label="Allumer la lampe" data-act="info" data-arg="La lampe s’allume.">${ic("lampe")}</button><button class="declencheur" data-act="${o.act}" aria-label="Prendre la photo"></button>${o.sansPhoto ? `<button class="sans-photo d" data-act="decl-sans">Sans photo</button>` : `<span class="d"></span>`}</div></div>`,
+  };
+}
+
+/* ─── Tablette : écran de verrouillage partagé ─── */
+function verrouillage(titre, notes) {
+  const v = S.verrou, qui = GENS.find((g) => g.k === v.qui);
+  const droite = v.mode === "qr"
+    ? `<h2>Présentez votre badge</h2><p class="doux">Tenez le badge devant la caméra, à une main de distance.</p><div class="lecteur">${qrBadge()}</div>
+       <div class="ligne-flex">${bouton({ t: "Badge lu : Aïssatou Barry", act: "badge", cls: "espace" })}${bouton({ t: "Utiliser mon code", style: "btn-trait", act: "mode-code" })}</div>`
+    : `<p class="doux">Code personnel de</p><h2>${qui ? qui.n : "Choisissez votre nom"}</h2>
+       <div class="cases" role="status" aria-label="${pluriel(v.pin.length, "chiffre saisi", "chiffres saisis")} sur 4">${[0, 1, 2, 3].map((k) => `<span class="case${k < v.pin.length ? "" : " vide"}">${k < v.pin.length ? "●" : "0"}</span>`).join("")}</div>
+       <div class="pave" style="max-width:360px;width:100%;align-self:center">${["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => `<button class="touche" data-act="pin" data-arg="${k}">${k}</button>`).join("")}<button class="touche fn" data-act="mode-qr">${ic("qr", "s28")}</button><button class="touche" data-act="pin" data-arg="0">0</button><button class="touche fn" data-act="pin-corr" aria-label="Effacer">${ic("effacer", "s28")}</button></div>
+       ${v.message ? `<p class="doux" role="status">${v.message}</p>` : ""}
+       ${bouton({ t: "Scanner mon badge", style: "btn-trait", ic: "qr", act: "mode-qr" })}`;
+  return { app: "tab", module: "hsseq", h: v.mode === "qr" ? "06:32" : "06:18", titre, qui: "Tablette partagée du dépôt", foret: true, kiosque: true, notes,
+    composants: ["Changement d’utilisateur (§ 3.11)"], astuce: v.mode === "qr" ? "Touchez « Badge lu : Aïssatou Barry » pour ouvrir sa session." : "Choisissez Fatoumata Bangoura, puis tapez quatre chiffres.",
+    html: `<div class="verrouillage"><div class="gauche"><div class="ligne-flex">${casque(48)}<div><p style="font:700 19px/1.2 var(--f-titre);color:#fff">NIMOVA · HSSEQ</p><p class="doux">Tablette du dépôt SGP Conakry</p></div></div>
+      <h2>Qui utilise la tablette ?</h2>
+      <div class="gens">${GENS.map((g) => `<button class="qui-tuile" aria-pressed="${v.mode === "code" && g.k === v.qui}" data-act="qui" data-arg="${g.k}">${avatar(g.i)}<b>${g.n}</b><span>${g.r}</span></button>`).join("")}</div>
+      <p class="pied">${ic("cadenas", "s20")} Verrouillage après 2 minutes sans geste. Rien de la session précédente ne reste affiché.</p></div>
+      <div class="droite">${droite}</div></div>`,
+  };
+}
+
+/* ─── Tablette du chef de parc ─── */
+function departTampon(v) {
+  if (v.id === "CT-07") {
+    if (S.tab.leve && S.tab.derog === "accordee") return tampon("Sous dérogation", "warn");
+    return tampon("Bloqué", "danger", losange());
+  }
+  return { bloque: tampon("Bloqué", "danger", losange()), route: tampon("En route"), autorise: tampon("Autorisé", "ok"), attente: tampon("À contrôler", "warn") }[v.dep];
+}
+function enteteTab(nom, role, ini) {
+  const u = `<button class="utilisateur-btn" data-act="changer-user" aria-label="Changer d’utilisateur. Session de ${nom}">${avatar(ini)}<span><b>${nom}</b><span class="r">Changer d’utilisateur</span></span>${ic("changer")}</button>`;
+  return `<header class="entete">${pliTrait}<span class="tuile">${pli("ic")}</span><div class="titres"><h1>NIMOVA · HSSEQ</h1><p class="sous">Dépôt SGP Conakry, lundi 26 octobre, ${role}</p></div>${pastille()}${u}</header>`;
+}
+function tabletteChef(titre) {
+  const t = S.tab, v = FLOTTE.find((x) => x.id === t.sel);
+  const liste = FLOTTE.filter((x) => t.filtre === "tous" || (t.filtre === "bloques" && x.dep === "bloque") || (t.filtre === "controle" && x.ctrl === "afaire"));
+  const gauche = `<h2 class="titre">Flotte du jour</h2>
+    <div class="registre"><div><b>5 <small>sur 9</small></b><p class="service">Contrôles faits</p></div><div><b>6 <small>sur 9</small></b><p class="service">Alcootests faits</p></div><div><b>${t.leve ? 1 : 2}</b><p class="service">Non-conformités ouvertes</p></div><div><b>2</b><p class="service">Départs bloqués</p></div></div>
+    <div class="filtres">${[["tous", "Tous, 9"], ["bloques", "Bloqués, 2"], ["controle", "À contrôler, 4"]].map(([k, l]) => `<button class="filtre" aria-pressed="${t.filtre === k}" data-act="filtre" data-arg="${k}">${l}</button>`).join("")}</div>
+    <div class="flotte">${liste.map((x) => `<button class="vehicule" aria-current="${x.id === t.sel}" data-act="sel" data-arg="${x.id}"><span class="l1"><b>${x.id}</b><span class="service espace">${x.h}, ${x.dest}</span>${departTampon(x)}</span><span class="l2">${x.cond}${x.profil === "Benne" ? ", benne" : ""}</span><span class="l2">Contrôle : ${x.ctrl === "fait" ? "fait" : "à faire"}${x.id === "CT-07" && !t.leve ? ", 1 non-conformité" : x.nc && x.id !== "CT-07" ? ", 1 non-conformité" : ""}. Alcootest : ${x.alco === "fait" ? "conforme" : "non réalisé"}.</span></button>`).join("")}</div>`;
+  let detail = "", barreDetail = "";
+  if (v.id === "CT-07") {
+    const v02 = t.leve
+      ? `<article class="motif"><div class="entete-motif"><span class="code">V02</span><h3 class="espace">Pneumatiques</h3>${tampon("Levée", "ok")}</div><div class="deux"><div><div class="vignette grande" style="height:120px">${photoPneu()}</div><p class="service">Avant, 05:42</p></div><div><div class="vignette grande" style="height:120px">${photoPneu(false)}</div><p class="service">Après, 06:24</p></div></div><p class="service">Levé par vous à 06:24 : ${t.fait.toLowerCase()}.</p></article>`
+      : `<article class="motif"><div class="entete-motif"><span class="code">V02</span><h3 class="espace">Pneumatiques : coupure</h3>${tampon("Ouverte", "warn")}</div><div class="ligne-flex"><div class="vignette" style="width:160px;height:110px">${photoPneu()}</div><div><p>Signalé par Ousmane Camara à 05:44, photo jointe.</p><p class="service">Vous levez ce motif après réparation, avec une photo.</p></div></div></article>`;
+    const v05tamp = t.derog === "demandee" ? tampon("Attente Responsable HSSEQ", "warn") : t.derog === "accordee" ? tampon("Sous dérogation", "warn") : "";
+    const v05 = `<article class="motif"><div class="entete-motif"><span class="code">V05</span><h3 class="espace">Visite technique expirée le 24/10</h3>${v05tamp}</div>
+      ${t.derog === "demandee" ? `<p>Dérogation demandée à 06:26, votre validation comptée : 1 sur 2. La seconde revient au Responsable HSSEQ, Aïssatou Barry.</p>` : t.derog === "accordee" ? `<p>Dérogation active pour ROT-0418 seulement, jusqu’à l’arrivée à Kindia. Le Directeur général est informé.</p>` : ""}
+      <div class="qui-leve">${avatar("MS")}<div><p class="service">Lève ce motif</p><p><b>Mohamed Sylla</b>, responsable maintenance, à réception du procès-verbal</p></div></div></article>`;
+    detail = `<div class="detail-tete"><div><h2 class="titre-fort">CT-07</h2><p>RC 4417 AB, citerne 36 000 L</p><p class="second">Ousmane Camara, vers Kindia, chargement 06:30</p></div>${departTampon(v)}</div>
+      <div class="deux"><div class="carte-etat"><p class="service">Contrôle avant départ</p><p class="libelle">Fait à 05:44</p></div><div class="carte-etat"><p class="service">Alcootest, statut seul</p><p class="libelle">Conforme</p></div></div>
+      <h3 class="section">${t.leve ? "Motifs" : "Motifs ouverts, 2"}</h3>${v02}${v05}`;
+    if (!t.leve) barreDetail = barre({ etat: "Après réparation, une photo est exigée pour lever.", actions: [{ t: "Demander une dérogation", style: "btn-trait", act: "ouvrir-derog" }, { t: "Lever la non-conformité", act: "ouvrir-levee" }] });
+    else if (t.derog === "aucune") barreDetail = barre({ etat: "V02 levé à 06:24. Reste V05.", ton: "ok", icone: "check", actions: [{ t: "Demander une dérogation", act: "ouvrir-derog" }] });
+    else if (t.derog === "demandee") barreDetail = barre({ etat: "Demande envoyée à 06:26 : en attente du Responsable HSSEQ.", ton: "warn", icone: "horloge", actions: [{ t: "Changer d’utilisateur", style: "btn-trait", act: "changer-user", ic: "changer" }] });
+    else barreDetail = barre({ etat: "Départ autorisé : le conducteur le voit à sa prochaine vérification.", ton: "ok", icone: "check", actions: [] });
+  } else {
+    const motifsAttente = [v.ctrl === "afaire" ? ["V01", "Contrôle avant départ non réalisé"] : null, v.alco === "afaire" ? ["V03", "Alcootest non réalisé"] : null].filter(Boolean);
+    let corps = "";
+    if (v.dep === "attente") corps = `<h3 class="section">Motifs ouverts, ${motifsAttente.length}</h3>${motifsAttente.map(([c, l]) => `<article class="motif"><div class="entete-motif"><span class="code">${c}</span><h3 class="espace">${l}</h3></div><p class="ligne-flex service">${ic("cadenas", "s20")}Jamais dérogeable : le conducteur doit le faire.</p></article>`).join("")}`;
+    else if (v.dep === "bloque") corps = `<h3 class="section">Motif ouvert, 1</h3><article class="motif"><div class="entete-motif"><span class="code">V02</span><h3 class="espace">Extincteurs : date dépassée</h3>${tampon("Ouverte", "warn")}</div><p>Le second extincteur est périmé depuis le 30/09. Signalé à 05:52, photo jointe.</p></article>`;
+    else if (v.dep === "route") corps = `<section class="info">${ic("info")}<p>En route depuis 06:04. Contrôle et alcootest faits.</p></section>`;
+    else corps = `<section class="info">${ic("check")}<p>Aucun motif ouvert : contrôle et alcootest faits.</p></section>`;
+    detail = `<div class="detail-tete"><div><h2 class="titre-fort">${v.id}</h2><p>${v.pl}, ${v.profil.toLowerCase()}</p><p class="second">${v.cond}, vers ${v.dest}, départ ${v.h}</p></div>${departTampon(v)}</div>${corps}`;
+    barreDetail = barre({ etat: v.dep === "attente" ? "Le conducteur fait le contrôle et l’alcootest sur son téléphone." : "", actions: [{ t: `Appeler ${v.cond.split(" ")[0]}`, style: "btn-trait", ic: "tel", act: "appel", arg: `${v.cond}, conducteur` }] });
+  }
+  let modale = "";
+  if (t.modale === "levee") {
+    modale = `<div class="voile"></div><section class="modale" role="dialog" aria-modal="true" aria-labelledby="m-titre"><header><h2 class="titre" id="m-titre">Lever la non-conformité</h2><p class="second">Pneumatiques, CT-07 : coupure signalée par Ousmane Camara à 05:44</p></header>
+      <div class="corps"><div class="deux"><div><p class="service">Avant, photo du conducteur</p><div class="vignette grande">${photoPneu()}</div></div><div><p class="service">Après correction, obligatoire</p>${t.photoApres ? `<div class="vignette grande">${photoPneu(false)}</div>` : `<button class="photo-requise" style="min-height:160px;flex-direction:column;justify-content:center;text-align:center" data-act="photo-apres">${ic("camera", "s40")}<span><b>Prendre la photo</b><span>Montrez la réparation</span></span></button>`}</div></div>
+      <p class="libelle">Ce qui a été fait</p><div class="filtres">${["Pneu remplacé", "Pneu réparé", "Autre"].map((x) => `<button class="filtre" aria-pressed="${t.fait === x}" data-act="fait" data-arg="${x}">${x}</button>`).join("")}</div>
+      <div class="champ">Précisez si besoin (facultatif)</div></div>
+      ${barre({ etat: t.photoApres ? "Votre code personnel signe la levée." : "La photo après correction manque.", ton: t.photoApres ? "" : "danger", icone: t.photoApres ? "cadenas" : "camera", actions: [{ t: "Annuler", style: "btn-trait", act: "fermer" }, { t: "Lever la non-conformité", act: "lever", off: !t.photoApres }] })}</section>`;
+  } else if (t.modale === "derog") {
+    modale = `<div class="voile"></div><section class="modale" role="dialog" aria-modal="true" aria-labelledby="m-titre"><header><h2 class="titre" id="m-titre">Demander une dérogation</h2><p class="second">Rotation ROT-0418, CT-07, Ousmane Camara, vers Kindia</p></header>
+      <div class="corps"><p class="libelle">Motif à déroger, un seul par demande</p>
+      <div role="radiogroup" aria-label="Motif à déroger" style="display:grid;gap:10px">
+      <button class="case-motif" role="radio" aria-checked="${t.v05}" data-act="v05"><span class="coche rond">${t.v05 ? '<span class="puce-radio"></span>' : ""}</span><span class="code">V05</span><span class="libelle espace">Visite technique expirée le 24/10</span></button>
+      ${t.leve ? "" : `<button class="case-motif" role="radio" aria-checked="false" data-act="info" data-arg="V02 se lève par la réparation : une dérogation reste possible, dans une demande à part."><span class="coche rond"></span><span class="code">V02</span><span class="libelle espace">Pneumatiques : coupure</span></button>`}</div>
+      <div class="non-derogeable">${ic("cadenas")}<p><b>Jamais dérogeables :</b> contrôle avant départ non réalisé (V01), alcootest non réalisé ou positif (V03).</p></div>
+      <p class="ligne-flex"><span class="libelle espace">Motif écrit, obligatoire</span><span class="service">172 caractères, 30 au moins</span></p>
+      <div class="zone-texte">Visite technique expirée le 24/10, rendez-vous au centre de contrôle de Matoto le 27/10. Livraison urgente de la station de Kindia, citerne contrôlée ce matin sans autre défaut.</div>
+      <div class="regles"><div>${ic("horloge")}<span>Pour cette seule rotation : elle expire à l’arrivée.</span></div><div>${ic("personne")}<span>Deux validations : la vôtre, puis celle du Responsable HSSEQ.</span></div><div>${ic("info")}<span>Le Directeur général est informé ; la dérogation compte dans les indicateurs.</span></div></div></div>
+      ${barre({ etat: "Vous donnez la première validation avec votre code.", icone: "cadenas", actions: [{ t: "Annuler", style: "btn-trait", act: "fermer" }, { t: "Valider ma demande", act: "derog-envoyer", off: !t.v05 }] })}</section>`;
+  }
+  const notesParEcran = {
+    "Flotte du jour": ["La flotte du jour se lit d’un coup d’œil : un registre de quatre chiffres, puis un véhicule par ligne avec son départ en tampon.", "Contrôle en « fait » ou « à faire » ; alcootest en statut seul (« conforme », « non réalisé »), sans taux, heure ni appareil, comme le prévoit le contrat d’API.", "Le détail du véhicule choisi occupe la droite ; l’action principale est en bas à droite, sous le pouce droit.", "Filtres de 56 dp ; les autres véhicules sont cliquables (CT-12 montre V01 et V03, non dérogeables)."],
+    "Lever une non-conformité": ["Avant et après côte à côte : la photo du conducteur, puis la photo de la réparation, exigée.", "Ce qui a été fait en un toucher ; la précision est facultative.", "« Lever » reste inactif tant que la photo manque ; le code personnel signe la levée."],
+    "Non-conformité levée": ["V02 passe en « Levé », avec les deux photos et l’heure.", "Reste V05 : la barre propose la dérogation, seule voie hors de la maintenance."],
+    "Demander une dérogation": ["Une demande porte sur un seul motif, choisi parmi les motifs ouverts dérogeables ; V01 et V03 sont dits non dérogeables dans un encadré à part, sans bouton.", "Motif écrit obligatoire, 30 caractères au moins, compteur visible.", "Portée, double validation et information du Directeur général sont dites avant l’envoi (spécification § 4.1)."],
+    "Dérogation demandée": ["Le tampon « 1 validation sur 2 » dit l’état exact ; la personne attendue est nommée.", "« Changer d’utilisateur » passe la tablette au Responsable HSSEQ (parcours f)."],
+  };
+  return { app: "tab", module: "hsseq", h: t.derog === "demandee" ? "06:26" : t.leve ? "06:24" : "06:20", titre, qui: "Chef de parc, tablette partagée", kiosque: true,
+    notes: notesParEcran[titre] ?? notesParEcran["Flotte du jour"],
+    composants: titre === "Demander une dérogation" ? ["Demande de dérogation (§ 3.9)", "Barre d’action basse (§ 3.2)"] : titre === "Lever une non-conformité" ? ["Photo obligatoire (§ 3.4)", "Signature par code (§ 3.10)"] : ["Tampon d’état (§ 3.6)", "Écran de verrou, version chef de parc (§ 3.8)", "Changement d’utilisateur (§ 3.11)"],
+    astuce: titre === "Flotte du jour" ? "Touchez « Lever la non-conformité », puis la zone photo." : "",
+    html: `${enteteTab("Fatoumata Bangoura", "chef de parc", "FB")}<div class="tab-corps"><div class="tab-gauche">${gauche}</div><div class="tab-droite"><div class="tab-detail">${detail}</div>${barreDetail}</div></div>${modale}`,
+  };
+}
+
+/* ─── Tablette du Responsable HSSEQ ─── */
+function tabletteHsseq(titre) {
+  const f = S.f, alerte = f.sel === "alerte";
+  const navD = (k, veh, code, lib, h) => {
+    const st = f[k];
+    return `<button class="nav-item" aria-current="${f.sel === k}" data-act="f-sel" data-arg="${k}"><span class="l1"><b>${veh}, ${code}</b>${st === "accordee" ? tampon("Active", "warn") : st === "refusee" ? tampon("Refusée", "danger") : tampon("À valider", "warn")}</span><span class="service">${lib}, demandée à ${h}</span></button>`;
+  };
+  const gauche = `<div class="nav-tab"><h2 class="titre" style="margin-bottom:4px">À traiter</h2>
+    <h3>Dérogations, seconde validation</h3>${navD("d1", "CT-07", "V05", "Visite technique expirée", "06:26")}${navD("d2", "CT-15", "V02", "Extincteur périmé", "06:30")}
+    <h3>Alertes</h3><button class="nav-item" aria-current="${alerte}" data-act="f-sel" data-arg="alerte"><span class="l1"><b>Presque-accident, rampe 3</b>${tampon("Criticité élevée", "danger", losange())}</span><span class="service">Classé à 06:31, CT-11 en cause</span></button>
+    <h3>Alcootests du jour</h3><div class="nav-item" style="cursor:default"><span class="l1"><b>6 faits sur 9 départs</b>${tampon("Aucun positif", "ok")}</span>${bouton({ t: "Voir les résultats chiffrés", style: "btn-trait", cls: "btn-56", ic: "cadenas", act: "info", arg: "Accès réservé au Responsable HSSEQ ; chaque consultation est journalisée." })}</div></div>`;
+  let detail = "", barreDetail = "";
+  if (!alerte) {
+    const d = f.sel === "d1"
+      ? { veh: "CT-07", rot: "ROT-0418", cond: "Ousmane Camara", dest: "Kindia", code: "V05", lib: "Visite technique expirée le 24/10", just: "Visite technique expirée le 24/10, rendez-vous au centre de contrôle de Matoto le 27/10. Livraison urgente de la station de Kindia, citerne contrôlée ce matin sans autre défaut.", h: "06:26" }
+      : { veh: "CT-15", rot: "ROT-0421", cond: "Thierno Diallo", dest: "Kankan", code: "V02", lib: "Extincteurs : le second est périmé depuis le 30/09", just: "Le premier extincteur est plombé et à date. Le second sera remplacé au dépôt de Kankan à l’arrivée ; aucun extincteur neuf au dépôt de Conakry ce matin.", h: "06:30" };
+    const st = f[f.sel];
+    detail = `<div class="detail-tete"><div><p class="service">Dérogation, seconde validation</p><h2 class="titre-fort">${d.veh}, ${d.rot}</h2><p class="second">${d.cond}, vers ${d.dest}</p></div>${st === "accordee" ? tampon("Active", "warn") : st === "refusee" ? tampon("Refusée", "danger") : tampon("À valider", "warn")}</div>
+      <article class="motif"><div class="entete-motif"><span class="code">${d.code}</span><h3>${d.lib}</h3></div></article>
+      <div><p class="service" style="margin-bottom:6px">Motif écrit par le chef de parc</p><p class="citation">${d.just}</p></div>
+      <div class="deux"><div class="carte-etat"><p class="service">Première validation</p><p class="libelle">Fatoumata Bangoura, chef de parc</p><p class="service">à ${d.h}, par code</p></div><div class="carte-etat"><p class="service">Portée</p><p class="libelle">Cette seule rotation</p><p class="service">Expire à l’arrivée à ${d.dest}</p></div></div>
+      <div class="non-derogeable">${ic("cadenas")}<p>Toujours vérifiés, jamais dérogeables : contrôle avant départ (fait à 05:44) et alcootest (fait à 05:47).</p></div>
+      ${st === "accordee" ? `<section class="confirme" style="padding:14px 16px">${""}<p class="libelle texte-ok">Dérogation active depuis 06:35, jusqu’à l’arrivée. Le Directeur général est informé ; elle compte dans les indicateurs.</p></section>` : ""}`;
+    barreDetail = st === "attente"
+      ? barre({ etat: "Votre code personnel vaut signature ; la validation est journalisée.", icone: "cadenas", actions: [{ t: "Refuser", style: "btn-danger-trait", act: "f-refuser" }, { t: "Valider la dérogation", act: "f-ouvrir-code" }] })
+      : barre({ etat: st === "accordee" ? "Le conducteur voit le départ autorisé à sa prochaine vérification." : "Le chef de parc est prévenu du refus.", ton: st === "accordee" ? "ok" : "danger", icone: st === "accordee" ? "check" : "croix", actions: [] });
+  } else {
+    const cell = (g, p) => { const c = g * p, z = c >= 15 ? "z4" : c >= 8 ? "z3" : c >= 4 ? "z2" : "z1"; return `<span class="m ${z}${g === 4 && p === 4 ? " ici" : ""}">${c}</span>`; };
+    let m = `<span></span>${[1, 2, 3, 4, 5].map((p) => `<span class="axe">${p}</span>`).join("")}`;
+    for (let g = 5; g >= 1; g--) m += `<span class="axe">${g}</span>${[1, 2, 3, 4, 5].map((p) => cell(g, p)).join("")}`;
+    detail = `<div><p class="ligne-flex">${tampon("Criticité élevée", "danger", losange())}<span class="service">16 sur 25, gravité potentielle 4 × probabilité 4</span></p><h2 class="titre" style="margin-top:8px">Presque-accident au dépôt SGP, rampe 3</h2><p class="second">Déclaré par Ousmane Camara à 05:58 ; classé par vous à 06:31. Véhicule en cause : CT-11.</p></div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start">
+        <div style="display:grid;gap:8px"><p class="citation">« Une citerne a reculé sans guide vers la rampe 3, un agent de quai a dû s’écarter. »</p>
+          <h3 class="section">Effets automatiques</h3>
+          <div class="effets">
+            <div class="effet">${f.immob ? tampon("Immobilisé", "danger", losange()) : tampon("À décider")}<p>${f.immob ? "CT-11 bloqué (V09) jusqu’à la fin de l’enquête." : "Immobiliser CT-11 (motif V09)."}</p></div>
+            <div class="effet">${tampon("À ouvrir", "warn")}<p>Arbre des causes avant jeudi 29/10, 06:31.</p></div>
+            <div class="effet">${tampon("À faire")}<p>Donneur d’ordre informé avant mardi 27/10, 06:31.</p></div>
+            <div class="effet">${tampon("Fait", "ok")}<p>Directeur général prévenu à 06:31.</p></div>
+          </div></div>
+        <div><div class="vignette" style="width:224px;height:96px;margin-bottom:10px">${photoRampe()}</div><div class="matrice" role="img" aria-label="Matrice 5 sur 5 : gravité potentielle 4, probabilité 4, criticité 16, zone élevée">${m}</div><p class="service" style="margin-top:4px">Lignes : gravité.<br>Colonnes : probabilité.</p></div>
+      </div>`;
+    barreDetail = f.immob
+      ? barre({ etat: "Le chef de parc et le conducteur de CT-11 sont prévenus.", ton: "ok", icone: "check", actions: [{ t: "Ouvrir l’enquête", act: "info", arg: "La fiche d’enquête s’ouvre (arbre des causes)." }] })
+      : barre({ etat: "Notification immédiate envoyée au Directeur général.", icone: "info", actions: [{ t: "Immobiliser CT-11", style: "btn-danger-trait", act: "immob", ic: "cadenas" }, { t: "Ouvrir l’enquête", act: "info", arg: "La fiche d’enquête s’ouvre (arbre des causes)." }] });
+  }
+  let modale = "";
+  if (f.modale === "code") {
+    modale = `<div class="voile"></div><section class="modale" style="width:520px" role="dialog" aria-modal="true" aria-labelledby="m-titre"><header><h2 class="titre" id="m-titre">Seconde validation</h2><p class="second">Dérogation V05, CT-07, ROT-0418</p></header>
+      <div class="corps" style="align-items:center"><p class="libelle">Tapez votre code personnel</p>
+      <div class="cases">${[0, 1, 2, 3].map((k) => `<span class="case${k < f.code.length ? "" : " vide"}">${k < f.code.length ? "●" : "0"}</span>`).join("")}</div>
+      <div class="pave" style="width:100%">${["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => `<button class="touche" data-act="f-pin" data-arg="${k}">${k}</button>`).join("")}<span></span><button class="touche" data-act="f-pin" data-arg="0">0</button><button class="touche fn" data-act="f-pin-corr" aria-label="Effacer">${ic("effacer", "s28")}</button></div></div>
+      ${barre({ etat: "Votre code vaut signature.", icone: "cadenas", actions: [{ t: "Annuler", style: "btn-trait", act: "f-fermer" }] })}</section>`;
+  }
+  const notes = {
+    "Dérogations à valider": ["La file des dérogations à valider est à gauche ; la demande choisie se lit en entier à droite : motif, texte du chef de parc, première validation, portée.", "V01 et V03 sont rappelés comme toujours vérifiés.", "« Refuser » et « Valider » sont séparés par 12 dp et ne se ressemblent pas (trait rouge, aplat pétrole)."],
+    "Seconde validation par code": ["La validation se signe par le code personnel, dans les cases du compteur.", "Quatre chiffres valident ; la tablette revient à la demande, tampon « Active ». Si la même personne avait donné la première validation, le refus serait dit en clair (same_approver)."],
+    "Alerte de criticité élevée": ["Criticité élevée (15 à 25) : tampon plein et losange, la valeur et son calcul (gravité potentielle × probabilité).", "La matrice 5 × 5 situe l’événement ; les effets automatiques (spécification § 9.1) sont listés avec leur échéance et leur état.", "L’immobilisation (V09) est une décision, en bouton à part, jamais automatique."],
+    "Véhicule immobilisé": ["CT-11 passe en « Immobilisé » : le verrou bloquera son départ (V09) jusqu’à la fin de l’enquête.", "Le chef de parc et le conducteur sont prévenus ; la flotte du jour le montre en « Bloqué »."],
+  };
+  return { app: "tab", module: "hsseq", h: f.immob ? "06:33" : alerte ? "06:32" : f.d1 === "accordee" ? "06:35" : "06:33", titre, qui: "Responsable HSSEQ, tablette partagée", kiosque: true,
+    notes: notes[titre], composants: alerte ? ["Alertes de criticité (§ 3.12)", "Tampon d’état (§ 3.6)"] : ["Demande de dérogation, seconde validation (§ 3.9)", "Signature par code (§ 3.10)"],
+    astuce: titre === "Dérogations à valider" ? "Touchez « Valider la dérogation », puis tapez quatre chiffres." : titre === "Alerte de criticité élevée" ? "Touchez « Immobiliser CT-11 »." : "",
+    html: `${enteteTab("Aïssatou Barry", "Responsable HSSEQ", "AB")}<div class="tab-corps"><div class="tab-gauche">${gauche}</div><div class="tab-droite"><div class="tab-detail">${detail}</div>${barreDetail}</div></div>${modale}`,
+  };
+}
+
+/* ─── Parcours du menu ─── */
+const PARCOURS = [
+  { id: "a", titre: "Contrôle avant départ", qui: "Conducteur, téléphone", etapes: [["a1", "Ma journée"], ["a2", "Le camion pré-rempli"], ["a3", "Point critique"], ["a4", "Non conforme : photo exigée"], ["a5", "Prise de photo"], ["a6", "Points non bloquants"], ["a7", "Récapitulatif"], ["a8", "Signature"], ["a9", "Enregistré hors réseau"], ["a10", "File d’envoi"]] },
+  { id: "b", titre: "Alcootest", qui: "Conducteur, téléphone", etapes: [["b1", "Consignes"], ["b2", "Saisie masquée"], ["b3", "Fait, sans résultat affiché"]] },
+  { id: "c", titre: "Déclaration en 30 secondes", qui: "Conducteur, téléphone", etapes: [["c1", "Type en un geste"], ["c1b", "Accident : d’abord les secours"], ["c2", "Photo"], ["c3", "Une phrase, position relevée"], ["c4", "Enregistrée"]] },
+  { id: "d", titre: "Verrou au départ", qui: "Conducteur, téléphone", etapes: [["d1", "Demander le départ"], ["d2", "Départ bloqué"], ["d3", "Hors réseau"], ["d4", "Départ autorisé"]] },
+  { id: "e", titre: "Flotte du jour", qui: "Chef de parc, tablette partagée", etapes: [["e1", "Ouvrir la tablette par code"], ["e2", "Flotte du jour"], ["e3", "Lever une non-conformité"], ["e4", "Non-conformité levée"], ["e5", "Demander une dérogation"], ["e6", "Dérogation demandée"], ["e7", "Changer d’utilisateur par badge"]] },
+  { id: "f", titre: "Dérogations et alertes", qui: "Responsable HSSEQ, tablette partagée", etapes: [["f1", "Dérogations à valider"], ["f2", "Seconde validation par code"], ["f3", "Alerte de criticité élevée"], ["f4", "Véhicule immobilisé"]] },
+];
+
+/* Préréglage d'un écran atteint depuis le menu : l'état plausible à ce moment du parcours. */
+function preparer(id) {
+  const garde = { mode: S.mode, main: S.main, echelle: S.echelle };
+  S = { ...etatInitial(), ...garde, ecran: id };
+  const c = S.ctrl;
+  const controleFini = () => { c.i = 7; c.rep = ["c", "nc", "c", "c", "c", "c", "c"]; c.defaut[1] = "Coupure"; c.photo[1] = true; c.nb = ["c", "c", "c", "c", "c"]; };
+  const p = id[0];
+  S.reseau = p === "a" || p === "b" ? "hors" : p === "c" ? "faible" : "ligne";
+  if (id === "a3") { c.i = 0; }
+  if (id === "a4" || id === "a5") { c.i = 1; c.rep = ["c", "nc"]; c.defaut[1] = "Coupure"; }
+  if (id === "a6") { controleFini(); c.nb = [null, null, null, null, null]; }
+  if (id === "a7" || id === "a8") controleFini();
+  if (id === "a9" || id === "a10") { controleFini(); c.signe = true; c.enregistre = true; }
+  if (p === "b") { controleFini(); c.signe = true; c.enregistre = true; }
+  if (id === "b3") S.alco.fait = true;
+  if (p === "c") { S.decl.type = "presque"; }
+  if (id === "c1b") S.decl.type = "accident";
+  if (id === "c3") { S.decl.photo = true; }
+  if (id === "c4") { S.decl.photo = true; S.decl.texte = true; S.decl.faite = true; }
+  if (p === "d") { controleFini(); c.signe = true; c.enregistre = true; S.alco.fait = true; S.envoye = true; }
+  if (id === "d3") S.reseau = "hors";
+  if (id === "d4") { S.tab.leve = true; S.tab.derog = "accordee"; }
+  if (id === "e1") { S.verrou.qui = "fatoumata"; }
+  if (id === "e3") S.tab.modale = "levee";
+  if (id === "e4") S.tab.leve = true;
+  if (id === "e5") { S.tab.leve = true; S.tab.modale = "derog"; }
+  if (id === "e6") { S.tab.leve = true; S.tab.derog = "demandee"; }
+  if (id === "e7") { S.tab.leve = true; S.tab.derog = "demandee"; S.verrou.mode = "qr"; S.verrou.qui = ""; }
+  if (id === "f2") S.f.modale = "code";
+  if (id === "f3") S.f.sel = "alerte";
+  if (id === "f4") { S.f.sel = "alerte"; S.f.immob = true; }
+}
+
+/* ─── Retours (vibration, message) ─── */
+function retourGeste(texte, motif) {
+  S.retourGeste = texte;
+  try { if (motif && navigator.vibrate) navigator.vibrate(motif); } catch (e) { /* bureau : sans vibreur */ }
+}
+
+/* ─── Navigation ─── */
+function aller(id) { S.hist.push(S.ecran); S.ecran = id; }
+const RETOUR_FIXE = { a9: "a1", b3: "a1", c4: "a1", a1: null, d4: "a1" };
+function retourAndroid() {
+  const E = ECRANS[S.ecran]();
+  if (E.app === "tab") {
+    if (S.tab.modale) { S.tab.modale = null; return retourGeste("Retour Android : la fenêtre se ferme, rien n’est envoyé."); }
+    if (S.f.modale) { S.f.modale = null; S.f.code = ""; return retourGeste("Retour Android : la fenêtre se ferme."); }
+    if (S.ecran === "e1" || S.ecran === "e7") return retourGeste("Retour Android : sans effet sur l’écran de verrouillage (mode kiosque).");
+    return retourGeste("Retour Android : la tablette reste sur l’écran principal ; « Changer d’utilisateur » ferme la session.");
+  }
+  if (S.ecran in RETOUR_FIXE) {
+    const cible = RETOUR_FIXE[S.ecran];
+    if (!cible) return retourGeste("Retour Android : « Ma journée » est l’écran d’accueil ; l’application passe en arrière-plan sans rien perdre.");
+    S.ecran = cible; S.hist = []; return retourGeste("Retour Android : après un enregistrement, retour à « Ma journée ».");
+  }
+  if (S.ecran === "a4") { S.ctrl.rep[S.ctrl.i] = undefined; S.ecran = "a3"; return retourGeste("Retour Android : la réponse « non conforme » est retirée, le point est à refaire."); }
+  if (S.ecran === "a3" && S.ctrl.i > 0) { S.ctrl.i -= 1; S.ctrl.rep[S.ctrl.i] = undefined; return retourGeste("Retour Android : retour au point précédent."); }
+  const prec = S.hist.pop();
+  S.ecran = prec ?? "a1";
+  retourGeste(["a3", "a6", "a7", "a8"].includes(prec) || S.ecran === "a2" ? "Retour Android : le contrôle reste en brouillon sur le téléphone." : "Retour Android : écran précédent.");
+}
+
+const ACTIONS = {
+  retour: () => retourAndroid(),
+  info: (a) => retourGeste(a),
+  appel: (a) => retourGeste(`Appel lancé vers ${a}.`, 20),
+  debut: () => { S.ctrl.i = 0; aller("a3"); },
+  rep: (a) => {
+    const i = S.ctrl.i;
+    S.ctrl.rep[i] = a;
+    if (a === "nc") { retourGeste("Vibration double (avertissement) : non conforme, photo exigée.", [30, 60, 30]); aller("a4"); return; }
+    retourGeste("Vibration courte (20 ms) : conforme, point suivant.", 20);
+    rendre();
+    setTimeout(() => { S.ctrl.i = i + 1; if (S.ctrl.i >= CRIT.length) { S.ecran = "a6"; } rendre(); }, 160);
+    return "differe";
+  },
+  corriger: () => { S.ctrl.i -= 1; S.ctrl.rep[S.ctrl.i] = undefined; retourGeste("Le point précédent est rouvert."); },
+  "changer-rep": () => { S.ctrl.rep[S.ctrl.i] = undefined; S.ecran = "a3"; },
+  defaut: (a) => { S.ctrl.defaut[S.ctrl.i] = a; retourGeste(`Défaut choisi : ${a}.`, 15); },
+  photo: () => aller("a5"),
+  declencher: () => { S.ctrl.photo[S.ctrl.i] = true; S.ecran = S.hist.pop() ?? "a4"; retourGeste("Vibration courte : photo prise, compressée à 180 Ko.", 30); },
+  "phrase-nc": () => { S.ctrl.phrase[S.ctrl.i] = true; retourGeste("Dictée terminée."); },
+  "suite-nc": () => { S.ctrl.i += 1; S.ecran = S.ctrl.i >= CRIT.length ? "a6" : "a3"; },
+  nb: (a) => { const [k, v] = a.split(":"); S.ctrl.nb[+k] = v; retourGeste(v === "c" ? "Vibration courte : conforme." : "Vibration double : non conforme, photo exigée.", v === "c" ? 20 : [30, 60, 30]); },
+  "nb-photo": (a) => { S.ctrl.nbPhoto[+a] = true; retourGeste("Photo prise (la maquette saute l’appareil photo).", 30); },
+  "voir-conformes": () => { S.ctrl.voirConformes = !S.ctrl.voirConformes; },
+  signer: () => { S.ctrl.signe = true; },
+  "effacer-sig": () => { S.ctrl.signe = false; },
+  "signer-code": () => { S.ctrl.signe = true; retourGeste("Signé avec le code personnel (pavé de code, comme sur la tablette)."); },
+  enregistrer: () => { S.ctrl.enregistre = true; S.hist = []; S.ecran = "a9"; retourGeste("Vibration de réussite (40 ms) : contrôle enregistré sur le téléphone.", 40); },
+  envoyer: () => { S.envoye = true; retourGeste("Envoi au bureau terminé à 06:03."); },
+  touche: (a) => { if (S.alco.saisie.length < 5) S.alco.saisie += a; navigator.vibrate?.(10); },
+  corr: () => { S.alco.saisie = S.alco.saisie.slice(0, -1); },
+  "alco-ok": () => { S.alco.fait = true; S.alco.saisie = ""; S.hist = []; S.ecran = "b3"; retourGeste("Vibration de réussite : alcootest fait. La valeur est chiffrée, rien ne s’affiche.", 40); },
+  type: (a) => { S.decl.type = a; retourGeste("Vibration courte : type choisi.", 20); aller(a === "accident" ? "c1b" : "c2"); },
+  "decl-photo": () => { S.decl.photo = true; aller("c3"); retourGeste("Photo prise.", 30); },
+  "decl-sans": () => { S.decl.photo = false; aller("c3"); },
+  dicter: () => { S.decl.texte = true; retourGeste("Dictée terminée : la phrase s’affiche, modifiable."); },
+  "decl-envoyer": () => { S.decl.faite = true; S.hist = []; S.ecran = "c4"; retourGeste("Vibration de réussite : déclaration enregistrée.", 40); },
+  depart: () => {
+    if (S.reseau === "hors") { aller("d3"); retourGeste("Hors réseau : le départ ne peut pas être vérifié.", [60, 40, 60]); return; }
+    if (S.tab.leve && S.tab.derog === "accordee") { S.ecran = "d4"; retourGeste("Vibration de réussite : départ autorisé par le bureau.", 40); return; }
+    if (S.ecran !== "d2") aller("d2");
+    retourGeste("Vibration d’erreur : départ bloqué par le verrou (réponse du serveur).", [60, 40, 60]);
+  },
+  partir: () => { S.depart = "route"; retourGeste("Rotation passée en route à 06:37.", 40); },
+  /* Tablette */
+  qui: (a) => { S.verrou.qui = a; S.verrou.mode = "code"; S.verrou.pin = ""; S.verrou.message = ""; },
+  pin: (a) => {
+    const v = S.verrou;
+    if (v.pin.length < 4) v.pin += a;
+    if (v.pin.length === 4) {
+      v.pin = "";
+      if (v.qui === "fatoumata") { S.hist = []; S.ecran = "e2"; S.tab.modale = null; retourGeste("Session ouverte : Fatoumata Bangoura, chef de parc.", 40); }
+      else if (v.qui === "aissatou") { S.hist = []; S.ecran = "f1"; retourGeste("Session ouverte : Aïssatou Barry, Responsable HSSEQ.", 40); }
+      else v.message = "Maquette : choisissez Fatoumata Bangoura ou Aïssatou Barry.";
+    }
+  },
+  "pin-corr": () => { S.verrou.pin = S.verrou.pin.slice(0, -1); },
+  "mode-qr": () => { S.verrou.mode = "qr"; S.verrou.pin = ""; },
+  "mode-code": () => { S.verrou.mode = "code"; S.verrou.qui = S.verrou.qui || "aissatou"; },
+  badge: () => { S.hist = []; S.ecran = "f1"; S.f.sel = "d1"; retourGeste("Badge lu : session d’Aïssatou Barry, Responsable HSSEQ.", 40); },
+  "changer-user": () => { S.tab.modale = null; S.f.modale = null; S.verrou = { qui: "", pin: "", mode: "qr", message: "" }; S.ecran = "e7"; S.hist = []; retourGeste("Session fermée : la tablette revient à l’écran de verrouillage."); },
+  sel: (a) => { S.tab.sel = a; },
+  filtre: (a) => { S.tab.filtre = a; },
+  "ouvrir-levee": () => { S.tab.modale = "levee"; S.ecran = "e3"; },
+  "photo-apres": () => { S.tab.photoApres = true; retourGeste("Photo de la réparation prise.", 30); },
+  fait: (a) => { S.tab.fait = a; },
+  lever: () => { S.tab.leve = true; S.tab.modale = null; S.ecran = "e4"; retourGeste("Vibration de réussite : V02 levé, signé par code.", 40); },
+  "ouvrir-derog": () => { S.tab.modale = "derog"; S.ecran = "e5"; },
+  v05: () => { S.tab.v05 = true; },
+  "derog-envoyer": () => { S.tab.derog = "demandee"; S.tab.modale = null; S.ecran = "e6"; retourGeste("Demande envoyée : première validation donnée par code.", 40); },
+  fermer: () => { S.tab.modale = null; S.ecran = S.tab.leve ? (S.tab.derog === "demandee" ? "e6" : "e4") : "e2"; },
+  "f-sel": (a) => { S.f.sel = a; S.ecran = a === "alerte" ? (S.f.immob ? "f4" : "f3") : "f1"; },
+  "f-ouvrir-code": () => { S.f.modale = "code"; S.f.code = ""; S.ecran = "f2"; },
+  "f-pin": (a) => { S.f.code += a; if (S.f.code.length === 4) { S.f[S.f.sel] = "accordee"; if (S.f.sel === "d1") S.tab.derog = "accordee", S.tab.leve = true; S.f.modale = null; S.f.code = ""; S.ecran = "f1"; retourGeste("Vibration de réussite : dérogation accordée, Directeur général informé.", 40); } },
+  "f-pin-corr": () => { S.f.code = S.f.code.slice(0, -1); },
+  "f-fermer": () => { S.f.modale = null; S.f.code = ""; S.ecran = "f1"; },
+  "f-refuser": () => { S.f[S.f.sel] = "refusee"; retourGeste("Refus enregistré : le motif du refus est demandé (non montré)."); },
+  immob: () => { S.f.immob = true; S.ecran = "f4"; retourGeste("CT-11 immobilisé : motif V09 ouvert.", [60, 40, 60]); },
+};
+
+/* ─── Rendu ─── */
+function barreStatut(h, cls) {
+  const r = S.reseau;
+  const barres = [0, 1, 2, 3].map((k) => `<rect x="${k * 4}" y="${10 - k * 3}" width="3" height="${2 + k * 3}" fill="currentColor" opacity="${(r === "ligne" ? 4 : r === "faible" ? 1 : 0) > k ? 1 : .3}"/>`).join("");
+  return `<div class="statut ${cls}"><span>${h}</span><span class="droite">${r === "hors" ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.6"/></svg>' : `<b style="font-size:11px">${r === "ligne" ? "4G" : "E"}</b>`}<svg width="16" height="13" viewBox="0 0 16 13" aria-hidden="true">${barres}</svg><svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true"><rect x=".75" y=".75" width="18" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2.5" y="2.5" width="10" height="7" fill="currentColor"/><rect x="19.5" y="4" width="2" height="4" fill="currentColor"/></svg><span>64 %</span></span></div>`;
+}
+function barreNavigation(cls, kiosque) {
+  const retour = `<button data-act="retour" aria-label="Retour Android"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M15 3.5L5.5 11 15 18.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>`;
+  if (kiosque) return `<nav class="nav-sys kiosque ${cls}" aria-label="Navigation Android (mode kiosque)">${retour}</nav>`;
+  return `<nav class="nav-sys ${cls}" aria-label="Navigation Android">${retour}<button data-act="info" data-arg="Bouton d’accueil Android : l’application passe en arrière-plan, la saisie en cours reste en brouillon." aria-label="Accueil Android"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><button data-act="info" data-arg="Applications récentes : rien ne s’affiche de la saisie dans l’aperçu (écran masqué pour l’alcootest)." aria-label="Applications récentes"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="4.5" y="4.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button></nav>`;
+}
+
+/* Espaces insécables de la typographie française et des nombres. */
+function typographie(racine) {
+  const w = document.createTreeWalker(racine, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = w.nextNode())) {
+    const t = n.nodeValue;
+    const r = t.replace(/ ([;!?])/g, " $1").replace(/ :/g, " :").replace(/« /g, "« ").replace(/ »/g, " »")
+      .replace(/(\d) (\d{3})(?!\d)/g, "$1 $2").replace(/(\d) (L|km|m|s|min|Ko|dp|%|caractères|points?|motifs?)(?![\wÀ-ÿ])/g, "$1 $2");
+    if (r !== t) n.nodeValue = r;
+  }
+}
+
+function rendre() {
+  const E = ECRANS[S.ecran]();
+  const appareil = document.getElementById("appareil");
+  const ecran = document.getElementById("ecran");
+  appareil.className = `appareil ${E.app === "tab" ? "tab" : "tel"}`;
+  ecran.dataset.mode = S.mode;
+  ecran.classList.toggle("main-gauche", S.main === "gauche");
+  const cls = E.noir ? "noir" : E.foret ? "foret" : "";
+  ecran.innerHTML = `<div class="app" data-module="${E.module}">${barreStatut(E.h, cls)}${E.html}${barreNavigation(cls, E.kiosque)}</div>`;
+  // L'en-tête et la barre d'état se lisent dans la couleur du module : la barre d'état suit.
+  typographie(ecran);
+  // Échelle : réelle (1 px = 1 dp) ou ajustée à la fenêtre.
+  const largeur = E.app === "tab" ? 1056 : 412;
+  const dispo = document.querySelector(".scene").clientWidth - 56;
+  appareil.style.zoom = S.echelle === "ajustee" && dispo < largeur ? (dispo / largeur).toFixed(3) : "";
+  rendreMenu(); rendreNotes(E);
+  const h = `#${S.ecran}${S.mode === "nuit" ? "/nuit" : ""}`;
+  if (location.hash !== h) history.replaceState(null, "", h);
+}
+
+function rendreNotes(E) {
+  const el = document.getElementById("notes");
+  el.innerHTML = `<h2>${E.titre}</h2><p class="qui">${E.qui}</p>
+    <h3>Ce que montre l’écran</h3><ul>${(E.notes ?? []).map((n) => `<li>${n}</li>`).join("")}</ul>
+    ${E.composants ? `<h3>Composants du système</h3><ul>${E.composants.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
+    ${E.astuce ? `<p class="astuce">${E.astuce}</p>` : ""}
+    ${S.retourGeste ? `<p class="retour-geste"><b>Dernier retour :</b> ${S.retourGeste}</p>` : ""}`;
+  typographie(el);
+}
+
+function seg(nom, valeurs, courant) {
+  return `<div class="segm" role="group" aria-label="${nom}">${valeurs.map(([v, l]) => `<button data-reglage="${nom}" data-val="${v}" aria-pressed="${courant === v}">${l}</button>`).join("")}</div>`;
+}
+function rendreMenu() {
+  const m = document.getElementById("menu");
+  m.innerHTML = `<div class="marque">${casque(40)}<div><b>NIMOVA Terrain</b><span>Maquettes HSSEQ, Android</span></div></div>
+    <div class="reglages">
+      <div class="reglage"><span>Mode d’affichage</span>${seg("mode", [["soleil", "Plein soleil"], ["nuit", "Nuit de cabine"]], S.mode)}</div>
+      <div class="reglage"><span>Réseau</span>${seg("reseau", [["ligne", "En ligne"], ["faible", "Faible"], ["hors", "Hors réseau"]], S.reseau)}</div>
+      <div class="reglage"><span>Main du pouce</span>${seg("main", [["droite", "Droite"], ["gauche", "Gauche"]], S.main)}</div>
+      <div class="reglage"><span>Échelle</span>${seg("echelle", [["reelle", "Réelle"], ["ajustee", "Ajustée"]], S.echelle)}</div>
+    </div>
+    ${PARCOURS.map((p) => `<section class="parcours"><h2><i>${p.id}</i>${p.titre}</h2><p>${p.qui}</p><ol>${p.etapes.map(([id, l]) => `<li><button data-saut="${id}" aria-current="${S.ecran === id ? "step" : "false"}">${l}</button></li>`).join("")}</ol></section>`).join("")}
+    <p class="menu-pied">Système : <code>systeme-terrain.md</code>. Données fictives. Le bouton retour de la barre Android fonctionne.</p>`;
+  typographie(m);
+}
+
+document.addEventListener("click", (ev) => {
+  const r = ev.target.closest("[data-reglage]");
+  if (r) { S[r.dataset.reglage] = r.dataset.val; if (r.dataset.reglage === "reseau" && r.dataset.val === "ligne" && fileAttente().length) { S.envoye = true; S.retourGeste = "Réseau revenu : la file d’envoi part seule (06:03)."; } rendre(); return; }
+  const saut = ev.target.closest("[data-saut]");
+  if (saut) { preparer(saut.dataset.saut); rendre(); document.getElementById("appareil").scrollIntoView({ block: "nearest" }); return; }
+  const b = ev.target.closest("#ecran [data-go], #ecran [data-act]");
+  if (!b || b.disabled) return;
+  if (b.dataset.act) { const res = ACTIONS[b.dataset.act]?.(b.dataset.arg); if (res === "differe") return; }
+  else if (b.dataset.go) { if (b.dataset.go === "a1") S.hist = []; aller(b.dataset.go); S.retourGeste = ""; }
+  rendre();
+});
+window.addEventListener("resize", () => { if (S.echelle === "ajustee") rendre(); });
+
+/* Ouverture : #a4 ou #a4/nuit ouvre directement un écran (captures, liens). */
+(function demarrer() {
+  const [id, mode] = location.hash.slice(1).split("/");
+  if (id && ECRANS[id]) preparer(id);
+  if (mode === "nuit") S.mode = "nuit";
+  rendre();
+})();
+</script>
+</body>
+</html>
