@@ -66,6 +66,10 @@ class TestHsseq(FinanceDataMixin, TransactionCase):
         self.assertEqual((status["fitness"], status["blocking"]), ("inapte", True))
         self.emp.write({"medical_fitness": "apte", "medical_fitness_until": self.day - timedelta(days=1)})
         self.assertIn("Aptitude médicale échue.", Employee._hsseq_driver_status(self.driver, self.day)["reasons"])
+        self.emp.medical_fitness = False
+        status = Employee._hsseq_driver_status(self.driver, self.day)
+        self.assertFalse(status["blocking"], "Aptitude non renseignée : avertissement, pas motif V04")
+        self.assertIn("Aptitude médicale non renseignée.", status["warnings"])
 
         other = self.env["eguitra.transport.driver"].create({"name": "Sans dossier", "company_id": self.company.id})
         self.assertTrue(Employee._hsseq_driver_status(other, self.day)["blocking"], "Chauffeur sans dossier salarié")

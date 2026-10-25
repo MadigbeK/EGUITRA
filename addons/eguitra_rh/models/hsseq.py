@@ -6,7 +6,7 @@ Ces données vivent ici ; HSSEQ n'en lit que des statuts, côté serveur, par le
 ci-dessous (jamais un justificatif, jamais un détail médical : l'aptitude n'est qu'« apte » ou
 « inapte » avec sa date de validité). Le verrou de départ V04 d'HSSEQ s'appuie sur
 _hsseq_driver_status : habilitation obligatoire pour les conducteurs expirée ou absente, aptitude
-« inapte » ou échue.
+« inapte » ou échue ; une aptitude non renseignée est un avertissement, pas un motif.
 """
 
 from datetime import date, timedelta
@@ -160,16 +160,18 @@ class EguitraRhEmployee(models.Model):
                                        "|", ("exit_date", "=", False), ("exit_date", ">=", day)], limit=1)
         if not employee:
             return {"employee_id": None, "fitness": "inconnu", "fitness_until": None, "qualifications": [],
-                    "blocking": True, "reasons": ["Aucun dossier salarié en cours n'est lié à ce chauffeur."]}
+                    "blocking": True, "reasons": ["Aucun dossier salarié en cours n'est lié à ce chauffeur."],
+                    "warnings": []}
         fitness = employee._fitness_state(day)
         quals = employee._qualification_rows(day)
-        reasons = []
+        reasons, warnings = [], []
         if fitness == "inapte":
             reasons.append("Aptitude médicale : inapte.")
         elif fitness == "echue":
             reasons.append("Aptitude médicale échue.")
         elif fitness == "inconnu":
-            reasons.append("Aptitude médicale non renseignée.")
+            # La spécification ne bloque que l'inaptitude : une aptitude non saisie est signalée.
+            warnings.append("Aptitude médicale non renseignée.")
         for row in quals:
             if row["mandatory"] and row["state"] in ("expiree", "absente"):
                 reasons.append(f"{row['name']} : {'expirée' if row['state'] == 'expiree' else 'absente'}.")
@@ -180,6 +182,7 @@ class EguitraRhEmployee(models.Model):
             "qualifications": [{k: r[k] for k in ("code", "name", "mandatory", "state", "expiry")} for r in quals],
             "blocking": bool(reasons),
             "reasons": reasons,
+            "warnings": warnings + [f"{r['name']} à renouveler." for r in quals if r["state"] == "a_renouveler"],
         }
 
     @api.model
