@@ -216,7 +216,7 @@ class EguitraRh(http.Controller):
                 label = {"inapte": "inapte", "echue": "échue", "inconnu": "non renseignée"}[fitness]
                 add("fitness", "warn" if fitness == "inconnu" else "danger", emp.medical_fitness_until or None, emp,
                     f"Aptitude médicale de {emp.name} : {label}.", href)
-            elif fitness == "apte" and emp.medical_fitness_until and \
+            elif fitness in ("apte", "apte_reserve") and emp.medical_fitness_until and \
                     (emp.medical_fitness_until - day).days <= settings.qualification_alert_days:
                 add("fitness", "warn", emp.medical_fitness_until, emp,
                     f"Visite d'aptitude de {emp.name} à programmer.", href)

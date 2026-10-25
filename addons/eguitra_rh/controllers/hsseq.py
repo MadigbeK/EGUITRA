@@ -44,8 +44,9 @@ def fitness_row(emp, day=None):
     day = day or today()
     settings = request.env["eguitra.rh.settings"]._get(emp.company_id)
     state = emp._fitness_state(day)
-    if state == "apte" and emp.medical_fitness_until:
-        state = "a_renouveler" if state_on(emp.medical_fitness_until, day, settings.qualification_alert_days) == "a_renouveler" else "apte"
+    if state in ("apte", "apte_reserve") and emp.medical_fitness_until:
+        if state_on(emp.medical_fitness_until, day, settings.qualification_alert_days) == "a_renouveler":
+            state = "a_renouveler"
     return {"status": emp.medical_fitness or None, "state": state, "date": emp.medical_fitness_date or None,
             "until": emp.medical_fitness_until or None}
 
