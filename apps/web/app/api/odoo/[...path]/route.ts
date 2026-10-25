@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAppCode } from "@/lib/config";
-import { forbiddenOrigin, sameOrigin } from "@/lib/route-helpers";
+import { messageStatut } from "@/lib/erreurs";
+import { forbiddenOrigin, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import {
   COOKIES,
   accessExpiring,
@@ -8,7 +9,7 @@ import {
   clearSessionCookies,
   clientIpFrom,
   odooFetch,
-  refreshSession,
+  renouvelerSession,
   setSessionCookies,
   type SessionTokens,
 } from "@/lib/session";
@@ -17,6 +18,8 @@ import {
  * Passerelle du navigateur vers l'API du noyau, sous l'identité de l'utilisateur connecté.
  * Le jeton est lu dans le cookie httpOnly, renouvelé si nécessaire, puis la réponse est relayée.
  * Les droits sont vérifiés par l'API elle-même : la passerelle n'élargit aucun accès.
+ * Un noyau injoignable (redémarrage, panne) donne un 503 en JSON, en français, sans toucher aux
+ * cookies : seul un refus du noyau ferme la session.
  */
 
 const ALLOWED_PATH = /^[a-zA-Z0-9_\-/.]+$/;
@@ -33,7 +36,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const normalized = new URL(apiPath, "http://passerelle").pathname;
   const sessionProfile = apiPath === "/auth/me" && req.method === "GET";
   if (!ALLOWED_PATH.test(apiPath) || normalized !== apiPath || apiPath.includes("..") || (apiPath.startsWith("/auth/") && !sessionProfile)) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return NextResponse.json({ error: "not_found", message: "Adresse inconnue du service." }, { status: 404 });
   }
 
   const refresh = req.cookies.get(COOKIES.refresh)?.value;
@@ -47,8 +50,14 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   let renewed: SessionTokens | null = null;
 
   if ((!access || accessExpiring(req.cookies.get(COOKIES.expires)?.value)) && refresh) {
-    renewed = await refreshSession(refresh, clientIp);
-    if (renewed) access = renewed.access_token;
+    const r = await renouvelerSession(refresh, clientIp);
+    if (r.etat === "ok") {
+      renewed = r.jetons;
+      access = renewed.access_token;
+    } else if (r.etat === "indisponible" && !access) {
+      return serviceIndisponible();
+    }
+    // Refus : le jeton d'accès qui reste (s'il n'a pas encore expiré) est tenté ; le noyau dira 401.
   }
   if (!access) return unauthenticated();
 
@@ -65,15 +74,34 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
       contentType: req.headers.get("content-type"),
     });
 
-  let res = await call(access);
-  if (res.status === 401 && refresh && !renewed) {
-    renewed = await refreshSession(refresh, clientIp);
-    if (renewed) res = await call(renewed.access_token);
+  let res: Response;
+  try {
+    res = await call(access);
+    if (res.status === 401 && refresh && !renewed) {
+      const r = await renouvelerSession(refresh, clientIp);
+      if (r.etat === "indisponible") return serviceIndisponible();
+      if (r.etat === "ok") {
+        renewed = r.jetons;
+        res = await call(renewed.access_token);
+      }
+    }
+  } catch {
+    // Noyau injoignable. Une session renouvelée juste avant garde ses nouveaux jetons : l'ancien jeton
+    // de renouvellement, déjà remplacé, ne vaudrait plus au prochain appel.
+    return avecSession(serviceIndisponible(), renewed, app);
   }
   if (res.status === 401) return unauthenticated();
 
-  const headers = new Headers({ "Cache-Control": "no-store" });
   const type = res.headers.get("content-type") ?? "application/octet-stream";
+  // Réponse d'erreur qui n'est pas du JSON : route inconnue du noyau (identifiant non numérique dans
+  // l'adresse), page d'erreur du serveur. L'écran reçoit un message en français, jamais du HTML.
+  if (!res.ok && !type.startsWith("application/json")) {
+    await res.body?.cancel().catch(() => undefined);
+    const erreur = res.status === 404 ? "not_found" : res.status >= 500 ? "unavailable" : "error";
+    return avecSession(NextResponse.json({ error: erreur, message: messageStatut(res.status) }, { status: res.status, headers: { "Cache-Control": "no-store" } }), renewed, app);
+  }
+
+  const headers = new Headers({ "Cache-Control": "no-store" });
   if (type.startsWith("application/json")) {
     headers.set("content-type", type);
   } else {
@@ -82,7 +110,11 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     headers.set("content-disposition", attachmentDisposition(res.headers.get("content-disposition")));
     headers.set("content-security-policy", "sandbox; default-src 'none'");
   }
-  const out = new NextResponse(res.body, { status: res.status, headers });
+  return avecSession(new NextResponse(res.body, { status: res.status, headers }), renewed, app);
+}
+
+/** Pose les jetons renouvelés pendant l'appel sur la réponse, quelle qu'elle soit. */
+function avecSession(out: NextResponse, renewed: SessionTokens | null, app: string | undefined): NextResponse {
   if (renewed) setSessionCookies(out.cookies, renewed, app);
   return out;
 }

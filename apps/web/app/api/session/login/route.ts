@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import QRCode from "qrcode";
 import { isAppCode } from "@/lib/config";
-import { forbiddenOrigin, readJson, sameOrigin } from "@/lib/route-helpers";
+import { forbiddenOrigin, lireReponse, readJson, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import {
   COOKIES,
   clientIpFrom,
@@ -31,12 +31,9 @@ export async function POST(req: NextRequest) {
       userAgent: req.headers.get("user-agent"),
     });
   } catch {
-    return NextResponse.json(
-      { error: "unavailable", message: "Service momentanément indisponible." },
-      { status: 503 },
-    );
+    return serviceIndisponible();
   }
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = await lireReponse(res);
   if (!res.ok) return NextResponse.json(data, { status: res.status });
 
   switch (data.status) {

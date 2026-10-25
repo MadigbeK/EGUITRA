@@ -1,5 +1,7 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
+import { messageStatut } from "./erreurs";
+import { MESSAGE_INDISPONIBLE } from "./session";
 
 /** Refuse les requêtes de modification venant d'un autre site (protection CSRF). */
 export function sameOrigin(req: NextRequest): boolean {
@@ -26,6 +28,25 @@ export async function readJson(req: NextRequest): Promise<Record<string, unknown
   } catch {
     return {};
   }
+}
+
+/** Le noyau ne répond pas : 503 en JSON, en français. Les cookies de session ne sont pas touchés. */
+export function serviceIndisponible(): NextResponse {
+  return NextResponse.json(
+    { error: "unavailable", message: MESSAGE_INDISPONIBLE },
+    { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "10" } },
+  );
+}
+
+/**
+ * Corps JSON d'une réponse du noyau. Une réponse d'erreur sans message (page d'erreur du serveur,
+ * corps illisible) reçoit un message en français : l'écran n'affiche jamais un code ou du HTML.
+ */
+export async function lireReponse(res: Response): Promise<Record<string, unknown>> {
+  const data: unknown = await res.json().catch(() => null);
+  const corps = data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+  if (res.ok || typeof corps.message === "string") return corps;
+  return { ...corps, error: typeof corps.error === "string" ? corps.error : "error", message: messageStatut(res.status) };
 }
 
 /** Relaie la réponse JSON du noyau telle quelle (statut et corps). */

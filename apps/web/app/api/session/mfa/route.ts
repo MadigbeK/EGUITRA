@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { forbiddenOrigin, readJson, sameOrigin } from "@/lib/route-helpers";
+import { forbiddenOrigin, lireReponse, readJson, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import { COOKIES, clientIpFrom, odooFetch, setSessionCookies, setStepCookie, type SessionTokens } from "@/lib/session";
 
 /** Étape 2 : code à 6 chiffres de l'application d'authentification. */
@@ -11,12 +11,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_token", message: "Étape expirée : reconnectez-vous." }, { status: 401 });
   }
   const { code } = await readJson(req);
-  const res = await odooFetch("/auth/mfa", {
-    body: { mfa_token: step, code: String(code ?? "") },
-    app,
-    clientIp: clientIpFrom(req.headers),
-  });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  let res: Response;
+  try {
+    res = await odooFetch("/auth/mfa", {
+      body: { mfa_token: step, code: String(code ?? "") },
+      app,
+      clientIp: clientIpFrom(req.headers),
+    });
+  } catch {
+    return serviceIndisponible();
+  }
+  const data = await lireReponse(res);
   if (!res.ok) return NextResponse.json(data, { status: res.status });
   const out = NextResponse.json({ status: "ok" });
   setStepCookie(out.cookies, COOKIES.mfa, "", 0); // effacé (mêmes attributs que le cookie posé)
