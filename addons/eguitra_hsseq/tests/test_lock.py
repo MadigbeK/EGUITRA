@@ -37,6 +37,40 @@ class TestLock(HsseqCase):
         self.assertEqual(status, 200, body)
         self.assertEqual(body["version"], version + 1, "Une modification, une version")
 
+    def test_controle_hors_ligne_sur_une_version_plus_ancienne(self):
+        """Seuls les points de la version utilisée sont exigés ; un point ajouté depuis est « non évalué », un
+        point retiré depuis reste accepté."""
+        template = self.tanker_template
+        old_version = template.version
+        old_answers = self.answers(template)
+        status, grids = self.api("kadi.hsseq", "GET", "/hsseq/checks/templates?vehicle_kind=tanker")
+        grid = next(g for g in grids if g["id"] == template.id)
+        status, body = self.api("kadi.hsseq", "PATCH", f"/hsseq/checks/templates/{template.id}", {
+            "items": [i for i in grid["items"] if i["label"] != LIGHTS]
+            + [{"label": "Gilet haute visibilité porté", "blocking": True, "sequence": 200}]})
+        self.assertEqual((status, body["version"]), (200, old_version + 1), body)
+        added = template._items().filtered(lambda i: i.label == "Gilet haute visibilité porté")
+        lights = template._items(active_only=False).filtered(lambda i: i.label == LIGHTS)
+        self.assertEqual((lights.active, lights.retired_version), (False, old_version + 1), "Retiré : archivé")
+        rot = self._rotation()
+        payload = {"client_uuid": "ctl-v-old", "template_id": template.id, "template_version": old_version,
+                   "rotation_id": rot.id, "offline": True, "answers": old_answers}
+        status, check = self.api("ibrahima", "POST", "/hsseq/checks", payload)
+        self.assertEqual(status, 200, check)
+        answers = {a["item_id"]: a["answer"] for a in check["answers"]}
+        self.assertEqual(answers[added.id], "not_evaluated", "Point ajouté après la saisie : non évalué, sans erreur")
+        self.assertEqual(answers[lights.id], "ok", "Point retiré depuis : sa réponse est gardée")
+        self.assertEqual((check["result"], check["template"]["version"]), ("compliant", old_version))
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(
+            payload, client_uuid="ctl-v-cur", template_version=old_version + 1))
+        self.assertEqual((status, body["error"], body["fields"]), (422, "incomplete_answers", [added.id]),
+                         "Version courante : le nouveau point est exigé")
+        brakes = template._items().filtered(lambda i: i.label == BRAKES)
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(
+            payload, client_uuid="ctl-v-gap", answers=[a for a in old_answers if a["item_id"] != brakes.id]))
+        self.assertEqual((status, body["error"], body["fields"]), (422, "incomplete_answers", [brakes.id]),
+                         "Un point de sa propre version manque")
+
     def test_controle_et_v02_d_une_rotation_a_l_autre(self):
         rot = self._rotation()
         status, body = self.api("ibrahima", "POST", "/hsseq/checks", {
@@ -132,6 +166,34 @@ class TestLock(HsseqCase):
         self.breath(rot)
         self.assertEqual(self.codes(rot), ["V03"], "Le même conducteur reste exclu de la rotation")
         self.assertIsNone(rot._hsseq_evaluate(detail=False)["reasons"][0]["detail"], "Détail de V03 hors hsseq : nul")
+
+    def test_annulation_d_un_alcootest_saisi_par_erreur(self):
+        rot = self._rotation()
+        self.check(rot)
+        test = self.breath(rot, "positive")
+        self.assertFalse(rot.driver_id)
+        for login in ("ibrahima", "dg.hsseq", "admin.hsseq"):
+            status, _b = self.api(login, "POST", f"/hsseq/breath-tests/{test.id}/cancel", {"reason": "Erreur"})
+            self.assertEqual(status, 403, f"{login} n'annule pas un alcootest")
+        status, _b = self.driver_api("POST", f"/hsseq/breath-tests/{test.id}/cancel", {"reason": "Erreur"})
+        self.assertEqual(status, 403, "Le conducteur n'annule pas un alcootest")
+        status, body = self.api("kadi.hsseq", "POST", f"/hsseq/breath-tests/{test.id}/cancel", {})
+        self.assertEqual((status, body["error"]), (422, "reason_required"))
+        status, cancelled = self.api("kadi.hsseq", "POST", f"/hsseq/breath-tests/{test.id}/cancel",
+                                     {"reason": "Saisi sur le mauvais conducteur"})
+        self.assertEqual((status, cancelled["cancelled"]), (200, True), cancelled)
+        self.assertEqual(rot.driver_id, self.driver, "Le conducteur retiré par le positif est rétabli")
+        [v03] = rot._hsseq_evaluate()["reasons"]
+        self.assertEqual((v03["code"], v03["pending"]), ("V03", True), "L'alcootest est à refaire")
+        entry = self.env["eguitra.hsseq.journal"].search([("model", "=", "breath_test"), ("res_id", "=", test.id),
+                                                          ("action", "=", "cancel")])
+        self.assertEqual((entry.old_value, entry.new_value, entry.user_id), ("non_compliant", "cancelled", self.hsseq),
+                         "Annulation journalisée : avant, après, auteur")
+        status, cockpit = self.api("kadi.hsseq", "GET", "/hsseq/cockpit")
+        positives = next(i for i in cockpit["indicators"] if i["code"] == "breath_test_positives")["value"]
+        self.assertEqual(positives, 0, "Un test annulé ne compte plus dans les indicateurs")
+        status, _b = self.api("ibrahima", "GET", f"/hsseq/breath-tests/{test.id}")
+        self.assertEqual(status, 404, "Test annulé : connu du seul profil hsseq")
 
     def test_depart_et_validation_par_transport(self):
         rot = self._rotation()
