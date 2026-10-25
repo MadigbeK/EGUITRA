@@ -59,8 +59,12 @@ vide : `up.sh` ne démarre un noyau que si sa base existe.
 1. Modèle : champs et méthodes dans `addons/eguitra_<module>/models/`. Tout nouveau modèle reçoit ses
    droits (`security/ir.model.access.csv`, par profil) et une règle de société
    (`security/*_rules.xml`, `company_id in company_ids`), sinon un profil d'une autre société le lirait.
-2. Piste d'audit : déclarer le modèle dans la liste passée à `eguitra.setup.ensure_audit_rules`
-   (crochet `post_init_hook` du module) et, pour les bases existantes, dans une migration.
+2. Piste d'audit : ajouter le modèle à la liste `AUDITED_MODELS` du paquet (`__init__.py`, ou
+   `hooks.py`), passée à `eguitra.setup.ensure_audit_rules` par le crochet `post_init_hook` du
+   module ; pour les bases existantes, une migration appelle `ensure_all_audit_rules` (exemple :
+   `eguitra_base/migrations/19.0.1.8.0/end-migrate.py`). Le test `test_audit_coverage`
+   d'`eguitra_base` échoue si un modèle de la plateforme n'est ni suivi ni écarté explicitement
+   (`AUDIT_EXCLUDED_MODELS`).
 3. Version et migration : augmenter la version du manifeste (`19.0.1.x.0`) et écrire
    `migrations/<version>/post-migrate.py` pour les données à transformer. Redémarrer le noyau après
    la mise à jour (module d'audit).
@@ -140,13 +144,15 @@ Le détail est dans `infra/README.md` et `infra/backup/README.md`. État au 25 o
 | Archivage des journaux de transactions (WAL) | `infra/backup/archive-wal.sh`, `archive_timeout` de 5 minutes | en service, sur le serveur |
 | Sauvegarde de base | `infra/backup/base-backup.sh`, chaque nuit à 01 h 30 | en service, sur le serveur, 14 jours |
 | Pièces jointes | `infra/backup/files-backup.sh`, miroir toutes les 15 minutes, instantané chaque nuit | en service, sur le serveur |
-| Copie hors site chiffrée | `infra/backup/offsite.sh` (rclone, distant `crypt`, rétentions de l'offre) | pas en service : le stockage chez un second hébergeur n'est pas souscrit (`infra/backup.env`) |
-| Tests de restauration | `infra/backup/restore-test.sh`, chaque mois et chaque trimestre à un instant donné, avec compte rendu | mensuel réussi ; premier test à un instant donné réussi le 25 octobre 2026 (`docs/projet/exploitation/restauration-20261025-0018.md`) |
+| Copie hors site chiffrée | `infra/backup/offsite.sh` (rclone, distant `crypt` ; 30 sauvegardes quotidiennes, 12 mensuelles, 15 jours de journaux) | pas en service : le stockage chez un second hébergeur n'est pas souscrit (`infra/backup.env`) |
+| Tests de restauration | `infra/backup/restore-test.sh`, chaque mois et chaque trimestre à un instant donné, avec compte rendu ; `--offsite` restaure depuis la copie hors site et mesure le vrai délai de reprise | mensuel réussi ; premier test à un instant donné réussi le 25 octobre 2026 (`docs/projet/exploitation/restauration-20261025-0018.md`) ; restauration depuis la copie hors site à jouer dès sa mise en service |
 | Supervision | `infra/monitor.sh` toutes les 5 minutes (`monitor-install.sh`) | en service ; aucune destination d'alerte configurée (`ALERT_WEBHOOK_URL`, `ALERT_NTFY_URL` dans `infra/.env`) : alertes inscrites au seul journal `logs/monitor.log` ; sonde externe `HEARTBEAT_URL` prévue |
-| Disponibilité | `infra/availability-report.py`, chaque mois | outillé ; calcul sur le journal de la supervision |
+| Disponibilité | `infra/availability-report.py`, chaque mois | outillé ; calcul sur le journal de la supervision, seules les maintenances annoncées 48 heures à l'avance étant exclues |
+| Mises à jour de sécurité | système : chaque nuit, sans redémarrage (`setup-vps.sh`) ; images : `infra/maj-securite.sh`, chaque mois, recette puis production, annoncée 48 heures à l'avance, compte rendu du mois | outillées ; la supervision rappelle la mise à jour des images au-delà de 35 jours |
 | Double authentification | paramètre `eguitra_api.mfa_required` | outillée ; suspendue en production depuis le 21 octobre 2026 à la demande du gérant, à rétablir avant la reprise des données réelles (paramètre à 1, puis redémarrage du noyau) ; suspendue aussi en recette |
 | Courriel sortant | `infra/mail-server.sh` | pas de serveur d'envoi fourni : les relances s'impriment |
 | Noms de domaine | `infra/domaines.sh` | adresses provisoires en `sslip.io` ; nimova.gn commandé le 21 octobre 2026, en attente de finalisation |
+| Réversibilité | `infra/export-reversibilite.sh` | outillée depuis le 25 octobre 2026 (chapitre 9) |
 
 Précaution : toujours redémarrer le noyau après l'installation ou la mise à jour de modules (le
 module d'audit modifie les modèles au chargement de ses règles). Les tâches longues se lancent
@@ -155,18 +161,20 @@ détachées (`nohup … &`, journal dans `~/eguitra/logs/`).
 ## 9. Réversibilité (offre, chapitre 5.4)
 
 Le client est propriétaire de ses données et du code développé pour lui. Sur simple demande et sans
-frais, E-VOLUTION XP remet une copie complète, dans des formats ouverts :
+frais, E-VOLUTION XP remet une copie complète, dans des formats ouverts. L'outil
+`infra/export-reversibilite.sh` la produit en une fois, sans arrêter la production, dans un dossier
+daté (par défaut sous `~/eguitra/exports`) :
 
-- la base de production, en fichier SQL de PostgreSQL ;
-- les pièces jointes (filestore), en fichiers ;
-- le code de la version en service : modules `addons/eguitra_*`, application `apps/web`, scripts
-  d'exploitation `infra/`, avec les références des modules OCA épinglés (`infra/oca/lock.txt`) ;
-- une notice d'installation : le présent dossier, `infra/README.md` et `infra/backup/README.md`.
+| Fichier | Contenu |
+|---|---|
+| `base.sql.gz` | base de production, export SQL complet en texte (`pg_dump`), sans propriétaires |
+| `pieces-jointes.tar.gz` | pièces jointes de la base |
+| `code.tar.gz` | code de la version en service : modules EGUITRA et OCA, applications web |
+| `deploiement.tar.gz` | configuration de déploiement et scripts, sans aucun secret |
+| `NOTICE.md` | contenu, versions, procédure de réinstallation, empreintes SHA-256 |
 
-Un outil d'export complet est en cours d'ajout : `infra/export-reversibilite.sh`, qui produira en
-une fois le fichier SQL, les pièces jointes, le code de la version en service et la notice. Jusqu'à
-sa livraison, ces éléments s'obtiennent à la main : `pg_dump` de la base de production, copie du
-miroir des pièces jointes (`/srv/eguitra/backup/filestore/current/`) et de la version figée
-`infra/releases/current`.
+L'export contient les données de l'entreprise : il se remet au client par un moyen sûr, puis
+s'efface du serveur. Le présent dossier, `infra/README.md` et `infra/backup/README.md` complètent
+la notice.
 
 Les composants génériques d'E-VOLUTION XP restent réutilisables par E-VOLUTION XP (offre, 5.4).
