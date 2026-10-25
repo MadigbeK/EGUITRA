@@ -233,7 +233,9 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
                 status = 500
                 return _error(500, "server_error", "Erreur interne. L'incident est journalisé.")
             finally:
-                _log_access(user_id, status, started, app)
+                # Le contrôle de santé (conteneur, supervision : toutes les 30 s) n'est pas un accès.
+                if route != "/health":
+                    _log_access(user_id, status, started, app)
 
         return http.route(
             API_PREFIX + route,
