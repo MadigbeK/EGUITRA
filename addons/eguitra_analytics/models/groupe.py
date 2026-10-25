@@ -855,12 +855,12 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                             + " ".join(a["comment"] for a in weak[:2]),
                             metric=metric, confidence=0.75, method=health["method"],
                             action="Traiter en priorité les deux axes les plus faibles (plan de trésorerie et de "
-                                   "recouvrement, revue de la structure de coûts).", link="/analyse/synthese")]
+                                   "recouvrement, revue de la structure de coûts).", link="/analyse")]
         if health["score"] >= 75:
             return [insight("synthese.sante_solide", "synthese", "positive", "La santé financière est solide",
                             f"Score de santé de {health['score']} sur 100 ; point de vigilance : {weak[0]['label'].lower()} "
                             f"({weak[0]['score']} sur 100).", metric=metric, confidence=0.75, method=health["method"],
-                            link="/analyse/synthese")]
+                            link="/analyse")]
         return []
 
     @staticmethod
