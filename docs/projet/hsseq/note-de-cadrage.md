@@ -26,6 +26,8 @@ Le module HSSEQ ne figure pas dans l'offre OTF-EGUITRA-2026-37, dont le périmè
 
   C'est faisable dans la même architecture. Le risque à suivre est la place disponible sur les téléphones d'entrée de gamme lors de longues coupures : nombre de photos limité par formulaire, purge après envoi.
 - **Profil « conducteur » à créer.** Rotations exige aujourd'hui le profil exploitation. Il faut un profil limité au téléphone : ses propres formulaires et ses habilitations, rien d'autre.
+- **Le départ lui-même se fait en ligne.** Les trois formulaires se remplissent sans réseau, mais le passage « en route » est évalué par le serveur au moment où on le demande. Le parc doit donc avoir du réseau au moment du départ, ou le chef de parc passe par l'ordinateur. Sinon, un camion partirait sans que le verrou ait été vérifié.
+- **Pas de contournement par la validation.** Une rotation chargée après l'activation de HSSEQ ne peut plus être validée sans être passée par « en route ». L'historique et les reprises de données restent libres.
 
 ## 3. Ce que Transport contient déjà
 
