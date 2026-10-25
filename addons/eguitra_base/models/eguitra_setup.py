@@ -1,3 +1,4 @@
+import importlib
 import logging
 
 from odoo import api, models
@@ -5,7 +6,8 @@ from odoo import api, models
 _logger = logging.getLogger(__name__)
 
 # Modèles du noyau dont chaque création, modification et suppression est journalisée
-# avec les valeurs avant et après (offre, chapitre 5.3). Les modules métier ajoutent les leurs.
+# avec les valeurs avant et après (offre, chapitre 5.3). Les modules métier ajoutent les leurs,
+# dans la liste AUDITED_MODELS de leur paquet (ou de son fichier hooks.py).
 CORE_AUDITED_MODELS = [
     "account.move",
     "account.move.line",
@@ -19,7 +21,28 @@ CORE_AUDITED_MODELS = [
     "res.company",
     "res.users",
     "res.currency.rate",
+    # Paramètres système, dont les interrupteurs de sécurité (double authentification exigée).
+    "ir.config_parameter",
 ]
+
+# Modèles de la plateforme volontairement hors de la piste d'audit : journaux et jetons eux-mêmes,
+# accusés de lecture, réactions et notifications, lignes recalculées d'un bulletin (le bulletin est
+# suivi), table de correspondance technique de la reprise.
+AUDIT_EXCLUDED_MODELS = [
+    "eguitra.api.access.log",
+    "eguitra.api.login.attempt",
+    "eguitra.api.token",
+    "eguitra.period.close.event",
+    "eguitra.reprise.reference",
+    "eguitra.rh.payslip.line",
+    "axispro.journal",
+    "axispro.message",
+    "portail.announcement.read",
+    "portail.article.reaction",
+    "portail.notification",
+    "portail.read.marker",
+]
+PLATFORM_PREFIXES = ("eguitra.", "axispro.", "portail.")
 
 
 class EguitraSetup(models.AbstractModel):
@@ -51,6 +74,29 @@ class EguitraSetup(models.AbstractModel):
                 Rule.create(
                     dict(values, name=f"EGUITRA - {model.name}", model_id=model.id, state="confirmed")
                 )
+
+    @api.model
+    def audited_models(self):
+        """Modèles suivis par la piste d'audit : ceux du noyau et les listes AUDITED_MODELS des modules
+        EGUITRA installés, limités aux modèles chargés."""
+        names = list(CORE_AUDITED_MODELS)
+        modules = self.env["ir.module.module"].sudo().search(
+            [("name", "=like", "eguitra\\_%"), ("state", "in", ("installed", "to upgrade"))]
+        )
+        for module in modules.mapped("name"):
+            for path in (f"odoo.addons.{module}", f"odoo.addons.{module}.hooks"):
+                try:
+                    names += getattr(importlib.import_module(path), "AUDITED_MODELS", [])
+                except ImportError:
+                    continue
+        return [name for name in dict.fromkeys(names) if name in self.env]
+
+    @api.model
+    def ensure_all_audit_rules(self):
+        """Règles de tous les modules installés (idempotent) : migration de fin de mise à jour
+        d'eguitra_base, une fois tous les modèles chargés, pour les modèles ajoutés aux listes après
+        l'installation de leur module."""
+        self.ensure_audit_rules(self.audited_models())
 
     @api.model
     def clear_placeholder_logos(self):
