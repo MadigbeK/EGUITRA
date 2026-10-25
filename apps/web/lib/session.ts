@@ -53,13 +53,31 @@ export function setSessionCookies(jar: CookieJar, tokens: SessionTokens, app?: s
 
 export function clearSessionCookies(jar: CookieJar) {
   // Effacement par un cookie expiré aux mêmes attributs : un cookie « __Host- » sans Secure serait refusé.
-  const names = [...Object.values(COOKIES), ...Object.keys(APPS).map((app) => companyCookie(app as AppCode))];
-  for (const name of names) jar.set(name, "", base(0));
+  for (const name of Object.values(COOKIES)) jar.set(name, "", base(0));
+  clearCompanyCookies(jar);
 }
 
 /** Société de travail mémorisée par application : la finance et AxisPro Suite ne se contaminent pas. */
 export function companyCookie(app: AppCode): string {
   return `${COOKIES.company}_${app}`;
+}
+
+/** Mémorise la société de travail d'une application (un an ; le noyau la contrôle à chaque appel). */
+export function setCompanyCookie(jar: CookieJar, app: AppCode, companyId: number) {
+  jar.set(companyCookie(app), String(companyId), base(60 * 60 * 24 * 365));
+}
+
+/** Oublie la société de travail d'une application : elle reprend la société par défaut du compte. */
+export function clearCompanyCookie(jar: CookieJar, app: AppCode) {
+  jar.set(companyCookie(app), "", base(0));
+}
+
+/**
+ * Oublie la société de travail de toutes les applications. À la connexion : une société retirée du
+ * compte depuis la dernière session ne reste pas mémorisée.
+ */
+export function clearCompanyCookies(jar: CookieJar) {
+  for (const app of Object.keys(APPS) as AppCode[]) clearCompanyCookie(jar, app);
 }
 
 export function setStepCookie(jar: CookieJar, name: string, value: string, maxAge = 600) {

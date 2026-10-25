@@ -120,17 +120,44 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
     if (res?.ok) window.location.reload();
   }
 
-  const passwordBanner = me.password_change_required && (
-    <div className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
-      <AlertTriangle className="h-4 w-4 flex-none text-warn" />
-      <span>
-        Votre mot de passe est provisoire.{" "}
-        <Link href="/compte/mot-de-passe" className="font-semibold text-warn underline underline-offset-2">
-          Choisissez votre mot de passe
-        </Link>
-        .
-      </span>
-    </div>
+  // Société mémorisée que l'administrateur a retirée au compte : la page s'est ouverte dans la société
+  // par défaut (requireUser). La mémoire périmée est oubliée, sans recharger, et un bandeau le dit.
+  const [societeRetiree, setSocieteRetiree] = useState(Boolean(me.societe_retiree));
+  useEffect(() => {
+    if (!me.societe_retiree) return;
+    void fetch("/api/session/company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: null, app }),
+    }).catch(() => undefined);
+  }, [me.societe_retiree, app]);
+
+  const passwordBanner = (
+    <>
+      {me.password_change_required && (
+        <div className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
+          <AlertTriangle className="h-4 w-4 flex-none text-warn" />
+          <span>
+            Votre mot de passe est provisoire.{" "}
+            <Link href="/compte/mot-de-passe" className="font-semibold text-warn underline underline-offset-2">
+              Choisissez votre mot de passe
+            </Link>
+            .
+          </span>
+        </div>
+      )}
+      {societeRetiree && (
+        <div role="status" className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
+          <AlertTriangle className="h-4 w-4 flex-none text-warn" />
+          <span className="min-w-0 flex-1">
+            La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez dans les livres de <strong className="font-semibold">{company?.name ?? "votre société par défaut"}</strong>.
+          </span>
+          <button type="button" onClick={() => setSocieteRetiree(false)} className="grid h-7 w-7 flex-none place-items-center rounded-lg text-muted transition-colors hover:bg-panel/70 hover:text-ink" aria-label="Fermer ce message">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </>
   );
 
   if (app === "portail") {

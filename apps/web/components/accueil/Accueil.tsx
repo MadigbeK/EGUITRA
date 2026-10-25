@@ -124,6 +124,13 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const hydratation = useSyncExternalStore(sansAbonnement, () => false, () => true);
   const [retour] = useState(() => !hydratation && dejaVu());
 
+  // Société mémorisée que l'administrateur a retirée au compte : l'accueil s'est ouvert dans la société
+  // par défaut (requireUser). La mémoire périmée est oubliée et l'accueil le dit.
+  useEffect(() => {
+    if (!me.societe_retiree) return;
+    void fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: null, app }) }).catch(() => undefined);
+  }, [me.societe_retiree, app]);
+
   const rayons = useMemo(() => familles(rayonsDe(me, app), principale(me, app)), [me, app]);
   const total = useMemo(() => rayons.reduce((n, r) => n + r.tuiles.length, 0), [rayons]);
 
@@ -361,6 +368,12 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
         </div>
 
         <div role="status" className="mx-auto max-w-md">
+          {me.societe_retiree && (
+            <p className="n-surgir mb-8 rounded-xl border border-warn/15 bg-warn-doux px-4 py-3 text-[13px] leading-snug text-ink">
+              La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez dans les livres de{" "}
+              <strong className="font-semibold">{me.companies.find((c) => c.id === me.company_id)?.name ?? "votre société par défaut"}</strong>.
+            </p>
+          )}
           {lente && (
             <p className="n-surgir mb-8 flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3 text-[13px] leading-snug text-ink-2 shadow-[0_2px_10px_-4px_rgb(16_36_31/0.18)]">
               <span className="min-w-0 flex-1">L&apos;ouverture de « {lente.libelle} » prend plus de temps que prévu.</span>

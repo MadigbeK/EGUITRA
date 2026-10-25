@@ -4,6 +4,7 @@ import { isAppCode } from "@/lib/config";
 import { forbiddenOrigin, lireReponse, readJson, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import {
   COOKIES,
+  clearCompanyCookies,
   clientIpFrom,
   odooFetch,
   setSessionCookies,
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
     case "ok": {
       const out = NextResponse.json({ status: "ok" });
       setSessionCookies(out.cookies, data as unknown as SessionTokens, app);
+      // Nouvelle session : une société retirée du compte depuis la précédente ne reste pas mémorisée.
+      clearCompanyCookies(out.cookies);
       return out;
     }
     case "mfa_required": {

@@ -5,6 +5,7 @@ import { forbiddenOrigin, sameOrigin, serviceIndisponible } from "@/lib/route-he
 import {
   COOKIES,
   accessExpiring,
+  clearCompanyCookie,
   companyCookie,
   clearSessionCookies,
   clientIpFrom,
@@ -45,9 +46,20 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const declared = req.headers.get("x-eguitra-app");
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
   const app = isAppCode(declared) ? declared : isAppCode(fromCookie) ? fromCookie : undefined;
-  const company = req.headers.get("x-eguitra-company") ?? (app ? req.cookies.get(companyCookie(app))?.value : undefined);
+  // Société : celle que la page déclare, à défaut celle mémorisée pour l'application.
+  const declaree = req.headers.get("x-eguitra-company");
+  const memorisee = declaree === null && app ? req.cookies.get(companyCookie(app))?.value : undefined;
+  let company = declaree ?? memorisee;
+  let retiree = false;
   const clientIp = clientIpFrom(req.headers);
   let renewed: SessionTokens | null = null;
+  // Réponse finale : jetons renouvelés pendant l'appel (quelle que soit l'issue : l'ancien jeton de
+  // renouvellement, déjà remplacé, ne vaudrait plus) et mémoire de société périmée effacée.
+  const finir = (out: NextResponse) => {
+    if (renewed) setSessionCookies(out.cookies, renewed, app);
+    if (retiree && app) clearCompanyCookie(out.cookies, app);
+    return out;
+  };
 
   if ((!access || accessExpiring(req.cookies.get(COOKIES.expires)?.value)) && refresh) {
     const r = await renouvelerSession(refresh, clientIp);
@@ -85,10 +97,18 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
         res = await call(renewed.access_token);
       }
     }
+    // Société mémorisée que l'administrateur a retirée au compte : l'appel est refait dans la société
+    // par défaut et la mémoire périmée est effacée. Une société déclarée par la page reste refusée :
+    // une écriture ne part jamais en silence dans d'autres livres que ceux affichés.
+    if (memorisee && res.status === 403 && (await codeErreur(res)) === "company_forbidden") {
+      await res.body?.cancel().catch(() => undefined);
+      company = undefined;
+      retiree = true;
+      res = await call(renewed?.access_token ?? access);
+    }
   } catch {
-    // Noyau injoignable. Une session renouvelée juste avant garde ses nouveaux jetons : l'ancien jeton
-    // de renouvellement, déjà remplacé, ne vaudrait plus au prochain appel.
-    return avecSession(serviceIndisponible(), renewed, app);
+    // Noyau injoignable : une session renouvelée juste avant garde quand même ses nouveaux jetons.
+    return finir(serviceIndisponible());
   }
   if (res.status === 401) return unauthenticated();
 
@@ -98,7 +118,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   if (!res.ok && !type.startsWith("application/json")) {
     await res.body?.cancel().catch(() => undefined);
     const erreur = res.status === 404 ? "not_found" : res.status >= 500 ? "unavailable" : "error";
-    return avecSession(NextResponse.json({ error: erreur, message: messageStatut(res.status) }, { status: res.status, headers: { "Cache-Control": "no-store" } }), renewed, app);
+    return finir(NextResponse.json({ error: erreur, message: messageStatut(res.status) }, { status: res.status, headers: { "Cache-Control": "no-store" } }));
   }
 
   const headers = new Headers({ "Cache-Control": "no-store" });
@@ -110,13 +130,12 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     headers.set("content-disposition", attachmentDisposition(res.headers.get("content-disposition")));
     headers.set("content-security-policy", "sandbox; default-src 'none'");
   }
-  return avecSession(new NextResponse(res.body, { status: res.status, headers }), renewed, app);
+  return finir(new NextResponse(res.body, { status: res.status, headers }));
 }
 
-/** Pose les jetons renouvelés pendant l'appel sur la réponse, quelle qu'elle soit. */
-function avecSession(out: NextResponse, renewed: SessionTokens | null, app: string | undefined): NextResponse {
-  if (renewed) setSessionCookies(out.cookies, renewed, app);
-  return out;
+/** Code d'erreur d'une réponse JSON du noyau (sans consommer la réponse). */
+async function codeErreur(res: Response): Promise<string | undefined> {
+  return ((await res.clone().json().catch(() => ({}))) as { error?: string }).error;
 }
 
 /** Content-Disposition « attachment » en conservant le nom de fichier proposé par le noyau. */
