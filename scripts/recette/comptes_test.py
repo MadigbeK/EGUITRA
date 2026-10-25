@@ -25,6 +25,10 @@ Recette en mot de passe commun (scripts/recette/mot_de_passe_commun.py, eguitra_
 Les rôles RH du libre-service (salarié, chef d'équipe) ne sont pas des profils : ce sont des
 comptes liés à un dossier du personnel (scripts/recette/donnees_demo_rh.py lie test.salarie, salarié
 sans autre profil, et test.exploitation et test.dg, chefs d'équipe).
+
+NIMOVA · HSSEQ : test.hsseq (Responsable HSSEQ, deux sociétés) et test.conducteur (NIMOVA Terrain seule,
+EGUITRA GROUP), que scripts/recette/donnees_demo_hsseq.py lie au dossier d'un chauffeur de démonstration ;
+test.parc et test.exploitation y sont chefs de parc du site de démonstration.
 """
 
 import os
@@ -55,6 +59,9 @@ COMPTES = [
     ("test.immobilier", "Test - Gestionnaire immobilier", ["immobilier"], ["groupe"]),
     ("test.consultant", "Test - Consultant du cabinet", ["cabinet"], ["cabinet"]),
     ("test.rh", "Test - Gestionnaire RH", ["rh"], ["groupe", "cabinet"]),
+    ("test.hsseq", "Test - Responsable HSSEQ", ["hsseq"], ["groupe", "cabinet"]),
+    # Téléphone seul (NIMOVA Terrain) ; lié à un chauffeur de démonstration par donnees_demo_hsseq.py.
+    ("test.conducteur", "Test - Conducteur", ["conducteur"], ["groupe"]),
     # Sans profil : le salarié qui n'a que « Mon espace » (lié à un dossier par donnees_demo_rh.py).
     ("test.salarie", "Test - Salarié", [], ["groupe"]),
     ("test.admin", "Test - Administrateur", ["admin"], ["groupe", "cabinet"]),
