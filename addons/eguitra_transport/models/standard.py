@@ -41,7 +41,7 @@ class EguitraTransportFuelPrice(models.Model):
 
     def _refresh_drafts(self, companies):
         self.env["eguitra.transport.rotation"].search(
-            [("company_id", "in", companies.ids), ("state", "=", "draft")])._set_standard()
+            [("company_id", "in", companies.ids), ("state", "in", ("draft", "en_route"))])._set_standard()
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -81,7 +81,7 @@ class EguitraTransportRoute(models.Model):
         result = super().write(vals)
         if set(ROUTE_STANDARDS) & set(vals):
             self.env["eguitra.transport.rotation"].search(
-                [("route_id", "in", self.ids), ("state", "=", "draft")])._set_standard()
+                [("route_id", "in", self.ids), ("state", "in", ("draft", "en_route"))])._set_standard()
         return result
 
 
@@ -138,7 +138,7 @@ class EguitraTransportRotation(models.Model):
 
     def _set_standard(self):
         """Coût standard des rotations encore saisies (une rotation validée garde le sien)."""
-        for rot in self.filtered(lambda r: r.state == "draft"):
+        for rot in self.filtered(lambda r: r.state in ("draft", "en_route")):
             values = rot._standard_vals()
             if any(rot[k] != v for k, v in values.items()):
                 rot.write(values)

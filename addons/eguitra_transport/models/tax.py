@@ -112,7 +112,7 @@ class EguitraTransportTax(models.Model):
         """Barème modifié : les rotations encore en saisie prennent les taxes en vigueur ; les rotations
         validées les prendront si elles sont modifiées, les rotations facturées gardent les leurs."""
         drafts = self.env["eguitra.transport.rotation"].search([
-            ("state", "=", "draft"), ("tax_rules", "=", True), ("company_id", "in", self.company_id.ids),
+            ("state", "in", ("draft", "en_route")), ("tax_rules", "=", True), ("company_id", "in", self.company_id.ids),
         ])
         drafts._apply_tax_rules()
 
