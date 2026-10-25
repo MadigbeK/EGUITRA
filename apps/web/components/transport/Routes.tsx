@@ -5,17 +5,27 @@ import { Fuel, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Input, Notice, Select } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt } from "@/lib/format";
+import { EcartBareme, libelleBareme, type OfficialScale } from "./Bareme";
 import { INSECABLE, fmtFixe } from "./commun";
-import { parseNumber, type Message, type Ref, type Referentials, type RouteStandards, type TransportSettings } from "./types";
+import { parseNumber, type Message, type OfficialRate, type RateGap, type Ref, type Referentials, type RouteStandards, type TransportSettings } from "./types";
 
-interface Tariff { id: number; partner: Ref; product: string | null; rate: number; shortage_tolerance: number | null; shortage_price: number | null }
-interface RouteRow extends RouteStandards { id: number; name: string; distance_km: number; distance_return_km: number | null; round_trip_km: number; round_trip_inconsistent: boolean; duration_days: number | null; default_rate: number; tariffs: Tariff[]; fuel_per_km: number | null }
+interface Tariff { id: number; partner: Ref; product: string | null; rate: number; shortage_tolerance: number | null; shortage_price: number | null; official_gap: RateGap | null }
+interface RouteRow extends RouteStandards {
+  id: number; name: string; distance_km: number; distance_return_km: number | null; round_trip_km: number; round_trip_inconsistent: boolean;
+  duration_days: number | null; default_rate: number; tariffs: Tariff[]; fuel_per_km: number | null;
+  /** Destination du barème officiel rattachée, tarif officiel en vigueur, écart du tarif par défaut. */
+  official_rate_id: number | null; official_rate: OfficialRate | null; default_rate_gap: RateGap | null;
+  /** Sans rattachement : destination du barème que suggère le nom de la route. */
+  official_suggestion: OfficialRate | null;
+}
 
 /** Routes, coûts standard, prix du carburant, tarifs négociés et conditions de manquant. */
 export function RoutesTarifs() {
   const { data: routes, mutate } = useApi<RouteRow[]>("/transport/routes");
   const { data: ref } = useApi<Referentials>("/transport/referentials");
   const { data: settings } = useApi<TransportSettings>("/transport/settings");
+  const { data: bareme } = useApi<OfficialScale>("/transport/official-rates");
+  const destinations = (bareme?.items ?? []).map((o) => ({ value: o.id, label: libelleBareme(o) }));
   // Le message dit son état (réussite ou erreur) : la couleur du Transport n'en dit aucun.
   const [message, setMessage] = useState<Message>(null);
   const echec = (e: unknown) => setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Erreur" });
@@ -45,7 +55,19 @@ export function RoutesTarifs() {
             </span>
           ) },
           { key: "duration_days", label: "Durée (j)", align: "right", render: (x) => <Input className="w-20 text-right font-mono" inputMode="decimal" defaultValue={x.duration_days ? String(x.duration_days).replace(".", ",") : ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== (x.duration_days ?? 0) && patchRoute(x, { duration_days: parseNumber(e.target.value) ?? 0 })} /> },
-          { key: "default_rate", label: "Tarif par m³ (GNF)", align: "right", render: (x) => fmtInt(x.default_rate) },
+          { key: "default_rate", label: "Tarif par m³ (GNF)", align: "right", render: (x) => <span className="inline-flex items-center gap-2"><EcartBareme gap={x.default_rate_gap} />{fmtInt(x.default_rate)}</span> },
+          { key: "official_rate", label: "Barème officiel (GNF par m³)", render: (x) => (
+            <span className="flex min-w-64 flex-col gap-1">
+              <Select value={x.official_rate_id ?? ""} placeholder="Sans référence" onChange={(e) => patchRoute(x, { official_rate_id: e.target.value ? Number(e.target.value) : null })} options={destinations} />
+              {x.official_rate ? (
+                <span className="font-mono text-[12px] text-muted">{fmtInt(x.official_rate.rate_per_m3)}{INSECABLE}GNF/m³, {x.official_rate.scale.name}</span>
+              ) : x.official_suggestion ? (
+                <button type="button" className="self-start text-[12px] font-semibold text-accent hover:underline" onClick={() => patchRoute(x, { official_rate_id: x.official_suggestion!.id })}>
+                  Rattacher à {libelleBareme(x.official_suggestion)}
+                </button>
+              ) : null}
+            </span>
+          ) },
           { key: "std_fuel_liters", label: "Carburant réf. (L)", align: "right", render: (x) => (
             <span className="inline-flex items-center gap-2">
               {x.fuel_per_km !== null && <span className="text-[11.5px] text-muted" title="Litres par km parcouru, aller et retour">{fmtFixe(x.fuel_per_km, 2)}{INSECABLE}L/km</span>}
@@ -56,7 +78,11 @@ export function RoutesTarifs() {
             key: k, label: { std_driver_bonus: "Prime de route", std_tolls: "Péages", std_other_costs: "Autres frais" }[k], align: "right" as const,
             render: (x: RouteRow) => <Input className="w-28 text-right font-mono" inputMode="numeric" defaultValue={x[k] || ""} onBlur={(e) => (parseNumber(e.target.value) ?? 0) !== x[k] && patchRoute(x, { [k]: parseNumber(e.target.value) ?? 0 })} />,
           })),
-          { key: "tariffs", label: "Tarifs clients (GNF par m³)", render: (x) => x.tariffs.map((t) => `${t.partner.name}${t.product ? ` (${productLabel(t.product)})` : ""} : ${fmtInt(t.rate)}`).join(", ") || "–" },
+          { key: "tariffs", label: "Tarifs clients (GNF par m³)", render: (x) => (x.tariffs.length ? (
+            <span className="flex flex-col gap-0.5">
+              {x.tariffs.map((t) => <span key={t.id} className="inline-flex items-center gap-2">{`${t.partner.name}${t.product ? ` (${productLabel(t.product)})` : ""} : ${fmtInt(t.rate)}`}<EcartBareme gap={t.official_gap} /></span>)}
+            </span>
+          ) : "–") },
         ]} />
         <div className="grid grid-cols-2 gap-2 border-t border-line p-3 md:grid-cols-6">
           <Input placeholder="Conakry - Siguiri" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} />
@@ -94,7 +120,7 @@ export function RoutesTarifs() {
           { key: "route", label: "Route" },
           { key: "partner", label: "Client", render: (t) => t.partner.name },
           { key: "product", label: "Produit", render: (t) => productLabel(t.product) },
-          { key: "rate", label: "Tarif par m³ (GNF)", align: "right", render: (t) => fmtInt(t.rate) },
+          { key: "rate", label: "Tarif par m³ (GNF)", align: "right", render: (t) => <span className="inline-flex items-center gap-2"><EcartBareme gap={t.official_gap} />{fmtInt(t.rate)}</span> },
           { key: "shortage_tolerance", label: "Tolérance (%)", align: "right", render: (t) => <Input disabled={!settings?.can_edit} className="w-24 text-right font-mono" placeholder="–" defaultValue={t.shortage_tolerance === null ? "" : String(t.shortage_tolerance).replace(".", ",")} onBlur={(e) => { const v = parseNumber(e.target.value); if (v !== t.shortage_tolerance) saveTerms(t, { shortage_tolerance: v }); }} /> },
           { key: "shortage_price", label: "Prix du m³ manquant", align: "right", render: (t) => <Input disabled={!settings?.can_edit} className="w-36 text-right font-mono" placeholder="Prix du produit" defaultValue={t.shortage_price ? String(t.shortage_price) : ""} onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== (t.shortage_price ?? 0)) saveTerms(t, { shortage_price: v }); }} /> },
         ]} />

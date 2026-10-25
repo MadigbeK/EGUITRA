@@ -11,6 +11,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, i
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
+from ..models.official_rate import DEPOTS, gap_pct, slug
 from ..models.ownership import OWNERSHIPS, PERIODICITIES
 from ..models.rotation import COSTS, ENTRY_COSTS
 from ..models.settings import OWNER_COST_BASES, SHORTAGE_RULES
@@ -96,11 +97,17 @@ def _rotation_row(rot):
         # Sans montant (volume ou tarif manquant), un taux n'a pas de sens : None.
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
+        **_rotation_official(rot),
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
         # Saisie par le compte connecté : il ne la valide pas lui-même (validation par un autre compte).
         "created_by": rot.create_uid.name or None, "self_entered": rot.create_uid == rot.env.user,
     }
+
+
+def _rotation_official(rot):
+    line, gap = rot._official_gap()
+    return {"official_rate": _official_ref(line), "official_rate_gap": _gap(gap)}
 
 
 def _rotation_order(sort):
@@ -223,7 +230,25 @@ def _tariff_terms(data):
 def _tariff_row(t):
     return {"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None, "product_id": t.product_id.id or None,
             "rate": t.rate, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
-            "shortage_price": t.shortage_price or None}
+            "shortage_price": t.shortage_price or None, "official_gap": _gap(t._official_gap()[1])}
+
+
+def _official_ref(line):
+    """Ligne du barème officiel : tarif en GNF par litre et son équivalent par m³ (tarifs des routes)."""
+    if not line:
+        return None
+    scale = line.scale_id
+    return {"id": line.id, "depot": line.depot, "depot_label": dict(DEPOTS)[line.depot], "sequence": line.sequence,
+            "destination": line.destination, "prefecture": line.prefecture or None, "rate": line.rate,
+            "rate_per_m3": line._rate_per_m3(), "distance_km": line.distance_km or None,
+            "scale": {"id": scale.id, "name": scale.name, "date_from": scale.date_from}}
+
+
+def _gap(pct):
+    """Écart au barème officiel, signalé au-delà de la tolérance de la société ; None sans comparaison."""
+    if pct is None:
+        return None
+    return {"pct": pct, "flagged": abs(pct) > request.env.company.transport_official_rate_tolerance}
 
 
 def _settings_payload():
@@ -242,6 +267,7 @@ def _settings_payload():
         "owner_account": _account_ref(accounts.transport_owner_account_id) if accounts else None,
         "owner_income_account": _account_ref(accounts.transport_owner_income_account_id) if accounts else None,
         "commission_account": _account_ref(accounts.transport_commission_account_id) if accounts else None,
+        "official_rate_tolerance": company.transport_official_rate_tolerance,
         "activity": _activity_ref(company.sudo().transport_activity_id),
         "activities": [_activity_ref(a) for a in _activities(company)] if finance else [],
         "rules": [{"code": k, "label": v} for k, v in SHORTAGE_RULES],
@@ -472,9 +498,46 @@ class EguitraTransport(http.Controller):
              "round_trip_km": r._round_trip_km(), "round_trip_inconsistent": r._round_trip_inconsistent(),
              "duration_days": r.duration_days or None, "default_rate": r.default_rate, "active": r.active,
              "tariffs": [_tariff_row(t) for t in r.tariff_ids],
-             **{k: r[k] for k in ROUTE_STANDARDS}, "fuel_per_km": r._fuel_per_km()}
+             **{k: r[k] for k in ROUTE_STANDARDS}, "fuel_per_km": r._fuel_per_km(),
+             **self._route_official(r)}
             for r in request.env["eguitra.transport.route"].with_context(active_test=False).search([])
         ]
+
+    @staticmethod
+    def _route_official(route):
+        """Tarif officiel de la route (barème en vigueur), écart du tarif par défaut, et, sans rattachement,
+        la destination du barème que suggère le nom de la route."""
+        line = route._official_at(today())
+        return {"official_rate_id": route.official_rate_id.id or None, "official_rate": _official_ref(line),
+                "default_rate_gap": _gap(gap_pct(route.default_rate, line)),
+                "official_suggestion": None if route.official_rate_id else _official_ref(route._suggest_official_rate())}
+
+    @api_route("/transport/official-rates", profiles=READ)
+    def official_rates(self, **kw):
+        """Barème officiel en vigueur (ou celui de scale_id) : destinations par dépôt, filtre depot et q."""
+        Scale = request.env["eguitra.transport.official.scale"]
+        scales = Scale.search([])
+        scale = Scale.browse(int_arg(kw, "scale_id")).exists() if kw.get("scale_id") else Scale._in_force(today())
+        if kw.get("scale_id") and not scale:
+            raise ApiError(404, "not_found", "Barème introuvable.")
+        lines = scale.rate_ids
+        if kw.get("depot"):
+            if kw["depot"] not in dict(DEPOTS):
+                raise ApiError(400, "invalid_parameter", "Dépôt inconnu.")
+            lines = lines.filtered(lambda r: r.depot == kw["depot"])
+        if kw.get("q"):
+            wanted = slug(kw["q"])
+            lines = lines.filtered(lambda r: wanted in slug(r.destination) or wanted in slug(r.prefecture))
+        return {
+            "scale": {"id": scale.id, "name": scale.name, "authority": scale.authority or None,
+                      "date_signed": scale.date_signed or None, "date_from": scale.date_from, "note": scale.note or None,
+                      "rate_count": scale.rate_count} if scale else None,
+            "scales": [{"id": s.id, "name": s.name, "date_from": s.date_from} for s in scales],
+            "depots": [{"code": k, "label": v, "count": len(scale.rate_ids.filtered(lambda r, k=k: r.depot == k))}
+                       for k, v in DEPOTS],
+            "items": [_official_ref(line) for line in lines],
+            "tolerance": request.env.company.transport_official_rate_tolerance,
+        }
 
     def _route_values(self, data, route=None):
         values = {k: data[k] or False for k in ("name", "origin", "destination") if k in data}
@@ -490,6 +553,16 @@ class EguitraTransport(http.Controller):
                 values[key] = as_float(data[key] or 0, key)
         if "active" in data:
             values["active"] = bool(data["active"])
+        if "official_rate_id" in data:
+            line = request.env["eguitra.transport.official.rate"]
+            if data["official_rate_id"]:
+                try:
+                    line = line.browse(int(data["official_rate_id"])).exists()
+                except (TypeError, ValueError) as e:
+                    raise ApiError(400, "invalid_parameter", "Destination du barème inconnue.") from e
+                if not line:
+                    raise ApiError(422, "business_rule", "Destination du barème inconnue.")
+            values["official_rate_id"] = line.id or False
         if "tariffs" in data:
             # Les tarifs sont renvoyés en entier ; les conditions de manquant fixées par la finance
             # (tolérance, prix du m³) suivent le tarif du même client et du même produit.
@@ -589,6 +662,11 @@ class EguitraTransport(http.Controller):
             values["transport_shortage_rule"] = data["shortage_rule"]
         if "volume_correction" in data:
             values["transport_volume_correction"] = bool(data["volume_correction"])
+        if "official_rate_tolerance" in data:
+            tolerance = as_float(data["official_rate_tolerance"] or 0, "official_rate_tolerance")
+            if not 0 <= tolerance <= 100:
+                raise ApiError(400, "invalid_parameter", "Écart toléré au barème attendu entre 0 et 100 %.")
+            values["transport_official_rate_tolerance"] = tolerance
         if "owner_cost_basis" in data:
             if data["owner_cost_basis"] not in dict(OWNER_COST_BASES):
                 raise ApiError(400, "invalid_parameter", "Base des charges des relevés inconnue.")

@@ -42,6 +42,14 @@ def fmt_volume(value, unit=True):
     return f"{fixe(value, 2)}{INSECABLE}m³" if unit else fixe(value, 2)
 
 
+def fmt_pct(value, digits=1, sign=False):
+    """« 12,5 % » ; sign : « +12,5 % » pour un écart."""
+    text = fixe(value, digits)
+    if sign and _round(value, digits) > 0:
+        text = f"+{text}"
+    return f"{text}{INSECABLE}%"
+
+
 def fmt_rate(value):
     """Taux contractuel (commission, tolérance) tel que saisi, sans zéro inutile : « 15 % », « 2,5 % »."""
     text = f"{_round(value, 3):f}".rstrip("0").rstrip(".") if value else "0"

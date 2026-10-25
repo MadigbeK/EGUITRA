@@ -24,15 +24,21 @@ et calcule le résultat sur ces coûts : elle suppose les achats de la flotte im
 l'activité et sur l'ensemble. Les deux résultats sont donnés côte à côte.
 """
 
-from odoo import api, models
+from odoo import api, fields, models
 
 from odoo.addons.eguitra_finance.models.finance_metrics import ACC_CODE
 from odoo.addons.eguitra_finance.models.syscohada import OPENING_JOURNAL
+
+from ..nombres import fmt_money, fmt_pct, fmt_rate
+from .official_rate import gap_pct
 
 AAL_CODE = ACC_CODE.replace("aml.", "aal.")
 IN_SERVICE = ("service", "maintenance")
 ROUND_TRIP_TOLERANCE = 0.15
 FUEL_TOLERANCE = 0.4
+# Objectifs et seuils d'alerte des indicateurs de flotte, repris du modèle d'indicateurs du client
+# (feuille « Paramètres Objectifs ») : (objectif %, alerte sous %).
+FLEET_TARGETS = {"availability": (90, 85), "utilization": (85, 75), "on_time": (95, 90), "fill_rate": (90, 80)}
 
 
 class EguitraTransportAnalysis(models.AbstractModel):
@@ -250,9 +256,80 @@ class EguitraTransportAnalysis(models.AbstractModel):
         order = (lambda r: r["label"]) if group_by == "month" else (lambda r: -(r["revenue"] or 0))
         return {"group": group_by, "date_from": date_from, "date_to": date_to, "rows": sorted(rows, key=order),
                 "indicators": indicators, "structure": structure, "controls": self.controls(companies),
+                "fleet": self.fleet_kpis(companies, date_from, date_to),
                 "deficit": [{"key": r["key"], "label": r["label"], "net_result": r["net_result"]} for r in deficit]}
 
+    # ─── Indicateurs de la flotte (modèle d'indicateurs du client) ────────
+
+    @api.model
+    def fleet_kpis(self, companies, date_from, date_to):
+        """Indicateurs de flotte du modèle du client que les données permettent de calculer, avec ses
+        objectifs et seuils d'alerte (FLEET_TARGETS) :
+          disponibilité = ensembles en service / ensembles de la flotte (hors cédés), à ce jour ;
+          utilisation = jours en rotation / (ensembles de la flotte × jours de la période) ;
+          remplissage = volume chargé / capacité des citernes, sur les rotations de la période ;
+          respect des délais = rotations revenues (ou livrées) dans la durée standard de leur route ;
+          rotations annulées et âge moyen de la flotte (année de fabrication).
+        Rotations validées ou facturées de la période, comme la rentabilité."""
+        Vehicle = self.env["eguitra.transport.vehicle"].sudo()
+        Rotation = self.env["eguitra.transport.rotation"].sudo()
+        fleet = Vehicle.search([("company_id", "in", companies.ids), ("state", "!=", "sold")])
+        base = [("company_id", "in", companies.ids), ("date_loading", ">=", date_from), ("date_loading", "<=", date_to)]
+        rotations = Rotation.search(base + [("state", "in", ("done", "invoiced"))])
+        days = (date_to - date_from).days + 1
+        filled = rotations.filtered(lambda r: r.vehicle_id.capacity_liters and r.volume_loaded)
+        timed = rotations.filtered(lambda r: (r.date_return or r.date_delivery) and r.route_id.duration_days)
+        on_time = timed.filtered(lambda r: r.duration_days <= r.route_id.duration_days)
+        years = [v.year for v in fleet if v.year]
+        today = fields.Date.context_today(self)
+
+        def kpi(code, value, basis):
+            target, alert = FLEET_TARGETS.get(code, (None, None))
+            return {"value": value, "target": target, "alert": alert, "basis": basis,
+                    "below_alert": value is not None and alert is not None and value < alert}
+
+        in_service = len(fleet.filtered(lambda v: v.state == "service"))
+        return {
+            "availability": kpi("availability", in_service / len(fleet) * 100 if fleet else None, len(fleet)),
+            "utilization": kpi("utilization", min(100.0, sum(rotations.mapped("duration_days")) / (len(fleet) * days) * 100)
+                               if fleet else None, len(rotations)),
+            "fill_rate": kpi("fill_rate", sum(r.volume_loaded * 1000 for r in filled)
+                             / sum(r.vehicle_id.capacity_liters for r in filled) * 100 if filled else None, len(filled)),
+            "on_time": kpi("on_time", len(on_time) / len(timed) * 100 if timed else None, len(timed)),
+            "cancelled": Rotation.search_count(base + [("state", "=", "cancelled")]),
+            "fleet_age_years": today.year - sum(years) / len(years) if years else None,
+            "vehicles": len(fleet), "in_service": in_service,
+        }
+
     # ─── Contrôles ────────────────────────────────────────────────────────
+
+    @api.model
+    def _check_official_rates(self, companies, routes, open_rotations, check):
+        """Tarifs des routes rattachées au barème officiel, de leurs clients et des rotations ouvertes,
+        comparés au tarif officiel en vigueur : écart au-delà de la tolérance de la société."""
+        tolerance = companies[:1].transport_official_rate_tolerance
+        day = fields.Date.context_today(self)
+        items = []
+
+        def note(label, rate, line):
+            gap = gap_pct(rate, line)
+            if gap is not None and abs(gap) > tolerance:
+                items.append(f"{label} : {fmt_pct(gap, sign=True)} du barème ({fmt_money(line._rate_per_m3())} le m³)")
+
+        for route in routes.filtered("official_rate_id"):
+            line = route._official_at(day)
+            note(f"{route.name}, tarif par défaut", route.default_rate, line)
+            for tariff in route.tariff_ids:
+                note(f"{route.name}, {tariff.partner_id.name}", tariff.rate, line)
+        for rot in open_rotations.filtered("route_id.official_rate_id"):
+            line, _gap = rot._official_gap()
+            note(f"Rotation {rot._label()}", rot.rate, line)
+        scale = self.env["eguitra.transport.official.scale"]._in_force(day)
+        check("official_rate_gap",
+              f"Tarifs proches du barème officiel (écart de {fmt_rate(tolerance)} au plus)",
+              items,
+              f"Barème de référence : {scale.name or 'aucun'}. Vérifiez le tarif du client ou la destination du "
+              "barème rattachée à la route (Routes et tarifs) ; l'écart est signalé, rien n'est bloqué.")
 
     @api.model
     def controls(self, companies):
@@ -297,6 +374,7 @@ class EguitraTransportAnalysis(models.AbstractModel):
               "de carburant.")
         Rotation = env["eguitra.transport.rotation"]
         open_rotations = Rotation.search([("company_id", "in", companies.ids), ("state", "in", ("draft", "done"))])
+        self._check_official_rates(companies, routes, open_rotations, check)
         check("over_capacity", "Volumes chargés dans la capacité des citernes",
               [f"{r._label()} : {r.volume_loaded:g} m³ pour {r.vehicle_id.capacity_liters / 1000:g} m³".replace(".", ",")
                for r in open_rotations.filtered("over_capacity")],

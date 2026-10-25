@@ -52,8 +52,28 @@ export const SHORTAGE_RULES: Array<{ value: ShortageRule; label: string }> = [
   { value: "both", label: "Déduction et créance sur le chauffeur" },
 ];
 
+/** Destination du barème officiel du transport des hydrocarbures (tarif en GNF par litre). */
+export interface OfficialRate {
+  id: number;
+  depot: string;
+  depot_label: string;
+  sequence: number;
+  destination: string;
+  prefecture: string | null;
+  rate: number;
+  rate_per_m3: number;
+  /** Estimation dérivée du tarif (tableur de la SONAP). */
+  distance_km: number | null;
+  scale: { id: number; name: string; date_from: string };
+}
+
+/** Écart d'un tarif au barème officiel, en % ; flagged : au-delà de la tolérance de la société. */
+export interface RateGap { pct: number; flagged: boolean }
+
 export interface TransportSettings {
   shortage_tolerance: number;
+  /** Écart toléré au barème officiel (%), au-delà duquel un tarif est signalé. */
+  official_rate_tolerance: number;
   shortage_rule: ShortageRule;
   volume_correction: boolean;
   shortage_account: AccountRef | null;

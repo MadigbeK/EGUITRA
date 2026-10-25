@@ -223,6 +223,10 @@ function Manquants({ settings, onSaved }: { settings: TransportSettings; onSaved
             onChange={(e) => void send("PATCH", "/transport/settings", { activity_id: e.target.value ? Number(e.target.value) : null }, "Activité enregistrée.")}
             options={(settings.activities.length ? settings.activities : settings.activity ? [settings.activity] : []).map((a) => ({ value: a.id, label: a.code ? `${a.code} ${a.name}` : a.name }))} />
         </Field>
+        <Field label="Écart toléré au barème officiel (%)" hint="Au-delà, un tarif de route, de client ou de rotation éloigné du barème est signalé.">
+          <Input disabled={ro} inputMode="decimal" className="font-mono" defaultValue={String(settings.official_rate_tolerance ?? 1).replace(".", ",")}
+            onBlur={(e) => { const v = parseNumber(e.target.value); if (v !== null && v !== settings.official_rate_tolerance) void send("PATCH", "/transport/settings", { official_rate_tolerance: v }, "Écart toléré enregistré."); }} />
+        </Field>
         <Field label="Compte des créances sur les chauffeurs" hint="Vide : 4211, sinon 421.">
           <Select disabled={ro} value={settings.claim_account?.id ?? ""} placeholder="Compte par défaut"
             onChange={(e) => void send("PATCH", "/transport/settings", { claim_account_id: e.target.value ? Number(e.target.value) : null }, "Compte enregistré.")}
