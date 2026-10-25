@@ -34,6 +34,13 @@ interface SentRotation {
 
 interface Form {
   uuid: string | null;
+  /**
+   * Correction d'une saisie en attente : sa version, celle de son premier envoi et sa date
+   * d'enregistrement, relevées à l'ouverture de la correction (voir QueuedRotation).
+   */
+  revision?: number;
+  envoyee?: number;
+  created_at?: string;
   date_loading: string;
   vehicle_id: string;
   driver_id: string;
@@ -75,7 +82,39 @@ type RetourBandeau = Retour & { tone: "ok" | "warn" | "danger" };
 interface Bilan {
   created: number;
   errors: number;
+  /** Corrections que le bureau n'a pas pu prendre (rotation déjà traitée ou retouchée au bureau). */
+  recues: number;
   echec: { reseau: boolean; message: string } | null;
+}
+
+/** Réponse du bureau pour une saisie envoyée (POST /transport/sync). */
+interface Resultat {
+  client_uuid: string | null;
+  status: "created" | "updated" | "exists" | "error";
+  message?: string;
+}
+
+/** Correction que le bureau n'a pas pu porter sur la rotation reçue, faute de message du noyau. */
+const MESSAGE_RECUE = "Déjà reçue au bureau, qui l'a traitée ou modifiée : la correction n'y est pas portée. Faites corriger la rotation au bureau, depuis sa fiche.";
+
+/** La saisie a-t-elle été corrigée sur le téléphone après son premier envoi ? Elle repart alors marquée. */
+const corrigee = (q: QueuedRotation) => q.envoyee !== undefined && (q.revision ?? 1) > q.envoyee;
+
+/** Ce que reçoit le bureau : la saisie, son identifiant, et la marque d'une correction faite après l'envoi. */
+const versEnvoi = (q: QueuedRotation) => ({ ...q.payload, client_uuid: q.client_uuid, ...(corrigee(q) ? { correction: true } : {}) });
+
+/**
+ * Ce que devient une saisie après la réponse du bureau. `actuelle` est relue au moment d'écrire : une
+ * correction enregistrée pendant l'envoi (version plus récente que celle partie) est gardée telle quelle
+ * et repartira, marquée correction ; une saisie supprimée entre-temps n'est pas recréée.
+ */
+function apresReponse(actuelle: QueuedRotation | undefined, partie: QueuedRotation, r: Resultat): QueuedRotation | "supprimer" | undefined {
+  if (!actuelle || (actuelle.revision ?? 1) !== (partie.revision ?? 1)) return undefined;
+  if (r.status === "created" || r.status === "updated") return "supprimer";
+  // Déjà reçue : identique à ce qui est parti au premier envoi, rien à garder ; corrigée depuis, le bureau
+  // n'a pas pu prendre la correction (rotation traitée ou retouchée au bureau).
+  if (r.status === "exists") return corrigee(partie) ? { ...actuelle, status: "recue", message: r.message ?? MESSAGE_RECUE } : "supprimer";
+  return { ...actuelle, status: "error", message: r.message ?? "Saisie refusée." };
 }
 
 /**
@@ -106,6 +145,13 @@ const blank = (): Form => ({
   delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+
+/** Formulaire où rien n'est saisi : la date et le produit proposés d'office ne comptent pas. */
+function formVide(f: Form): boolean {
+  const vide = (v: string | undefined) => !(v ?? "").trim();
+  return !f.uuid && !f.vehicle_id && !f.driver_id && !f.partner_id && !f.route_id && vide(f.delivery_note) && vide(f.volume_loaded)
+    && vide(f.volume_delivered) && vide(f.note) && Object.values(f.costs ?? {}).every(vide) && Object.values(f.measures ?? {}).every(vide);
+}
 
 /** Contrôle avant enregistrement (mêmes règles qu'avant) : un message sous chaque champ manquant. */
 function controler(f: Form): Erreurs {
@@ -227,7 +273,8 @@ function fromPayload(item: QueuedRotation, refs: Referentials): Form {
   const s = (k: string) => (p[k] === undefined || p[k] === null ? "" : String(p[k]));
   const pick = (list: Array<{ code: string }>) => Object.fromEntries(list.map((c) => [c.code, s(c.code)]).filter(([, v]) => v));
   return {
-    uuid: item.client_uuid, date_loading: s("date_loading") || today(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
+    uuid: item.client_uuid, revision: item.revision ?? 1, envoyee: item.envoyee, created_at: item.created_at,
+    date_loading: s("date_loading") || today(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
     partner_id: s("partner_id"), route_id: s("route_id"), product: s("product") || "gasoil", delivery_note: s("delivery_note"),
     volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
     // Une saisie d'avant la mise à jour garde son ancien total des taxes (« specific_taxes ») : il
@@ -277,6 +324,12 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const [phase, setPhase] = useState<Phase>("repos");
   const [retour, setRetour] = useState<Retour | null>(null);
   const busy = useRef(false);
+  // Saisie ouverte en correction : elle ne part pas avant que la correction soit enregistrée (sinon
+  // l'ancienne version arriverait au bureau pendant la frappe).
+  const enCorrection = useRef<string | null>(null);
+  // Enregistrement pendant un envoi : un nouvel envoi suit celui en cours (dernière version de sync).
+  const relance = useRef(false);
+  const syncRef = useRef<(origine?: "auto" | "envoi" | "saisie") => Promise<Bilan | null>>(async () => null);
   // Verrou d'enregistrement : posé au premier toucher, avant toute attente. Un double toucher ne
   // met jamais deux rotations en file.
   const verrou = useRef(false);
@@ -288,6 +341,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const reduit = useMouvementReduit();
 
   const mine = items.filter((i) => i.user_id === me.id);
+  // Corrections que le bureau n'a pas pu prendre : elles ne partent plus, l'agent les retire une fois
+  // le bureau prévenu.
+  const recues = mine.filter((i) => i.status === "recue");
   const others = items.length - mine.length;
   const faible = online && echange !== null && (!echange.ok || echange.lent);
   const echecRef = useRef(false);
@@ -313,6 +369,10 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   useEffect(() => {
     vueRef.current = view;
   }, [view]);
+
+  useEffect(() => {
+    enCorrection.current = form.uuid;
+  }, [form.uuid]);
 
   useEffect(() => () => {
     window.clearTimeout(minuteRetour.current);
@@ -377,41 +437,59 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   /**
    * Envoi des saisies en attente. `origine` dit qui le demande : « saisie » (l'enregistrement dit
    * lui-même son résultat dans la barre d'action), « envoi » (bouton de « À envoyer ») ou « auto »
-   * (ouverture, retour du réseau, toutes les deux minutes).
+   * (ouverture, retour du réseau, toutes les deux minutes). Une saisie ouverte en correction part une
+   * fois la correction enregistrée.
    */
   const sync = useCallback(async (origine: "auto" | "envoi" | "saisie" = "auto"): Promise<Bilan | null> => {
-    if (busy.current || !navigator.onLine) return null;
-    const pending = (await loadQueue()).filter((i) => i.user_id === me.id);
-    if (!pending.length) return null;
+    if (!navigator.onLine) return null;
+    if (busy.current) {
+      relance.current = true;
+      return null;
+    }
+    const candidates = (await loadQueue()).filter((i) => i.user_id === me.id && i.client_uuid !== enCorrection.current && i.status !== "recue");
+    if (!candidates.length) return null;
     busy.current = true;
     setSyncing(true);
     let created = 0;
     let errors = 0;
+    let recues = 0;
     let echec: Bilan["echec"] = null;
     try {
-      for (let i = 0; i < pending.length; i += 50) {
-        const batch = pending.slice(i, i + 50);
-        const res = await echanger(() => apiSend<{ results: Array<{ client_uuid: string | null; status: "created" | "exists" | "error"; message?: string }> }>(
-          "POST", "/transport/sync", { rotations: batch.map((b) => ({ ...b.payload, client_uuid: b.client_uuid })) }, { timeout: DELAI_ENVOI },
-        ));
+      for (let i = 0; i < candidates.length; i += 50) {
+        const batch: QueuedRotation[] = [];
+        for (const c of candidates.slice(i, i + 50)) {
+          if (c.client_uuid === enCorrection.current) continue;
+          // Premier envoi : la version qui part est notée avant l'envoi, dans la transaction qui relit la
+          // saisie (sa réponse peut se perdre ; une correction enregistrée entre-temps n'est jamais écrasée).
+          const actuelle = await queue.transformer(c.client_uuid, (q) => (q && q.envoyee === undefined ? { ...q, envoyee: q.revision ?? 1 } : undefined)).catch(() => undefined);
+          if (actuelle && actuelle.status !== "recue") batch.push(actuelle);
+        }
+        if (!batch.length) continue;
+        const res = await echanger(() => apiSend<{ results: Resultat[] }>("POST", "/transport/sync", { rotations: batch.map(versEnvoi) }, { timeout: DELAI_ENVOI }));
         for (const r of res.results) {
-          if (!r.client_uuid) continue;
-          if (r.status === "error") {
-            errors += 1;
-            const item = batch.find((b) => b.client_uuid === r.client_uuid);
-            if (item) await queue.put({ ...item, status: "error", message: r.message ?? "Saisie refusée." });
-          } else {
-            created += 1;
-            await queue.remove(r.client_uuid);
-          }
+          const partie = r.client_uuid ? batch.find((b) => b.client_uuid === r.client_uuid) : undefined;
+          if (!partie) continue;
+          // undefined : corrigée ou supprimée pendant l'envoi, gardée telle quelle (une correction repartira).
+          let suite: ReturnType<typeof apresReponse> = undefined;
+          await queue.transformer(partie.client_uuid, (q) => (suite = apresReponse(q, partie, r))).catch(() => {
+            suite = undefined;
+          });
+          const issue = suite as ReturnType<typeof apresReponse>;
+          if (issue === "supprimer") created += 1;
+          else if (issue?.status === "recue") recues += 1;
+          else if (issue?.status === "error") errors += 1;
         }
       }
       const envoi = new Date();
       setLastSync(envoi);
       void dernierEnvoi.set(envoi);
-      if (errors) {
+      if (errors || recues) {
         // Les refus du bureau gardent le bandeau du haut ; sur « Nouvelle », la barre le dit aussi.
-        const texte = `${pluriel(errors, "saisie refusée : corrigez-la", "saisies refusées : corrigez-les")} dans « À envoyer ».`;
+        const texte = [
+          errors ? `${pluriel(errors, "saisie refusée : corrigez-la", "saisies refusées : corrigez-les")} dans « À envoyer ».` : "",
+          recues === 1 ? "1 correction n'a pas pu être portée : le bureau avait déjà traité ou modifié la rotation. Faites-la corriger au bureau (voir « À envoyer »)." : "",
+          recues > 1 ? `${fmtInt(recues)} corrections n'ont pas pu être portées : le bureau avait déjà traité ou modifié ces rotations. Faites-les corriger au bureau (voir « À envoyer »).` : "",
+        ].filter(Boolean).join(" ");
         setNotice({ tone: "danger", text: texte });
         if (origine === "auto" && vueRef.current === "saisie") annoncer({ tone: "danger", text: texte });
       } else if (created && origine !== "saisie") {
@@ -429,9 +507,18 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       setSyncing(false);
       await loadQueue();
       void loadSent();
+      // Une saisie enregistrée pendant cet envoi part aussitôt, sans attendre le prochain essai.
+      if (relance.current) {
+        relance.current = false;
+        window.setTimeout(() => void syncRef.current("auto"), 0);
+      }
     }
-    return { created, errors, echec };
+    return { created, errors, recues, echec };
   }, [loadQueue, loadSent, me.id, annoncer, signaler, echanger]);
+
+  useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -505,21 +592,28 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
         !(await demanderConfirmation(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtM3(vehicle.capacity_liters / 1000)}) : le bureau devra le corriger avant validation.`, { titre: "Enregistrer au-delà de la capacité ?", action: "Enregistrer quand même" }))) {
         return;
       }
-      const item: QueuedRotation = {
-        client_uuid: form.uuid ?? newUuid(), user_id: me.id, created_at: new Date().toISOString(), status: "pending",
-        payload: toPayload(form),
-      };
+      const uuid = form.uuid ?? newUuid();
+      const payload = toPayload(form);
+      const maintenant = new Date().toISOString();
       // « ER-09, 36,50 m³ » : ce que l'agent reconnaît de la rotation qu'il vient de saisir.
       const resume = `${vehicle?.name ?? "Rotation"}, ${fmtM3(num(form.volume_loaded) || num(form.volume_delivered))}`;
       setPhase("ecriture");
       annoncer(null);
       try {
-        await queue.put(item);
+        // Correction : version suivante de la saisie relue dans la même transaction (une réponse d'envoi
+        // ne s'intercale pas). Disparue de la file (envoyée et retirée pendant la correction), le bureau en
+        // a reçu une version : la correction repart marquée et le noyau met à jour son brouillon.
+        await queue.transformer(uuid, (q): QueuedRotation => ({
+          client_uuid: uuid, user_id: me.id, created_at: q?.created_at ?? form.created_at ?? maintenant, status: "pending", payload,
+          revision: form.uuid ? (q?.revision ?? form.revision ?? 1) + 1 : 1,
+          envoyee: !form.uuid ? undefined : q ? q.envoyee : (form.envoyee ?? form.revision ?? 1),
+        }));
       } catch {
         setPhase("repos");
         annoncer({ tone: "danger", text: "Enregistrement impossible sur ce téléphone : réessayez. Si cela recommence, prévenez le bureau." });
         return;
       }
+      enCorrection.current = null;
 
       // Enregistrée sur le téléphone : le bouton le dit 1,5 s, le téléphone vibre, la page remonte.
       setForm({ ...blank(), date_loading: form.date_loading });
@@ -543,9 +637,10 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       }
       annoncer({ tone: "neutral", text: `${resume} : envoi au bureau…` }, null);
       const bilan = await sync("saisie");
-      const restant = (await queue.all().catch(() => [] as QueuedRotation[])).find((i) => i.client_uuid === item.client_uuid);
+      const restant = await queue.get(uuid).catch(() => undefined);
       if (!restant) annoncer({ tone: "ok", text: `${resume} : envoyée au bureau.` });
       else if (restant.status === "error") annoncer({ tone: "danger", text: `${resume} : refusée par le bureau, à corriger dans « À envoyer ».` });
+      else if (restant.status === "recue") annoncer({ tone: "danger", text: `${resume} : déjà traitée au bureau, la correction n'y est pas portée. Faites-la corriger au bureau.` });
       else if (!bilan) annoncer({ tone: "ok", text: `${resume} : enregistrée, partira avec le prochain envoi.` });
       else if (bilan.echec && !bilan.echec.reseau) annoncer({ tone: "warn", text: `${resume} : enregistrée sur le téléphone. ${bilan.echec.message}` });
       else annoncer({ tone: "warn", text: `${resume} : partira au retour du réseau.`, reseau: true });
@@ -555,15 +650,39 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }
 
   async function remove(item: QueuedRotation) {
-    if (!(await demanderConfirmation("Supprimer cette saisie du téléphone ? Elle ne sera pas transmise.", { action: "Supprimer", danger: true }))) return;
-    await queue.remove(item.client_uuid);
+    const question = item.status === "recue"
+      ? "Retirer cette correction du téléphone ? La rotation reçue au bureau n'est pas touchée : prévenez le bureau pour qu'il la corrige."
+      : "Supprimer cette saisie du téléphone ? Elle ne sera pas transmise.";
+    if (!(await demanderConfirmation(question, { action: item.status === "recue" ? "Retirer" : "Supprimer", danger: true }))) return;
+    await queue.remove(item.client_uuid).catch(() => undefined);
+    // La correction ouverte de cette saisie n'a plus d'objet.
+    if (form.uuid === item.client_uuid) {
+      enCorrection.current = null;
+      setForm(blank());
+      setErreurs({});
+    }
     await loadQueue();
+  }
+
+  /** Ouvre la correction d'une saisie en attente ; une autre saisie en cours n'est remplacée qu'avec accord. */
+  async function ouvrirCorrection(item: QueuedRotation) {
+    if (!refs) return;
+    // Déjà ouverte : la correction en cours reste telle quelle.
+    if (form.uuid === item.client_uuid) {
+      ouvrir("saisie");
+      return;
+    }
+    if (!formVide(form) && !(await demanderConfirmation("Une saisie est en cours sur « Nouvelle » : la remplacer par cette correction ? Ce qui n'a pas été enregistré sera perdu.", { titre: "Remplacer la saisie en cours ?", action: "Remplacer", danger: true }))) return;
+    enCorrection.current = item.client_uuid;
+    setForm(fromPayload(item, refs));
+    setErreurs({});
+    ouvrir("saisie");
   }
 
   async function logout() {
     // Toujours confirmée : l'icône est près de la pastille du réseau, et la déconnexion efface les listes.
-    const question = mine.length
-      ? `${pluriel(mine.length, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${mine.length > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`
+    const question = aEnvoyer
+      ? `${pluriel(aEnvoyer, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${aEnvoyer > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`
       : "Les listes gardées sur ce téléphone seront effacées : il faudra du réseau pour vous reconnecter.";
     if (!(await demanderConfirmation(question, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
     // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
@@ -590,10 +709,11 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const invalide = (k: Requis) => (erreurs[k] ? true : undefined);
   const champ = cx("min-h-12 text-base", SOUS_BARRE, INVALIDE);
   const champVolume = cx("min-h-14 font-compteur text-[28px] font-semibold tracking-wide", SOUS_BARRE, INVALIDE);
-  const aEnvoyer = mine.length;
+  // À envoyer : en attente ou refusées ; les corrections que le bureau n'a pas prises ne partent plus.
+  const aEnvoyer = mine.length - recues.length;
   const views: Array<[View, string, number | null]> = [
     ["saisie", "Nouvelle", null],
-    ["attente", "À envoyer", aEnvoyer],
+    ["attente", "À envoyer", mine.length],
     ["envoyees", "Envoyées", null],
   ];
 
@@ -715,7 +835,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                   {!retour && <p className="min-w-0 flex-1 text-muted">{etat.texte}</p>}
                 </div>
                 <div className="flex gap-2">
-                  {form.uuid && phase === "repos" && <Button size="lg" className="min-h-14 px-5 text-base" onClick={() => { setForm(blank()); setErreurs({}); }}>Annuler</Button>}
+                  {form.uuid && phase === "repos" && <Button size="lg" className="min-h-14 px-5 text-base" onClick={() => { enCorrection.current = null; setForm(blank()); setErreurs({}); }}>Annuler</Button>}
                   <button
                     type="button"
                     onClick={() => void save()}
@@ -741,11 +861,11 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
               <span>{lastSync ? `Dernier envoi : ${quand(lastSync)}` : "Les saisies partent seules dès que le réseau revient."}</span>
               <Button size="lg" className="min-h-12" loading={syncing} disabled={!online || !aEnvoyer} onClick={() => void sync("envoi")}><RefreshCw className="h-4 w-4" /> Envoyer</Button>
             </div>
-            {aEnvoyer === 0 && <p className="py-8 text-center text-[15px] text-muted">Toutes vos saisies ont été transmises.</p>}
+            {mine.length === 0 && <p className="py-8 text-center text-[15px] text-muted">Toutes vos saisies ont été transmises.</p>}
             {mine.map((item) => {
-              const mot = item.status === "error" ? "Refusée" : "En attente";
+              const mot = item.status === "error" ? "Refusée" : item.status === "recue" ? "À corriger au bureau" : item.client_uuid === form.uuid ? "En correction" : "En attente";
               return (
-                <div key={item.client_uuid} className={cx(FEUILLE, "n-surgir p-4 text-sm", item.status === "error" && "ring-2 ring-danger/60")}>
+                <div key={item.client_uuid} className={cx(FEUILLE, "n-surgir p-4 text-sm", item.status !== "pending" && "ring-2 ring-danger/60")}>
                   <div className="flex items-start justify-between gap-3">
                     <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-doux text-accent">
                       <Truck className="h-5 w-5" />
@@ -755,13 +875,14 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                       <div className="mt-0.5 text-[14px] text-muted">{label("clients", item.payload.partner_id)}, {label("routes", item.payload.route_id)}</div>
                     </div>
                     {/* Le seul état vivant de l'écran est la pastille du réseau : le tampon ne bat pas. */}
-                    <Badge tone={tonEtat(mot)}>{mot}</Badge>
+                    <Badge tone={tonEtat(mot, "warn")}>{mot}</Badge>
                   </div>
                   <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtVolume(item.payload.volume_loaded ?? item.payload.volume_delivered)}{INSECABLE}<span className="text-[15px] font-semibold text-muted">m³</span></div>
                   {item.message && <div className="mt-2 text-[14px] font-semibold text-danger">{item.message}</div>}
                   <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
-                    <Button variant="ghost" size="lg" className="min-h-12" onClick={() => { if (refs) { setForm(fromPayload(item, refs)); setErreurs({}); ouvrir("saisie"); } }}><Pencil className="h-4 w-4" /> Corriger</Button>
-                    <Button variant="danger" size="lg" className="min-h-12" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
+                    {/* Une correction que le bureau n'a pas prise ne repart pas : on la retire, le bureau corrige. */}
+                    {item.status !== "recue" && <Button variant="ghost" size="lg" className="min-h-12" onClick={() => void ouvrirCorrection(item)}><Pencil className="h-4 w-4" /> Corriger</Button>}
+                    <Button variant="danger" size="lg" className="min-h-12" onClick={() => void remove(item)}><Trash2 className="h-4 w-4" /> {item.status === "recue" ? "Retirer" : "Supprimer"}</Button>
                   </div>
                 </div>
               );
