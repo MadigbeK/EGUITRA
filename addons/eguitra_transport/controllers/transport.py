@@ -657,23 +657,28 @@ class EguitraTransport(http.Controller):
                     raise ApiError(422, "business_rule", "Destination du barème inconnue.")
             values["official_rate_id"] = line.id or False
         if "tariffs" in data:
-            # Les tarifs sont renvoyés en entier ; les conditions de manquant fixées par la finance
-            # (tolérance, prix du m³) suivent le tarif du même client et du même produit.
+            # Les tarifs sont renvoyés en entier. Le tarif du même client et du même produit est mis à jour
+            # (il garde ses conditions de manquant, fixées par la finance), un nouveau est créé ; retirer un
+            # tarif de la liste le supprime, ce que seule la finance peut faire.
             kept = {(t.partner_id.id, t.product_id.id): t for t in (route.tariff_ids if route else [])}
             finance = _is_finance()
-            commands = [(5, 0, 0)]
+            commands, seen = [], set()
             for t in data["tariffs"] or []:
                 product = _product(t).id if (t.get("product") or t.get("product_id")) else False
                 line = {"partner_id": int(t["partner_id"]), "product_id": product,
                         "rate": as_float(t.get("rate", 0), "rate")}
-                previous = kept.get((line["partner_id"], product))
-                if previous:
-                    line.update(tolerance_custom=previous.tolerance_custom, shortage_tolerance=previous.shortage_tolerance,
-                                shortage_price=previous.shortage_price)
                 if finance:
                     line.update(_tariff_terms(t))
-                commands.append((0, 0, line))
-            values["tariff_ids"] = commands
+                previous = kept.get((line["partner_id"], product))
+                if previous and previous.id not in seen:
+                    seen.add(previous.id)
+                    commands.append((1, previous.id, line))
+                else:
+                    commands.append((0, 0, line))
+            removed = [t for t in kept.values() if t.id not in seen]
+            if removed and not finance:
+                raise ApiError(403, "forbidden", "La suppression d'un tarif client relève de la finance.")
+            values["tariff_ids"] = commands + [(2, t.id) for t in removed]
         return values
 
     @api_route("/transport/routes", methods=("POST",), profiles=WRITE)

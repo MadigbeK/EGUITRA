@@ -364,8 +364,10 @@ class EguitraTransportRotation(models.Model):
         rotations = self.filtered(lambda r: r.state in ("draft", "en_route", "done"))
         if not rotations:
             return
-        Line = self.env["eguitra.transport.rotation.tax"]
-        rotations.tax_line_ids.unlink()
+        # Lignes calculées par le barème des taxes, jamais saisies : le système les recalcule (le droit de
+        # modifier la rotation est déjà vérifié ; le parc ne supprime pas lui-même de ligne de taxe).
+        Line = self.env["eguitra.transport.rotation.tax"].sudo()
+        rotations.tax_line_ids.sudo().unlink()
         rules = self.env["eguitra.transport.tax"].search([("company_id", "in", rotations.company_id.ids)])
         values = [
             tax._line_vals(rot)
