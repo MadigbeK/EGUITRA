@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileSpreadsheet, FileText, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
+import { Download, FileSpreadsheet, FileText, Pencil, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select, Tag } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
@@ -242,11 +242,18 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
   );
 }
 
-/** Règles de répartition : pourcentage du chiffre d'affaires brut d'un ensemble ou d'une catégorie, par bénéficiaire. */
+const REGLE_VIDE = { target: "", partner: null as Ref | null, rate: "", date_from: "", date_to: "", note: "" };
+
+/**
+ * Règles de répartition : pourcentage du chiffre d'affaires brut d'un ensemble ou d'une catégorie, par
+ * bénéficiaire. Une règle se modifie sur place (taux, période, fondement) : la fermer à une date garde
+ * son historique, au lieu de la supprimer et de la recréer.
+ */
 function Regles({ canEdit }: { canEdit: boolean }) {
   const { data: rules, error, mutate } = useApi<Rule[]>("/transport/share-rules");
   const { data: vehicles } = useApi<Array<{ id: number; name: string; ownership: Ownership; owner: Ref | null }>>("/transport/vehicles");
-  const [form, setForm] = useState<{ target: string; partner: Ref | null; rate: string; date_from: string; date_to: string; note: string }>({ target: "", partner: null, rate: "", date_from: "", date_to: "", note: "" });
+  const [form, setForm] = useState(REGLE_VIDE);
+  const [editing, setEditing] = useState<number | null>(null);
   const [message, setMessage] = useState<Message>(null);
   const targets = [
     ...OWNERSHIPS.map((o) => ({ value: `cat:${o.value}`, label: `Tous les ${CATEGORY[o.value].toLowerCase()}` })),
@@ -256,16 +263,26 @@ function Regles({ canEdit }: { canEdit: boolean }) {
     setMessage(null);
     const [kind, value] = form.target.split(":");
     try {
-      await apiSend("POST", "/transport/share-rules", {
+      await apiSend(editing ? "PATCH" : "POST", editing ? `/transport/share-rules/${editing}` : "/transport/share-rules", {
         partner_id: form.partner?.id, rate: parseNumber(form.rate) ?? 0,
         vehicle_id: kind === "veh" ? Number(value) : null, ownership: kind === "cat" ? value : null,
         date_from: form.date_from || null, date_to: form.date_to || null, note: form.note || null,
       });
-      setForm({ target: "", partner: null, rate: "", date_from: "", date_to: "", note: "" });
+      setForm(REGLE_VIDE);
+      setEditing(null);
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Enregistrement impossible." });
     }
+  }
+  function modifier(rule: Rule) {
+    setMessage(null);
+    setEditing(rule.id);
+    setForm({
+      target: rule.vehicle ? `veh:${rule.vehicle.id}` : rule.ownership ? `cat:${rule.ownership}` : "",
+      partner: rule.partner, rate: String(rule.rate), date_from: rule.date_from ?? "", date_to: rule.date_to ?? "",
+      note: rule.note ?? "",
+    });
   }
   async function remove(rule: Rule) {
     setMessage(null);
@@ -291,16 +308,29 @@ function Regles({ canEdit }: { canEdit: boolean }) {
           { key: "rate", label: "Taux", align: "right", render: (r) => `${fmtDec(r.rate)}${INSECABLE}%` },
           { key: "period", label: "Période", render: (r) => (r.date_from || r.date_to ? `${r.date_from ? fmtDate(r.date_from) : "…"} au ${r.date_to ? fmtDate(r.date_to) : "…"}` : "Permanente") },
           { key: "note", label: "Fondement", render: (r) => r.note ?? "–" },
-          { key: "actions", label: "", render: (r) => (canEdit ? <button type="button" title="Supprimer la règle" className="text-muted hover:text-danger" onClick={() => void remove(r)}><Trash2 className="h-4 w-4" /></button> : null) },
+          { key: "actions", label: "", render: (r) => (canEdit ? (
+            <span className="inline-flex gap-3">
+              <button type="button" title="Modifier la règle" aria-label="Modifier la règle" className="text-muted hover:text-ink" onClick={() => modifier(r)}><Pencil className="h-4 w-4" /></button>
+              <button type="button" title="Supprimer la règle" aria-label="Supprimer la règle" className="text-muted hover:text-danger" onClick={() => void remove(r)}><Trash2 className="h-4 w-4" /></button>
+            </span>
+          ) : null) },
         ]} />
       )}
       {canEdit && (
         <div className="grid grid-cols-1 gap-2 border-t border-line p-3 md:grid-cols-7">
+          {editing && <p className="text-[12.5px] font-semibold text-ink md:col-span-7">Modification de la règle : changez le taux, la période ou le fondement, puis enregistrez.</p>}
           <Select className="md:col-span-2" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} placeholder="Ensemble ou catégorie…" options={targets} />
           <div className="md:col-span-2"><PartnerPicker kind="supplier" value={form.partner} placeholder="Bénéficiaire…" onChange={(p) => setForm({ ...form, partner: p })} /></div>
           <Input placeholder="Taux (%)" inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
-          <Input placeholder="Fondement (contrat…)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-          <Button variant="primary" disabled={!form.target || !form.partner || !parseNumber(form.rate)} onClick={() => void save()}><Plus className="h-4 w-4" /> Ajouter</Button>
+          <Input className="md:col-span-2" placeholder="Fondement (contrat…)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+          <Field label="Du" className="md:col-span-2"><Input type="date" value={form.date_from} onChange={(e) => setForm({ ...form, date_from: e.target.value })} /></Field>
+          <Field label="Au" hint="Vide : sans fin" className="md:col-span-2"><Input type="date" value={form.date_to} onChange={(e) => setForm({ ...form, date_to: e.target.value })} /></Field>
+          <div className="flex items-end gap-2 md:col-span-3">
+            {editing && <Button onClick={() => { setEditing(null); setForm(REGLE_VIDE); }}>Abandonner</Button>}
+            <Button variant="primary" disabled={!form.target || !form.partner || !parseNumber(form.rate)} onClick={() => void save()}>
+              {editing ? "Enregistrer" : <><Plus className="h-4 w-4" /> Ajouter</>}
+            </Button>
+          </div>
         </div>
       )}
     </Card>
