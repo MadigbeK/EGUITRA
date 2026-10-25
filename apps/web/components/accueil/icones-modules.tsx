@@ -592,6 +592,15 @@ const DESSINS: Record<string, ReactNode> = {
       </g>
     </>
   ),
+  "rh-habilitations": (
+    <>
+      <path className="a-pop" style={k(0)} d="M24 3 41 9v13c0 11-7.5 19.5-17 23C14.5 41.5 7 33 7 22V9Z" fill={P} />
+      <path className="a-pop" style={k(1)} d="M24 9.5 35.5 13.6v8.6c0 7.6-5 13.6-11.5 16.3-6.5-2.7-11.5-8.7-11.5-16.3v-8.6Z" fill={M} />
+      <path className="a-trace" style={k(2)} d="M17.5 23.5l4.6 4.6 8.6-9.6" stroke={F} strokeWidth="3.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <circle className="a-pop" style={k(3)} cx="38" cy="38" r="6.5" fill={G} />
+      <path className="a-pop" style={k(4)} d="M38 34.6v3.8l2.4 1.6" stroke={F} strokeWidth="2.2" fill="none" strokeLinecap="round" />
+    </>
+  ),
   "rh-paie": (
     <>
       <g className="a-eventail" style={pivot(18, 42)}>
@@ -810,6 +819,7 @@ const PAR_ADRESSE: Record<string, string> = {
   "/rh/salaries": "rh-salaries",
   "/rh/conges": "rh-conges",
   "/rh/avances": "rh-avances",
+  "/rh/habilitations": "rh-habilitations",
   "/rh/paie": "rh-paie",
   "/rh/simulateur": "rh-simulateur",
   "/rh/moi": "rh-moi",

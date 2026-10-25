@@ -10,10 +10,11 @@ import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from
 import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
+import { SecuriteSalarie } from "./Securite";
 
-type Onglet = "identite" | "contrat" | "conges" | "documents" | "paie";
+type Onglet = "identite" | "contrat" | "conges" | "documents" | "securite" | "paie";
 
-/** Fiche d'un salarié : identité, contrat et rémunération, congés, documents, paie. */
+/** Fiche d'un salarié : identité, contrat et rémunération, congés, documents, sécurité (habilitations, aptitude, EPI), paie. */
 export function FicheSalarie({ id }: { id: string }) {
   const { data: e, error, mutate } = useApi<Employee>(`/rh/employees/${id}`);
   const { data: meta, error: erreurMeta, mutate: rafraichirMeta } = useApi<Meta>("/rh/meta");
@@ -75,6 +76,7 @@ export function FicheSalarie({ id }: { id: string }) {
           { key: "contrat", label: "Contrat et rémunération" },
           { key: "conges", label: "Congés", count: e.leaves.length },
           { key: "documents", label: "Documents", count: e.documents.length },
+          { key: "securite", label: "Sécurité", count: e.qualification_status.filter((q) => q.state !== "valide").length || undefined },
           { key: "paie", label: "Paie", count: e.payslips.length },
         ]}
       />
@@ -82,6 +84,7 @@ export function FicheSalarie({ id }: { id: string }) {
       {onglet === "contrat" && <Contrat e={e} meta={meta} ecrit={ecrit} onChanged={rafraichir} />}
       {onglet === "conges" && <CongesSalarie e={e} meta={meta} ecrit={ecrit} onChanged={rafraichir} />}
       {onglet === "documents" && <Documents e={e} meta={meta} ecrit={ecrit} onChanged={rafraichir} />}
+      {onglet === "securite" && <SecuriteSalarie e={e} meta={meta} ecrit={ecrit} onChanged={rafraichir} />}
       {onglet === "paie" && <PaieSalarie e={e} />}
       {edition && (
         <FormulaireSalarie

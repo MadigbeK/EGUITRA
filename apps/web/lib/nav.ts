@@ -184,6 +184,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/rh/salaries", label: "Salariés", icon: "Users", profiles: RH_GESTION },
         { href: "/rh/conges", label: "Absences et congés", icon: "Calendar", profiles: RH_GESTION },
         { href: "/rh/avances", label: "Avances et prêts", icon: "HandCoins", profiles: RH_GESTION },
+        { href: "/rh/habilitations", label: "Habilitations et sécurité", icon: "ShieldCheck", profiles: RH_GESTION },
       ],
     },
     {
