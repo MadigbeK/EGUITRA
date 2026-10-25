@@ -109,6 +109,8 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
 | Alcootests : saisie | non | non | E | E | E (pour lui-même) | non |
 | Alcootests : lecture | statut | statut | détail | statut (site) | fait (propres) | non |
 | `POST /hsseq/lock/evaluate` | L | L | L | L | L (ses rotations) | non |
+| `GET /hsseq/me/rotations` | L | non | L | L (site) | L (propres) | non |
+| `POST /transport/rotations/{id}/depart` (Transport) | non | non | non | E (site) | non | non |
 | `GET /hsseq/lock/departures` | L | L | L | L (site) | non | non |
 | `/hsseq/lock/reasons` | L, E | L | L, E | L | non | non |
 | `GET /hsseq/sites` | L | L | L | L | L | L |
@@ -159,6 +161,7 @@ ou ce dont il est responsable ; « site » : borné aux sites du compte.
   "owners": [{ "id": 19, "name": "Alhassane Diakité" }],
   "criticality_thresholds": [{ "level": "significant", "min": 8, "max": 14, "investigation_days": 7, "method": "five_whys" }],
   "costly_action_threshold": 50000000,
+  "check_window_hours": 12, "breath_test_window_hours": 4,
   "me": { "profiles": ["exploitation"], "site_ids": [1], "employee_id": null, "driver_id": null }
 }
 ```
@@ -423,11 +426,12 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
 - `GET /hsseq/checks/{id}` → `Check` : réponses point par point (`answer` ∈ `ok`, `not_ok`, `na`,
   `comment`, `photos`), `signature`, `nonconformities`, `photos_missing` (vrai tant qu'une
   non-conformité du contrôle est sans photo), `rights`.
-- `POST /hsseq/checks` : `NewCheck` (`client_uuid`, `template_id`, `vehicle_id`, `rotation_id`,
+- `POST /hsseq/checks` : `NewCheck` (`client_uuid`, `template_id`, `vehicle_id` obligatoire, `rotation_id` facultatif,
   `driver_id`, `reported_at`, `offline`, `duration_s`, `latitude`, `longitude`, `gps_accuracy`, `answers` : `item_id`, `answer`,
   `comment`, `signature`). `result` : `blocking` dès qu'un point bloquant est `not_ok`,
   `non_compliant` (avec réserves) pour un point non bloquant, `compliant` sinon. Chaque réponse
   `not_ok` ouvre une non-conformité.
+- Rattachement à la rotation : voir §9, « Rattachement automatique ».
 - Photos : le noyau accepte le contrôle sans ses photos, la pièce se déposant rattachée à une fiche
   (§11). NIMOVA Terrain envoie le contrôle, puis au moins une photo par non-conformité
   (`model: "nonconformity"`, `id` de la non-conformité). Chaque non-conformité porte
@@ -448,7 +452,7 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
 
 ## 8. Alcootests : `/hsseq/breath-tests` (§4 V03, §9.4)
 
-- `POST /hsseq/breath-tests` : `NewBreathTest` (`client_uuid`, `rotation_id`, `driver_id`, `performed`,
+- `POST /hsseq/breath-tests` : `NewBreathTest` (`client_uuid`, `rotation_id` facultatif, `driver_id`, `performed`,
   `result` (`negative`, `positive`) si réalisé, `reading_mg_l`, `device`, `not_done_reason` sinon,
   `reported_at`, `offline`). Un conducteur ne saisit que pour lui-même. Un positif retire le conducteur
   de la rotation (`driver_removed`) : Transport doit en affecter un autre.
@@ -465,7 +469,8 @@ il ne se répond pas dans le contrôle et relève de V03. Cible : moins de 4 min
 
 Évaluation côté serveur, sans contournement possible depuis un client (§4, §11). Côté Transport :
 nouvel état `en_route` de la rotation, posé par `action_depart` (`POST /transport/rotations/{id}/depart`),
-qui appelle l'évaluation dans la même transaction. Un refus répond 422 `departure_blocked` avec
+qui appelle l'évaluation dans la même transaction. Au lot 1, le départ est réservé au chef de parc
+(`exploitation`, sites de la rotation), pas au conducteur. Un refus répond 422 `departure_blocked` avec
 `blockers` : `{ code, label, source, since, waivable, severity }`, `severity` valant `block` ou `warn`,
 rien d'autre ; les motifs propres à Transport (T01) y figurent aussi, T01 en `block`. Au lot 1, motifs V01 à V05 ; V06 à
 V09 sont déclarés au paramétrage mais inactifs.
@@ -490,9 +495,9 @@ Entrée `{ "rotation_id": 1127 }`. Sortie `LockEvaluation` (§4.2 en anglais, pl
 
 | Code | Ouvert quand (lot 1) |
 |---|---|
-| V01 | Aucun contrôle avant départ enregistré pour la rotation. |
+| V01 | Aucun contrôle avant départ rattaché à la rotation (rattachement automatique ci-dessous). |
 | V02 | Une non-conformité d'un point bloquant reste ouverte sur le véhicule, d'une rotation à l'autre. |
-| V03 | Aucun alcootest du conducteur de la rotation, ou le dernier est non réalisé ou positif ; `detail` nul hors `hsseq`. |
+| V03 | Aucun alcootest du conducteur rattaché à la rotation (rattachement automatique ci-dessous), ou le dernier est non réalisé ou positif ; `detail` nul hors `hsseq`. |
 | V04 | Habilitation obligatoire du salarié lié au chauffeur (`eguitra.rh.qualification`) absente ou expirée à la date de chargement, ou aptitude `unfit`. |
 | V05 | Assurance (`insurance`) ou visite technique (`inspection`) du véhicule expirée à la date de chargement. |
 
@@ -507,6 +512,39 @@ fait) et V03 (alcootest non fait ou non réalisé) ; faux pour V02, V03 positif,
 dérogation active de la rotation (`waiver_id`). `active_waiver` : `id`, `approved_by` (demandeur puis
 second valideur), `expires`, ou nul. `label`, `source` et `resolution` reprennent le tableau du §4 de
 la spécification ; `detail` précise le cas. Chaque évaluation est journalisée.
+
+### Rattachement automatique
+
+Le contrôle avant départ (`vehicle_id` toujours requis) et l'alcootest sont acceptés sans
+`rotation_id`. À l'évaluation du verrou et au départ, le noyau rattache à la rotation, si elle n'en a
+pas encore :
+
+- le dernier contrôle avant départ de son véhicule saisi dans la fenêtre `check_window_hours`
+  (12 h par défaut) précédant l'évaluation, et pas encore rattaché ;
+- le dernier alcootest de son conducteur saisi dans la fenêtre `breath_test_window_hours` (4 h par
+  défaut), et pas encore rattaché.
+
+Fenêtres paramétrables, servies par les référentiels. Pas de double rattachement : une saisie
+rattachée à une rotation ne compte jamais pour une autre. Le rattachement est journalisé ; la fiche du
+contrôle ou de l'alcootest porte ensuite sa `rotation`.
+
+### `GET /hsseq/me/rotations`
+
+`date` (aujourd'hui par défaut). Lecture : `conducteur` (ses rotations, par `employee.driver_id`),
+`exploitation` (rotations de ses sites), `hsseq` et `admin` (toutes). Rotations du jour à l'état
+`draft` ou `en_route`, triées par véhicule ; tableau de `MyRotation` :
+
+```json
+[{
+  "id": 1129, "name": null, "date_loading": "2026-10-15", "state": "draft",
+  "vehicle": { "id": 9, "name": "ER-09", "vehicle_kind": "tanker" },
+  "site": { "id": 1, "name": "Parc de Matoto" },
+  "lock": { "allowed": false, "pending_checks_only": false, "reasons": ["LockReason, avec pending"] }
+}]
+```
+
+`lock` reprend l'évaluation du verrou (rattachement automatique compris) ; `pending_checks_only` suit
+la règle des départs ci-dessous.
 
 ### `GET /hsseq/lock/departures`
 
@@ -638,3 +676,13 @@ Horodatage : `reported_at` (saisie) et `synced_at` (posé par le serveur).
    `/hsseq/lock/departures` (§9).
 5. Position GPS à plat, aux noms des modèles du noyau : `latitude`, `longitude`, `gps_accuracy` (mètres),
    sur les événements et les contrôles saisis au terrain (§1, §5, §7).
+
+### Ajouts de la session Mobile App (25/10)
+
+1. `GET /hsseq/me/rotations?date=` : rotations du jour (`draft`, `en_route`) avec leur verrou, pour
+   `conducteur`, `exploitation` (ses sites), `hsseq` et `admin` (§2, §9).
+2. `POST /transport/rotations/{id}/depart` réservé au chef de parc (`exploitation`) au lot 1, pas au
+   conducteur (§2, §9).
+3. Contrôle avant départ et alcootest acceptés sans `rotation_id`, rattachés automatiquement au
+   verrou et au départ dans des fenêtres paramétrables (12 h pour le contrôle du véhicule, 4 h pour
+   l'alcootest du conducteur), sans double rattachement (§7, §8, §9).

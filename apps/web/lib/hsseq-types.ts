@@ -449,7 +449,8 @@ export interface NewCheck {
   client_uuid: string;
   template_id: number;
   vehicle_id: number;
-  rotation_id: number | null;
+  /** Facultatif : sinon rattaché à la rotation du véhicule au verrou ou au départ (fenêtre de 12 h). */
+  rotation_id?: number | null;
   driver_id: number | null;
   reported_at: string;
   offline: boolean;
@@ -533,7 +534,8 @@ export type BreathTest = BreathTestDone | BreathTestStatus | BreathTestDetail;
 
 export interface NewBreathTest {
   client_uuid: string;
-  rotation_id: number | null;
+  /** Facultatif : sinon rattaché à la rotation du conducteur au verrou ou au départ (fenêtre de 4 h). */
+  rotation_id?: number | null;
   driver_id: number;
   performed: boolean;
   result?: "negative" | "positive" | null;
@@ -610,6 +612,17 @@ export interface Departures {
   allowed: number;
   blocked: number;
   items: Departure[];
+}
+
+/** Rotation du jour lue par GET /hsseq/me/rotations, avec son verrou. */
+export interface MyRotation {
+  id: number;
+  name: string | null;
+  date_loading: string;
+  state: "draft" | "en_route";
+  vehicle: { id: number; name: string; vehicle_kind: VehicleKind };
+  site: Ref | null;
+  lock: { allowed: boolean; pending_checks_only: boolean; reasons: LockReason[] };
 }
 
 /** Paramétrage d'un motif : activation par profil et par site (§4.2). */
@@ -778,6 +791,9 @@ export interface Referentials {
   criticality_thresholds: CriticalityThreshold[];
   /** Seuil d'une action coûteuse, validée par la direction avant démarrage (GNF). */
   costly_action_threshold: number;
+  /** Fenêtres du rattachement automatique à la rotation (heures) : contrôle du véhicule, alcootest du conducteur. */
+  check_window_hours: number;
+  breath_test_window_hours: number;
   /** Compte connecté : profils HSSEQ, sites couverts (vide : tous), salarié RH et chauffeur liés. */
   me: { profiles: HsseqProfile[]; site_ids: number[]; employee_id: number | null; driver_id: number | null };
 }

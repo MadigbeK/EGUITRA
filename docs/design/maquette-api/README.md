@@ -102,7 +102,9 @@ Les routes `/hsseq/*` (lot 1) suivent le contrat `docs/design/hsseq-contrat.md` 
 `apps/web/lib/hsseq-types.ts` : cockpit, référentiels et sites, échéances, événements (cycle, enquête,
 coûts, rapport PDF, registre Excel), actions (preuve, J+90, validation de la direction), grilles et
 contrôles avant départ, non-conformités et levée, alcootests, verrou (`lock/evaluate`,
-`lock/departures`, `lock/reasons`), dérogations, pièces jointes et journal. Chaque fiche renvoie
+`lock/departures`, `lock/reasons`), rotations du jour du compte (`me/rotations`), dérogations, pièces
+jointes et journal. Un contrôle ou un alcootest saisi sans `rotation_id` se rattache à la rotation à
+l'évaluation du verrou (fenêtres de 12 h et de 4 h), une seule fois. Chaque fiche renvoie
 `rights` et `transitions` selon le profil du compte connecté ; l'alcootest se lit en « fait » pour
 le conducteur, en statut pour exploitation, direction et administration, en détail chiffré pour le
 seul profil `hsseq`. Le profil complet (`demo`) porte aussi `hsseq`.
