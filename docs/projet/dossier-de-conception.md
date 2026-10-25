@@ -187,6 +187,9 @@ même jour :
   suivi pour un autre promoteur ne peut pas être rattaché à un dossier ;
 - chaque route de l'API est réservée à des profils, et les refus sont testés.
 
+Décidé le 22 octobre 2026 et ajouté au code le 25 octobre : une rotation est validée par un autre
+compte que celui qui l'a saisie.
+
 ## 7. Règles de gestion paramétrées
 
 Valeurs de départ, ajustables par l'administration.
@@ -199,7 +202,7 @@ Valeurs de départ, ajustables par l'administration.
 | Alertes de gestion (gravités bloquante, critique, élevée, moyenne, avec l'action recommandée) | compte de passage 585 non soldé (bloquant) ; trésorerie sous le minimum (à fixer par société) et compte de banque ou de caisse négatif ; DSCR < 1,20 ; créances échues depuis plus de 90 jours, part échue > 20 %, délai de recouvrement > 60 jours, concentration sur un client > 40 % ; dettes fournisseurs échues ; résultat net cumulé négatif ; marge transport < 30 %, rotations non facturées, ensembles routiers déficitaires après charges de structure ; dépassement budgétaire > 10 % ; clôture en retard de plus de 10 jours ; validation en attente depuis plus de 3 jours |
 | Pertes attendues (IFRS 9, retraitement hors livres SYSCOHADA) | non échu 1 %, 1 à 30 jours 3 %, 31 à 60 jours 10 %, 61 à 90 jours 25 %, au-delà 50 % |
 | Relances des clients | rappel dès 1 jour de retard, relance ferme à 15 jours, mise en demeure à 30 jours (jamais envoyée sans décision de la finance) |
-| Clôture mensuelle | contrôles bloquants (équilibres, compte de passage, pièces en attente, relevés rapprochés), verrouillage et empreinte de chaînage des écritures, réouverture tracée |
+| Clôture mensuelle | contrôles bloquants (équilibres, compte de passage, pièces en attente, relevés rapprochés), verrouillage et empreinte de chaînage des écritures, réouverture tracée ; cohérence des références (référence de fournisseur saisie deux fois, numéros manquants dans les factures et avoirs du mois), en vigilance |
 | Transport | tarif du client sur la route, à défaut tarif de la route ; facture par client, une ligne par rotation |
 | Coût standard d'une rotation (ajout) | forfaits de la route (litres de carburant aller et retour × prix du litre à la date de chargement, prime de route, péages, autres frais) ; mis à jour tant que la rotation est saisie, figé à sa validation |
 | Ensembles gérés pour des propriétaires (ajout) | règles de répartition en % du chiffre d'affaires brut, par ensemble ou par catégorie ; part du propriétaire = marge − commissions ; relevé mensuel figé, pièces en brouillon |
@@ -256,11 +259,11 @@ Sauvegardes de la production, état au 25 octobre 2026 :
 | Journalisation continue | copie hors site chiffrée toutes les 15 minutes ; restauration à tout instant des 14 derniers jours | archivage des journaux de transactions (WAL) sur le serveur, toutes les 5 minutes au plus |
 | Sauvegarde complète | quotidienne, chiffrée, copiée hors site chez un second fournisseur | quotidienne (01 h 30), sur le serveur |
 | Pièces jointes | synchronisées hors site toutes les heures | miroir sur le serveur toutes les 15 minutes, instantané chaque nuit |
-| Rétention | 30 sauvegardes quotidiennes, 12 mensuelles, journaux sur 14 jours | 14 jours sur le serveur ; les rétentions de l'offre s'appliqueront à la copie hors site |
+| Rétention | 30 sauvegardes quotidiennes, 12 mensuelles, journaux sur 14 jours | 14 jours sur le serveur ; les rétentions de l'offre s'appliqueront à la copie hors site (15 jours de journaux gardés pour 14 jours complets de restauration) |
 | Perte de données maximale | 15 minutes | tenue tant que le serveur et ses disques restent disponibles ; pas garantie en cas de perte du serveur |
-| Délai de reprise | 4 heures ouvrées | procédure écrite ; restauration du 25 octobre faite en 15 secondes, sur une base encore vide |
+| Délai de reprise | 4 heures ouvrées | procédure écrite ; restauration du 25 octobre faite en 15 secondes, sur une base encore vide ; la reprise depuis la copie hors site, qui mesure le vrai délai, se jouera dès sa mise en service |
 | Test de restauration | chaque trimestre, dont un à un instant donné, avec compte rendu | test mensuel de l'état le plus récent réussi ; premier test trimestriel à un instant donné réussi le 25 octobre 2026, avec compte rendu ; tests programmés chaque mois et chaque trimestre |
-| Disponibilité | 99,5 % par mois | mesurée chaque mois sur le journal de la supervision |
+| Disponibilité | 99,5 % par mois | mesurée chaque mois sur le journal de la supervision, hors maintenances annoncées 48 heures à l'avance |
 
 Copie hors site chiffrée : outillée (chiffrement avant envoi, rétentions de l'offre), mais pas en
 service tant que le stockage chez un second hébergeur n'est pas souscrit. Ce stockage fait partie
@@ -274,9 +277,14 @@ authentification. Les alertes sont outillées (messagerie d'équipe, notificatio
 sonde externe), mais aucune destination n'est configurée : elles ne sont aujourd'hui inscrites
 qu'au journal du serveur. Les destinations sont à convenir avec le client (point 12).
 
-Mises à jour de sécurité : celles du système s'appliquent automatiquement, sans redémarrage
-automatique ; celles des composants de la plateforme passent par la recette puis par la procédure
-de mise en production.
+Mises à jour de sécurité : celles du système s'appliquent chaque nuit, sans redémarrage
+automatique. Celles des composants (noyau, base de données, applications web, proxy) se font chaque
+mois, en recette puis en production, annoncées 48 heures à l'avance, avec un compte rendu du mois
+(offre, chapitre 5.3) ; la procédure est outillée.
+
+Réversibilité (offre, chapitre 5.4) : un outil produit en une fois la copie complète remise au
+client, en formats ouverts : base en SQL, pièces jointes, code de la version en service,
+configuration de déploiement sans secret, notice de réinstallation.
 
 ## 10. Reprise de l'exercice 2026
 
