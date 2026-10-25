@@ -260,6 +260,10 @@ class EguitraHsseqChecks(http.Controller):
         quiet = template.with_context(hsseq_no_bump=True)
         quiet.write(_template_values(data))
         if "items" in data:
+            # Une seule version pour toute la modification : les points ajoutés y entrent, les points retirés en
+            # sortent. Un point retiré s'archive, jamais supprimé : un appareil hors ligne peut encore le répondre
+            # sur sa version de la grille.
+            following = template.version + 1
             Item = request.env["eguitra.hsseq.check.item"].sudo().with_context(hsseq_no_bump=True, active_test=False)
             existing = {i.id: i for i in template._items(active_only=False)}
             kept = set()
@@ -269,11 +273,20 @@ class EguitraHsseqChecks(http.Controller):
                 if item_id:
                     if item_id not in existing:
                         raise ApiError(422, "business_rule", "Point d'une autre grille.", fields=["items"])
-                    Item.browse(item_id).write(values)
+                    current = existing[item_id]
+                    if values["active"] != current.active:
+                        if values["active"]:
+                            values.update(retired_version=0, since_version=following)
+                        else:
+                            values.update(retired_version=following)
+                    current.with_context(hsseq_no_bump=True).write(values)
                     kept.add(item_id)
                 else:
-                    Item.create(dict(values, template_id=template.id))
-            Item.browse([i for i in existing if i not in kept]).unlink()
+                    Item.create(dict(values, template_id=template.id, since_version=following))
+            for item_id in [i for i in existing if i not in kept]:
+                item = existing[item_id].with_context(hsseq_no_bump=True)
+                if item.active:
+                    item.write({"active": False, "retired_version": following})
         template._bump_version()
         return template_row(template, all_items=True)
 
@@ -371,6 +384,7 @@ class EguitraHsseqChecks(http.Controller):
             answers.append({"item_id": item_id, "answer": answer["answer"], "comment": text(answer, "comment", 1000)})
             photos[item_id] = ids_list(answer, "attachment_ids")
         values = {"company_id": vehicle.company_id.id, "template_id": template.id, "vehicle_id": vehicle.id,
+                  "template_version": int_or_none(data, "template_version") or template.version,
                   "rotation_id": rotation.id if rotation else False, "driver_id": driver.id or False,
                   "author_id": request.env.uid, "client_uuid": uuid, "reported_at": reported_at(data),
                   "offline": bool(data.get("offline")), "duration_s": int(number(data, "duration_s")),

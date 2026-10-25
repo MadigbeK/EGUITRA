@@ -55,6 +55,11 @@ class EguitraHsseqCheckTemplate(models.Model):
     def _answerable_items(self):
         return self._items().filtered(lambda i: not i.linked_to)
 
+    def _version_items(self, version):
+        """Points à répondre de la version donnée de la grille (y compris ceux retirés depuis)."""
+        self.ensure_one()
+        return self._items(active_only=False).filtered(lambda i: not i.linked_to and i._in_version(version))
+
 
 class EguitraHsseqCheckItem(models.Model):
     _name = "eguitra.hsseq.check.item"
@@ -67,14 +72,38 @@ class EguitraHsseqCheckItem(models.Model):
     sequence = fields.Integer("Ordre", default=10)
     linked_to = fields.Selection(LINKS, "Relié à", help="Point qui ne se répond pas dans le contrôle.")
     active = fields.Boolean(default=True)
+    since_version = fields.Integer("Dans la grille depuis la version", default=1)
+    retired_version = fields.Integer("Retiré de la grille à la version", help="0 : toujours dans la grille.")
+
+    def _in_version(self, version):
+        self.ensure_one()
+        return self.since_version <= version and (not self.retired_version or self.retired_version > version)
 
     @api.model_create_multi
     def create(self, vals_list):
+        Template = self.env["eguitra.hsseq.check.template"]
+        if not self.env.context.get("hsseq_no_bump"):
+            for vals in vals_list:
+                if vals.get("template_id") and "since_version" not in vals:
+                    vals["since_version"] = Template.browse(vals["template_id"]).version + 1
         items = super().create(vals_list)
         items.template_id._bump_version()
         return items
 
     def write(self, vals):
+        """Archivé, un point sort de la version suivante de la grille ; réactivé, il y revient (sauf version
+        fixée par l'appelant, qui regroupe ses modifications en une version)."""
+        automatic = "active" in vals and not self.env.context.get("hsseq_no_bump")
+        if automatic and not {"since_version", "retired_version"} & set(vals):
+            for item in self:
+                if bool(vals["active"]) == item.active:
+                    continue
+                following = item.template_id.version + 1
+                if vals["active"]:
+                    extra = {"retired_version": 0, "since_version": following}
+                else:
+                    extra = {"retired_version": following}
+                super(EguitraHsseqCheckItem, item).write(extra)
         result = super().write(vals)
         self.template_id._bump_version()
         return result
@@ -147,7 +176,13 @@ class EguitraHsseqCheck(models.Model):
         if template.vehicle_kind != kind:
             raise HsseqError("vehicle_kind_mismatch", f"La grille « {template.name} » vaut pour un autre type de "
                                                       f"véhicule que {vehicle.name}.", fields=["template_id"])
-        items = template._answerable_items()
+        version = values.get("template_version") or template.version
+        if not 1 <= version <= template.version:
+            raise HsseqError("invalid_parameter", f"Version {version} inconnue pour la grille « {template.name} ».",
+                             fields=["template_version"], status=400)
+        # Saisie hors ligne sur une version plus ancienne : seuls les points de cette version sont exigés ; un
+        # point retiré depuis reste accepté, un point ajouté depuis est noté « non évalué ».
+        items = template._version_items(version)
         by_id = {item.id: item for item in template._items(active_only=False)}
         given = {}
         for answer in answers:
@@ -161,7 +196,8 @@ class EguitraHsseqCheck(models.Model):
         missing = [item.id for item in items if item.id not in given]
         if missing:
             raise HsseqError("incomplete_answers", "Chaque point de la grille attend sa réponse.", fields=missing)
-        check = self.sudo().create(dict(values, template_version=template.version, vehicle_kind=kind,
+        later = template._answerable_items().filtered(lambda i: i.id not in given and i not in items)
+        check = self.sudo().create(dict(values, template_version=version, vehicle_kind=kind,
                                         site_id=values.get("site_id") or vehicle.site_id.id))
         Answer = self.env["eguitra.hsseq.check.answer"].sudo()
         for item_id, answer in given.items():
@@ -173,6 +209,9 @@ class EguitraHsseqCheck(models.Model):
                 self.env["eguitra.hsseq.nonconformity"].sudo().create({
                     "check_id": check.id, "answer_id": row.id, "item_id": item.id, "label": item.label,
                     "blocking": item.blocking, "comment": row.comment, "found_at": check.reported_at})
+        for item in later:
+            Answer.create({"check_id": check.id, "item_id": item.id, "label": item.label, "blocking": item.blocking,
+                           "sequence": item.sequence, "answer": "not_evaluated"})
         check.reference = self.env["ir.sequence"].sudo().next_by_code("eguitra.hsseq.check") or "/"
         return check
 

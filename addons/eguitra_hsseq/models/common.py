@@ -56,7 +56,8 @@ REMINDER_KINDS = [("d_minus_7", "Échéance dans 7 jours"), ("d0", "Échéance d
                   ("escalation", "Escalade au Directeur général")]
 
 CHECK_KINDS = [("pre_departure", "Contrôle avant départ"), ("unloading", "Dépotage"), ("mine_site", "Site minier")]
-ANSWERS = [("ok", "Conforme"), ("not_ok", "Non conforme"), ("na", "Sans objet")]
+ANSWERS = [("ok", "Conforme"), ("not_ok", "Non conforme"), ("na", "Sans objet"),
+           ("not_evaluated", "Non évalué (point ajouté à la grille après la saisie)")]
 CHECK_RESULTS = [("compliant", "Conforme"), ("non_compliant", "Non conforme (réserves)"),
                  ("blocking", "Non conforme bloquant")]
 NONCONFORMITY_STATUSES = [("open", "Ouverte"), ("lifted", "Levée")]
