@@ -6,7 +6,7 @@
 #                                     PostgreSQL 16, Caddy), images de la recette reconstruites et mises
 #                                     en service, base de recette relancée sur la nouvelle image
 #                                     PostgreSQL, audit des dépendances des applications web. Ensuite :
-#                                     infra/test.sh sur tous les modules et contrôle de la recette.
+#                                     infra/test.sh --rebuild sur tous les modules (base modèle refaite sur le nouveau noyau) et contrôle de la recette.
 #   infra/maj-securite.sh production --annoncee "AAAA-MM-JJ HH:MM"
 #                                     proxy relancé sur sa nouvelle image, puis mise en production des
 #                                     images validées en recette (infra/release.sh, base de production et
@@ -63,7 +63,7 @@ case "${1:-}" in
       echo
       echo "- Audit des dépendances web (npm audit, paquets livrés) : ${audit:-sans résultat}"
       echo "- État : $health"
-      echo "- Suite : infra/test.sh sur tous les modules, contrôle des écrans de la recette, puis"
+      echo "- Suite : infra/test.sh --rebuild sur tous les modules, contrôle des écrans de la recette, puis"
       echo "  infra/maj-securite.sh production --annoncee \"AAAA-MM-JJ HH:MM\"."
       echo
     } >> "$report"
