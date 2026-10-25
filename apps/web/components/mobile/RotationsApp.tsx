@@ -438,7 +438,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
    * Envoi des saisies en attente. `origine` dit qui le demande : « saisie » (l'enregistrement dit
    * lui-même son résultat dans la barre d'action), « envoi » (bouton de « À envoyer ») ou « auto »
    * (ouverture, retour du réseau, toutes les deux minutes). Une saisie ouverte en correction part une
-   * fois la correction enregistrée.
+   * fois la correction enregistrée. Une saisie refusée par le bureau attend sa correction : les envois
+   * automatiques ne la renvoient plus (même refus toutes les deux minutes, bandeau rouge pendant la
+   * frappe) ; le bouton « Envoyer » la renvoie à la demande, par exemple après une mise à jour du bureau.
    */
   const sync = useCallback(async (origine: "auto" | "envoi" | "saisie" = "auto"): Promise<Bilan | null> => {
     if (!navigator.onLine) return null;
@@ -446,7 +448,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       relance.current = true;
       return null;
     }
-    const candidates = (await loadQueue()).filter((i) => i.user_id === me.id && i.client_uuid !== enCorrection.current && i.status !== "recue");
+    const candidates = (await loadQueue()).filter((i) => i.user_id === me.id && i.client_uuid !== enCorrection.current
+      && (i.status === "pending" || (i.status === "error" && origine === "envoi")));
     if (!candidates.length) return null;
     busy.current = true;
     setSyncing(true);
