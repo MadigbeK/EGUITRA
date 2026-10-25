@@ -200,6 +200,20 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**25 octobre : application mobile NIMOVA Terrain, socle** (branche `claude/nimova-terrain`, à fusionner
+après l'audit en cours). Analyse : `docs/projet/mobile/analyse-application-mobile.md`. Décisions du
+gérant : React Native avec Expo, Android d'abord ; formulaires HSSEQ directement dans l'application
+native, sans solution d'attente dans Rotations web ; conducteurs équipés de téléphones de service.
+- Fait : `apps/terrain` (Expo SDK 58), connexion par jetons de l'API avec double authentification et
+  mot de passe provisoire, ouverture hors réseau, Rotations reprises de Rotations web (file d'envoi
+  SQLite, envoi idempotent), mise en page téléphone et tablette, bureau simulé en développement.
+  29 tests, `tsc`, `expo-doctor` et paquet Android au vert ; parcours vérifiés dans l'aperçu web.
+- Bloquant pour brancher la recette : une entrée de la passerelle pour les applications natives
+  (`Authorization: Bearer`, routes de session rendant les jetons), à demander à l'intégrateur.
+- Ensuite : compte Expo de l'entreprise (EAS, mises à jour à distance), icônes et système de
+  conception « terrain » (session DESIGN), envoi en arrière-plan, puis formulaires HSSEQ avec le
+  module serveur (session OTHER). Hors offre initiale : avenant à chiffrer avec HSSEQ.
+
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
 - Module `eguitra_portail` 19.0.1.0.0 (dépend d'`eguitra_axispro` sans modifier ses fichiers), 8 tests au

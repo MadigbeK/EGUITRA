@@ -119,7 +119,21 @@ flotte (MDM) recommandée pour les tablettes de dépôt. L'iPhone suit avec le m
 | 2. HSSEQ lot 1 terrain (6 semaines, en parallèle du module HSSEQ) | Contrôle avant départ (deux profils), alcootest, déclaration en 30 s, photos, GPS, signature, verrou affiché avant le départ | Sur un site pilote, 100 % des départs contrôlés pendant 4 semaines, aucun départ avec un motif ouvert |
 | 3. Tablette de dépôt et HSSE (4 semaines) | Mode dépôt, levée des non-conformités, dérogations, contrôles inopinés, réunions de sécurité avec émargement, notifications push | Reporting mensuel HSSE produit sans ressaisie |
 
-## 9. Autres documents reçus
+## 9. Décisions du gérant (25 octobre 2026)
+
+- **Option C** : application native React Native avec Expo, **Android d'abord**, iPhone ensuite avec
+  le même code.
+- **Pas de solution d'attente** : les trois formulaires HSSEQ sont construits directement dans
+  l'application native, pas dans Rotations web, qui reste en service pour les rotations pendant la
+  transition. Les maquettes et le système de conception « terrain » viennent de la session DESIGN.
+- **Téléphones de service** pour les conducteurs, fournis par EGUITRA et gérés à distance ; tablette
+  partagée au dépôt pour le chef de parc.
+- **Périmètre** : l'offre couvre la saisie des rotations hors réseau, déjà livrée (Rotations web).
+  L'application native et les formulaires HSSEQ forment un nouveau module, facturable selon le
+  chapitre des évolutions de l'offre : avenant à chiffrer avec le module HSSEQ.
+- Socle réalisé le même jour : `apps/terrain` (voir son `README.md`).
+
+## 10. Autres documents reçus
 
 - **Arrêté n° A/2019/816/MH du 19 mars 2019** (en vigueur au 1er avril 2019) : tarifs officiels de
   transport des hydrocarbures **en GNF par litre**, par dépôt et par destination (et non par
