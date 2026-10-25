@@ -112,6 +112,25 @@ Ces valeurs sont communes aux deux sociétés ; le numéro d'employeur CNSS, la 
 le journal des salaires sont propres à chacune. **Faites-les valider par l'expert-comptable et
 confirmer par la CNSS avant la première paie réelle.**
 
+## Habilitations et sécurité
+
+L'écran « Habilitations et sécurité » et l'onglet « Sécurité » de chaque fiche tiennent les données
+dont le module HSSEQ a besoin pour autoriser ou refuser le départ d'un conducteur :
+
+- **Habilitations** : permis poids lourd, conduite défensive, matières dangereuses, accès au site
+  minier, secourisme (liste réglable dans les paramètres). Saisissez la date d'obtention : l'expiration
+  est proposée selon la durée de validité du type. Joignez le justificatif.
+- **Aptitude médicale** : seulement « apte » ou « inapte », la date de la visite et sa date de validité.
+  N'enregistrez jamais de détail médical.
+- **EPI remis** : casque, chaussures, gilet… avec la date de remise et celle du renouvellement.
+- **Accident du travail** : saisissez l'arrêt avec le type d'absence « Accident du travail ». Il entre
+  dans les taux de fréquence et de gravité, calculés sur les heures réellement travaillées.
+
+Un conducteur sans permis, conduite défensive ou habilitation aux matières dangereuses valide, ou dont
+l'aptitude est « inapte » ou dépassée, ne peut pas partir en rotation (motif V04 du verrou HSSEQ). La
+matrice le signale par « départ refusé ». L'échéancier prévient 30 jours puis 7 jours avant chaque
+expiration. Chaque conducteur voit ses habilitations dans « Mon espace ».
+
 ## Mon espace (tous les salariés)
 
 Chaque salarié lié à un compte NIMOVA y trouve son dossier résumé, son solde de congés, ses demandes

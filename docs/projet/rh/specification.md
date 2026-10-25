@@ -138,3 +138,34 @@ salarié).
 - Échéancier : fins de période d'essai et de CDD, documents expirés ou à expirer, soldes de congés
   élevés, paie du mois précédent non validée, fiches incomplètes, anniversaires.
 - Simulateur : du salaire de base au net et au coût employeur, ou du net cible au salaire de base.
+
+## 7. Données lues par NIMOVA · HSSEQ
+
+Demande de la Direction générale (spécification du module HSSEQ, diffusion restreinte, hors dépôt) :
+les données RH du module HSSEQ vivent dans `eguitra_rh` ; HSSEQ n'en lit que des statuts, côté serveur,
+sans jamais un justificatif ni un détail médical.
+
+- **Habilitations** : référentiel `eguitra.rh.qualification.type` (permis poids lourd, conduite
+  défensive, matières dangereuses, accès au site minier, secourisme ; durée de validité, obligatoire
+  pour les conducteurs, justificatif exigé) et habilitations des salariés `eguitra.rh.qualification`
+  (obtention, expiration, référence, organisme, justificatif). Statut : valide, à renouveler (J-30),
+  expirée (le lendemain de la date d'expiration), absente (type obligatoire sans habilitation).
+- **Aptitude médicale** : sur le dossier, « apte » ou « inapte », date de la visite et date de
+  validité ; aucun autre champ, aucun détail médical.
+- **EPI remis** : `eguitra.rh.ppe.issue` (équipement, précision, taille, quantité, date, renouvellement,
+  remise signée).
+- **Accidents du travail** : type d'absence « Accident du travail » (`work_accident`), jours perdus
+  comptés en jours calendaires ; heures réellement travaillées tirées des bulletins validés (jours
+  payés au prorata de l'horaire mensuel, plus heures supplémentaires), estimées par la présence pour
+  un mois sans paie validée.
+- **Interface serveur** (méthodes de `eguitra.rh.employee`, en sudo) : `_hsseq_driver_status(driver,
+  on_date)` (motif V04 du verrou de départ : habilitation obligatoire expirée ou absente, aptitude
+  inapte, échue ou non renseignée, chauffeur sans dossier salarié), `_hsseq_expiring(companies,
+  horizon_days)` (alertes J-30 et J-7), `_hsseq_worked_hours`, `_hsseq_work_accidents`,
+  `_hsseq_indicators` (taux de fréquence : accidents avec arrêt × 1 000 000 ÷ heures ; taux de gravité :
+  jours perdus × 1 000 ÷ heures).
+- **API RH** : `/rh/qualifications` (liste, création, modification, suppression, justificatif),
+  `/rh/qualifications/matrix`, `/rh/qualification-types`, `/rh/ppe`, `/rh/safety` ; aptitude par
+  PATCH `/rh/employees/<id>` ; `/rh/me` renvoie au conducteur ses habilitations et son aptitude.
+  Quatre yeux : personne ne gère ses propres habilitations ni son aptitude.
+- **Échéancier** : habilitations et aptitudes à J-30 (à traiter) et J-7 (urgent), expirées (urgent).
