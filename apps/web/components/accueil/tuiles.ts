@@ -48,6 +48,7 @@ const COURT: Record<string, string> = {
   "/rh/salaries": "Salariés",
   "/rh/conges": "Congés",
   "/rh/avances": "Avances",
+  "/rh/habilitations": "Habilitations",
   "/rh/paie": "Paie",
   "/rh/simulateur": "Simulateur",
   "/rh/moi": "Mon espace",

@@ -8,6 +8,7 @@ import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Leave, type LeaveType, type MySpace } from "@/lib/rh-types";
 import { DecisionAbsence, EtatAbsence, Ligne, jours, messageErreur, moisLong, periode, useJoursOuvrables } from "./commun";
+import { MesHabilitations } from "./Securite";
 
 /**
  * Mon espace : le salarié voit son solde de congés, demande une absence, suit ses demandes, lit ses
@@ -115,6 +116,7 @@ export function MonEspace() {
           )}
         </Card>
         <div className="space-y-6 lg:col-span-5">
+          <MesHabilitations qualifications={data.qualifications ?? []} fitness={data.fitness ?? null} />
           <Card title={<span className="flex items-center gap-2"><FileText className="h-4 w-4 text-accent" /> Mes bulletins de paie</span>}>
             {data.payslips.length === 0 ? (
               <p className="text-sm text-muted">Aucun bulletin validé pour l&apos;instant.</p>
