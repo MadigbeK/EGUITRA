@@ -121,6 +121,7 @@ class EguitraPeriodClose(models.Model):
                                   f"{unreconciled} ligne(s) de relevé à rapprocher.", unreconciled))
         checks += self._bank_statement_checks(start, end)
         checks.append(self._analytic_consistency_check(start, end))
+        checks.append(self._reference_consistency_check(start, end))
 
         unmapped = sheet["unmapped_accounts"]
         checks.append(self._check("statement_mapping", "Tous les comptes figurent dans les états", not unmapped, False,
@@ -160,6 +161,42 @@ class EguitraPeriodClose(models.Model):
             self._check("bank_statement_imported", "Relevés du mois importés", not missing, False,
                         "Sans relevé pour le mois : " + ", ".join(missing) + ".", len(missing)),
         ]
+
+    def _reference_consistency_check(self, start, end):
+        """Cohérence des références (offre, chapitre 3.3), vigilance : une même référence de fournisseur
+        saisie deux fois chez un même fournisseur (facture en double probable), et des numéros manquants
+        dans la numérotation des factures et des avoirs du mois."""
+        cr = self.env.cr
+        company = self.company_id
+        cr.execute(
+            """SELECT p.name, MAX(am.ref), COUNT(*) FROM account_move am
+                 JOIN res_partner p ON p.id = am.commercial_partner_id
+                WHERE am.company_id = %s AND am.state = 'posted' AND am.move_type IN ('in_invoice', 'in_refund')
+                  AND COALESCE(TRIM(am.ref), '') <> ''
+             GROUP BY p.name, am.commercial_partner_id, am.move_type, LOWER(TRIM(am.ref))
+               HAVING COUNT(*) > 1 AND MAX(am.date) BETWEEN %s AND %s
+             ORDER BY p.name""",
+            (company.id, start, end),
+        )
+        duplicates = cr.fetchall()
+        cr.execute(
+            """SELECT am.sequence_prefix,
+                      MAX(am.sequence_number) - MIN(am.sequence_number) + 1 - COUNT(DISTINCT am.sequence_number)
+                 FROM account_move am JOIN account_journal j ON j.id = am.journal_id
+                WHERE am.company_id = %s AND am.state = 'posted' AND j.type IN ('sale', 'purchase')
+                  AND am.date BETWEEN %s AND %s AND am.sequence_prefix IS NOT NULL
+             GROUP BY am.journal_id, am.sequence_prefix
+               HAVING MAX(am.sequence_number) - MIN(am.sequence_number) + 1 > COUNT(DISTINCT am.sequence_number)
+             ORDER BY am.sequence_prefix""",
+            (company.id, start, end),
+        )
+        gaps = cr.fetchall()
+        details = [f"{name} : référence {ref} saisie {n} fois" for name, ref, n in duplicates[:5]]
+        details += [f"{prefix} : {missing} numéro(s) manquant(s)" for prefix, missing in gaps[:5]]
+        return self._check(
+            "reference_consistency", "Cohérence des références (doublons de fournisseurs, numérotation)",
+            not duplicates and not gaps, False, "; ".join(details), len(duplicates) + sum(m for _p, m in gaps),
+        )
 
     def _analytic_consistency_check(self, start, end):
         """Vigilance : une ligne imputée à un centre de coût et à une autre activité que la sienne."""
