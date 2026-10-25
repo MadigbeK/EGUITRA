@@ -49,7 +49,7 @@ export function useSession(): Session {
   return s;
 }
 
-const utilisateur = (u: PublicUser): Utilisateur => ({ id: u.id, name: u.name, login: u.login });
+const utilisateur = (u: PublicUser): Utilisateur => ({ id: u.id, name: u.name, login: u.login, profiles: u.profiles ?? [] });
 
 /** Révoque au bureau les sessions fermées sans réseau ; une coupure les garde pour la fois suivante. */
 async function revoquerEnAttente(api: ApiClient): Promise<void> {

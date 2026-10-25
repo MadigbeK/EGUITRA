@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import type { QueuedItem, Store } from "./types";
+import type { Piece, QueuedItem, Store } from "./types";
 
 /**
  * Base locale de l'appareil (SQLite). Version du schéma dans PRAGMA user_version : chaque montée de
@@ -16,6 +16,17 @@ const MIGRATIONS = [
      payload TEXT NOT NULL
    );
    CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);`,
+  // 2 : photos des fiches HSSEQ, envoyées après leur fiche.
+  `CREATE TABLE IF NOT EXISTS pieces (
+     client_uuid TEXT PRIMARY KEY NOT NULL,
+     parent_uuid TEXT NOT NULL,
+     model TEXT NOT NULL,
+     item_id INTEGER,
+     uri TEXT NOT NULL,
+     size INTEGER NOT NULL,
+     created_at TEXT NOT NULL
+   );
+   CREATE INDEX IF NOT EXISTS pieces_parent ON pieces (parent_uuid);`,
 ];
 
 interface Ligne {
@@ -82,6 +93,20 @@ export function sqliteStore(): Store {
       },
       remove: async (uuid) => {
         await (await base()).runAsync("DELETE FROM queue WHERE client_uuid = ?", uuid);
+      },
+    },
+    pieces: {
+      of: async (parentUuid) =>
+        (await base()).getAllAsync<Piece>("SELECT * FROM pieces WHERE parent_uuid = ? ORDER BY created_at", parentUuid),
+      put: async (p) => {
+        await (await base()).runAsync(
+          `INSERT OR REPLACE INTO pieces (client_uuid, parent_uuid, model, item_id, uri, size, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          p.client_uuid, p.parent_uuid, p.model, p.item_id, p.uri, p.size, p.created_at,
+        );
+      },
+      remove: async (uuid) => {
+        await (await base()).runAsync("DELETE FROM pieces WHERE client_uuid = ?", uuid);
       },
     },
     cache: {

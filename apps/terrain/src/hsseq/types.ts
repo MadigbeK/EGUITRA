@@ -1,0 +1,134 @@
+/**
+ * Formes de l'API HSSEQ dont l'application de terrain a besoin, selon le contrat du lot 1
+ * (docs/design/hsseq-contrat.md sur la branche claude/design-nimova, commit 43540a8) : clés en
+ * anglais snake_case, libellés affichés en français côté écran.
+ */
+
+/** Type de véhicule venu de Transport : citerne ou benne. */
+export type VehicleKind = "tanker" | "tipper";
+
+/** GET /hsseq/referentials (§ 3), ce que l'appareil en garde. */
+export interface HsseqReferentials {
+  sites: Array<{ id: number; name: string; code: string; default_vehicle_kind: VehicleKind; active: boolean }>;
+  vehicles: Array<{ id: number; name: string; vehicle_kind: VehicleKind; plate: string | null; site_id: number | null; driver_id: number | null }>;
+  drivers: Array<{ id: number; name: string; site_id: number | null }>;
+  me: { profiles: string[]; site_ids: number[]; employee_id: number | null; driver_id: number | null };
+}
+
+/** Point d'une grille (§ 7). `linked_to: "breath_test"` : relié à l'alcootest, il ne se répond pas ici. */
+export interface TemplateItem {
+  id: number;
+  label: string;
+  blocking: boolean;
+  sequence: number;
+  linked_to: string | null;
+}
+
+/** Grille de contrôle (GET /hsseq/checks/templates), versionnée. */
+export interface CheckTemplate {
+  id: number;
+  name: string;
+  kind: "pre_departure" | "unloading" | "mine_site";
+  vehicle_kind: VehicleKind;
+  version: number;
+  active: boolean;
+  items: TemplateItem[];
+}
+
+export type Answer = "ok" | "not_ok" | "na";
+
+/** Position relevée au terrain, à plat, aux noms des modèles du noyau (§ 1). */
+export interface Position {
+  latitude: number;
+  longitude: number;
+  /** Précision, en mètres. */
+  gps_accuracy: number | null;
+}
+
+/** Corps de POST /hsseq/checks, sans client_uuid, reported_at ni offline (posés à l'envoi). */
+export interface NewCheck extends Partial<Position> {
+  template_id: number;
+  /** Version de la grille répondue : un contrôle sur une version ancienne reste accepté. */
+  template_version: number;
+  vehicle_id: number;
+  rotation_id: number | null;
+  driver_id: number | null;
+  duration_s: number;
+  answers: Array<{ item_id: number; answer: Answer; comment?: string }>;
+}
+
+/** Réponse de POST /hsseq/checks : les non-conformités ouvertes, auxquelles se rattachent les photos. */
+export interface CheckResponse {
+  id: number;
+  nonconformities: Array<{ id: number; item: { id: number } }>;
+}
+
+/** Types d'événement (§ 5). */
+export type EventType =
+  | "work_accident" | "road_accident" | "near_miss" | "hazard" | "spill" | "fire"
+  | "security_breach" | "product_quality" | "property_damage";
+
+/** Corps de POST /hsseq/events (EventReport), sans client_uuid, reported_at ni offline. */
+export interface EventReport extends Partial<Position> {
+  type: EventType;
+  title: string;
+  description: string;
+  occurred_at: string;
+  location?: string;
+  site_id?: number | null;
+  rotation_id?: number | null;
+  vehicle_id?: number | null;
+}
+
+/**
+ * Corps de POST /hsseq/breath-tests, sans client_uuid, reported_at ni offline. Le résultat et la
+ * lecture ne sont jamais écrits en base : ils restent au coffre jusqu'à l'envoi (hsseq/secrets.ts).
+ */
+export interface NewBreathTest {
+  rotation_id: number | null;
+  driver_id: number | null;
+  performed: boolean;
+  device?: string;
+  not_done_reason?: string;
+}
+
+/** Résultat d'un alcootest réalisé : gardé au coffre, envoyé au seul Responsable HSSEQ. */
+export interface ResultatAlcootest {
+  result: "negative" | "positive";
+  reading_mg_l?: number;
+}
+
+/** Rotation du jour (GET /hsseq/me/rotations), avec son verrou. */
+export interface MyRotation {
+  id: number;
+  name: string | null;
+  date_loading: string;
+  state: "draft" | "en_route";
+  vehicle: { id: number; name: string; vehicle_kind: VehicleKind };
+  site: { id: number; name: string } | null;
+  lock: { allowed: boolean; pending_checks_only: boolean; reasons: LockReason[] };
+}
+
+/** Motif du verrou de départ (§ 9). */
+export interface LockReason {
+  code: string;
+  label: string;
+  source: string;
+  since: string | null;
+  waivable: boolean;
+  detail: string | null;
+  resolution: string | null;
+  severity: "block" | "warn";
+  /** Se lève par une saisie de terrain encore à faire (V01, V03 non fait). */
+  pending: boolean;
+  waiver_id: number | null;
+}
+
+/** POST /hsseq/lock/evaluate. */
+export interface LockEvaluation {
+  rotation_id: number;
+  allowed: boolean;
+  reasons: LockReason[];
+  active_waiver: { id: number; expires: string | null } | null;
+  checked_at: string;
+}

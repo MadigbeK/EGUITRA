@@ -63,7 +63,7 @@ describe("ApiClient", () => {
     await expect(api.appel("GET", "/transport/referentials")).resolves.toEqual({ ok: true });
     expect(appels[0]!.url).toBe("https://bureau/api/transport/referentials");
     expect(appels[0]!.headers.Authorization).toBe("Bearer acces-1");
-    expect(appels[0]!.headers["X-Eguitra-App"]).toBe("mobile");
+    expect(appels[0]!.headers["X-Eguitra-App"]).toBe("terrain");
     expect(c.valeur).toBe("renouvellement-1");
   });
 

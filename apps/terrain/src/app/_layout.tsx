@@ -1,11 +1,12 @@
 import { FunnelDisplay_600SemiBold, FunnelDisplay_700Bold } from "@expo-google-fonts/funnel-display";
 import { FunnelSans_400Regular, FunnelSans_600SemiBold, FunnelSans_700Bold } from "@expo-google-fonts/funnel-sans";
 import { useFonts } from "expo-font";
-import { Slot } from "expo-router";
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider, useSession } from "../auth/session";
+import { EnvoiProvider } from "../sync/Envoi";
 import { API_URL, SIMULATION } from "../config";
 import { Connexion } from "../connexion/Connexion";
 import { Texte } from "../ui/elements";
@@ -46,9 +47,12 @@ export default function Racine() {
   );
 }
 
-/** Rien de l'application ne s'affiche avant une session ouverte. */
+/**
+ * Rien de l'application ne s'affiche avant une session ouverte. La file d'envoi commune appartient à
+ * l'utilisateur : un autre compte repart d'une file à lui.
+ */
 function Porte() {
-  const { etape } = useSession();
+  const { etape, store, api } = useSession();
   if (etape.nom === "demarrage") {
     return (
       <View style={[styles.fond, styles.centre]}>
@@ -57,7 +61,11 @@ function Porte() {
     );
   }
   if (etape.nom !== "ouverte") return <Connexion />;
-  return <Slot />;
+  return (
+    <EnvoiProvider key={etape.user.id} store={store} api={api} userId={etape.user.id}>
+      <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+    </EnvoiProvider>
+  );
 }
 
 const styles = StyleSheet.create({

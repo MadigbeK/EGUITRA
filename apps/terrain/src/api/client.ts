@@ -11,6 +11,8 @@ export interface Coffre {
 
 export interface OptionsAppel {
   body?: unknown;
+  /** Envoi d'un fichier (multipart) : la limite du corps est posée par fetch, pas d'en-tête JSON. */
+  form?: FormData;
   /** Délai de réponse en millisecondes, DELAI_LISTE par défaut. */
   timeout?: number;
   /** false : route publique (connexion, double authentification). */
@@ -171,14 +173,14 @@ export class ApiClient {
     const minuteur = setTimeout(() => controle.abort(), opts.timeout ?? DELAI_LISTE);
     const headers: Record<string, string> = { Accept: "application/json", "X-Eguitra-App": APP_CODE };
     if (jeton) headers.Authorization = `Bearer ${jeton}`;
-    if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+    if (opts.body !== undefined && !opts.form) headers["Content-Type"] = "application/json";
     let status: number;
     let texte: string;
     try {
       const res = await this.fetchFn(this.base + path, {
         method,
         headers,
-        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        body: opts.form ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
         signal: controle.signal,
       });
       status = res.status;

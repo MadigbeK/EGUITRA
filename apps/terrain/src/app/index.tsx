@@ -1,10 +1,9 @@
+import { MaJournee } from "../accueil/MaJournee";
 import { useSession } from "../auth/session";
-import { RotationsEcran } from "../rotations/RotationsEcran";
 
-/** Accueil : Rotations, seul module du socle. Les modules HSSEQ viendront à côté. */
+/** Accueil : « Ma journée », les modules ouverts au compte et la file d'envoi. */
 export default function Accueil() {
   const { etape } = useSession();
   if (etape.nom !== "ouverte") return null;
-  // Un autre compte repart d'un écran vierge.
-  return <RotationsEcran key={etape.user.id} user={etape.user} />;
+  return <MaJournee user={etape.user} />;
 }

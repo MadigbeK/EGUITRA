@@ -71,6 +71,8 @@ export interface Utilisateur {
   id: number;
   name: string;
   login: string;
+  /** Profils du compte : ils décident des modules proposés dans « Ma journée ». */
+  profiles: string[];
 }
 
 export const profilGarde = {
@@ -79,10 +81,10 @@ export const profilGarde = {
     if (!brut) return null;
     try {
       const u = JSON.parse(brut) as Utilisateur;
-      return typeof u.id === "number" && typeof u.name === "string" ? u : null;
+      return typeof u.id === "number" && typeof u.name === "string" ? { ...u, profiles: Array.isArray(u.profiles) ? u.profiles : [] } : null;
     } catch {
       return null;
     }
   },
-  ecrire: (u: Utilisateur) => ecrire(CLE_PROFIL, JSON.stringify({ id: u.id, name: u.name, login: u.login })),
+  ecrire: (u: Utilisateur) => ecrire(CLE_PROFIL, JSON.stringify({ id: u.id, name: u.name, login: u.login, profiles: u.profiles })),
 };

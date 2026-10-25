@@ -15,13 +15,12 @@ export const ENVIRONNEMENT = process.env.EXPO_PUBLIC_ENVIRONMENT ?? "";
 export const SIMULATION = !API_URL && __DEV__;
 
 /**
- * Code d'application transmis au noyau (addons/eguitra_api/organisation.py, APPS) : celui de
- * Rotations, ouvert aux profils administrateur et exploitation, qui travaille dans la seule société
- * EGUITRA GROUP. Les longues durées de session hors réseau y sont réservées au profil exploitation.
- * Le module HSSEQ (branche hsseq, session OTHER) ajoute au noyau l'application « terrain » (profils
- * admin, hsseq, exploitation et conducteur) : passer à « terrain » une fois ce module intégré.
+ * Code d'application transmis au noyau (addons/eguitra_api/organisation.py, APPS) : « terrain »,
+ * ajouté par le module HSSEQ (profils admin, hsseq, exploitation et conducteur, société EGUITRA
+ * GROUP, sessions longues pour l'exploitation et le conducteur). Sur un noyau sans module HSSEQ,
+ * EXPO_PUBLIC_APP_CODE=mobile ouvre l'application sous le code de Rotations (Rotations seules).
  */
-export const APP_CODE = "mobile";
+export const APP_CODE = process.env.EXPO_PUBLIC_APP_CODE === "mobile" ? "mobile" : "terrain";
 
 /**
  * Délais de réponse du bureau, repris de Rotations web : 8 s pour une liste (la dernière connue

@@ -1,4 +1,4 @@
-import type { QueuedItem, Store } from "./types";
+import type { Piece, QueuedItem, Store } from "./types";
 
 /**
  * Stockage en mémoire : tests et aperçu dans un navigateur (développement). Rien n'y survit à la
@@ -6,8 +6,19 @@ import type { QueuedItem, Store } from "./types";
  */
 export function memoryStore(): Store {
   const queue = new Map<string, QueuedItem>();
+  const pieces = new Map<string, Piece>();
   const cache = new Map<string, string>();
   return {
+    pieces: {
+      of: async (parentUuid) =>
+        [...pieces.values()].filter((p) => p.parent_uuid === parentUuid).sort((a, b) => a.created_at.localeCompare(b.created_at)).map(structuredCloneSimple),
+      put: async (piece) => {
+        pieces.set(piece.client_uuid, structuredCloneSimple(piece));
+      },
+      remove: async (uuid) => {
+        pieces.delete(uuid);
+      },
+    },
     queue: {
       all: async () => [...queue.values()].map((i) => structuredCloneSimple(i)),
       get: async (uuid) => {
