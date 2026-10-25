@@ -371,6 +371,27 @@ export interface DocFile {
 
 export interface Message { id: number; author: string; from_promoter: boolean; body: string; date: string; internal: boolean }
 
+/** Saisie de temps (GET /axispro/timesheets, liste bornée : 300 par défaut). */
+export interface Timesheet {
+  id: number;
+  dossier: { id: number; reference: string; name: string };
+  user: string;
+  date: string;
+  hours: number;
+  description: string;
+  billable: boolean;
+  invoice: string | null;
+}
+
+/** Totaux de toutes les saisies du filtre (GET /axispro/timesheets/summary), à afficher au lieu d'additionner la liste bornée. */
+export interface TimesheetSummary {
+  count: number;
+  hours: number;
+  /** Heures facturables encore sans facture d'honoraires. */
+  unbilled: number;
+  dossiers: Array<{ id: number; reference: string; name: string; count: number; hours: number; unbilled: number }>;
+}
+
 export const DOC_STATE: Record<string, { label: string; tone: "ok" | "warn" | "danger" | "neutral" | "accent" }> = {
   missing: { label: "Manquante", tone: "danger" },
   received: { label: "Reçue", tone: "accent" },

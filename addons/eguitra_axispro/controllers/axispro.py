@@ -678,20 +678,45 @@ class EguitraAxispro(http.Controller):
 
     # ─── Temps et facturation ─────────────────────────────────────────────
 
-    @api_route("/axispro/timesheets", profiles=READ)
-    def timesheets(self, **kw):
+    @staticmethod
+    def _timesheet_domain(kw):
         domain = []
         if kw.get("dossier_id"):
             domain.append(("dossier_id", "=", int_arg(kw, "dossier_id")))
         if kw.get("unbilled") == "1":
             domain += [("billable", "=", True), ("invoice_id", "=", False)]
-        sheets = request.env["axispro.timesheet"].search(domain, limit=int_arg(kw, "limit", 300, 1, 2000))
+        return domain
+
+    @api_route("/axispro/timesheets", profiles=READ)
+    def timesheets(self, **kw):
+        """Saisies de temps, les plus récentes d'abord (300 par défaut, `limit` jusqu'à 2 000) ; les
+        totaux de tout le filtre se lisent dans /axispro/timesheets/summary."""
+        sheets = request.env["axispro.timesheet"].search(self._timesheet_domain(kw),
+                                                         limit=int_arg(kw, "limit", 300, 1, 2000))
         return [
             {"id": t.id, "dossier": {"id": t.dossier_id.id, "reference": t.dossier_id.reference, "name": t.dossier_id.name},
              "user": t.user_id.name, "date": t.date, "hours": t.hours, "description": t.description,
              "billable": t.billable, "invoice": t.invoice_id.name or None}
             for t in sheets
         ]
+
+    @api_route("/axispro/timesheets/summary", profiles=READ)
+    def timesheets_summary(self, **kw):
+        """Totaux de toutes les saisies du filtre (mêmes filtres que /axispro/timesheets, sans limite) :
+        nombre de saisies, heures, heures facturables encore sans facture, et par dossier. La liste,
+        elle, est bornée : un total calculé sur elle serait faux au-delà de sa limite."""
+        Timesheet = request.env["axispro.timesheet"]
+        domain = self._timesheet_domain(kw)
+        unbilled = domain + [("billable", "=", True), ("invoice_id", "=", False)]
+        totals = {d.id: [count, hours] for d, count, hours in Timesheet._read_group(
+            domain, ["dossier_id"], ["__count", "hours:sum"])}
+        pending = {d.id: hours for d, hours in Timesheet._read_group(unbilled, ["dossier_id"], ["hours:sum"])}
+        dossiers = request.env["axispro.dossier"].browse(list(totals))
+        rows = [{"id": d.id, "reference": d.reference, "name": d.name, "count": totals[d.id][0],
+                 "hours": totals[d.id][1], "unbilled": pending.get(d.id, 0.0)} for d in dossiers]
+        rows.sort(key=lambda r: -r["hours"])
+        return {"count": sum(r["count"] for r in rows), "hours": sum(r["hours"] for r in rows),
+                "unbilled": sum(r["unbilled"] for r in rows), "dossiers": rows}
 
     @api_route("/axispro/timesheets", methods=("POST",), profiles=WRITE)
     def log_time(self, **_kw):

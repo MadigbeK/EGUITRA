@@ -328,6 +328,28 @@ class TestAxispro(ApiCase):
         self.assertEqual(status, 200, invoice)
         self.assertEqual(invoice["amount_untaxed"], 3_000_000)
 
+    def test_totaux_des_temps_sur_tout_le_filtre(self):
+        """Audit de l'application web (I-D13) : les totaux des temps portent sur toutes les saisies du
+        filtre, pas sur la liste bornée qu'affiche l'écran."""
+        dossier, autre = self._dossier(), self._dossier()
+        Timesheet = self.env["axispro.timesheet"]
+        Timesheet.create([{"dossier_id": dossier.id, "hours": 1.5, "description": f"Analyse {i}"} for i in range(4)])
+        Timesheet.create({"dossier_id": dossier.id, "hours": 2, "description": "Revue interne", "billable": False})
+        Timesheet.create({"dossier_id": autre.id, "hours": 3, "description": "Visite du site"})
+        token = self.open_session("consultant", app="axispro")["access_token"]
+        status, rows = self.call("GET", f"/axispro/timesheets?dossier_id={dossier.id}&limit=2", token=token)
+        self.assertEqual((status, len(rows)), (200, 2), "Liste bornée")
+        status, summary = self.call("GET", f"/axispro/timesheets/summary?dossier_id={dossier.id}", token=token)
+        self.assertEqual(status, 200, summary)
+        self.assertEqual((summary["count"], summary["hours"], summary["unbilled"]), (5, 8.0, 6.0),
+                         "Totaux de toutes les saisies, le temps non facturable hors des heures à facturer")
+        self.assertEqual([(r["id"], r["hours"]) for r in summary["dossiers"]], [(dossier.id, 8.0)])
+        status, summary = self.call("GET", f"/axispro/timesheets/summary?dossier_id={autre.id}&unbilled=1", token=token)
+        self.assertEqual((summary["count"], summary["hours"], summary["unbilled"]), (1, 3.0, 3.0))
+        status, summary = self.call("GET", "/axispro/timesheets/summary", token=token)
+        self.assertGreaterEqual(summary["hours"], 11.0)
+        self.assertEqual({dossier.id, autre.id} - {r["id"] for r in summary["dossiers"]}, set())
+
     def test_facture_d_honoraires_refusee_a_l_admin(self):
         """Audit des rôles I6 : seul le cabinet facture les honoraires ; l'admin ne fait que consulter."""
         dossier = self._dossier()
