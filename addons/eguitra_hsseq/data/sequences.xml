@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="seq_event" model="ir.sequence">
+        <field name="name">Événements HSSEQ</field>
+        <field name="code">eguitra.hsseq.event</field>
+        <field name="prefix">EVT/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_action" model="ir.sequence">
+        <field name="name">Actions HSSEQ</field>
+        <field name="code">eguitra.hsseq.action</field>
+        <field name="prefix">ACT/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_check" model="ir.sequence">
+        <field name="name">Contrôles avant départ HSSEQ</field>
+        <field name="code">eguitra.hsseq.check</field>
+        <field name="prefix">CTL/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_waiver" model="ir.sequence">
+        <field name="name">Dérogations au verrou de départ</field>
+        <field name="code">eguitra.hsseq.waiver</field>
+        <field name="prefix">DER/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+</odoo>

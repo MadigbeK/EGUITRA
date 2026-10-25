@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Paramétrage initial des grilles de contrôle avant départ (spécification HSSEQ §5) : huit points
+    critiques bloquants par type de véhicule, dont l'alcootest relié à son formulaire (il ne se répond pas
+    dans le contrôle, motif V03), et cinq points communs non bloquants. Modifiable ensuite par les profils
+    hsseq et admin (noupdate : une mise à jour du module ne l'écrase pas). Ce n'est pas une donnée de
+    démonstration : c'est la grille de départ de la spécification.
+-->
+<odoo noupdate="1">
+    <record id="template_tanker" model="eguitra.hsseq.check.template" context="{'hsseq_no_bump': True}">
+        <field name="name">Contrôle avant départ, citerne</field>
+        <field name="kind">pre_departure</field>
+        <field name="vehicle_kind">tanker</field>
+    </record>
+    <record id="item_tanker_01" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">10</field>
+        <field name="label">Freins et ralentisseur, essai statique</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_02" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">20</field>
+        <field name="label">Pneumatiques : usure, pression, coupures</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_03" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">30</field>
+        <field name="label">Vannes de fond fermées et plombées</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_04" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">40</field>
+        <field name="label">Dômes et trous d'homme fermés, joints en état</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_05" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">50</field>
+        <field name="label">Deux extincteurs plombés et à date</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_06" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">60</field>
+        <field name="label">Kit antidéversement complet</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_07" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">70</field>
+        <field name="label">Plaques et étiquettes de danger en place</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tanker_breath_test" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">80</field>
+        <field name="label">Alcootest du conducteur négatif</field><field name="blocking" eval="True"/>
+        <field name="linked_to">breath_test</field>
+    </record>
+    <record id="item_tanker_common_01" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">90</field>
+        <field name="label">Éclairage et feux de détresse</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tanker_common_02" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">100</field>
+        <field name="label">Rétroviseurs et pare-brise</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tanker_common_03" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">110</field>
+        <field name="label">Trousse de premiers secours</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tanker_common_04" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">120</field>
+        <field name="label">Cales et triangles</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tanker_common_05" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tanker"/><field name="sequence">130</field>
+        <field name="label">EPI du conducteur</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="template_tipper" model="eguitra.hsseq.check.template" context="{'hsseq_no_bump': True}">
+        <field name="name">Contrôle avant départ, benne</field>
+        <field name="kind">pre_departure</field>
+        <field name="vehicle_kind">tipper</field>
+    </record>
+    <record id="item_tipper_01" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">10</field>
+        <field name="label">Freins et ralentisseur, essai statique</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_02" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">20</field>
+        <field name="label">Pneumatiques : usure, pression, coupures</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_03" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">30</field>
+        <field name="label">Benne abaissée et verrouillée, vérin sans fuite</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_04" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">40</field>
+        <field name="label">Bâche en place et arrimée</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_05" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">50</field>
+        <field name="label">Extincteur plombé et à date</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_06" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">60</field>
+        <field name="label">Gyrophare, avertisseur de recul, fanion (accès site minier)</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_07" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">70</field>
+        <field name="label">Ticket de pesée conforme à la charge utile</field><field name="blocking" eval="True"/>
+    </record>
+    <record id="item_tipper_breath_test" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">80</field>
+        <field name="label">Alcootest du conducteur négatif</field><field name="blocking" eval="True"/>
+        <field name="linked_to">breath_test</field>
+    </record>
+    <record id="item_tipper_common_01" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">90</field>
+        <field name="label">Éclairage et feux de détresse</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tipper_common_02" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">100</field>
+        <field name="label">Rétroviseurs et pare-brise</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tipper_common_03" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">110</field>
+        <field name="label">Trousse de premiers secours</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tipper_common_04" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">120</field>
+        <field name="label">Cales et triangles</field><field name="blocking" eval="False"/>
+    </record>
+    <record id="item_tipper_common_05" model="eguitra.hsseq.check.item" context="{'hsseq_no_bump': True}">
+        <field name="template_id" ref="template_tipper"/><field name="sequence">130</field>
+        <field name="label">EPI du conducteur</field><field name="blocking" eval="False"/>
+    </record>
+</odoo>

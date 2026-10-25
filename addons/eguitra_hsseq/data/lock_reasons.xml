@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Motifs du verrou de départ (spécification HSSEQ §4). V01 à V05 évalués au lot 1, actifs pour les deux
+    types de véhicule et tous les sites ; V06 à V09 déclarés, inactifs jusqu'au lot 2. Activation par type
+    de véhicule et par site modifiable par les profils hsseq et admin (noupdate). V01 et V03 ne sont jamais
+    dérogeables.
+-->
+<odoo noupdate="1">
+    <record id="reason_v01" model="eguitra.hsseq.lock.reason">
+        <field name="code">V01</field><field name="name">Contrôle avant départ non réalisé pour la rotation</field>
+        <field name="source">NIMOVA Terrain</field><field name="resolution">Réaliser le contrôle</field>
+        <field name="waivable" eval="False"/>
+    </record>
+    <record id="reason_v02" model="eguitra.hsseq.lock.reason">
+        <field name="code">V02</field><field name="name">Point critique du contrôle avant départ non conforme</field>
+        <field name="source">NIMOVA Terrain</field>
+        <field name="resolution">Chef de parc après correction, photo obligatoire</field>
+    </record>
+    <record id="reason_v03" model="eguitra.hsseq.lock.reason">
+        <field name="code">V03</field><field name="name">Alcootest non réalisé ou positif</field>
+        <field name="source">NIMOVA Terrain</field>
+        <field name="resolution">Responsable HSSEQ ; positif : conducteur retiré de la rotation</field>
+        <field name="waivable" eval="False"/>
+    </record>
+    <record id="reason_v04" model="eguitra.hsseq.lock.reason">
+        <field name="code">V04</field>
+        <field name="name">Habilitation obligatoire expirée ou aptitude médicale « inapte »</field>
+        <field name="source">Habilitations (RH)</field><field name="resolution">Changer de conducteur</field>
+    </record>
+    <record id="reason_v05" model="eguitra.hsseq.lock.reason">
+        <field name="code">V05</field><field name="name">Document du véhicule expiré (assurance, visite technique)</field>
+        <field name="source">Transport, fiche véhicule</field><field name="resolution">Responsable maintenance</field>
+    </record>
+    <record id="reason_v06" model="eguitra.hsseq.lock.reason">
+        <field name="code">V06</field><field name="name">Barémage ou certificat d'étanchéité de la citerne expiré</field>
+        <field name="source">Transport, fiche véhicule</field><field name="resolution">Responsable maintenance</field>
+        <field name="lot">2</field><field name="enabled" eval="False"/><field name="tipper" eval="False"/>
+    </record>
+    <record id="reason_v07" model="eguitra.hsseq.lock.reason">
+        <field name="code">V07</field><field name="name">Charge déclarée supérieure à la charge utile autorisée</field>
+        <field name="source">Transport, ticket de pesée</field><field name="resolution">Chef de parc après délestage</field>
+        <field name="lot">2</field><field name="enabled" eval="False"/><field name="tanker" eval="False"/>
+    </record>
+    <record id="reason_v08" model="eguitra.hsseq.lock.reason">
+        <field name="code">V08</field>
+        <field name="name">Plan de trajet absent, circulation de nuit sur un axe interdit ou temps de conduite dépassé</field>
+        <field name="source">Transport, rotation</field><field name="resolution">Responsable exploitation</field>
+        <field name="lot">2</field><field name="enabled" eval="False"/>
+    </record>
+    <record id="reason_v09" model="eguitra.hsseq.lock.reason">
+        <field name="code">V09</field><field name="name">Véhicule immobilisé par un événement en cours d'enquête</field>
+        <field name="source">Événements</field><field name="resolution">Responsable HSSEQ</field>
+        <field name="lot">2</field><field name="enabled" eval="False"/>
+    </record>
+</odoo>

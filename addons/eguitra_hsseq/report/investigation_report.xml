@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Rapport d'enquête d'un événement HSSEQ. Les valeurs sont préparées et mises en forme par
+         controllers/events.py (report_context) ; le gabarit ne fait que les disposer. -->
+
+    <template id="report_investigation_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="report"/>
+            <div class="page hs">
+                <style>
+                    .hs { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10pt; color: #1d2320; }
+                    .hs h1 { font-size: 16pt; margin: 0 0 1mm 0; }
+                    .hs h2 { font-size: 11.5pt; margin: 6mm 0 2mm 0; border-bottom: 1px solid #c9d3cf; padding-bottom: 1mm; }
+                    .hs .muted { color: #5b6662; }
+                    .hs .small { font-size: 8.5pt; }
+                    .hs table { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
+                    .hs th { background: #11221d; color: #fff; text-align: left; padding: 1.2mm 1.6mm; font-weight: 600; font-size: 9pt; }
+                    .hs td { border-bottom: 1px solid #e3e8e6; padding: 1.2mm 1.6mm; vertical-align: top; }
+                    .hs .kv td:first-child { width: 35%; color: #5b6662; }
+                    .hs .num { text-align: right; white-space: nowrap; }
+                    .hs .block { white-space: pre-wrap; }
+                </style>
+                <h1>Rapport d'enquête</h1>
+                <p class="muted small"><t t-esc="r['reference']"/>, <t t-esc="r['title']"/>. Établi le <t t-esc="r['printed_at']"/>.</p>
+
+                <h2>Événement</h2>
+                <table class="kv">
+                    <tr t-foreach="r['header']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/></tr>
+                </table>
+                <p class="block" t-esc="r['description']"/>
+
+                <t t-if="r['people']">
+                    <h2>Personnes en cause</h2>
+                    <table>
+                        <tr><th>Personne</th><th>Rôle</th><th class="num">Jours d'arrêt</th></tr>
+                        <tr t-foreach="r['people']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td class="num" t-esc="row[2]"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>Enquête</h2>
+                <table class="kv">
+                    <tr t-foreach="r['investigation']" t-as="row"><td t-esc="row[0]"/><td class="block" t-esc="row[1]"/></tr>
+                </table>
+                <t t-if="r['whys']">
+                    <p><strong>5 Pourquoi</strong></p>
+                    <ol><li t-foreach="r['whys']" t-as="why" t-esc="why"/></ol>
+                </t>
+                <t t-if="r['tree']">
+                    <p><strong>Arbre des causes</strong></p>
+                    <table>
+                        <tr><th>Fait</th><th>Nature</th><th>Conduit à</th></tr>
+                        <tr t-foreach="r['tree']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/></tr>
+                    </table>
+                </t>
+                <t t-if="r['factors']">
+                    <p><strong>Facteurs (5M)</strong></p>
+                    <table class="kv">
+                        <tr t-foreach="r['factors']" t-as="row"><td t-esc="row[0]"/><td class="block" t-esc="row[1]"/></tr>
+                    </table>
+                </t>
+
+                <h2>Plan d'actions</h2>
+                <t t-if="r['actions']">
+                    <table>
+                        <tr><th>Action</th><th>Responsable</th><th>Échéance</th><th>Statut</th></tr>
+                        <tr t-foreach="r['actions']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/><td t-esc="row[3]"/>
+                        </tr>
+                    </table>
+                </t>
+                <p t-else="" class="muted">Aucune action.</p>
+
+                <t t-if="r['costs']">
+                    <h2>Coûts</h2>
+                    <table>
+                        <tr><th>Nature</th><th>Libellé</th><th class="num">Montant</th></tr>
+                        <tr t-foreach="r['costs']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/><td class="num" t-esc="row[2]"/></tr>
+                    </table>
+                </t>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_investigation">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_hsseq.report_investigation_document"/>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_investigation" model="ir.actions.report">
+        <field name="name">Rapport d'enquête HSSEQ</field>
+        <field name="model">eguitra.hsseq.event</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_hsseq.report_investigation</field>
+        <field name="report_file">eguitra_hsseq.report_investigation</field>
+    </record>
+</odoo>

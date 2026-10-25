@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="cron_action_reminders" model="ir.cron">
+        <field name="name">HSSEQ : relances des actions (J-7, J0, chaque semaine de retard, escalade)</field>
+        <field name="model_id" ref="model_eguitra_hsseq_action"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_reminders()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque matin à 07 h 15 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:15:00')"/>
+    </record>
+    <record id="cron_waiver_expiry" model="ir.cron">
+        <field name="name">HSSEQ : expiration des dérogations au verrou de départ</field>
+        <field name="model_id" ref="model_eguitra_hsseq_waiver"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_expire()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">hours</field>
+    </record>
+    <record id="cron_freeze_indicators" model="ir.cron">
+        <field name="name">HSSEQ : indicateurs du mois précédent figés le 5 du mois</field>
+        <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>
+        <field name="state">code</field>
+        <field name="code">env["eguitra.hsseq.cockpit"]._cron_freeze()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 02 h 40 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 02:40:00')"/>
+    </record>
+    <record id="cron_purge_orphan_attachments" model="ir.cron">
+        <field name="name">HSSEQ : purge des pièces déposées et jamais rattachées à une fiche (7 jours)</field>
+        <field name="model_id" ref="model_eguitra_hsseq_attachment"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge_orphans()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 03 h 20 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:20:00')"/>
+    </record>
+</odoo>

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cloisonnement par société : chaque compte ne voit que les fiches HSSEQ des sociétés auxquelles il est
+     ouvert. Le bornage par site (chef de parc) et par propriété (conducteur, responsable d'une action) est
+     appliqué par l'API, qui lit et écrit ces fiches après ce contrôle. -->
+<odoo>
+    <record id="rule_hsseq_settings_company" model="ir.rule">
+        <field name="name">Paramètres HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_settings"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_site_company" model="ir.rule">
+        <field name="name">Sites HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_site"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_journal_company" model="ir.rule">
+        <field name="name">Journal HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_journal"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_notification_company" model="ir.rule">
+        <field name="name">Notifications HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_notification"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_attachment_company" model="ir.rule">
+        <field name="name">Pièces jointes HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_attachment"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_event_company" model="ir.rule">
+        <field name="name">Événements HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_event"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_event_person_company" model="ir.rule">
+        <field name="name">Personnes des événements : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_event_person"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_event_cost_company" model="ir.rule">
+        <field name="name">Coûts des événements : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_event_cost"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_action_company" model="ir.rule">
+        <field name="name">Actions HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_action"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_action_reminder_company" model="ir.rule">
+        <field name="name">Relances des actions : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_action_reminder"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_check_company" model="ir.rule">
+        <field name="name">Contrôles avant départ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_check"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_check_answer_company" model="ir.rule">
+        <field name="name">Réponses des contrôles : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_check_answer"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_nonconformity_company" model="ir.rule">
+        <field name="name">Non-conformités : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_nonconformity"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_breath_test_company" model="ir.rule">
+        <field name="name">Alcootests : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_breath_test"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_waiver_company" model="ir.rule">
+        <field name="name">Dérogations : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_waiver"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_lock_log_company" model="ir.rule">
+        <field name="name">Évaluations du verrou : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_lock_log"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_indicator_snapshot_company" model="ir.rule">
+        <field name="name">Indicateurs figés : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>
