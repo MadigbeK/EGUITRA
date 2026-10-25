@@ -150,17 +150,20 @@ sans jamais un justificatif ni un détail médical.
   pour les conducteurs, justificatif exigé) et habilitations des salariés `eguitra.rh.qualification`
   (obtention, expiration, référence, organisme, justificatif). Statut : valide, à renouveler (J-30),
   expirée (le lendemain de la date d'expiration), absente (type obligatoire sans habilitation).
-- **Aptitude médicale** : sur le dossier, « apte » ou « inapte », date de la visite et date de
-  validité ; aucun autre champ, aucun détail médical.
+- **Aptitude médicale** : sur le dossier, « apte », « apte avec réserve » ou « inapte », date de la
+  visite et date de validité ; aucun autre champ, aucun détail médical (la nature d'une réserve reste
+  chez le médecin du travail).
 - **EPI remis** : `eguitra.rh.ppe.issue` (équipement, précision, taille, quantité, date, renouvellement,
   remise signée).
 - **Accidents du travail** : type d'absence « Accident du travail » (`work_accident`), jours perdus
   comptés en jours calendaires ; heures réellement travaillées tirées des bulletins validés (jours
   payés au prorata de l'horaire mensuel, plus heures supplémentaires), estimées par la présence pour
-  un mois sans paie validée.
+  un mois sans paie validée. Faute de pointage, ce sont des heures payées : la base de chaque mois
+  (`paid` ou `presence`) est rendue avec le total et affichée à côté des taux.
 - **Interface serveur** (méthodes de `eguitra.rh.employee`, en sudo) : `_hsseq_driver_status(driver,
   on_date)` (motif V04 du verrou de départ : habilitation obligatoire expirée ou absente, aptitude
-  inapte, échue ou non renseignée, chauffeur sans dossier salarié), `_hsseq_expiring(companies,
+  inapte ou échue, chauffeur sans dossier salarié en cours ; simples avertissements, sans blocage :
+  aptitude non renseignée, apte avec réserve, habilitation à renouveler), `_hsseq_expiring(companies,
   horizon_days)` (alertes J-30 et J-7), `_hsseq_worked_hours`, `_hsseq_work_accidents`,
   `_hsseq_indicators` (taux de fréquence : accidents avec arrêt × 1 000 000 ÷ heures ; taux de gravité :
   jours perdus × 1 000 ÷ heures).
@@ -168,4 +171,8 @@ sans jamais un justificatif ni un détail médical.
   `/rh/qualifications/matrix`, `/rh/qualification-types`, `/rh/ppe`, `/rh/safety` ; aptitude par
   PATCH `/rh/employees/<id>` ; `/rh/me` renvoie au conducteur ses habilitations et son aptitude.
   Quatre yeux : personne ne gère ses propres habilitations ni son aptitude.
-- **Échéancier** : habilitations et aptitudes à J-30 (à traiter) et J-7 (urgent), expirées (urgent).
+- **Échéancier** : habilitations et aptitudes à J-30 (à traiter) et J-7 (urgent), expirées (urgent) ;
+  délais réglables dans les paramètres RH.
+- **Mise en service** : les trois habilitations obligatoires des conducteurs (permis poids lourd,
+  conduite défensive, matières dangereuses) sont à saisir pour chaque conducteur avant d'activer le
+  verrou V04 dans HSSEQ ; sans elles, tout départ est refusé.
