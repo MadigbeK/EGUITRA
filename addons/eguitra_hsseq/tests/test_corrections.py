@@ -311,3 +311,24 @@ class TestCorrections(HsseqCase):
                                      ("POST", "/decisions", {"description": "x"})):
             status, _b = self.api("awa.auditrice", method, f"/hsseq/reviews/{review['id']}{sub}", payload)
             self.assertEqual(status, 403, f"Auditeur en écriture : {method} {sub}")
+
+    def test_photo_de_levee_aux_droits_de_la_levee(self):
+        """Un chef de parc qui a aussi un profil de lecture complète (direction) lève la non-conformité et en
+        dépose la photo de correction ; la direction seule ne fait ni l'un ni l'autre."""
+        mixed = self._create_user("mixte.parc", "exploitation", "direction")
+        self.site.manager_ids = [(4, mixed.id)]
+        check = self.check(self._rotation(), failing=("Freins et ralentisseur, essai statique",))
+        nc = check.nonconformity_ids[:1]
+        status, detail = self.api("mixte.parc", "GET", f"/hsseq/checks/{check.id}")
+        self.assertEqual((status, detail["rights"]["can_close"]), (200, True), detail)
+        status, photo = self.upload("mixte.parc", model="nonconformity", id=nc.id, role="lift")
+        self.assertEqual((status, photo["role"]), (200, "lift"), "Photo de correction : même droit que la levée")
+        status, lifted = self.api("mixte.parc", "POST", f"/hsseq/checks/{check.id}/lift",
+                                  {"nonconformity_id": nc.id, "attachment_ids": [photo["id"]], "comment": "Réglés"})
+        self.assertEqual(status, 200, lifted)
+        self.assertEqual([n["status"] for n in lifted["nonconformities"]], ["lifted"])
+        other = self.check(self._rotation(), failing=("Freins et ralentisseur, essai statique",))
+        status, detail = self.api("dg.hsseq", "GET", f"/hsseq/checks/{other.id}")
+        self.assertFalse(detail["rights"]["can_close"], "Direction seule : pas de levée")
+        status, _b = self.upload("dg.hsseq", model="nonconformity", id=other.nonconformity_ids[:1].id, role="lift")
+        self.assertEqual(status, 403, "Ni la photo de correction")

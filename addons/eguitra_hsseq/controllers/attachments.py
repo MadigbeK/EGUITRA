@@ -79,10 +79,14 @@ def reads(allowed):
     return bool(profiles() & set(allowed))
 
 
-def can_attach(object_key, record):
-    """Ajouter une pièce à la fiche : son auteur ou responsable, le chef de parc du site, ou hsseq."""
+def can_attach(object_key, record, role=None):
+    """Ajouter une pièce à la fiche : son auteur ou responsable, le chef de parc du site, ou hsseq. La photo
+    de la correction d'une non-conformité (role « lift ») suit exactement le droit de la levée (can_lift) :
+    rights.can_close n'est vrai que si elle peut être déposée."""
     if closed(object_key, record):
         return False
+    if object_key == "nonconformity" and role == "lift":
+        return checks.can_lift(record)
     if is_hsseq():
         return True
     user = request.env.user
@@ -135,7 +139,7 @@ class EguitraHsseqAttachments(http.Controller):
             if object_key not in ATTACHMENT_OBJECTS:
                 raise ApiError(400, "invalid_parameter", "Fiche inconnue.", fields=["model"])
             record = get(MODELS[object_key], form.get("id") or form.get("object_id"), "Fiche")
-            if not can_read(object_key, record) or not can_attach(object_key, record):
+            if not can_read(object_key, record) or not can_attach(object_key, record, form.get("role")):
                 raise forbidden("Pièce jointe non autorisée sur cette fiche.")
             if request.env["eguitra.hsseq.attachment"].sudo().search_count(
                     [("object", "=", object_key), ("res_id", "=", record.id)]) >= MAX_PER_RECORD:
