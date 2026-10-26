@@ -68,7 +68,7 @@ function Corps() {
               {d.funnel?.length ? (
                 <>
                   <Entonnoir label="Entonnoir des dossiers par gate" stages={d.funnel.map((f) => ({ key: f.gate, label: `${f.gate} · ${f.label}`, count: f.count, value: f.need, conversion_pct: f.conversion_pct }))} hauteur={Math.max(300, d.funnel.length * 46)} surligne={gateVise?.gate} />
-                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Effectif présent ou passé par chaque gate ; la pastille donne le taux de passage depuis le gate précédent, le montant à droite le besoin de financement.</p>
+                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Chaque marche est large comme les dossiers en cours dans le gate ; entre deux marches, la pastille donne la part des dossiers parvenus au premier gate qui ont atteint le second ; à droite, le besoin de financement.</p>
                 </>
               ) : (
                 <Vide titre="Aucun dossier" />

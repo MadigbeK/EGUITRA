@@ -245,7 +245,6 @@ function CockpitCabinet() {
     .map((m) => ({ id: String(m.id), label: m.name, x: m.readiness ?? 0, y: m.bankability ?? 0, size: Math.max(1, m.need), group: RECO[m.recommendation]?.label ?? m.recommendation, detail: `${m.reference} · ${m.sector ?? "secteur non renseigné"} · ${m.gate} · probabilité ${fmtPct(m.probability * 100, 0)}` }));
   const couleurs = Object.fromEntries(Object.values(RECO).map((r) => [r.label, r.couleur]));
   const quadrant = (key: string, defaut: string) => seuils?.quadrants?.find((q) => q.key === key)?.label ?? defaut;
-  const funnel = (d?.funnel ?? []).filter((f) => f.count > 0 || (f.sequence ?? 0) <= 2);
 
   return (
     <div>
@@ -264,7 +263,7 @@ function CockpitCabinet() {
               {d.funnel?.length ? (
                 <>
                   <Entonnoir label="Entonnoir des dossiers par gate" stages={(d.funnel ?? []).map((f) => ({ key: f.gate, label: `${f.gate} · ${f.label}`, count: f.count, value: f.need, conversion_pct: f.conversion_pct }))} hauteur={Math.max(300, (d.funnel?.length ?? 0) * 46)} />
-                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Chaque marche est large comme son nombre de dossiers ; le montant à droite est leur besoin de financement, la pastille le taux de passage depuis le gate précédent.{funnel.length === 0 ? " Aucun dossier n'a encore franchi de gate." : ""}</p>
+                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Chaque marche est large comme les dossiers en cours dans le gate ; le montant à droite est leur besoin de financement ; entre deux marches, la pastille donne la part des dossiers parvenus au premier gate qui ont atteint le second.</p>
                 </>
               ) : (
                 <Vide titre="Aucun dossier ouvert" hint="Les dossiers apparaissent ici dès leur création dans AxisPro." />

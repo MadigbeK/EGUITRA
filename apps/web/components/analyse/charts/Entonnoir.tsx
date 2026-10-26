@@ -10,14 +10,18 @@ export interface EtapeEntonnoir {
   count: number;
   /** Montant porté par l'étape (besoin de financement, montant du pipeline). */
   value?: number;
-  /** Conversion depuis l'étape précédente, en pourcentage. */
+  /**
+   * Passage vers l'étape suivante, en pourcentage : part des dossiers parvenus à cette étape qui ont
+   * atteint la suivante (le noyau le porte sur l'étape de départ, null sur la dernière).
+   */
   conversion_pct?: number | null;
 }
 
 /**
  * Entonnoir à conversion : une marche par étape, large comme son effectif, centrée ; entre deux
- * marches, le taux de passage. La plus étroite dit où l'on perd. Survol et clavier lisent chaque
- * étape (effectif, montant, conversion). `surligne` : clé de l'étape visée par un lien, cerclée.
+ * marches, le taux de passage de la première à la seconde. La plus étroite dit où l'on perd. Survol
+ * et clavier lisent chaque étape (effectif, montant, passage au suivant). `surligne` : clé de l'étape
+ * visée par un lien, cerclée.
  */
 export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES, surligne }: { stages: EtapeEntonnoir[]; hauteur?: number; label: string; format?: (v: number) => string; couleurs?: readonly string[]; surligne?: string | null }) {
   const [focus, setFocus] = useState<number | null>(null);
@@ -52,6 +56,8 @@ export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES, s
                 const couleur = couleurs[i % couleurs.length] ?? COULEUR.accent;
                 const estompe = focus !== null && focus !== i;
                 const vise = surligne !== undefined && surligne !== null && s.key === surligne;
+                const precedent = i > 0 ? stages[i - 1]!.conversion_pct : null;
+                const passage = precedent === undefined || precedent === null ? null : precedent;
                 return (
                   <g key={s.key} onPointerEnter={() => setFocus(i)} className="an-estompe" style={{ opacity: estompe ? 0.45 : 1 }}>
                     {vise && <rect x={4} y={y0 - 4} width={W - 8} height={marcheH + 8} rx={10} fill={COULEUR.accent} fillOpacity={0.1} stroke={COULEUR.accent} strokeWidth={2} strokeDasharray="5 4" />}
@@ -67,11 +73,12 @@ export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES, s
                         {show(s.value)}
                       </text>
                     )}
-                    {i > 0 && s.conversion_pct !== undefined && s.conversion_pct !== null && (
+                    {passage !== null && (
+                      // Entre l'étape précédente et celle-ci : le passage de la précédente vers celle-ci.
                       <g className="an-fondu" style={{ "--i": i * 3 + 4 } as CSSProperties}>
                         <rect x={centre + Math.max(w0, largeurDe(stages[i - 1]!) * 0.72) / 2 + 8} y={y0 - 12} width={54} height={18} rx={9} fill="var(--panel)" stroke={COULEUR.trait} />
-                        <text x={centre + Math.max(w0, largeurDe(stages[i - 1]!) * 0.72) / 2 + 35} y={y0 - 3} dy="0.35em" textAnchor="middle" fontSize={10.5} fontWeight={700} fill={s.conversion_pct < 50 ? "var(--danger)" : "var(--ok-texte)"}>
-                          {fmtPct(s.conversion_pct, 0)}
+                        <text x={centre + Math.max(w0, largeurDe(stages[i - 1]!) * 0.72) / 2 + 35} y={y0 - 3} dy="0.35em" textAnchor="middle" fontSize={10.5} fontWeight={700} fill={passage < 50 ? "var(--danger)" : "var(--ok-texte)"}>
+                          {fmtPct(passage, 0)}
                         </text>
                       </g>
                     )}
@@ -89,14 +96,14 @@ export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES, s
                 lignes={[
                   { nom: "Dossiers", valeur: fmtInt(choisi.count), couleur: couleurs[focus % couleurs.length] },
                   ...(choisi.value !== undefined ? [{ nom: "Montant", valeur: show(choisi.value) }] : []),
-                  ...(choisi.conversion_pct !== undefined && choisi.conversion_pct !== null ? [{ nom: "Passage", valeur: fmtPct(choisi.conversion_pct, 0) }] : []),
+                  ...(choisi.conversion_pct !== undefined && choisi.conversion_pct !== null ? [{ nom: "Passage au suivant", valeur: fmtPct(choisi.conversion_pct, 0) }] : []),
                 ]}
               />
             )}
           </>
         );
       }}
-      apres={<TableRepli caption={label} colonnes={["Étape", "Dossiers", "Montant", "Conversion"]} lignes={stages.map((s) => [s.label, fmtInt(s.count), s.value === undefined ? "–" : show(s.value), s.conversion_pct === undefined || s.conversion_pct === null ? "–" : fmtPct(s.conversion_pct, 0)])} />}
+      apres={<TableRepli caption={label} colonnes={["Étape", "Dossiers", "Montant", "Passage au suivant"]} lignes={stages.map((s) => [s.label, fmtInt(s.count), s.value === undefined ? "–" : show(s.value), s.conversion_pct === undefined || s.conversion_pct === null ? "–" : fmtPct(s.conversion_pct, 0)])} />}
     />
   );
 }
