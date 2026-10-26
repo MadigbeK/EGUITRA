@@ -10,7 +10,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, require
 
-from ..models.common import STOP_KINDS
+from ..models.common import STOP_KINDS, fr_number
 from .common import (
     CONFIG,
     HSSEQ,
@@ -152,7 +152,8 @@ class EguitraHsseqJourneys(http.Controller):
         journey = rotation._hsseq_journey()
         Journey = request.env["eguitra.hsseq.journey"].sudo()
         if journey:
-            journey.write(values)
+            if not journey._same_plan(values):
+                journey.write(values)
         else:
             Journey.create(dict(values, rotation_id=rotation.id))
         return journey_row(rotation)
@@ -180,11 +181,14 @@ class EguitraHsseqJourneys(http.Controller):
     def update_route(self, route_id, **_kw):
         route = get("eguitra.transport.route", route_id, "Route")
         data = read_json()
-        require(data, "night_driving_forbidden")
+        if not isinstance(data.get("night_driving_forbidden"), bool):
+            raise ApiError(400, "invalid_parameter", "night_driving_forbidden : true ou false.",
+                           fields=["night_driving_forbidden"])
         old = route.hsseq_night_forbidden
-        route.sudo().hsseq_night_forbidden = bool(data["night_driving_forbidden"])
+        route.sudo().hsseq_night_forbidden = data["night_driving_forbidden"]
         request.env["eguitra.hsseq.journal"]._log("route", route, "write", field="hsseq_night_forbidden",
-                                                  old=str(old), new=str(route.hsseq_night_forbidden))
+                                                  old="oui" if old else "non",
+                                                  new="oui" if route.hsseq_night_forbidden else "non")
         return {"id": route.id, "name": route.name, "night_driving_forbidden": route.hsseq_night_forbidden}
 
     # ─── Nouvelle pesée (V07) ─────────────────────────────────────────────
@@ -201,10 +205,10 @@ class EguitraHsseqJourneys(http.Controller):
             raise ApiError(400, "invalid_parameter", "Poids brut et poids à vide positifs, le second au plus égal au "
                                                      "premier.", fields=["weight_gross", "weight_tare"])
         rot = rotation.sudo()
-        before = f"{rot.weigh_ticket or '-'} : {rot.weight_gross:.3f} t brut, {rot.weight_tare:.3f} t à vide"
+        before = f"{rot.weigh_ticket or '-'} : {fr_number(rot.weight_gross, 3)} t brut, {fr_number(rot.weight_tare, 3)} t à vide"
         rot.write({"weigh_ticket": text(data, "weigh_ticket", 64) or rot.weigh_ticket, "weight_gross": gross,
                    "weight_tare": tare})
-        after = f"{rot.weigh_ticket or '-'} : {rot.weight_gross:.3f} t brut, {rot.weight_tare:.3f} t à vide"
+        after = f"{rot.weigh_ticket or '-'} : {fr_number(rot.weight_gross, 3)} t brut, {fr_number(rot.weight_tare, 3)} t à vide"
         request.env["eguitra.hsseq.journal"]._log("rotation", rot, "reweigh", field="weigh_ticket", old=before,
                                                   new=after, note=text(data, "comment", 1000) or None)
         return {"rotation": rotation_ref(rot), "weigh_ticket": rot.weigh_ticket or None, "weight_gross": rot.weight_gross,

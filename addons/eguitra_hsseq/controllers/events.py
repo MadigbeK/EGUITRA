@@ -25,6 +25,7 @@ from ..models.common import (
     PERSON_KINDS,
     PERSON_ROLES,
     TREE_FACT_KINDS,
+    fr_number,
 )
 from .actions import action_line
 from .common import (
@@ -513,7 +514,7 @@ class EguitraHsseqEvents(http.Controller):
             "event_id": event.id, "kind": data["kind"], "label": text(data, "label", 300),
             "amount": number(data, "amount"), "date": date_value(data, "date") or fields.Date.context_today(event),
             "finance_move_id": move.id or False})
-        event._journal("cost", note=f"{dict(COST_KINDS)[data['kind']]} : {number(data, 'amount'):,.0f} GNF")
+        event._journal("cost", note=f"{dict(COST_KINDS)[data['kind']]} : {fr_number(number(data, 'amount'), 0)} GNF")
         return event_detail(event)
 
     @hsseq_route("/hsseq/events/<int:event_id>/costs/<int:cost_id>", methods=("DELETE",), profiles=HSSEQ)
@@ -524,7 +525,7 @@ class EguitraHsseqEvents(http.Controller):
         cost = event.cost_ids.filtered(lambda c: c.id == cost_id)
         if not cost:
             raise ApiError(404, "not_found", "Coût introuvable.")
-        event._journal("cost_removed", note=f"{dict(COST_KINDS)[cost.kind]} : {cost.amount:,.0f} GNF")
+        event._journal("cost_removed", note=f"{dict(COST_KINDS)[cost.kind]} : {fr_number(cost.amount, 0)} GNF")
         cost.unlink()
         return event_detail(event)
 
@@ -598,6 +599,6 @@ def report_context(event):
         "factors": [(factor_labels[k], event[f"factor_{k}"]) for k in FACTORS_5M if event[f"factor_{k}"]],
         "actions": [(a.description, a.owner_id.name, a.due_date.strftime("%d/%m/%Y"), action_statuses.get(a.status, ""))
                     for a in event.action_ids],
-        "costs": [(dict(COST_KINDS)[c.kind], c.label or "", f"{c.amount:,.0f} GNF".replace(",", " "))
+        "costs": [(dict(COST_KINDS)[c.kind], c.label or "", f"{fr_number(c.amount, 0)} GNF")
                   for c in event.cost_ids],
     }

@@ -75,11 +75,13 @@ class EguitraHsseqEvent(models.Model):
 
     def _immobilization_proposed(self):
         """Immobilisation proposée : événement de criticité élevée, en cours, qui met en cause un ensemble
-        pas encore immobilisé."""
+        pas encore immobilisé, et que l'événement n'a jamais immobilisé (après une levée, elle n'est plus
+        proposée : le Responsable HSSEQ peut toujours immobiliser de nouveau)."""
         self.ensure_one()
         event = self.sudo()
         return bool(event.level == "high" and event.status != "closed" and event.vehicle_id
-                    and not event.vehicle_id.hsseq_immobilized)
+                    and not event.vehicle_id.hsseq_immobilized
+                    and not event.immobilization_ids.filtered(lambda i: i.vehicle_id == event.vehicle_id))
 
     def action_immobilize(self, reason=None):
         """Immobilisation du véhicule de l'événement (V09), par le Responsable HSSEQ."""

@@ -39,7 +39,7 @@ from odoo.exceptions import AccessError
 
 from odoo.addons.eguitra_transport.blocking import motif
 
-from .common import EXPLOITATION_GROUP, VEHICLE_KINDS, day_start, today, vehicle_kind
+from .common import EXPLOITATION_GROUP, VEHICLE_KINDS, day_start, fr_number, today, vehicle_kind
 from .waiver import NOT_WAIVABLE, ROTATION_ENDED
 
 V05_KINDS = ("insurance", "inspection")
@@ -308,8 +308,9 @@ class EguitraTransportRotation(models.Model):
         overload = self._overload()
         if overload > 0:
             net = self.weight_gross - self.weight_tare
-            add("V07", info=f"Poids net {net:.2f} t pour une charge utile de {self.vehicle_id.payload_tonnes:.2f} t : "
-                            f"délester de {overload:.2f} t, puis nouvelle pesée.")
+            add("V07", info=f"Poids net {fr_number(net)} t pour une charge utile de "
+                            f"{fr_number(self.vehicle_id.payload_tonnes)} t : délester de {fr_number(overload)} t, "
+                            "puis nouvelle pesée.")
 
     def _hsseq_v08(self, add, settings):
         journey = self._hsseq_journey()

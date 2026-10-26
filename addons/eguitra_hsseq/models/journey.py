@@ -61,10 +61,31 @@ class EguitraHsseqJourney(models.Model):
                 raise HsseqError("invalid_parameter", "L'arrivée prévue suit le départ prévu.",
                                  fields=["planned_arrival"], status=400)
 
+    def _plan_key(self, values=None):
+        """Plan comparable (valeurs des champs et arrêts) : celui de la fiche, ou celui qu'elle aurait avec
+        values (commandes d'arrêts (5,) puis (0, 0, valeurs), comme le PUT de l'API)."""
+        self.ensure_one()
+        values = values or {}
+        plan = tuple(values[f] if f in values else self[f] for f in PLAN_FIELDS)
+        plan = tuple(v or False for v in plan)
+        if "stop_ids" in values:
+            stops = [c[2] for c in values["stop_ids"] if c[0] == 0]
+            stops = sorted((s.get("kind") or "break", s.get("place") or False, s["planned_at"], s["duration_minutes"])
+                           for s in stops)
+        else:
+            stops = sorted((s.kind, s.place or False, s.planned_at, s.duration_minutes) for s in self.stop_ids)
+        return plan, stops
+
+    def _same_plan(self, values):
+        """Les valeurs reprennent-elles exactement le plan enregistré ?"""
+        self.ensure_one()
+        return self._plan_key(values) == self._plan_key()
+
     def write(self, vals):
-        """Un plan validé qu'on modifie revient « à valider »."""
+        """Un plan validé dont le plan change réellement revient « à valider »."""
         replanned = set(vals) & set(PLAN_FIELDS + ("stop_ids",))
-        changed = self.filtered(lambda j: j.status == "validated") if replanned else self.browse()
+        changed = self.filtered(lambda j: j.status == "validated" and not j._same_plan(vals)) if replanned \
+            else self.browse()
         result = super().write(vals)
         if changed and "status" not in vals:
             changed._invalidate_plan()

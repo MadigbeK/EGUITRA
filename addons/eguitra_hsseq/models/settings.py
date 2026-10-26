@@ -9,7 +9,7 @@ from datetime import timedelta
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-from .common import DIRECTION_GROUP, users_in_group
+from .common import DIRECTION_GROUP, HsseqError, users_in_group
 
 # Cibles proposées par le contrat d'API (§4) ; « targets » les remplace indicateur par indicateur.
 DEFAULT_TARGETS = {
@@ -114,8 +114,12 @@ class EguitraHsseqSettings(models.Model):
     @api.constrains("night_start_hour", "night_end_hour", "max_driving_hours")
     def _check_journey(self):
         for s in self:
-            if not (0 <= s.night_start_hour < 24 and 0 <= s.night_end_hour < 24) or s.max_driving_hours < 0:
-                raise ValidationError("Heures de nuit entre 0 et 24, durée de conduite positive.")
+            if not (0 <= s.night_start_hour < 24 and 0 <= s.night_end_hour < 24):
+                raise HsseqError("invalid_parameter", "Heures de nuit entre 0 et 24.",
+                                 fields=["night_start_hour", "night_end_hour"], status=400)
+            if s.max_driving_hours < 0:
+                raise HsseqError("invalid_parameter", "Durée de conduite positive ou nulle.",
+                                 fields=["max_driving_hours"], status=400)
 
     @api.constrains("co2_factor", "complaint_response_days", "read_reminder_days")
     def _check_lot3(self):

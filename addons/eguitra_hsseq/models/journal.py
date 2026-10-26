@@ -5,6 +5,8 @@ historique d'une fiche et GET /hsseq/log. Écrit en sudo, jamais modifié ; lu p
 
 from odoo import api, fields, models
 
+from .common import fr_number
+
 
 class EguitraHsseqJournal(models.Model):
     _name = "eguitra.hsseq.journal"
@@ -49,8 +51,14 @@ class EguitraHsseqJournaled(models.AbstractModel):
             return value.display_name or ""
         if field.type in ("many2many", "one2many"):
             return ", ".join(value.mapped("display_name"))
+        if field.type == "boolean":
+            return "oui" if value else "non"
         if value in (False, None):
             return ""
+        if field.type in ("float", "monetary"):
+            return fr_number(value, 0 if field.type == "monetary" else 3, trim=True)
+        if field.type == "integer":
+            return fr_number(value, 0)
         return str(value)
 
     def _journal(self, action, note=None, field=None, old=None, new=None):

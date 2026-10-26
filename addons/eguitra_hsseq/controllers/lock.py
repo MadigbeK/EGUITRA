@@ -135,7 +135,8 @@ class EguitraHsseqLock(http.Controller):
             raise ApiError(422, "business_rule", "Le caractère dérogeable d'un motif ne se modifie pas.",
                            fields=["waivable"])
         reason.write(values)
-        request.env["eguitra.hsseq.journal"]._log("lock_reason", reason, "write", note=str(values))
+        request.env["eguitra.hsseq.journal"]._log("lock_reason", reason, "write", note=", ".join(
+            f"{key} : {'oui' if value is True else 'non' if value is False else value}" for key, value in values.items()))
         return reason_setting_row(reason)
 
     @hsseq_route("/hsseq/me/rotations", profiles=MY_ROTATIONS)

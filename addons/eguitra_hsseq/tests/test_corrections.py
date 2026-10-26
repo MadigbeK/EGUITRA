@@ -220,3 +220,73 @@ class TestCorrections(HsseqCase):
         self.assertNotIn(f"{previous:%Y-%m}", [m["month"] for m in months["items"]], "Antérieur au modèle")
         status, months = self.api("kadi.hsseq", "GET", f"/hsseq/reports?template_id={template['id']}&year={self.day.year + 1}")
         self.assertEqual((status, months["items"]), (200, []), "Année à venir : aucun mois")
+
+    def test_trajets_pesees_parametres_et_immobilisation(self):
+        """Nombres en français dans les textes (V07, journal de la pesée, coûts, valeurs du journal) ; un PUT
+        identique d'un plan validé ne le dévalide pas ; paramètres à zéro servis à 0 ; booléen strict sur les
+        routes ; contrôle des heures avec un code et ses champs ; après une levée, l'immobilisation du même
+        véhicule n'est plus proposée."""
+        from datetime import datetime, time
+
+        self.env.ref("eguitra_hsseq.reason_v07").enabled = True
+        tipper = self.env["eguitra.transport.vehicle"].create({"name": "BN-11", "vehicle_kind": "tipper",
+                                                               "payload_tonnes": 30, "site_id": self.site.id})
+        heavy = self._rotation(vehicle_id=tipper.id, driver_id=self.driver.id, weigh_ticket="TP-7", weight_gross=48.5,
+                               weight_tare=13)
+        [v07] = [r for r in heavy._hsseq_evaluate()["reasons"] if r["code"] == "V07"]
+        self.assertIn("délester de 5,50 t", v07["detail"])
+        self.assertIn("charge utile de 30,00 t", v07["detail"])
+        status, body = self.api("ibrahima", "POST", f"/hsseq/rotations/{heavy.id}/reweigh",
+                                {"weigh_ticket": "TP-8", "weight_gross": 47.8, "weight_tare": 18.25})
+        self.assertEqual(status, 200, body)
+        entry = self.env["eguitra.hsseq.journal"].search([("model", "=", "rotation"), ("res_id", "=", heavy.id),
+                                                          ("action", "=", "reweigh")], limit=1)
+        self.assertEqual((entry.old_value, entry.new_value),
+                         ("TP-7 : 48,500 t brut, 13,000 t à vide", "TP-8 : 47,800 t brut, 18,250 t à vide"))
+        event = self.event()
+        status, _b = self.api("kadi.hsseq", "POST", f"/hsseq/events/{event.id}/costs",
+                              {"kind": "repair", "amount": 1500000, "label": "Pare-chocs"})
+        cost = self.env["eguitra.hsseq.journal"].search([("model", "=", "event"), ("res_id", "=", event.id),
+                                                         ("action", "=", "cost")], limit=1)
+        self.assertEqual(cost.note, "Réparation : 1\u202f500\u202f000 GNF")
+        spill = self.env["eguitra.hsseq.spill"].create({"company_id": self.company.id, "site_id": self.site.id,
+                                                        "occurred_at": datetime.now(), "volume_liters": 1200})
+        spill.recovered_liters = 812.5
+        change = self.env["eguitra.hsseq.journal"].search([("model", "=", "spill"), ("res_id", "=", spill.id),
+                                                           ("field", "=", "recovered_liters")], limit=1)
+        self.assertEqual((change.old_value, change.new_value), (False, "812,5"))
+        # Plan de trajet : un PUT identique garde la validation, un plan modifié revient à valider.
+        rot = self._rotation(driver_id=self.driver.id)
+        start = datetime.combine(rot.date_loading, time(7, 0))
+        plan = {"itinerary": "RN1", "planned_departure": start.isoformat() + "Z",
+                "planned_arrival": start.replace(hour=15).isoformat() + "Z",
+                "stops": [{"kind": "break", "planned_at": start.replace(hour=11).isoformat() + "Z", "duration_minutes": 45}]}
+        path = f"/hsseq/rotations/{rot.id}/journey"
+        self.api("ibrahima", "PUT", path, plan)
+        status, validated = self.api("ibrahima", "POST", f"{path}/validate")
+        self.assertEqual((status, validated["journey"]["status"]), (200, "validated"), validated)
+        status, same = self.api("ibrahima", "PUT", path, plan)
+        self.assertEqual(same["journey"]["status"], "validated", "PUT identique : plan toujours validé")
+        status, moved = self.api("ibrahima", "PUT", path, dict(plan, itinerary="RN1 puis RN2"))
+        self.assertEqual(moved["journey"]["status"], "draft", "Plan modifié : à valider de nouveau")
+        # Paramètres : 0 reste 0 ; heures hors plage refusées avec leur code et leurs champs.
+        status, settings = self.api("kadi.hsseq", "PATCH", "/hsseq/settings", {"max_driving_hours": 0,
+                                                                                "night_end_hour": 0})
+        self.assertEqual((status, settings["max_driving_hours"], settings["night_end_hour"]), (200, 0, 0), settings)
+        status, body = self.api("kadi.hsseq", "PATCH", "/hsseq/settings", {"night_start_hour": 25})
+        self.assertEqual((status, body["error"], body["fields"]),
+                         (400, "invalid_parameter", ["night_start_hour", "night_end_hour"]))
+        # Routes : booléen strict.
+        route = f"/hsseq/routes/{self.route.id}"
+        status, body = self.api("kadi.hsseq", "PATCH", route, {"night_driving_forbidden": "false"})
+        self.assertEqual((status, body["error"]), (400, "invalid_parameter"))
+        status, body = self.api("kadi.hsseq", "PATCH", route, {"night_driving_forbidden": True})
+        self.assertEqual((status, body["night_driving_forbidden"]), (200, True))
+        # Immobilisation levée : plus proposée pour le même véhicule tant que l'événement reste ouvert.
+        high = self.event(title="Freins défaillants")
+        high.action_classify({"potential_severity": 5, "probability": 4})
+        self.assertTrue(high._immobilization_proposed())
+        high.action_immobilize("Expertise")
+        self.api("kadi.hsseq", "POST", f"/hsseq/vehicles/{self.truck.id}/release", {"reason": "Freins remplacés"})
+        status, detail = self.api("kadi.hsseq", "GET", f"/hsseq/events/{high.id}")
+        self.assertNotIn("immobilize", detail["transitions"], "Levée : plus de nouvelle proposition")

@@ -82,7 +82,7 @@ def site_row(site):
 
 
 def settings_row(settings):
-    row = {key: settings[key] or None for key in SETTINGS_FIELDS}
+    row = {key: (settings[key] or None) if kind == "date" else settings[key] for key, kind in SETTINGS_FIELDS.items()}
     row.update({"company": company_ref(settings.company_id), "director": user_ref(settings.director_user_id),
                 "criticality_thresholds": settings._thresholds(), "targets": settings.targets or {}})
     return row
