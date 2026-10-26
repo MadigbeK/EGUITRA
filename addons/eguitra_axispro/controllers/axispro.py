@@ -79,6 +79,26 @@ def _percent(data, key):
     return value
 
 
+def _weight(data, key="weight"):
+    """Poids d'un domaine ou d'un critère : nombre positif ou nul (0 le retire du score). Un poids
+    négatif retrancherait des points au score (audit du noyau, M8)."""
+    if data[key] in (None, ""):
+        raise ApiError(400, "invalid_parameter", "Poids : nombre attendu.", fields=[key])
+    value = as_float(data[key], key)
+    if value < 0:
+        raise ApiError(400, "invalid_parameter", "Poids : nombre positif ou nul attendu (0 retire l'élément du score).",
+                       fields=[key])
+    return value
+
+
+def _label(data, key, what):
+    """Intitulé obligatoire d'un élément de la grille : une ligne, 200 caractères au plus."""
+    text = " ".join(str(data[key] or "").split())[:200]
+    if not text:
+        raise ApiError(400, "invalid_parameter", f"{what} : intitulé obligatoire.", fields=[key])
+    return text
+
+
 def _policy_payload(policy):
     pieces = {}
     for t in policy.document_type_ids:
@@ -178,12 +198,20 @@ class EguitraAxispro(http.Controller):
         policy = _record("axispro.policy", policy_id, "Politique")
         _draft(policy)
         data = read_json()
-        values = {k: data[k] or False for k in ("name", "notes") if k in data}
+        values = {"notes": data["notes"] or False} if "notes" in data else {}
+        if "name" in data:
+            values["name"] = _label(data, "name", "Politique d'évaluation")
         for key in THRESHOLDS:
             if key in data:
                 values[key] = _percent(data, key)
         if "dscr_target" in data:
-            values["dscr_target"] = as_float(data["dscr_target"] or 0, "dscr_target")
+            # Un DSCR bancaire vide ou nul laisserait passer tous les dossiers à la règle de bancabilité
+            # (audit de l'application web, C1 : « 1,3x » arrivait à 0).
+            dscr = as_float(data["dscr_target"], "dscr_target") if data["dscr_target"] not in (None, "") else None
+            if dscr is None or not 0 < dscr <= 10:
+                raise ApiError(400, "invalid_parameter", "DSCR bancaire : nombre positif attendu, 10 au plus "
+                                                         "(par exemple 1,3).", fields=["dscr_target"])
+            values["dscr_target"] = dscr
         if data.get("weighting") in dict(WEIGHTINGS):
             values["weighting"] = data["weighting"]
         for flag in POLICY_FLAGS:
@@ -236,9 +264,11 @@ class EguitraAxispro(http.Controller):
         domain = _record("axispro.domain", domain_id, "Domaine")
         _draft(domain.policy_id)
         data = read_json()
-        values = {k: data[k] or False for k in ("name", "deliverable") if k in data}
+        values = {"deliverable": data["deliverable"] or False} if "deliverable" in data else {}
+        if "name" in data:
+            values["name"] = _label(data, "name", "Domaine")
         if "weight" in data:
-            values["weight"] = as_float(data["weight"], "weight")
+            values["weight"] = _weight(data)
         if "compartment_id" in data:
             wanted = int_value(data["compartment_id"], "compartment_id") if data["compartment_id"] else 0
             compartment = domain.policy_id.compartment_ids.filtered(lambda k: k.id == wanted)
@@ -263,20 +293,26 @@ class EguitraAxispro(http.Controller):
         criterion = _record("axispro.criterion", criterion_id, "Critère")
         _draft(criterion.policy_id)
         data = read_json()
-        values = {k: data[k] or False for k in ("name", "guidance", "deliverable") if k in data}
+        values = {k: data[k] or False for k in ("guidance", "deliverable") if k in data}
+        if "name" in data:
+            values["name"] = _label(data, "name", f"Critère {criterion.code}")
         for key in ("critical", "knockout", "evidence_required", "bankability"):
             if key in data:
                 values[key] = bool(data[key])
         if data.get("requirement_type") in REQUIREMENTS:
             values["requirement_type"] = data["requirement_type"]
         if "weight" in data:
-            values["weight"] = as_float(data["weight"], "weight")
+            values["weight"] = _weight(data)
         if "indicator" in data:
             if data["indicator"] and data["indicator"] not in INDICATORS:
                 raise ApiError(400, "invalid_parameter", "Indicateur inconnu.")
             values["indicator"] = data["indicator"] or False
         if "indicator_threshold" in data:
-            values["indicator_threshold"] = as_float(data["indicator_threshold"] or 0, "indicator_threshold")
+            # Seuil vide : refusé plutôt qu'enregistré à 0 (un seuil de 0 se saisit).
+            if data["indicator_threshold"] in (None, ""):
+                raise ApiError(400, "invalid_parameter", "Seuil de satisfaction : nombre attendu.",
+                               fields=["indicator_threshold"])
+            values["indicator_threshold"] = as_float(data["indicator_threshold"], "indicator_threshold")
         if "indicator_partial" in data:
             partial = data["indicator_partial"]
             values["indicator_has_partial"] = partial not in (None, "")
@@ -746,20 +782,44 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/timesheets", methods=("POST",), profiles=WRITE)
     def log_time(self, **_kw):
+        """Saisie de temps sur un dossier : heures positives (audit du noyau, M8 : des heures nulles ou
+        négatives faussaient la charge et la facture), travaux décrits."""
         data = read_json()
         dossier_id, hours, description = require(data, "dossier_id", "hours", "description")
+        dossier = _dossier(int_value(dossier_id, "dossier_id"))
+        hours = as_float(hours, "hours")
+        if hours <= 0:
+            raise ApiError(400, "invalid_parameter", "Heures : nombre positif attendu (par exemple 1,5).",
+                           fields=["hours"])
+        description = " ".join(str(description).split())[:500]
+        if not description:
+            raise ApiError(400, "missing_fields", "Décrivez les travaux.", fields=["description"])
         sheet = request.env["axispro.timesheet"].create({
-            "dossier_id": int(dossier_id), "hours": as_float(hours, "hours"), "description": description,
+            "dossier_id": dossier.id, "hours": hours, "description": description,
             "date": parse_date(data, "date", today()), "billable": data.get("billable", True) is not False,
         })
         return {"id": sheet.id}
 
     @api_route("/axispro/dossiers/<int:dossier_id>/invoice", methods=("POST",), profiles=WRITE)
     def invoice(self, dossier_id, **_kw):
-        """Facture d'honoraires du dossier : seul le cabinet facture (les temps sont fermés à l'admin)."""
+        """Facture d'honoraires du dossier : seul le cabinet facture (les temps sont fermés à l'admin).
+        Taux horaire positif dès qu'il reste des temps à facturer (un taux nul les facturait à zéro et
+        les sortait du carnet) ; lignes complémentaires {name, amount} de montant positif."""
         dossier = _dossier(dossier_id)
         data = read_json()
         sheets = request.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)])
-        extra = [{"name": str(x["name"]), "amount": as_float(x["amount"], "amount")} for x in data.get("lines") or []]
-        invoice = sheets.action_invoice(as_float(data.get("hourly_rate") or 0, "hourly_rate"), extra)
+        extra = []
+        for x in data.get("lines") or []:
+            name = " ".join(str(x.get("name") or "").split())[:200] if isinstance(x, dict) else ""
+            if not name:
+                raise ApiError(400, "invalid_parameter", "Ligne complémentaire : libellé obligatoire.", fields=["lines"])
+            amount = as_float(x.get("amount"), "amount")
+            if amount <= 0:
+                raise ApiError(400, "invalid_parameter", f"Ligne « {name} » : montant positif attendu.", fields=["lines"])
+            extra.append({"name": name, "amount": amount})
+        rate = data.get("hourly_rate")
+        rate = as_float(rate, "hourly_rate") if rate not in (None, "") else 0.0
+        if rate <= 0 and sheets.filtered(lambda t: t.billable and not t.invoice_id):
+            raise ApiError(400, "invalid_parameter", "Taux horaire : montant positif attendu.", fields=["hourly_rate"])
+        invoice = sheets.action_invoice(rate, extra)
         return move_summary(invoice)

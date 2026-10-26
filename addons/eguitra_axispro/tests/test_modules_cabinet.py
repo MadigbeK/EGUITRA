@@ -1,9 +1,10 @@
 """Modules du cabinet (audit du noyau et de l'application web, lot 3) : devise du dossier dans le
 portefeuille, les financements et le modèle financier (I-X3), seuil partiel égal à 0 (I-X4), nombres
-à la française dans les textes (M8)."""
+à la française dans les textes, poids, heures et taux horaire contrôlés (M8)."""
 
 import re
 
+from odoo.exceptions import UserError, ValidationError
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
@@ -253,3 +254,86 @@ class TestModulesCabinetApi(ApiCase):
         sheets = self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 1.5, "description": "Analyse"})
         names = sheets.action_invoice(200_000).invoice_line_ids.mapped("name")
         self.assertTrue(any(name.endswith("(1,5 h)") for name in names), names)
+
+    # ─── M8 : saisies contrôlées ──────────────────────────────────────────
+
+    def test_poids_et_reglages_de_la_grille_controles(self):
+        """M8 et C1 : ni poids négatif, ni DSCR bancaire vide ou nul, ni seuil d'indicateur vide, ni intitulé vide
+        dans l'éditeur de la grille."""
+        draft = self.policy.copy_as_new_version()
+        domain = draft.domain_ids.filtered(lambda d: d.code == "D01")
+        criterion = draft.criterion_ids.filtered(lambda c: c.code == "C002")
+        for path, payload, field in (
+            (f"/axispro/domains/{domain.id}", {"weight": -1}, "weight"),
+            (f"/axispro/domains/{domain.id}", {"weight": None}, "weight"),
+            (f"/axispro/domains/{domain.id}", {"name": ""}, "name"),
+            (f"/axispro/criteria/{criterion.id}", {"weight": -0.5}, "weight"),
+            (f"/axispro/criteria/{criterion.id}", {"indicator_threshold": None}, "indicator_threshold"),
+            (f"/axispro/criteria/{criterion.id}", {"name": "  "}, "name"),
+            (f"/axispro/policies/{draft.id}", {"dscr_target": 0}, "dscr_target"),
+            (f"/axispro/policies/{draft.id}", {"dscr_target": None}, "dscr_target"),
+            (f"/axispro/policies/{draft.id}", {"dscr_target": 130}, "dscr_target"),
+            (f"/axispro/policies/{draft.id}", {"name": " "}, "name"),
+        ):
+            with self.subTest(path=path, payload=payload):
+                status, body = self.call("PATCH", path, payload, token=self.token)
+                self.assertEqual((status, body.get("fields")), (400, [field]), body)
+        self.env.invalidate_all()
+        self.assertEqual((domain.weight, criterion.weight, criterion.indicator_threshold, draft.dscr_target),
+                         (1.0, 2.0, 1000.0, 1.3), "Rien n'a changé")
+
+        for path, payload in ((f"/axispro/domains/{domain.id}", {"weight": 0}),
+                              (f"/axispro/criteria/{criterion.id}", {"weight": 2.5, "indicator_threshold": 0}),
+                              (f"/axispro/policies/{draft.id}", {"dscr_target": 1.25})):
+            status, body = self.call("PATCH", path, payload, token=self.token)
+            self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        self.assertEqual((domain.weight, criterion.weight, criterion.indicator_threshold, draft.dscr_target),
+                         (0.0, 2.5, 0.0, 1.25), "Un poids nul et un seuil de 0 se saisissent")
+        with self.assertRaises(ValidationError):
+            domain.weight = -2
+        with self.assertRaises(ValidationError):
+            criterion.weight = -1
+
+    def test_temps_et_honoraires_controles(self):
+        """M8 : heures positives, taux horaire et lignes de la facture d'honoraires positifs."""
+        dossier = self._dossier()
+        for hours in (0, -2, "abc"):
+            with self.subTest(hours=hours):
+                status, body = self.call("POST", "/axispro/timesheets",
+                                         {"dossier_id": dossier.id, "hours": hours, "description": "Analyse"},
+                                         token=self.token)
+                self.assertEqual(status, 400, body)
+        status, body = self.call("POST", "/axispro/timesheets",
+                                 {"dossier_id": dossier.id, "hours": 1.5, "description": "  "}, token=self.token)
+        self.assertEqual((status, body.get("fields")), (400, ["description"]), body)
+        status, body = self.call("POST", "/axispro/timesheets",
+                                 {"dossier_id": 999999, "hours": 1.5, "description": "Analyse"}, token=self.token)
+        self.assertEqual(status, 404, body)
+        self.env.invalidate_all()
+        self.assertFalse(self.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)]), "Aucun temps enregistré")
+        status, body = self.call("POST", "/axispro/timesheets",
+                                 {"dossier_id": dossier.id, "hours": 1.5, "description": "Analyse du plan d'affaires"},
+                                 token=self.token)
+        self.assertEqual(status, 200, body)
+        with self.assertRaises(ValidationError):
+            self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": -1, "description": "Erreur"})
+
+        invoice_path = f"/axispro/dossiers/{dossier.id}/invoice"
+        for payload, field in (({"hourly_rate": 0}, "hourly_rate"), ({}, "hourly_rate"),
+                               ({"hourly_rate": 200_000, "lines": [{"name": "Déplacement", "amount": 0}]}, "lines"),
+                               ({"hourly_rate": 200_000, "lines": [{"name": " ", "amount": 50_000}]}, "lines")):
+            with self.subTest(payload=payload):
+                status, body = self.call("POST", invoice_path, payload, token=self.token)
+                self.assertEqual((status, body.get("fields")), (400, [field]), body)
+        self.env.invalidate_all()
+        sheets = self.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)])
+        self.assertFalse(sheets.invoice_id, "Aucune facture après un refus")
+        status, body = self.call("POST", invoice_path, {"hourly_rate": 200_000}, token=self.token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["amount_untaxed"], 300_000)
+        pending = self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 1, "description": "Revue"})
+        with self.assertRaises(UserError):
+            pending.action_invoice(0)
+        with self.assertRaises(UserError):
+            pending.action_invoice(200_000, [{"name": "Remise", "amount": -10_000}])

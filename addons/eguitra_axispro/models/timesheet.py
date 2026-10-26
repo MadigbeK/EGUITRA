@@ -1,7 +1,7 @@
 """Temps passés par dossier et facturation des prestations du cabinet."""
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 # Services de MB AxisPro Consulting (activités analytiques du cabinet). Les honoraires des dossiers
 # d'AxisPro Suite relèvent de la gestion de projets ; les autres services se facturent depuis Finance.
@@ -31,6 +31,14 @@ class AxisproTimesheet(models.Model):
     billable = fields.Boolean("Facturable", default=True)
     invoice_id = fields.Many2one("account.move", "Facture", readonly=True, copy=False)
 
+    @api.constrains("hours")
+    def _check_hours(self):
+        # Des heures nulles ou négatives fausseraient la charge, le carnet à facturer et la facture
+        # d'honoraires (audit du noyau, M8).
+        for sheet in self:
+            if sheet.hours <= 0:
+                raise ValidationError("Temps passé : nombre d'heures positif attendu.")
+
     def _activity_account(self, company, name=PROJECT_ACTIVITY):
         plan = self.env.ref("eguitra_base.analytic_plan_activite")
         Analytic = self.env["account.analytic.account"].sudo()
@@ -54,10 +62,16 @@ class AxisproTimesheet(models.Model):
                 self._activity_account(company, name)
 
     def action_invoice(self, hourly_rate, extra_lines=None):
-        """Facture d'honoraires du cabinet : une ligne par consultant, au taux horaire indiqué."""
+        """Facture d'honoraires du cabinet : une ligne par consultant, au taux horaire indiqué (positif :
+        un taux nul facturerait les temps à zéro et les sortirait du carnet à facturer), et des lignes
+        complémentaires de montant positif."""
         lines = self.filtered(lambda t: t.billable and not t.invoice_id)
         if not lines and not extra_lines:
             raise UserError("Aucun temps facturable non encore facturé.")
+        if lines and not hourly_rate > 0:
+            raise UserError("Taux horaire : montant positif attendu pour facturer les temps.")
+        if any(not extra.get("amount", 0) > 0 for extra in extra_lines or []):
+            raise UserError("Ligne complémentaire de la facture : montant positif attendu.")
         dossier = (lines.dossier_id or self.dossier_id)[:1]
         company = dossier.company_id
         income = self.env["account.account"].search(

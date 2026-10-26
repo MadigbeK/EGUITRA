@@ -20,7 +20,7 @@ import re
 import unicodedata
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, workbook_sheets, xlsx_row
 
@@ -580,6 +580,13 @@ class AxisproDomain(models.Model):
     deliverable = fields.Char("Livrable type pour combler un écart")
     compartment_id = fields.Many2one("axispro.compartment", "Compartiment", ondelete="set null", index=True)
 
+    @api.constrains("weight")
+    def _check_weight(self):
+        # Un poids négatif retrancherait des points au score (audit du noyau, M8) ; 0 retire le domaine.
+        for domain in self:
+            if domain.weight < 0:
+                raise ValidationError(f"Domaine {domain.code} : pondération positive ou nulle attendue.")
+
 
 class AxisproCriterion(models.Model):
     _name = "axispro.criterion"
@@ -605,6 +612,13 @@ class AxisproCriterion(models.Model):
     indicator_threshold = fields.Float("Seuil de satisfaction")
     indicator_has_partial = fields.Boolean("Seuil partiel défini")
     indicator_partial = fields.Float("Seuil de satisfaction partielle")
+
+    @api.constrains("weight")
+    def _check_weight(self):
+        # Un poids négatif retrancherait des points au score (audit du noyau, M8) ; 0 retire le critère.
+        for criterion in self:
+            if criterion.weight < 0:
+                raise ValidationError(f"Critère {criterion.code} : poids positif ou nul attendu.")
 
     def default_deliverable(self):
         self.ensure_one()
