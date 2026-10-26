@@ -38,7 +38,7 @@ def _flatten(value):
     if isinstance(value, (list, tuple)):
         if all(_scalar(v) for v in value):
             return ", ".join("" if v is None else str(v) for v in value)
-        return f"{len(value)} élément(s)"
+        return f"{len(value)} élément{'s' if len(value) > 1 else ''}"
     if isinstance(value, dict):
         return " ; ".join(f"{_label(k)} : {_flatten(v)}" for k, v in value.items() if _scalar(v))
     return value

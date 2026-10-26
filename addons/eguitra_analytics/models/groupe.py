@@ -108,6 +108,11 @@ def _num(value, digits=0):
     return f"{value:,.{digits}f}".replace(",", " ").replace(".", ",")
 
 
+def _n(count, one, many=None):
+    """« 1 rotation », « 3 rotations » : nombre à la française et nom accordé."""
+    return f"{_num(count)} {one if abs(count or 0) < 2 else (many or one + 's')}"
+
+
 def _days(value):
     """Délai à une décimale, même règle que l'écran (eguitra_finance.formats.days) : « 56,5 jours »."""
     return days(value)
@@ -859,7 +864,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             "solvabilite": {
                 "score": leverage_score, "label": "Solvabilité", "value": leverage, "unit": "ratio",
                 "comment": ("Pas de dette financière nette." if net_debt <= 0 else
-                            f"Dette financière nette de {gnf(net_debt)}, soit {_num(leverage, 1)} année(s) d'EBE "
+                            f"Dette financière nette de {gnf(net_debt)}, soit {_num(leverage, 1)} {'année' if leverage < 2 else 'années'} d'EBE "
                             "(4 ans et plus = 0, 1 an et moins = 100)." if leverage is not None else
                             f"Dette financière nette de {gnf(net_debt)} pour un EBE nul ou négatif sur douze mois."),
             },
@@ -1442,7 +1447,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if summary["unpaid_amount"] > 0.5:
             items.append(insight(
                 "rentabilite.loyers_impayes", "rentabilite", "medium", "Des loyers échus restent impayés",
-                f"{summary['unpaid_count']} quittance(s) échue(s) non réglée(s), {gnf(summary['unpaid_amount'])} au total.",
+                f"{_n(summary['unpaid_count'], 'quittance échue non réglée', 'quittances échues non réglées')}, {gnf(summary['unpaid_amount'])} au total.",
                 metric=_metric("Impayés", summary["unpaid_amount"], "gnf"), impact_gnf=summary["unpaid_amount"],
                 confidence=0.9, method="Factures de loyer comptabilisées, échues et non réglées.",
                 action="Relancer les locataires et appliquer les clauses du bail (dépôt de garantie, résiliation).",
@@ -1452,7 +1457,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             yield_pct = summary["gross_yield_pct"] or 0.0
             lost = sum(p["value"] for p in vacant) * yield_pct / 100
             items.append(insight(
-                "rentabilite.biens_vacants", "rentabilite", "medium", f"{len(vacant)} bien(s) sans locataire",
+                "rentabilite.biens_vacants", "rentabilite", "medium", f"{_n(len(vacant), 'bien')} sans locataire",
                 "Biens vacants : " + ", ".join(p["name"] for p in vacant[:5]) + "."
                 + (f" Au rendement moyen du parc ({pct(yield_pct)}), le manque à gagner approche {gnf(lost)} par an."
                    if lost else ""),
@@ -1673,7 +1678,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             week = fc["weeks"][runway["weeks_p50"] - 1]
             items.append(insight(
                 "tresorerie.seuil_franchi", "tresorerie", "critical",
-                f"La trésorerie passe sous {floor_label} dans {runway['weeks_p50']} semaine(s)",
+                f"La trésorerie passe sous {floor_label} dans {_n(runway['weeks_p50'], 'semaine')}",
                 f"Dans le scénario central, le solde des banques et caisses tombe à {gnf(week['balance_p50'])} la semaine "
                 f"du {week['start']:%d/%m/%Y} ; point bas de {gnf(runway['low_point']['balance_p50'])}.",
                 metric=_metric("Solde au point bas", runway["low_point"]["balance_p50"], "gnf", threshold, "Seuil"),
@@ -1683,7 +1688,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             week = fc["weeks"][runway["weeks_p10"] - 1]
             items.append(insight(
                 "tresorerie.risque_seuil", "tresorerie", "high",
-                f"Une chance sur dix de passer sous {floor_label} d'ici {runway['weeks_p10']} semaine(s)",
+                f"Une chance sur dix de passer sous {floor_label} d'ici {_n(runway['weeks_p10'], 'semaine')}",
                 f"Le scénario central reste au-dessus du seuil, mais si les clients paient comme dans leurs pires délais "
                 f"observés, le solde tombe à {gnf(week['balance_p10'])} la semaine du {week['start']:%d/%m/%Y}.",
                 metric=_metric("Solde p10 au point bas", runway["low_point"]["balance_p10"], "gnf", threshold, "Seuil"),
@@ -1978,7 +1983,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             if severity:
                 items.append(insight(
                     "clients.concentration", "clients", severity,
-                    f"Le chiffre d'affaires dépend de {concentration['pareto_count']} client(s)",
+                    f"Le chiffre d'affaires dépend de {_n(concentration['pareto_count'], 'client')}",
                     f"{top['first_name']} pèse {pct(first)} du chiffre d'affaires de la période, les cinq premiers "
                     f"{pct(top['top5'])} ; indice HHI de {_num(hhi)} ("
                     + ("très concentré" if hhi > 2500 else "modérément concentré") + ")."
@@ -1999,7 +2004,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if exposed:
             amount = sum(r["open"] for r in exposed)
             items.append(insight(
-                "clients.a_securiser", "clients", "high", f"{len(exposed)} client(s) majeur(s) paient mal",
+                "clients.a_securiser", "clients", "high", f"{_n(len(exposed), 'client majeur paie', 'clients majeurs paient')} mal",
                 "Clients qui font l'essentiel du chiffre d'affaires mais paient en retard : "
                 + ", ".join(f"{r['name']} (note {r['payment_score']}, retard moyen {_days(r['avg_days_late'])})"
                             for r in exposed[:3]) + f" ; encours de {gnf(amount)}.",
@@ -2048,7 +2053,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if share and share >= 60:
             items.append(insight(
                 "clients.bons_payeurs", "clients", "positive", f"{pct(share, 0)} du chiffre d'affaires vient de bons payeurs",
-                f"{len(good)} client(s) ont une note de paiement d'au moins 80 sur 100.",
+                f"{_n(len(good), 'client a', 'clients ont')} une note de paiement d'au moins 80 sur 100.",
                 metric=_metric("Part des bons payeurs", share, "pct"), confidence=0.7, method=segments["method"],
                 link="/analyse/clients"))
         return items
@@ -2272,7 +2277,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 items.append(insight(
                     f"transport.route_marge_negative.{row['id']}", "transport", "critical" if direct else "high",
                     f"La route {row['name']} perd de l'argent",
-                    f"Sur la période, {row['rotations']} rotation(s) ont dégagé une marge directe de "
+                    f"Sur la période, {_n(row['rotations'], 'rotation a', 'rotations ont')} dégagé une marge directe de "
                     f"{pct(row['margin_rate'])}" + ("" if direct else
                                                     f", ramenée à {gnf(row['net_result'])} après charges de structure")
                     + f". Tarif moyen de {_num(row['avg_rate'])} GNF/m³ pour un point mort de {_num(row['breakeven_rate'])} "
@@ -2298,7 +2303,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 items.append(insight(
                     f"transport.ensemble_deficitaire.{row['id']}", "transport", "high",
                     f"L'ensemble {row['name']} est déficitaire après structure",
-                    f"{row['rotations']} rotation(s), {_num(row['km'])} km, marge directe de {gnf(row['margin'])} mais "
+                    f"{_n(row['rotations'], 'rotation')}, {_num(row['km'])} km, marge directe de {gnf(row['margin'])} mais "
                     f"résultat net de {gnf(row['net_result'])} une fois sa part de structure absorbée ; taux "
                     f"d'utilisation de {pct(row['utilization_pct'], 0)}.",
                     metric=_metric("Résultat net", row["net_result"], "gnf", 0, "Équilibre"), impact_gnf=-row["net_result"],
@@ -2324,7 +2329,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             worst = over[0]
             items.append(insight(
                 "transport.consommation_anormale", "transport", "high",
-                f"{len(over)} rotation(s) à consommation anormale",
+                f"{_n(len(over), 'rotation')} à consommation anormale",
                 f"{_num(liters)} litres au-delà de la consommation habituelle, soit {gnf(cost)}. Écart le plus net : "
                 f"rotation {worst['rotation']} ({worst['truck']}, {worst['route']}) à {_num(worst['value'], 1)} L/100 km "
                 f"pour {_num(worst['expected'], 1)} attendus.",
@@ -2350,7 +2355,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if late:
             amount = sum(u["revenue"] for u in late)
             items.append(insight(
-                "transport.non_facture", "transport", "high", f"{len(late)} rotation(s) livrée(s) non facturée(s)",
+                "transport.non_facture", "transport", "high", _n(len(late), 'rotation livrée non facturée', 'rotations livrées non facturées'),
                 f"{gnf(amount)} de prestations validées depuis plus de 30 jours attendent leur facture.",
                 metric=_metric("Non facturé", amount, "gnf"), impact_gnf=amount, confidence=0.95,
                 method="Rotations validées non facturées, livrées depuis plus de 30 jours.",
@@ -2362,7 +2367,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             items.append(insight(
                 f"transport.meilleure_route.{best['id']}", "transport", "positive",
                 f"La route {best['name']} est la plus rentable",
-                f"Marge directe de {pct(best['margin_rate'])} sur {best['rotations']} rotation(s), tarif moyen de "
+                f"Marge directe de {pct(best['margin_rate'])} sur {_n(best['rotations'], 'rotation')}, tarif moyen de "
                 f"{_num(best['avg_rate'])} GNF/m³.", metric=_metric("Marge", best["margin_rate"], "pct", target, "Seuil"),
                 confidence=_confidence(best["rotations"], 12), method="Marge directe par route.",
                 link=f"/analyse/transport?route={best['id']}"))
@@ -2562,7 +2567,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                     if relative <= 0.01:
                         score = 40 + 30 * (1 - relative / 0.01) + 30 * (1 - days / 30)
                         reasons = ["montant identique" if relative < 1e-9 else "montant à moins de 1 %",
-                                   f"{days} jour(s) d'écart"]
+                                   f"{_n(days, 'jour')} d'écart"]
                         # Même montant facturé chaque mois (loyer, contrat de carburant) : récurrence probable.
                         if days >= 25 and repeats.get(round(a["amount"]), 0) >= 3:
                             score = min(score, 45.0)
@@ -2606,7 +2611,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             amount = sum(d["amount_at_risk"] for d in duplicates)
             top = duplicates[0]
             items.append(insight(
-                "depenses.doublons", "depenses", "high", f"{len(duplicates)} facture(s) fournisseur suspecte(s) de doublon",
+                "depenses.doublons", "depenses", "high", f"{_n(len(duplicates), 'facture fournisseur suspecte', 'factures fournisseur suspectes')} de doublon",
                 f"{gnf(amount)} en jeu. Exemple : {top['a']['name']} et {top['b']['name']} de {top['partner']} "
                 f"({', '.join(top['reasons'])}).", metric=_metric("Montant en jeu", amount, "gnf"), impact_gnf=amount,
                 confidence=0.8, method="Même fournisseur et même référence, ou montant à 1 % près à moins de 30 jours.",
@@ -2638,7 +2643,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if outliers:
             excess = sum(o["amount"] - o["median"] for o in outliers)
             items.append(insight(
-                "depenses.montants_inhabituels", "depenses", "medium", f"{len(outliers)} dépense(s) d'un montant inhabituel",
+                "depenses.montants_inhabituels", "depenses", "medium", f"{_n(len(outliers), 'dépense')} d'un montant inhabituel",
                 "La plus nette : " + f"{outliers[0]['move']} ({outliers[0]['category_label']}), {gnf(outliers[0]['amount'])} "
                 f"pour un montant habituel de {gnf(outliers[0]['median'])}.",
                 metric=_metric("Écart cumulé", excess, "gnf"), impact_gnf=excess, confidence=0.6,
@@ -2923,7 +2928,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return self._check(
             "analytic", "Imputation analytique", value, "pct", 95.0,
             stats.linear_score(value, 50, 95) if value is not None else None,
-            f"{missing_count} ligne(s) de charges ou de produits sans activité ({gnf(total - covered)}).", "/finance/ecritures",
+            f"{_n(missing_count, 'ligne')} de charges ou de produits sans activité ({gnf(total - covered)}).", "/finance/ecritures",
             "Part (en montant) des lignes de charges et de produits de la période imputées sur l'axe Activité.",
             "Compléter l'imputation des pièces (activité) : sans elle, la rentabilité par activité est faussée.",
             count=missing_count, amount=total - covered)
@@ -2940,7 +2945,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         oldest = min(pending.mapped("date")) if pending else None
         return self._check(
             "bank_reconciled", "Relevés rapprochés", value, "pct", 100.0, stats.linear_score(value, 80, 100),
-            f"{len(pending)} ligne(s) de relevé à rapprocher" + (f", la plus ancienne du {oldest:%d/%m/%Y}." if oldest else "."),
+            f"{_n(len(pending), 'ligne')} de relevé à rapprocher" + (f", la plus ancienne du {oldest:%d/%m/%Y}." if oldest else "."),
             "/finance/tresorerie/rapprochement", "Part des lignes de relevé bancaire rapprochées à la date d'arrêté.",
             "Rapprocher les lignes de relevé : la trésorerie et les encaissements clients en dépendent.",
             count=len(pending), amount=sum(abs(a) for a in pending.mapped("amount")))
@@ -2961,7 +2966,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         value = (len(bills) - missing) / len(bills) * 100
         return self._check(
             "attachments", "Pièces justificatives", value, "pct", 100.0, stats.linear_score(value, 50, 100),
-            f"{missing} facture(s) fournisseur sans justificatif joint.", "/finance/achats",
+            f"{_n(missing, 'facture fournisseur', 'factures fournisseur')} sans justificatif joint.", "/finance/achats",
             "Part des factures et avoirs fournisseurs de la période portant au moins une pièce jointe.",
             "Joindre la facture numérisée à chaque pièce d'achat (contrôle fiscal, audit).", count=missing)
 
@@ -2986,7 +2991,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         value = late / len(delays) * 100
         return self._check(
             "late_entries", "Saisie dans les délais", value, "pct", 5.0, stats.linear_score(value, 30, 5),
-            f"{late} pièce(s) saisie(s) plus de 30 jours après leur date (délai médian {_days(stats.median(delays))}).",
+            f"{_n(late, 'pièce saisie', 'pièces saisies')} plus de 30 jours après leur date (délai médian {_days(stats.median(delays))}).",
             "/finance/ecritures",
             "Part des pièces de la période saisies plus de 30 jours après leur date (pièces datées après la mise en service).",
             "Saisir les pièces au fil de l'eau : une comptabilité en retard rend les analyses et la trésorerie fausses.",
@@ -2999,7 +3004,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         count = Move.search_count(domain)
         return self._check(
             "old_drafts", "Pièces en brouillon anciennes", count, "count", 0, stats.linear_score(count, 10, 0),
-            f"{count} pièce(s) en brouillon datée(s) de plus de 30 jours.", "/finance/ecritures",
+            f"{_n(count, 'pièce en brouillon datée', 'pièces en brouillon datées')} de plus de 30 jours.", "/finance/ecritures",
             "Pièces non comptabilisées dont la date a plus de 30 jours : absentes des états et des analyses.",
             "Valider ou supprimer ces brouillons.", count=count)
 
@@ -3044,7 +3049,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         value = (len(partners) - len(missing)) / len(partners) * 100
         return self._check(
             "partners_vat", "Tiers identifiés (NIF)", value, "pct", 100.0, stats.linear_score(value, 50, 100),
-            f"{len(missing)} tiers facturé(s) sans NIF : " + ", ".join(missing[:5].mapped("name")) + ".", "/finance/tiers",
+            f"{_n(len(missing), 'tiers facturé', 'tiers facturés')} sans NIF : " + ", ".join(missing[:5].mapped("name")) + ".", "/finance/tiers",
             "Part des clients et fournisseurs facturés sur la période dont la fiche porte un NIF.",
             "Compléter le NIF des tiers (déclarations fiscales, retenues à la source).", count=len(missing))
 
@@ -3060,7 +3065,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         amount = sum(late.mapped("revenue"))
         return self._check(
             "unbilled_rotations", "Rotations facturées", len(late), "count", 0, stats.linear_score(len(late), 10, 0),
-            f"{len(late)} rotation(s) validée(s) non facturée(s) depuis plus de 30 jours ({gnf(amount)}).",
+            f"{_n(len(late), 'rotation validée non facturée', 'rotations validées non facturées')} depuis plus de 30 jours ({gnf(amount)}).",
             "/transport/rotations", "Rotations validées, livrées depuis plus de 30 jours et non facturées.",
             "Facturer les rotations livrées.", count=len(late), amount=amount)
 
@@ -3075,7 +3080,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return self._check(
             "tiers_without_partner", "Lignes de tiers rattachées", int(count), "count", 0,
             stats.linear_score(int(count), 20, 0),
-            f"{count} ligne(s) de compte client ou fournisseur sans tiers ({gnf(float(amount))}).", "/finance/ecritures",
+            f"{_n(count, 'ligne')} de compte client ou fournisseur sans tiers ({gnf(float(amount))}).", "/finance/ecritures",
             "Lignes des comptes clients et fournisseurs de la période sans tiers : absentes des balances âgées.",
             "Renseigner le tiers de ces lignes.", count=int(count), amount=float(amount))
 
@@ -3085,7 +3090,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         count = unmapped + len(sheet["unmapped_accounts"])
         return self._check(
             "unmapped_accounts", "Comptes classés dans les états", count, "count", 0, stats.linear_score(count, 10, 0),
-            f"{count} compte(s) mouvementé(s) hors des rubriques SYSCOHADA.", "/finance/etats",
+            f"{_n(count, 'compte mouvementé', 'comptes mouvementés')} hors des rubriques SYSCOHADA.", "/finance/etats",
             "Comptes mouvementés qu'aucune rubrique du bilan ou du compte de résultat ne reprend.",
             "Faire valider le classement de ces comptes par l'expert-comptable.", count=count)
 
@@ -3099,7 +3104,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         value = with_fuel / len(period) * 100
         return self._check(
             "rotations_fuel", "Litres de carburant saisis", value, "pct", 90.0, stats.linear_score(value, 30, 90),
-            f"{len(period) - with_fuel} rotation(s) sans litres de carburant : consommation non contrôlable.",
+            f"{_n(len(period) - with_fuel, 'rotation')} sans litres de carburant : consommation non contrôlable.",
             "/transport/rotations", "Part des rotations de la période dont les litres de carburant sont saisis.",
             "Saisir les litres (bon de carburant) sur chaque rotation, au bureau ou dans l'application Rotations.",
             count=len(period) - with_fuel)
@@ -3117,5 +3122,5 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                  if c["status"] in ("bad", "warn") and c["detail"]]
         if name in ("tresorerie", "clients"):
             history = self._payment_history(ctx)
-            notes.append(f"Délais de paiement appris sur {len(history)} facture(s) réglée(s) en 24 mois.")
+            notes.append(f"Délais de paiement appris sur {_n(len(history), 'facture réglée', 'factures réglées')} en 24 mois.")
         return {"score": score, "notes": (notes + ctx.notes)[:6]}

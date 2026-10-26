@@ -116,6 +116,11 @@ def _n(count, one, many=None):
     return f"{count} {one if count < 2 else (many or one + 's')}"
 
 
+def _n_fr(value, one, many, digits=1):
+    """« 1,5 point », « 2,5 points » : nombre décimal à la française et nom accordé."""
+    return f"{_fr(value, digits)} {one if abs(value or 0) < 2 else many}"
+
+
 def _refs(dossiers, limit=3):
     names = [d.reference or d.name for d in dossiers[:limit]]
     more = len(dossiers) - limit
@@ -478,7 +483,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         (déjà contrôlée par la route). La réponse est celle de la spécification 6.6, la même pour tous les
         profils de la section : heures par consultant et par semaine (noms des consultants), rentabilité
         et carnet par dossier (référence, nom et consultant du dossier), honoraires par ligne de service.
-        Aucune pièce, évaluation ni donnée du porteur n'y figure (décision du gérant sur M14)."""
+        Aucune pièce, évaluation ni donnée du porteur n'y figure (arbitrage du 26 octobre 2026)."""
         user = self.env.user
         trusted = self.env.su or user.has_group("eguitra_base.group_profile_cabinet") or \
             user.has_group("eguitra_base.group_profile_direction")
@@ -836,7 +841,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                           "exclus des durées.", 20 * len(incomplete) / len(b.dossiers)))
         foreign = live.filtered(lambda d: d.currency_id and d.currency_id != b.company.currency_id)
         if foreign:
-            notes.append((f"{_n(len(foreign), 'dossier')} en devise, converti(s) au cours du "
+            notes.append((f"{_n(len(foreign), 'dossier')} en devise, {'converti' if len(foreign) < 2 else 'convertis'} au cours du "
                           f"{b.date_to:%d/%m/%Y}.", 0))
         return notes
 
@@ -919,7 +924,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                     f"Seuls {pct(ratio)} du besoin de financement sont bancables à court terme",
                     f"Pondéré par la probabilité de bancabilité de chaque dossier, le pipeline vaut "
                     f"{gnf(pipeline['weighted'])} pour {gnf(total_need)} de besoin de financement."
-                    + (f" {_n(len(near), 'dossier est', 'dossiers sont')} proche(s) du seuil (Bankability entre 55 et 75)."
+                    + (f" {_n(len(near), 'dossier est proche', 'dossiers sont proches')} du seuil (Bankability entre 55 et 75)."
                        if near else ""),
                     metric={"label": "Pipeline pondéré / besoin", "value": ratio, "unit": "pct", "reference": 50.0,
                             "reference_label": "Portefeuille équilibré"},
@@ -980,7 +985,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     f"cabinet.prevision.{target['gate']}", "portefeuille", "info",
                     f"Dossiers attendus au gate {target['gate']} ({target['label']}) dans les six mois",
-                    f"Au rythme observé, {_fr(target['expected_6m'] or 0, 1)} arrivée(s) attendue(s) en six mois "
+                    f"Au rythme observé, {_n_fr(target['expected_6m'] or 0, 'arrivée attendue', 'arrivées attendues')} en six mois "
                     f"({_fr(target['expected_3m'] or 0, 1)} en trois mois)"
                     + (f" ; {_n(len(soon), 'dossier')} en approche d'ici trois mois : {_refs([b.env['axispro.dossier'].browse(c['id']) for c in soon])}."
                        if soon else "."),
@@ -1194,7 +1199,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         notes = []
         if backlog:
             total_due = sum(info["due"] for info in gaps.values())
-            notes.append((f"{_n(backlog, 'critère')} des gates atteints reste(nt) à évaluer sur "
+            notes.append((f"{_n(backlog, 'critère')} des gates atteints {'reste' if backlog < 2 else 'restent'} à évaluer sur "
                           f"{_n(len(backlog_dossiers), 'dossier')} : écarts sous-estimés d'autant.",
                           40 * backlog / total_due if total_due else 0))
         if not live:
@@ -1335,7 +1340,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             out.append(insight(
                 f"cabinet.domaine_faible.{dom['code']}", "diagnostic", "medium",
                 f"Le domaine {dom['label']} est le point faible du portefeuille",
-                f"Score moyen de {_fr(dom['mean'], 1)}/100 sur les critères exigés et évalués, {dom['weak']} dossier(s) "
+                f"Score moyen de {_fr(dom['mean'], 1)}/100 sur les critères exigés et évalués, {_n(dom['weak'], 'dossier')} "
                 f"sur {dom['n']} sous 50.",
                 metric={"label": "Score moyen du domaine", "value": dom["mean"], "unit": "score", "reference": 50.0,
                         "reference_label": "Priorité élevée en dessous"},
@@ -1395,9 +1400,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         if backlog:
             out.append(insight(
                 "cabinet.evaluations_en_retard", "diagnostic", "medium",
-                f"{_n(backlog, 'critère')} des gates atteints reste(nt) à évaluer",
+                f"{_n(backlog, 'critère')} des gates atteints {'reste' if backlog < 2 else 'restent'} à évaluer",
                 f"Sur {_n(len(backlog_dossiers), 'dossier')}, la recommandation reste « à compléter » tant que ces "
-                f"critères ne sont pas évalués" + (f", dont {pending_ko} éliminatoire(s)." if pending_ko else "."),
+                f"critères ne sont pas évalués" + (f", dont {_n(pending_ko, 'éliminatoire')}." if pending_ko else "."),
                 metric={"label": "Critères à évaluer", "value": backlog, "unit": "count", "reference": 0,
                         "reference_label": "Cible"},
                 confidence=0.9,
@@ -1423,7 +1428,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         if velocity is not None and velocity > 0:
             out.append(insight(
                 "cabinet.progression", "diagnostic", "positive",
-                f"Les dossiers gagnent {_fr(velocity, 1)} point(s) de Readiness par mois",
+                f"Les dossiers gagnent {_n_fr(velocity, 'point', 'points')} de Readiness par mois",
                 f"{_n(progression['improving'], 'dossier progresse', 'dossiers progressent')} depuis leur première revue "
                 "de comité (vitesse médiane).",
                 metric={"label": "Gain médian mensuel", "value": velocity, "unit": "score", "reference": None,
@@ -1531,7 +1536,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         favorable_ko = [r for r in period_reviews if r.decision in PASSING_DECISIONS and _knockouts_confirmes(r.snapshot)]
         notes = []
         if drafts:
-            notes.append((f"{_n(len(drafts), 'revue de comité', 'revues de comité')} de la période non verrouillée(s) : "
+            notes.append((f"{_n(len(drafts), 'revue de comité de la période non verrouillée', 'revues de comité de la période non verrouillées')} : "
                           "hors analyse des décisions.", 10 * len(drafts) / (len(drafts) + len(period_reviews))))
         missing = period_reviews.filtered(lambda r: not r.recommendation)
         if missing:
@@ -1630,7 +1635,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     "cabinet.delai_decision", "comites", "medium",
                     f"{_days(median)} en médiane avant la première décision du comité",
-                    f"Mesuré sur {_n(time_to_decision['n'], 'dossier')} décidé(s) pour la première fois sur la période.",
+                    f"Mesuré sur {_n(time_to_decision['n'], 'dossier décidé', 'dossiers décidés')} pour la première fois sur la période.",
                     metric={"label": "Délai médian", "value": median, "unit": "days",
                             "reference": float(DECISION_TARGET_DAYS), "reference_label": "Cible"},
                     confidence=_confidence(time_to_decision["n"]),
@@ -1834,7 +1839,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     "cabinet.taux_succes", "financements", "high",
                     f"Seules {pct(success, 0)} des demandes tranchées aboutissent",
-                    f"{len(won)} financement(s) obtenu(s) pour {len(lost)} refus.",
+                    f"{_n(len(won), 'financement obtenu', 'financements obtenus')} pour {len(lost)} refus.",
                     metric={"label": "Taux de succès", "value": success, "unit": "pct", "reference": 50.0,
                             "reference_label": "Repère"},
                     confidence=_confidence(decided),
@@ -1847,7 +1852,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     "cabinet.taux_succes", "financements", "positive",
                     f"{pct(success, 0)} des demandes tranchées aboutissent",
-                    f"{len(won)} financement(s) obtenu(s) pour {len(lost)} refus, {gnf(sum(won.mapped('amount_granted')))} "
+                    f"{_n(len(won), 'financement obtenu', 'financements obtenus')} pour {len(lost)} refus, {gnf(sum(won.mapped('amount_granted')))} "
                     "accordés.",
                     metric={"label": "Taux de succès", "value": success, "unit": "pct", "reference": 50.0,
                             "reference_label": "Repère"},
@@ -1862,7 +1867,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             out.append(insight(
                 f"cabinet.financeur_cle.{top['id']}", "financements", "positive",
                 f"{top['label']} est le premier financeur du portefeuille",
-                f"{gnf(top['granted'])} accordés sur {top['won']} demande(s) obtenue(s), taux de succès de "
+                f"{gnf(top['granted'])} accordés sur {_n(top['won'], 'demande obtenue', 'demandes obtenues')}, taux de succès de "
                 f"{pct(top['success_pct'], 0)}" + (f", décision en {_days(top['median_days'])} en médiane." if top["median_days"] is not None else "."),
                 metric={"label": "Montant accordé", "value": top["granted"], "unit": "gnf", "reference": None,
                         "reference_label": None},
@@ -2576,8 +2581,8 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             oldest = overdue.sorted(lambda a: a.due_date)[0]
             out.append(insight(
                 "cabinet.actions_en_retard", "risques", "high" if share >= 25 else "medium",
-                f"{_n(len(overdue), 'action en retard', 'actions en retard')} sur {actions['open']} ouverte(s)",
-                f"{porteur} confiée(s) aux porteurs, {len(overdue) - porteur} au cabinet ; la plus ancienne : "
+                f"{_n(len(overdue), 'action en retard', 'actions en retard')} sur {actions['open']} {'ouverte' if actions['open'] < 2 else 'ouvertes'}",
+                f"{porteur} {'confiée' if porteur < 2 else 'confiées'} aux porteurs, {len(overdue) - porteur} au cabinet ; la plus ancienne : "
                 f"« {oldest.name} » ({oldest.dossier_id.reference}), échue depuis {_days((b.date_to - oldest.due_date).days)}.",
                 metric={"label": "Part des actions en retard", "value": round(share, 1), "unit": "pct", "reference": 10.0,
                         "reference_label": "Seuil de vigilance"},
@@ -2622,7 +2627,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                     "cabinet.reactivite_porteurs", "risques", "medium",
                     f"Les porteurs mettent {_days(median)} en médiane à fournir une pièce",
                     f"Mesuré sur {_n(responsiveness['n'], 'pièce déposée', 'pièces déposées')} sur la période ; "
-                    f"{_n(responsiveness['pending'], 'pièce reste', 'pièces restent')} attendue(s).",
+                    f"{_n(responsiveness['pending'], 'pièce reste attendue', 'pièces restent attendues')}.",
                     metric={"label": "Délai médian de dépôt", "value": median, "unit": "days",
                             "reference": float(RESPONSE_TARGET_DAYS), "reference_label": "Cible"},
                     confidence=_confidence(responsiveness["n"]),
