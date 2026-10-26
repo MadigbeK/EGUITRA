@@ -39,7 +39,9 @@ from .common import (
 
 SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "created_at": "create_date"}
 # Origine d'une action -> (fiche de l'API, champ de l'action) ; une revue de direction n'a pas de fiche.
-ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id")}
+# Origine « audit » : l'action répond à un constat de l'audit (origin_id : le constat).
+ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id"),
+                  "audit": ("finding", "finding_id")}
 CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",)}
 TRANSITIONS = ("start", "close", "verify", "approve", "cancel", "reopen")
 
@@ -106,9 +108,12 @@ def action_line(action):
         origin_label = action.check_id.reference
     elif action.risk_id:
         origin_label = f"{action.risk_id.reference} {action.risk_id.feared_event[:120]}"
+    elif action.finding_id:
+        origin_label = f"{action.finding_id.reference} {action.finding_id.description[:120]}"
     return {
         "id": action.id, "reference": action.reference, "description": action.description, "origin": action.origin,
-        "origin_id": action.origin_id or action.event_id.id or action.check_id.id or action.risk_id.id or None,
+        "origin_id": action.origin_id or action.event_id.id or action.check_id.id or action.risk_id.id
+        or action.finding_id.id or None,
         "origin_label": origin_label,
         "event": {"id": action.event_id.id, "reference": action.event_id.reference} if action.event_id else None,
         "control_level": action.control_level or None, "owner": user_ref(action.owner_id), "due_date": action.due_date,
@@ -257,6 +262,9 @@ class EguitraHsseqActions(http.Controller):
             if origin in CLOSED_SOURCES and source.status in CLOSED_SOURCES[origin]:
                 raise ApiError(422, "invalid_transition", "Fiche d'origine close ou archivée : rouvrez-la avant d'y "
                                                           "ajouter une action.")
+            if origin == "audit" and source.audit_id.status not in ("planned", "done"):
+                raise ApiError(422, "invalid_transition", "Audit clos ou annulé : rouvrez-le avant d'y ajouter une "
+                                                          "action.")
             company = source.company_id
             values[field] = source.id
         values.update(origin_id=origin_id or 0, company_id=company.id)

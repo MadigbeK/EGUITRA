@@ -47,6 +47,8 @@ class EguitraHsseqAction(models.Model):
                                ondelete="restrict")
     risk_id = fields.Many2one("eguitra.hsseq.risk", "Risque d'origine", check_company=True, index=True,
                               ondelete="restrict")
+    finding_id = fields.Many2one("eguitra.hsseq.finding", "Constat d'audit d'origine", index=True,
+                                 ondelete="restrict")
     description = fields.Text("Action", required=True)
     control_level = fields.Selection(CONTROL_LEVELS, "Niveau de maîtrise")
     owner_id = fields.Many2one("res.users", "Responsable", required=True, index=True)
@@ -70,10 +72,11 @@ class EguitraHsseqAction(models.Model):
     site_id = fields.Many2one("eguitra.hsseq.site", "Site", compute="_compute_site", store=True, index=True)
     reminder_ids = fields.One2many("eguitra.hsseq.action.reminder", "action_id", "Relances")
 
-    @api.depends("event_id.site_id", "check_id.site_id", "risk_id.site_id")
+    @api.depends("event_id.site_id", "check_id.site_id", "risk_id.site_id", "finding_id.site_id")
     def _compute_site(self):
         for action in self:
-            action.site_id = action.event_id.site_id or action.check_id.site_id or action.risk_id.site_id
+            action.site_id = (action.event_id.site_id or action.check_id.site_id or action.risk_id.site_id
+                              or action.finding_id.site_id)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -84,6 +87,8 @@ class EguitraHsseqAction(models.Model):
                 vals["check_id"] = vals["origin_id"]
             if vals.get("origin") == "risk" and vals.get("origin_id") and not vals.get("risk_id"):
                 vals["risk_id"] = vals["origin_id"]
+            if vals.get("origin") == "audit" and vals.get("origin_id") and not vals.get("finding_id"):
+                vals["finding_id"] = vals["origin_id"]
         actions = super().create(vals_list)
         for action in actions:
             action.reference = self.env["ir.sequence"].sudo().next_by_code("eguitra.hsseq.action") or "/"

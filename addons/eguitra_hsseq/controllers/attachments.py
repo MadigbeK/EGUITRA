@@ -13,7 +13,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
 from ..models.common import ATTACHMENT_OBJECTS
-from . import actions, checks, events, risks, waivers
+from . import actions, audits, checks, events, risks, waivers
 from .common import (
     client_uuid,
     existing_by_uuid,
@@ -34,7 +34,8 @@ FORMATS = {"image/jpeg", "image/png", "application/pdf"}
 UPLOADERS = {"admin", "direction", "hsseq", "exploitation", "conducteur"}
 MODELS = {"event": "eguitra.hsseq.event", "action": "eguitra.hsseq.action", "check": "eguitra.hsseq.check",
           "nonconformity": "eguitra.hsseq.nonconformity", "waiver": "eguitra.hsseq.waiver",
-          "risk": "eguitra.hsseq.risk"}
+          "risk": "eguitra.hsseq.risk", "audit": "eguitra.hsseq.audit", "finding": "eguitra.hsseq.finding",
+          "requirement": "eguitra.hsseq.requirement"}
 
 
 def closed(object_key, record):
@@ -43,13 +44,17 @@ def closed(object_key, record):
             "nonconformity": record.status != "open" if object_key == "nonconformity" else False,
             "waiver": record.status not in ("pending_hsseq", "active") if object_key == "waiver" else False,
             "risk": record.status == "archived" if object_key == "risk" else False,
+            "audit": record.status in ("closed", "cancelled") if object_key == "audit" else False,
+            "finding": record.audit_id.status in ("closed", "cancelled") if object_key == "finding" else False,
             }.get(object_key, False)
 
 
 def can_read(object_key, record):
     readers = {"event": events.can_read, "action": actions.can_read, "check": checks.can_read,
                "nonconformity": lambda nc: checks.can_read(nc.check_id), "waiver": waivers.can_read,
-               "risk": risks.can_read}
+               "risk": risks.can_read, "audit": lambda audit: audits.in_scope(audit.site_id),
+               "finding": lambda finding: audits.in_scope(finding.site_id),
+               "requirement": lambda _r: bool(profiles() & set(audits.REQUIREMENT_READ))}
     return object_key in readers and readers[object_key](record)
 
 
@@ -113,7 +118,7 @@ class EguitraHsseqAttachments(http.Controller):
         elif not profiles() & UPLOADERS:
             raise forbidden("Dépôt sans fiche réservé aux profils de NIMOVA · HSSEQ.")
         content, mimetype, name = read_upload()
-        role = "evidence" if object_key == "action" else "photo"
+        role = "evidence" if object_key in ("action", "audit", "finding", "requirement", "risk") else "photo"
         if object_key == "nonconformity" and record.status == "open" and form.get("role") == "lift":
             role = "lift"
         file = request.env["ir.attachment"].sudo().create({

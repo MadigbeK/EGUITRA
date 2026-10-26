@@ -12,7 +12,7 @@ AUDITED_MODELS = [
     "eguitra.hsseq.check.answer", "eguitra.hsseq.nonconformity", "eguitra.hsseq.breath.test", "eguitra.hsseq.waiver", "eguitra.hsseq.lock.reason", "eguitra.hsseq.lock.log",
     "eguitra.hsseq.indicator.snapshot", "eguitra.hsseq.risk", "eguitra.hsseq.risk.measure",
     "eguitra.hsseq.expiry.alert", "eguitra.hsseq.journey", "eguitra.hsseq.journey.stop",
-    "eguitra.hsseq.immobilization",
+    "eguitra.hsseq.immobilization", "eguitra.hsseq.audit", "eguitra.hsseq.finding", "eguitra.hsseq.requirement",
 ]
 
 

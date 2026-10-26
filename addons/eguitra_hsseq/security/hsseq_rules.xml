@@ -113,6 +113,21 @@
         <field name="model_id" ref="model_eguitra_hsseq_immobilization"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_audit_company" model="ir.rule">
+        <field name="name">Audits HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_audit"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_finding_company" model="ir.rule">
+        <field name="name">Constats d'audit : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_finding"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_requirement_company" model="ir.rule">
+        <field name="name">Exigences HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_requirement"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_indicator_snapshot_company" model="ir.rule">
         <field name="name">Indicateurs figés : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>

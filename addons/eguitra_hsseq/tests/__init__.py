@@ -7,3 +7,4 @@ from . import test_auditor
 from . import test_risks
 from . import test_qualifications
 from . import test_lock_lot2
+from . import test_audits
