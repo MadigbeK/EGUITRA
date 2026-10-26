@@ -237,7 +237,6 @@ class EguitraPortailPorteur(http.Controller):
         ranked = sorted(articles, key=lambda a: (not (set(vues.split_list(a.gate_codes)) & codes),
                                                  bool(reactions.get(a.id) and reactions[a.id].viewed_at),
                                                  not a.featured))
-        fundings = dossier.funding_ids
         return {
             "dossier": dict(vues.dossier_ref(dossier, porteur=True), gates=vues.gates_of(dossier),
                             location=dossier.location or None),
@@ -247,9 +246,8 @@ class EguitraPortailPorteur(http.Controller):
             "timeline": vues.timeline(dossier, limit=6),
             "announcements": [vues.announcement_row(a, reads.get(a.id)) for a in announcements[:3]],
             "articles": [vues.article_row(a, reactions.get(a.id), codes) for a in ranked[:3]],
-            "fundings": {"count": len(fundings), "requested": sum(fundings.mapped("amount_requested")),
-                         "granted": sum(fundings.mapped("amount_granted")),
-                         "currency": dossier.currency_id.symbol or dossier.currency_id.name},
+            # Même résumé que « Mon projet » : pistes actives seulement, devise des financements.
+            "fundings": vues.fundings_summary(dossier),
         }
 
     @api_route("/portail/dossiers/<int:dossier_id>/projet", profiles=PORTEUR)
@@ -268,6 +266,7 @@ class EguitraPortailPorteur(http.Controller):
                 promoter=dossier.promoter_id.name),
             "team": team,
             "fundings": [vues.funding_row(f) for f in dossier.funding_ids.sorted(lambda f: (f.state_date or fields.Date.today()), reverse=True)],
+            "fundings_summary": vues.fundings_summary(dossier),
             "timeline": vues.timeline(dossier),
         }
 

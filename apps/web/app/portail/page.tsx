@@ -6,8 +6,13 @@ import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, typ
 import { KIND_ICON, dateLongue, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { useApi } from "@/lib/api-client";
-import { fmtShort } from "@/lib/format";
+import { INSECABLE, fmtShort } from "@/lib/format";
 import type { NextStep, Tableau } from "@/lib/portail-types";
+
+/** Montant abrégé suivi de sa devise, sans coupure de ligne : « 1,74 Md GNF ». */
+function montant(valeur: number, devise: string) {
+  return `${fmtShort(valeur)}${INSECABLE}${devise || "GNF"}`;
+}
 
 const URGENCE: Record<NextStep["urgency"], { tone: Tone; label: string; trait: string }> = {
   high: { tone: "danger", label: "Prioritaire", trait: "bg-danger" },
@@ -36,6 +41,7 @@ export default function AccueilPortail() {
   if (!data) return <Loading label="Préparation de votre espace…" />;
   const d = data.dossier;
   const p = data.preparation;
+  const f = data.fundings;
   const prenom = me.name.split(" ")[0];
   const raccourcis = [
     { href: "/portail/pieces", label: "Déposer une pièce", icon: FileUp },
@@ -161,14 +167,16 @@ export default function AccueilPortail() {
               })}
             </ol>
           )}
-          <Link href="/portail/projet" className="mt-4 flex items-center gap-3 rounded-xl bg-panel-2 px-4 py-3 hover:bg-panel-3">
+          <Link href={`/portail/projet?dossier=${d.id}`} className="mt-4 flex items-center gap-3 rounded-xl bg-panel-2 px-4 py-3 hover:bg-panel-3">
             <HandCoins className="h-5 w-5 text-accent" />
             <span className="flex-1 text-[13px] text-ink-2">
-              {data.fundings.count ? (
+              {f.count ? (
                 <>
-                  <b className="text-ink">{data.fundings.count}</b> piste{data.fundings.count > 1 ? "s" : ""} de financement, <b className="text-ink">{fmtShort(data.fundings.requested)} {data.fundings.currency}</b> sollicités
-                  {data.fundings.granted > 0 && <>, <b className="text-ok">{fmtShort(data.fundings.granted)}</b> accordés</>}
+                  <b className="text-ink">{f.count}</b> piste{f.count > 1 ? "s" : ""} de financement en cours, <b className="text-ink">{montant(f.requested, f.currency)}</b> sollicités
+                  {f.granted > 0 && <>, <b className="text-ok">{montant(f.granted, f.currency)}</b> accordés</>}
                 </>
+              ) : f.closed ? (
+                "Aucune piste de financement en cours : votre consultant vous en proposera de nouvelles."
               ) : (
                 "Le cabinet vous présentera ici les financements recherchés."
               )}

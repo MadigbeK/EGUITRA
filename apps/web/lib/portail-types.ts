@@ -80,7 +80,19 @@ export interface Tableau {
   timeline: TimelineItem[];
   announcements: AnnouncementRow[];
   articles: ArticleRow[];
-  fundings: { count: number; requested: number; granted: number; currency: string };
+  fundings: ResumeFinancements;
+}
+
+/**
+ * Résumé des financements, calculé par le noyau et identique à l'accueil et dans « Mon projet » : pistes
+ * actives (ni refusées ni abandonnées), montants de ces seules pistes, dans la devise des financements.
+ */
+export interface ResumeFinancements {
+  count: number;
+  closed: number;
+  requested: number;
+  granted: number;
+  currency: string;
 }
 
 export interface FundingRow {
@@ -90,6 +102,8 @@ export interface FundingRow {
   instrument_label: string;
   amount_requested: number;
   amount_granted: number;
+  /** Devise des montants du financement (qui peut différer de celle du dossier). */
+  currency: string | null;
   state: "identified" | "submitted" | "review" | "agreed" | "signed" | "disbursed" | "rejected" | "withdrawn";
   state_label: string;
   state_date: string | null;
@@ -111,6 +125,7 @@ export interface Projet {
   };
   team: Array<Person & { role: string }>;
   fundings: FundingRow[];
+  fundings_summary: ResumeFinancements;
   timeline: TimelineItem[];
 }
 

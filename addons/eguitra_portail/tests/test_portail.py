@@ -287,3 +287,19 @@ class TestPortail(ApiCase):
             texte = json.dumps(vue, ensure_ascii=False)
             for jargon in ("NO-GO", "HOLD", "CONDITIONAL GO"):
                 self.assertNotIn(jargon, texte, "Jamais le vocabulaire interne du comité")
+
+    def test_financements_identiques_accueil_et_projet(self):
+        Funding = self.env["axispro.funding"]
+        Funding.create({"dossier_id": self.dossier_a.id, "funder_id": self.env["res.partner"].create({"name": "Banque"}).id,
+                        "amount_requested": 300_000_000, "amount_granted": 200_000_000, "state": "agreed"})
+        Funding.create({"dossier_id": self.dossier_a.id, "funder_id": self.env["res.partner"].create({"name": "Fonds"}).id,
+                        "amount_requested": 100_000_000, "state": "rejected"})
+        _s, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        _s, projet = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/projet", token=self.porteur)
+        self.assertEqual(tableau["fundings"], projet["fundings_summary"], "Mêmes montants sur l'accueil et dans Mon projet")
+        resume = tableau["fundings"]
+        self.assertEqual((resume["count"], resume["closed"], resume["requested"], resume["granted"]),
+                         (1, 1, 300_000_000, 200_000_000), "La piste refusée n'est ni comptée ni additionnée")
+        self.assertEqual(resume["currency"], self.cabinet.currency_id.name)
+        self.assertEqual({f["currency"] for f in projet["fundings"]}, {self.cabinet.currency_id.name},
+                         "Chaque montant porte la devise de son financement")

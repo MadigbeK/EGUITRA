@@ -16,6 +16,8 @@ from ..models.suivi import FEEDBACK_TOPICS
 
 DECISIONS = dict(COMMITTEE_DECISIONS)
 GATE_NOTE = re.compile(r"de (\S+) à ([^\s.(]+)")
+# Pistes de financement closes : ni comptées ni additionnées dans les résumés du porteur.
+FUNDING_CLOSED = ("rejected", "withdrawn")
 
 
 def excerpt(text, size=220):
@@ -130,8 +132,21 @@ def timeline(dossier, limit=None):
 def funding_row(f):
     return {"id": f.id, "funder": f.funder_id.name, "instrument": f.instrument,
             "instrument_label": dict(INSTRUMENTS)[f.instrument], "amount_requested": f.amount_requested,
-            "amount_granted": f.amount_granted, "state": f.state, "state_label": dict(FUNDING_STATES)[f.state],
-            "state_date": f.state_date, "next_step": f.next_step or None, "next_date": f.next_date}
+            "amount_granted": f.amount_granted, "currency": f.currency_id.name or None, "state": f.state,
+            "state_label": dict(FUNDING_STATES)[f.state], "state_date": f.state_date,
+            "next_step": f.next_step or None, "next_date": f.next_date}
+
+
+def fundings_summary(dossier):
+    """Financements du dossier tels que l'accueil et « Mon projet » les résument, à l'identique : pistes
+    actives (ni refusées ni abandonnées), montants sollicités et accordés de ces seules pistes, dans la
+    devise des financements."""
+    fundings = dossier.sudo().funding_ids
+    active = fundings.filtered(lambda f: f.state not in FUNDING_CLOSED)
+    currency = fundings[:1].currency_id or dossier.company_id.currency_id
+    return {"count": len(active), "closed": len(fundings) - len(active),
+            "requested": sum(active.mapped("amount_requested")), "granted": sum(active.mapped("amount_granted")),
+            "currency": currency.name or ""}
 
 
 def announcement_row(a, read=None, full=False):
