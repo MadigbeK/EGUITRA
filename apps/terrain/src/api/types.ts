@@ -46,7 +46,7 @@ export interface Referentials {
 export interface SentRotation {
   id: number;
   name: string | null;
-  state: "draft" | "done" | "invoiced" | "cancelled";
+  state: "draft" | "en_route" | "done" | "invoiced" | "cancelled";
   date_loading: string;
   vehicle: { name: string } | null;
   client: { name: string } | null;

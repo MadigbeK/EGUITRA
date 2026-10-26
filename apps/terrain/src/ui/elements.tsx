@@ -1,9 +1,9 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { forwardRef, useMemo, useState, type ReactNode } from "react";
+import { forwardRef, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ActivityIndicator, Alert, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View,
-  type StyleProp, type TextInputInstance, type TextInputProps, type TextProps, type ViewStyle,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View,
+  type HostInstance, type StyleProp, type TextInputInstance, type TextInputProps, type TextProps, type ViewStyle,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { signalerActivite } from "./activite";
@@ -374,6 +374,24 @@ export function Segment<K extends string>({
 export function Feuille({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const { c } = useTerrain();
   return <View style={[styles.feuille, { backgroundColor: c.surface, borderColor: c.filet }, style]}>{children}</View>;
+}
+
+/**
+ * Place faite au clavier pour un contenu qui ne commence pas en haut de l'écran (sous un en-tête et
+ * un sélecteur) : KeyboardAvoidingView mesure sa position dans son parent, pas dans la fenêtre ; le
+ * décalage est donc la position mesurée du conteneur dans la fenêtre. Android bord à bord : la
+ * fenêtre ne rétrécit plus d'elle-même.
+ */
+export function ClavierEvite({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const conteneur = useRef<HostInstance>(null);
+  const [decalage, setDecalage] = useState(0);
+  return (
+    <View ref={conteneur} style={[{ flex: 1 }, style]} onLayout={() => conteneur.current?.measureInWindow((_x, y) => setDecalage(y))}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={decalage}>
+        {children}
+      </KeyboardAvoidingView>
+    </View>
+  );
 }
 
 /**

@@ -1,4 +1,6 @@
 import { useRouter } from "expo-router";
+import { PHOTO_REFUSEE } from "../hsseq/envoi";
+import { useContactsCrise } from "../hsseq/useHsseq";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
@@ -6,10 +8,21 @@ import { useSession } from "../auth/session";
 import { ENVIRONNEMENT, SIMULATION } from "../config";
 import { heure, pluriel, quand } from "../format";
 import { useEnvoi } from "../sync/Envoi";
+import { RECUE_AVANT_CORRECTION } from "../sync/outbox";
+import type { QueuedItem } from "../store/types";
 import { Bandeau, Bouton, EnTete, Ecran, Feuille, PastilleReseau, Tampon, Texte, demanderConfirmation, type EtatReseau } from "../ui/elements";
 import { espaces, marque, mesures, modules, rayons, traits } from "../ui/terrain";
 import { useTerrain } from "../ui/useTerrain";
-import { modulesOuverts } from "./modules";
+import { modulesOuverts, peutOuvrir } from "./modules";
+
+/** Annuaire de crise rafraîchi à l'ouverture, pour qu'il soit sur l'appareil le jour d'un accident. */
+function AnnuaireGarde() {
+  useContactsCrise();
+  return null;
+}
+
+/** Saisie reçue au bureau malgré le message qu'elle porte (photo refusée, correction arrivée trop tard). */
+const recue = (i: QueuedItem) => i.message === PHOTO_REFUSEE || i.message === RECUE_AVANT_CORRECTION;
 
 const NATURE: Record<string, string> = {
   rotation: "Rotation",
@@ -30,6 +43,18 @@ export function MaJournee({ user }: { user: Utilisateur }) {
   const ouverts = modulesOuverts(user.profiles);
   const aEnvoyer = envoi.mine.length;
   const etatReseau: EtatReseau = !envoi.online ? "hors" : envoi.faible ? "faible" : "en_ligne";
+
+  /**
+   * Fiche HSSEQ refusée ou reçue avec réserve : elle ne se corrige pas sur l'appareil (contrôle et
+   * alcootest se refont). La supprimer efface aussi ses photos et le résultat gardé au coffre.
+   */
+  async function supprimer(i: QueuedItem) {
+    const question = recue(i)
+      ? "Le bureau a reçu cette saisie. La retirer de l'appareil ? Le Responsable HSSEQ complète au bureau ce qui manque."
+      : "Supprimer cette saisie refusée ? Elle ne sera pas transmise ; refaites-la si besoin.";
+    if (!(await demanderConfirmation(question, { titre: "Retirer de l'appareil ?", action: "Supprimer", danger: !recue(i) }))) return;
+    await envoi.supprimer(i.client_uuid).catch(() => envoi.setNotice({ ton: "danger", texte: "Suppression impossible sur cet appareil : réessayez." }));
+  }
 
   async function quitter() {
     const question = aEnvoyer
@@ -72,6 +97,7 @@ export function MaJournee({ user }: { user: Utilisateur }) {
           <Texte variante="service" style={{ color: "#0b1a16" }}>Simulation : bureau fictif, aucune donnée réelle.</Texte>
         </View>
       ) : null}
+      {peutOuvrir(user.profiles, "declaration") ? <AnnuaireGarde /> : null}
       <ScrollView contentContainerStyle={styles.page}>
         {envoi.notice ? <Bandeau ton={envoi.notice.ton} texte={envoi.notice.texte} onFermer={() => envoi.setNotice(null)} /> : null}
         {ouverts.length === 0 ? (
@@ -85,7 +111,8 @@ export function MaJournee({ user }: { user: Utilisateur }) {
                 key={m.cle}
                 accessibilityRole="button"
                 accessibilityLabel={`${m.titre}. ${m.detail}`}
-                onPress={() => router.push(m.route)}
+                // navigate : un double toucher n'empile pas deux fois le même écran.
+                onPress={() => router.navigate(m.route)}
                 android_ripple={{ color: c.voile, foreground: true }}
                 style={[styles.tuile, { backgroundColor: c.surface, borderColor: teinte.accent, borderLeftColor: teinte.accentPlein }]}
               >
@@ -111,16 +138,25 @@ export function MaJournee({ user }: { user: Utilisateur }) {
           ) : aEnvoyer === 0 ? (
             <Texte ton="second">Toutes vos saisies ont été transmises.</Texte>
           ) : (
-            envoi.mine.map((i, n) => (
-              <View key={i.client_uuid} style={[styles.saisie, n > 0 && { borderTopWidth: traits.filet, borderTopColor: c.filet }]}>
-                <View style={{ flex: 1 }}>
-                  <Texte variante="texteDemi">{NATURE[i.kind] ?? i.kind}</Texte>
-                  <Texte variante="service" ton="second">Saisi {heure(i.created_at)}, envoi : {i.status === "error" ? "refusé" : "en attente"}</Texte>
-                  {i.message ? <Texte variante="service" ton="dangerTexte">{i.message}</Texte> : null}
+            envoi.mine.map((i, n) => {
+              const reserve = recue(i);
+              const refusee = i.status === "error" && !reserve;
+              // Les rotations se corrigent dans leur module ; les fiches HSSEQ se suppriment ici.
+              const supprimable = i.status === "error" && i.kind !== "rotation";
+              return (
+                <View key={i.client_uuid} style={[styles.saisie, n > 0 && { borderTopWidth: traits.filet, borderTopColor: c.filet }]}>
+                  <View style={{ flex: 1, gap: espaces[1] }}>
+                    <Texte variante="texteDemi">{NATURE[i.kind] ?? i.kind}</Texte>
+                    <Texte variante="service" ton="second">
+                      Saisi {heure(i.created_at)}, envoi : {reserve ? (i.message === PHOTO_REFUSEE ? "reçu, photo refusée" : "reçu, version antérieure") : refusee ? "refusé" : "en attente"}
+                    </Texte>
+                    {i.message ? <Texte variante="service" ton={reserve ? "warn" : "dangerTexte"}>{i.message}</Texte> : null}
+                    {supprimable ? <Bouton titre="Supprimer" variante="danger" onPress={() => void supprimer(i)} style={{ alignSelf: "flex-start" }} /> : null}
+                  </View>
+                  <Tampon mot={reserve ? "Reçue" : refusee ? "Refusée" : "En attente"} ton={refusee ? "danger" : "warn"} />
                 </View>
-                <Tampon mot={i.status === "error" ? "Refusée" : "En attente"} ton={i.status === "error" ? "danger" : "warn"} />
-              </View>
-            ))
+              );
+            })
           )}
         </Feuille>
       </ScrollView>

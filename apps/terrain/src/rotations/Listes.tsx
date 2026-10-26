@@ -91,7 +91,11 @@ export function ListeEnvoyees({ rot }: { rot: Rotations }) {
               </View>
               <View style={{ alignItems: "flex-end", gap: 4 }}>
                 <Texte variante="libelle">{fmtVolume(r.volume_delivered || r.volume_loaded)} m³</Texte>
-                <Tampon mot={STATE_LABEL[r.state]} ton={r.state === "cancelled" ? "danger" : r.state === "draft" ? "warn" : "ok"} />
+                {/* État inconnu de l'application (ajouté au bureau depuis) : son code, plutôt qu'un tampon vide. */}
+                <Tampon
+                  mot={STATE_LABEL[r.state] ?? String(r.state)}
+                  ton={r.state === "cancelled" ? "danger" : r.state === "draft" ? "warn" : r.state === "en_route" ? "neutre" : "ok"}
+                />
               </View>
             </View>
           ))}

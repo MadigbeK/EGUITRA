@@ -1,10 +1,10 @@
 import { randomUUID } from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
+import { Keyboard, Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Referentials } from "../api/types";
 import { aujourdhui, fmtDate, fmtM3, lireDate } from "../format";
-import { Bandeau, BarreAction, Bouton, Champ, Choix, Feuille, Texte, demanderConfirmation, vibrer, type Ton } from "../ui/elements";
+import { Bandeau, BarreAction, Bouton, Champ, Choix, ClavierEvite, Feuille, Texte, demanderConfirmation, vibrer, type Ton } from "../ui/elements";
 import { espaces, mesures, polices, rayons, traits } from "../ui/terrain";
 import { useTerrain } from "../ui/useTerrain";
 import { blank, controler, depasseCapacite, grouper, num, REQUIS, toPayload, type Erreurs, type Form, type Requis } from "./form";
@@ -199,9 +199,10 @@ export function Saisie({
     </BarreAction>
   );
 
-  // Android affiche bord à bord : le clavier ne réduit plus la fenêtre, la page lui fait place.
+  // Android affiche bord à bord : le clavier ne réduit plus la fenêtre, la page lui fait place, en
+  // comptant l'en-tête et le sélecteur placés au-dessus.
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+    <ClavierEvite>
       <ScrollView
         ref={defilement}
         contentContainerStyle={[styles.page, !barre && { paddingBottom: espaces[8] + insets.bottom }]}
@@ -332,7 +333,7 @@ export function Saisie({
         {!barre ? actions : null}
       </ScrollView>
       {barre && !clavier ? actions : null}
-    </KeyboardAvoidingView>
+    </ClavierEvite>
   );
 }
 

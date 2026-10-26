@@ -113,6 +113,7 @@ export function keepSent(r: SentRotation): SentRotation {
 /** Mot de l'état d'une rotation envoyée. */
 export const STATE_LABEL: Record<SentRotation["state"], string> = {
   draft: "Reçue au bureau",
+  en_route: "En route",
   done: "Validée",
   invoiced: "Facturée",
   cancelled: "Annulée",
