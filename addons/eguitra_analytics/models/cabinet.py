@@ -2114,13 +2114,17 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                                    "share_pct": _r(_share(revenue, period_total))})
         metrics = env["eguitra.finance.metrics"]
         receivables = metrics.open_items(company, "asset_receivable", b.date_to)
-        revenue_12m = self._revenue_period(b, b.date_to - relativedelta(years=1) + timedelta(days=1), b.date_to)
+        # DSO de la finance (working_capital) : créances TTC / ventes TTC des douze derniers mois × jours, et
+        # non rapportées au chiffre d'affaires hors taxes (18 % de trop).
+        start_12m = b.date_to - relativedelta(years=1) + timedelta(days=1)
+        sales_12m = sum(s for s, _p in env["eguitra.analytics.groupe"].documents_ttc(company, start_12m, b.date_to).values())
+        days_12m = (b.date_to - start_12m).days + 1
         revenue_block = {
             "monthly": {"months": months, "series": series},
             "total": round(period_total), "previous": round(previous_total), "unassigned": round(unassigned_period),
             "receivables": {"open": round(receivables["total"]), "overdue": round(receivables["overdue"]),
                             "aging": {k: round(v) for k, v in receivables["aging"].items()},
-                            "dso_days": _r(receivables["total"] / revenue_12m * 365) if revenue_12m > 0 else None,
+                            "dso_days": _r(receivables["total"] / sales_12m * days_12m) if sales_12m > 0 else None,
                             "by_client": self._receivables_by_client(b)},
         }
 

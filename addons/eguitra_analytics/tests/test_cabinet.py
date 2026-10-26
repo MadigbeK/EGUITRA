@@ -10,6 +10,8 @@ vérifient à la main (calculs rappelés en commentaire).
 
 from datetime import datetime, time, timedelta
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
@@ -539,6 +541,10 @@ class TestAnalyseCabinet(ApiCase):
         projets = next(s for s in body["revenue"]["monthly"]["series"] if s["key"] == "projets")
         self.assertEqual(projets["values"][-1], 10_000_000, "Gestion de projets, mois de la facture")
         self.assertGreaterEqual(body["revenue"]["receivables"]["open"], 10_000_000)
+        # DSO de la finance : créances TTC / ventes TTC × jours ; la seule facture, du jour, est toute ouverte.
+        days_12m = (self.today - (self.today - relativedelta(years=1) + timedelta(days=1))).days + 1
+        self.assertAlmostEqual(body["revenue"]["receivables"]["dso_days"], days_12m, delta=0.1,
+                               msg="Créances TTC rapportées aux ventes TTC, et non au chiffre d'affaires hors taxes")
         self.assertEqual((len(body["forecast"]["fees"]), body["forecast"]["backlog_hours"]), (3, 13.0))
         self.assertEqual(body["time"]["consultants"], ["Awa Camara", "Moussa Diallo"])
         self.assertIn("cabinet.temps_non_facture", [i["id"] for i in body["insights"]])
