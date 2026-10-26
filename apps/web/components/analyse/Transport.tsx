@@ -46,6 +46,10 @@ function Corps() {
   const camionsFaibles = trucks.filter((t) => (t.utilization_pct ?? 100) < 50);
   const ind = d?.indicators ?? null;
   const anomalies = d?.fuel_anomalies ?? [];
+  // Nuage des rotations : seules celles dont la marge se calcule (une recette, _pct_of du noyau) y
+  // entrent ; le seuil des kilomètres est la moyenne de ces rotations-là.
+  const nuage = (d?.scatter ?? []).filter((s) => s.margin_rate !== null && Number.isFinite(s.km));
+  const horsNuage = (d?.scatter?.length ?? 0) - nuage.length;
   // Cible d'un constat : une route (tarifs, carte de chaleur), un ensemble routier, ou le bloc des
   // consommations anormales (#consommation).
   const route = useCible("route");
@@ -164,22 +168,25 @@ function Corps() {
               <p className="px-5 py-3 text-[12.5px] leading-snug text-muted">Point mort = coût complet d&apos;une rotation (coûts déclarés + structure au km) rapporté aux m³ ; tarif cible = point mort / (1 − marge cible).</p>
             </Card>
             <Card title="Les rotations, une à une" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Aire : volume</span>}>
-              {d.scatter?.length ? (
-                <Bulles
-                  label="Rotations : kilomètres contre marge, aire selon le volume"
-                  points={d.scatter.filter((s) => s.margin_rate !== null).map((s) => ({ id: String(s.id), label: s.name, x: s.km, y: s.margin_rate ?? 0, size: Math.max(1, s.volume), group: (s.route ?? "Sans route").replace(/^Conakry - /, "").replace(/ \(démo\)$/, ""), detail: `${s.truck ?? "ensemble inconnu"} · ${fmtDate(s.date)} · ${fmtShort(s.revenue)} GNF` }))}
-                  xLabel="Kilomètres"
-                  yLabel="Marge"
-                  quadrants={{ x: Math.max(1, Math.round(d.scatter.reduce((s, x) => s + x.km, 0) / Math.max(1, d.scatter.length))), y: 15, labels: ["Longues et rentables", "Courtes et rentables", "Longues, marge faible", "Courtes, marge faible"], teintes: ["var(--g-jade)", "var(--g-jade)", "var(--warn-vif)", "var(--danger-vif)"] }}
-                  formatX={(v) => fmtInt(v)}
-                  formatY={(v) => `${Math.round(v)} %`}
-                  formatSize={(v) => `${unNombre(v)} m³`}
-                  sizeLabel="Volume"
-                  hauteur={400}
-                  rayonMax={11}
-                />
+              {nuage.length ? (
+                <>
+                  <Bulles
+                    label="Rotations : kilomètres contre marge, aire selon le volume"
+                    points={nuage.map((s) => ({ id: String(s.id), label: s.name, x: s.km, y: s.margin_rate ?? 0, size: Math.max(1, s.volume), group: (s.route ?? "Sans route").replace(/^Conakry - /, "").replace(/ \(démo\)$/, ""), detail: `${s.truck ?? "ensemble inconnu"} · ${fmtDate(s.date)} · ${fmtShort(s.revenue)} GNF` }))}
+                    xLabel="Kilomètres"
+                    yLabel="Marge"
+                    quadrants={{ x: Math.max(1, Math.round(nuage.reduce((s, x) => s + x.km, 0) / nuage.length)), y: 15, labels: ["Longues et rentables", "Courtes et rentables", "Longues, marge faible", "Courtes, marge faible"], teintes: ["var(--g-jade)", "var(--g-jade)", "var(--warn-vif)", "var(--danger-vif)"] }}
+                    formatX={(v) => fmtInt(v)}
+                    formatY={(v) => `${Math.round(v)} %`}
+                    formatSize={(v) => `${unNombre(v)} m³`}
+                    sizeLabel="Volume"
+                    hauteur={400}
+                    rayonMax={11}
+                  />
+                  {horsNuage > 0 && <p className="mt-2 text-[12px] leading-snug text-muted">{pluriel(horsNuage, "rotation sans recette reste", "rotations sans recette restent")} hors du nuage : leur marge ne se calcule pas.</p>}
+                </>
               ) : (
-                <Vide titre="Aucune rotation" />
+                <Vide titre={d.scatter?.length ? "Aucune rotation avec recette" : "Aucune rotation"} hint={d.scatter?.length ? "Aucune rotation de la période n'a de recette : la marge ne se calcule pas." : undefined} />
               )}
             </Card>
           </div>

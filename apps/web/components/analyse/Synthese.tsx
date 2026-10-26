@@ -9,7 +9,7 @@ import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurThem
 import { useApi } from "@/lib/api-client";
 import { RECO as RECO_METHODE } from "@/lib/axispro-types";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";
-import { fmtInt } from "@/lib/format";
+import { INSECABLE, fmtInt } from "@/lib/format";
 
 /** Cockpit : celui du groupe ou celui du cabinet selon la société de travail. */
 export function Synthese() {
@@ -105,7 +105,7 @@ function CockpitGroupe() {
                     axes={AXES_SANTE.map(([k, label]) => {
                       const a = axes[k];
                       const v = nombre(a?.value);
-                      return { key: k, label: a?.label ?? label, score: nombre(a?.score) ?? 0, value: v === null ? undefined : a.unit === "ratio" ? v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) : a.unit === "pct" ? fmtPct(v) : a.unit === "days" ? `${fmtInt(v)} j` : String(v), comment: a?.comment };
+                      return { key: k, label: a?.label ?? label, score: nombre(a?.score), value: v === null ? undefined : a.unit === "ratio" ? v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) : a.unit === "pct" ? fmtPct(v) : a.unit === "days" ? `${fmtInt(v)} j` : String(v), comment: a?.comment };
                     })}
                     taille={300}
                   />
@@ -113,14 +113,15 @@ function CockpitGroupe() {
                     {AXES_SANTE.map(([k, label]) => {
                       const a = axes[k];
                       if (!a) return null;
-                      const s = nombre(a.score) ?? 0;
+                      // Un axe non calculable est écarté du score (poids rapportés aux autres) : jamais un 0 rouge.
+                      const s = nombre(a.score);
                       return (
                         <li key={k} className="flex items-start gap-2">
-                          <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full" style={{ background: s < 40 ? "var(--danger-vif)" : s < 60 ? "var(--warn-vif)" : "var(--g-jade)" }} />
+                          <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full" style={{ background: s === null ? "var(--muted)" : s < 40 ? "var(--danger-vif)" : s < 60 ? "var(--warn-vif)" : "var(--g-jade)" }} />
                           <span>
                             <span className="font-semibold text-ink-2">
-                              {a.label ?? label} {Math.round(s)}
-                              {a.weight ? <span className="font-normal text-muted"> (poids {a.weight} %)</span> : null}
+                              {a.label ?? label} {s === null ? "non calculable" : Math.round(s)}
+                              {s === null ? <span className="font-normal text-muted"> (écarté du score)</span> : a.weight ? <span className="font-normal text-muted"> (poids {a.weight}{INSECABLE}%)</span> : null}
                             </span>{" "}
                             : {a.comment}
                           </span>

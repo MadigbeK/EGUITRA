@@ -120,7 +120,8 @@ export interface WaterfallStep {
 }
 
 export interface HealthAxis {
-  score: number;
+  /** Score 0-100 ; null quand l'axe n'est pas calculable (écarté, poids rapportés aux autres axes). */
+  score: number | null;
   label: string;
   value: number | null;
   unit: Unit;
