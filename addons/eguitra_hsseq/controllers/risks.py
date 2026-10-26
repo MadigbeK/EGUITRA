@@ -200,12 +200,15 @@ def measure_values(data, partial=False):
     return values
 
 
-def list_domain(kw):
+def list_domain(kw, with_status=True):
+    """Domaine de la liste (et de ses compteurs, sans le filtre d'état : with_status=False)."""
     domain = read_domain(kw)
-    if kw.get("status"):
-        domain.append(("status", "in", kw["status"].split(",")))
-    else:
-        domain.append(("status", "!=", "archived"))
+    if with_status:
+        domain.append(("status", "in", kw["status"].split(",")) if kw.get("status") else ("status", "!=", "archived"))
+    # Case de la matrice : gravité et probabilité brutes ou résiduelles.
+    for key in NOTE_FIELDS:
+        if kw.get(key):
+            domain.append((key, "=", note(kw, key)))
     for key in ("nature", "vehicle_kind"):
         if kw.get(key):
             domain.append((key, "in", kw[key].split(",")))
@@ -246,7 +249,8 @@ class EguitraHsseqRisks(http.Controller):
         rows = Risk.search(domain, offset=offset, limit=limit, order=order)
         everything = Risk.search(domain)
         counts = {
-            "by_status": {code: Risk.search_count(read_domain(kw) + [("status", "=", code)]) for code, _l in RISK_STATUSES},
+            "by_status": {code: Risk.search_count(list_domain(kw, with_status=False) + [("status", "=", code)])
+                          for code, _l in RISK_STATUSES},
             "by_raw_level": {code: len(everything.filtered(lambda r, c=code: r.raw_level == c)) for code, _l in LEVELS},
             "by_residual_level": {code: len(everything.filtered(lambda r, c=code: r.residual_level == c))
                                   for code, _l in LEVELS},

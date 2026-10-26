@@ -196,8 +196,10 @@ def list_domain(kw):
         domain.append(("site_id", "=", int_or_none(kw, "site_id")))
     if kw.get("due_before"):
         domain.append(("due_date", "<=", date_value(kw, "due_before")))
-    if kw.get("event_id"):
-        domain.append(("event_id", "=", int_or_none(kw, "event_id")))
+    # Actions d'une fiche d'origine.
+    for key in ("event_id", "risk_id", "finding_id", "complaint_id", "drill_id", "review_id"):
+        if kw.get(key):
+            domain.append((key, "=", int_or_none(kw, key)))
     if str(kw.get("approval_pending", "")) in ("1", "true"):
         domain += approval_pending_domain(companies(kw))
     if kw.get("search"):

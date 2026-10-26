@@ -229,6 +229,8 @@ class EguitraHsseqReferentials(http.Controller):
             "costly_action_threshold": settings.costly_action_threshold,
             "check_window_hours": settings.check_window_hours,
             "breath_test_window_hours": settings.breath_test_window_hours,
+            # Délai de revue d'un risque (prochaine revue proposée).
+            "risk_review_months": settings.risk_review_months,
             "vehicle_kinds": [{"code": k, "label": label} for k, label in VEHICLE_KINDS],
             "me": {"profiles": sorted(user_profiles), "site_ids": my_sites().ids,
                    "employee_id": employee.id or None, "driver_id": driver.id or None},
