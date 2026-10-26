@@ -359,8 +359,17 @@ class EguitraSyscohada(models.AbstractModel):
         self.env.flush_all()
         investment = "^(404|481|482)"
         payable = f"(aa.account_type = 'liability_payable' AND {ACC_CODE} !~ '{investment}')"
+        # La recherche part des seules lignes des comptes d'immobilisations (21 à 27, index du compte), et non de
+        # tout le grand livre ; les pièces d'acquisition trouvées sont ensuite lues en entier.
         self.env.cr.execute(
-            f"""WITH bills AS (
+            f"""WITH assets AS (
+                    SELECT aa.id FROM account_account aa
+                     WHERE EXISTS (SELECT 1 FROM jsonb_each_text(aa.code_store) c WHERE c.value ~ '^2[1-7]')
+                ), acquisitions AS (
+                    SELECT DISTINCT aml.move_id FROM account_move_line aml
+                     WHERE aml.account_id IN (SELECT id FROM assets) AND aml.debit > 0 AND aml.parent_state = 'posted'
+                       AND aml.company_id = ANY(%(companies)s) AND aml.date <= %(day)s
+                ), bills AS (
                     SELECT aml.move_id,
                            SUM(CASE WHEN {ACC_CODE} ~ '^21' THEN aml.balance ELSE 0 END) AS ff,
                            SUM(CASE WHEN {ACC_CODE} ~ '^2[2-5]' THEN aml.balance ELSE 0 END) AS fg,
@@ -369,8 +378,7 @@ class EguitraSyscohada(models.AbstractModel):
                       FROM account_move_line aml
                       JOIN account_account aa ON aa.id = aml.account_id
                       JOIN account_journal aj ON aj.id = aml.journal_id
-                     WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
-                       AND aml.date <= %(day)s AND aj.code != %(journal)s
+                     WHERE aml.move_id IN (SELECT move_id FROM acquisitions) AND aj.code != %(journal)s
                   GROUP BY aml.move_id
                     HAVING SUM(CASE WHEN {ACC_CODE} ~ '^2[1-7]' THEN aml.balance ELSE 0 END) > 0
                        AND SUM(CASE WHEN {payable} THEN -aml.balance ELSE 0 END) > 0
