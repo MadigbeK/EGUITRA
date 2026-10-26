@@ -1,11 +1,13 @@
 import io
 from datetime import timedelta
+from unittest.mock import patch
 
 from odoo import fields
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_axispro.tests.test_axispro import GRID
+from odoo.addons.eguitra_portail.controllers import porteur as porteur_api
 
 PDF = b"%PDF-1.4\n% statuts\n%%EOF\n"
 FUTURE = (fields.Datetime.now() + timedelta(days=20)).replace(microsecond=0)
@@ -282,3 +284,44 @@ class TestPortail(ApiCase):
         status, body = self.call("POST", "/axispro/portail/notifications/lues", {}, token=dg)
         self.assertEqual((status, body["unread"]), (200, 0))
 
+    # ─── Repris de l'ancien portail (routes retirées d'eguitra_axispro) ───
+
+    def test_messagerie_du_porteur_bornee_et_fermee_sur_un_dossier_clos(self):
+        """Messages du porteur bornés par jour (429) ; un dossier clos ne reçoit plus de message (422)
+        mais son fil reste lisible."""
+        path = f"/portail/dossiers/{self.dossier_a.id}/fil"
+        with patch.object(porteur_api, "MAX_DAILY_MESSAGES", 1):
+            self.assertEqual(self.post_form(path, self.porteur, {"body": "Bonjour"})[0], 200)
+            self.assertEqual(self.post_form(path, self.porteur, {"body": "Encore"})[0], 429, "Messages bornés par jour")
+        self.dossier_a.state = "closed"
+        status, body = self.post_form(path, self.porteur, {"body": "Une question"})
+        self.assertEqual((status, body["message"]), (422, "Ce dossier est clos."))
+        status, fil = self.call("GET", path, token=self.porteur)
+        self.assertEqual((status, fil["closed"], [m["body"] for m in fil["messages"]]), (200, True, ["Bonjour"]),
+                         "Les échanges restent lisibles")
+
+    def test_pieces_du_porteur_sans_structure_de_la_grille(self):
+        """Les pièces attendues et déposées que lit le porteur ne disent jamais quels critères de la
+        grille elles justifient."""
+        evaluation = self.dossier_a.evaluation_ids[:1]
+        status, body = self.post_form(f"/axispro/evaluations/{evaluation.id}/evidence", self.cabinet_token,
+                                      {"portal_visible": "1"}, ("preuve.pdf", PDF))
+        self.assertEqual(status, 200, body)
+        status, pieces = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/pieces", token=self.porteur)
+        self.assertEqual(status, 200, pieces)
+        self.assertTrue(pieces["attendues"] and pieces["fichiers"], pieces)
+        for row in pieces["attendues"] + pieces["fichiers"]:
+            self.assertFalse({"criteria", "origin", "available"} & set(row), row)
+
+    def test_actions_du_porteur_sans_celles_du_cabinet(self):
+        Action = self.env["axispro.action"]
+        mine = Action.create({"dossier_id": self.dossier_a.id, "name": "Fournir le bilan", "assignee": "porteur"})
+        interne = Action.create({"dossier_id": self.dossier_a.id, "name": "Relire le bilan", "assignee": "cabinet"})
+        autre = Action.create({"dossier_id": self.dossier_b.id, "name": "Action d'un autre dossier",
+                               "assignee": "porteur"})
+        status, rows = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/actions", token=self.porteur)
+        self.assertEqual(status, 200, rows)
+        ids = [r["id"] for r in rows]
+        self.assertIn(mine.id, ids)
+        self.assertNotIn(interne.id, ids, "Les actions du cabinet restent internes")
+        self.assertNotIn(autre.id, ids, "Ni celles d'un autre dossier")

@@ -6,7 +6,7 @@ from odoo.exceptions import UserError
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import PASSWORD, ApiCase
-from odoo.addons.eguitra_axispro.controllers import common, portal
+from odoo.addons.eguitra_axispro.controllers import common
 
 GRID = (
     "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide\n"
@@ -187,7 +187,8 @@ class TestAxispro(ApiCase):
 
         first = self.open_session("promoteur.smn", app="portail")
         porteur = first["access_token"]
-        status, body = self.call("GET", "/portail/dossiers", token=porteur)
+        pieces = f"/portail/dossiers/{dossier.id}/pieces.pdf"
+        status, body = self.call("GET", pieces, token=porteur)
         self.assertEqual((status, body["error"]), (403, "password_change_required"),
                          "Le mot de passe provisoire doit être remplacé avant tout accès")
         status, body = self.call("POST", "/auth/password", {"old_password": PASSWORD, "new_password": "Porteur-Nouveau-2026"},
@@ -195,12 +196,10 @@ class TestAxispro(ApiCase):
         self.assertEqual(status, 200, body)
         porteur = self.open_session("promoteur.smn", app="portail", password="Porteur-Nouveau-2026",
                                     secret=first["_secret"])["access_token"]
-        status, mine = self.call("GET", "/portail/dossiers", token=porteur)
-        self.assertEqual([d["id"] for d in mine], [dossier.id], "Le porteur ne voit que son dossier")
-        status, _b = self.call("GET", f"/portail/dossiers/{autre.id}", token=porteur)
-        self.assertEqual(status, 404)
-        status, msgs = self.call("GET", f"/portail/dossiers/{dossier.id}/messages", token=porteur)
-        self.assertEqual([m["body"] for m in msgs], ["Merci d'envoyer vos statuts."])
+        self.assertEqual(self.call("GET", pieces, token=porteur)[0], 200, "Le porteur lit les pièces de son dossier")
+        status, _b = self.call("GET", f"/portail/dossiers/{autre.id}/pieces.pdf", token=porteur)
+        self.assertEqual(status, 404, "et jamais celles d'un autre dossier")
+        # Fil des messages sans les notes internes : eguitra_portail (test_portail).
 
         statuts = self.policy.document_type_ids.filtered(lambda t: t.code == "P01")
         response = self.url_open(
@@ -279,25 +278,47 @@ class TestAxispro(ApiCase):
         self.assertEqual(deposer("rapport.docx", macros.getvalue()).status_code, 415, "Document à macros refusé")
         with patch.object(common, "MAX_DOSSIER_FILES", 1):
             self.assertEqual(deposer("bilan.pdf", b"%PDF-1.4 bilan").status_code, 422, "Espace du dossier borné")
-        with patch.object(portal, "MAX_DAILY_MESSAGES", 1):
-            path = f"/portail/dossiers/{dossier.id}/messages"
-            self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
-            self.assertEqual(self.call("POST", path, {"body": "Encore"}, token=token)[0], 429, "Messages bornés par jour")
+        # Messages bornés par jour : messagerie du portail (eguitra_portail, test_portail).
 
-    def test_messagerie_du_portail_fermee_sur_un_dossier_clos(self):
-        """Audit des rôles, à améliorer 8 : un dossier clos ne reçoit plus de message du porteur."""
+    def test_depot_refuse_sur_un_dossier_clos(self):
+        """Un dossier clos se consulte mais ne reçoit plus de pièce du porteur ; la messagerie (fil du
+        portail, eguitra_portail) applique la même règle."""
         dossier = self._dossier()
         porteur = self._create_user("porteur.clos", "porteur", company_id=self.cabinet.id,
                                     company_ids=[(6, 0, self.cabinet.ids)])
         dossier.portal_user_ids = [(4, porteur.id)]
         token = self.open_session("porteur.clos", app="portail")["access_token"]
-        path = f"/portail/dossiers/{dossier.id}/messages"
-        self.assertEqual(self.call("POST", path, {"body": "Bonjour"}, token=token)[0], 200)
+
+        def deposer():
+            return self.url_open(
+                f"/api/v1/portail/dossiers/{dossier.id}/documents",
+                files={"file": ("bilan.pdf", io.BytesIO(b"%PDF-1.4 bilan"), "application/pdf")},
+                headers={"Authorization": f"Bearer {token}"}, method="POST", timeout=60,
+            )
+
+        self.assertEqual(deposer().status_code, 200)
         dossier.state = "closed"
-        status, body = self.call("POST", path, {"body": "Encore une question"}, token=token)
-        self.assertEqual((status, body["message"]), (422, "Ce dossier est clos."))
-        status, messages = self.call("GET", path, token=token)
-        self.assertEqual((status, [m["body"] for m in messages]), (200, ["Bonjour"]), "Les échanges restent lisibles")
+        response = deposer()
+        self.assertEqual((response.status_code, response.json()["message"]), (422, "Ce dossier est clos."))
+        self.assertEqual(self.call("GET", f"/portail/dossiers/{dossier.id}/pieces.pdf", token=token)[0], 200,
+                         "Les pièces restent lisibles")
+
+    def test_anciennes_routes_du_portail_retirees(self):
+        """Les routes de l'ancien portail qu'aucun écran n'appelait plus (doublons de /espace, /tableau,
+        /pieces et /fil d'eguitra_portail) n'existent plus ; la vue du dossier montrait au porteur
+        l'intitulé des critères de ses premiers écarts."""
+        dossier = self._dossier()
+        porteur = self._create_user("porteur.ancien", "porteur", company_id=self.cabinet.id,
+                                    company_ids=[(6, 0, self.cabinet.ids)])
+        dossier.portal_user_ids = [(4, porteur.id)]
+        token = self.open_session("porteur.ancien", app="portail")["access_token"]
+        for method, path in (("GET", "/portail/dossiers"), ("GET", f"/portail/dossiers/{dossier.id}"),
+                             ("GET", f"/portail/dossiers/{dossier.id}/documents"),
+                             ("GET", f"/portail/dossiers/{dossier.id}/messages"),
+                             ("POST", f"/portail/dossiers/{dossier.id}/messages")):
+            status, _body = self.call(method, path, {"body": "Bonjour"} if method == "POST" else None, token=token)
+            self.assertEqual(status, 404, f"{method} {path} retirée")
+        self.assertFalse(dossier.message_ids, "Aucun message déposé par l'ancienne route")
 
     def test_activites_du_cabinet(self):
         """Les services du cabinet sont des activités de MB AxisPro Consulting, proposées aux lignes de facture."""

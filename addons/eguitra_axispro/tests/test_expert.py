@@ -216,11 +216,10 @@ class TestAxisproExpert(ApiCase):
         internal = self.env["axispro.action"].create({"dossier_id": self.dossier.id, "name": "Note du cabinet",
                                                       "assignee": "cabinet"})
         ptoken = self.open_session("porteur.briques", app="portail")["access_token"]
-        status, view = self.call("GET", f"/portail/dossiers/{self.dossier.id}", token=ptoken)
-        self.assertEqual(status, 200, view)
-        task_ids = [t["id"] for t in view["tasks"]]
-        self.assertNotIn(internal.id, task_ids, "Les actions du cabinet restent internes")
-        self.assertEqual(len(task_ids), 4)
+        # Liste des actions du porteur (sans celles du cabinet) : /portail/dossiers/<id>/actions
+        # d'eguitra_portail (test_portail) ; l'ancienne vue du dossier est retirée.
+        status, _b = self.call("POST", f"/portail/actions/{internal.id}/report", {"comment": "Fait"}, token=ptoken)
+        self.assertEqual(status, 404, "Les actions du cabinet restent internes")
         status, _b = self.call("POST", f"/portail/actions/{foreign.id}/report", {"comment": "Fait"}, token=ptoken)
         self.assertEqual(status, 404, "Le porteur n'agit que sur son dossier")
         status, task = self.call("POST", f"/portail/actions/{action['id']}/report",

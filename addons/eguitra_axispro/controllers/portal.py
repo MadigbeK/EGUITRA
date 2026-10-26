@@ -1,24 +1,25 @@
-"""API du portail des porteurs de projets : leur dossier, leurs pièces, leurs échanges avec le cabinet.
+"""Routes du porteur gardées de l'ancien portail : liste imprimable des pièces, dépôt d'une pièce,
+téléchargement d'une pièce visible du porteur, compte rendu d'une action. Les écrans du portail
+(apps/web/app/portail) les appellent encore ; le reste du portail du porteur (espace, tableau de bord,
+projet, pièces attendues, fil des messages, rendez-vous…) est servi par eguitra_portail
+(controllers/porteur.py). Les anciennes routes /portail/dossiers, /portail/dossiers/<id>, la liste
+des pièces et la messagerie (GET et POST /portail/dossiers/<id>/messages), qu'aucun écran n'appelait
+plus, sont retirées : elles doublaient /espace, /tableau, /pieces et /fil, et la vue du dossier
+montrait au porteur l'intitulé des critères de la grille de ses cinq premiers écarts.
 
-Le porteur n'accède qu'aux dossiers dont il est utilisateur du portail (règles d'accès du noyau
-et contrôle explicite ici) ; il ne voit ni le détail du scoring interne, ni les notes internes.
+Le porteur n'accède qu'aux dossiers dont il est utilisateur du portail (contrôle explicite ici) ; il
+ne voit ni le détail du scoring interne, ni les notes internes.
 """
 
-from datetime import timedelta
-
-from odoo import fields, http
+from odoo import http
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
-from .common import document_row, download, message_row, store_upload
+from .common import document_row, download, store_upload
 from .rapports import pieces_pdf
 
 PORTEUR = ("porteur",)
-# Ce que le porteur voit d'une pièce attendue : jamais les critères de la grille qu'elle justifie.
-PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
-                        "state", "version")
-MAX_DAILY_MESSAGES = 50
 
 
 def _own(dossier_id):
@@ -29,36 +30,10 @@ def _own(dossier_id):
 
 
 def _open(dossier):
-    """Un dossier clos se consulte, mais ne reçoit plus ni pièce ni message (même contrôle que le
-    portail des porteurs, eguitra_portail)."""
+    """Un dossier clos se consulte, mais ne reçoit plus de pièce (même contrôle que le portail des
+    porteurs, eguitra_portail, pour les messages)."""
     if dossier.state == "closed":
         raise ApiError(422, "business_rule", "Ce dossier est clos.")
-
-
-def _portal_view(dossier):
-    result = dossier.evaluate()
-    docs = [{k: d[k] for k in PORTAL_DOCUMENT_KEYS} for d in dossier.documents_status(result)]
-    due = [d for d in docs if d["due"] and d["required"]]
-    return {
-        "id": dossier.id, "reference": dossier.reference, "name": dossier.name, "state": dossier.state,
-        "consultant": dossier.consultant_id.name or None,
-        "current_gate": {"code": dossier.current_gate_id.code, "name": dossier.current_gate_id.name}
-        if dossier.current_gate_id else None,
-        "gates": [{"code": g.code, "name": g.name, "reached": g.sequence <= (dossier.current_gate_id.sequence or 0)}
-                  for g in dossier.policy_id.gate_ids],
-        "documents": docs,
-        "documents_progress": {"due": len(due), "received": len([d for d in due if d["state"] in ("received", "validated")])},
-        "actions": [{"name": g["name"], "action": g["action"]} for g in dossier.gaps(5, result)],
-        "tasks": [_task_row(a) for a in _tasks(dossier)],
-        "decision": dossier.decision or None,
-    }
-
-
-def _tasks(dossier):
-    """Actions confiées au porteur et rendues visibles par le cabinet."""
-    return dossier.action_ids.filtered(
-        lambda a: a.portal_visible and a.assignee == "porteur" and a.state != "cancelled"
-    ).sorted(lambda a: (a.state == "done", a.due_date or fields.Date.today(), a.id))
 
 
 def _task_row(action):
@@ -68,25 +43,10 @@ def _task_row(action):
 
 
 class EguitraPortal(http.Controller):
-    @api_route("/portail/dossiers", profiles=PORTEUR)
-    def dossiers(self, **_kw):
-        dossiers = request.env["axispro.dossier"].sudo().search([("portal_user_ids", "in", request.env.user.id)])
-        return [_portal_view(d) for d in dossiers]
-
-    @api_route("/portail/dossiers/<int:dossier_id>", profiles=PORTEUR)
-    def dossier(self, dossier_id, **_kw):
-        return _portal_view(_own(dossier_id))
-
     @api_route("/portail/dossiers/<int:dossier_id>/pieces.pdf", profiles=PORTEUR)
     def pieces(self, dossier_id, **_kw):
         """Liste imprimable des pièces attendues du porteur et des compléments demandés."""
         return pieces_pdf(_own(dossier_id))
-
-    @api_route("/portail/dossiers/<int:dossier_id>/documents", profiles=PORTEUR)
-    def documents(self, dossier_id, **_kw):
-        dossier = _own(dossier_id)
-        files = dossier.document_ids.filtered("portal_visible")
-        return [document_row(d, portal=True) for d in files]
 
     @api_route("/portail/dossiers/<int:dossier_id>/documents", methods=("POST",), profiles=PORTEUR)
     def upload(self, dossier_id, **_kw):
@@ -116,25 +76,3 @@ class EguitraPortal(http.Controller):
         (comment,) = require(read_json(), "comment")
         action.write({"state": "submitted", "porteur_comment": str(comment)[:5000]})
         return _task_row(action)
-
-    @api_route("/portail/dossiers/<int:dossier_id>/messages", profiles=PORTEUR)
-    def messages(self, dossier_id, **_kw):
-        dossier = _own(dossier_id)
-        return [message_row(m) for m in dossier.message_ids.filtered(lambda m: not m.internal)]
-
-    @api_route("/portail/dossiers/<int:dossier_id>/messages", methods=("POST",), profiles=PORTEUR)
-    def post_message(self, dossier_id, **_kw):
-        dossier = _own(dossier_id)
-        _open(dossier)
-        (body,) = require(read_json(), "body")
-        Message = request.env["axispro.message"].sudo()
-        recent = Message.search_count([
-            ("dossier_id", "=", dossier.id), ("author_id", "=", request.env.user.id),
-            ("date", ">=", fields.Datetime.now() - timedelta(days=1)),
-        ])
-        if recent >= MAX_DAILY_MESSAGES:
-            raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
-        message = Message.create(
-            {"dossier_id": dossier.id, "body": str(body)[:5000], "author_id": request.env.user.id, "internal": False}
-        )
-        return message_row(message)

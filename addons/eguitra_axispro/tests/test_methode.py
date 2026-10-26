@@ -503,20 +503,8 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertEqual(len(rows), 2, "En-tête et une pièce, sans ligne ajoutée par le nom")
         self.assertTrue(rows[1][1].startswith("'="), "Formule neutralisée")
 
-    def test_portail_sans_structure_de_la_grille(self):
-        self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf")
-        porteur = self._create_user("porteur.grille", "porteur", company_id=self.cabinet.id,
-                                    company_ids=[(6, 0, self.cabinet.ids)])
-        self.dossier.portal_user_ids = [(4, porteur.id)]
-        ptoken = self.open_session("porteur.grille", app="portail")["access_token"]
-        status, view = self.call("GET", f"/portail/dossiers/{self.dossier.id}", token=ptoken)
-        self.assertEqual(status, 200, view)
-        self.assertTrue(view["documents"])
-        for doc in view["documents"]:
-            self.assertFalse({"criteria", "origin", "available"} & set(doc), doc)
-        status, files = self.call("GET", f"/portail/dossiers/{self.dossier.id}/documents", token=ptoken)
-        self.assertEqual(status, 200, files)
-        self.assertTrue(all("criteria" not in f for f in files), files)
+    # Portail sans la structure de la grille : routes du portail d'eguitra_portail (test_portail), les
+    # anciennes vues du dossier et de ses pièces étant retirées.
 
     def test_grille_aux_valeurs_illisibles_refusee(self):
         head = "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide\n"
