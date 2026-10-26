@@ -1,6 +1,7 @@
 """Modules du cabinet (audit du noyau et de l'application web, lot 3) : devise du dossier dans le
-portefeuille, les financements et le modèle financier (I-X3), seuil partiel égal à 0 (I-X4), nombres
-à la française dans les textes, poids, heures et taux horaire contrôlés (M8)."""
+portefeuille, les financements et le modèle financier (I-X3), seuil partiel égal à 0 (I-X4), pièces
+standard d'une grille en brouillon modifiables par le cabinet (I-X6), nombres à la française dans les
+textes, poids, heures et taux horaire contrôlés (M8), écritures refusées aux autres profils."""
 
 import re
 
@@ -40,6 +41,8 @@ GAP = [
     {"kind": "revenue", "name": "Ventes", "quantity": 100, "price": 10},
     {"kind": "funding", "name": "Apport", "funding_type": "equity", "amount": 400},
 ]
+# Écritures du noyau refusées hors du profil cabinet : profil, application de connexion.
+REFUSES = (("direction", "axispro"), ("admin", "axispro"), ("finance", "finance"), ("porteur", "portail"))
 
 
 @tagged("post_install", "-at_install")
@@ -255,6 +258,51 @@ class TestModulesCabinetApi(ApiCase):
         names = sheets.action_invoice(200_000).invoice_line_ids.mapped("name")
         self.assertTrue(any(name.endswith("(1,5 h)") for name in names), names)
 
+    # ─── I-X6 : pièces standard d'une version en brouillon ────────────────
+
+    def test_piece_standard_modifiable_en_brouillon(self):
+        """I-X6 : intitulé, rubrique, gate, caractère obligatoire, consignes et critères justifiés d'une
+        pièce se modifient sur une version en brouillon, jamais sur la version en vigueur."""
+        draft = self.policy.copy_as_new_version()
+        piece = draft.document_type_ids.filtered(lambda t: t.code == "P02")
+        g0 = draft.gate_ids.filtered(lambda g: g.code == "G0")
+        criteria = draft.criterion_ids.filtered(lambda c: c.code in ("C002", "C003"))
+        links = draft.integrity()["links"]
+        path = f"/axispro/document-types/{piece.id}"
+        status, body = self.call("PATCH", path, {
+            "name": "  Plan d'affaires   actualisé ", "category": "Projet et marché", "gate_id": g0.id, "required": False,
+            "guidance": "Version signée par le promoteur.", "criterion_ids": criteria.ids,
+        }, token=self.token)
+        self.assertEqual(status, 200, body)
+        row = next(t for t in body["documents"] if t["id"] == piece.id)
+        self.assertEqual((row["name"], row["category"], row["gate_id"], row["required"], row["guidance"]),
+                         ("Plan d'affaires actualisé", "Projet et marché", g0.id, False, "Version signée par le promoteur."))
+        self.assertEqual((sorted(row["criteria"]), sorted(row["criterion_ids"])), (["C002", "C003"], sorted(criteria.ids)))
+        self.assertEqual(body["integrity"]["links"], links + 2)
+        status, body = self.call("PATCH", path, {"gate_id": None, "criterion_ids": []}, token=self.token)
+        self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        self.assertEqual((piece.gate_id, piece.criterion_ids), (self.env["axispro.gate"], self.env["axispro.criterion"]),
+                         "Attendue dès l'ouverture, plus aucun critère rattaché")
+
+        en_vigueur = self.policy.criterion_ids[:1]
+        for payload, field in (({"criterion_ids": [en_vigueur.id]}, "criterion_ids"),
+                               ({"gate_id": self.policy.gate_ids[:1].id}, "gate_id"),
+                               ({"criterion_ids": "C002"}, "criterion_ids"), ({"name": "   "}, "name")):
+            with self.subTest(payload=payload):
+                status, body = self.call("PATCH", path, payload, token=self.token)
+                self.assertEqual((status, body.get("fields")), (400, [field]), body)
+        self.env.invalidate_all()
+        self.assertEqual(piece.name, "Plan d'affaires actualisé", "Rien n'a changé après un refus")
+
+        active = self.policy.document_type_ids.filtered(lambda t: t.code == "P02")
+        status, body = self.call("PATCH", f"/axispro/document-types/{active.id}", {"name": "Autre"}, token=self.token)
+        self.assertEqual((status, body.get("error")), (422, "business_rule"), "Version en vigueur : nouvelle version")
+        self.env.invalidate_all()
+        self.assertEqual(active.name, "Plan d'affaires")
+        status, body = self.call("PATCH", "/axispro/document-types/999999", {"name": "X"}, token=self.token)
+        self.assertEqual(status, 404, body)
+
     # ─── M8 : saisies contrôlées ──────────────────────────────────────────
 
     def test_poids_et_reglages_de_la_grille_controles(self):
@@ -337,3 +385,50 @@ class TestModulesCabinetApi(ApiCase):
             pending.action_invoice(0)
         with self.assertRaises(UserError):
             pending.action_invoice(200_000, [{"name": "Remise", "amount": -10_000}])
+
+    # ─── Rôles par profil ─────────────────────────────────────────────────
+
+    def test_ecritures_refusees_aux_autres_profils(self):
+        """Rôles par profil : la direction et l'administration du cabinet consultent ; seules les sessions du
+        profil cabinet écrivent la grille (pièces standard comprises), les temps, la facture d'honoraires, le
+        modèle financier et les démarches de financement (403 pour la direction, l'administration, la
+        finance et le porteur, sans que rien ne change)."""
+        draft = self.policy.copy_as_new_version()
+        domain, criterion = draft.domain_ids[:1], draft.criterion_ids[:1]
+        piece = draft.document_type_ids[:1]
+        dossier = self._dossier()
+        self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 2, "description": "Analyse"})
+        funding = self.env["axispro.funding"].create({"dossier_id": dossier.id, "funder_id": self.bank.id,
+                                                      "amount_requested": 100})
+        before = (draft.dscr_target, domain.weight, criterion.weight, piece.name)
+        writes = (
+            ("PATCH", f"/axispro/policies/{draft.id}", {"dscr_target": 1.5}),
+            ("PATCH", f"/axispro/domains/{domain.id}", {"weight": 3}),
+            ("PATCH", f"/axispro/criteria/{criterion.id}", {"weight": 3}),
+            ("PATCH", f"/axispro/document-types/{piece.id}", {"name": "Pièce renommée"}),
+            ("POST", "/axispro/timesheets", {"dossier_id": dossier.id, "hours": 1, "description": "Saisie refusée"}),
+            ("POST", f"/axispro/dossiers/{dossier.id}/invoice", {"hourly_rate": 100_000}),
+            ("PATCH", f"/axispro/dossiers/{dossier.id}/plan", {"horizon": 6}),
+            ("POST", f"/axispro/dossiers/{dossier.id}/fundings", {"funder_id": self.bank.id}),
+            ("PATCH", f"/axispro/fundings/{funding.id}", {"amount_requested": 999}),
+        )
+        cabinet = {"company_id": self.cabinet.id, "company_ids": [(6, 0, self.cabinet.ids)]}
+        for profile, app in REFUSES:
+            login = f"lot3.{profile}"
+            self._create_user(login, profile, **cabinet)
+            token = self.open_session(login, app=app)["access_token"]
+            for method, path, payload in writes:
+                with self.subTest(profile=profile, route=f"{method} {path}"):
+                    status, body = self.call(method, path, payload, token=token)
+                    self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+            if app == "axispro":
+                for path in ("/axispro/portfolio", f"/axispro/policies/{draft.id}", f"/axispro/dossiers/{dossier.id}/plan",
+                             "/axispro/timesheets/summary"):
+                    with self.subTest(profile=profile, lecture=path):
+                        self.assertEqual(self.call("GET", path, token=token)[0], 200, f"{profile} consulte {path}")
+        self.env.invalidate_all()
+        self.assertEqual((draft.dscr_target, domain.weight, criterion.weight, piece.name), before, "Grille inchangée")
+        sheets = self.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)])
+        self.assertEqual((len(sheets), sheets.invoice_id), (1, self.env["account.move"]), "Ni temps ni facture")
+        self.assertFalse(dossier.plan_ids, "Modèle financier non créé")
+        self.assertEqual((dossier.funding_ids, funding.amount_requested), (funding, 100.0))

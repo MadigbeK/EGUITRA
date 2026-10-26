@@ -143,7 +143,8 @@ def _policy_payload(policy):
                        for k, v in INDICATORS.items()},
         "documents": [
             {"id": t.id, "code": t.code, "name": t.name, "category": t.category or None, "gate_id": t.gate_id.id or None,
-             "required": t.required, "guidance": t.guidance or None, "criteria": t.criterion_ids.mapped("code")}
+             "required": t.required, "guidance": t.guidance or None, "criteria": t.criterion_ids.mapped("code"),
+             "criterion_ids": t.criterion_ids.ids}
             for t in policy.document_type_ids
         ],
     }
@@ -319,6 +320,46 @@ class EguitraAxispro(http.Controller):
             values["indicator_partial"] = as_float(partial, "indicator_partial") if partial not in (None, "") else 0.0
         criterion.write(values)
         return {"status": "ok"}
+
+    @api_route("/axispro/document-types/<int:type_id>", methods=("PATCH",), profiles=WRITE)
+    def update_document_type(self, type_id, **_kw):
+        """Pièce standard de la data room d'une version en brouillon : intitulé, rubrique, gate où elle
+        est attendue (vide : dès l'ouverture), pièce obligatoire, consignes au porteur et critères
+        qu'elle justifie (`criterion_ids`, critères de la même version). Audit du noyau, I-X6 : la
+        grille se modifie par le cabinet sans intervention technique (offre, chapitre 3.7), pièces
+        comprises ; une version en vigueur ou archivée ne se modifie pas (422)."""
+        piece = _record("axispro.document.type", type_id, "Pièce standard")
+        policy = piece.policy_id
+        _draft(policy)
+        data = read_json()
+        values = {}
+        if "name" in data:
+            values["name"] = _label(data, "name", f"Pièce {piece.code}")
+        if "category" in data:
+            values["category"] = " ".join(str(data["category"] or "").split())[:200] or False
+        if "guidance" in data:
+            values["guidance"] = str(data["guidance"] or "").strip()[:5000] or False
+        if "required" in data:
+            values["required"] = bool(data["required"])
+        if "gate_id" in data:
+            wanted = int_value(data["gate_id"], "gate_id") if data["gate_id"] else 0
+            gate = policy.gate_ids.filtered(lambda g: g.id == wanted)
+            if wanted and not gate:
+                raise ApiError(400, "invalid_parameter", "Gate inconnu dans cette version de la grille.",
+                               fields=["gate_id"])
+            values["gate_id"] = gate.id or False
+        if "criterion_ids" in data:
+            if not isinstance(data["criterion_ids"] or [], list):
+                raise ApiError(400, "invalid_parameter", "criterion_ids : liste d'identifiants attendue.",
+                               fields=["criterion_ids"])
+            wanted = {int_value(i, "criterion_ids") for i in data["criterion_ids"] or []}
+            criteria = policy.criterion_ids.filtered(lambda c: c.id in wanted)
+            if len(criteria) != len(wanted):
+                raise ApiError(400, "invalid_parameter", "Critère inconnu dans cette version de la grille.",
+                               fields=["criterion_ids"])
+            values["criterion_ids"] = [(6, 0, criteria.ids)]
+        piece.write(values)
+        return _policy_payload(policy)
 
     # ─── Dossiers ─────────────────────────────────────────────────────────
 
