@@ -112,6 +112,8 @@ def _row(loan, lines=False):
         data["schedule"] = [
             {"id": l.id, "sequence": l.sequence, "due_date": l.due_date, "principal": l.principal,
              "interest": l.interest, "total": l.total, "remaining": l.remaining, "paid": l.paid,
+             # Règlement soumis au circuit des décaissements (pending), refusé, en brouillon, ou à régler.
+             "settlement": l.settlement_state(),
              "move_id": l.move_id.id or None, "statement_line_id": l.statement_line_id.id or None}
             for l in loan.line_ids
         ]

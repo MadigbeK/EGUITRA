@@ -37,7 +37,9 @@ interface Loan {
   principal_account_id: number | null;
   interest_account_id: number | null;
   journal_id: number | null;
-  schedule?: Array<{ id: number; sequence: number; due_date: string; principal: number; interest: number; total: number; remaining: number; paid: boolean; statement_line_id: number | null }>;
+  // settlement : pending, règlement soumis au circuit des décaissements (comptabilisé à la dernière
+  // approbation) ; rejected, refusé (« Régler » en soumet un nouveau) ; draft, pièce en brouillon hors circuit.
+  schedule?: Array<{ id: number; sequence: number; due_date: string; principal: number; interest: number; total: number; remaining: number; paid: boolean; settlement?: "paid" | "pending" | "rejected" | "draft" | "due"; statement_line_id: number | null }>;
 }
 
 const STATE = { draft: { label: "Brouillon", tone: "neutral" as const }, active: { label: "En cours", tone: "accent" as const }, closed: { label: "Soldé", tone: "ok" as const } };
@@ -139,7 +141,14 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
       `Régler l'échéance n° ${ligne.sequence} du ${fmtDate(ligne.due_date)} ? La sortie de ${fmtGNF(ligne.total)} est comptabilisée sur ${loan.journal ?? "le journal de règlement"}, capital et intérêts en contrepartie.`,
       { action: "Régler l'échéance", danger: true },
     );
-    if (oui) await agir(`regler-${ligne.id}`, () => apiSend("POST", `/finance/loans/lines/${ligne.id}/pay`, {}), `Échéance n° ${ligne.sequence} réglée.`);
+    if (!oui) return;
+    let retenue = false;
+    const ok = await agir(`regler-${ligne.id}`, async () => {
+      const apres = await apiSend<Loan>("POST", `/finance/loans/lines/${ligne.id}/pay`, {});
+      retenue = apres.schedule?.find((x) => x.id === ligne.id)?.settlement === "pending";
+    }, `Échéance n° ${ligne.sequence} réglée.`);
+    // Au-delà du seuil des décaissements, le règlement attend l'approbation : il n'est pas encore comptabilisé.
+    if (ok && retenue) envoi.setMessage({ tone: "ok", text: `Règlement de l'échéance n° ${ligne.sequence} soumis à l'approbation (À valider) : il sera comptabilisé à la dernière approbation.` });
   }
   const brouillon = loan?.state === "draft";
   return (
@@ -221,6 +230,10 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
                   render: (e) =>
                     e.paid ? (
                       <Badge tone="ok">{e.statement_line_id ? "Rapprochée du relevé" : "Réglée"}</Badge>
+                    ) : e.settlement === "pending" ? (
+                      <Badge tone="warn">En attente d&apos;approbation</Badge>
+                    ) : e.settlement === "draft" ? (
+                      <Badge tone="warn">Règlement en brouillon</Badge>
                     ) : l.state === "active" && ecriture ? (
                       <Button size="sm" loading={envoi.busy === `regler-${e.id}`} disabled={!!envoi.busy} onClick={() => regler(e)}>
                         Régler
