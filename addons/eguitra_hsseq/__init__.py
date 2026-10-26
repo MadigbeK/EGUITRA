@@ -11,6 +11,7 @@ AUDITED_MODELS = [
     "eguitra.hsseq.check.template.version", "eguitra.hsseq.check.item", "eguitra.hsseq.check",
     "eguitra.hsseq.check.answer", "eguitra.hsseq.nonconformity", "eguitra.hsseq.breath.test", "eguitra.hsseq.waiver", "eguitra.hsseq.lock.reason", "eguitra.hsseq.lock.log",
     "eguitra.hsseq.indicator.snapshot", "eguitra.hsseq.risk", "eguitra.hsseq.risk.measure",
+    "eguitra.hsseq.expiry.alert",
 ]
 
 

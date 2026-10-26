@@ -38,6 +38,16 @@
         <!-- Chaque matin à 07 h 30 (heure de Conakry, UTC). -->
         <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:30:00')"/>
     </record>
+    <record id="cron_expiry_alerts" model="ir.cron">
+        <field name="name">HSSEQ : alertes J-30 et J-7 des habilitations, aptitudes et documents des véhicules</field>
+        <field name="model_id" ref="model_eguitra_hsseq_expiry_alert"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_alerts()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque matin à 06 h 45 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 06:45:00')"/>
+    </record>
     <record id="cron_purge_orphan_attachments" model="ir.cron">
         <field name="name">HSSEQ : purge des pièces déposées et jamais rattachées à une fiche (7 jours)</field>
         <field name="model_id" ref="model_eguitra_hsseq_attachment"/>

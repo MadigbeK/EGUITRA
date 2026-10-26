@@ -93,6 +93,11 @@
         <field name="model_id" ref="model_eguitra_hsseq_risk_measure"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_expiry_alert_company" model="ir.rule">
+        <field name="name">Alertes d'expiration : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_expiry_alert"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_indicator_snapshot_company" model="ir.rule">
         <field name="name">Indicateurs figés : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>

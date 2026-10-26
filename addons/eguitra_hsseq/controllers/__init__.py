@@ -7,5 +7,6 @@ from . import breath_tests
 from . import lock
 from . import waivers
 from . import risks
+from . import qualifications
 from . import attachments
 from . import cockpit

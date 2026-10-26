@@ -401,12 +401,20 @@ class EguitraHsseqReferentials(http.Controller):
         else:
             rotations = rotations.browse()
         detail = is_hsseq()
+        # Ses habilitations, au format de la matrice (statut, dates d'obtention et d'expiration).
+        matrix = employee._hsseq_matrix_row(
+            env["eguitra.rh.qualification.type"].sudo().search([]), day) if employee else None
+        cells = {c["code"]: c for c in matrix["qualifications"]} if matrix else {}
         return {
             "employee": {"id": employee.id, "name": employee.name, "matricule": employee.matricule} if employee else None,
             "driver": driver_ref(driver),
             "fitness": FITNESS.get(employee._fitness_state(day)) if employee else None,
-            "qualifications": [{k: r[k] for k in ("code", "name", "mandatory", "state", "expiry")}
+            "qualifications": [dict({k: r[k] for k in ("code", "name", "mandatory", "state", "expiry")},
+                                    **{k: cells.get(r["code"], {}).get(k) for k in ("status", "obtained_on",
+                                                                                    "expires_on", "days_left")})
                                for r in employee._qualification_rows(day)] if employee else [],
+            "qualifications_status": matrix["status"] if matrix else None,
+            "departure_blocked": matrix["blocking"] if matrix else None,
             "rotations": [dict(rotation_ref(r), vehicle=vehicle_ref(r.vehicle_id),
                                lock=r._hsseq_evaluate(detail=detail) if r.state == "draft" else None)
                           for r in rotations],
