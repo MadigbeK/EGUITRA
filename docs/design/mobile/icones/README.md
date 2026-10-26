@@ -27,7 +27,7 @@ Les six PNG portent les noms et chemins de `apps/terrain/app.json` (modèle Expo
 ]
 ```
 
-Avec `imageWidth` à 200, le pli mesure environ 94 dp. La valeur se règle à l'essai sur les téléphones de service. L'application est en thème clair seulement (`userInterfaceStyle`) : pas de variante sombre à fournir.
+Avec `imageWidth` à 200, le pli mesure environ 94 dp. La valeur se règle à l'essai sur les téléphones de service. L'application suit le thème du téléphone (`userInterfaceStyle` : `automatic`, pour la nuit de cabine) ; le démarrage reste sur fond forêt dans les deux modes : pas de variante sombre à fournir.
 
 ## Refaire les fichiers
 
