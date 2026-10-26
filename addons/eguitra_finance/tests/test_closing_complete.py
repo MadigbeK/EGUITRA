@@ -1,5 +1,6 @@
 from dateutil.relativedelta import relativedelta
 
+from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
 from .common import FinanceDataMixin
@@ -161,3 +162,17 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         final = {c["code"]: c for c in close.last_check["checks"]}
         self.assertEqual(final["depreciation_posted"]["status"], "ok", "Contrôle refait après les générations")
         self.assertAlmostEqual(close.snapshot["depreciations"], line.amount, 2)
+
+    def test_mois_non_termine_refuse(self):
+        """Un mois ne se clôture qu'une fois terminé : le mois en cours, a fortiori un mois futur, est refusé."""
+        Close = self.env["eguitra.period.close"]
+        previous = {c["code"]: c for c in Close._get(self.company, self.month).action_check()}
+        self.assertEqual(previous["month_ended"]["status"], "ok")
+        for day in (self.today, self.today + relativedelta(months=2)):
+            close = Close._get(self.company, day)
+            checks = {c["code"]: c for c in close.action_check()}
+            self.assertEqual(checks["month_ended"]["status"], "blocking", day)
+            with self.assertRaises(UserError):
+                close.action_close()
+            self.assertEqual(close.state, "open")
+        self.assertFalse(self.company.fiscalyear_lock_date, "Rien n'est verrouillé")

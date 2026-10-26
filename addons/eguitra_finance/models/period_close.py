@@ -61,6 +61,14 @@ class EguitraPeriodClose(models.Model):
         cr = self.env.cr
         checks = []
 
+        # Un mois ne se clôture qu'une fois terminé : verrouillé, scellé et sa TVA liquidée sur un mois partiel,
+        # il ne recevrait plus les pièces de ses derniers jours.
+        next_day = end + relativedelta(days=1)
+        checks.append(self._check(
+            "month_ended", "Mois terminé", fields.Date.context_today(self) >= next_day, True,
+            f"Le mois se termine le {end:%d/%m/%Y} : il se clôture à partir du {next_day:%d/%m/%Y}.",
+        ))
+
         # Les mois se clôturent dans l'ordre, depuis le premier mois comportant des écritures.
         first_move = self.env["account.move"].sudo().search(
             [("company_id", "=", company.id), ("state", "=", "posted")], order="date asc", limit=1
