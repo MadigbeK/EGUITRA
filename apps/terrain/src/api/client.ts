@@ -1,5 +1,5 @@
 import { APP_CODE, DELAI_LISTE } from "../config";
-import { ApiError, DelaiDepasse, HorsReseau, SESSION_EXPIREE, messageParDefaut } from "./errors";
+import { ApiError, DelaiDepasse, HorsReseau, SESSION_CHANGEE, SESSION_EXPIREE, messageParDefaut } from "./errors";
 import type { SessionTokens } from "./types";
 
 /** Coffre du jeton de renouvellement : stockage sécurisé de l'appareil (src/auth/coffre.ts). */
@@ -27,13 +27,23 @@ export interface OptionsClient {
   surSessionPerdue: () => void;
   fetchFn?: typeof fetch;
   maintenant?: () => number;
+  /**
+   * Vrai si le coffre appartient toujours au compte de ce client. Le client de l'envoi en arrière-plan
+   * le vérifie avant d'utiliser et d'écrire le jeton de renouvellement : si quelqu'un d'autre s'est
+   * connecté entre-temps, il s'arrête au lieu d'envoyer sous le jeton du suivant.
+   */
+  verifierSession?: () => Promise<boolean>;
 }
 
 /** Le jeton d'accès est renouvelé un peu avant son échéance plutôt que refusé en route. */
 const MARGE = 30_000;
 
-/** Deux essais de renouvellement tiennent dans le délai de grâce du bureau (30 s). */
-const DELAI_RENOUVELLEMENT = 10_000;
+/**
+ * Le bureau accepte l'ancien jeton de renouvellement 30 secondes après l'avoir remplacé
+ * (REUSE_GRACE_SECONDS), puis révoque toute la session. Un seul envoi, attendu 25 secondes ; un
+ * nouvel essai seulement après un échec immédiat de la liaison, qui n'a donc rien remplacé.
+ */
+const DELAI_RENOUVELLEMENT = 25_000;
 
 /**
  * Refus du renouvellement qui finissent la session (addons/eguitra_api/controllers/auth.py). Toute
@@ -57,6 +67,7 @@ export class ApiClient {
   private readonly surSessionPerdue: () => void;
   private readonly fetchFn: typeof fetch;
   private readonly maintenant: () => number;
+  private readonly verifierSession: () => Promise<boolean>;
   private access: string | null = null;
   private echeance = 0;
   private renouvellement: Promise<void> | null = null;
@@ -72,6 +83,7 @@ export class ApiClient {
     this.surSessionPerdue = options.surSessionPerdue;
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
     this.maintenant = options.maintenant ?? (() => Date.now());
+    this.verifierSession = options.verifierSession ?? (async () => true);
   }
 
   /** Jetons reçus à la connexion : l'accès en mémoire, le renouvellement au coffre. */
@@ -135,7 +147,10 @@ export class ApiClient {
   }
 
   private async faireRenouveler(): Promise<void> {
+    // Jeton lu, puis compte vérifié : une connexion écrit le nouveau jeton après avoir retiré l'ancien
+    // profil, si bien qu'un jeton lu ici appartient toujours au compte vérifié juste après.
     const refresh = await this.coffre.lire();
+    if (!(await this.verifierSession())) throw sessionChangee();
     if (!refresh) {
       await this.perdre();
       throw new ApiError(401, "unauthenticated", SESSION_EXPIREE);
@@ -147,16 +162,18 @@ export class ApiClient {
       try {
         jetons = await demander();
       } catch (e) {
-        // Réponse perdue : le bureau a peut-être déjà remplacé le jeton. Il accepte l'ancien encore
-        // 30 secondes (REUSE_GRACE_SECONDS), puis révoque toute la session : on redemande aussitôt.
-        if (!(e instanceof DelaiDepasse || e instanceof HorsReseau)) throw e;
+        // Liaison coupée d'emblée : la demande n'est pas partie, le jeton n'a pas été remplacé.
+        if (!(e instanceof HorsReseau)) throw e;
         jetons = await demander();
       }
     } catch (e) {
       // Refus du bureau : la session est finie. Sans réseau, elle reste : les saisies attendent.
-      if (e instanceof ApiError && SESSION_FINIE.has(e.code)) await this.perdre();
+      if (e instanceof ApiError && SESSION_FINIE.has(e.code) && (await this.coffre.lire()) === refresh) await this.perdre();
       throw e;
     }
+    // Écriture seulement si le coffre tient encore le jeton présenté, et pour le même compte : un autre
+    // client de l'appareil (premier plan, arrière-plan) ou une autre connexion l'a peut-être remplacé.
+    if ((await this.coffre.lire()) !== refresh || !(await this.verifierSession())) throw sessionChangee();
     await this.ouvrir(jetons);
   }
 
@@ -202,6 +219,10 @@ export class ApiClient {
     const message = typeof corps.message === "string" ? corps.message : messageParDefaut(status);
     throw new ApiError(status, code, message, corps);
   }
+}
+
+function sessionChangee(): ApiError {
+  return new ApiError(409, SESSION_CHANGEE, "La session a changé sur cet appareil : l'envoi reprendra sous la bonne session.");
 }
 
 /**

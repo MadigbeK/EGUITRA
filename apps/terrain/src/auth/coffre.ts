@@ -59,6 +59,7 @@ export const aRevoquer = {
     const liste = (await aRevoquer.lire()).filter((j) => j !== jeton);
     await ecrire(CLE_REVOQUER, JSON.stringify([...liste, jeton].slice(-5)));
   },
+  /** Jeton révoqué au bureau, ou refusé pour de bon (réponse 4xx) : il quitte la liste. */
   retirer: async (jeton: string) => {
     const liste = (await aRevoquer.lire()).filter((j) => j !== jeton);
     if (liste.length) await ecrire(CLE_REVOQUER, JSON.stringify(liste));
@@ -73,6 +74,8 @@ export interface Utilisateur {
   login: string;
   /** Profils du compte : ils décident des modules proposés dans « Ma journée ». */
   profiles: string[];
+  /** Mot de passe provisoire à remplacer : la session reprise rouvre sur ce remplacement. */
+  provisoire?: boolean;
 }
 
 export const profilGarde = {
@@ -81,10 +84,14 @@ export const profilGarde = {
     if (!brut) return null;
     try {
       const u = JSON.parse(brut) as Utilisateur;
-      return typeof u.id === "number" && typeof u.name === "string" ? { ...u, profiles: Array.isArray(u.profiles) ? u.profiles : [] } : null;
+      if (typeof u.id !== "number" || typeof u.name !== "string") return null;
+      return { ...u, profiles: Array.isArray(u.profiles) ? u.profiles : [], ...(u.provisoire ? { provisoire: true } : {}) };
     } catch {
       return null;
     }
   },
-  ecrire: (u: Utilisateur) => ecrire(CLE_PROFIL, JSON.stringify({ id: u.id, name: u.name, login: u.login, profiles: u.profiles })),
+  ecrire: (u: Utilisateur) =>
+    ecrire(CLE_PROFIL, JSON.stringify({ id: u.id, name: u.name, login: u.login, profiles: u.profiles, ...(u.provisoire ? { provisoire: true } : {}) })),
+  /** Profil retiré avant l'écriture d'un nouveau jeton : l'envoi de fond ne mêle jamais deux comptes. */
+  effacer: () => effacer(CLE_PROFIL),
 };

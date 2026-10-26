@@ -6,6 +6,7 @@ import type { Appareil, EnvoyeurFiches } from "./envoi";
  * Dépôt immédiat d'une photo sur une fiche (POST /hsseq/attachments), pour les gestes qui demandent
  * le bureau : la levée d'une non-conformité se fait en ligne, sa photo d'abord (`role: "lift"`), puis
  * la levée la cite par `attachment_ids` (contrat HSSEQ, § 7 ; noyau, controllers/attachments.py).
+ * Le fichier reste sur l'appareil jusqu'à la levée confirmée : c'est l'appelant qui le supprime.
  */
 export async function deposerPhoto(
   api: EnvoyeurFiches,
@@ -19,7 +20,5 @@ export async function deposerPhoto(
   form.append("id", String(cible.id));
   if (cible.role) form.append("role", cible.role);
   form.append("client_uuid", piece.client_uuid);
-  const depot = await api.appel<{ id: number }>("POST", "/hsseq/attachments", { form, timeout: DELAI_ENVOI });
-  await appareil.supprimerFichier(piece.uri).catch(() => undefined);
-  return depot;
+  return api.appel<{ id: number }>("POST", "/hsseq/attachments", { form, timeout: DELAI_ENVOI });
 }

@@ -19,8 +19,9 @@ import { aRevoquer, coffreJeton, profilGarde, type Utilisateur } from "./coffre"
 export type Etape =
   | { nom: "demarrage" }
   | { nom: "connexion"; message?: string }
-  | { nom: "code"; jeton: string }
-  | { nom: "activation"; jeton: string; secret: string; uri: string }
+  /** `expire` : fin de validité du jeton d'étape (5 minutes pour le code, 10 pour l'activation). */
+  | { nom: "code"; jeton: string; expire: number }
+  | { nom: "activation"; jeton: string; secret: string; uri: string; expire: number }
   | { nom: "mot_de_passe"; user: Utilisateur }
   /**
    * `fraiche` : session ouverte par une connexion avec identifiant (et double authentification) à
@@ -42,8 +43,8 @@ interface Session {
    * part au premier échange réussi.
    */
   seDeconnecter(options?: { horsReseau?: boolean }): Promise<void>;
-  /** Retour à l'identifiant (étape du code abandonnée). */
-  recommencer(): void;
+  /** Retour à l'identifiant (étape du code abandonnée ou expirée), avec un message éventuel. */
+  recommencer(message?: string): void;
 }
 
 const Contexte = createContext<Session | null>(null);
@@ -54,15 +55,29 @@ export function useSession(): Session {
   return s;
 }
 
-const utilisateur = (u: PublicUser): Utilisateur => ({ id: u.id, name: u.name, login: u.login, profiles: u.profiles ?? [] });
+const utilisateur = (u: PublicUser): Utilisateur => ({
+  id: u.id,
+  name: u.name,
+  login: u.login,
+  profiles: u.profiles ?? [],
+  ...(u.password_change_required ? { provisoire: true } : {}),
+});
 
-/** Révoque au bureau les sessions fermées sans réseau ; une coupure les garde pour la fois suivante. */
+/** Durée des jetons d'étape du noyau (addons/eguitra_api) : code de vérification, activation. */
+const DUREE_CODE = 5 * 60_000;
+const DUREE_ACTIVATION = 10 * 60_000;
+
+/**
+ * Révoque au bureau les sessions fermées sans réseau. Un jeton ne quitte la liste que sur une réponse
+ * nette du bureau (réussite, ou refus 4xx : jeton déjà fini) ; une coupure, une erreur du serveur ou
+ * une limite de débit le gardent pour la fois suivante.
+ */
 async function revoquerEnAttente(api: ApiClient): Promise<void> {
   for (const jeton of await aRevoquer.lire()) {
     try {
       await api.appel("POST", "/auth/logout", { auth: false, body: { refresh_token: jeton } });
     } catch (e) {
-      if (!(e instanceof ApiError)) return;
+      if (!(e instanceof ApiError) || e.status >= 500 || e.status === 429) return;
     }
     await aRevoquer.retirer(jeton).catch(() => undefined);
   }
@@ -88,15 +103,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   /** Session ouverte : listes d'un autre compte effacées, profil gardé pour l'ouverture hors réseau. */
   const ouvrir = useCallback(
     async (rep: LoginResponse) => {
-      if (rep.status === "mfa_required") return setEtape({ nom: "code", jeton: rep.mfa_token });
+      if (rep.status === "mfa_required") return setEtape({ nom: "code", jeton: rep.mfa_token, expire: Date.now() + DUREE_CODE });
       if (rep.status === "mfa_setup_required") {
-        return setEtape({ nom: "activation", jeton: rep.setup_token, secret: rep.secret, uri: rep.otpauth_uri });
+        return setEtape({ nom: "activation", jeton: rep.setup_token, secret: rep.secret, uri: rep.otpauth_uri, expire: Date.now() + DUREE_ACTIVATION });
       }
-      await api.ouvrirSession(rep);
       const user = utilisateur(rep.user);
+      // Profil retiré, jeton écrit, puis profil du nouveau compte : l'envoi de fond, qui vérifie le
+      // profil avant d'écrire un jeton renouvelé, ne prend jamais le jeton d'un compte pour un autre.
+      await profilGarde.effacer();
+      await api.ouvrirSession(rep);
       await profilGarde.ecrire(user);
       await claimCache(store, user.id);
-      setEtape(rep.user.password_change_required ? { nom: "mot_de_passe", user } : { nom: "ouverte", user, fraiche: true });
+      setEtape(user.provisoire ? { nom: "mot_de_passe", user } : { nom: "ouverte", user, fraiche: true });
       void revoquerEnAttente(api).catch(() => undefined);
     },
     [api, store],
@@ -121,13 +139,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return;
       }
       await claimCache(store, user.id);
-      setEtape({ nom: "ouverte", user });
+      // Mot de passe provisoire pas encore remplacé : la session rouvre sur son remplacement.
+      setEtape(user.provisoire ? { nom: "mot_de_passe", user } : { nom: "ouverte", user });
       try {
         const me = await api.appel<PublicUser>("GET", "/auth/me");
         if (!actif) return;
         await profilGarde.ecrire(utilisateur(me));
-        if (me.password_change_required) setEtape({ nom: "mot_de_passe", user: utilisateur(me) });
-        else setEtape({ nom: "ouverte", user: utilisateur(me) });
+        const confirme = utilisateur(me);
+        setEtape(confirme.provisoire ? { nom: "mot_de_passe", user: confirme } : { nom: "ouverte", user: confirme });
         void revoquerEnAttente(api).catch(() => undefined);
       } catch {
         // Hors réseau : la session reste ouverte sur le profil gardé. Session perdue : déjà traitée.
@@ -202,7 +221,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [api, store, etape],
   );
 
-  const recommencer = useCallback(() => setEtape({ nom: "connexion" }), []);
+  const recommencer = useCallback((message?: string) => setEtape(message ? { nom: "connexion", message } : { nom: "connexion" }), []);
+
+  // Écran de connexion affiché : les révocations en attente partent si le réseau passe.
+  useEffect(() => {
+    if (etape.nom === "connexion") void revoquerEnAttente(api).catch(() => undefined);
+  }, [api, etape.nom]);
 
   const valeur = useMemo<Session>(
     () => ({ etape, api, store, seConnecter, validerCode, activer, changerMotDePasse, seDeconnecter, recommencer }),

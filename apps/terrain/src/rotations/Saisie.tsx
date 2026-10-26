@@ -116,6 +116,15 @@ export function Saisie({
         return;
       }
       const uuid = form.uuid ?? randomUUID();
+      // Correction : la saisie doit être encore sur l'appareil. Partie entre-temps, elle est au bureau,
+      // qui garde la première version : la correction s'y fait.
+      const precedente = form.uuid ? await rot.retrouver(form.uuid) : undefined;
+      if (form.uuid && !precedente) {
+        vibrer.erreur();
+        annoncer({ ton: "danger", texte: "Cette rotation est déjà arrivée au bureau : faites-y la correction. Rien n'a été enregistré sur l'appareil." }, null);
+        setForm(blank(form.date_loading));
+        return;
+      }
       const camion = r.vehicles.find((v) => String(v.id) === form.vehicle_id);
       // « ER-09, 36,50 m³ » : ce que l'agent reconnaît de la rotation qu'il vient de saisir.
       const resume = `${camion?.name ?? "Rotation"}, ${fmtM3(num(form.volume_loaded) || num(form.volume_delivered))}`;
@@ -123,8 +132,10 @@ export function Saisie({
       annoncer(null);
       try {
         await rot.enregistrer({
-          client_uuid: uuid, kind: "rotation", user_id: userId, created_at: new Date().toISOString(), status: "pending",
+          client_uuid: uuid, kind: "rotation", user_id: userId, created_at: precedente?.created_at ?? new Date().toISOString(), status: "pending",
           payload: toPayload(form),
+          // Version du premier envoi conservée : si le bureau l'a déjà reçue, l'envoi le dira.
+          ...(precedente?.tentative ? { tentative: precedente.tentative } : {}),
         });
       } catch {
         setPhase("repos");

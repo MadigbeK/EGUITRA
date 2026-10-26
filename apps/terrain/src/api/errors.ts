@@ -31,6 +31,9 @@ export class HorsReseau extends Error {
 
 export const SESSION_EXPIREE = "Session expirée. Reconnectez-vous.";
 
+/** La session a changé sur l'appareil pendant l'appel : rien n'est écrit, rien n'est oublié. */
+export const SESSION_CHANGEE = "session_changed";
+
 /** Message d'une réponse sans corps lisible, selon son statut. */
 export function messageParDefaut(status: number): string {
   if (status === 401) return SESSION_EXPIREE;

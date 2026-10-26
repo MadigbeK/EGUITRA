@@ -6,6 +6,7 @@ import {
   type StyleProp, type TextInputInstance, type TextInputProps, type TextProps, type ViewStyle,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { signalerActivite } from "./activite";
 import { espaces, marque, mesures, polices, rayons, textes, traits, type Palette } from "./terrain";
 import { useTerrain } from "./useTerrain";
 
@@ -102,6 +103,10 @@ export const Champ = forwardRef<TextInputInstance, ChampProps>(function Champ({ 
         accessibilityLabel={libelle}
         accessibilityHint={erreur ?? aide}
         {...input}
+        onChangeText={(t) => {
+          signalerActivite();
+          input.onChangeText?.(t);
+        }}
         onFocus={(e) => {
           setFocus(true);
           input.onFocus?.(e);
@@ -186,7 +191,10 @@ export function Choix({
           {options.length > 8 ? (
             <TextInput
               value={filtre}
-              onChangeText={setFiltre}
+              onChangeText={(t) => {
+                signalerActivite();
+                setFiltre(t);
+              }}
               placeholder="Rechercher"
               placeholderTextColor={c.second}
               accessibilityLabel={`Rechercher dans ${libelle}`}

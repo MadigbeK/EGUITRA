@@ -1,4 +1,4 @@
-import { ApiError, DelaiDepasse } from "../api/errors";
+import { ApiError, DelaiDepasse, SESSION_CHANGEE } from "../api/errors";
 import type { SyncResult } from "../api/types";
 import { DELAI_ENVOI, LOT_ENVOI } from "../config";
 import type { QueuedItem, Store } from "../store/types";
@@ -7,7 +7,12 @@ import type { QueuedItem, Store } from "../store/types";
 export interface Bilan {
   created: number;
   errors: number;
-  echec: { reseau: boolean; message: string } | null;
+  /**
+   * Envoi interrompu : `reseau`, la coupure ou le délai dépassé ; `arret`, ce qui empêche aussi les
+   * envois suivants (coupure, session finie ou changée). Un refus du bureau sur une route n'arrête
+   * pas celles des autres saisies.
+   */
+  echec: { reseau: boolean; arret: boolean; message: string } | null;
 }
 
 /** Ce que l'envoi demande au client de l'API (ApiClient). */
@@ -28,6 +33,13 @@ export function messageEchec(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   if (e instanceof DelaiDepasse) return "Réseau faible : le bureau n'a pas répondu à temps. Les saisies repartiront seules.";
   return "Réseau indisponible : les saisies partiront au retour du réseau.";
+}
+
+/** Échec qui arrête tout l'envoi : coupure du réseau, session finie au bureau ou changée sur l'appareil. */
+export function echecEnvoi(e: unknown): NonNullable<Bilan["echec"]> {
+  const reseau = !(e instanceof ApiError);
+  const session = e instanceof ApiError && (e.status === 401 || e.code === SESSION_CHANGEE);
+  return { reseau, arret: reseau || session, message: messageEchec(e) };
 }
 
 /** Une saisie corrigée sur l'appareil pendant son envoi. */
@@ -63,6 +75,14 @@ export async function envoyerRotations(
     for (let i = 0; i < pending.length; i += LOT_ENVOI) {
       if (api.numero !== session) break;
       const batch = pending.slice(i, i + LOT_ENVOI);
+      // Version de chaque saisie au premier envoi, gardée tant qu'elle n'est pas reçue : si le bureau
+      // répond plus tard « déjà reçue » sur une saisie corrigée depuis, la correction ne s'est pas faite.
+      for (const b of batch) {
+        if (b.tentative) continue;
+        b.tentative = JSON.stringify(b.payload);
+        const actuelle = await store.queue.get(b.client_uuid);
+        if (actuelle && memeContenu(actuelle, b)) await store.queue.put({ ...actuelle, tentative: b.tentative });
+      }
       const res = await api.appel<{ results: SyncResult[] }>("POST", "/transport/sync", {
         body: { rotations: batch.map((b) => ({ ...b.payload, client_uuid: b.client_uuid })) },
         timeout: DELAI_ENVOI,
@@ -79,13 +99,15 @@ export async function envoyerRotations(
           await store.queue.put({ ...actuelle, status: "error", message: r.message ?? "Saisie refusée." });
         } else {
           created += 1;
-          if (inchangee) await store.queue.remove(actuelle.client_uuid);
+          // « Déjà reçue » d'une version antérieure : le bureau garde l'ancienne, la correction est à faire au bureau.
+          const anterieure = r.status === "exists" && envoyee.tentative !== undefined && envoyee.tentative !== JSON.stringify(envoyee.payload);
+          if (inchangee && !anterieure) await store.queue.remove(actuelle.client_uuid);
           else await store.queue.put({ ...actuelle, status: "error", message: RECUE_AVANT_CORRECTION });
         }
       }
     }
   } catch (e) {
-    echec = { reseau: !(e instanceof ApiError), message: messageEchec(e) };
+    echec = echecEnvoi(e);
   }
   return { created, errors, echec };
 }

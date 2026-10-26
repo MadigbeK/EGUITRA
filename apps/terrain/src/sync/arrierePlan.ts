@@ -21,14 +21,22 @@ export const verrouEnvoi = { pris: false };
 
 export async function envoyerEnArrierePlan(): Promise<void> {
   if (verrouEnvoi.pris || !API_URL) return;
-  const user = (await coffreJeton.lire()) ? await profilGarde.lire() : null;
-  if (!user) return;
+  // Verrou posé avant toute attente : l'application rouverte pendant ce temps n'envoie pas en double.
   verrouEnvoi.pris = true;
   try {
+    const user = (await coffreJeton.lire()) ? await profilGarde.lire() : null;
+    if (!user) return;
     const store = sqliteStore();
-    const api = new ApiClient({ base: API_URL, coffre: coffreJeton, surSessionPerdue: () => undefined });
+    // Le client de fond ne voit pas les connexions du premier plan : avant d'écrire un jeton renouvelé,
+    // il vérifie que le coffre garde toujours la session de cet utilisateur.
+    const api = new ApiClient({
+      base: API_URL,
+      coffre: coffreJeton,
+      surSessionPerdue: () => undefined,
+      verifierSession: async () => (await profilGarde.lire())?.id === user.id,
+    });
     const rotations = await envoyerRotations(store, api, user.id);
-    if (!rotations?.echec) await envoyerFiches(store, api, appareil, user.id);
+    if (!rotations?.echec?.arret) await envoyerFiches(store, api, appareil, user.id);
   } finally {
     verrouEnvoi.pris = false;
   }

@@ -5,6 +5,7 @@ import type { QueuedItem } from "../store/types";
 import { Bandeau, Bouton, Feuille, Tampon, Texte, demanderConfirmation } from "../ui/elements";
 import { espaces, traits } from "../ui/terrain";
 import { useTerrain } from "../ui/useTerrain";
+import { RECUE_AVANT_CORRECTION } from "../sync/outbox";
 import { STATE_LABEL } from "./form";
 import type { Rotations } from "./useRotations";
 
@@ -38,6 +39,7 @@ export function ListeAttente({ rot, onCorriger }: { rot: Rotations; onCorriger: 
       ) : null}
       {rot.mine.map((item) => {
         const refusee = item.status === "error";
+        const recue = item.message === RECUE_AVANT_CORRECTION;
         return (
           <Feuille key={item.client_uuid} style={refusee ? { borderColor: c.danger, borderWidth: traits.fort } : undefined}>
             <View style={styles.ligne}>
@@ -45,13 +47,13 @@ export function ListeAttente({ rot, onCorriger }: { rot: Rotations; onCorriger: 
                 <Texte variante="texteDemi">{nom(rot.refs, "vehicles", item.payload.vehicle_id)}, {fmtDate(item.payload.date_loading)}</Texte>
                 <Texte variante="service" ton="second">{nom(rot.refs, "clients", item.payload.partner_id)}, {nom(rot.refs, "routes", item.payload.route_id)}</Texte>
               </View>
-              <Tampon mot={refusee ? "Refusée" : "En attente"} ton={refusee ? "danger" : "warn"} />
+              <Tampon mot={recue ? "Reçue" : refusee ? "Refusée" : "En attente"} ton={refusee ? (recue ? "warn" : "danger") : "warn"} />
             </View>
             <Texte variante="titre">{fmtM3(item.payload.volume_loaded ?? item.payload.volume_delivered)}</Texte>
-            <Texte variante="service" ton="second">Saisi {heure(item.created_at)}, envoi : {refusee ? "refusé par le bureau" : "en attente"}</Texte>
+            <Texte variante="service" ton="second">Saisi {heure(item.created_at)}, envoi : {recue ? "reçu au bureau, version antérieure" : refusee ? "refusé par le bureau" : "en attente"}</Texte>
             {item.message ? <Texte variante="texteDemi" ton="dangerTexte">{item.message}</Texte> : null}
             <View style={[styles.actions, { borderTopColor: c.filet }]}>
-              <Bouton titre="Corriger" variante="secondaire" desactive={!rot.refs} onPress={() => onCorriger(item)} />
+              {!recue ? <Bouton titre="Corriger" variante="secondaire" desactive={!rot.refs} onPress={() => onCorriger(item)} /> : null}
               <Bouton titre="Supprimer" variante="danger" onPress={() => void supprimer(item)} />
             </View>
           </Feuille>

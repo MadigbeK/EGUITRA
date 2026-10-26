@@ -27,6 +27,8 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL
    );
    CREATE INDEX IF NOT EXISTS pieces_parent ON pieces (parent_uuid);`,
+  // 3 : version d'une saisie à son premier envoi.
+  `ALTER TABLE queue ADD COLUMN tentative TEXT;`,
 ];
 
 interface Ligne {
@@ -37,6 +39,7 @@ interface Ligne {
   status: QueuedItem["status"];
   message: string | null;
   payload: string;
+  tentative: string | null;
 }
 
 function versSaisie(r: Ligne): QueuedItem {
@@ -47,6 +50,7 @@ function versSaisie(r: Ligne): QueuedItem {
     created_at: r.created_at,
     status: r.status,
     ...(r.message ? { message: r.message } : {}),
+    ...(r.tentative ? { tentative: r.tentative } : {}),
     payload: JSON.parse(r.payload) as Record<string, unknown>,
   };
 }
@@ -85,10 +89,10 @@ export function sqliteStore(): Store {
       },
       put: async (item) => {
         await (await base()).runAsync(
-          `INSERT OR REPLACE INTO queue (client_uuid, kind, user_id, created_at, status, message, payload)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT OR REPLACE INTO queue (client_uuid, kind, user_id, created_at, status, message, payload, tentative)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           item.client_uuid, item.kind, item.user_id, item.created_at, item.status, item.message ?? null,
-          JSON.stringify(item.payload),
+          JSON.stringify(item.payload), item.tentative ?? null,
         );
       },
       remove: async (uuid) => {
@@ -98,6 +102,7 @@ export function sqliteStore(): Store {
     pieces: {
       of: async (parentUuid) =>
         (await base()).getAllAsync<Piece>("SELECT * FROM pieces WHERE parent_uuid = ? ORDER BY created_at", parentUuid),
+      all: async () => (await base()).getAllAsync<Piece>("SELECT * FROM pieces"),
       put: async (p) => {
         await (await base()).runAsync(
           `INSERT OR REPLACE INTO pieces (client_uuid, parent_uuid, model, item_id, uri, size, created_at)

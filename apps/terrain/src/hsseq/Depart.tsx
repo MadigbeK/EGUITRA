@@ -8,6 +8,7 @@ import { useSession } from "../auth/session";
 import { DELAI_LISTE } from "../config";
 import { fmtDate, heure, pluriel } from "../format";
 import { useEnvoi } from "../sync/Envoi";
+import { signalerActivite } from "../ui/activite";
 import { BarreAction, Bandeau, Bouton, EnTete, Ecran, Feuille, Tampon, Texte, vibrer } from "../ui/elements";
 import { Cadenas } from "../ui/icones";
 import { espaces, mesures, polices, rayons, textes, traits } from "../ui/terrain";
@@ -387,7 +388,10 @@ function Derogation({
             accessibilityLabel="Justification de la dérogation"
             multiline
             value={justification}
-            onChangeText={setJustification}
+            onChangeText={(t) => {
+              signalerActivite();
+              setJustification(t);
+            }}
             placeholderTextColor={c.second}
             style={[styles.texte, { borderColor: c.trait, backgroundColor: c.surface, color: c.encre }]}
           />

@@ -186,7 +186,7 @@ describe("envoi des fiches HSSEQ", () => {
     await store.pieces.put(photo("ph", "a1", "event", null));
     const { api } = bureau((a) => (a.path === "/hsseq/events" ? { id: 5 } : new HorsReseau()));
     const bilan = await envoyerFiches(store, api, appareil(), 7);
-    expect(bilan?.echec).toEqual({ reseau: true, message: "Réseau indisponible : les saisies partiront au retour du réseau." });
+    expect(bilan?.echec).toEqual({ reseau: true, arret: true, message: "Réseau indisponible : les saisies partiront au retour du réseau." });
     // La fiche reçue repartira (le bureau la reconnaîtra), avec sa photo.
     expect(await store.queue.all()).toHaveLength(1);
     expect(await store.pieces.of("a1")).toHaveLength(1);

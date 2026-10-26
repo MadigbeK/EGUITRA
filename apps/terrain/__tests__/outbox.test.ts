@@ -1,4 +1,4 @@
-import { ApiError, DelaiDepasse, HorsReseau } from "../src/api/errors";
+import { ApiError, DelaiDepasse, HorsReseau, SESSION_CHANGEE } from "../src/api/errors";
 import type { SyncResult } from "../src/api/types";
 import { memoryStore } from "../src/store/memory";
 import type { QueuedItem } from "../src/store/types";
@@ -89,7 +89,7 @@ describe("envoyerRotations", () => {
       return recues(rotations);
     });
     const bilan = await envoyerRotations(store, api, 7);
-    expect(bilan).toEqual({ created: 50, errors: 0, echec: { reseau: true, message: "Réseau indisponible : les saisies partiront au retour du réseau." } });
+    expect(bilan).toEqual({ created: 50, errors: 0, echec: { reseau: true, arret: true, message: "Réseau indisponible : les saisies partiront au retour du réseau." } });
     expect(await store.queue.all()).toHaveLength(10);
   });
 
@@ -98,7 +98,7 @@ describe("envoyerRotations", () => {
     await store.queue.put(saisie(1));
     const { api } = envoyeur(() => new DelaiDepasse());
     const bilan = await envoyerRotations(store, api, 7);
-    expect(bilan?.echec).toEqual({ reseau: true, message: "Réseau faible : le bureau n'a pas répondu à temps. Les saisies repartiront seules." });
+    expect(bilan?.echec).toEqual({ reseau: true, arret: true, message: "Réseau faible : le bureau n'a pas répondu à temps. Les saisies repartiront seules." });
     expect(await store.queue.all()).toHaveLength(1);
   });
 
@@ -107,7 +107,18 @@ describe("envoyerRotations", () => {
     await store.queue.put(saisie(1));
     const { api } = envoyeur(() => new ApiError(403, "forbidden", "Accès non autorisé pour votre profil."));
     const bilan = await envoyerRotations(store, api, 7);
-    expect(bilan?.echec).toEqual({ reseau: false, message: "Accès non autorisé pour votre profil." });
+    // Un refus sur une route n'arrête pas l'envoi des fiches HSSEQ.
+    expect(bilan?.echec).toEqual({ reseau: false, arret: false, message: "Accès non autorisé pour votre profil." });
+  });
+
+  it("arrête tout l'envoi sur une session finie ou changée", async () => {
+    const store = memoryStore();
+    await store.queue.put(saisie(1));
+    const fini = await envoyerRotations(store, envoyeur(() => new ApiError(401, "unauthenticated", "Session expirée.")).api, 7);
+    expect(fini?.echec?.arret).toBe(true);
+    const change = await envoyerRotations(store, envoyeur(() => new ApiError(409, SESSION_CHANGEE, "La session a changé.")).api, 7);
+    expect(change?.echec?.arret).toBe(true);
+    expect(await store.queue.all()).toHaveLength(1);
   });
 
   it("ne renvoie les saisies refusées que sur demande", async () => {

@@ -55,8 +55,39 @@ export async function preparerPhoto(
     await fichier.move(destination);
     uri = destination.uri;
     size = destination.size ?? 0;
+    // Le cliché d'origine, en pleine taille dans le cache, n'a plus d'usage.
+    try {
+      const brut = new File(source.uri);
+      if (source.uri !== image.uri && brut.exists) brut.delete();
+    } catch {
+      // Le système videra le cache.
+    }
   }
   return { client_uuid, ...rattachement, uri, size, created_at: new Date().toISOString() };
+}
+
+/** Une photo plus récente peut appartenir à une fiche encore ouverte, pas encore enregistrée. */
+const AGE_ORPHELINE = 60 * 60 * 1000;
+
+/**
+ * Photos du dossier qu'aucune saisie ne cite plus (fiche abandonnée, application fermée avant
+ * l'enregistrement, levée faite) : elles quittent l'appareil. Une photo de moins d'une heure reste.
+ */
+export function balayerPhotos(gardees: ReadonlySet<string>, maintenant = Date.now()): number {
+  if (web) return 0;
+  let supprimees = 0;
+  try {
+    for (const f of dossierPhotos().list()) {
+      if (!(f instanceof File) || gardees.has(f.uri)) continue;
+      const modifiee = f.info().modificationTime ?? maintenant;
+      if (maintenant - modifiee < AGE_ORPHELINE) continue;
+      f.delete();
+      supprimees += 1;
+    }
+  } catch {
+    // Dossier illisible : nouvel essai à la prochaine ouverture.
+  }
+  return supprimees;
 }
 
 /** Suppression d'une photo abandonnée (saisie supprimée, photo reprise). */

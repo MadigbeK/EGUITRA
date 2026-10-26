@@ -5,7 +5,7 @@ import type { ApiClient } from "../api/client";
 import { ApiError } from "../api/errors";
 import { ECHANGE_LENT, INTERVALLE_ENVOI } from "../config";
 import { pluriel } from "../format";
-import { appareil, supprimerPhoto } from "../hsseq/appareil";
+import { appareil, balayerPhotos, supprimerPhoto } from "../hsseq/appareil";
 import { envoyerFiches } from "../hsseq/envoi";
 import { dernierEnvoi } from "../store/device";
 import type { Piece, QueuedItem, Store } from "../store/types";
@@ -83,6 +83,18 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
   const encore = useRef(false);
   const relance = useRef<() => Promise<Bilan | null>>(async () => null);
   const echecRef = useRef(false);
+  // Le fournisseur vit le temps d'une session : démonté (déconnexion, autre compte), il n'envoie plus
+  // rien, et ses relances en attente sont annulées.
+  const monte = useRef(true);
+  const session = useRef(api.numero);
+  const minuteurs = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const plusTard = useCallback((ms: number) => {
+    const id = setTimeout(() => {
+      minuteurs.current.delete(id);
+      void relance.current();
+    }, ms);
+    minuteurs.current.add(id);
+  }, []);
 
   const noter = useCallback((ok: boolean, debut: number) => {
     echecRef.current = !ok;
@@ -121,7 +133,7 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
 
   const sync = useCallback(
     async (origine: Origine = "auto"): Promise<Bilan | null> => {
-      if (!onlineRef.current) return null;
+      if (!monte.current || api.numero !== session.current || !onlineRef.current) return null;
       // Verrou posé avant toute attente : deux déclencheurs rapprochés n'envoient jamais deux fois.
       // Une saisie enregistrée pendant un envoi part juste après, sans attendre le minuteur.
       if (busy.current) {
@@ -130,7 +142,7 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
       }
       // Envoi en arrière-plan en cours (application tout juste rouverte) : nouvel essai dans 5 s.
       if (verrouEnvoi.pris) {
-        setTimeout(() => void relance.current(), 5_000);
+        plusTard(5_000);
         return null;
       }
       busy.current = true;
@@ -143,7 +155,9 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
         const debut = Date.now();
         const refusees = origine === "envoi";
         const rotations = await envoyerRotations(store, api, userId, { refusees });
-        const fiches = rotations?.echec ? null : await envoyerFiches(store, api, appareil, userId, { refusees });
+        // Un refus du bureau sur les rotations n'empêche pas l'envoi des fiches HSSEQ.
+        const arret = rotations?.echec?.arret || api.numero !== session.current;
+        const fiches = arret ? null : await envoyerFiches(store, api, appareil, userId, { refusees });
         bilan = reunir(rotations, fiches);
         if (!bilan) return null;
         noter(!bilan.echec?.reseau, debut);
@@ -173,28 +187,36 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
         verrouEnvoi.pris = false;
         if (encore.current) {
           encore.current = false;
-          setTimeout(() => void relance.current(), 0);
+          plusTard(0);
         }
       }
     },
-    [api, store, userId, noter, charger],
+    [api, store, userId, noter, charger, plusTard],
   );
   relance.current = () => sync();
 
   useEffect(() => {
+    monte.current = true;
+    const enCours = minuteurs.current;
     void (async () => {
       setLastSync(await dernierEnvoi.get(store));
       await charger();
       void sync();
       void inscrireEnvoiArrierePlan();
+      // Photos qu'aucune saisie ne cite plus : fiche abandonnée, application fermée avant l'enregistrement.
+      const gardees = await store.pieces.all().then((ps) => new Set(ps.map((p) => p.uri))).catch(() => null);
+      if (gardees) balayerPhotos(gardees);
     })();
     const etat = AppState.addEventListener("change", (s) => {
       if (s === "active") void sync();
     });
     const minuteur = setInterval(() => void sync(), INTERVALLE_ENVOI);
     return () => {
+      monte.current = false;
       etat.remove();
       clearInterval(minuteur);
+      for (const id of enCours) clearTimeout(id);
+      enCours.clear();
     };
   }, [store, charger, sync]);
 

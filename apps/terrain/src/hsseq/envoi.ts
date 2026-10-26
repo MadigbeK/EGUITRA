@@ -1,7 +1,7 @@
-import { ApiError } from "../api/errors";
+import { ApiError, SESSION_CHANGEE } from "../api/errors";
 import { DELAI_ENVOI } from "../config";
 import type { Kind, Piece, QueuedItem, Store } from "../store/types";
-import { enAttente, messageEchec, type Bilan } from "../sync/outbox";
+import { echecEnvoi, enAttente, type Bilan } from "../sync/outbox";
 import type { CheckResponse, ResultatAlcootest } from "./types";
 
 /** Ce que l'envoi des fiches demande au client de l'API (ApiClient). */
@@ -27,6 +27,25 @@ export const ROUTES: Partial<Record<Kind, string>> = {
 };
 
 export const FICHES: Kind[] = ["check", "breath_test", "event"];
+
+/**
+ * Refus définitif propre à une fiche ou à une photo : le bureau l'a lue et n'en veut pas en l'état
+ * (champ manquant, format, saisie d'un autre compte, motif métier). Une erreur passagère (5xx, 408,
+ * 429), une session à refaire (401, mot de passe provisoire, application fermée au profil) ou une
+ * session changée sur l'appareil ne sont pas des refus : l'envoi s'arrête, la fiche et ses photos
+ * restent en attente et repartiront telles quelles.
+ */
+export function refusDefinitif(e: unknown): e is ApiError {
+  if (!(e instanceof ApiError)) return false;
+  if (e.code === "password_change_required" || e.code === "app_forbidden" || e.code === SESSION_CHANGEE) return false;
+  return [400, 403, 404, 409, 413, 415, 422].includes(e.status);
+}
+
+/** Refus pour une heure de saisie que le bureau juge à venir : l'horloge de l'appareil avance. */
+function horlogeDecalee(e: ApiError): boolean {
+  const champs = e.extra.fields;
+  return Array.isArray(champs) && champs.includes("reported_at");
+}
 
 /** Une photo refusée par le bureau (format, taille) : la fiche est reçue, la photo reste à refaire. */
 export const PHOTO_REFUSEE = "Fiche reçue au bureau, mais une photo a été refusée : prévenez le Responsable HSSEQ.";
@@ -73,7 +92,10 @@ export async function envoyerFiches(
       try {
         reponse = await api.appel<{ id: number }>("POST", ROUTES[fiche.kind]!, { body: corps, timeout: DELAI_ENVOI });
       } catch (e) {
-        if (!(e instanceof ApiError) || e.status === 401) throw e;
+        if (!refusDefinitif(e)) throw e;
+        // Heure de saisie refusée (horloge de l'appareil en avance) : la fiche reste en attente et
+        // repartira, l'heure du téléphone une fois corrigée.
+        if (horlogeDecalee(e)) continue;
         // Refus du bureau sur cette fiche seule : les suivantes partent quand même.
         errors += 1;
         const actuelle = await store.queue.get(fiche.client_uuid);
@@ -94,7 +116,9 @@ export async function envoyerFiches(
           try {
             await api.appel("POST", "/hsseq/attachments", { form, timeout: DELAI_ENVOI });
           } catch (e) {
-            if (!(e instanceof ApiError) || e.status === 401) throw e;
+            // Erreur passagère : la photo reste sur l'appareil, la fiche repartira (le bureau la
+            // reconnaîtra) avec elle.
+            if (!refusDefinitif(e)) throw e;
             photoRefusee = true;
           }
         }
@@ -112,7 +136,7 @@ export async function envoyerFiches(
       }
     }
   } catch (e) {
-    echec = { reseau: !(e instanceof ApiError), message: messageEchec(e) };
+    echec = echecEnvoi(e);
   }
   return { created, errors, echec };
 }

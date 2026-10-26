@@ -12,6 +12,7 @@ export function memoryStore(): Store {
     pieces: {
       of: async (parentUuid) =>
         [...pieces.values()].filter((p) => p.parent_uuid === parentUuid).sort((a, b) => a.created_at.localeCompare(b.created_at)).map(structuredCloneSimple),
+      all: async () => [...pieces.values()].map(structuredCloneSimple),
       put: async (piece) => {
         pieces.set(piece.client_uuid, structuredCloneSimple(piece));
       },

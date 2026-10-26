@@ -1,6 +1,6 @@
 import * as Linking from "expo-linking";
-import { useRef, useState } from "react";
-import { KeyboardAvoidingView, ScrollView, StyleSheet, View, type TextInputInstance } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AppState, KeyboardAvoidingView, ScrollView, StyleSheet, View, type TextInputInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, DelaiDepasse } from "../api/errors";
 import { useSession } from "../auth/session";
@@ -41,6 +41,25 @@ export function Connexion() {
 
   const message = etape.nom === "connexion" ? etape.message : undefined;
 
+  // Code de vérification et activation : à l'expiration du jeton d'étape, retour à l'identifiant ; la
+  // clé d'activation n'attend pas le suivant à l'écran. Le passage en arrière-plan ne compte pas : la
+  // personne quitte l'application pour lire son code dans l'application d'authentification. Au
+  // retour, une étape expirée pendant l'absence se referme aussitôt.
+  const echeance = etape.nom === "code" || etape.nom === "activation" ? etape.expire : null;
+  const { recommencer } = session;
+  useEffect(() => {
+    if (echeance === null) return;
+    const expirer = () => recommencer("Délai dépassé : reprenez la connexion.");
+    const id = setTimeout(expirer, Math.max(0, echeance - Date.now()));
+    const abonnement = AppState.addEventListener("change", (s) => {
+      if (s === "active" && Date.now() >= echeance) expirer();
+    });
+    return () => {
+      clearTimeout(id);
+      abonnement.remove();
+    };
+  }, [echeance, recommencer]);
+
   return (
     <KeyboardAvoidingView style={styles.racine} behavior="padding">
       <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + espaces[8] }]} keyboardShouldPersistTaps="handled">
@@ -59,7 +78,7 @@ export function Connexion() {
               aide="Le code à 6 chiffres de votre application d'authentification."
               envoi={envoi}
               onValider={(c) => void agir(() => session.validerCode(c))}
-              onRetour={session.recommencer}
+              onRetour={() => recommencer()}
             />
           ) : null}
           {etape.nom === "activation" ? (
@@ -69,11 +88,19 @@ export function Connexion() {
               <Bouton titre="Ouvrir l'application d'authentification" variante="secondaire" onPress={() => void Linking.openURL(etape.uri).catch(() => setErreur("Aucune application d'authentification sur cet appareil : saisissez la clé à la main."))} />
               <Texte variante="libelle" ton="encre2">Clé à saisir à la main</Texte>
               <Texte variante="chiffre" selectable style={{ fontSize: 18, letterSpacing: 1 }}>{etape.secret}</Texte>
-              <CodeSaisi titre="Code affiché" envoi={envoi} onValider={(c) => void agir(() => session.activer(c))} onRetour={session.recommencer} />
+              <CodeSaisi titre="Code affiché" envoi={envoi} onValider={(c) => void agir(() => session.activer(c))} onRetour={() => recommencer()} />
             </>
           ) : null}
           {etape.nom === "mot_de_passe" ? (
-            <NouveauMotDePasse envoi={envoi} onValider={(a, n) => void agir(() => session.changerMotDePasse(a, n))} />
+            <>
+              <NouveauMotDePasse envoi={envoi} onValider={(a, n) => void agir(() => session.changerMotDePasse(a, n))} />
+              <Bouton
+                titre="Changer d'utilisateur"
+                variante="discret"
+                desactive={envoi}
+                onPress={() => void agir(() => session.seDeconnecter().catch(() => session.seDeconnecter({ horsReseau: true })))}
+              />
+            </>
           ) : null}
         </Feuille>
       </ScrollView>

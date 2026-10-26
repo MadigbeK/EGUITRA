@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { enableAppSwitcherProtectionAsync } from "expo-screen-capture";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { AppState, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ecouterActivite } from "../ui/activite";
 import { Bouton, Texte, vibrer } from "../ui/elements";
 import { espaces, LARGEUR_TABLETTE, marque, mesures, rayons, textes, traits } from "../ui/terrain";
 import { codeAppareil } from "./codeAppareil";
@@ -15,6 +17,17 @@ const INACTIVITE = 2 * 60_000;
 const PREAVIS = 20_000;
 
 type Etat = "chargement" | "a_definir" | "ouvert" | "verrouille";
+
+/**
+ * Code personnel redemandé avant un geste qui engage son auteur (dérogation, levée d'une
+ * non-conformité) : sur une tablette partagée, la session ouverte n'est pas forcément celle de la
+ * personne devant l'écran. Rend vrai si le code est juste, faux si la personne renonce.
+ */
+const Confirmation = createContext<(raison: string) => Promise<boolean>>(async () => false);
+
+export function useConfirmerCode(): (raison: string) => Promise<boolean> {
+  return useContext(Confirmation);
+}
 
 /**
  * Verrou de l'application par le code personnel (système « terrain », § 3.11). Une session reprise
@@ -32,6 +45,9 @@ export function Verrou({ user, fraiche, children }: { user: Utilisateur; fraiche
   const [preavis, setPreavis] = useState(false);
   const quitte = useRef<number | null>(null);
   const dernierGeste = useRef(Date.now());
+  const [demande, setDemande] = useState<{ raison: string; resoudre: (ok: boolean) => void } | null>(null);
+  const demandeRef = useRef(demande);
+  demandeRef.current = demande;
 
   // Fraîcheur de la connexion au montage : elle décide de l'état de départ, une fois. La session
   // change d'identité à chaque étape (profil confirmé par le bureau) : l'état de départ n'est pas
@@ -53,6 +69,45 @@ export function Verrou({ user, fraiche, children }: { user: Utilisateur; fraiche
       actif = false;
     };
   }, [user.id]);
+
+  // Verrouillé : le clavier ouvert se ferme (la frappe n'atteint pas le champ resté dessous).
+  useEffect(() => {
+    if (etat === "verrouille") Keyboard.dismiss();
+  }, [etat]);
+
+  // La frappe au clavier compte comme un geste ; un champ ouvert aussi.
+  useEffect(() => {
+    const touche = () => {
+      dernierGeste.current = Date.now();
+      setPreavis(false);
+    };
+    const arret = ecouterActivite(touche);
+    const montre = Keyboard.addListener("keyboardDidShow", touche);
+    const cache = Keyboard.addListener("keyboardDidHide", touche);
+    return () => {
+      arret();
+      montre.remove();
+      cache.remove();
+    };
+  }, []);
+
+  // iPhone et iPad : l'aperçu du sélecteur d'applications est flouté. Android : la fenêtre des
+  // applications récentes montre le dernier écran, verrouillé dès le retour après le délai.
+  useEffect(() => {
+    if (Platform.OS === "ios") void enableAppSwitcherProtectionAsync(0.9).catch(() => undefined);
+  }, []);
+
+  // Demande en cours au démontage (déconnexion) : la personne n'a pas confirmé.
+  useEffect(() => () => demandeRef.current?.resoudre(false), []);
+
+  const confirmerCode = useCallback(
+    (raison: string) =>
+      new Promise<boolean>((resoudre) => {
+        demandeRef.current?.resoudre(false);
+        setDemande({ raison, resoudre });
+      }),
+    [],
+  );
 
   // Réveil de l'application.
   useEffect(() => {
@@ -89,7 +144,8 @@ export function Verrou({ user, fraiche, children }: { user: Utilisateur; fraiche
 
   const echec = useCallback(async () => {
     await codeAppareil.effacer(user.id);
-    await seDeconnecter({ horsReseau: true }).catch(() => undefined);
+    // Fermeture au bureau d'abord ; sans réseau, oubli sur l'appareil et révocation au premier échange.
+    await seDeconnecter().catch(() => seDeconnecter({ horsReseau: true })).catch(() => undefined);
   }, [seDeconnecter, user.id]);
 
   if (etat === "chargement") return <View style={{ flex: 1, backgroundColor: marque.foret }} />;
@@ -97,12 +153,44 @@ export function Verrou({ user, fraiche, children }: { user: Utilisateur; fraiche
 
   return (
     <View style={{ flex: 1 }} onStartShouldSetResponderCapture={geste} onMoveShouldSetResponderCapture={geste}>
-      {children}
+      {/* Verrouillé : le contenu resté dessous n'est plus lu par le lecteur d'écran. */}
+      <View
+        style={{ flex: 1 }}
+        importantForAccessibility={etat === "verrouille" || demande ? "no-hide-descendants" : "auto"}
+        accessibilityElementsHidden={etat === "verrouille" || !!demande}
+      >
+        <Confirmation.Provider value={confirmerCode}>{children}</Confirmation.Provider>
+      </View>
       {preavis ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Rester connecté" onPress={geste} style={styles.preavis}>
           <Text style={[textes.libelle, { color: "#0b1a16", textAlign: "center" }]}>La tablette se verrouille dans 20 s. Touchez pour rester.</Text>
         </Pressable>
       ) : null}
+      <Modal visible={!!demande} animationType="none" statusBarTranslucent onRequestClose={() => { demande?.resoudre(false); setDemande(null); }}>
+        {demande ? (
+          <SaisieCode
+            titre="Confirmez par votre code personnel"
+            aide={demande.raison}
+            onCode={async (code) => {
+              const r = await codeAppareil.verifier(user.id, code);
+              if (r.ok) {
+                dernierGeste.current = Date.now();
+                demande.resoudre(true);
+                setDemande(null);
+                return null;
+              }
+              if (r.restants === 0) {
+                demande.resoudre(false);
+                setDemande(null);
+                await echec();
+                return "Cinq erreurs : reconnectez-vous avec votre identifiant.";
+              }
+              return `Code incorrect : encore ${r.restants} essai${r.restants > 1 ? "s" : ""}.`;
+            }}
+            secondaire={{ titre: "Annuler", action: () => { demande.resoudre(false); setDemande(null); } }}
+          />
+        ) : null}
+      </Modal>
       <Modal visible={etat === "verrouille"} animationType="none" statusBarTranslucent onRequestClose={() => undefined}>
         <SaisieCode
             titre={`${user.name}, votre code personnel`}

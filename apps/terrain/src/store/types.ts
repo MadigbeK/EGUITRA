@@ -20,6 +20,8 @@ export interface QueuedItem {
   status: "pending" | "error";
   message?: string;
   payload: Record<string, unknown>;
+  /** Contenu de la saisie à son premier envoi (JSON), tant qu'elle n'est pas reçue au bureau. */
+  tentative?: string;
 }
 
 /**
@@ -50,6 +52,8 @@ export interface Store {
   };
   pieces: {
     of(parentUuid: string): Promise<Piece[]>;
+    /** Toutes les photos en attente, pour retrouver les fichiers orphelins du dossier. */
+    all(): Promise<Piece[]>;
     put(piece: Piece): Promise<void>;
     remove(uuid: string): Promise<void>;
   };
