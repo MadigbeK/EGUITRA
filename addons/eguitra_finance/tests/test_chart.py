@@ -99,7 +99,9 @@ class TestChartOfAccounts(FinanceDataMixin, ApiCase):
         first = self.make_invoice("in_invoice", 2_000_000, post=False)
         first.ref = "FAC-EAU-0007"
         first.with_context(eguitra_approval_granted=True).action_post()
-        first._reverse_moves([{"date": first.date, "ref": "Montant erroné"}], cancel=True)
+        # Avoir daté comme la facture : une pièce d'achat ne se valide pas sans date (invoice_date n'est pas copiée).
+        first._reverse_moves([{"date": first.date, "invoice_date": first.invoice_date, "ref": "Montant erroné"}],
+                             cancel=True)
         self.assertEqual(first.payment_state, "reversed")
         second = self.make_invoice("in_invoice", 2_500_000, post=False)
         second.ref = " fac-eau-0007 "
