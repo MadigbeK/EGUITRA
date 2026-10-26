@@ -927,13 +927,26 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
   );
 }
 
-/** Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire. */
+/**
+ * Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire.
+ * Le champ est remis à zéro après chaque choix : après un refus, choisir à nouveau le même fichier
+ * (corrigé ou non) relance l'envoi, au lieu de ne rien faire.
+ */
 export function FileButton({ label, accept, onFile, small }: { label: string; accept?: string; onFile: (file: File) => void; small?: boolean }) {
   return (
     <label className={classesBouton("secondary", small ? "sm" : "md", "relative cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif")}>
       <FileUpIcon className={small ? "h-3.5 w-3.5" : "h-4 w-4"} />
       {label}
-      <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+      <input
+        type="file"
+        className="sr-only"
+        accept={accept}
+        onChange={(e) => {
+          const fichier = e.target.files?.[0];
+          e.target.value = "";
+          if (fichier) onFile(fichier);
+        }}
+      />
     </label>
   );
 }
