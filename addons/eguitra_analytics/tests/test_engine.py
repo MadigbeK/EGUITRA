@@ -203,3 +203,36 @@ class TestFormatsConstats(BaseCase):
         self.assertEqual(_days(1.2), "1,2 jour")
         self.assertEqual(_days(None), "–")
         self.assertEqual(gnf(500_000), "500 000 GNF", "Jamais « k »")
+
+
+@tagged("post_install", "-at_install")
+class TestClasseur(BaseCase):
+    """Classeur Excel : un code accompagné de son libellé ne s'exporte que par son libellé."""
+
+    def test_code_et_libelle(self):
+        import io
+
+        import openpyxl
+        import xlsxwriter
+
+        from ..controllers.classeur import _Writer
+
+        buffer = io.BytesIO()
+        book = xlsxwriter.Workbook(buffer, {"in_memory": True})
+        writer = _Writer(book)
+        sheet = writer.sheet("Chantiers")
+        writer.table(sheet, 0, [
+            {"name": "Pont", "state": "preparation", "state_label": "En préparation",
+             "reference": 50, "reference_label": "Seuil CONDITIONAL GO"},
+            {"name": "Route", "state": "received", "state_label": "Réceptionné",
+             "reference": 65, "reference_label": "Seuil GO"},
+        ])
+        writer.finish(sheet)
+        book.close()
+        rows = list(openpyxl.load_workbook(io.BytesIO(buffer.getvalue()))["Chantiers"].iter_rows(values_only=True))
+        header, first = rows[0], rows[1]
+        self.assertEqual(len(header), 4, "Le code d'état disparaît, la référence chiffrée reste")
+        self.assertIn("État", header, "Le libellé prend l'intitulé du code")
+        self.assertIn("En préparation", first)
+        self.assertNotIn("preparation", first, "Jamais de code brut")
+        self.assertIn(50, first)

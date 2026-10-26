@@ -1249,7 +1249,8 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             eac = contract / cpi if cpi else None
             rows.append({
                 "id": chantier.id, "name": chantier.name, "code": chantier.code or None, "client": chantier.partner_id.name,
-                "state": chantier.state, "contract_amount": contract, "progress_pct": progress, "invoiced": invoiced,
+                "state": chantier.state, "state_label": dict(chantier._fields["state"].selection).get(chantier.state),
+                "contract_amount": contract, "progress_pct": progress, "invoiced": invoiced,
                 "costs": cost, "margin": invoiced - cost, "margin_pct": _pct_of(invoiced - cost, invoiced),
                 "earned_value": earned, "cpi": cpi, "eac": eac,
                 "margin_at_completion": contract - eac if eac is not None else None,
@@ -1305,7 +1306,8 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             income, expense = flows.get(prop.analytic_account_id.id, (0.0, 0.0))
             amount, count = unpaid.get(prop.id, (0.0, 0))
             rows.append({
-                "id": prop.id, "name": prop.name, "kind": prop.kind, "occupied": bool(active),
+                "id": prop.id, "name": prop.name, "kind": prop.kind,
+                "kind_label": dict(prop._fields["kind"].selection).get(prop.kind), "occupied": bool(active),
                 "occupancy_pct": min(100.0, covered / ctx.days * 100), "annual_rent": rent, "value": value,
                 "gross_yield_pct": _pct_of(rent, value), "unpaid_amount": amount, "unpaid_count": count,
                 "revenue": income, "costs": expense, "net": income - expense,

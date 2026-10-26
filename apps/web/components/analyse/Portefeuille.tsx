@@ -158,8 +158,8 @@ function Corps() {
           <Card title={<span id="prevision">Ce que la vitesse observée promet</span>} className={cx("transition-shadow duration-500", eclat === "prevision" && CIBLE_BLOC)} actions={<span className="text-[12.5px] text-muted">Dossiers par mois franchissant chaque gate, 12 mois</span>}>
             <div className="grid gap-5 xl:grid-cols-12">
               <div className="grid grid-cols-2 gap-2.5 xl:col-span-5">
-                <Chiffre label="APD Ready dans 3 mois" value={String(d.forecast.apd_3m)} hint="dossiers attendus" grand />
-                <Chiffre label="APD Ready dans 6 mois" value={String(d.forecast.apd_6m)} hint="dossiers attendus" grand />
+                <Chiffre label="APD READY dans 3 mois" value={String(d.forecast.apd_3m)} hint="dossiers attendus" grand />
+                <Chiffre label="APD READY dans 6 mois" value={String(d.forecast.apd_6m)} hint="dossiers attendus" grand />
                 <Chiffre label="Bankability dans 3 mois" value={String(d.forecast.bankability_3m)} hint="dossiers attendus" grand tone="ok" />
                 <Chiffre label="Bankability dans 6 mois" value={String(d.forecast.bankability_6m)} hint="dossiers attendus" grand tone="ok" />
               </div>

@@ -6,10 +6,12 @@ import { COULEUR_DECISION, ETATS } from "@/lib/couleurs";
 import { CarteChaleur, Legende, TableRepli } from "@/components/analyse/charts";
 import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtDate, fmtPct, joursOu, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
+import { RECO, type Recommendation } from "@/lib/axispro-types";
 import type { CabinetComites, Decision } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
-const LIBELLE_DECISION: Record<string, string> = { go: "GO", conditional: "GO sous conditions", hold: "HOLD", no_go: "NO-GO", postponed: "Ajourné" };
+/** Décision d'un comité, dans le vocabulaire de la méthode (CONDITIONAL GO, comme le noyau). */
+const libelleDecision = (code: string) => RECO[code as Recommendation]?.label ?? code;
 
 /** Lecture d'une case de la matrice, donnée par le noyau (la diagonale n'est pas l'accord). */
 const LECTURE_CASE: Record<string, string> = {
@@ -98,7 +100,7 @@ function Corps() {
                     {ttd.rows.map((r) => (
                       <li key={`${r.id}-${r.date}`} className="flex items-center justify-between gap-3">
                         <span className="truncate"><LienFiche href={r.link}>{r.reference}</LienFiche> · {r.name}</span>
-                        <span className="whitespace-nowrap text-muted">{fmtDate(r.date)} · {joursOu(r.days)} · {LIBELLE_DECISION[r.decision] ?? r.decision}</span>
+                        <span className="whitespace-nowrap text-muted">{fmtDate(r.date)} · {joursOu(r.days)} · {libelleDecision(r.decision)}</span>
                       </li>
                     ))}
                   </ul>
@@ -141,7 +143,7 @@ function Corps() {
               {(d.score_at_decision ?? []).some((s) => s.scores.length > 0) ? <Bandes series={d.score_at_decision} /> : <Vide compact titre="Aucune revue avec score" />}
               <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <Chiffre label="Conditions posées" value={String(d.conditions?.count ?? 0)} hint={d.conditions ? `${d.conditions.done} levées · ${d.conditions.open} ouvertes${d.conditions.overdue ? ` · ${d.conditions.overdue} en retard` : ""}` : undefined} tone={d.conditions?.overdue ? "warn" : undefined} />
-                <Chiffre label="Conditions levées" value={pctOu(d.conditions?.done_rate_pct ?? null, 0)} hint="part des conditions des GO sous conditions" />
+                <Chiffre label="Conditions levées" value={pctOu(d.conditions?.done_rate_pct ?? null, 0)} hint="part des conditions des CONDITIONAL GO" />
               </div>
             </Card>
           </div>

@@ -232,6 +232,8 @@ export interface Chantier {
   code: string | null;
   client: string | null;
   state: string;
+  /** Libellé de l'état (En préparation, En cours, Réceptionné, Clos). */
+  state_label?: string | null;
   contract_amount: number;
   progress_pct: number;
   invoiced: number;
@@ -250,6 +252,8 @@ export interface Bien {
   id: number;
   name: string;
   kind: string;
+  /** Libellé de la nature du bien (Appartement, Entrepôt…). */
+  kind_label?: string | null;
   occupied: boolean;
   occupancy_pct: number;
   annual_rent: number;

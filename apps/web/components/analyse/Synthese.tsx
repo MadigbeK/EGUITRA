@@ -7,6 +7,7 @@ import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
 import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
+import { RECO as RECO_METHODE } from "@/lib/axispro-types";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
@@ -209,14 +210,15 @@ function CockpitGroupe() {
 
 /* ─── MB AxisPro Consulting ────────────────────────────────────────────── */
 
-const RECO: Record<Recommendation, { label: string; couleur: string }> = {
-  bankable: { label: "Bankable", couleur: COULEUR_VERDICT.bankable! },
-  apd_ready: { label: "APD Ready", couleur: COULEUR_VERDICT.apd_ready! },
-  go: { label: "GO", couleur: COULEUR_VERDICT.go! },
-  conditional: { label: "GO sous conditions", couleur: COULEUR_VERDICT.conditional! },
-  hold: { label: "HOLD", couleur: COULEUR_VERDICT.hold! },
-  no_go: { label: "NO-GO", couleur: COULEUR_VERDICT.no_go! },
-  pending: { label: "À compléter", couleur: COULEUR_VERDICT.pending! },
+/** Libellés de la méthode (BANKABLE CANDIDATE, CONDITIONAL GO…), couleurs des verdicts. */
+const VERDICTS: Record<Recommendation, { label: string; couleur: string }> = {
+  bankable: { label: RECO_METHODE.bankable.label, couleur: COULEUR_VERDICT.bankable! },
+  apd_ready: { label: RECO_METHODE.apd_ready.label, couleur: COULEUR_VERDICT.apd_ready! },
+  go: { label: RECO_METHODE.go.label, couleur: COULEUR_VERDICT.go! },
+  conditional: { label: RECO_METHODE.conditional.label, couleur: COULEUR_VERDICT.conditional! },
+  hold: { label: RECO_METHODE.hold.label, couleur: COULEUR_VERDICT.hold! },
+  no_go: { label: RECO_METHODE.no_go.label, couleur: COULEUR_VERDICT.no_go! },
+  pending: { label: RECO_METHODE.pending.label, couleur: COULEUR_VERDICT.pending! },
 };
 
 const SECTIONS_CABINET: Record<string, string> = { portefeuille: "Projets et pipeline", diagnostic: "Diagnostic", comites: "Décisions", financements: "Financements", activite: "Activité", risques: "Risques" };
@@ -242,8 +244,8 @@ function CockpitCabinet() {
   );
   const points = (d?.maturity ?? [])
     .filter((m) => m.readiness !== null && m.bankability !== null)
-    .map((m) => ({ id: String(m.id), label: m.name, x: m.readiness ?? 0, y: m.bankability ?? 0, size: Math.max(1, m.need), group: RECO[m.recommendation]?.label ?? m.recommendation, detail: `${m.reference} · ${m.sector ?? "secteur non renseigné"} · ${m.gate} · probabilité ${fmtPct(m.probability * 100, 0)}` }));
-  const couleurs = Object.fromEntries(Object.values(RECO).map((r) => [r.label, r.couleur]));
+    .map((m) => ({ id: String(m.id), label: m.name, x: m.readiness ?? 0, y: m.bankability ?? 0, size: Math.max(1, m.need), group: VERDICTS[m.recommendation]?.label ?? m.recommendation, detail: `${m.reference} · ${m.sector ?? "secteur non renseigné"} · ${m.gate} · probabilité ${fmtPct(m.probability * 100, 0)}` }));
+  const couleurs = Object.fromEntries(Object.values(VERDICTS).map((r) => [r.label, r.couleur]));
   const quadrant = (key: string, defaut: string) => seuils?.quadrants?.find((q) => q.key === key)?.label ?? defaut;
 
   return (

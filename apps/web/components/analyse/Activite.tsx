@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AreaChart, Badge, Button, Card, DataTable, ErrorBox, Field, Input, SERIES, cx } from "@/components/ui";
 import { CarteChaleur, Eventail, Puces } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, methodePrevision, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { CabinetActivite } from "@/lib/analyse-types";
 import { AIDE_NOMBRE, fmtDec, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
@@ -192,7 +192,7 @@ function Corps() {
                 <Vide titre="Aucun honoraire facturé sur 12 mois" />
               )}
             </Card>
-            <Card title="Les trois prochains mois" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">{prev?.method ?? ""}{prev?.mape !== null && prev?.mape !== undefined ? ` · MAPE ${fmtPct(prev.mape)}` : ""}</span>}>
+            <Card title="Les trois prochains mois" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">{prev ? methodePrevision(prev.method) : ""}{prev?.mape !== null && prev?.mape !== undefined ? ` · MAPE ${fmtPct(prev.mape)}` : ""}</span>}>
               {prev && prev.months.length ? (
                 <Eventail
                   label="Honoraires : historique et prévision à trois mois"

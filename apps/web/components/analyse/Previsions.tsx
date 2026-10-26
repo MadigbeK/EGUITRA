@@ -4,7 +4,7 @@ import { useState } from "react";
 import { RotateCcw, Sparkles } from "@/components/icons";
 import { Anneau, Button, Card, FEUILLE, Valeur, cx } from "@/components/ui";
 import { Cascade, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, gnfOu, moisCourt, pctOu, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, gnfOu, methodePrevision, moisCourt, pctOu, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { ForecastBlock, GroupePrevisions, Landing, WaterfallStep } from "@/lib/analyse-types";
 import { fmtGNF } from "@/lib/format";
@@ -27,7 +27,6 @@ const LEVIERS: Array<{ key: keyof GroupePrevisions["sensitivities"]; label: stri
   { key: "payroll", label: "Masse salariale", aide: "Salaires et charges, toutes activités" },
 ];
 
-const METHODES: Record<string, string> = { holt: "Holt amorti", holt_winters: "Holt-Winters additif", naive: "Naïf saisonnier" };
 
 function Corps() {
   const [periode, setPeriode, query] = usePeriode();
@@ -74,7 +73,7 @@ function BlocPrevision({ titre, bloc, budget, couleur }: { titre: string; bloc: 
   const serie = bloc.series ?? [];
   const rupture = bloc.cusum?.change && bloc.cusum.index !== null ? serie[bloc.cusum.index]?.month : undefined;
   return (
-    <Card title={titre} className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">{METHODES[bloc.method] ?? bloc.method}{bloc.mape !== null ? ` · MAPE ${fmtPct(bloc.mape)}` : ""} · {bloc.history_months} mois d&apos;historique</span>}>
+    <Card title={titre} className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">{methodePrevision(bloc.method)}{bloc.mape !== null ? ` · MAPE ${fmtPct(bloc.mape)}` : ""} · {bloc.history_months} mois d&apos;historique</span>}>
       {serie.length ? (
         <>
           <Eventail label={`${titre} : historique, prévision et bande p10-p90`} points={serie.map((p) => ({ label: moisCourt(p.month, true), actual: p.actual, forecast: p.forecast, low: p.low, high: p.high }))} cible={budget ? budget / 12 : null} cibleLabel="Budget / 12" couleur={couleur} hauteur={270} />

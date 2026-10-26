@@ -5,11 +5,11 @@ import { COULEUR_FINANCEMENT, ETATS } from "@/lib/couleurs";
 import { Puces, Sankey } from "@/components/analyse/charts";
 import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
-import type { CabinetFinancements, Recommendation } from "@/lib/analyse-types";
+import type { CabinetFinancements } from "@/lib/analyse-types";
+import { RECO } from "@/lib/axispro-types";
 import { fmtInt } from "@/lib/format";
 
 const COULEUR_ETAT = COULEUR_FINANCEMENT;
-const RECO_LABEL: Record<Recommendation, string> = { bankable: "Bankable", apd_ready: "APD Ready", go: "GO", conditional: "GO sous conditions", hold: "HOLD", no_go: "NO-GO", pending: "À compléter" };
 
 /** Financements recherchés : flux secteur → financeur → état, succès par financeur, pipeline par état, couverture du besoin. */
 export function Financements() {
@@ -109,7 +109,7 @@ function Corps() {
                 rows={cov.rows}
                 rowKey={(r) => r.id}
                 columns={[
-                  { key: "name", label: "Dossier", render: (r) => <LienFiche href={r.link}>{r.name}<span className="block text-[11.5px] font-normal text-muted">{r.reference} · {RECO_LABEL[r.recommendation] ?? r.recommendation}</span></LienFiche> },
+                  { key: "name", label: "Dossier", render: (r) => <LienFiche href={r.link}>{r.name}<span className="block text-[11.5px] font-normal text-muted">{r.reference} · {RECO[r.recommendation]?.label ?? r.recommendation}</span></LienFiche> },
                   { key: "need", label: "Besoin", align: "right", render: (r) => fmtShort(r.need) },
                   { key: "granted", label: "Obtenu", align: "right", render: (r) => <span className={cx(r.granted > 0 && "font-semibold text-ok-texte")}>{fmtShort(r.granted)}</span> },
                   { key: "open_requested", label: "En cours", align: "right", render: (r) => fmtShort(r.open_requested) },

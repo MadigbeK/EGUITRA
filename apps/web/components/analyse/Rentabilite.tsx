@@ -35,7 +35,8 @@ export function Rentabilite() {
   );
 }
 
-const ETAT_CHANTIER: Record<string, string> = { draft: "Brouillon", progress: "En cours", done: "Terminé", cancelled: "Annulé", closed: "Clos" };
+/** États d'un chantier (eguitra_chantier), quand le noyau ne donne pas leur libellé. */
+const ETAT_CHANTIER: Record<string, string> = { preparation: "En préparation", progress: "En cours", received: "Réceptionné", closed: "Clos" };
 
 function Corps() {
   const [periode, setPeriode, query] = usePeriode();
@@ -258,7 +259,7 @@ function Corps() {
                       rows={chantiers}
                       rowKey={(r) => r.id}
                       columns={[
-                        { key: "name", label: "Chantier", render: (r) => <span className="font-medium text-ink">{r.name}<span className="block text-[11.5px] font-normal text-muted">{[r.code, r.client, ETAT_CHANTIER[r.state] ?? r.state].filter(Boolean).join(" · ")}</span></span> },
+                        { key: "name", label: "Chantier", render: (r) => <span className="font-medium text-ink">{r.name}<span className="block text-[11.5px] font-normal text-muted">{[r.code, r.client, r.state_label ?? ETAT_CHANTIER[r.state]].filter(Boolean).join(" · ")}</span></span> },
                         {
                           key: "progress_pct",
                           label: "Avancement",
@@ -299,7 +300,7 @@ function Corps() {
                         <li key={b.id} className="grid grid-cols-[minmax(0,1fr)_84px_72px] items-center gap-3 text-[12.5px]">
                           <span className="min-w-0">
                             <span className="block truncate font-medium text-ink-2" title={b.name}>{b.name}</span>
-                            <span className="block truncate text-[11px] text-muted">{b.kind}{b.unpaid_amount > 0 ? ` · impayés ${fmtShort(b.unpaid_amount)}` : ""}</span>
+                            <span className="block truncate text-[11px] text-muted">{b.kind_label ?? "Bien"}{b.unpaid_amount > 0 ? ` · impayés ${fmtShort(b.unpaid_amount)}` : ""}</span>
                           </span>
                           <span className="h-2 overflow-hidden rounded-full bg-panel-3">
                             <span className="n-pousser-x block h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, b.occupancy_pct))}%`, background: b.occupancy_pct < 70 ? COULEUR.mauvais : b.occupancy_pct < 90 ? COULEUR.alerte : COULEUR.bon, "--i": i } as CSSProperties} />

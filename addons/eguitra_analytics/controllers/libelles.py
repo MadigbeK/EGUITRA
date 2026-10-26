@@ -134,7 +134,8 @@ COLONNES = {
     "cost_ratio_default_pct": "Taux de revient par défaut (%)", "fiscal_year": "Exercice",
     "late_entries": "Saisies tardives", "backlog_old_hours": "Carnet de plus de 60 jours (heures)",
     "amount_at_risk": "Montant en jeu", "granted_vs_requested_pct": "Obtenu sur demandé (%)",
-    "matrix_kinds": "Lecture des cases", "first_id": "Premier client (identifiant)",
+    "matrix_kinds": "Lecture des cases", "first_id": "Premier client (identifiant)", "state_label": "État",
+    "kind_label": "Nature",
 }
 
 # Traduction mot à mot des clés inconnues (avant mise en forme).

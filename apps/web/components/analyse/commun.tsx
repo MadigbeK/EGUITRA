@@ -55,6 +55,11 @@ export function joursOu(v: number | null | undefined, digits = 0): string {
   return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${v.toLocaleString("fr-FR", { maximumFractionDigits: digits })} j`;
 }
 
+/** Méthode de prévision du noyau, en clair (holt_winters, holt, naive). */
+export function methodePrevision(code: string | null | undefined): string {
+  return code === "holt_winters" ? "Holt-Winters additif" : code === "holt" ? "Holt amorti" : code === "naive" ? "Naïf (dernière valeur)" : "Lissage exponentiel";
+}
+
 /* ─── Contexte ─────────────────────────────────────────────────────────── */
 
 export function useContexte() {
@@ -562,7 +567,9 @@ export const GRAVITE: Record<Severity, { label: string; tone: Tone; teinte: Tein
   positive: { label: "Point fort", tone: "ok", teinte: "jade", icon: CheckCircle2, couleur: "var(--g-jade)" },
 };
 
+/** Domaine d'un constat ; un domaine inconnu ne s'affiche pas (jamais de code brut à l'écran). */
 const DOMAINES: Record<string, string> = {
+  synthese: "Santé financière",
   rentabilite: "Rentabilité",
   tresorerie: "Trésorerie",
   clients: "Clients",
@@ -785,7 +792,7 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={g.tone}>{g.label}</Badge>
-          <span className="truncate rounded-md bg-panel-3 px-1.5 py-px text-[11.5px] font-medium text-ink-2">{DOMAINES[insight.domain] ?? insight.domain}</span>
+          {DOMAINES[insight.domain] && <span className="truncate rounded-md bg-panel-3 px-1.5 py-px text-[11.5px] font-medium text-ink-2">{DOMAINES[insight.domain]}</span>}
         </div>
         {impact !== null && impact > 0 && (
           <span className="flex-none text-right">
@@ -840,10 +847,7 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
         <div className="n-apparaitre mt-2 rounded-xl border border-line bg-panel-2/60 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-2">
           <span className="font-semibold text-ink">Méthode : </span>
           {insight.method || "Règle métier documentée dans la spécification."}
-          <span className="mt-1 block text-[11.5px] text-muted">
-            Identifiant {insight.id}
-            {typeof insight.score === "number" ? ` · score ${insight.score.toLocaleString("fr-FR")}` : ""}
-          </span>
+          <span className="mt-1 block text-[11.5px] text-muted">Constats classés par gravité, impact en GNF et confiance.</span>
         </div>
       )}
     </article>
