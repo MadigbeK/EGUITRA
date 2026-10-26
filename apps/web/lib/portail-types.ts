@@ -186,6 +186,8 @@ export interface Fil {
   consultant: Person | null;
   closed: boolean;
   messages: MessageRow[];
+  /** Des messages plus anciens restent à charger (?before=). */
+  more: boolean;
 }
 
 export type MeetingMode = "office" | "video" | "phone" | "site";

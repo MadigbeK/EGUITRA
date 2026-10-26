@@ -84,14 +84,27 @@ class TestPortail(ApiCase):
         self.assertEqual(espace["counts"]["messages"], 1, "La note interne n'est ni visible ni comptée")
         _s, fil = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil", token=self.porteur)
         self.assertEqual([m["body"] for m in fil["messages"]], ["Bonjour, merci d'envoyer vos statuts."])
+        self.assertFalse(fil["more"], "Aucun message plus ancien")
         _s, espace = self.call("GET", "/portail/espace", token=self.porteur)
-        self.assertEqual(espace["counts"]["messages"], 0, "Lus à l'ouverture du fil")
+        self.assertEqual(espace["counts"]["messages"], 1, "Une lecture (GET) ne marque rien comme lu")
+        dernier = fil["messages"][-1]["id"]
+        status, lu = self.call("POST", f"/portail/dossiers/{self.dossier_a.id}/fil/lu", {"message_id": dernier},
+                               token=self.porteur)
+        self.assertEqual((status, lu["unread"]), (200, 0), lu)
+        _s, espace = self.call("GET", "/portail/espace", token=self.porteur)
+        self.assertEqual(espace["counts"]["messages"], 0, "Lus une fois affichés par l'écran")
+        status, _b = self.call("POST", f"/portail/dossiers/{self.dossier_b.id}/fil/lu", {}, token=self.porteur)
+        self.assertEqual(status, 404, "Messages du dossier d'un autre porteur")
+        status, _b = self.call("POST", f"/portail/dossiers/{self.dossier_a.id}/fil/lu", {}, token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
 
         status, message = self.post_form(f"/portail/dossiers/{self.dossier_a.id}/fil", self.porteur,
                                          {"body": "Voici les statuts."}, ("statuts.pdf", PDF))
         self.assertEqual(status, 200, message)
         self.assertEqual(message["attachments"][0]["name"], "statuts.pdf")
         self.assertTrue(message["from_me"])
+        _s, suite = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil?after={dernier}", token=self.porteur)
+        self.assertEqual([m["id"] for m in suite["messages"]], [message["id"]], "Relecture : les seuls nouveaux messages")
         self.assertIn("statuts.pdf", self.dossier_a.document_ids.mapped("name"), "La pièce jointe rejoint la data room")
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
         _s, conversations = self.call("GET", "/axispro/portail/conversations", token=self.cabinet_token)

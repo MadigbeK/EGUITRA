@@ -14,7 +14,7 @@ from datetime import timedelta
 from odoo import fields, http
 from odoo.http import content_disposition, request
 
-from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
+from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_axispro.controllers.common import store_upload
 
 from ..models.agenda import MEETING_MODES
@@ -24,6 +24,8 @@ from . import vues
 PORTEUR = ("porteur",)
 MAX_DAILY_MESSAGES = 50
 MAX_OPEN_MEETING_REQUESTS = 3
+# Messages renvoyés par appel au fil : les plus récents d'abord, la page précédente sur demande.
+FIL_PAGE = 200
 PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
                         "state", "version")
 PROFILE_FIELDS = ("phone", "email", "street", "city", "website")
@@ -125,6 +127,11 @@ def _published_articles(dossiers):
 
 def _notifications_unread():
     return request.env["portail.notification"].sudo().search_count([("user_id", "=", _me().id), ("read_at", "=", False)])
+
+
+def _visible_messages(dossier):
+    """Domaine des messages du dossier que le porteur lit : jamais les notes internes du cabinet."""
+    return [("dossier_id", "=", dossier.id), ("internal", "=", False)]
 
 
 class EguitraPortailPorteur(http.Controller):
@@ -295,13 +302,44 @@ class EguitraPortailPorteur(http.Controller):
     # ─── Messagerie ──────────────────────────────────────────────────────
 
     @api_route("/portail/dossiers/<int:dossier_id>/fil", profiles=PORTEUR)
-    def fil(self, dossier_id, **_kw):
+    def fil(self, dossier_id, **kw):
+        """Messages du dossier, sans les notes internes, du plus ancien au plus récent. Sans paramètre : les
+        200 derniers (`more` : il en reste de plus anciens) ; `before` : la page précédant ce message ;
+        `after` : les messages postérieurs à ce message (relecture périodique de l'écran). La lecture ne
+        marque rien comme lu : l'écran le fait ensuite (POST …/fil/lu)."""
         me, dossier = _me(), _own(dossier_id)
-        messages = dossier.sudo().message_ids.filtered(lambda m: not m.internal)
-        if messages:
-            request.env["portail.read.marker"].mark(me, dossier, max(messages.ids))
+        after = int_arg(kw, "after", None, 0)
+        before = int_arg(kw, "before", None, 0)
+        Message = request.env["axispro.message"].sudo()
+        domain = _visible_messages(dossier)
+        if after is not None:
+            messages = Message.search(domain + [("id", ">", after)], order="id", limit=FIL_PAGE)
+            more = False
+        else:
+            if before is not None:
+                domain = domain + [("id", "<", before)]
+            messages = Message.search(domain, order="id desc", limit=FIL_PAGE)
+            more = bool(messages) and bool(Message.search_count(domain + [("id", "<", min(messages.ids))]))
+        messages = messages.sorted(lambda m: (m.date, m.id))
         return {"consultant": vues.person(dossier.consultant_id), "closed": dossier.state == "closed",
-                "messages": [vues.message_row(m, me) for m in messages]}
+                "messages": [vues.message_row(m, me) for m in messages], "more": more}
+
+    @api_route("/portail/dossiers/<int:dossier_id>/fil/lu", methods=("POST",), profiles=PORTEUR)
+    def fil_lu(self, dossier_id, **_kw):
+        """Messages lus jusqu'au message `message_id`, le dernier que l'écran a affiché (à défaut, le dernier
+        du dossier). Rend le nombre de messages du cabinet restant à lire sur ce dossier."""
+        me, dossier = _me(), _own(dossier_id)
+        wanted = read_json().get("message_id")
+        last = request.env["axispro.message"].sudo().search(_visible_messages(dossier), order="id desc", limit=1).id or 0
+        if wanted not in (None, ""):
+            try:
+                last = min(last, int(wanted))
+            except (TypeError, ValueError) as e:
+                raise ApiError(400, "invalid_parameter", "Message invalide.") from e
+        Marker = request.env["portail.read.marker"]
+        if last > 0:
+            Marker.mark(me, dossier, last)
+        return {"unread": Marker.unread(me, dossier).get(dossier.id, 0)}
 
     @api_route("/portail/dossiers/<int:dossier_id>/fil", methods=("POST",), profiles=PORTEUR)
     def ecrire(self, dossier_id, **_kw):
@@ -318,11 +356,12 @@ class EguitraPortailPorteur(http.Controller):
         if recent >= MAX_DAILY_MESSAGES:
             raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
         documents = store_upload(dossier, quota=True) if has_file else request.env["axispro.document"]
+        # Aucun repère de lecture ici : ses propres messages ne comptent jamais comme non lus, et un message du
+        # cabinet arrivé juste avant l'envoi resterait sinon marqué lu sans avoir été affiché.
         message = Message.create({
             "dossier_id": dossier.id, "body": body[:5000] or f"Pièce jointe : {documents.name}", "author_id": me.id,
             "internal": False, "document_ids": [(6, 0, documents.ids)],
         })
-        request.env["portail.read.marker"].mark(me, dossier, message.id)
         return vues.message_row(message, me)
 
     # ─── Rendez-vous ─────────────────────────────────────────────────────
