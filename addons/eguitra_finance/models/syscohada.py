@@ -305,9 +305,11 @@ class EguitraSyscohada(models.AbstractModel):
             "FA": result["XI"] + result["RL"] + result["RN"] - result["TJ"] - result["TL"] - result["TN"] + result["RO"],
             "FB": -(a1["BA"] - a0["BA"]),
             "FC": -(a1["BB"] - a0["BB"]),
-            "FD": -(a1["BG"] - a0["BG"]),
+            # Écarts de conversion (BU, DV) neutralisés : l'écart de fin de mois ajuste la créance ou la dette en
+            # devise sans mouvement de trésorerie ; créances et dettes s'y lisent à leur valeur d'origine.
+            "FD": -(a1["BG"] - a0["BG"]) - (a1["BU"] - a0["BU"]),
             # Les dividendes à payer (465) relèvent du financement (FN), pas du passif circulant.
-            "FE": (p1["DP"] - p0["DP"]) - (_credit_side(end, "465") - _credit_side(start, "465")),
+            "FE": (p1["DP"] - p0["DP"]) + (p1["DV"] - p0["DV"]) - (_credit_side(end, "465") - _credit_side(start, "465")),
             "FF": -debits(["21"]),
             "FG": -debits(["22", "23", "24", "25"]),
             "FH": -debits(["26", "27"]),

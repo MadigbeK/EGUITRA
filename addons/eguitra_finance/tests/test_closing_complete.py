@@ -136,6 +136,9 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         self.assertEqual(reversal.date, self.end + relativedelta(days=1))
         self.assertAlmostEqual(self._balance("479", self.end + relativedelta(days=1)), 0, 0, msg="Extourné le mois suivant")
         self.assertEqual(fx.line_ids.filtered(lambda line: line.partner_id).partner_id, self.customer)
+        fy_start = env["eguitra.finance.metrics"].fiscal_year_bounds(self.company, self.end)[0]
+        flow = env["eguitra.syscohada"].cash_flow(self.company, fy_start, self.end)
+        self.assertAlmostEqual(flow["difference"], 0, 0, msg="Écart de conversion neutralisé au tableau des flux")
 
     def test_dotations_du_mois_a_la_cloture(self):
         def account(prefix):
