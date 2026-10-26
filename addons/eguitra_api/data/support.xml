@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Numéro des demandes de l'espace de suivi : DEM-AAAA-NNNN, sans trou, repris à 1 chaque année,
+         commun aux deux sociétés (un seul contrat de support). -->
+    <record id="seq_support_request" model="ir.sequence">
+        <field name="name">Demandes de l'espace de suivi</field>
+        <field name="code">eguitra.support.request</field>
+        <field name="prefix">DEM-%(range_year)s-</field>
+        <field name="padding">4</field>
+        <field name="use_date_range" eval="True"/>
+        <field name="implementation">no_gap</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    <!-- Procédure de support, 4 : une demande résolue sans réponse de son auteur sous 5 jours ouvrés est close. -->
+    <record id="cron_support_close_resolved" model="ir.cron">
+        <field name="name">EGUITRA : clôture des demandes résolues sans réponse de leur auteur</field>
+        <field name="model_id" ref="model_eguitra_support_request"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_close_resolved()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 03 h 10 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:10:00')"/>
+    </record>
+</odoo>

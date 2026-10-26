@@ -479,6 +479,12 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
             <Link href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
               <KeyRound className="h-4 w-4 text-muted" /> Changer le mot de passe
             </Link>
+            {/* Espace partagé de suivi des demandes au support : comptes internes seulement (pas le portail). */}
+            {app !== "portail" && (
+              <Link href="/compte/demandes" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
+                {ICONES.ListChecks && <ICONES.ListChecks className="h-4 w-4 text-muted" />} Mes demandes
+              </Link>
+            )}
             {others.map((a) => (
               <Link key={a} href={accueilDe(a, me, app)} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
                 <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: TEINTE_APP[a] }} />
