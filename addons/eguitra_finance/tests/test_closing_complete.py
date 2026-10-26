@@ -5,6 +5,7 @@ from dateutil.relativedelta import relativedelta
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
+from ..models.period_close import pluriel
 from .common import FinanceDataMixin
 
 
@@ -291,3 +292,13 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         self.assertAlmostEqual(self._balance("443"), 0, 2, msg="TVA collectée soldée")
         self.assertAlmostEqual(self._balance(other.code), 0, 2, msg="445 créditeur soldé")
         self.assertAlmostEqual(self._balance("445"), 9_000_000 - 1_000_000 - 1_800_000, 2, msg="Crédit gardé au 445")
+
+    def test_messages_accordes_au_nombre(self):
+        """Messages des contrôles accordés au nombre, jamais « (s) »."""
+        self.assertEqual([pluriel(n, "pièce") for n in (0, 1, 2)], ["0 pièce", "1 pièce", "2 pièces"])
+        self.assertEqual(pluriel(1500, "ligne de relevé", "lignes de relevé"), "1 500 lignes de relevé")
+        self.make_invoice("out_invoice", 1_000_000, day=self.month, post=False)
+        checks = self.env["eguitra.period.close"]._get(self.company, self.month).action_check()
+        drafts = next(c for c in checks if c["code"] == "draft_moves")
+        self.assertTrue(drafts["detail"].startswith("1 pièce en brouillon jusqu'au"), drafts["detail"])
+        self.assertNotIn("(s)", " ".join(c["detail"] or "" for c in checks))

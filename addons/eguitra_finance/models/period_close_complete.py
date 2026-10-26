@@ -27,7 +27,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
-from .period_close import SECURED_JOURNAL_TYPES
+from .period_close import SECURED_JOURNAL_TYPES, pluriel
 
 CLOSE_KINDS = [
     ("vat", "Liquidation de la TVA"),
@@ -141,8 +141,10 @@ class EguitraPeriodClose(models.Model):
         pending = self.env["account.asset"]._eguitra_pending_lines(self.company_id, end)
         closing = self.env.context.get("eguitra_closing")
         amount = sum(pending.mapped("amount"))
-        detail = (f"{len(pending)} dotation(s) non comptabilisée(s) ({_gnf(amount)} GNF)." if closing else
-                  f"{len(pending)} dotation(s) ({_gnf(amount)} GNF) seront comptabilisées par la clôture.")
+        count = len(pending)
+        detail = (f"{pluriel(count, 'dotation non comptabilisée', 'dotations non comptabilisées')} ({_gnf(amount)} GNF)."
+                  if closing else f"{pluriel(count, 'dotation')} ({_gnf(amount)} GNF) "
+                                  f"{'sera comptabilisée' if count < 2 else 'seront comptabilisées'} par la clôture.")
         return self._check("depreciation_posted", "Dotations aux amortissements du mois comptabilisées",
                            not pending, bool(closing), detail, len(pending))
 
@@ -155,7 +157,7 @@ class EguitraPeriodClose(models.Model):
         assets = self.env["account.asset"].sudo().search([("company_id", "=", self.company_id.id), ("state", "=", "close")])
         names = ", ".join(assets[:8].mapped("name")) + ("…" if len(assets) > 8 else "")
         return self._check("fully_depreciated", "Biens totalement amortis encore à l'actif (contrôle trimestriel)",
-                           not assets, False, f"{len(assets)} bien(s) à examiner : {names}.", len(assets))
+                           not assets, False, f"{pluriel(len(assets), 'bien à examiner', 'biens à examiner')} : {names}.", len(assets))
 
     # ─── Générations ──────────────────────────────────────────────────────
 
@@ -489,7 +491,7 @@ class EguitraPeriodClose(models.Model):
         pending = self.env["account.asset"]._eguitra_pending_lines(self.company_id, end)
         if pending:
             items.append({"kind": "depreciation", "label": KIND_LABELS["depreciation"], "amount": sum(pending.mapped("amount")),
-                          "detail": f"{len(pending)} dotation(s) jusqu'au {end:%d/%m/%Y}"})
+                          "detail": f"{pluriel(len(pending), 'dotation')} jusqu'au {end:%d/%m/%Y}"})
         b443, b445, _carry, _carried, collected, position = self._vat_position(end)
         if b443 or b445:
             items.append({"kind": "vat", "label": f"Liquidation de la TVA (TVA-{self._label()})",
@@ -517,7 +519,8 @@ class EguitraPeriodClose(models.Model):
         if targets:
             items.append({"kind": "accrual", "label": f"Factures à établir (FAE-{self._label()})",
                           "amount": sum(t["amount"] for t in targets.values()),
-                          "detail": f"{len(targets)} prestation(s) livrée(s) non facturée(s), extournées le "
+                          "detail": f"{pluriel(len(targets), 'prestation livrée non facturée', 'prestations livrées non facturées')}, "
+                                    f"{'extournée' if len(targets) < 2 else 'extournées'} le "
                                     f"{end + relativedelta(days=1):%d/%m/%Y}"})
         return items
 

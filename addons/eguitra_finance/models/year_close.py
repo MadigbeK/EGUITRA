@@ -19,6 +19,8 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import RedirectWarning, UserError
 
+from .period_close import pluriel
+
 # Comptes de l'affectation : préfixe, rubrique, libellé de la rubrique. Une perte ne se distribue pas :
 # elle s'impute sur les réserves ou se reporte à nouveau (129), jamais en dividendes.
 ALLOCATION_ACCOUNTS = [
@@ -200,7 +202,9 @@ class EguitraYearClose(models.AbstractModel):
         lock_blocking = running + months_check
         if drafts:
             lock_blocking.append(_check("draft_moves", f"Aucune pièce en brouillon jusqu'au {end:%d/%m/%Y}",
-                                        f"{drafts} pièce(s) en brouillon : validez-les ou supprimez-les.", drafts))
+                                        f"{pluriel(drafts, 'pièce en brouillon', 'pièces en brouillon')} : "
+                                        f"{'validez-la ou supprimez-la' if drafts < 2 else 'validez-les ou supprimez-les'}.",
+                                        drafts))
         events = self.env["eguitra.period.close.event"].sudo().search(
             [("close_id", "in", [close.id for close in closes.values()]), ("action", "=", "year_lock")])
         return {

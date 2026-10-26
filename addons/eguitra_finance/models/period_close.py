@@ -16,6 +16,11 @@ from .analytic import ACTIVITY_PLAN, distribution_ids
 SECURED_JOURNAL_TYPES = ("sale", "purchase", "general", "bank", "cash")
 
 
+def pluriel(n, un, plusieurs=None):
+    """Nombre et nom accordé, sans « (s) » : « 1 pièce », « 3 pièces » (milliers groupés)."""
+    return f"{n:,}".replace(",", " ") + " " + (un if abs(n) < 2 else plusieurs or un + "s")
+
+
 class EguitraPeriodClose(models.Model):
     _name = "eguitra.period.close"
     _description = "Clôture mensuelle"
@@ -91,7 +96,7 @@ class EguitraPeriodClose(models.Model):
             ("company_id", "=", company.id), ("state", "=", "draft"), ("date", "<=", end),
         ])
         checks.append(self._check("draft_moves", "Aucune pièce en brouillon", not drafts, True,
-                                  f"{drafts} pièce(s) en brouillon jusqu'au {end:%d/%m/%Y}.", drafts))
+                                  f"{pluriel(drafts, 'pièce en brouillon', 'pièces en brouillon')} jusqu'au {end:%d/%m/%Y}.", drafts))
 
         cr.execute(
             """SELECT COUNT(*) FROM (
@@ -102,7 +107,7 @@ class EguitraPeriodClose(models.Model):
         )
         unbalanced = cr.fetchone()[0]
         checks.append(self._check("move_balance", "Équilibre débit et crédit de chaque pièce", not unbalanced, True,
-                                  f"{unbalanced} pièce(s) déséquilibrée(s).", unbalanced))
+                                  f"{pluriel(unbalanced, 'pièce déséquilibrée', 'pièces déséquilibrées')}.", unbalanced))
 
         cr.execute(
             """SELECT COALESCE(SUM(debit), 0), COALESCE(SUM(credit), 0) FROM account_move_line
@@ -126,7 +131,7 @@ class EguitraPeriodClose(models.Model):
             ("company_id", "=", company.id), ("is_reconciled", "=", False), ("date", "<=", end),
         ])
         checks.append(self._check("bank_reconciliation", "Relevés bancaires rapprochés", not unreconciled, True,
-                                  f"{unreconciled} ligne(s) de relevé à rapprocher.", unreconciled))
+                                  f"{pluriel(unreconciled, 'ligne de relevé', 'lignes de relevé')} à rapprocher.", unreconciled))
         checks += self._bank_statement_checks(start, end)
         checks.append(self._analytic_consistency_check(start, end))
         checks.append(self._reference_consistency_check(start, end))
@@ -209,7 +214,7 @@ class EguitraPeriodClose(models.Model):
         )
         gaps = cr.fetchall()
         details = [f"{name} : référence {ref} saisie {n} fois" for name, ref, n in duplicates[:5]]
-        details += [f"{prefix} : {missing} numéro(s) manquant(s)" for prefix, missing in gaps[:5]]
+        details += [f"{prefix} : {pluriel(missing, 'numéro manquant', 'numéros manquants')}" for prefix, missing in gaps[:5]]
         return self._check(
             "reference_consistency", "Cohérence des références (doublons de fournisseurs, numérotation)",
             not duplicates and not gaps, False, "; ".join(details), len(duplicates) + sum(m for _p, m in gaps),
@@ -241,7 +246,7 @@ class EguitraPeriodClose(models.Model):
                         break
         labels = ", ".join(sorted(Analytic.browse(list(names)).mapped("name"))[:5])
         return self._check("analytic_consistency", "Centres de coût imputés avec leur activité", not wrong, False,
-                           f"{wrong} ligne(s) avec une autre activité que celle du centre de coût ({labels}).", wrong)
+                           f"{pluriel(wrong, 'ligne')} avec une autre activité que celle du centre de coût ({labels}).", wrong)
 
     def action_check(self):
         self.ensure_one()
