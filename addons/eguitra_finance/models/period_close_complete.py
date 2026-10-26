@@ -9,7 +9,9 @@ Après les contrôles et avant le verrouillage, la clôture passe, dans l'ordre 
 3. les factures à établir (pièce « FAE-mm/aaaa ») : prestations livrées et non facturées à la fin
    du mois, fournies par les modules métier (rotations du transport), extournées le premier jour
    du mois suivant ;
-4. puis le verrouillage et le chaînage (module de base), l'instantané au registre et le sceau
+4. au dernier mois de l'exercice, la provision pour perte de change (pièce « PDC-mm/aaaa ») à hauteur
+   des pertes latentes des créances et dettes en devises, reprise le premier jour de l'exercice suivant ;
+5. puis le verrouillage et le chaînage (module de base), l'instantané au registre et le sceau
    SHA-256 de la période, imprimé sur le PV de clôture à conserver hors du système.
 
 Chaque génération est rejouable : elle se calcule sur les soldes (TVA) ou par différence avec ce
@@ -25,6 +27,8 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
+from ..formats import pluriel
+from .finance_metrics import ACC_CODE
 from .period_close import SECURED_JOURNAL_TYPES
 
 CLOSE_KINDS = [
@@ -34,9 +38,23 @@ CLOSE_KINDS = [
     ("fx", "Écarts de conversion des créances et dettes"),
     ("fx_reversal", "Extourne des écarts de conversion"),
     ("fx_bank", "Réévaluation des disponibilités en devises"),
+    ("fx_provision", "Provision pour perte de change"),
+    ("fx_provision_reversal", "Reprise de la provision pour perte de change"),
     ("ecl", "Pertes de crédit attendues"),
 ]
+# Provision pour perte de change de fin d'exercice (comptes à valider avec l'expert-comptable) : dotation
+# aux provisions financières, provision pour pertes de change, reprise de provisions financières. La
+# provision va au 194 seul (rubrique DC, hors passif circulant) : portée au 499 (DN, passif circulant), sa
+# hausse compterait deux fois au tableau des flux, dans la CAFG (dotation réintégrée) et dans FE.
+FX_PROVISION_EXPENSE = ("6971", "697")
+FX_PROVISION_ACCOUNT = ("194",)
+FX_PROVISION_INCOME = ("7971", "797")
 KIND_LABELS = dict(CLOSE_KINDS) | {"depreciation": "Dotations aux amortissements"}
+# Version du sceau. 2 : identité de la société hors de l'empreinte, colonne balance des lignes scellée.
+SEAL_VERSION = 2
+# Identité de la société, imprimée sur le PV mais hors de l'empreinte (version 2) : un changement de nom
+# ou de NIF ne lève pas les sceaux des mois clôturés.
+SEAL_IDENTITY = ("company", "vat")
 
 
 def _gnf(amount):
@@ -127,8 +145,10 @@ class EguitraPeriodClose(models.Model):
         pending = self.env["account.asset"]._eguitra_pending_lines(self.company_id, end)
         closing = self.env.context.get("eguitra_closing")
         amount = sum(pending.mapped("amount"))
-        detail = (f"{len(pending)} dotation(s) non comptabilisée(s) ({_gnf(amount)} GNF)." if closing else
-                  f"{len(pending)} dotation(s) ({_gnf(amount)} GNF) seront comptabilisées par la clôture.")
+        count = len(pending)
+        detail = (f"{pluriel(count, 'dotation non comptabilisée', 'dotations non comptabilisées')} ({_gnf(amount)} GNF)."
+                  if closing else f"{pluriel(count, 'dotation')} ({_gnf(amount)} GNF) "
+                                  f"{'sera comptabilisée' if count < 2 else 'seront comptabilisées'} par la clôture.")
         return self._check("depreciation_posted", "Dotations aux amortissements du mois comptabilisées",
                            not pending, bool(closing), detail, len(pending))
 
@@ -141,7 +161,7 @@ class EguitraPeriodClose(models.Model):
         assets = self.env["account.asset"].sudo().search([("company_id", "=", self.company_id.id), ("state", "=", "close")])
         names = ", ".join(assets[:8].mapped("name")) + ("…" if len(assets) > 8 else "")
         return self._check("fully_depreciated", "Biens totalement amortis encore à l'actif (contrôle trimestriel)",
-                           not assets, False, f"{len(assets)} bien(s) à examiner : {names}.", len(assets))
+                           not assets, False, f"{pluriel(len(assets), 'bien à examiner', 'biens à examiner')} : {names}.", len(assets))
 
     # ─── Générations ──────────────────────────────────────────────────────
 
@@ -192,12 +212,23 @@ class EguitraPeriodClose(models.Model):
             if carry:
                 line(carry, max(position, 0.0) - carried)
         else:
-            # Pas de compte de crédit à reporter : le crédit reste au 445 (consommé à hauteur de la TVA collectée).
-            remaining = max(collected, 0.0)
+            # Pas de compte de crédit à reporter : le crédit reste au 445. Les comptes 445 créditeurs se soldent,
+            # puis les débiteurs sont consommés à hauteur de la TVA collectée et de ces soldes créditeurs (ou
+            # complétés d'une TVA collectée débitrice), de sorte qu'ils gardent le crédit et que la pièce soit
+            # équilibrée.
+            consume = collected + sum(-b for b in b445.values() if b < 0)
+            debtors = sorted(code for code, b in b445.items() if b > 0)
             for code, balance in sorted(b445.items()):
-                used = min(balance, remaining) if balance > 0 else balance
-                line(account(code), -used)
-                remaining -= max(used, 0.0)
+                if balance < 0:
+                    line(account(code), -balance)
+            if consume >= 0:
+                for code in debtors:
+                    used = min(b445[code], consume)
+                    line(account(code), -used)
+                    consume -= used
+            else:
+                holder = account(debtors[0]) if debtors else self._close_account("4452", "445")
+                line(holder, -consume)
         if due:
             line(self._close_account("4441"), -due, date_maturity=end.replace(day=1) + relativedelta(months=1, day=15))
         if not lines:
@@ -283,9 +314,11 @@ class EguitraPeriodClose(models.Model):
     # ─── Devises (réévaluation à la clôture) ──────────────────────────────
 
     def _fx_line(self, label, account, amount, currency, partner=False):
-        """Ligne d'écart de change : montant en GNF seulement, montant en devise nul."""
-        values = {"name": label, "account_id": account.id, "debit": max(amount, 0.0), "credit": max(-amount, 0.0),
-                  "partner_id": partner or False}
+        """Ligne d'écart de change : montant en GNF seulement, montant en devise nul. Le solde est écrit tel quel
+        (balance) : donné par le débit et le crédit, il pouvait être recalculé d'après le montant en devise nul
+        (inverse du montant en devise d'une ligne en devise, le solde n'étant pas alors protégé), et l'écriture
+        n'était plus équilibrée."""
+        values = {"name": label, "account_id": account.id, "balance": amount, "partner_id": partner or False}
         if currency:
             values.update({"currency_id": currency.id, "amount_currency": 0.0})
         return Command.create(values)
@@ -331,18 +364,30 @@ class EguitraPeriodClose(models.Model):
 
     @api.model
     def _fx_open_items(self, company, end):
-        """Écarts de conversion latents des créances et dettes en devises non lettrées, au cours de
-        la date : {(compte, tiers, devise): écart en GNF} (positif : gain latent)."""
+        """Écarts de conversion latents des créances et dettes en devises encore dues à la date, au cours
+        de la date : {(compte, tiers, devise): écart en GNF} (positif : gain latent). Le reste dû est celui
+        de la date (lettrages datés au plus tard ce jour) : un règlement reçu après la fin du mois, avant
+        sa clôture, ne l'efface pas. Les écarts de conversion déjà passés (ECA et leurs extournes) n'en
+        font pas partie : la clôture les compare elle-même à ce qu'elle a déjà passé."""
         self.env.flush_all()
         self.env.cr.execute(
-            """SELECT aml.account_id, aml.partner_id, aml.currency_id, SUM(aml.amount_residual),
-                      SUM(aml.amount_residual_currency)
+            """SELECT aml.account_id, aml.partner_id, aml.currency_id,
+                      SUM(aml.balance - COALESCE(dr.amount, 0) + COALESCE(cr.amount, 0)),
+                      SUM(aml.amount_currency - COALESCE(dr.amount_currency, 0) + COALESCE(cr.amount_currency, 0))
                  FROM account_move_line aml
+                 JOIN account_move am ON am.id = aml.move_id
                  JOIN account_account aa ON aa.id = aml.account_id
-                WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date <= %s AND NOT aml.reconciled
-                  AND aa.account_type IN ('asset_receivable', 'liability_payable') AND aml.currency_id != %s
+            LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount, SUM(apr.debit_amount_currency) AS amount_currency
+                                 FROM account_partial_reconcile apr
+                                WHERE apr.debit_move_id = aml.id AND apr.max_date <= %(end)s) dr ON TRUE
+            LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount, SUM(apr.credit_amount_currency) AS amount_currency
+                                 FROM account_partial_reconcile apr
+                                WHERE apr.credit_move_id = aml.id AND apr.max_date <= %(end)s) cr ON TRUE
+                WHERE aml.company_id = %(company)s AND aml.parent_state = 'posted' AND aml.date <= %(end)s
+                  AND aa.account_type IN ('asset_receivable', 'liability_payable') AND aml.currency_id != %(currency)s
+                  AND am.eguitra_close_kind IS DISTINCT FROM 'fx' AND am.eguitra_close_kind IS DISTINCT FROM 'fx_reversal'
              GROUP BY 1, 2, 3""",
-            (company.id, end, company.currency_id.id),
+            {"company": company.id, "end": end, "currency": company.currency_id.id},
         )
         Currency = self.env["res.currency"].sudo()
         result = {}
@@ -380,6 +425,71 @@ class EguitraPeriodClose(models.Model):
         self._close_reverse(move, "fx_reversal", end + relativedelta(days=1))
         return move
 
+    def _year_end(self):
+        """Dernier mois de l'exercice ?"""
+        _start, end = self._bounds()
+        return end == self.env["eguitra.finance.metrics"].fiscal_year_bounds(self.company_id, end)[1]
+
+    def _fx_latent_loss(self, end):
+        """Pertes latentes des créances et dettes en devises à la date (écart de conversion actif, 478)."""
+        rounding = self.company_id.currency_id.round
+        return rounding(-sum(v for v in self._fx_open_items(self.company_id, end).values() if v < 0))
+
+    @api.model
+    def _fx_provision_charge(self, company, date_from, date_to):
+        """Charge nette de la provision pour perte de change sur la période (dotations moins reprises des
+        pièces PDC) : la passerelle IFRS la retire, IAS 21 portant directement l'écart latent en résultat."""
+        self.env.flush_all()
+        self.env.cr.execute(
+            f"""SELECT COALESCE(SUM(aml.balance), 0)
+                  FROM account_move_line aml
+                  JOIN account_move am ON am.id = aml.move_id
+                  JOIN account_account aa ON aa.id = aml.account_id
+                 WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date BETWEEN %s AND %s
+                   AND am.eguitra_close_kind IN ('fx_provision', 'fx_provision_reversal') AND {ACC_CODE} ~ '^[67]'""",
+            (company.id, date_from, date_to),
+        )
+        return float(self.env.cr.fetchone()[0])
+
+    def _close_fx_provision(self):
+        """Fin d'exercice : provision pour perte de change à hauteur des pertes latentes (478), dotation
+        aux provisions financières (6971) et provision pour pertes de change (194), reprise (7971) le
+        premier jour de l'exercice suivant ; par différence avec la provision déjà passée pour ce mois."""
+        if not self._year_end():
+            return None
+        _start, end = self._bounds()
+        rounding = self.company_id.currency_id.round
+        previous = sum((m.eguitra_close_data or {}).get("provision") or 0.0 for m in self._previous_moves("fx_provision"))
+        delta = rounding(self._fx_latent_loss(end) - previous)
+        if not delta:
+            return None
+        provision = self._close_account(*FX_PROVISION_ACCOUNT)
+        label = f"Provision pour perte de change au {end:%d/%m/%Y}"
+        # Complément de provision (dotation), ou provision devenue excessive après une réouverture (reprise).
+        other = self._close_account(*(FX_PROVISION_EXPENSE if delta > 0 else FX_PROVISION_INCOME))
+        debit, credit = (other, provision) if delta > 0 else (provision, other)
+        move = self._close_post("fx_provision", end, f"PDC-{self._label()}", [
+            Command.create({"name": label, "account_id": debit.id, "debit": abs(delta)}),
+            Command.create({"name": label, "account_id": credit.id, "credit": abs(delta)}),
+        ], {"provision": delta})
+        if delta > 0:
+            day = end + relativedelta(days=1)
+            reprise = f"Reprise de la provision pour perte de change au {day:%d/%m/%Y}"
+            self._close_post("fx_provision_reversal", day, f"Reprise PDC-{self._label()}", [
+                Command.create({"name": reprise, "account_id": provision.id, "debit": delta}),
+                Command.create({"name": reprise, "account_id": self._close_account(*FX_PROVISION_INCOME).id,
+                                "credit": delta}),
+            ])
+        else:
+            # La reprise passée au premier jour de l'exercice suivant suit la provision : on ajuste son montant.
+            day = end + relativedelta(days=1)
+            self._close_post("fx_provision_reversal", day, f"Reprise PDC-{self._label()} (correction)", [
+                Command.create({"name": label, "account_id": self._close_account(*FX_PROVISION_INCOME).id,
+                                "debit": -delta}),
+                Command.create({"name": label, "account_id": provision.id, "credit": -delta}),
+            ])
+        return move
+
     def _closing_generate(self):
         """Générations de la clôture, dans l'ordre ; renvoie les écritures passées."""
         self.ensure_one()
@@ -392,7 +502,8 @@ class EguitraPeriodClose(models.Model):
     def _closing_steps(self):
         """Étapes de génération après les dotations : devises d'abord (les écarts de change n'ont pas
         de TVA), puis TVA et factures à établir."""
-        return [self._close_fx_bank, self._close_fx_items, self._close_vat, self._close_accruals]
+        return [self._close_fx_bank, self._close_fx_items, self._close_fx_provision, self._close_vat,
+                self._close_accruals]
 
     def _closing_preview(self):
         """Ce que la clôture passerait, sans rien écrire (affiché avec les contrôles)."""
@@ -402,7 +513,7 @@ class EguitraPeriodClose(models.Model):
         pending = self.env["account.asset"]._eguitra_pending_lines(self.company_id, end)
         if pending:
             items.append({"kind": "depreciation", "label": KIND_LABELS["depreciation"], "amount": sum(pending.mapped("amount")),
-                          "detail": f"{len(pending)} dotation(s) jusqu'au {end:%d/%m/%Y}"})
+                          "detail": f"{pluriel(len(pending), 'dotation')} jusqu'au {end:%d/%m/%Y}"})
         b443, b445, _carry, _carried, collected, position = self._vat_position(end)
         if b443 or b445:
             items.append({"kind": "vat", "label": f"Liquidation de la TVA (TVA-{self._label()})",
@@ -421,11 +532,17 @@ class EguitraPeriodClose(models.Model):
                           "detail": f"gains latents {_gnf(sum(v for v in fx.values() if v > 0))} GNF (479), pertes "
                                     f"latentes {_gnf(-sum(v for v in fx.values() if v < 0))} GNF (478), extournés le "
                                     f"{end + relativedelta(days=1):%d/%m/%Y}"})
+        loss = self._fx_latent_loss(end) if fx and self._year_end() else 0.0
+        if loss:
+            items.append({"kind": "fx_provision", "label": f"Provision pour perte de change (PDC-{self._label()})",
+                          "amount": loss,
+                          "detail": f"pertes latentes de fin d'exercice, reprise le {end + relativedelta(days=1):%d/%m/%Y}"})
         targets = self._close_accrual_targets(self.company_id, end)
         if targets:
             items.append({"kind": "accrual", "label": f"Factures à établir (FAE-{self._label()})",
                           "amount": sum(t["amount"] for t in targets.values()),
-                          "detail": f"{len(targets)} prestation(s) livrée(s) non facturée(s), extournées le "
+                          "detail": f"{pluriel(len(targets), 'prestation livrée non facturée', 'prestations livrées non facturées')}, "
+                                    f"{'extournée' if len(targets) < 2 else 'extournées'} le "
                                     f"{end + relativedelta(days=1):%d/%m/%Y}"})
         return items
 
@@ -452,17 +569,24 @@ class EguitraPeriodClose(models.Model):
             self.event_ids[:1].sudo().seal = seal  # la réouverture garde trace du sceau levé
         return result
 
-    def _seal_payload(self):
-        """Éléments scellés : société, période, horodatage de clôture, et pour chaque journal chaîné
-        le nombre de pièces et l'empreinte de la dernière pièce chaînée du mois ; totaux des lignes."""
+    def _seal_payload(self, stored=None):
+        """Éléments scellés : période, horodatage de clôture, et pour chaque journal chaîné le nombre de
+        pièces et l'empreinte de la dernière pièce chaînée du mois ; totaux et empreinte du contenu des
+        lignes. stored : éléments d'un sceau déjà posé, recalculés à l'identique (même version, mêmes
+        journaux, même identité) : un journal ouvert après la clôture ne lève pas le sceau."""
         company = self.company_id.sudo()
         _start, end = self._bounds()
+        version = stored.get("version", 1) if stored else SEAL_VERSION
         Move = self.env["account.move"].sudo()
         order = "secure_sequence_number desc, id desc" if "secure_sequence_number" in Move._fields else "date desc, id desc"
+        # Recalcul d'un sceau posé : journaux archivés depuis compris (ils gardent leurs pièces scellées).
+        journals = self.env["account.journal"].sudo().with_context(active_test=not stored).search(
+            [("company_id", "=", company.id), ("type", "in", SECURED_JOURNAL_TYPES)], order="code")
+        if stored:
+            sealed = {j["journal"] for j in stored.get("journals", [])}
+            journals = journals.filtered(lambda j: j.code in sealed)
         chain = []
-        for journal in self.env["account.journal"].sudo().search(
-            [("company_id", "=", company.id), ("type", "in", SECURED_JOURNAL_TYPES)], order="code"
-        ):
+        for journal in journals:
             domain = [("journal_id", "=", journal.id), ("state", "=", "posted"), ("date", "<=", end)]
             last = Move.search(domain + [("inalterable_hash", "!=", False)], order=order, limit=1)
             chain.append({"journal": journal.code, "moves": Move.search_count(domain),
@@ -475,27 +599,38 @@ class EguitraPeriodClose(models.Model):
         )
         count, debit, credit = self.env.cr.fetchone()
         # Empreinte du contenu des lignes du mois : une modification faite hors de la plateforme (même
-        # d'un libellé) change le sceau.
+        # d'un libellé, ou du seul solde, qui alimente les états) change le sceau.
         start, _end = self._bounds()
+        columns = ("aml.id, aml.move_id, aml.account_id, aml.date, aml.debit, aml.credit, aml.amount_currency, "
+                   "aml.currency_id, aml.partner_id, aml.name, aml.tax_line_id")
+        if version >= 2:
+            columns += ", aml.balance"
         self.env.cr.execute(
-            """SELECT encode(sha256(convert_to(COALESCE(string_agg(concat_ws('|', aml.id, aml.move_id, aml.account_id,
-                      aml.date, aml.debit, aml.credit, aml.amount_currency, aml.currency_id, aml.partner_id, aml.name,
-                      aml.tax_line_id), E'\\n' ORDER BY aml.id), ''), 'UTF8')), 'hex')
+            f"""SELECT encode(sha256(convert_to(COALESCE(string_agg(concat_ws('|', {columns}),
+                      E'\\n' ORDER BY aml.id), ''), 'UTF8')), 'hex')
                  FROM account_move_line aml
                 WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date BETWEEN %s AND %s""",
             (company.id, start, end),
         )
         digest = self.env.cr.fetchone()[0]
-        return {
-            "company": company.name, "vat": company.vat or "", "period": f"{self.period:%Y-%m}",
+        payload = {
+            "company": stored.get("company", company.name) if stored else company.name,
+            "vat": stored.get("vat", "") if stored else company.vat or "",
+            "period": f"{self.period:%Y-%m}",
             "closed_at": fields.Datetime.to_string(self.closed_at) if self.closed_at else None,
             "journals": chain, "lines": count, "debit": round(float(debit), 2), "credit": round(float(credit), 2),
             "month_digest": digest,
         }
+        if version >= 2:
+            payload["version"] = version
+        return payload
 
     @staticmethod
     def _seal_hash(payload):
-        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        """Empreinte SHA-256 des éléments scellés ; à partir de la version 2, sans l'identité de la société."""
+        sealed = payload if payload.get("version", 1) < 2 else {
+            key: value for key, value in payload.items() if key not in SEAL_IDENTITY}
+        return hashlib.sha256(json.dumps(sealed, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
     def _closing_snapshot(self, generated):
         company = self.company_id.sudo()
@@ -539,10 +674,10 @@ class EguitraPeriodClose(models.Model):
         self.ensure_one()
         if self.state != "closed" or not self.seal:
             return {"period": self.period, "status": "none", "seal": None}
-        payload = self._seal_payload()
+        stored = self.seal_data or {}
+        payload = self._seal_payload(stored or None)
         computed = self._seal_hash(payload)
         differences = []
-        stored = self.seal_data or {}
         labels = {"lines": "nombre de lignes", "debit": "total des débits", "credit": "total des crédits"}
         for key, label in labels.items():
             if stored.get(key) != payload.get(key):
@@ -554,5 +689,7 @@ class EguitraPeriodClose(models.Model):
             before = old.get(journal["journal"])
             if before != journal:
                 differences.append(f"journal {journal['journal']} modifié depuis la clôture")
+        for code in sorted(set(old) - {j["journal"] for j in payload["journals"]}):
+            differences.append(f"journal {code} supprimé depuis la clôture")
         return {"period": self.period, "status": "ok" if computed == self.seal else "altered", "seal": self.seal,
                 "computed": computed, "differences": differences[:10]}

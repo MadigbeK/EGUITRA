@@ -39,10 +39,15 @@ def _payment_term(spec):
         return Term
     if not isinstance(spec, dict):
         raise ApiError(400, "invalid_parameter", "Condition de paiement : {days, end_of_month}.")
+    # Un délai absent ou illisible (« 30 j » envoyé vide) ne devient jamais « Comptant » : il est refusé.
+    raw = spec.get("days")
     try:
-        days = int(spec.get("days") or 0)
+        if raw in (None, "") or isinstance(raw, bool) or float(raw) != int(float(raw)):
+            raise ValueError(raw)
+        days = int(float(raw))
     except (TypeError, ValueError) as e:
-        raise ApiError(400, "invalid_parameter", "Délai de paiement invalide.") from e
+        raise ApiError(400, "invalid_parameter", "Délai de paiement illisible : un nombre entier de jours (vide "
+                                                 "pour retirer la condition).") from e
     if not 0 <= days <= 365:
         raise ApiError(422, "business_rule", "Le délai de paiement est compris entre 0 et 365 jours.")
     end_of_month = bool(spec.get("end_of_month"))
@@ -187,9 +192,11 @@ class EguitraFinancePartners(http.Controller):
         if not finance:
             return values
         if "credit_limit" in data:
-            limit = data["credit_limit"]
+            limit = as_float(data["credit_limit"], "credit_limit") if data["credit_limit"] not in (None, "") else 0.0
+            if limit < 0:
+                raise ApiError(422, "business_rule", "La limite de crédit est positive (vide ou 0 : pas de limite).")
             values["use_partner_credit_limit"] = bool(limit)
-            values["credit_limit"] = as_float(limit, "credit_limit") if limit else 0.0
+            values["credit_limit"] = limit
         if "vat_exempt" in data:
             values["eguitra_vat_exempt"] = bool(data["vat_exempt"])
         if "payment_term" in data:

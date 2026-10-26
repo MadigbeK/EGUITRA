@@ -12,6 +12,17 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, models
 
 ACC_CODE = "COALESCE(aa.code_store->>(aml.company_id::text), '')"
+# Comptes de gestion (classes 6 à 8) : leur solde repart de zéro à chaque exercice, le résultat des
+# exercices précédents rejoignant les capitaux propres (report à nouveau) tant qu'il n'est pas affecté.
+RESULT_PATTERN = "^[678]"
+# Compte d'affectation du résultat du noyau (« 999999 Affectation du résultat » du plan de la Guinée) :
+# l'OD d'affectation décidée par l'assemblée le débite (bénéfice) ou le crédite (perte).
+UNAFFECTED_TYPE = "equity_unaffected"
+# Lignes reprises d'un exercice à l'autre (balance, grand livre, SAF-T) : tout compte autre que de
+# gestion, et le compte d'affectation du résultat ; les comptes de gestion, depuis le début de l'exercice.
+CARRIED_LINES = f"({ACC_CODE} !~ '{RESULT_PATTERN}' OR aa.account_type = '{UNAFFECTED_TYPE}')"
+# Libellé du résultat antérieur quand le plan d'une société n'a pas de compte d'affectation du résultat.
+UNAFFECTED_LABEL = "Résultats antérieurs non affectés"
 
 
 def month_bounds(day):
@@ -45,10 +56,9 @@ class EguitraFinanceMetrics(models.AbstractModel):
         )
         return float(self.env.cr.fetchone()[0])
 
-    def account_balances(self, companies, date_to, date_from=None, exclude_partner_ids=None):
-        """Solde par code de compte (toutes sociétés confondues), à une date ou sur une période ;
-        exclude_partner_ids écarte les lignes de ces tiers (éliminations intra-groupe)."""
-        self.env.flush_all()  # les requêtes SQL doivent voir les écritures en attente
+    def _line_filters(self, companies, date_to, date_from=None, exclude_partner_ids=None):
+        """Conditions communes des soldes : écritures validées des sociétés jusqu'à date_to (depuis
+        date_from), hors lignes des tiers exclus (éliminations intra-groupe)."""
         where = ["aml.parent_state = 'posted'", "aml.company_id = ANY(%(companies)s)", "aml.date <= %(date_to)s"]
         params = {"companies": list(companies.ids), "date_to": date_to}
         if date_from:
@@ -60,6 +70,13 @@ class EguitraFinanceMetrics(models.AbstractModel):
             where.append("(aml.partner_id IS NULL OR aml.partner_id <> ALL(%(excluded)s) "
                          "OR aa.account_type = 'asset_cash')")
             params["excluded"] = list(exclude_partner_ids)
+        return where, params
+
+    def account_balances(self, companies, date_to, date_from=None, exclude_partner_ids=None):
+        """Solde par code de compte (toutes sociétés confondues), à une date ou sur une période ;
+        exclude_partner_ids écarte les lignes de ces tiers (éliminations intra-groupe)."""
+        self.env.flush_all()  # les requêtes SQL doivent voir les écritures en attente
+        where, params = self._line_filters(companies, date_to, date_from, exclude_partner_ids)
         self.env.cr.execute(
             f"""SELECT {ACC_CODE} AS code, SUM(aml.balance)
                   FROM account_move_line aml
@@ -69,6 +86,86 @@ class EguitraFinanceMetrics(models.AbstractModel):
             params,
         )
         return {code: float(balance) for code, balance in self.env.cr.fetchall() if code}
+
+    # ─── Résultat et report à nouveau ────────────────────────────────────
+
+    def unaffected_accounts(self, companies):
+        """Comptes d'affectation du résultat (type equity_unaffected du noyau), un par société au plus."""
+        return self.env["account.account"].sudo().with_context(active_test=False).search(
+            [("account_type", "=", UNAFFECTED_TYPE), ("company_ids", "in", companies.ids)], order="id")
+
+    def unaffected_account(self, company):
+        """Compte d'affectation du résultat de la société (vide s'il manque au plan)."""
+        return self.unaffected_accounts(company)[:1]
+
+    def unaffected_codes(self, companies):
+        """Codes des comptes d'affectation du résultat, dans le plan de chaque société."""
+        codes = set()
+        for account in self.unaffected_accounts(companies):
+            for company in companies.filtered(lambda c, a=account: c in a.company_ids):
+                code = account.with_company(company).code
+                if code:
+                    codes.add(code)
+        return codes
+
+    def result_split(self, companies, date_to, exclude_partner_ids=None):
+        """Résultat (classes 6 à 8) à la date, réparti comme dans le noyau : exercice en cours de chaque
+        société (depuis le début de son exercice, fiscal_year_bounds) et exercices précédents (avant ce
+        début, jusqu'à l'origine). Montants positifs pour un bénéfice. Le compte d'affectation du
+        résultat (type equity_unaffected) n'en fait pas partie : l'OD d'affectation le solde en
+        contrepartie des réserves, du report à nouveau et des dividendes."""
+        if not companies:
+            return {"current": 0.0, "previous": 0.0}
+        self.env.flush_all()
+        where, params = self._line_filters(companies, date_to, None, exclude_partner_ids)
+        params.update({
+            "fy_companies": list(companies.ids),
+            "fy_starts": [self.fiscal_year_bounds(company, date_to)[0] for company in companies],
+        })
+        self.env.cr.execute(
+            f"""SELECT COALESCE(SUM(CASE WHEN aml.date >= fy.fy_start THEN aml.balance END), 0),
+                       COALESCE(SUM(CASE WHEN aml.date < fy.fy_start THEN aml.balance END), 0)
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                  JOIN unnest(%(fy_companies)s::int[], %(fy_starts)s::date[]) AS fy(company_id, fy_start)
+                    ON fy.company_id = aml.company_id
+                 WHERE {' AND '.join(where)} AND NOT {CARRIED_LINES}""",
+            params,
+        )
+        current, previous = (float(v) for v in self.env.cr.fetchone())
+        return {"current": -current, "previous": -previous}
+
+    def previous_results(self, companies, before):
+        """Résultat des exercices précédents (classes 6 à 8 avant `before`) que les comptes de gestion ne
+        reprennent plus, porté comme dans le noyau au compte d'affectation du résultat de chaque société :
+        [(code, libellé, solde)], solde débiteur (perte) positif, créditeur (bénéfice) négatif. La balance,
+        le grand livre et le fichier SAF-T restent ainsi équilibrés d'un exercice à l'autre."""
+        self.env.flush_all()
+        self.env.cr.execute(
+            f"""SELECT aml.company_id, COALESCE(SUM(aml.balance), 0)
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                 WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s) AND aml.date < %(before)s
+                   AND NOT {CARRIED_LINES}
+              GROUP BY 1""",
+            {"companies": list(companies.ids), "before": before},
+        )
+        rows = []
+        for company_id, balance in self.env.cr.fetchall():
+            balance = float(balance)
+            if abs(balance) < 0.005:
+                continue
+            company = self.env["res.company"].sudo().browse(company_id)
+            account = self.unaffected_account(company)
+            code = account.with_company(company).code if account else None
+            rows.append((code or "999999", account.name if account else UNAFFECTED_LABEL, balance))
+        return rows
+
+    def year_result(self, company, start, end):
+        """Résultat d'un exercice à affecter : toutes les classes 6 à 8 de la période, sur la même base que le
+        report à nouveau du bilan (result_split). Il égale la rubrique XI quand tous les comptes de gestion
+        figurent au compte de résultat (contrôle « comptes hors états »)."""
+        return self.net_result(company, start, end)
 
     def fiscal_year_bounds(self, company, day):
         """Exercice comptable contenant la date (clôture au 31 décembre par défaut)."""

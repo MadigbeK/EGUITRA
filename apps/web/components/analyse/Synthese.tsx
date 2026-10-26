@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import { type CSSProperties } from "react";
-import { AreaChart, Card, ErrorBox, SERIES, cx } from "@/components/ui";
+import { AreaChart, Card, SERIES, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
-import { AttenteSection, Constats, EnTeteSection, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
+import { RECO as RECO_METHODE } from "@/lib/axispro-types";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";
-import { fmtInt } from "@/lib/format";
+import { INSECABLE, fmtRatio, fmtJours, fmtDec } from "@/lib/format";
 
 /** Cockpit : celui du groupe ou celui du cabinet selon la société de travail. */
 export function Synthese() {
-  const { data: contexte, error } = useContexte();
+  const { data: contexte, error, mutate } = useContexte();
   return (
     <FournisseurTheme>
-      {error && <ErrorBox error={error} />}
+      {error && !contexte && <ErreurLecture error={error} onRetry={() => void mutate()} titre="L'analyse n'a pas pu lire la société de travail." />}
       {!contexte && !error && <AttenteSection />}
       {contexte && !contexte.sections.some((x) => x.key === "synthese") ? (
         // Profil sans le cockpit de cette société (la finance, côté cabinet) : ses écrans ouverts.
@@ -76,9 +77,9 @@ function CockpitGroupe() {
       ) : (
         <>Le score de santé n&apos;est pas calculable sur la période</>
       )}
-      {ca?.value !== null && ca?.value !== undefined && <> : {fmtShort(ca.value)} GNF de chiffre d&apos;affaires{ca.delta_pct !== null && ` (${ca.delta_pct >= 0 ? "+" : ""}${fmtPct(ca.delta_pct)} sur un an)`}</>}
-      {ebe?.value !== null && ebe?.value !== undefined && <>, {fmtShort(ebe.value)} GNF d&apos;EBE{ebePct?.value !== null && ebePct?.value !== undefined ? ` soit ${fmtPct(ebePct.value)}` : ""}</>}
-      {cash?.value !== null && cash?.value !== undefined && <>, {fmtShort(cash.value)} GNF de trésorerie{cash.target !== null && cash.value < cash.target ? " sous le seuil de sécurité" : ""}</>}.
+      {ca?.value !== null && ca?.value !== undefined && <> : {gnfOu(ca.value)} de chiffre d&apos;affaires{ca.delta_pct !== null && ` (${ca.delta_pct >= 0 ? "+" : ""}${fmtPct(ca.delta_pct)} sur un an)`}</>}
+      {ebe?.value !== null && ebe?.value !== undefined && <>, {gnfOu(ebe.value)} d&apos;EBE{ebePct?.value !== null && ebePct?.value !== undefined ? ` soit ${fmtPct(ebePct.value)}` : ""}</>}
+      {cash?.value !== null && cash?.value !== undefined && <>, {gnfOu(cash.value)} de trésorerie{cash.target !== null && cash.value < cash.target ? " sous le seuil de sécurité" : ""}</>}.
       {alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
   );
@@ -90,7 +91,7 @@ function CockpitGroupe() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/synthese.xlsx${query}`} question="Où en est EGUITRA GROUP aujourd'hui ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
@@ -104,7 +105,7 @@ function CockpitGroupe() {
                     axes={AXES_SANTE.map(([k, label]) => {
                       const a = axes[k];
                       const v = nombre(a?.value);
-                      return { key: k, label: a?.label ?? label, score: nombre(a?.score) ?? 0, value: v === null ? undefined : a.unit === "ratio" ? v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) : a.unit === "pct" ? fmtPct(v) : a.unit === "days" ? `${fmtInt(v)} j` : String(v), comment: a?.comment };
+                      return { key: k, label: a?.label ?? label, score: nombre(a?.score), value: v === null ? undefined : a.unit === "ratio" ? fmtRatio(v) : a.unit === "pct" ? fmtPct(v) : a.unit === "days" ? fmtJours(v) : fmtDec(v), comment: a?.comment };
                     })}
                     taille={300}
                   />
@@ -112,14 +113,15 @@ function CockpitGroupe() {
                     {AXES_SANTE.map(([k, label]) => {
                       const a = axes[k];
                       if (!a) return null;
-                      const s = nombre(a.score) ?? 0;
+                      // Un axe non calculable est écarté du score (poids rapportés aux autres) : jamais un 0 rouge.
+                      const s = nombre(a.score);
                       return (
                         <li key={k} className="flex items-start gap-2">
-                          <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full" style={{ background: s < 40 ? "var(--danger-vif)" : s < 60 ? "var(--warn-vif)" : "var(--g-jade)" }} />
+                          <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full" style={{ background: s === null ? "var(--muted)" : s < 40 ? "var(--danger-vif)" : s < 60 ? "var(--warn-vif)" : "var(--g-jade)" }} />
                           <span>
                             <span className="font-semibold text-ink-2">
-                              {a.label ?? label} {Math.round(s)}
-                              {a.weight ? <span className="font-normal text-muted"> (poids {a.weight} %)</span> : null}
+                              {a.label ?? label} {s === null ? "non calculable" : Math.round(s)}
+                              {s === null ? <span className="font-normal text-muted"> (écarté du score)</span> : a.weight ? <span className="font-normal text-muted"> (poids {a.weight}{INSECABLE}%)</span> : null}
                             </span>{" "}
                             : {a.comment}
                           </span>
@@ -193,7 +195,7 @@ function CockpitGroupe() {
                     labels={mensuel.months.map((m) => moisCourt(m, true))}
                     series={mensuel.series.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: [SERIES[0], SERIES[2], SERIES[1]][i] ?? SERIES[i % SERIES.length]! }))}
                     height={170}
-                    format={(v) => `${fmtShort(v)} GNF`}
+                    format={(v) => gnfOu(v)}
                   />
                 </div>
               )}
@@ -209,14 +211,15 @@ function CockpitGroupe() {
 
 /* ─── MB AxisPro Consulting ────────────────────────────────────────────── */
 
-const RECO: Record<Recommendation, { label: string; couleur: string }> = {
-  bankable: { label: "Bankable", couleur: COULEUR_VERDICT.bankable! },
-  apd_ready: { label: "APD Ready", couleur: COULEUR_VERDICT.apd_ready! },
-  go: { label: "GO", couleur: COULEUR_VERDICT.go! },
-  conditional: { label: "GO sous conditions", couleur: COULEUR_VERDICT.conditional! },
-  hold: { label: "HOLD", couleur: COULEUR_VERDICT.hold! },
-  no_go: { label: "NO-GO", couleur: COULEUR_VERDICT.no_go! },
-  pending: { label: "À compléter", couleur: COULEUR_VERDICT.pending! },
+/** Libellés de la méthode (BANKABLE CANDIDATE, CONDITIONAL GO…), couleurs des verdicts. */
+const VERDICTS: Record<Recommendation, { label: string; couleur: string }> = {
+  bankable: { label: RECO_METHODE.bankable.label, couleur: COULEUR_VERDICT.bankable! },
+  apd_ready: { label: RECO_METHODE.apd_ready.label, couleur: COULEUR_VERDICT.apd_ready! },
+  go: { label: RECO_METHODE.go.label, couleur: COULEUR_VERDICT.go! },
+  conditional: { label: RECO_METHODE.conditional.label, couleur: COULEUR_VERDICT.conditional! },
+  hold: { label: RECO_METHODE.hold.label, couleur: COULEUR_VERDICT.hold! },
+  no_go: { label: RECO_METHODE.no_go.label, couleur: COULEUR_VERDICT.no_go! },
+  pending: { label: RECO_METHODE.pending.label, couleur: COULEUR_VERDICT.pending! },
 };
 
 const SECTIONS_CABINET: Record<string, string> = { portefeuille: "Projets et pipeline", diagnostic: "Diagnostic", comites: "Décisions", financements: "Financements", activite: "Activité", risques: "Risques" };
@@ -234,23 +237,22 @@ function CockpitCabinet() {
   const reponse = d && (
     <>
       Le cabinet accompagne <strong className="font-semibold text-ink">{dossiers?.value !== null && dossiers?.value !== undefined ? pluriel(dossiers.value, "projet") : "des projets"}</strong>
-      {besoin?.value !== null && besoin?.value !== undefined && <> pour {fmtShort(besoin.value)} GNF de besoin de financement</>}
-      {pipeline?.value !== null && pipeline?.value !== undefined && <>, dont {fmtShort(pipeline.value)} GNF pondérés par leur chance d&apos;être financés</>} ; {murs} dossier{murs > 1 ? "s sont" : " est"} présentable{murs > 1 ? "s" : ""} aux financeurs.
-      {honoraires?.value !== null && honoraires?.value !== undefined && <> Honoraires de la période : {fmtShort(honoraires.value)} GNF{honoraires.delta_pct !== null && ` (${honoraires.delta_pct >= 0 ? "+" : ""}${fmtPct(honoraires.delta_pct)})`}.</>}
+      {besoin?.value !== null && besoin?.value !== undefined && <> pour {gnfOu(besoin.value)} de besoin de financement</>}
+      {pipeline?.value !== null && pipeline?.value !== undefined && <>, dont {gnfOu(pipeline.value)} pondérés par leur chance d&apos;être financés</>} ; {murs} dossier{murs > 1 ? "s sont" : " est"} présentable{murs > 1 ? "s" : ""} aux financeurs.
+      {honoraires?.value !== null && honoraires?.value !== undefined && <> Honoraires de la période : {gnfOu(honoraires.value)}{honoraires.delta_pct !== null && ` (${honoraires.delta_pct >= 0 ? "+" : ""}${fmtPct(honoraires.delta_pct)})`}.</>}
       {alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
   );
   const points = (d?.maturity ?? [])
     .filter((m) => m.readiness !== null && m.bankability !== null)
-    .map((m) => ({ id: String(m.id), label: m.name, x: m.readiness ?? 0, y: m.bankability ?? 0, size: Math.max(1, m.need), group: RECO[m.recommendation]?.label ?? m.recommendation, detail: `${m.reference} · ${m.sector ?? "secteur non renseigné"} · ${m.gate} · probabilité ${fmtPct(m.probability * 100, 0)}` }));
-  const couleurs = Object.fromEntries(Object.values(RECO).map((r) => [r.label, r.couleur]));
+    .map((m) => ({ id: String(m.id), label: m.name, x: m.readiness ?? 0, y: m.bankability ?? 0, size: Math.max(1, m.need), group: VERDICTS[m.recommendation]?.label ?? m.recommendation, detail: `${m.reference} · ${m.sector ?? "secteur non renseigné"} · ${m.gate} · probabilité ${fmtPct(m.probability * 100, 0)}` }));
+  const couleurs = Object.fromEntries(Object.values(VERDICTS).map((r) => [r.label, r.couleur]));
   const quadrant = (key: string, defaut: string) => seuils?.quadrants?.find((q) => q.key === key)?.label ?? defaut;
-  const funnel = (d?.funnel ?? []).filter((f) => f.count > 0 || (f.sequence ?? 0) <= 2);
 
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/synthese.xlsx${query}`} question="Où en est le portefeuille de projets du cabinet ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
@@ -264,10 +266,10 @@ function CockpitCabinet() {
               {d.funnel?.length ? (
                 <>
                   <Entonnoir label="Entonnoir des dossiers par gate" stages={(d.funnel ?? []).map((f) => ({ key: f.gate, label: `${f.gate} · ${f.label}`, count: f.count, value: f.need, conversion_pct: f.conversion_pct }))} hauteur={Math.max(300, (d.funnel?.length ?? 0) * 46)} />
-                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Chaque marche est large comme son nombre de dossiers ; le montant à droite est leur besoin de financement, la pastille le taux de passage depuis le gate précédent.{funnel.length === 0 ? " Aucun dossier n'a encore franchi de gate." : ""}</p>
+                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Chaque marche est large comme les dossiers en cours dans le gate ; le montant à droite est leur besoin de financement ; entre deux marches, la pastille donne la part des dossiers parvenus au premier gate qui ont atteint le second.</p>
                 </>
               ) : (
-                <Vide titre="Aucun dossier ouvert" hint="Les dossiers apparaissent ici dès leur création dans AxisPro." />
+                <Vide titre="Aucun dossier ouvert" hint="Les dossiers apparaissent ici dès leur création dans MB AxisPro Consulting." />
               )}
             </Card>
             <Card title="Maturité des projets" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Aire : besoin de financement · seuils {seuils?.readiness ?? 65} / {seuils?.bankability ?? 80}</span>}>
@@ -282,7 +284,7 @@ function CockpitCabinet() {
                   quadrants={{ x: seuils?.readiness ?? 65, y: seuils?.bankability ?? 80, labels: [quadrant("presentable", "Présentables aux financeurs"), quadrant("confirm", "Bancabilité à confirmer"), quadrant("structure", "Prêts, à structurer"), quadrant("upstream", "À accompagner en amont")], teintes: ["var(--g-jade)", "var(--g-azur)", "var(--warn-vif)", "var(--danger-vif)"] }}
                   formatX={(v) => String(Math.round(v))}
                   formatY={(v) => String(Math.round(v))}
-                  formatSize={(v) => `${fmtShort(v)} GNF`}
+                  formatSize={(v) => gnfOu(v)}
                   sizeLabel="Besoin"
                   couleurs={couleurs}
                   hauteur={380}

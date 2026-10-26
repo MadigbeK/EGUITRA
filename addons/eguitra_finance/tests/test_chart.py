@@ -87,3 +87,29 @@ class TestChartOfAccounts(FinanceDataMixin, ApiCase):
         checks = {c["code"]: c for c in close._run_controls()}
         self.assertEqual(checks["reference_consistency"]["status"], "warning", "Facture de fournisseur en double")
         self.assertIn("saisie 2 fois", checks["reference_consistency"]["detail"])
+
+    def test_coherence_des_references_cas_courants(self):
+        """Ni doublon pour une facture de fournisseur extournée puis ressaisie, ni numéro manquant pour une
+        facture annulée (elle garde son numéro)."""
+        close = self.env["eguitra.period.close"]._get(self.company, self.today.replace(day=1))
+
+        def check():
+            return {c["code"]: c for c in close._run_controls()}["reference_consistency"]
+
+        first = self.make_invoice("in_invoice", 2_000_000, post=False)
+        first.ref = "FAC-EAU-0007"
+        first.with_context(eguitra_approval_granted=True).action_post()
+        # Avoir daté comme la facture : une pièce d'achat ne se valide pas sans date (invoice_date n'est pas copiée).
+        first._reverse_moves([{"date": first.date, "invoice_date": first.invoice_date, "ref": "Montant erroné"}],
+                             cancel=True)
+        self.assertEqual(first.payment_state, "reversed")
+        second = self.make_invoice("in_invoice", 2_500_000, post=False)
+        second.ref = " fac-eau-0007 "
+        second.with_context(eguitra_approval_granted=True).action_post()
+        self.assertEqual(check()["status"], "ok", "Facture extournée puis ressaisie : pas de doublon")
+
+        sales = [self.make_invoice("out_invoice", 1_000_000) for _i in range(3)]
+        sales[1].button_draft()
+        sales[1].button_cancel()
+        self.assertEqual(sales[1].state, "cancel")
+        self.assertEqual(check()["status"], "ok", "Une facture annulée garde son numéro : aucun trou")

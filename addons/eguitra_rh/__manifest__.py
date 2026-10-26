@@ -2,7 +2,7 @@
     "name": "EGUITRA - Ressources humaines",
     "summary": "Personnel, absences et congés, avances et prêts, paie guinéenne (CNSS, RTS, VF), bulletins, "
                "écriture de paie, libre-service des salariés",
-    "version": "19.0.1.0.2",
+    "version": "19.0.1.1.0",
     "category": "Human Resources",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

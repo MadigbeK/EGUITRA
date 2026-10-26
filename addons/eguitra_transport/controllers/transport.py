@@ -82,6 +82,14 @@ def _move_ref(move):
     return {"id": move.id, "name": move.name if move.name and move.name != "/" else None, "state": move.state} if move else None
 
 
+def _depart_fields(rot):
+    """Départ permis à l'utilisateur (écrans : bouton « Faire partir ») et, sinon, pourquoi."""
+    if rot.state != "draft":
+        return {"can_depart": False, "depart_refusal": None}
+    refusal = rot._depart_refusal()
+    return {"can_depart": not refusal, "depart_refusal": refusal}
+
+
 def _rotation_row(rot, detail=False, official=None):
     """Ligne de rotation ; detail : avec les motifs qui s'opposent au départ (fiche, pas la liste)."""
     return {
@@ -120,7 +128,7 @@ def _rotation_row(rot, detail=False, official=None):
         "weight_tare": rot.weight_tare or None, "weight_net": rot.weight_net or None, "over_payload": rot.over_payload,
         "vehicle_kind": rot.vehicle_id.vehicle_kind or None,
         "departure_blockers": rot._departure_blockers() if detail and rot.state == "draft" else None,
-        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by),
+        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by), **_depart_fields(rot),
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
         **_rotation_official(rot, official),
@@ -446,7 +454,7 @@ class EguitraTransport(http.Controller):
              "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
              "monthly_charges": sum(c._monthly() for c in v.charge_ids),
              "vehicle_kind": v.vehicle_kind, "payload_tonnes": v.payload_tonnes or None,
-             "documents": [_document_row(d) for d in v.document_ids], "document_issues": v._document_issues()}
+             "documents": [_document_row(d) for d in v._active_documents()], "document_issues": v._document_issues()}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
 
@@ -526,7 +534,7 @@ class EguitraTransport(http.Controller):
                     wanted = int(d["id"])
                 except (TypeError, ValueError) as e:
                     raise ApiError(400, "invalid_parameter", "Identifiant de document invalide.") from e
-                doc = vehicle.document_ids.filtered(lambda x, i=wanted: x.id == i)
+                doc = vehicle._active_documents().filtered(lambda x, i=wanted: x.id == i)
                 if not doc:
                     raise ApiError(422, "business_rule", "Document inconnu pour cet ensemble.")
                 seen.add(doc.id)
@@ -534,7 +542,7 @@ class EguitraTransport(http.Controller):
             else:
                 commands.append((0, 0, line))
         # Document retiré de la liste : archivé, il reste à l'historique (audit du 25 octobre, M15).
-        return commands + [(1, doc.id, {"active": False}) for doc in vehicle.document_ids if doc.id not in seen]
+        return commands + [(1, doc.id, {"active": False}) for doc in vehicle._active_documents() if doc.id not in seen]
 
     @api_route("/transport/vehicles", methods=("POST",), profiles=WRITE)
     def create_vehicle(self, **_kw):
@@ -1155,7 +1163,12 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/sync", methods=("POST",), profiles=WRITE)
     def sync(self, **_kw):
-        """Rotations saisies hors réseau : chaque saisie porte un identifiant unique (idempotence)."""
+        """Rotations saisies hors réseau : chaque saisie porte un identifiant unique (idempotence).
+
+        Une saisie déjà reçue répond « exists », sauf si le téléphone la renvoie corrigée (« correction » :
+        l'agent l'a modifiée après un premier envoi dont la réponse s'est perdue, ou pendant un envoi) : le
+        brouillon est alors mis à jour (« updated ») s'il est encore en saisie, saisi par ce compte et pas
+        retouché au bureau depuis ; sinon il reste tel quel et le bureau le corrige depuis sa fiche."""
         items = read_json().get("rotations") or []
         if not isinstance(items, list) or len(items) > MAX_SYNC:
             raise ApiError(400, "invalid_parameter", f"Liste de rotations invalide ({MAX_SYNC} au plus par envoi).")
@@ -1172,7 +1185,7 @@ class EguitraTransport(http.Controller):
             # Recherche sous les droits de l'agent : une saisie d'une autre société n'est pas révélée.
             existing = Rotation.search([("client_uuid", "=", uuid)], limit=1)
             if existing:
-                results.append({"client_uuid": uuid, "status": "exists", "id": existing.id})
+                results.append(self._sync_existing(existing, item, uuid))
                 continue
             missing = [k for k in ("vehicle_id", "partner_id", "route_id") if not item.get(k)]
             if missing:
@@ -1201,3 +1214,33 @@ class EguitraTransport(http.Controller):
                 _logger.exception("Synchronisation mobile : saisie %s rejetée", uuid)
                 results.append({"client_uuid": uuid, "status": "error", "message": "Saisie invalide."})
         return {"results": results}
+
+    def _sync_existing(self, rot, item, uuid):
+        """Réponse à une saisie déjà reçue (voir sync) : « exists », ou correction du brouillon de son auteur."""
+        exists = {"client_uuid": uuid, "status": "exists", "id": rot.id, "state": rot.state}
+        if not item.get("correction"):
+            return exists
+        user = request.env.user
+        # Retouchée au bureau (dernière écriture d'un autre compte), validée, facturée ou annulée, ou saisie
+        # par un autre compte : la correction du téléphone n'écrase rien.
+        if rot.state != "draft" or rot.create_uid != user or rot.write_uid != user:
+            return dict(exists, message="Déjà reçue au bureau, qui l'a traitée ou modifiée : la correction n'y est "
+                                        "pas portée. Faites corriger la rotation au bureau, depuis sa fiche.")
+        if any(not item.get(k) for k in ("vehicle_id", "partner_id", "route_id")):
+            return {"client_uuid": uuid, "status": "error", "message": "Ensemble, client et route sont obligatoires."}
+        try:
+            with request.env.cr.savepoint():
+                before = (rot.partner_id, rot.route_id, rot.product_id, rot.vehicle_id)
+                rot.write(_rotation_values(item))
+                # Comme à la création : tarif du client et de la route, chauffeur habituel de l'ensemble.
+                if (rot.partner_id, rot.route_id, rot.product_id) != before[:3]:
+                    rot.rate = rot.route_id._rate_for(rot.partner_id, rot.product_id)
+                if rot.vehicle_id != before[3] and not item.get("driver_id"):
+                    rot.driver_id = rot.vehicle_id.driver_id
+        except (ApiError, UserError, ValidationError) as e:
+            message = e.message if isinstance(e, ApiError) else str(e.args[0])
+            return {"client_uuid": uuid, "status": "error", "message": message}
+        except Exception:  # noqa: BLE001 - une correction défectueuse ne bloque pas les autres saisies
+            _logger.exception("Synchronisation mobile : correction de la saisie %s rejetée", uuid)
+            return {"client_uuid": uuid, "status": "error", "message": "Correction invalide."}
+        return {"client_uuid": uuid, "status": "updated", "id": rot.id}

@@ -2,6 +2,8 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
+from odoo.addons.eguitra_finance.formats import pluriel
+
 
 class EguitraAlertThreshold(models.Model):
     _inherit = "eguitra.alert.threshold"
@@ -17,7 +19,7 @@ class EguitraAlertThreshold(models.Model):
             ])
             if late:
                 alerts.append(self._alert(
-                    t, "Validations en retard", f"{late} demande(s) en attente depuis plus de {int(t.value)} jours.",
+                    t, "Validations en retard", f"{pluriel(late, 'demande')} en attente depuis plus de {pluriel(int(t.value), 'jour')}.",
                     None, "/finance/approbations",
                 ))
         return alerts
@@ -37,6 +39,6 @@ class EguitraPeriodClose(models.Model):
         )
         checks.append(self._check(
             "pending_approvals", "Aucune pièce en attente de validation sur la période", not in_period, False,
-            f"{len(in_period)} pièce(s) en attente de validation.", len(in_period),
+            f"{pluriel(len(in_period), 'pièce')} en attente de validation.", len(in_period),
         ))
         return checks

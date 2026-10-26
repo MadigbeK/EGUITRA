@@ -2,10 +2,37 @@
 
 import { useId, useState } from "react";
 import { ChevronDown, Download } from "@/components/icons";
-import { Button, Card, Notice, Repartition, Segmented, cx } from "@/components/ui";
-import { fmtGNF, fmtInt } from "@/lib/format";
+import { Button, Card, Notice, Repartition, Segmented, Select, cx } from "@/components/ui";
+import { INSECABLE, fmtFixe, fmtGNF, fmtInt, pluriel } from "@/lib/format";
 import { ChampMontant, ChampNombre, Ligne } from "./champs";
-import { decimal, type ParamsPret, type ResultatPret, type TypeDiffere } from "./calculs";
+import type { ParamsPret, ResultatPret, TypeDiffere } from "./calculs";
+
+const NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+/** Nombre d'une cellule CSV : virgule décimale, sans séparateur de milliers (lisible par un tableur). */
+function nombreCsv(v: number, chiffres: number): string {
+  return v.toLocaleString("fr-FR", { minimumFractionDigits: chiffres, maximumFractionDigits: chiffres, useGrouping: false });
+}
+
+/**
+ * Mois de la première échéance (AAAA-MM) en deux listes, mois et année : le champ « mois » du navigateur
+ * n'existe ni dans Firefox ni dans Safari de bureau, où il demandait de taper « 2026-11 » sans le dire.
+ */
+function ChoixMois({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const [a, m] = value.split("-").map(Number);
+  const maintenant = new Date().getFullYear();
+  const annee = a && Number.isFinite(a) ? a : maintenant;
+  const mois = m && m >= 1 && m <= 12 ? m : 1;
+  const annees = Array.from({ length: 12 }, (_, i) => maintenant - 1 + i);
+  if (!annees.includes(annee)) annees.push(annee);
+  const ecrire = (x: number, y: number) => onChange(`${y}-${String(x).padStart(2, "0")}`);
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-2">
+      <Select id={id} aria-label="Mois de la première échéance" value={mois} onChange={(e) => ecrire(Number(e.target.value), annee)} options={NOMS_MOIS.map((nom, i) => ({ value: i + 1, label: nom }))} />
+      <Select aria-label="Année de la première échéance" value={annee} onChange={(e) => ecrire(mois, Number(e.target.value))} options={annees.sort((x, y) => x - y).map((y) => ({ value: y, label: String(y) }))} />
+    </div>
+  );
+}
 
 function moisCourt(d: Date) {
   return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" }).replace(".", "");
@@ -16,7 +43,7 @@ function moisCourt(d: Date) {
  * une tabulation est neutralisé (apostrophe) pour qu'un tableur n'y voie jamais une formule.
  */
 function cellule(v: string | number, chiffres = 2): string {
-  if (typeof v === "number") return decimal(Math.abs(v) < 0.005 ? 0 : v, chiffres);
+  if (typeof v === "number") return nombreCsv(Math.abs(v) < 0.005 ? 0 : v, chiffres);
   const s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
   return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
@@ -94,13 +121,7 @@ export function SimulateurPret({ params, onChange, resultat }: { params: ParamsP
           )}
           <div>
             <label htmlFor={`${zone}-debut`} className="mb-1.5 block text-[13px] font-medium text-ink-2">Première échéance</label>
-            <input
-              id={`${zone}-debut`}
-              type="month"
-              value={params.debut}
-              onChange={(e) => e.target.value && maj({ debut: e.target.value })}
-              className="w-full rounded-[10px] border border-line-strong/80 bg-panel px-3 py-2 text-sm text-ink outline-none focus:border-accent-vif focus:ring-4 focus:ring-accent-vif/15"
-            />
+            <ChoixMois id={`${zone}-debut`} value={params.debut} onChange={(debut) => maj({ debut })} />
           </div>
           <p className="text-[12px] leading-snug text-muted">Remboursement mensuel à échéances constantes. Assurance et frais de dossier non compris : demandez-les à la banque.</p>
         </div>
@@ -117,7 +138,7 @@ export function SimulateurPret({ params, onChange, resultat }: { params: ParamsP
                 {fmtInt(r.echeance)} <span className="text-[16px] font-semibold text-white/70">GNF</span>
               </div>
               <div className="mt-2 text-[13px] text-white/75">
-                {r.moisAmortissement} échéances
+                {pluriel(r.moisAmortissement, "échéance")}
                 {params.differe > 0 && (
                   <>
                     , précédées de {params.differe} mois de différé {params.typeDiffere === "partiel" ? `à ${fmtGNF(r.echeanceDiffere)} par mois` : "sans paiement"}
@@ -149,7 +170,7 @@ export function SimulateurPret({ params, onChange, resultat }: { params: ParamsP
               />
               <dl className="mt-3">
                 {params.typeDiffere === "total" && params.differe > 0 && <Ligne label="Capital à amortir après le différé" valeur={fmtGNF(r.capitalAmorti)} />}
-                <Ligne label="Le crédit coûte, pour 100 GNF empruntés" valeur={`${decimal((r.coutCredit / params.montant) * 100, 1)} GNF`} />
+                <Ligne label="Le crédit coûte, pour 100 GNF empruntés" valeur={`${fmtFixe((r.coutCredit / params.montant) * 100, 1)}${INSECABLE}GNF`} />
               </dl>
             </Card>
 

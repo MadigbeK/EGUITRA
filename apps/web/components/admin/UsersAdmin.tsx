@@ -2,11 +2,16 @@
 
 import { useState } from "react";
 import { KeyRound, Plus, ShieldOff } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, PasswordInput, Select, Tag } from "@/components/ui";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import type { Company, Me } from "@/lib/types";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Modal, Notice, PageHeader, PasswordInput, Select, Tag, demanderConfirmation } from "@/components/ui";
+import { apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { useEnvoi } from "@/lib/envoi";
+import type { Company, Me, Profile } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
 import { RetraitDiscussions } from "@/components/discussions/RetraitDiscussions";
+
+// Profils des routes /admin/users, /admin/profiles et /admin/rights (addons/eguitra_api/controllers/admin.py,
+// ADMIN) : l'administration seule crée, modifie, désactive un compte et remet ses accès.
+const ADMINISTRATION: Profile[] = ["admin"];
 
 interface UserRow extends Me {
   active: boolean;
@@ -30,21 +35,38 @@ const PROFILS_COMPTABLES = ["admin", "direction", "finance"];
 /** Utilisateurs : profils, droits complémentaires, sociétés, mot de passe provisoire, double authentification. */
 export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]; defaultCompany: number }) {
   const { data: users, error, mutate } = useApi<UserRow[]>("/admin/users");
-  const { data: profiles } = useApi<ProfileDef[]>("/admin/profiles");
-  const { data: rights } = useApi<RightDef[]>("/admin/rights");
+  const { data: profiles, error: erreurProfils, mutate: relireProfils } = useApi<ProfileDef[]>("/admin/profiles");
+  const { data: rights, error: erreurDroits, mutate: relireDroits } = useApi<RightDef[]>("/admin/rights");
+  const administration = useAutorise(ADMINISTRATION);
   const [editing, setEditing] = useState<UserRow | "new" | null>(null);
   const label = (code: string) => profiles?.find((p) => p.code === code)?.name ?? code;
+  // Profils et droits non lus : la fiche ne s'ouvrirait pas (profils) ou masquerait la saisie libre (droits).
+  const erreurReferentiel = erreurProfils ?? erreurDroits;
   return (
     <div>
       <PageHeader
         title="Utilisateurs"
         subtitle="Chaque utilisateur ne voit que le périmètre de ses profils et les sociétés qui lui sont ouvertes ; un même compte peut travailler pour les deux sociétés. La double authentification est obligatoire."
         actions={
-          <Button variant="primary" onClick={() => setEditing("new")}>
-            <Plus className="h-4 w-4" /> Nouvel utilisateur
-          </Button>
+          administration ? (
+            <Button variant="primary" disabled={!profiles} onClick={() => setEditing("new")}>
+              <Plus className="h-4 w-4" /> Nouvel utilisateur
+            </Button>
+          ) : undefined
         }
       />
+      {erreurReferentiel && (
+        <div className="mb-4">
+          <ErrorBox
+            error={erreurReferentiel}
+            titre={erreurProfils ? "Profils non chargés : les fiches des utilisateurs ne s'ouvrent pas." : "Droits complémentaires non chargés : la saisie libre des comptes ne s'affiche pas dans les fiches."}
+            onRetry={() => {
+              void relireProfils();
+              void relireDroits();
+            }}
+          />
+        </div>
+      )}
       <Card padded={false}>
         {!users ? (
           <Etat error={error} onRetry={() => mutate()} />
@@ -52,7 +74,7 @@ export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]
           <DataTable
             rows={users}
             rowKey={(u) => u.id}
-            onRowClick={(u) => setEditing(u)}
+            onRowClick={administration && profiles ? (u) => setEditing(u) : undefined}
             columns={[
               { key: "name", label: "Nom" },
               { key: "login", label: "Identifiant" },
@@ -65,7 +87,7 @@ export function UsersAdmin({ companies, defaultCompany }: { companies: Company[]
           />
         )}
       </Card>
-      {editing && profiles && <UserForm user={editing === "new" ? null : editing} profiles={profiles} rights={rights ?? []} companies={companies} defaultCompany={defaultCompany} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
+      {editing && profiles && administration && <UserForm user={editing === "new" ? null : editing} profiles={profiles} rights={rights ?? []} companies={companies} defaultCompany={defaultCompany} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
     </div>
   );
 }
@@ -79,8 +101,7 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
   const [selected, setSelected] = useState<string[]>(user?.profiles.filter((p) => !(p === "direction" || p === "finance") || !user.profiles.includes("admin")) ?? []);
   const [granted, setGranted] = useState<Rights>(user?.rights ?? {});
   const comptable = selected.some((p) => PROFILS_COMPTABLES.includes(p));
-  const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const envoi = useEnvoi();
 
   function toggle(code: string) {
     const ajout = !selected.includes(code);
@@ -100,18 +121,21 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
   const manquantes = selected
     .map((code) => profiles.find((p) => p.code === code))
     .filter((p): p is ProfileDef => Boolean(p?.entity) && !companies.some((c) => c.entity === p!.entity && companyIds.includes(c.id)));
-  async function run(fn: () => Promise<unknown>, ok: string, close = false) {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await fn();
-      if (close) onSaved();
-      else setMessage({ tone: "ok", text: ok });
-    } catch (e) {
-      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Action impossible." });
-    } finally {
-      setBusy(false);
-    }
+  /** Écriture sur le compte : close ferme la fiche (liste relue) ; sinon, le message reste dans la fiche. */
+  async function run(cle: string, fn: () => Promise<unknown>, ok?: string, close = false) {
+    if ((await envoi.run(cle, fn, close ? undefined : ok)) && close) onSaved();
+  }
+  async function reinitialiserDoubleAuth() {
+    if (!user) return;
+    const oui = await demanderConfirmation(`Réinitialiser la double authentification de ${user.name} ? Ses sessions sont fermées et son application d'authentification ne sert plus : il la réactivera à sa prochaine connexion.`, { action: "Réinitialiser", danger: true });
+    if (oui) await run("mfa", () => apiSend("POST", `/admin/users/${user.id}/reset-mfa`), "Double authentification réinitialisée : l'utilisateur la réactivera à sa prochaine connexion.");
+  }
+  async function basculerActif() {
+    if (!user) return;
+    const oui = user.active
+      ? await demanderConfirmation(`Désactiver le compte de ${user.name} ? Il ne pourra plus se connecter ; ses pièces et son historique restent. Le compte se réactive d'ici.`, { action: "Désactiver", danger: true })
+      : await demanderConfirmation(`Réactiver le compte de ${user.name} ? Il pourra de nouveau se connecter avec ses profils actuels.`, { action: "Réactiver" });
+    if (oui) await run("actif", () => apiSend("PATCH", `/admin/users/${user.id}`, { active: !user.active }), undefined, true);
   }
   function toggleCompany(id: number) {
     const next = companyIds.includes(id) ? companyIds.filter((x) => x !== id) : [...companyIds, id];
@@ -123,13 +147,13 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
   const rightsPayload = comptable && rights.length ? { rights: Object.fromEntries(rights.map((r) => [r.code, Boolean(granted[r.code])])) } : {};
   const save = () =>
     user
-      ? run(() => apiSend("PATCH", `/admin/users/${user.id}`, { name: form.name, email: form.email, profiles: selected, ...rightsPayload, ...(foreign.length ? {} : companyPayload) }), "", true)
-      : run(() => apiSend("POST", "/admin/users", { ...form, profiles: selected, ...rightsPayload, ...companyPayload }), "", true);
+      ? run("enregistrer", () => apiSend("PATCH", `/admin/users/${user.id}`, { name: form.name, email: form.email, profiles: selected, ...rightsPayload, ...(foreign.length ? {} : companyPayload) }), undefined, true)
+      : run("enregistrer", () => apiSend("POST", "/admin/users", { ...form, profiles: selected, ...rightsPayload, ...companyPayload }), undefined, true);
 
   return (
-    <Modal open wide title={user ? user.name : "Nouvel utilisateur"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={save} disabled={!form.name || !form.login || !selected.length || !companyIds.length || (!user && form.password.length < 10)}>Enregistrer</Button>}>
+    <Modal open wide title={user ? user.name : "Nouvel utilisateur"} onClose={onClose} footer={<Button variant="primary" loading={envoi.busy === "enregistrer"} onClick={save} disabled={envoi.busy !== null || !form.name || !form.login || !selected.length || !companyIds.length || (!user && form.password.length < 10)}>Enregistrer</Button>}>
       <div className="space-y-4">
-        {message && <Notice tone={message.tone}>{message.text}</Notice>}
+        {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Nom complet">
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -205,11 +229,11 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
         )}
         {user && (
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-            <PasswordReset userId={user.id} />
-            <Button onClick={() => run(() => apiSend("POST", `/admin/users/${user.id}/reset-mfa`), "Double authentification réinitialisée : l'utilisateur la réactivera à sa prochaine connexion.")}>
+            <PasswordReset userId={user.id} userName={user.name} />
+            <Button loading={envoi.busy === "mfa"} disabled={envoi.busy !== null} onClick={reinitialiserDoubleAuth}>
               <ShieldOff className="h-4 w-4" /> Réinitialiser la double auth.
             </Button>
-            <Button variant="danger" onClick={() => run(() => apiSend("PATCH", `/admin/users/${user.id}`, { active: !user.active }), "", true)}>
+            <Button variant={user.active ? "danger" : "secondary"} loading={envoi.busy === "actif"} disabled={envoi.busy !== null} onClick={basculerActif}>
               {user.active ? "Désactiver" : "Réactiver"}
             </Button>
             {/* Compte désactivé : le retirer de ses conversations de la discussion interne (sans les lire). */}
@@ -221,10 +245,15 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
   );
 }
 
-function PasswordReset({ userId }: { userId: number }) {
+/** Mot de passe provisoire remis par l'administrateur : il ferme les sessions du compte, d'où la confirmation. */
+function PasswordReset({ userId, userName }: { userId: number; userName: string }) {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const envoi = useEnvoi();
+  async function appliquer() {
+    const oui = await demanderConfirmation(`Remettre un mot de passe provisoire à ${userName} ? Ses sessions ouvertes sont fermées ; il choisira son mot de passe à la prochaine connexion.`, { action: "Remettre le mot de passe", danger: true });
+    if (oui && (await envoi.run("motdepasse", () => apiSend("POST", `/admin/users/${userId}/password`, { password }), "Mot de passe provisoire enregistré, sessions fermées."))) setPassword("");
+  }
   if (!open)
     return (
       <Button onClick={() => setOpen(true)}>
@@ -232,19 +261,12 @@ function PasswordReset({ userId }: { userId: number }) {
       </Button>
     );
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <PasswordInput autoComplete="new-password" placeholder="10 caractères minimum" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <Button
-        disabled={password.length < 10}
-        onClick={() =>
-          apiSend("POST", `/admin/users/${userId}/password`, { password })
-            .then(() => setMessage("Mot de passe provisoire enregistré, sessions fermées."))
-            .catch((e) => setMessage(e instanceof ApiError ? e.message : "Erreur"))
-        }
-      >
+      <Button loading={envoi.busy === "motdepasse"} disabled={password.length < 10 || envoi.busy !== null} onClick={appliquer}>
         Appliquer
       </Button>
-      {message && <span className="text-xs text-muted">{message}</span>}
+      {envoi.message && <span className={envoi.message.tone === "danger" ? "text-xs font-medium text-danger" : "text-xs text-muted"}>{envoi.message.text}</span>}
     </div>
   );
 }

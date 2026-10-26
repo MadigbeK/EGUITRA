@@ -3,11 +3,15 @@ from odoo.exceptions import UserError
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
+from odoo.addons.eguitra_api.tests.profils import RefusParProfil
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
+
+# Profils des routes des engagements (controllers/commitments.py, INTERNAL).
+INTERNAL = ("admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet", "achats")
 
 
 @tagged("post_install", "-at_install")
-class TestCommitment(FinanceDataMixin, ApiCase):
+class TestCommitment(RefusParProfil, FinanceDataMixin, ApiCase):
     """Engagements de dépense : circuit d'approbation avant la commande, consommation par les pièces
     d'achat, qui ne refont pas le circuit dans la limite de l'engagement."""
 
@@ -115,3 +119,79 @@ class TestCommitment(FinanceDataMixin, ApiCase):
         self.assertEqual(status, 200, _b)
         status, bills = self.call("GET", f"/finance/commitments/for-bill?partner_id={self.supplier.id}", token=ftoken)
         self.assertIn(body["id"], [c["id"] for c in bills], "Proposé à la saisie d'une pièce du fournisseur")
+
+    def test_modifier_en_brouillon_puis_apres_refus(self):
+        """« Modifier » : un engagement se corrige en brouillon ou refusé (la finance en précise le compte),
+        jamais une fois soumis ; corrigé après un refus, il est resoumis et refait le circuit."""
+        token = self.open_session("chantier.eng", app="finance")["access_token"]
+        status, draft = self.call("POST", "/finance/commitments", {
+            "partner_id": self.supplier.id, "object": "Location d'un camion-benne", "amount": 8_000_000,
+        }, token=token)
+        self.assertEqual(status, 200, draft)
+        self.assertIsNone(draft["account"], "Compte à préciser par la finance")
+        path = f"/finance/commitments/{draft['id']}"
+        status, body = self.call("PATCH", path, {
+            "object": "Location de deux camions-bennes", "amount": 16_000_000, "date_expected": self.today.isoformat(),
+        }, token=token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["object"], body["amount"], body["date_expected"]),
+                         ("Location de deux camions-bennes", 16_000_000, self.today.isoformat()))
+        status, body = self.call("PATCH", path, {"object": " "}, token=token)
+        self.assertEqual(status, 400, "L'objet se change, il ne se vide pas")
+        ftoken = self.open_session("chef.eng", app="finance")["access_token"]
+        status, body = self.call("PATCH", path, {"account_id": self.acc_purchase.id}, token=ftoken)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["account"]["id"], self.acc_purchase.id, "La finance précise le compte")
+
+        status, body = self.call("POST", f"{path}/submit", token=token)
+        self.assertEqual((status, body["state"]), (200, "submitted"), body)
+        first = body["approval"]["request_id"]
+        status, body = self.call("PATCH", path, {"amount": 20_000_000}, token=token)
+        self.assertEqual(status, 422, "Soumis : il ne se modifie plus")
+        status, body = self.call("POST", f"/approvals/{first}/reject", {"comment": "Un seul camion suffit"}, token=ftoken)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("GET", path, token=token)
+        self.assertEqual((body["state"], body["approval"]["rejected_reason"], body["approval"]["rejected_by"]),
+                         ("rejected", "Un seul camion suffit", self.chef_comptable.name), "Le demandeur lit le motif")
+
+        status, body = self.call("PATCH", path, {"object": "Location d'un camion-benne", "amount": 8_000_000}, token=token)
+        self.assertEqual((status, body["amount"]), (200, 8_000_000), body)
+        status, body = self.call("POST", f"{path}/submit", token=token)
+        self.assertEqual((status, body["state"]), (200, "submitted"), body)
+        second = body["approval"]["request_id"]
+        self.assertNotEqual(second, first, "Nouvelle demande, au montant corrigé")
+        status, body = self.call("POST", f"/approvals/{second}/approve", {}, token=ftoken)
+        self.assertEqual(status, 200, body)
+        status, body = self.call("GET", path, token=token)
+        self.assertEqual((body["state"], body["amount"]), ("approved", 8_000_000))
+
+    def test_regle_par_compte_appliquee_sans_compte(self):
+        """Règle réservée à certains comptes (investissements, préfixe 2) : un engagement sans compte la suit
+        aussi, faute de pouvoir l'écarter ; le compte précisé, seules les règles de son compte s'appliquent."""
+        rule = self.env["eguitra.approval.rule"].create({
+            "name": "Investissements : accord de la direction", "company_id": self.company.id,
+            "document": "commitment", "sequence": 3, "min_amount": 0, "account_prefix": "2",
+            "approver_profile": "direction",
+        })
+        asset = self.env["account.account"].search(
+            [("code", "=like", "24%"), ("company_ids", "in", self.company.ids)], limit=1)
+        self.assertTrue(asset, "Compte de matériel (24) du plan")
+        commitment = self._commitment(10_000_000)
+        commitment.account_id = False
+        self.assertIn(rule, commitment._eguitra_required_rules(), "Sans compte : la règle des investissements s'applique")
+        commitment.account_id = self.acc_purchase
+        self.assertNotIn(rule, commitment._eguitra_required_rules(), "Compte de charges : elle ne s'applique pas")
+        commitment.account_id = asset
+        self.assertIn(rule, commitment._eguitra_required_rules(), "Compte d'immobilisation : elle s'applique")
+        commitment.account_id = False
+        commitment.action_submit()
+        self.assertEqual(self._request(commitment).step_ids.mapped("profile"), ["finance", "direction"],
+                         "Soumis sans compte : la direction tranche aussi")
+
+    def test_modification_et_soumission_refusees_hors_profils(self):
+        """Routes des engagements (INTERNAL) : le porteur et la RH sont refusés, sans effet sur l'engagement."""
+        commitment = self._commitment(5_000_000)
+        self.assertRefuseHors(INTERNAL, "PATCH", f"/finance/commitments/{commitment.id}", {"amount": 1})
+        self.assertRefuseHors(INTERNAL, "POST", f"/finance/commitments/{commitment.id}/submit")
+        commitment.invalidate_recordset()
+        self.assertEqual((commitment.amount, commitment.state), (5_000_000, "draft"))

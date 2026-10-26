@@ -1,20 +1,41 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
-import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
+import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { MOVE_STATES, type Account, type Journal, type MoveSummary, type Paged } from "@/lib/finance-types";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, PagesListe, aujourdhui, enSaisie } from "@/components/finance/communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { MOVE_STATES, type Account, type Journal, type MoveDetail, type MoveLine, type MoveSummary, type Paged } from "@/lib/finance-types";
 import type { Me } from "@/lib/types";
-import { fmtDate, fmtGNF } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
-interface Line { account_id: string; name: string; debit: string; credit: string; axes: AxisChoice }
+/**
+ * Ligne d'OD saisie. partner_id : tiers de la ligne relue d'un brouillon, renvoyé tel quel ; original :
+ * répartition analytique relue, renvoyée tant que ses axes ne changent pas.
+ */
+interface Line { account_id: string; name: string; debit: string; credit: string; axes: AxisChoice; partner?: { id: number; name: string } | null; original?: Record<string, number> }
 const emptyLine = (): Line => ({ account_id: "", name: "", debit: "", credit: "", axes: {} });
+
+/** Ligne d'un brouillon d'OD relu pour modification. */
+function lineOf(l: MoveLine): Line {
+  return {
+    account_id: l.account ? String(l.account.id) : "",
+    name: l.name ?? "",
+    debit: l.debit ? enSaisie(l.debit) : "",
+    credit: l.credit ? enSaisie(l.credit) : "",
+    axes: {},
+    partner: l.partner ?? null,
+    original: l.analytic_distribution && Object.keys(l.analytic_distribution).length ? l.analytic_distribution : undefined,
+  };
+}
 /** Les axes se proposent sur les comptes de gestion et d'immobilisation (classes 2, 6, 7 et 8). */
 const ANALYTIC_CLASSES = /^[2678]/;
-const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+/** Débit ou crédit lu à la française (« 1 500 000 ») ; vide ou illisible : 0, l'illisible étant signalé et bloquant. */
+const num = (v: string) => lireNombre(v) ?? 0;
+/** Opérations diverses par page. */
+const PAGE = 100;
 
 /** Modèles d'OD guidées : comptes proposés selon la nature de l'opération. */
 const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; side: "debit" | "credit"; name: string }> }> = {
@@ -26,24 +47,31 @@ const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; 
 };
 
 export default function EntriesPage() {
-  const { data, error, mutate } = useApi<Paged<MoveSummary>>("/finance/moves?type=entry&limit=100");
+  const [offset, setOffset] = useState(0);
+  const { data, error, mutate } = useApi<Paged<MoveSummary>>(`/finance/moves?type=entry&limit=${PAGE}&offset=${offset}`);
   const { data: me } = useApi<Me>("/auth/me");
-  // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes ».
+  // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes », et la route
+  // (POST /finance/moves, opération diverse) à la finance et à l'administration.
   const libre = me?.rights?.free_accounts === true;
+  const saisie = useAutorise(ECRITURE_FINANCE);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  /** Brouillon d'OD ouvert dans le formulaire pour modification. */
+  const [editing, setEditing] = useState<MoveDetail | null>(null);
   return (
     <div>
       <PageHeader
         title="Journaux et opérations diverses"
         subtitle="Écritures d'OD guidées, toujours équilibrées. Les virements internes se saisissent dans Trésorerie."
         actions={
-          <Button variant="primary" onClick={() => setCreating(true)} disabled={!libre}>
-            <Plus className="h-4 w-4" /> Nouvelle OD
-          </Button>
+          saisie && (
+            <Button variant="primary" onClick={() => setCreating(true)} disabled={!libre}>
+              <Plus className="h-4 w-4" /> Nouvelle OD
+            </Button>
+          )
         }
       />
-      {me && !libre && (
+      {me && saisie && !libre && (
         <div className="mb-4">
           <Notice tone="accent">
             La saisie des opérations diverses demande le droit « Saisie libre des comptes » (Administration &gt; Utilisateurs) : vos pièces prennent le compte de leur catégorie de dépense, du type d&apos;opération ou de l&apos;activité.
@@ -69,30 +97,72 @@ export default function EntriesPage() {
             ]}
           />
         )}
+        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Opérations" onPage={setOffset} />}
       </Card>
       {creating && <EntryForm onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); }} />}
-      <MoveDetailModal moveId={selected} onClose={() => setSelected(null)} onChanged={() => mutate()} />
+      {editing && (
+        <EntryForm
+          move={editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            const id = editing.id;
+            setEditing(null);
+            void mutate();
+            setSelected(id);
+          }}
+        />
+      )}
+      {/* Remontée à chaque pièce : le règlement, le montant et l'erreur d'une pièce ne passent pas à la suivante. */}
+      <MoveDetailModal
+        key={selected ?? "aucune"}
+        moveId={selected}
+        onClose={() => setSelected(null)}
+        onChanged={() => mutate()}
+        onOpen={setSelected}
+        // La modification d'une OD réécrit ses comptes : réservée au droit « Saisie libre des comptes ».
+        onEditEntry={
+          libre
+            ? (m) => {
+                setSelected(null);
+                setEditing(m);
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }
 
-function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+/**
+ * Saisie d'une opération diverse, ou modification d'un brouillon (move) : lignes, date et libellé se
+ * réécrivent (PATCH), le journal d'une pièce enregistrée ne change pas.
+ */
+function EntryForm({ move, onClose, onDone }: { move?: MoveDetail; onClose: () => void; onDone: () => void }) {
   const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=3000");
   const { data: journals } = useApi<Journal[]>("/finance/journals");
-  const [journalId, setJournalId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [ref, setRef] = useState("");
+  const [journalId, setJournalId] = useState(move?.journal ? String(move.journal.id) : "");
+  const [date, setDate] = useState(move?.date ?? aujourdhui());
+  const [ref, setRef] = useState(move?.ref ?? "");
   const [template, setTemplate] = useState("libre");
-  const [lines, setLines] = useState<Line[]>([emptyLine(), emptyLine()]);
+  const [lines, setLines] = useState<Line[]>(() => (move ? move.lines.map(lineOf) : [emptyLine(), emptyLine()]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Brouillon relu : les axes de chaque ligne s'affichent une fois ceux de la société chargés.
+  const [axesRelus, setAxesRelus] = useState(!move);
   const debit = lines.reduce((a, l) => a + num(l.debit), 0);
   const credit = lines.reduce((a, l) => a + num(l.credit), 0);
   const balanced = Math.abs(debit - credit) < 0.5 && debit > 0;
+  // Débit ou crédit illisible (« 1.500.000 » était lu 0) ou négatif : signalé sous le tableau, envoi bloqué.
+  const saisieInvalide = lines.some((l) => nombreIllisible(l.debit) || nombreIllisible(l.credit) || num(l.debit) < 0 || num(l.credit) < 0);
   const accountOptions = (accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }));
   const { data: axes } = useAxes();
   const codeOf = (id: string) => accounts?.find((a) => String(a.id) === id)?.code ?? "";
   const analytic = (l: Line) => Boolean(l.account_id) && ANALYTIC_CLASSES.test(codeOf(l.account_id));
+  useEffect(() => {
+    if (axesRelus || !axes) return;
+    setLines((ls) => ls.map((l) => (l.original ? { ...l, axes: fromDistribution(axes, l.original) } : l)));
+    setAxesRelus(true);
+  }, [axes, axesRelus]);
 
   function applyTemplate(key: string) {
     setTemplate(key);
@@ -112,23 +182,40 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
   async function submit(post: boolean) {
     setBusy(true);
     setError(null);
+    const corps = {
+      date,
+      ref,
+      lines: lines
+        .filter((l) => l.account_id && (num(l.debit) || num(l.credit)))
+        .map((l) => ({
+          account_id: Number(l.account_id),
+          name: l.name || ref,
+          debit: num(l.debit),
+          credit: num(l.credit),
+          partner_id: l.partner?.id,
+          analytic_distribution: analytic(l) ? (l.original ?? toDistribution(l.axes)) : undefined,
+        })),
+    };
     try {
-      await apiSend("POST", "/finance/moves", {
-        move_type: "entry",
-        journal_id: Number(journalId),
-        date,
-        ref,
-        post,
-        lines: lines
-          .filter((l) => l.account_id && (num(l.debit) || num(l.credit)))
-          .map((l) => ({
-            account_id: Number(l.account_id),
-            name: l.name || ref,
-            debit: num(l.debit),
-            credit: num(l.credit),
-            analytic_distribution: analytic(l) ? toDistribution(l.axes) : undefined,
-          })),
-      });
+      if (!move) {
+        await apiSend("POST", "/finance/moves", { move_type: "entry", journal_id: Number(journalId), post, ...corps });
+        onDone();
+        return;
+      }
+      try {
+        await apiSend("PATCH", `/finance/moves/${move.id}`, corps);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
+        return;
+      }
+      if (post) {
+        try {
+          await apiSend("POST", `/finance/moves/${move.id}/post`);
+        } catch (e) {
+          setError(`Brouillon enregistré, validation refusée : ${e instanceof ApiError ? e.message : "réseau indisponible"}`);
+          return;
+        }
+      }
       onDone();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
@@ -141,14 +228,14 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
     <Modal
       open
       wide
-      title="Nouvelle opération diverse"
+      title={move ? `Modifier l'opération diverse${move.ref ? ` « ${move.ref} »` : ""}` : "Nouvelle opération diverse"}
       onClose={onClose}
       footer={
         <>
-          <Button onClick={() => submit(false)} loading={busy} disabled={!balanced || !journalId}>
+          <Button onClick={() => submit(false)} loading={busy} disabled={!balanced || !journalId || saisieInvalide}>
             Brouillon
           </Button>
-          <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={!balanced || !journalId}>
+          <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={!balanced || !journalId || saisieInvalide}>
             Valider
           </Button>
         </>
@@ -160,8 +247,8 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           <Field label="Modèle">
             <Select value={template} onChange={(e) => applyTemplate(e.target.value)} options={Object.entries(TEMPLATES).map(([k, t]) => ({ value: k, label: t.label }))} />
           </Field>
-          <Field label="Journal">
-            <Select value={journalId} onChange={(e) => setJournalId(e.target.value)} placeholder="Choisir…" options={(journals ?? []).map((j) => ({ value: j.id, label: `${j.code} ${j.name}` }))} />
+          <Field label="Journal" hint={move ? "Le journal d'une pièce enregistrée ne change pas." : undefined}>
+            <Select value={journalId} disabled={Boolean(move)} onChange={(e) => setJournalId(e.target.value)} placeholder="Choisir…" options={(journals ?? []).map((j) => ({ value: j.id, label: `${j.code} ${j.name}` }))} />
           </Field>
           <Field label="Date">
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -191,12 +278,13 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
                 </td>
                 <td className="px-2 py-1">
                   <Input value={l.name} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} aria-label={`Libellé, ligne ${i + 1}`} />
+                  {l.partner && <div className="mt-0.5 text-[12px] text-muted">Tiers : {l.partner.name}</div>}
                 </td>
                 <td className="px-2 py-1">
-                  <Input className="text-right font-mono" inputMode="numeric" value={l.debit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, debit: e.target.value, credit: "" } : x)))} aria-label={`Débit, ligne ${i + 1}`} />
+                  <Input className={`text-right font-mono ${CHAMP_INVALIDE}`} inputMode="decimal" aria-invalid={nombreIllisible(l.debit) || num(l.debit) < 0} value={l.debit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, debit: e.target.value, credit: "" } : x)))} aria-label={`Débit, ligne ${i + 1}`} />
                 </td>
                 <td className="px-2 py-1">
-                  <Input className="text-right font-mono" inputMode="numeric" value={l.credit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, credit: e.target.value, debit: "" } : x)))} aria-label={`Crédit, ligne ${i + 1}`} />
+                  <Input className={`text-right font-mono ${CHAMP_INVALIDE}`} inputMode="decimal" aria-invalid={nombreIllisible(l.credit) || num(l.credit) < 0} value={l.credit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, credit: e.target.value, debit: "" } : x)))} aria-label={`Crédit, ligne ${i + 1}`} />
                 </td>
                 <td>
                   {lines.length > 2 && (
@@ -209,7 +297,7 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
               {analytic(l) && (
                 <tr>
                   <td colSpan={5} className="px-2 pb-2">
-                    <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => setLines(lines.map((x, j) => (j === i ? { ...x, axes: next } : x)))} />
+                    <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => setLines(lines.map((x, j) => (j === i ? { ...x, axes: next, original: undefined } : x)))} />
                   </td>
                 </tr>
               )}
@@ -229,7 +317,10 @@ function EntryForm({ onClose, onDone }: { onClose: () => void; onDone: () => voi
             </tr>
           </tfoot>
         </table>
-        {!balanced && debit + credit > 0 && <Notice tone="warn">Écart débit - crédit : {fmtGNF(debit - credit)}. Une pièce doit être équilibrée.</Notice>}
+        {saisieInvalide && (
+          <Notice tone="danger">{lines.some((l) => nombreIllisible(l.debit) || nombreIllisible(l.credit)) ? AIDE_NOMBRE : "Un débit ou un crédit se saisit sans signe moins : le sens vient de sa colonne."}</Notice>
+        )}
+        {!saisieInvalide && !balanced && debit + credit > 0 && <Notice tone="warn">Écart débit - crédit : {fmtGNF(debit - credit)}. Une pièce doit être équilibrée.</Notice>}
       </div>
     </Modal>
   );

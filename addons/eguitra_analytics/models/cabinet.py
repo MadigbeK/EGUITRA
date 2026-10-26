@@ -19,13 +19,15 @@ Conventions :
   (taux de revient du temps, en part du taux de vente ; 0,40 par défaut).
 """
 
+import math
 from collections import defaultdict
 from datetime import timedelta
 from functools import cached_property
+from urllib.parse import quote
 
 from dateutil.relativedelta import relativedelta
 
-from odoo import models
+from odoo import api, models
 
 from odoo.addons.eguitra_axispro.models.dossier import COMMITTEE_DECISIONS, RECOMMENDATIONS
 from odoo.addons.eguitra_axispro.models.pilotage import (
@@ -40,7 +42,7 @@ from odoo.addons.eguitra_axispro.models.timesheet import CABINET_ACTIVITIES, PRO
 from odoo.addons.eguitra_finance.models.finance_metrics import ACC_CODE
 
 from ..engine import portfolio as pf
-from ..engine.forecast import forecast_series
+from ..engine.forecast import forecast_series, method_label
 from ..engine.insights import gnf, insight, pct, rank
 
 OPEN_STATES = ("open", "on_hold")
@@ -114,6 +116,11 @@ def _n(count, one, many=None):
     return f"{count} {one if count < 2 else (many or one + 's')}"
 
 
+def _n_fr(value, one, many, digits=1):
+    """« 1,5 point », « 2,5 points » : nombre décimal à la française et nom accordé."""
+    return f"{_fr(value, digits)} {one if abs(value or 0) < 2 else many}"
+
+
 def _refs(dossiers, limit=3):
     names = [d.reference or d.name for d in dossiers[:limit]]
     more = len(dossiers) - limit
@@ -157,6 +164,52 @@ def _quality(notes):
 
 def _dossier_link(dossier):
     return f"/axispro/dossiers/{dossier.id}"
+
+
+def _section_link(section, anchor=None, **params):
+    """Lien vers une section de l'Analyse : la cible en paramètres (?gate=G2), mise en évidence par l'écran,
+    et le bloc qui explique le constat en ancre (#temps), jusqu'où l'écran fait défiler."""
+    query = "&".join(f"{key}={quote(str(value), safe='')}" for key, value in params.items() if value not in (None, ""))
+    return f"/analyse/{section}" + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else "")
+
+
+def _lire_reglage(raw):
+    """Valeur d'un réglage enregistré (« 450 000 », « 0,4 ») : nombre, None s'il est vide, False s'il est
+    illisible."""
+    text = str(raw or "").replace(" ", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return False
+    return value if math.isfinite(value) else False
+
+
+def _historique_clos(months, values, day):
+    """Série mensuelle sans le mois de la date d'arrêté quand il est entamé : ses chiffres partiels (le 3 du
+    mois, trois jours d'honoraires) tireraient la prévision vers le bas. Renvoie (mois, valeurs, entamé)."""
+    entame = (day + timedelta(days=1)).month == day.month
+    if entame and months and months[-1] == pf.month_key(day):
+        return months[:-1], values[:-1], True
+    return months, values, False
+
+
+def _knockouts_confirmes(snapshot):
+    """Knock-outs constatés à la décision : ceux de l'instantané scellé, moins ceux dont le critère n'était
+    pas encore évalué (la méthode compte un critère non évalué comme non disponible)."""
+    snap = snapshot or {}
+    return max(0, len(snap.get("knockouts") or []) - int(snap.get("knockouts_pending") or 0))
+
+
+def _recommandation_scellee(recommendation, snapshot):
+    """Recommandation de la méthode à la décision, pour l'accord avec le comité : un NO-GO qui ne tient qu'à
+    des knock-outs non encore évalués (gate non atteint) n'est pas un verdict de la méthode, il reste hors
+    du calcul comme une recommandation à compléter."""
+    snap = snapshot or {}
+    if recommendation == "no_go" and snap.get("knockouts") and not _knockouts_confirmes(snap):
+        return "pending"
+    return recommendation or "pending"
 
 
 def _brief(dossier):
@@ -362,9 +415,10 @@ class Bundle:
 
     @cached_property
     def waiting(self):
-        """Séjours en cours des dossiers du portefeuille, par gate : [(dossier, âge en jours)]."""
+        """Séjours en cours des dossiers actifs, par gate : [(dossier, âge en jours)]. Un dossier suspendu
+        n'attend pas une décision du gate : il ne fait ni goulot ni dossier bloqué."""
         result = defaultdict(list)
-        for d in self.live:
+        for d in self.live.filtered(lambda d: d.state == "open"):
             t = self.timeline(d)
             if not t["incomplete"]:
                 result[t["gate"]].append((d, t["age"]))
@@ -426,7 +480,10 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
     def activite(self, company, period, ctx=None):
         """Activité et honoraires (6.6). Ouverte aussi au profil finance, qui ne lit pas les dossiers du
         cabinet : ses agrégats sont alors calculés en lecture privilégiée, bornés à la société de travail
-        (déjà contrôlée par la route) ; seuls des totaux et des références de dossiers sont rendus."""
+        (déjà contrôlée par la route). La réponse est celle de la spécification 6.6, la même pour tous les
+        profils de la section : heures par consultant et par semaine (noms des consultants), rentabilité
+        et carnet par dossier (référence, nom et consultant du dossier), honoraires par ligne de service.
+        Aucune pièce, évaluation ni donnée du porteur n'y figure (arbitrage du 26 octobre 2026)."""
         user = self.env.user
         trusted = self.env.su or user.has_group("eguitra_base.group_profile_cabinet") or \
             user.has_group("eguitra_base.group_profile_direction")
@@ -725,7 +782,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 for p in passages:
                     if p["dst"] == code and p["date"] <= b.date_to:
                         arrivals[pf.month_key(p["date"])] += 1
-            values = [float(arrivals.get(m, 0)) for m in months]
+            # Mois entamé écarté de l'historique : la prévision part du dernier mois clos (le mois en cours
+            # devient le premier mois prévu).
+            history, values, _entame = _historique_clos(months, [float(arrivals.get(m, 0)) for m in months], b.date_to)
             fc = _forecast(values, 6)
             point, low, high = fc["forecast"], fc["low"], fc["high"]
             approaching = []
@@ -758,7 +817,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 "gate": code, "label": b.gate_names[code], "rule": rule, "expected_3m": total(point, 3),
                 "expected_6m": total(point, 6), "interval_3m": [total(low, 3), total(high, 3)],
                 "interval_6m": [total(low, 6), total(high, 6)], "method": fc["method"],
-                "mape": _r(fc["mape"]), "history": {"months": months, "values": values},
+                "mape": _r(fc["mape"]), "history": {"months": history, "values": values},
                 "candidates": approaching,
             })
         return result
@@ -782,7 +841,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                           "exclus des durées.", 20 * len(incomplete) / len(b.dossiers)))
         foreign = live.filtered(lambda d: d.currency_id and d.currency_id != b.company.currency_id)
         if foreign:
-            notes.append((f"{_n(len(foreign), 'dossier')} en devise, converti(s) au cours du "
+            notes.append((f"{_n(len(foreign), 'dossier')} en devise, {'converti' if len(foreign) < 2 else 'convertis'} au cours du "
                           f"{b.date_to:%d/%m/%Y}.", 0))
         return notes
 
@@ -809,7 +868,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                                                    "values": [x["age_days"] for x in bottleneck["dossiers"]], "unit": "days"}},
                 action=f"Tenir une revue d'avancement ciblée des dossiers en {bottleneck['gate']} : lever les écarts "
                        "bloquants avec les porteurs, ou prononcer un HOLD pour libérer la capacité des consultants.",
-                link=f"/analyse/portefeuille?gate={bottleneck['gate']}",
+                link=_section_link("portefeuille", "temps", gate=bottleneck["gate"]),
             ))
         stuck = []
         p75 = {row["gate"]: (row["p75_days"] if row["n"] >= 3 else None) for row in time_in_gate}
@@ -865,7 +924,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                     f"Seuls {pct(ratio)} du besoin de financement sont bancables à court terme",
                     f"Pondéré par la probabilité de bancabilité de chaque dossier, le pipeline vaut "
                     f"{gnf(pipeline['weighted'])} pour {gnf(total_need)} de besoin de financement."
-                    + (f" {_n(len(near), 'dossier est', 'dossiers sont')} proche(s) du seuil (Bankability entre 55 et 75)."
+                    + (f" {_n(len(near), 'dossier est proche', 'dossiers sont proches')} du seuil (Bankability entre 55 et 75)."
                        if near else ""),
                     metric={"label": "Pipeline pondéré / besoin", "value": ratio, "unit": "pct", "reference": 50.0,
                             "reference_label": "Portefeuille équilibré"},
@@ -918,7 +977,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                            "clos à ce gate) ; les dossiers encore en cours sont écartés.",
                     action="Renforcer la préqualification en amont de ce gate pour n'engager que des projets à même de "
                            "le franchir.",
-                    link=f"/analyse/portefeuille?gate={row['gate']}",
+                    link=_section_link("portefeuille", "entonnoir", gate=row["gate"]),
                 ))
         for target in forecast["targets"]:
             soon = [c for c in target["candidates"] if c["eta_days"] <= 92 and not c["knockout"]]
@@ -926,17 +985,17 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     f"cabinet.prevision.{target['gate']}", "portefeuille", "info",
                     f"Dossiers attendus au gate {target['gate']} ({target['label']}) dans les six mois",
-                    f"Au rythme observé, {_fr(target['expected_6m'] or 0, 1)} arrivée(s) attendue(s) en six mois "
+                    f"Au rythme observé, {_n_fr(target['expected_6m'] or 0, 'arrivée attendue', 'arrivées attendues')} en six mois "
                     f"({_fr(target['expected_3m'] or 0, 1)} en trois mois)"
                     + (f" ; {_n(len(soon), 'dossier')} en approche d'ici trois mois : {_refs([b.env['axispro.dossier'].browse(c['id']) for c in soon])}."
                        if soon else "."),
                     metric={"label": "Arrivées attendues à 6 mois", "value": target["expected_6m"] or 0, "unit": "count",
                             "reference": None, "reference_label": None},
                     confidence=0.55,
-                    method=f"Arrivées mensuelles au gate (journal des passages) prolongées par {target['method'] or 'lissage'} ; "
+                    method=f"Arrivées mensuelles au gate (journal des passages) prolongées par {method_label(target['method'])} ; "
                            "dossiers en approche : médianes des gates restant à franchir moins l'âge dans le gate courant.",
                     action="Préparer les comités et la charge des consultants pour ces arrivées.",
-                    link=f"/analyse/portefeuille?gate={target['gate']}",
+                    link=_section_link("portefeuille", "prevision", gate=target["gate"]),
                 ))
         return out
 
@@ -1140,7 +1199,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         notes = []
         if backlog:
             total_due = sum(info["due"] for info in gaps.values())
-            notes.append((f"{_n(backlog, 'critère')} des gates atteints reste(nt) à évaluer sur "
+            notes.append((f"{_n(backlog, 'critère')} des gates atteints {'reste' if backlog < 2 else 'restent'} à évaluer sur "
                           f"{_n(len(backlog_dossiers), 'dossier')} : écarts sous-estimés d'autant.",
                           40 * backlog / total_due if total_due else 0))
         if not live:
@@ -1281,7 +1340,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             out.append(insight(
                 f"cabinet.domaine_faible.{dom['code']}", "diagnostic", "medium",
                 f"Le domaine {dom['label']} est le point faible du portefeuille",
-                f"Score moyen de {_fr(dom['mean'], 1)}/100 sur les critères exigés et évalués, {dom['weak']} dossier(s) "
+                f"Score moyen de {_fr(dom['mean'], 1)}/100 sur les critères exigés et évalués, {_n(dom['weak'], 'dossier')} "
                 f"sur {dom['n']} sous 50.",
                 metric={"label": "Score moyen du domaine", "value": dom["mean"], "unit": "score", "reference": 50.0,
                         "reference_label": "Priorité élevée en dessous"},
@@ -1341,9 +1400,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         if backlog:
             out.append(insight(
                 "cabinet.evaluations_en_retard", "diagnostic", "medium",
-                f"{_n(backlog, 'critère')} des gates atteints reste(nt) à évaluer",
+                f"{_n(backlog, 'critère')} des gates atteints {'reste' if backlog < 2 else 'restent'} à évaluer",
                 f"Sur {_n(len(backlog_dossiers), 'dossier')}, la recommandation reste « à compléter » tant que ces "
-                f"critères ne sont pas évalués" + (f", dont {pending_ko} éliminatoire(s)." if pending_ko else "."),
+                f"critères ne sont pas évalués" + (f", dont {_n(pending_ko, 'éliminatoire')}." if pending_ko else "."),
                 metric={"label": "Critères à évaluer", "value": backlog, "unit": "count", "reference": 0,
                         "reference_label": "Cible"},
                 confidence=0.9,
@@ -1369,7 +1428,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         if velocity is not None and velocity > 0:
             out.append(insight(
                 "cabinet.progression", "diagnostic", "positive",
-                f"Les dossiers gagnent {_fr(velocity, 1)} point(s) de Readiness par mois",
+                f"Les dossiers gagnent {_n_fr(velocity, 'point', 'points')} de Readiness par mois",
                 f"{_n(progression['improving'], 'dossier progresse', 'dossiers progressent')} depuis leur première revue "
                 "de comité (vitesse médiane).",
                 metric={"label": "Gain médian mensuel", "value": velocity, "unit": "score", "reference": None,
@@ -1406,7 +1465,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                         "values": [counts[(m, key)] for m in months]} for key in DECISION_KEYS],
             "totals": {key: sum(1 for r in period_reviews if r.decision == key) for key in DECISION_KEYS},
         }
-        pairs = [(r.recommendation or "pending", r.decision) for r in period_reviews]
+        pairs = [(_recommandation_scellee(r.recommendation, r.snapshot), r.decision) for r in period_reviews]
+        ko_pending = sum(1 for r in period_reviews if r.recommendation == "no_go"
+                         and _recommandation_scellee(r.recommendation, r.snapshot) == "pending")
         matrix = [[sum(1 for rec, dec in pairs if rec == rk and dec == dk) for dk in DECISION_KEYS]
                   for rk in RECOMMENDATION_KEYS]
         stats = pf.agreement(pairs)
@@ -1414,6 +1475,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "recommendations": RECOMMENDATION_KEYS, "decisions": DECISION_KEYS,
             "recommendation_labels": [RECOMMENDATION_LABELS[k] for k in RECOMMENDATION_KEYS],
             "decision_labels": [DECISION_LABELS[k] for k in DECISION_KEYS], "matrix": matrix,
+            # Lecture de chaque case (accord, comité plus favorable ou plus sévère, hors calcul) : sept
+            # recommandations face à cinq décisions, la diagonale de la matrice n'est pas l'accord.
+            "matrix_kinds": [[pf.agreement_kind(rk, dk) for dk in DECISION_KEYS] for rk in RECOMMENDATION_KEYS],
             "agreement_pct": _r(stats["agreement_pct"]), "kappa": _r(stats["kappa"], 3), "n": stats["n"],
             "agreed": stats["agreed"], "lenient": stats["lenient"], "strict": stats["strict"],
             "excluded": len(pairs) - stats["n"],
@@ -1463,19 +1527,23 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                                                   ("dossier_id", "in", b.dossiers.ids)])
         actions = actions.filtered(lambda a: a.create_date.date() <= b.date_to)
         open_actions = actions.filtered(lambda a: a.state in ACTION_OPEN)
-        late = open_actions.filtered(lambda a: a.is_overdue(b.date_to))
+        # Conditions en retard : celles des seuls dossiers actifs (suspendu ou clos : rien à relancer).
+        late = open_actions.filtered(lambda a: a.is_overdue(b.date_to) and a.dossier_id.state == "open")
         decided = actions.filtered(lambda a: a.state != "cancelled")
         conditions = {"count": len(actions), "done": len(actions.filtered(lambda a: a.state == "done")),
                       "open": len(open_actions), "overdue": len(late),
                       "done_rate_pct": _r(_share(len(actions.filtered(lambda a: a.state == "done")), len(decided)))}
-        favorable_ko = [r for r in period_reviews if r.decision in PASSING_DECISIONS and (r.snapshot or {}).get("knockouts")]
+        favorable_ko = [r for r in period_reviews if r.decision in PASSING_DECISIONS and _knockouts_confirmes(r.snapshot)]
         notes = []
         if drafts:
-            notes.append((f"{_n(len(drafts), 'revue de comité', 'revues de comité')} de la période non verrouillée(s) : "
+            notes.append((f"{_n(len(drafts), 'revue de comité de la période non verrouillée', 'revues de comité de la période non verrouillées')} : "
                           "hors analyse des décisions.", 10 * len(drafts) / (len(drafts) + len(period_reviews))))
         missing = period_reviews.filtered(lambda r: not r.recommendation)
         if missing:
             notes.append((f"{_n(len(missing), 'décision')} sans recommandation calculée.", 10))
+        if ko_pending:
+            notes.append((f"{_n(ko_pending, 'décision écartée', 'décisions écartées')} de l'accord : le NO-GO de la "
+                          "méthode n'y tenait qu'à des knock-outs non encore évalués.", 5))
         if not period_reviews:
             notes.append(("Aucune décision de comité verrouillée sur la période.", 0))
         candidates = self._comites_insights(b, agreement, forced_summary, forced_rows, time_to_decision,
@@ -1538,11 +1606,12 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 f"cabinet.decision_ko.{r.id}", "comites", "critical",
                 f"Décision {DECISION_LABELS[r.decision]} sur {d.reference} malgré un knock-out actif",
                 f"Le comité du {r.date:%d/%m/%Y} a rendu une décision favorable alors que l'instantané scellé portait "
-                f"{_n(len(r.snapshot.get('knockouts', [])), 'knock-out')}.",
-                metric={"label": "Knock-outs à la décision", "value": len(r.snapshot.get("knockouts", [])),
+                f"{_n(_knockouts_confirmes(r.snapshot), 'knock-out constaté', 'knock-outs constatés')}.",
+                metric={"label": "Knock-outs à la décision", "value": _knockouts_confirmes(r.snapshot),
                         "unit": "count", "reference": 0, "reference_label": "Règle de la méthode"},
                 impact_gnf=b.need(d), confidence=0.95,
-                method="Instantané scellé de la revue de comité : knock-outs actifs au verrouillage.",
+                method="Instantané scellé de la revue de comité : knock-outs actifs au verrouillage, sur des critères "
+                       "évalués (un critère pas encore évalué n'est pas un knock-out constaté).",
                 action="Faire lever le knock-out avant tout engagement auprès d'un financeur, ou motiver la dérogation.",
                 link=_dossier_link(d),
             ))
@@ -1566,7 +1635,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     "cabinet.delai_decision", "comites", "medium",
                     f"{_days(median)} en médiane avant la première décision du comité",
-                    f"Mesuré sur {_n(time_to_decision['n'], 'dossier')} décidé(s) pour la première fois sur la période.",
+                    f"Mesuré sur {_n(time_to_decision['n'], 'dossier décidé', 'dossiers décidés')} pour la première fois sur la période.",
                     metric={"label": "Délai médian", "value": median, "unit": "days",
                             "reference": float(DECISION_TARGET_DAYS), "reference_label": "Cible"},
                     confidence=_confidence(time_to_decision["n"]),
@@ -1687,7 +1756,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "expected_gnf": round(open_live * success / 100) if success is not None else None,
             "success_pct": _r(success), "rows": sorted(coverage_rows, key=lambda x: -x["gap"]),
         }
-        follow_ups = open_all.filtered(lambda f: f.next_date and f.next_date < b.date_to).sorted("next_date")
+        # Relances : démarches des seuls dossiers actifs (un dossier suspendu ou clos ne se relance pas).
+        follow_ups = open_all.filtered(lambda f: f.next_date and f.next_date < b.date_to
+                                       and f.dossier_id.state == "open").sorted("next_date")
         stale = open_all.filtered(lambda f: f.state in ("submitted", "review") and f.state_date
                                   and (b.date_to - f.state_date).days > STALE_FUNDING_DAYS)
         notes = []
@@ -1768,7 +1839,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     "cabinet.taux_succes", "financements", "high",
                     f"Seules {pct(success, 0)} des demandes tranchées aboutissent",
-                    f"{len(won)} financement(s) obtenu(s) pour {len(lost)} refus.",
+                    f"{_n(len(won), 'financement obtenu', 'financements obtenus')} pour {len(lost)} refus.",
                     metric={"label": "Taux de succès", "value": success, "unit": "pct", "reference": 50.0,
                             "reference_label": "Repère"},
                     confidence=_confidence(decided),
@@ -1781,7 +1852,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 out.append(insight(
                     "cabinet.taux_succes", "financements", "positive",
                     f"{pct(success, 0)} des demandes tranchées aboutissent",
-                    f"{len(won)} financement(s) obtenu(s) pour {len(lost)} refus, {gnf(sum(won.mapped('amount_granted')))} "
+                    f"{_n(len(won), 'financement obtenu', 'financements obtenus')} pour {len(lost)} refus, {gnf(sum(won.mapped('amount_granted')))} "
                     "accordés.",
                     metric={"label": "Taux de succès", "value": success, "unit": "pct", "reference": 50.0,
                             "reference_label": "Repère"},
@@ -1796,7 +1867,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             out.append(insight(
                 f"cabinet.financeur_cle.{top['id']}", "financements", "positive",
                 f"{top['label']} est le premier financeur du portefeuille",
-                f"{gnf(top['granted'])} accordés sur {top['won']} demande(s) obtenue(s), taux de succès de "
+                f"{gnf(top['granted'])} accordés sur {_n(top['won'], 'demande obtenue', 'demandes obtenues')}, taux de succès de "
                 f"{pct(top['success_pct'], 0)}" + (f", décision en {_days(top['median_days'])} en médiane." if top["median_days"] is not None else "."),
                 metric={"label": "Montant accordé", "value": top["granted"], "unit": "gnf", "reference": None,
                         "reference_label": None},
@@ -1824,32 +1895,55 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
 
     # ─── 6.6 Activité et honoraires ───────────────────────────────────────
 
+    @api.model
+    def reglages(self):
+        """Réglages de la valeur du temps du cabinet (écran Activité et honoraires) : taux horaire de
+        référence (GNF/h, à défaut déduit des factures) et taux de revient du temps (part du taux de vente,
+        40 % par défaut) ; une saisie illisible est dite, au lieu d'être ignorée en silence."""
+        params = self.env["ir.config_parameter"].sudo()
+        raw_rate = params.get_param(PARAM_HOURLY_RATE) or ""
+        raw_ratio = params.get_param(PARAM_COST_RATIO) or ""
+        rate, ratio = _lire_reglage(raw_rate), _lire_reglage(raw_ratio)
+        rate_ok = rate is None or (rate is not False and rate > 0)
+        ratio_ok = ratio is None or (ratio is not False and 0 < ratio <= 1.5)
+        return {
+            "hourly_rate": rate if rate_ok and rate else None, "hourly_rate_invalid": None if rate_ok else raw_rate,
+            "cost_ratio_pct": _r(ratio * 100) if ratio_ok and ratio else None,
+            "cost_ratio_invalid": None if ratio_ok else raw_ratio,
+            "cost_ratio_default_pct": _r(COST_RATIO_DEFAULT * 100),
+        }
+
+    @api.model
+    def ecrire_reglages(self, values):
+        """Écrit les réglages contrôlés par la route : hourly_rate (GNF/h, > 0) et cost_ratio_pct (0 à 150 %) ;
+        None efface le réglage (taux déduit des factures, taux de revient par défaut)."""
+        params = self.env["ir.config_parameter"].sudo()
+        if "hourly_rate" in values:
+            rate = values["hourly_rate"]
+            params.set_param(PARAM_HOURLY_RATE, str(round(rate)) if rate else False)
+        if "cost_ratio_pct" in values:
+            pct_ = values["cost_ratio_pct"]
+            params.set_param(PARAM_COST_RATIO, str(round(pct_ / 100, 4)) if pct_ else False)
+        return self.reglages()
+
     def _standard_rate(self, b, sheets):
         """Taux horaire standard : paramètre système, à défaut taux moyen des factures d'honoraires
         validées des 12 derniers mois (montant hors taxes / heures facturées)."""
-        raw = b.env["ir.config_parameter"].sudo().get_param(PARAM_HOURLY_RATE) or ""
-        try:
-            value = float(str(raw).replace(" ", "").replace(",", "."))
-        except ValueError:
-            value = 0.0
-        if value > 0:
+        value = _lire_reglage(b.env["ir.config_parameter"].sudo().get_param(PARAM_HOURLY_RATE) or "")
+        if value and value > 0:
             return value, "parameter"
         year_ago = b.date_to - relativedelta(years=1)
         invoices = sheets.invoice_id.filtered(
             lambda m: _billed(m) and m.invoice_date and year_ago < m.invoice_date <= b.date_to)
         hours = sum(sheets.filtered(lambda t: t.invoice_id in invoices).mapped("hours"))
-        amount = sum(invoices.mapped("amount_untaxed_signed"))
+        amount = sum(_net_billed(b.env, invoices, b.date_to).values())
         if hours and amount > 0:
             return amount / hours, "derived"
         return None, None
 
     def _cost_ratio(self, b):
-        raw = b.env["ir.config_parameter"].sudo().get_param(PARAM_COST_RATIO) or ""
-        try:
-            value = float(str(raw).replace(",", "."))
-        except ValueError:
-            value = 0.0
-        return value if 0 < value <= 1.5 else COST_RATIO_DEFAULT
+        value = _lire_reglage(b.env["ir.config_parameter"].sudo().get_param(PARAM_COST_RATIO) or "")
+        return value if value and 0 < value <= 1.5 else COST_RATIO_DEFAULT
 
     def _income_lines(self, b, xmlid):
         """Produits (comptes 70) par compte analytique d'un axe et par jour, jusqu'à la date d'arrêté."""
@@ -1925,13 +2019,17 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         invoice_hours = defaultdict(float)
         for t in sheets.filtered(lambda t: t.invoice_id in invoices):
             invoice_hours[t.invoice_id.id] += t.hours
-        effective = {m.id: m.amount_untaxed_signed / invoice_hours[m.id] for m in invoices if invoice_hours[m.id]}
+        net = _net_billed(env, invoices, b.date_to)
+        effective = {m.id: net[m.id] / invoice_hours[m.id] for m in invoices if invoice_hours[m.id]}
 
         def billed_value(t):
             return t.hours * effective.get(t.invoice_id.id, 0.0) if t.invoice_id in invoices else 0.0
 
         def unbilled(t):
-            return t.billable and t.invoice_id not in invoices
+            # « À facturer », la définition d'AxisPro : temps facturable encore rattaché à aucune facture. Le
+            # temps d'une facture annulée, contrepassée ou en brouillon n'y est pas : il ne se refacture pas
+            # tant que la facture le garde (signalé dans la fiabilité des données).
+            return t.billable and not t.invoice_id
 
         def blank():
             return {"hours": 0.0, "billable_hours": 0.0, "billed": 0.0, "billed_hours": 0.0, "wip_hours": 0.0,
@@ -1985,7 +2083,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                            for x in sorted(realization_rows, key=lambda x: -(x["hours"] or 0))],
             "by_service": [{"key": SERVICE_KEYS[name], "label": name, "hours": _r(hours if name == PROJECT_ACTIVITY else 0.0)}
                            for name in CABINET_ACTIVITIES],
-            "hours_per_week": _r(hours / len(weeks)) if weeks else None,
+            # Par semaine et par consultant : le total de l'équipe divisé par les consultants qui ont saisi du
+            # temps sur la période (et non le total de l'équipe).
+            "hours_per_week": _r(hours / len(weeks) / len(period_sheets.user_id)) if weeks and period_sheets else None,
         }
         realization_block = {
             "overall_pct": _r(_share(billed, value)) if value else None, "standard_rate": round(rate) if rate else None,
@@ -2069,22 +2169,30 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                                    "share_pct": _r(_share(revenue, period_total))})
         metrics = env["eguitra.finance.metrics"]
         receivables = metrics.open_items(company, "asset_receivable", b.date_to)
-        revenue_12m = self._revenue_period(b, b.date_to - relativedelta(years=1) + timedelta(days=1), b.date_to)
+        # DSO de la finance (working_capital) : créances TTC / ventes TTC des douze derniers mois × jours, et
+        # non rapportées au chiffre d'affaires hors taxes (18 % de trop).
+        start_12m = b.date_to - relativedelta(years=1) + timedelta(days=1)
+        sales_12m = sum(s for s, _p in env["eguitra.analytics.groupe"].documents_ttc(company, start_12m, b.date_to).values())
+        days_12m = (b.date_to - start_12m).days + 1
         revenue_block = {
             "monthly": {"months": months, "series": series},
             "total": round(period_total), "previous": round(previous_total), "unassigned": round(unassigned_period),
             "receivables": {"open": round(receivables["total"]), "overdue": round(receivables["overdue"]),
                             "aging": {k: round(v) for k, v in receivables["aging"].items()},
-                            "dso_days": _r(receivables["total"] / revenue_12m * 365) if revenue_12m > 0 else None,
+                            "dso_days": _r(receivables["total"] / sales_12m * days_12m) if sales_12m > 0 else None,
                             "by_client": self._receivables_by_client(b)},
         }
 
         history = pf.months_back(b.date_to, 24)
         values = [totals.get(m, 0.0) for m in history]
+        history, values, entame = _historique_clos(history, values, b.date_to)
         while len(values) > 6 and not values[0]:
             values.pop(0)
             history = history[1:]
-        fc = _forecast(values, 3)
+        fc = _forecast(values, 4 if entame else 3)
+        if entame:
+            # Prévision partie du dernier mois clos : le mois en cours d'abord, puis les trois suivants.
+            fc = dict(fc, forecast=fc["forecast"][1:], low=fc["low"][1:], high=fc["high"][1:])
         backlog = [t for t in sheets if unbilled(t)]
         backlog_hours = sum(t.hours for t in backlog)
         backlog_old = sum(t.hours for t in backlog if (b.date_to - t.date).days > UNBILLED_OLD_DAYS)
@@ -2120,20 +2228,32 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "overdue": revenue_block["receivables"]["overdue"],
         }
         notes = []
+        reglages = self.reglages()
+        if reglages["hourly_rate_invalid"]:
+            notes.append((f"Taux horaire de référence enregistré illisible (« {reglages['hourly_rate_invalid']} ») : "
+                          "ignoré ; à corriger dans les réglages d'Activité et honoraires.", 10))
+        if reglages["cost_ratio_invalid"]:
+            notes.append((f"Taux de revient enregistré illisible ou hors de 0 à 150 % (« {reglages['cost_ratio_invalid']} ») : "
+                          f"{_fr(COST_RATIO_DEFAULT * 100)} % appliqué ; à corriger dans les réglages.", 10))
         if rate_source is None:
-            notes.append(("Taux horaire standard non paramétré et aucune facture d'honoraires validée sur 12 mois : "
-                          "valeur du temps et réalisation non calculables (paramètre "
-                          f"{PARAM_HOURLY_RATE}).", 30))
+            notes.append(("Taux horaire de référence non réglé et aucune facture d'honoraires validée sur 12 mois : "
+                          "valeur du temps et réalisation non calculables (réglages d'Activité et honoraires).", 30))
         elif rate_source == "derived":
-            notes.append((f"Taux horaire standard déduit des factures d'honoraires des 12 derniers mois "
-                          f"({gnf(rate)}/h) : à fixer par le paramètre {PARAM_HOURLY_RATE}.", 5))
+            notes.append((f"Taux horaire de référence déduit des factures d'honoraires des 12 derniers mois "
+                          f"({gnf(rate)}/h) : à fixer dans les réglages d'Activité et honoraires.", 5))
         if period_total and abs(unassigned_period) >= 1:
             notes.append((f"{gnf(unassigned_period)} de chiffre d'affaires sans activité analytique sur la période.",
                           min(20, 20 * abs(unassigned_period) / abs(period_total))))
         drafts = sheets.invoice_id.filtered(lambda m: m.state == "draft")
         if drafts:
-            notes.append((f"{_n(len(drafts), 'facture d’honoraires', 'factures d’honoraires')} en brouillon : temps "
-                          "compté dans le carnet.", 5))
+            notes.append((f"{_n(len(drafts), 'facture d’honoraires', 'factures d’honoraires')} en brouillon : temps ni "
+                          "facturé ni « à facturer » tant qu'elle n'est pas validée.", 5))
+        stuck = [t for t in sheets if t.billable and t.invoice_id and t.invoice_id not in invoices
+                 and t.invoice_id.state != "draft"]
+        if stuck:
+            notes.append((f"{_fr(sum(t.hours for t in stuck), 1)} h rattachées à des factures annulées ou contrepassées : "
+                          "ni facturées ni refacturables tant qu'elles restent attachées à la facture dans MB AxisPro "
+                          "Consulting.", 10))
         candidates = self._activite_insights(b, rate, ratio, realization_block, profit_rows, forecast, revenue_block,
                                              summary, by_service)
         return {
@@ -2270,7 +2390,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 metric={"label": "Prévision à 3 mois", "value": total, "unit": "gnf", "reference": None,
                         "reference_label": None},
                 confidence=0.55 if forecast["mape"] is None else max(0.3, min(0.9, 1 - forecast["mape"] / 100)),
-                method=f"Honoraires mensuels prolongés par {forecast['method'] or 'lissage exponentiel'}"
+                method=f"Honoraires mensuels prolongés par {method_label(forecast['method'])}"
                        + (f" (erreur moyenne {pct(forecast['mape'], 0)})." if forecast["mape"] is not None else "."),
                 action="Ajuster la charge des consultants et la prospection à ce niveau d'activité.",
                 link="/analyse/activite",
@@ -2462,8 +2582,8 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             oldest = overdue.sorted(lambda a: a.due_date)[0]
             out.append(insight(
                 "cabinet.actions_en_retard", "risques", "high" if share >= 25 else "medium",
-                f"{_n(len(overdue), 'action en retard', 'actions en retard')} sur {actions['open']} ouverte(s)",
-                f"{porteur} confiée(s) aux porteurs, {len(overdue) - porteur} au cabinet ; la plus ancienne : "
+                f"{_n(len(overdue), 'action en retard', 'actions en retard')} sur {actions['open']} {'ouverte' if actions['open'] < 2 else 'ouvertes'}",
+                f"{porteur} {'confiée' if porteur < 2 else 'confiées'} aux porteurs, {len(overdue) - porteur} au cabinet ; la plus ancienne : "
                 f"« {oldest.name} » ({oldest.dossier_id.reference}), échue depuis {_days((b.date_to - oldest.due_date).days)}.",
                 metric={"label": "Part des actions en retard", "value": round(share, 1), "unit": "pct", "reference": 10.0,
                         "reference_label": "Seuil de vigilance"},
@@ -2508,7 +2628,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                     "cabinet.reactivite_porteurs", "risques", "medium",
                     f"Les porteurs mettent {_days(median)} en médiane à fournir une pièce",
                     f"Mesuré sur {_n(responsiveness['n'], 'pièce déposée', 'pièces déposées')} sur la période ; "
-                    f"{_n(responsiveness['pending'], 'pièce reste', 'pièces restent')} attendue(s).",
+                    f"{_n(responsiveness['pending'], 'pièce reste attendue', 'pièces restent attendues')}.",
                     metric={"label": "Délai médian de dépôt", "value": median, "unit": "days",
                             "reference": float(RESPONSE_TARGET_DAYS), "reference_label": "Cible"},
                     confidence=_confidence(responsiveness["n"]),
@@ -2549,3 +2669,15 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
 def _billed(move):
     """Facture d'honoraires validée et non contrepassée."""
     return move.state == "posted" and move.move_type == "out_invoice" and move.payment_state != "reversed"
+
+
+def _net_billed(env, invoices, day):
+    """Montant hors taxes de chaque facture d'honoraires, net des avoirs validés qui la contrepassent
+    (reversed_entry_id), lettrés ou non, partiels compris, jusqu'à la date d'arrêté."""
+    net = {m.id: m.amount_untaxed_signed for m in invoices}
+    if invoices:
+        refunds = env["account.move"].search([("reversed_entry_id", "in", invoices.ids), ("state", "=", "posted"),
+                                              ("move_type", "=", "out_refund"), ("date", "<=", day)])
+        for refund in refunds:
+            net[refund.reversed_entry_id.id] += refund.amount_untaxed_signed
+    return net

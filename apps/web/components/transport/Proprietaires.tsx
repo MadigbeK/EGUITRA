@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Pencil, Plus, RefreshCw, Trash2, Undo2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select, Tag } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, Select, Tag, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { tonEtat, type TonEtat } from "@/lib/couleurs";
-import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtShort, pluriel } from "@/lib/format";
-import { INSECABLE, fmtFixe, fmtVolume } from "./commun";
+import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtShort, nombreIllisible, pluriel } from "@/lib/format";
+import { ChampNombre, INSECABLE, fmtFixe, fmtVolume, saisieDe } from "./commun";
 import { OWNERSHIPS, parseNumber, type Message, type Ownership, type Ref, type TransportSettings } from "./types";
 
 interface MoveRef { id: number; name: string | null; state: string }
@@ -140,6 +140,18 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
   const { data: st, error, mutate } = useApi<Statement>(`/transport/owner-statements/${id}`);
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState(false);
+  const [export_, setExport] = useState<"pdf" | "xlsx" | null>(null);
+  async function telecharger(format: "pdf" | "xlsx", nom: string) {
+    setExport(format);
+    setMessage(null);
+    try {
+      await apiDownload(`/transport/owner-statements/${id}/releve.${format}`, nom);
+    } catch (e) {
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Téléchargement impossible : vérifiez le réseau, puis réessayez." });
+    } finally {
+      setExport(null);
+    }
+  }
   async function run(action: "refresh" | "prepare" | "reset", ok: string) {
     setBusy(true);
     setMessage(null);
@@ -158,8 +170,8 @@ function Releve({ id, canEdit, onClose, onChanged }: { id: number; canEdit: bool
   return (
     <Modal open wide title={st ? `Relevé ${st.name}` : "Relevé"} onClose={onClose} footer={st && (
       <>
-        <Button onClick={() => apiDownload(`/transport/owner-statements/${id}/releve.pdf`, `${file}.pdf`)}><FileText className="h-4 w-4" /> PDF</Button>
-        <Button onClick={() => apiDownload(`/transport/owner-statements/${id}/releve.xlsx`, `${file}.xlsx`)}><FileSpreadsheet className="h-4 w-4" /> Excel</Button>
+        <Button loading={export_ === "pdf"} disabled={export_ !== null} onClick={() => void telecharger("pdf", `${file}.pdf`)}><FileText className="h-4 w-4" /> PDF</Button>
+        <Button loading={export_ === "xlsx"} disabled={export_ !== null} onClick={() => void telecharger("xlsx", `${file}.xlsx`)}><FileSpreadsheet className="h-4 w-4" /> Excel</Button>
         {canEdit && st.state === "draft" && <Button loading={busy} onClick={() => run("refresh", "Relevé actualisé.")}><RefreshCw className="h-4 w-4" /> Actualiser</Button>}
         {canEdit && st.state === "draft" && <Button variant="primary" loading={busy} onClick={() => run("prepare", "Pièces préparées en brouillon, à valider dans Achats et Ventes.")}><Download className="h-4 w-4" /> Préparer les pièces</Button>}
         {canEdit && st.state === "posted" && <Button loading={busy} onClick={() => run("reset", "Pièces en brouillon supprimées, relevé rouvert.")}><Undo2 className="h-4 w-4" /> Rouvrir</Button>}
@@ -255,11 +267,17 @@ function Regles({ canEdit }: { canEdit: boolean }) {
   const [form, setForm] = useState(REGLE_VIDE);
   const [editing, setEditing] = useState<number | null>(null);
   const [message, setMessage] = useState<Message>(null);
+  // Envoi en cours : un double clic n'enregistre pas deux règles (commission doublée).
+  const [saving, setSaving] = useState(false);
+  const [suppression, setSuppression] = useState<number | null>(null);
+  const tauxIllisible = nombreIllisible(form.rate);
   const targets = [
     ...OWNERSHIPS.map((o) => ({ value: `cat:${o.value}`, label: `Tous les ${CATEGORY[o.value].toLowerCase()}` })),
     ...(vehicles ?? []).map((v) => ({ value: `veh:${v.id}`, label: `${v.name}${v.ownership === "managed" ? ` (géré, ${v.owner?.name ?? "–"})` : ""}` })),
   ];
   async function save() {
+    if (saving) return;
+    setSaving(true);
     setMessage(null);
     const [kind, value] = form.target.split(":");
     try {
@@ -273,6 +291,8 @@ function Regles({ canEdit }: { canEdit: boolean }) {
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Enregistrement impossible." });
+    } finally {
+      setSaving(false);
     }
   }
   function modifier(rule: Rule) {
@@ -280,17 +300,27 @@ function Regles({ canEdit }: { canEdit: boolean }) {
     setEditing(rule.id);
     setForm({
       target: rule.vehicle ? `veh:${rule.vehicle.id}` : rule.ownership ? `cat:${rule.ownership}` : "",
-      partner: rule.partner, rate: String(rule.rate), date_from: rule.date_from ?? "", date_to: rule.date_to ?? "",
+      partner: rule.partner, rate: saisieDe(rule.rate), date_from: rule.date_from ?? "", date_to: rule.date_to ?? "",
       note: rule.note ?? "",
     });
   }
   async function remove(rule: Rule) {
+    // Définitive : la règle et son historique disparaissent (fermer la règle à une date garde l'historique).
+    const cible = rule.vehicle?.name ?? (rule.ownership ? CATEGORY[rule.ownership].toLowerCase() : "–");
+    if (!(await demanderConfirmation(`Supprimer la règle de ${fmtDec(rule.rate)}${INSECABLE}% pour ${rule.partner.name} (${cible}) ? Pour l'arrêter en gardant son historique, fixez plutôt sa date de fin.`, { action: "Supprimer la règle", danger: true }))) return;
     setMessage(null);
+    setSuppression(rule.id);
     try {
       await apiSend("DELETE", `/transport/share-rules/${rule.id}`);
+      if (editing === rule.id) {
+        setEditing(null);
+        setForm(REGLE_VIDE);
+      }
       void mutate();
     } catch (e) {
       setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Suppression impossible." });
+    } finally {
+      setSuppression(null);
     }
   }
   return (
@@ -311,7 +341,7 @@ function Regles({ canEdit }: { canEdit: boolean }) {
           { key: "actions", label: "", render: (r) => (canEdit ? (
             <span className="inline-flex gap-3">
               <button type="button" title="Modifier la règle" aria-label="Modifier la règle" className="text-muted hover:text-ink" onClick={() => modifier(r)}><Pencil className="h-4 w-4" /></button>
-              <button type="button" title="Supprimer la règle" aria-label="Supprimer la règle" className="text-muted hover:text-danger" onClick={() => void remove(r)}><Trash2 className="h-4 w-4" /></button>
+              <button type="button" title="Supprimer la règle" aria-label="Supprimer la règle" aria-busy={suppression === r.id || undefined} disabled={suppression !== null} className="text-muted hover:text-danger disabled:opacity-45" onClick={() => void remove(r)}><Trash2 className="h-4 w-4" /></button>
             </span>
           ) : null) },
         ]} />
@@ -321,13 +351,13 @@ function Regles({ canEdit }: { canEdit: boolean }) {
           {editing && <p className="text-[12.5px] font-semibold text-ink md:col-span-7">Modification de la règle : changez le taux, la période ou le fondement, puis enregistrez.</p>}
           <Select className="md:col-span-2" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} placeholder="Ensemble ou catégorie…" options={targets} />
           <div className="md:col-span-2"><PartnerPicker kind="supplier" value={form.partner} placeholder="Bénéficiaire…" onChange={(p) => setForm({ ...form, partner: p })} /></div>
-          <Input placeholder="Taux (%)" inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+          <ChampNombre label="Taux (% du chiffre d'affaires)" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
           <Input className="md:col-span-2" placeholder="Fondement (contrat…)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           <Field label="Du" className="md:col-span-2"><Input type="date" value={form.date_from} onChange={(e) => setForm({ ...form, date_from: e.target.value })} /></Field>
           <Field label="Au" hint="Vide : sans fin" className="md:col-span-2"><Input type="date" value={form.date_to} onChange={(e) => setForm({ ...form, date_to: e.target.value })} /></Field>
           <div className="flex items-end gap-2 md:col-span-3">
             {editing && <Button onClick={() => { setEditing(null); setForm(REGLE_VIDE); }}>Abandonner</Button>}
-            <Button variant="primary" disabled={!form.target || !form.partner || !parseNumber(form.rate)} onClick={() => void save()}>
+            <Button variant="primary" loading={saving} disabled={!form.target || !form.partner || tauxIllisible || !parseNumber(form.rate)} onClick={() => void save()}>
               {editing ? "Enregistrer" : <><Plus className="h-4 w-4" /> Ajouter</>}
             </Button>
           </div>

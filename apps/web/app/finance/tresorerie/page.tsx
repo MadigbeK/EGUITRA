@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale, Undo2, Wallet } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, PagesListe, aujourdhui, montantDevise } from "@/components/finance/communPieces";
+import { ApiError, apiSend, apiUpload, useApi, useAutorise, useSaisieLibre } from "@/lib/api-client";
 import { autresTresorerie, type Account, type AnalyticShare, type CashAccount, type Ref, type TreasuryPosition } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { AIDE_NOMBRE, INSECABLE, fmtDate, fmtFixe, fmtGNF, fmtPct, fmtShort, lireNombre, nombreIllisible, pluriel } from "@/lib/format";
 
 interface StLine {
   id: number;
@@ -17,6 +18,8 @@ interface StLine {
   partner: { id: number; name: string } | null;
   amount: number;
   reconciled: boolean;
+  /** Devise du compte : le montant de l'opération est dans cette devise. */
+  currency?: string;
   /** Faux : décaissement en attente du circuit d'approbation (comptabilisé à la dernière approbation). */
   posted?: boolean;
   approval?: { request_id: number; state: string; pending_with: string | null } | null;
@@ -54,7 +57,9 @@ function usePaymentModes() {
 
 const cle = (c: Candidate) => `${c.kind ?? "move_line"}-${c.id}`;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = aujourdhui;
+/** Opérations par page ; le noyau découpe la liste (offset) et en donne le total. */
+const PAGE = 100;
 
 /**
  * Chiffre principal de la position : la trésorerie nette de la classe 5 (cash), le chiffre du billet
@@ -141,16 +146,43 @@ export default function TreasuryPage() {
   const { data: position, error, mutate: refreshPosition } = useApi<TreasuryPosition>("/finance/treasury");
   const [journalId, setJournalId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"unreconciled" | "all">("unreconciled");
+  // Rang de la première opération affichée ; revient à 0 au changement de compte ou de filtre.
+  const [offset, setOffset] = useState(0);
   const current = position?.accounts.find((a) => a.journal_id === journalId) ?? position?.accounts[0] ?? null;
-  const { data: lines, error: erreurLignes, mutate } = useApi<{ items: StLine[]; total_count: number }>(current ? `/finance/treasury/${current.journal_id}/lines?state=${filter}&limit=300` : null);
+  const { data: lines, error: erreurLignes, mutate } = useApi<{ items: StLine[]; total_count: number }>(current ? `/finance/treasury/${current.journal_id}/lines?state=${filter}&limit=${PAGE}&offset=${offset}` : null);
   const [modal, setModal] = useState<null | "operation" | "import" | "transfer">(null);
   const [matching, setMatching] = useState<StLine | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
+  // Opérations, import, rapprochement, virement et justificatifs : routes de la finance et de
+  // l'administration ; la direction consulte la position et l'état de rapprochement.
+  const ecriture = useAutorise(ECRITURE_FINANCE);
 
   function refresh() {
     void mutate();
     void refreshPosition();
+  }
+
+  /** Opération dont le rapprochement est en cours d'annulation (bouton bloqué pendant l'appel). */
+  const [derapprochement, setDerapprochement] = useState<number | null>(null);
+
+  /** Annulation d'un rapprochement : confirmée, en chargement pendant l'appel, l'échec affiché. */
+  async function derapprocher(l: StLine) {
+    const oui = await demanderConfirmation(
+      `Annuler le rapprochement de « ${l.label} » ? L'opération redevient « à rapprocher » : son lettrage avec la facture ou son imputation est défait.`,
+      { action: "Annuler le rapprochement", danger: true },
+    );
+    if (!oui) return;
+    setDerapprochement(l.id);
+    setNotice(null);
+    try {
+      await apiSend("POST", `/finance/treasury/lines/${l.id}/unreconcile`);
+      refresh();
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : "Annulation du rapprochement impossible : vérifiez la connexion, puis réessayez.");
+    } finally {
+      setDerapprochement(null);
+    }
   }
 
   return (
@@ -160,22 +192,28 @@ export default function TreasuryPage() {
         subtitle="Position par compte et par devise, opérations de banque et de caisse, import des relevés, rapprochement."
         actions={
           <>
-            <Button onClick={() => setModal("transfer")}>
-              <ArrowLeftRight className="h-4 w-4" /> Virement interne
-            </Button>
-            <Button onClick={() => setModal("import")} disabled={!current || current.type !== "bank"}>
-              <FileUp className="h-4 w-4" /> Importer un relevé
-            </Button>
+            {ecriture && (
+              <Button onClick={() => setModal("transfer")}>
+                <ArrowLeftRight className="h-4 w-4" /> Virement interne
+              </Button>
+            )}
+            {ecriture && (
+              <Button onClick={() => setModal("import")} disabled={!current || current.type !== "bank"}>
+                <FileUp className="h-4 w-4" /> Importer un relevé
+              </Button>
+            )}
             <Button onClick={() => current && router.push(`/finance/tresorerie/rapprochement?journal=${current.journal_id}`)} disabled={!current}>
               <Scale className="h-4 w-4" /> État de rapprochement
             </Button>
-            <Button variant="primary" onClick={() => setModal("operation")} disabled={!current}>
-              <Plus className="h-4 w-4" /> Nouvelle opération
-            </Button>
+            {ecriture && (
+              <Button variant="primary" onClick={() => setModal("operation")} disabled={!current}>
+                <Plus className="h-4 w-4" /> Nouvelle opération
+              </Button>
+            )}
           </>
         }
       />
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => refreshPosition()} />}
       {!position && !error && <Loading />}
       {position && (
         <>
@@ -189,7 +227,7 @@ export default function TreasuryPage() {
                 <button
                   key={a.journal_id}
                   type="button"
-                  onClick={() => setJournalId(a.journal_id)}
+                  onClick={() => { setJournalId(a.journal_id); setOffset(0); }}
                   aria-pressed={choisi}
                   className={cx(
                     "n-kpi n-levable relative min-w-0 overflow-hidden rounded-[20px] p-4 text-left",
@@ -211,7 +249,7 @@ export default function TreasuryPage() {
                     <span className={cx("ml-1.5 text-[12px]", choisi ? "text-white/70" : "text-muted")}>{a.type === "cash" ? "Caisse" : "Banque"}</span>
                   </div>
                   <div className={cx("relative mt-1 font-display text-[22px] font-bold tabular", choisi ? "text-white" : a.balance < 0 ? "text-danger" : "text-ink")}>
-                    {a.currency !== "GNF" ? `${fmtDec(a.balance_currency)} ${a.currency}` : fmtGNF(a.balance)}
+                    {a.currency !== "GNF" ? `${fmtFixe(a.balance_currency, 2)}${INSECABLE}${a.currency}` : fmtGNF(a.balance)}
                   </div>
                   {a.currency !== "GNF" && <div className={cx("relative mt-0.5 text-[12px]", choisi ? "text-white/75" : "text-muted")}>Contre-valeur {fmtGNF(a.balance)}</div>}
                 </button>
@@ -233,7 +271,7 @@ export default function TreasuryPage() {
                     { key: "all", label: "Toutes" },
                   ]}
                   value={filter}
-                  onChange={setFilter}
+                  onChange={(f) => { setFilter(f); setOffset(0); }}
                 />
               </div>
               {!lines ? (
@@ -269,7 +307,7 @@ export default function TreasuryPage() {
                           "–"
                         ),
                     },
-                    { key: "amount", label: "Montant", align: "right", render: (l) => <span className={cx("font-semibold", l.amount < 0 ? "text-danger" : "text-ok")}>{l.amount > 0 ? "+" : ""}{fmtGNF(l.amount)}</span> },
+                    { key: "amount", label: "Montant", align: "right", render: (l) => <span className={cx("font-semibold", l.amount < 0 ? "text-danger" : "text-ok")}>{l.amount > 0 ? "+" : ""}{montantDevise(l.amount, l.currency)}</span> },
                     {
                       key: "attachments",
                       label: "",
@@ -281,19 +319,21 @@ export default function TreasuryPage() {
                               {l.attachments}
                             </span>
                           )}
-                          <FileButton
-                            small
-                            label="Justificatif"
-                            accept={JUSTIFICATIFS}
-                            onFile={(file) => {
-                              const form = new FormData();
-                              form.append("file", file);
-                              setNotice(null);
-                              apiUpload(`/finance/treasury/lines/${l.id}/attachments`, form)
-                                .then(refresh)
-                                .catch((e) => setNotice(e instanceof ApiError ? e.message : "Envoi du justificatif impossible."));
-                            }}
-                          />
+                          {ecriture && (
+                            <FileButton
+                              small
+                              label="Justificatif"
+                              accept={JUSTIFICATIFS}
+                              onFile={(file) => {
+                                const form = new FormData();
+                                form.append("file", file);
+                                setNotice(null);
+                                apiUpload(`/finance/treasury/lines/${l.id}/attachments`, form)
+                                  .then(refresh)
+                                  .catch((e) => setNotice(e instanceof ApiError ? e.message : "Envoi du justificatif impossible."));
+                              }}
+                            />
+                          )}
                         </span>
                       ),
                     },
@@ -306,8 +346,23 @@ export default function TreasuryPage() {
                           <Badge tone={l.approval?.state === "rejected" ? "danger" : "warn"}>
                             {l.approval?.state === "rejected" ? "Décaissement refusé" : `En approbation${l.approval?.pending_with ? ` : ${l.approval.pending_with}` : ""}`}
                           </Badge>
+                        ) : !ecriture ? (
+                          l.reconciled ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted">
+                              <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted">À rapprocher</span>
+                          )
                         ) : l.reconciled ? (
-                          <button type="button" className="inline-flex items-center gap-1 text-xs text-muted hover:text-warn" onClick={() => apiSend("POST", `/finance/treasury/lines/${l.id}/unreconcile`).then(refresh)}>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-xs text-muted hover:text-warn disabled:opacity-50"
+                            aria-label={`Annuler le rapprochement de l'opération ${l.label}`}
+                            title="Annuler le rapprochement"
+                            disabled={derapprochement === l.id}
+                            onClick={() => void derapprocher(l)}
+                          >
                             <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée <Undo2 className="h-3.5 w-3.5" />
                           </button>
                         ) : (
@@ -319,6 +374,7 @@ export default function TreasuryPage() {
                   ]}
                 />
               )}
+              {lines && <PagesListe offset={offset} taille={PAGE} total={lines.total_count} libelle="Opérations" onPage={setOffset} />}
             </Card>
           )}
         </>
@@ -386,13 +442,24 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
   const [createdId, setCreatedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Montant lu à la française et saisi sans signe : le sens vient de « Sortie » ou « Entrée » (ou du type).
+  // « -500 000 » saisi en sortie partait en entrée de 500 000.
+  const montant = lireNombre(form.amount);
+  const erreurMontant = nombreIllisible(form.amount)
+    ? AIDE_NOMBRE
+    : montant !== null && montant < 0
+      ? "Saisissez le montant sans signe moins : le sens vient de « Sortie » ou « Entrée »."
+      : montant === 0
+        ? "Le montant ne peut pas être nul."
+        : undefined;
   async function submit() {
+    if (montant === null || erreurMontant) return;
     setBusy(true);
     setError(null);
     try {
       let id = createdId;
       if (!id) {
-        const amount = Number(form.amount.replace(/\s/g, ""));
+        const amount = montant;
         const line = await apiSend<StLine>("POST", `/finance/treasury/${journal.journal_id}/lines`, {
           date: form.date,
           label: form.label,
@@ -428,7 +495,7 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
     }
   }
   return (
-    <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || !form.amount || (createdId === null && Boolean(financement) && !form.loan) || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
+    <Modal open wide title={`Opération, ${journal.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.label || (createdId === null && (montant === null || Boolean(erreurMontant))) || (createdId === null && Boolean(financement) && !form.loan) || (createdId !== null && !receipt)}>{createdId ? "Joindre le justificatif" : "Enregistrer"}</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
         {kinds && kinds.length > 0 && (
@@ -441,8 +508,9 @@ function OperationModal({ journal, onClose, onDone, onTransfer }: { journal: Cas
           <Field label="Date">
             <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </Field>
-          <Field label="Montant (GNF)">
-            <Input inputMode="numeric" className="text-right font-mono" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          {/* Montant dans la devise du compte (une caisse en USD reçoit des USD). */}
+          <Field label={`Montant (${journal.currency})`} error={erreurMontant}>
+            <Input inputMode="decimal" aria-invalid={Boolean(erreurMontant)} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
           </Field>
           <Field label="Mode de paiement">
             <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} placeholder="–" options={(modes ?? []).map((m) => ({ value: m.id, label: m.name }))} />
@@ -510,16 +578,20 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
   const [gap, setGap] = useState<ImportBalances | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Soldes saisis lus à la française ; envoyés lus (« 1500000.5 »), jamais tels quels.
+  const soldeIllisible = nombreIllisible(start) || nombreIllisible(end);
   async function submit(force = false) {
-    if (!file) return;
+    if (!file || soldeIllisible) return;
     setBusy(true);
     setError(null);
     setGap(null);
     try {
       const form = new FormData();
       form.append("file", file);
-      if (start.trim()) form.append("balance_start", start.trim());
-      if (end.trim()) form.append("balance_end", end.trim());
+      const debut = lireNombre(start);
+      const fin = lireNombre(end);
+      if (debut !== null) form.append("balance_start", String(debut));
+      if (fin !== null) form.append("balance_end", String(fin));
       if (force) form.append("force", "1");
       setResult(await apiUpload<ImportResult>(`/finance/treasury/${journal.journal_id}/import`, form));
       onDone();
@@ -543,7 +615,7 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
               Importer malgré l&apos;écart
             </Button>
           )}
-          <Button variant="primary" onClick={() => submit(false)} loading={busy} disabled={!file || Boolean(result)}>
+          <Button variant="primary" onClick={() => submit(false)} loading={busy} disabled={!file || Boolean(result) || soldeIllisible}>
             Importer
           </Button>
         </>
@@ -572,11 +644,11 @@ function ImportModal({ journal, onClose, onDone }: { journal: CashAccount; onClo
         )}
         <input type="file" accept=".csv,.xlsx,.xml" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setGap(null); }} className="text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line-strong/70 file:bg-panel file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-ink hover:file:bg-panel-2" />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Solde initial du relevé" hint="Vide : lu dans le fichier">
-            <Input inputMode="decimal" className="text-right font-mono" value={start} onChange={(e) => setStart(e.target.value)} />
+          <Field label="Solde initial du relevé" hint="Vide : lu dans le fichier" error={nombreIllisible(start) ? AIDE_NOMBRE : undefined}>
+            <Input inputMode="decimal" aria-invalid={nombreIllisible(start)} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={start} onChange={(e) => setStart(e.target.value)} />
           </Field>
-          <Field label="Solde final du relevé" hint="Vide : lu dans le fichier">
-            <Input inputMode="decimal" className="text-right font-mono" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <Field label="Solde final du relevé" hint="Vide : lu dans le fichier" error={nombreIllisible(end) ? AIDE_NOMBRE : undefined}>
+            <Input inputMode="decimal" aria-invalid={nombreIllisible(end)} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={end} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
       </div>
@@ -588,19 +660,32 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
   const [form, setForm] = useState({ from: "", to: "", amount: "", date: today(), ref: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Virement retenu par le circuit des décaissements : annoncé, la fenêtre ne propose plus que « Fermer ». */
+  const [soumis, setSoumis] = useState<string | null>(null);
   const options = accounts.map((a) => ({ value: a.journal_id, label: a.name }));
+  // Montant lu à la française, positif.
+  const montant = lireNombre(form.amount);
+  const erreurMontant = nombreIllisible(form.amount) ? AIDE_NOMBRE : montant !== null && montant <= 0 ? "Le montant du virement doit être positif." : undefined;
   async function submit() {
+    if (montant === null || erreurMontant) return;
     setBusy(true);
     setError(null);
     try {
-      await apiSend("POST", "/finance/transfers", {
+      const res = await apiSend<{ status: "ok" | "submitted"; moves: Array<{ approval?: { pending_with: string | null } | null }> }>("POST", "/finance/transfers", {
         from_journal_id: Number(form.from),
         to_journal_id: Number(form.to),
-        amount: Number(form.amount.replace(/\s/g, "")),
+        amount: montant,
         date: form.date,
         ref: form.ref || undefined,
       });
       onDone();
+      if (res.status === "submitted") {
+        const qui = res.moves[0]?.approval?.pending_with;
+        setSoumis(
+          `Virement soumis à l'approbation${qui ? ` (${qui})` : ""} : ses deux écritures restent en attente et ne comptent qu'à la dernière approbation. Ne le saisissez pas une seconde fois ; la demande se suit dans « À valider ».`,
+        );
+        return;
+      }
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Virement impossible.");
@@ -609,10 +694,26 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
     }
   }
   return (
-    <Modal open title="Virement interne" onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.from || !form.to || !form.amount}>Enregistrer le virement</Button>}>
+    <Modal
+      open
+      title="Virement interne"
+      onClose={onClose}
+      footer={
+        soumis ? (
+          <Button variant="primary" onClick={onClose}>
+            Fermer
+          </Button>
+        ) : (
+          <Button variant="primary" loading={busy} onClick={submit} disabled={!form.from || !form.to || montant === null || Boolean(erreurMontant)}>
+            Enregistrer le virement
+          </Button>
+        )
+      }
+    >
       <div className="space-y-3">
         <p className="text-xs text-muted">Le virement passe par le compte de passage 585, soldé dès que les deux écritures sont passées.</p>
         {error && <Notice tone="danger">{error}</Notice>}
+        {soumis && <Notice tone="warn">{soumis}</Notice>}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Depuis">
             <Select value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="Choisir…" options={options} />
@@ -620,8 +721,8 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
           <Field label="Vers">
             <Select value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="Choisir…" options={options} />
           </Field>
-          <Field label="Montant (GNF)">
-            <Input inputMode="numeric" className="text-right font-mono" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          <Field label="Montant (GNF)" error={erreurMontant}>
+            <Input inputMode="decimal" aria-invalid={Boolean(erreurMontant)} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
           </Field>
           <Field label="Date">
             <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
@@ -687,7 +788,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
     <Modal
       open
       wide
-      title={`Rapprocher, ${line.label}, ${fmtGNF(line.amount)}`}
+      title={`Rapprocher, ${line.label}, ${montantDevise(line.amount, line.currency)}`}
       onClose={onClose}
       footer={
         <Button variant="primary" loading={busy} disabled={!selected.length && !imputation} onClick={submit}>

@@ -12,7 +12,7 @@ import { type ReactNode } from "react";
 import { AlertTriangle, ChevronRight, Info, ShieldAlert, TriangleAlert, type Icon } from "@/components/icons";
 import { Badge, DataTable, IconTile, cx, type Teinte, type Tone } from "@/components/ui";
 import type { Alert, AlertUnit, CashForecast, MonthStatus, MonthlyCash, Question, Severity, Thresholds, Verdict, WorkingCapital } from "@/lib/finance-types";
-import { MONTHS_FR, fmtAxe, fmtGNF, fmtInt, fmtJours, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, MONTHS_FR, fmtAxe, fmtGNF, fmtInt, fmtJours, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
 
 /* ─── Gravités et valeurs ──────────────────────────────────────────────── */
 
@@ -58,13 +58,6 @@ function chiffresAlerte(a: Alert): { valeur: string | null; seuil: string | null
     valeur: a.value === null ? null : fmtValeur(a.value, a.unit),
     seuil: a.threshold_unit === "none" || (!a.threshold && a.threshold_unit !== "gnf" && a.threshold_unit !== "count") ? null : fmtValeur(a.threshold, a.threshold_unit),
   };
-}
-
-/** « 420 M GNF · seuil 1,50 Md GNF » */
-export function valeurEtSeuil(a: Alert): string | null {
-  const { valeur, seuil } = chiffresAlerte(a);
-  if (!valeur && !seuil) return null;
-  return [valeur, seuil && `seuil ${seuil}`].filter(Boolean).join(" · ");
 }
 
 /**
@@ -217,7 +210,7 @@ export function CourbeTresorerie({ data, forecast }: { data: MonthlyCash; foreca
   const debutPrev = pts.length && prevision.length ? [pts.length > 1 && prevision[0]!.i === pts[pts.length - 1]!.i ? pts[pts.length - 2]! : pts[pts.length - 1]!] : [];
   const low = data.summary.low_point;
   const lowPt = low ? pts.find((p) => p.label === low.label) : undefined;
-  const resume = `Trésorerie de fin de mois${seuil ? `, seuil de sécurité ${fmtShort(seuil)} GNF` : ""}${low ? `, point bas fin ${low.label} à ${fmtShort(low.end)} GNF` : ""}.`;
+  const resume = `Trésorerie de fin de mois${seuil ? `, seuil de sécurité ${fmtShort(seuil)}${INSECABLE}GNF` : ""}${low ? `, point bas fin ${low.label} à ${fmtShort(low.end)}${INSECABLE}GNF` : ""}.`;
 
   if (!pts.length && !prevision.length) return <p className="py-8 text-center text-sm text-muted">Aucun mouvement de trésorerie sur l&apos;exercice.</p>;
   return (
@@ -261,7 +254,7 @@ export function CourbeTresorerie({ data, forecast }: { data: MonthlyCash; foreca
         ))}
       </div>
       <p className="mt-3 text-[12.5px] leading-snug text-muted">
-        {low ? `Point bas fin ${low.label} à ${fmtShort(low.end)} GNF. ` : ""}
+        {low ? `Point bas fin ${low.label} à ${fmtShort(low.end)}${INSECABLE}GNF. ` : ""}
         {data.summary.active_months > 0 && `${data.summary.negative_months} mois sur ${data.summary.active_months} en cash net négatif${data.summary.negative_months > data.summary.active_months / 2 ? " : l'exploitation ne s'autofinance pas" : ""}.`}
       </p>
     </div>
@@ -311,7 +304,7 @@ export function Prevision({ forecast, seuil }: { forecast: CashForecast; seuil: 
       <div className="px-5 pb-1 pt-4 text-[13.5px] font-semibold text-ink">Prévision de trésorerie</div>
       <p className="px-5 pb-2 text-[12.5px] leading-snug text-muted">
         À partir de {fmtGNF(forecast.start)} en banques et caisses : créances clients à encaisser selon leur échéance
-        {forecast.month_end.doubtful_excluded > 0 && ` (hors ${fmtShort(forecast.month_end.doubtful_excluded)} GNF échus depuis plus de 90 jours, tenus pour douteux)`}, dettes fournisseurs et échéances d&apos;emprunt à régler.
+        {forecast.month_end.doubtful_excluded > 0 && ` (hors ${fmtShort(forecast.month_end.doubtful_excluded)}${INSECABLE}GNF échus depuis plus de 90 jours, tenus pour douteux)`}, dettes fournisseurs et échéances d&apos;emprunt à régler.
       </p>
       <DataTable
         dense
@@ -357,8 +350,8 @@ export function CarteBfr({ wc, thresholds }: { wc: WorkingCapital; thresholds: T
       <Chiffre label="Cycle d'exploitation" value={fmtJours(wc.cycle)} hint="DSO + DIO - DPO" />
       <Chiffre label="DSO (recouvrement)" value={fmtJours(wc.dso)} hint={cible ? `Cible ${fmtJours(cible)} · 12 mois ${fmtJours(wc.dso_12m)}` : `12 mois glissants ${fmtJours(wc.dso_12m)}`} tone={wc.dso !== null && cible ? (wc.dso > cible ? "danger" : "ok") : undefined} />
       <Chiffre label="DPO (fournisseurs)" value={fmtJours(wc.dpo)} hint={wc.dio !== null && wc.stocks ? `DIO ${fmtJours(wc.dio)}` : "Sans stock"} />
-      <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} sur ${fmtShort(wc.receivables)} GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
-      <Chiffre label="Dettes fournisseurs échues" value={`${fmtShort(wc.payables_overdue)}`} hint={`sur ${fmtShort(wc.payables)} GNF`} tone={wc.payables_overdue > 0.5 ? "warn" : undefined} />
+      <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} sur ${fmtShort(wc.receivables)}${INSECABLE}GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
+      <Chiffre label="Dettes fournisseurs échues" value={`${fmtShort(wc.payables_overdue)}`} hint={`sur ${fmtShort(wc.payables)}${INSECABLE}GNF`} tone={wc.payables_overdue > 0.5 ? "warn" : undefined} />
       <Chiffre label="Premier client" value={fmtPct(wc.concentration.pct)} hint={`${wc.concentration.partner ?? "du chiffre d'affaires"} · ${concMax ? `seuil ${fmtPct(concMax, 0)}` : "seuil non fixé"}`} tone={wc.concentration.pct !== null && concMax && wc.concentration.pct > concMax ? "warn" : undefined} />
       <Chiffre label="Douteux (+ de 90 j)" value={`${fmtShort(wc.receivables_doubtful)}`} hint={pluriel(wc.receivables_aging_count.plus_90, "pièce")} tone={wc.receivables_doubtful > 0 ? "danger" : undefined} />
     </div>

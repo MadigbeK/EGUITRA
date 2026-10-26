@@ -200,30 +200,14 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
-### 26 octobre 2026 : discussion interne (branche `chat-interne`, à fusionner)
+### 26 octobre 2026 : intégration de l'audit, interrompue par la limite d'usage
 
-Demande du gérant : « implémente le chat interne ». Module `eguitra_chat` 19.0.1.0.0 (dépend
-d'`eguitra_api`), ajouté à `release.sh`, `init-db.sh`, `essai.sh` et aux commandes de test.
-- Choix : modèles propres légers, pas le module mail du noyau (`discuss.channel` donne toutes les
-  conversations au groupe Paramètres, ouvre les canaux publics à tout compte interne, rend un message
-  lisible de ses destinataires notifiés, peut envoyer des courriels et repose sur le websocket).
-- Conversations à deux, de groupe (responsable : le créateur, puis le plus ancien membre) et de fiche
-  (dossier AxisPro, chantier, rotation, bien : ouvertes à qui lit la fiche). Comptes internes avec un
-  profil seulement ; conversation et ajout de membres avec des comptes qui partagent une société.
-- Confidentialité par des règles d'enregistrement globales (membres seuls, administration et
-  administrateur du noyau compris) ; lecture seule pour les comptes, écritures par les méthodes du
-  modèle. L'administration retire un compte archivé de ses conversations (Administration >
-  Utilisateurs, compte désactivé), sans les lire. Messages et lectures hors piste d'audit.
-- Messages : texte, jusqu'à cinq pièces jointes contrôlées, réponse, retrait par l'auteur (texte gardé
-  en base, plus servi), non-lus par membre. Relecture par la passerelle : fil ouvert toutes les
-  5 secondes, non-lus toutes les 30 secondes, onglet visible seulement ; ni geste compté pour la
-  déconnexion après inactivité, ni ligne au journal des accès (`api_route(..., journal=False)`).
-- Web : icône et panneau dans l'en-tête de la coque, page `/discussions`, bouton « Discussion » des
-  fiches, guide commun (README des guides, guides Word régénérés, sauf celui du porteur).
-- Tests écrits (`addons/eguitra_chat/tests/test_chat.py`, 10 tests), **pas encore lancés** :
-  `infra/test.sh eguitra_base eguitra_api eguitra_chat` (et `eguitra_axispro` pour le test du dossier).
-- Ensuite : `-u eguitra_base,eguitra_api` et `-i eguitra_chat` en recette, redémarrage du noyau
-  (module d'audit), application web reconstruite.
+- Fusionné et poussé (0922a14), pas encore en recette ni en production : corrections du noyau du transport, du départ en route (administration et exploitation) et du barème ; espace de suivi des demandes (« Mes demandes », eguitra_api 19.0.1.2.0) ; socle web (pannes, reconnexion, société par onglet, déconnexion après 1 minute d'inactivité puis 30 secondes, eguitra_api 19.0.1.3.0) ; portail des porteurs ; Transport, Rotations hors ligne et RH (eguitra_rh 19.0.1.1.0) ; Finance en deux lots (eguitra_finance 19.0.1.9.0, eguitra_approval 19.0.1.3.0, chantier, immobilier) ; clôture de l'exercice et bilan (CJ limité à l'exercice en cours) ; Analyse.
+- Tests : série du 26/10 à 12 h 15 : 8 échecs, corrigés depuis ; troisième série lancée à 13 h 16 sur 0922a14 (journal ~/eguitra/logs/tests-1026c.log), résultat à lire.
+- En cours (copies isolées) : AxisPro (agent aaa3f12…), chat interne (module eguitra_chat, agent a96e702…). Après eux : série complète, -u de tous les modules en recette, redémarrage, répétition, release.sh, puis libérer le verrou et prévenir RH (rh-hsseq, 98 tests réussis), TRANSPORT, OTHER et DESIGN (HSSEQ).
+- Chat interne fusionné (branche chat-interne) : module eguitra_chat 19.0.1.0.0 (modèles propres plutôt que discuss.channel ; conversations à deux, de groupe et de fiche ; membres seuls lecteurs, administration comprise, par règles d'enregistrement globales ; relectures à 5 s et 30 s hors journal des accès, sans effet sur la déconnexion après inactivité), icône et panneau dans l'en-tête, page /discussions, bouton « Discussion » des fiches (dossier, chantier, rotation, bien), retrait d'un compte archivé par l'administration ; 10 tests écrits, à lancer (infra/test.sh eguitra_base eguitra_api eguitra_chat eguitra_axispro) ; recette : -i eguitra_chat, -u eguitra_base,eguitra_api, redémarrage du noyau, web reconstruit.
+- Demandes du gérant à faire ensuite : vérification complète du système, puis un fichier Word de test par module pour les utilisateurs finaux. Gestion clientèle et WhatsApp : mis de côté, à reprendre.
+- À faire valider par l'expert-comptable : plafond d'exonération de 25 %, avantage en nature (781), plancher CNSS, stagiaires ; résultat non affecté en CH, comptes d'affectation, provision pour perte de change, nouvelles rubriques du bilan.
 
 ### 25 octobre 2026, après-midi : audit approfondi, interrompu par la limite d'usage
 

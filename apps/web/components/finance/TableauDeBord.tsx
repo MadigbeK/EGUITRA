@@ -10,7 +10,8 @@ import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/com
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import { autresTresorerie, type Dashboard, type KpiSeries } from "@/lib/finance-types";
-import { fmtDate, fmtGNF, fmtJours, fmtMonth, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtFixe, fmtGNF, fmtInt, fmtJours, fmtMonth, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
+import { aujourdhui } from "@/lib/jour";
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
 const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = [
@@ -30,11 +31,8 @@ const BILLET = ["#7fdcb4", "#e6c47e", "#8fd0f5", "#f3a9c9", "#ffb48f"];
  */
 const REGISTRE = "grid grid-cols-2 gap-4 max-sm:[&_.kpi]:px-3.5 max-sm:[&_.kpi_.font-display]:text-[22px]";
 
-/** Montant d'un compte dans sa devise, à deux décimales : « 81 120,74 USD ». */
-const enDevise = (v: number, devise: string) => `${v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always" })} ${devise}`;
-
-/** Date du jour au format du noyau (« 2026-10-15 ») : Conakry vit à l'heure UTC. */
-const aujourdhui = () => new Date().toISOString().slice(0, 10);
+/** Montant d'un compte dans sa devise, à deux décimales, espace insécable avant la devise : « 81 120,74 USD ». */
+const enDevise = (v: number, devise: string) => `${fmtFixe(v, 2)}${INSECABLE}${devise}`;
 
 /** La date d'arrêté est-elle le dernier jour de son mois ? */
 function finDeMois(jour: string): boolean {
@@ -319,7 +317,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
             <div>
               <h2 className="text-[15px] font-semibold text-white">Trésorerie nette</h2>
               <p className="mt-1 text-[12.5px] leading-snug text-white/65">
-                {d.cash_by_journal.length} compte{d.cash_by_journal.length > 1 ? "s" : ""} de banque et caisse
+                {pluriel(d.cash_by_journal.length, "compte")} de banque et caisse
                 {autres.comptes.length > 0 && `, ${pluriel(autres.comptes.length, "autre compte", "autres comptes")} de la classe 5`}, au {fmtDate(d.as_of)}
                 {th.cash_min ? `, seuil de sécurité ${fmtShort(th.cash_min)}` : ""}
               </p>
@@ -577,7 +575,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
               <RankBars items={transport.vehicles.items.slice(0, 8).map((v) => ({ key: String(v.key ?? v.label), label: v.label, value: v.result, detail: v.km !== null ? `${fmtShort(v.km)} km` : `CA ${fmtShort(v.revenue)}` }))} />
               <p className="mt-3 text-[12.5px] leading-snug text-muted">
                 {transport.vehicles.basis === "net"
-                  ? `${pluriel(transport.vehicles.deficit.length, "camion")} sur ${transport.vehicles.count} déficitaire${transport.vehicles.deficit.length > 1 ? "s" : ""} une fois les charges de structure absorbées.`
+                  ? `${pluriel(transport.vehicles.deficit.length, "camion")} sur ${fmtInt(transport.vehicles.count)} déficitaire${transport.vehicles.deficit.length > 1 ? "s" : ""} une fois les charges de structure absorbées.`
                   : "Marge directe des rotations : le résultat après charges de structure s'affichera dès que le module transport le calcule."}
               </p>
             </>
@@ -608,9 +606,10 @@ function DashboardBody({ d }: { d: Dashboard }) {
           empty="Imputez les pièces sur l'axe Activité pour voir ce tableau."
           columns={[
             { key: "name", label: "Activité", render: (r) => <span className="font-medium text-ink">{r.name}</span> },
-            { key: "income", label: "Produits", align: "right", render: (r) => fmtShort(r.income) },
-            { key: "expense", label: "Charges", align: "right", render: (r) => fmtShort(r.expense) },
-            { key: "margin", label: "Marge", align: "right", render: (r) => <span className={cx("font-semibold", r.margin < 0 ? "text-danger" : "text-ink")}>{fmtShort(r.margin)}</span> },
+            // Tableau : montants entiers, l'unité dans l'en-tête (lib/format.ts).
+            { key: "income", label: "Produits (GNF)", align: "right", render: (r) => fmtInt(r.income) },
+            { key: "expense", label: "Charges (GNF)", align: "right", render: (r) => fmtInt(r.expense) },
+            { key: "margin", label: "Marge (GNF)", align: "right", render: (r) => <span className={cx("font-semibold", r.margin < 0 ? "text-danger" : "text-ink")}>{fmtInt(r.margin)}</span> },
             {
               key: "margin_rate",
               label: "Taux de marge",
