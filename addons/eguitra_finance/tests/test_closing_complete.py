@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from dateutil.relativedelta import relativedelta
 
 from odoo.exceptions import UserError
@@ -204,3 +206,60 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         check = close.eguitra_verify_seal()
         self.assertEqual(check["status"], "altered", "Solde modifié hors de la plateforme")
         self.assertIn("contenu des écritures du mois modifié depuis la clôture", check["differences"])
+
+    def test_provision_pour_perte_de_change_en_fin_d_exercice(self):
+        """Créance en devise réglée après la fin de l'exercice, avant sa clôture : l'écart de conversion se
+        calcule sur le reste dû au 31 décembre ; la clôture de décembre passe la provision pour perte de
+        change (PDC), reprise le premier jour de l'exercice suivant."""
+        env = self.env
+        Account = env["account.account"]
+        for prefix, kind in (("6971", "expense"), ("194", "liability_non_current"), ("7971", "income_other")):
+            if not Account.search_count([("code", "=like", prefix + "%"), ("company_ids", "in", self.company.ids)]):
+                Account.create({"code": prefix.ljust(6, "0"), "name": f"Compte {prefix} (test)", "account_type": kind,
+                                "company_ids": [(6, 0, self.company.ids)]})
+        fy_start = env["eguitra.finance.metrics"].fiscal_year_bounds(self.company, self.today)[0]
+        end = fy_start - timedelta(days=1)
+        month = end.replace(day=1)
+        paid_on = end + timedelta(days=10)
+        usd, eur = env.ref("base.USD"), env.ref("base.EUR")
+        foreign = eur if self.company.currency_id == usd else usd
+        foreign.active = True
+        Rate = env["res.currency.rate"]
+        for day, rate in ((month, 9_000), (end, 8_600), (paid_on, 9_000)):
+            Rate.create({"currency_id": foreign.id, "name": day, "inverse_company_rate": rate, "company_id": self.company.id})
+        invoice = env["account.move"].create({
+            "move_type": "out_invoice", "partner_id": self.customer.id, "currency_id": foreign.id,
+            "invoice_date": month + timedelta(days=1),
+            "invoice_line_ids": [(0, 0, {"name": "Transport en devise", "quantity": 1, "price_unit": 10_000,
+                                         "account_id": self.acc_services.id, "tax_ids": [(6, 0, [])]})],
+        })
+        invoice.with_context(eguitra_approval_granted=True).action_post()
+        receivable = invoice.line_ids.filtered(lambda line: line.account_id.account_type == "asset_receivable")
+        payment = env["account.move"].create({
+            "move_type": "entry", "journal_id": self.bank.id, "date": paid_on,
+            "line_ids": [(0, 0, {"name": "Règlement en devise", "account_id": receivable.account_id.id,
+                                 "partner_id": self.customer.id, "currency_id": foreign.id, "amount_currency": -10_000,
+                                 "credit": 90_000_000}),
+                         (0, 0, {"name": "Règlement en devise", "account_id": self.bank.default_account_id.id,
+                                 "debit": 90_000_000})],
+        })
+        payment.action_post()
+        (receivable | payment.line_ids.filtered(lambda line: line.account_id == receivable.account_id)).reconcile()
+        self.assertTrue(receivable.reconciled, "Réglée en janvier, avant la clôture de décembre")
+
+        close = env["eguitra.period.close"]._get(self.company, month)
+        self.assertIn("fx_provision", {g["kind"] for g in close._closing_preview()})
+        close.action_close()
+        moves = {kind: close.generated_move_ids.filtered(lambda m, k=kind: m.eguitra_close_kind == k)
+                 for kind in ("fx", "fx_provision", "fx_provision_reversal")}
+        self.assertTrue(moves["fx"], "Écart de conversion sur le reste dû au 31 décembre")
+        self.assertAlmostEqual(self._balance("478", end), 4_000_000, 0, msg="10 000 × (9 000 - 8 600)")
+        provision = moves["fx_provision"]
+        self.assertEqual((provision.date, provision.ref), (end, f"PDC-{month:%m/%Y}"))
+        self.assertAlmostEqual(sum(provision.line_ids.filtered(lambda l: l.account_id.code.startswith("697")).mapped("debit")),
+                               4_000_000, 0, msg="Dotation aux provisions financières")
+        self.assertAlmostEqual(-self._balance("194", end), 4_000_000, 0, msg="Provision pour pertes de change")
+        reversal = moves["fx_provision_reversal"]
+        self.assertEqual(reversal.date, end + timedelta(days=1), "Reprise au premier jour de l'exercice suivant")
+        self.assertAlmostEqual(self._balance("194", end + timedelta(days=1)), 0, 0)
+        self.assertAlmostEqual(-self._balance("797", end + timedelta(days=1)), 4_000_000, 0, msg="Reprise en 797")

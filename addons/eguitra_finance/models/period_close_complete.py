@@ -9,7 +9,9 @@ Après les contrôles et avant le verrouillage, la clôture passe, dans l'ordre 
 3. les factures à établir (pièce « FAE-mm/aaaa ») : prestations livrées et non facturées à la fin
    du mois, fournies par les modules métier (rotations du transport), extournées le premier jour
    du mois suivant ;
-4. puis le verrouillage et le chaînage (module de base), l'instantané au registre et le sceau
+4. au dernier mois de l'exercice, la provision pour perte de change (pièce « PDC-mm/aaaa ») à hauteur
+   des pertes latentes des créances et dettes en devises, reprise le premier jour de l'exercice suivant ;
+5. puis le verrouillage et le chaînage (module de base), l'instantané au registre et le sceau
    SHA-256 de la période, imprimé sur le PV de clôture à conserver hors du système.
 
 Chaque génération est rejouable : elle se calcule sur les soldes (TVA) ou par différence avec ce
@@ -34,8 +36,15 @@ CLOSE_KINDS = [
     ("fx", "Écarts de conversion des créances et dettes"),
     ("fx_reversal", "Extourne des écarts de conversion"),
     ("fx_bank", "Réévaluation des disponibilités en devises"),
+    ("fx_provision", "Provision pour perte de change"),
+    ("fx_provision_reversal", "Reprise de la provision pour perte de change"),
     ("ecl", "Pertes de crédit attendues"),
 ]
+# Provision pour perte de change de fin d'exercice (comptes à valider avec l'expert-comptable) : dotation
+# aux provisions financières, provision pour pertes de change, reprise de provisions financières.
+FX_PROVISION_EXPENSE = ("6971", "697")
+FX_PROVISION_ACCOUNT = ("194", "4997", "499")
+FX_PROVISION_INCOME = ("7971", "797")
 KIND_LABELS = dict(CLOSE_KINDS) | {"depreciation": "Dotations aux amortissements"}
 # Version du sceau. 2 : identité de la société hors de l'empreinte, colonne balance des lignes scellée.
 SEAL_VERSION = 2
@@ -336,18 +345,30 @@ class EguitraPeriodClose(models.Model):
 
     @api.model
     def _fx_open_items(self, company, end):
-        """Écarts de conversion latents des créances et dettes en devises non lettrées, au cours de
-        la date : {(compte, tiers, devise): écart en GNF} (positif : gain latent)."""
+        """Écarts de conversion latents des créances et dettes en devises encore dues à la date, au cours
+        de la date : {(compte, tiers, devise): écart en GNF} (positif : gain latent). Le reste dû est celui
+        de la date (lettrages datés au plus tard ce jour) : un règlement reçu après la fin du mois, avant
+        sa clôture, ne l'efface pas. Les écarts de conversion déjà passés (ECA et leurs extournes) n'en
+        font pas partie : la clôture les compare elle-même à ce qu'elle a déjà passé."""
         self.env.flush_all()
         self.env.cr.execute(
-            """SELECT aml.account_id, aml.partner_id, aml.currency_id, SUM(aml.amount_residual),
-                      SUM(aml.amount_residual_currency)
+            """SELECT aml.account_id, aml.partner_id, aml.currency_id,
+                      SUM(aml.balance - COALESCE(dr.amount, 0) + COALESCE(cr.amount, 0)),
+                      SUM(aml.amount_currency - COALESCE(dr.amount_currency, 0) + COALESCE(cr.amount_currency, 0))
                  FROM account_move_line aml
+                 JOIN account_move am ON am.id = aml.move_id
                  JOIN account_account aa ON aa.id = aml.account_id
-                WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date <= %s AND NOT aml.reconciled
-                  AND aa.account_type IN ('asset_receivable', 'liability_payable') AND aml.currency_id != %s
+            LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount, SUM(apr.debit_amount_currency) AS amount_currency
+                                 FROM account_partial_reconcile apr
+                                WHERE apr.debit_move_id = aml.id AND apr.max_date <= %(end)s) dr ON TRUE
+            LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount, SUM(apr.credit_amount_currency) AS amount_currency
+                                 FROM account_partial_reconcile apr
+                                WHERE apr.credit_move_id = aml.id AND apr.max_date <= %(end)s) cr ON TRUE
+                WHERE aml.company_id = %(company)s AND aml.parent_state = 'posted' AND aml.date <= %(end)s
+                  AND aa.account_type IN ('asset_receivable', 'liability_payable') AND aml.currency_id != %(currency)s
+                  AND am.eguitra_close_kind IS DISTINCT FROM 'fx' AND am.eguitra_close_kind IS DISTINCT FROM 'fx_reversal'
              GROUP BY 1, 2, 3""",
-            (company.id, end, company.currency_id.id),
+            {"company": company.id, "end": end, "currency": company.currency_id.id},
         )
         Currency = self.env["res.currency"].sudo()
         result = {}
@@ -385,6 +406,55 @@ class EguitraPeriodClose(models.Model):
         self._close_reverse(move, "fx_reversal", end + relativedelta(days=1))
         return move
 
+    def _year_end(self):
+        """Dernier mois de l'exercice ?"""
+        _start, end = self._bounds()
+        return end == self.env["eguitra.finance.metrics"].fiscal_year_bounds(self.company_id, end)[1]
+
+    def _fx_latent_loss(self, end):
+        """Pertes latentes des créances et dettes en devises à la date (écart de conversion actif, 478)."""
+        rounding = self.company_id.currency_id.round
+        return rounding(-sum(v for v in self._fx_open_items(self.company_id, end).values() if v < 0))
+
+    def _close_fx_provision(self):
+        """Fin d'exercice : provision pour perte de change à hauteur des pertes latentes (478), dotation
+        aux provisions financières (6971) et provision pour pertes de change (194), reprise (7971) le
+        premier jour de l'exercice suivant ; par différence avec la provision déjà passée pour ce mois."""
+        if not self._year_end():
+            return None
+        _start, end = self._bounds()
+        rounding = self.company_id.currency_id.round
+        previous = sum((m.eguitra_close_data or {}).get("provision") or 0.0 for m in self._previous_moves("fx_provision"))
+        delta = rounding(self._fx_latent_loss(end) - previous)
+        if not delta:
+            return None
+        provision = self._close_account(*FX_PROVISION_ACCOUNT)
+        label = f"Provision pour perte de change au {end:%d/%m/%Y}"
+        # Complément de provision (dotation), ou provision devenue excessive après une réouverture (reprise).
+        other = self._close_account(*(FX_PROVISION_EXPENSE if delta > 0 else FX_PROVISION_INCOME))
+        debit, credit = (other, provision) if delta > 0 else (provision, other)
+        move = self._close_post("fx_provision", end, f"PDC-{self._label()}", [
+            Command.create({"name": label, "account_id": debit.id, "debit": abs(delta)}),
+            Command.create({"name": label, "account_id": credit.id, "credit": abs(delta)}),
+        ], {"provision": delta})
+        if delta > 0:
+            day = end + relativedelta(days=1)
+            reprise = f"Reprise de la provision pour perte de change au {day:%d/%m/%Y}"
+            self._close_post("fx_provision_reversal", day, f"Reprise PDC-{self._label()}", [
+                Command.create({"name": reprise, "account_id": provision.id, "debit": delta}),
+                Command.create({"name": reprise, "account_id": self._close_account(*FX_PROVISION_INCOME).id,
+                                "credit": delta}),
+            ])
+        else:
+            # La reprise passée au premier jour de l'exercice suivant suit la provision : on ajuste son montant.
+            day = end + relativedelta(days=1)
+            self._close_post("fx_provision_reversal", day, f"Reprise PDC-{self._label()} (correction)", [
+                Command.create({"name": label, "account_id": self._close_account(*FX_PROVISION_INCOME).id,
+                                "debit": -delta}),
+                Command.create({"name": label, "account_id": provision.id, "credit": -delta}),
+            ])
+        return move
+
     def _closing_generate(self):
         """Générations de la clôture, dans l'ordre ; renvoie les écritures passées."""
         self.ensure_one()
@@ -397,7 +467,8 @@ class EguitraPeriodClose(models.Model):
     def _closing_steps(self):
         """Étapes de génération après les dotations : devises d'abord (les écarts de change n'ont pas
         de TVA), puis TVA et factures à établir."""
-        return [self._close_fx_bank, self._close_fx_items, self._close_vat, self._close_accruals]
+        return [self._close_fx_bank, self._close_fx_items, self._close_fx_provision, self._close_vat,
+                self._close_accruals]
 
     def _closing_preview(self):
         """Ce que la clôture passerait, sans rien écrire (affiché avec les contrôles)."""
@@ -426,6 +497,11 @@ class EguitraPeriodClose(models.Model):
                           "detail": f"gains latents {_gnf(sum(v for v in fx.values() if v > 0))} GNF (479), pertes "
                                     f"latentes {_gnf(-sum(v for v in fx.values() if v < 0))} GNF (478), extournés le "
                                     f"{end + relativedelta(days=1):%d/%m/%Y}"})
+        loss = self._fx_latent_loss(end) if fx and self._year_end() else 0.0
+        if loss:
+            items.append({"kind": "fx_provision", "label": f"Provision pour perte de change (PDC-{self._label()})",
+                          "amount": loss,
+                          "detail": f"pertes latentes de fin d'exercice, reprise le {end + relativedelta(days=1):%d/%m/%Y}"})
         targets = self._close_accrual_targets(self.company_id, end)
         if targets:
             items.append({"kind": "accrual", "label": f"Factures à établir (FAE-{self._label()})",
