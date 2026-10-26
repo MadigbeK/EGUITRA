@@ -5,7 +5,7 @@ import { type CSSProperties } from "react";
 import { AreaChart, Card, SERIES, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
-import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import { RECO as RECO_METHODE } from "@/lib/axispro-types";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";

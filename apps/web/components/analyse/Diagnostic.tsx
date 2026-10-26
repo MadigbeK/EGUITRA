@@ -188,7 +188,7 @@ function Corps() {
                   label="Scores par dossier et par domaine d'évaluation"
                   rows={transposer ? domaines.map((x) => ({ key: x.code, label: x.label })) : dossiers.map((x) => ({ key: x.reference, label: x.name }))}
                   cols={transposer ? dossiers.map((x) => x.reference) : domaines.map((x) => x.code)}
-                  formatCol={(code) => (transposer ? (dossiers.find((x) => x.reference === code)?.name ?? code).replace(/ \(démo(nstration)?\)$/, "") : (domaines.find((x) => x.code === code)?.label ?? code))}
+                  formatCol={(code) => (transposer ? (dossiers.find((x) => x.reference === code)?.name ?? code) : (domaines.find((x) => x.code === code)?.label ?? code))}
                   cells={cellules.map((c) => ({ row: transposer ? c.domain : c.dossier, col: transposer ? c.dossier : c.domain, value: c.score, detail: c.priority ? `${PRIORITE[c.priority] ?? c.priority}${c.priority_label ? ` (${c.priority_label.toLowerCase()})` : ""}` : "Non évalué" }))}
                   format={(v) => String(Math.round(v))}
                   pivot={50}

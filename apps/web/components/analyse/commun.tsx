@@ -12,7 +12,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, Target, TriangleAlert, type Icon } from "@/components/icons";
-import { Badge, Button, Delta, Empty, ErrorBox, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, useMouvementReduit, type Teinte, type Tone } from "@/components/ui";
+import { Badge, Button, Empty, ErrorBox, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, useMouvementReduit, type Teinte, type Tone } from "@/components/ui";
 import { ApiError, apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import { APPS, appFromPath, type AppCode, type EntiteSociete } from "@/lib/config";
@@ -908,26 +908,6 @@ export function KpiContrat({ kpi }: { kpi: Kpi }) {
   );
 }
 
-/** Bande de chiffres clés compacte (une ligne par indicateur), pour les sections. */
-export function LigneKpi({ kpis }: { kpis: Kpi[] }) {
-  return (
-    <ul className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-      {kpis.map((k) => (
-        <li key={k.key} title={k.definition} className="an-carte flex items-center justify-between gap-3 rounded-xl border border-line bg-panel px-3.5 py-2.5">
-          <span className="min-w-0">
-            <span className="block truncate text-[12px] font-medium text-muted">{k.label}</span>
-            <span className={cx("block font-display text-[19px] font-bold leading-tight tabular", k.status === "bad" ? "text-danger" : "text-ink")}>{k.value === null ? "–" : fmtValeur(k.value, k.unit)}</span>
-          </span>
-          <span className="flex flex-col items-end gap-1">
-            <Delta value={k.delta_pct} inverse={k.inverse} />
-            {k.target !== null && <span className="text-[11px] text-muted">cible {fmtValeur(k.target, k.unit)}</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /* ─── Divers ───────────────────────────────────────────────────────────── */
 
 /** Petit bloc chiffré d'une carte : libellé, valeur, précision. */
@@ -938,15 +918,6 @@ export function Chiffre({ label, value, hint, tone, grand }: { label: string; va
       <div className={cx("mt-1 font-display font-bold leading-tight tabular", grand ? "text-[24px]" : "text-[19px]", tone === "danger" ? "text-danger" : tone === "warn" ? "text-warn" : tone === "ok" ? "text-ok-texte" : "text-ink")}>{value}</div>
       {hint && <div className="mt-0.5 text-[11.5px] leading-snug text-muted">{hint}</div>}
     </div>
-  );
-}
-
-/** Lien discret vers un autre écran. */
-export function LienEcran({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link href={href} className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
-      {children} <ArrowUpRight className="h-3.5 w-3.5" />
-    </Link>
   );
 }
 

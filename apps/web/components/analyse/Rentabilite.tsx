@@ -5,7 +5,7 @@ import { scaleLinear } from "d3-scale";
 import { AreaChart, Badge, Card, DataTable, SERIES, Tabs, cx } from "@/components/ui";
 import { Cascade, Puces, TableRepli } from "@/components/analyse/charts";
 import { COULEUR, Cadre } from "@/components/analyse/charts/commun";
-import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, pctOu, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CostStructure, GroupeRentabilite } from "@/lib/analyse-types";
 import { fmtAxe, fmtGNF, fmtInt } from "@/lib/format";

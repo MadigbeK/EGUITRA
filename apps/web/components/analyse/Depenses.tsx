@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Badge, Card, DataTable, cx } from "@/components/ui";
 import { Benford, Pareto, PetitsMultiples, Treemap } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pluriel, useAncreVisee, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeDepenses } from "@/lib/analyse-types";
 import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";

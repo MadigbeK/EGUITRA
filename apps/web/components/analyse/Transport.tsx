@@ -112,7 +112,7 @@ function Corps() {
       {!d && !error && <AttenteSection />}
       {d && !d.available && (
         <Card title="Transport">
-          <Vide titre="Pas de rotation sur la période" hint="Les rotations validées (Rotations ou Finance > Transport) alimentent cette section." />
+          <Vide titre="Pas de rotation sur la période" hint="Les rotations validées (Rotations, ou l'application Transport) alimentent cette section." />
         </Card>
       )}
       {d && d.available && (
@@ -172,7 +172,7 @@ function Corps() {
                 <>
                   <Bulles
                     label="Rotations : kilomètres contre marge, aire selon le volume"
-                    points={nuage.map((s) => ({ id: String(s.id), label: s.name, x: s.km, y: s.margin_rate ?? 0, size: Math.max(1, s.volume), group: (s.route ?? "Sans route").replace(/^Conakry - /, "").replace(/ \(démo\)$/, ""), detail: `${s.truck ?? "ensemble inconnu"} · ${fmtDate(s.date)} · ${fmtShort(s.revenue)} GNF` }))}
+                    points={nuage.map((s) => ({ id: String(s.id), label: s.name, x: s.km, y: s.margin_rate ?? 0, size: Math.max(1, s.volume), group: (s.route ?? "Sans route").replace(/^Conakry - /, ""), detail: `${s.truck ?? "ensemble inconnu"} · ${fmtDate(s.date)} · ${fmtShort(s.revenue)} GNF` }))}
                     xLabel="Kilomètres"
                     yLabel="Marge"
                     quadrants={{ x: Math.max(1, Math.round(nuage.reduce((s, x) => s + x.km, 0) / nuage.length)), y: 15, labels: ["Longues et rentables", "Courtes et rentables", "Longues, marge faible", "Courtes, marge faible"], teintes: ["var(--g-jade)", "var(--g-jade)", "var(--warn-vif)", "var(--danger-vif)"] }}
