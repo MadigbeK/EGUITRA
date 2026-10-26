@@ -85,17 +85,20 @@ CR_ORDER = [
 BILAN_ACTIF = [
     ("AD", "Immobilisations incorporelles", ["21", "281", "291"], [], "all"),
     ("AI", "Immobilisations corporelles", ["22", "23", "24", "282", "283", "284", "292", "293", "294"], [], "all"),
-    ("AP", "Avances et acomptes versés sur immobilisations", ["25"], [], "all"),
+    ("AP", "Avances et acomptes versés sur immobilisations", ["25", "295"], [], "all"),
     ("AQ", "Immobilisations financières", ["26", "27", "296", "297"], [], "all"),
     ("BA", "Actif circulant HAO", ["485", "488", "498"], [], "all"),
     ("BB", "Stocks et encours", ["3"], [], "all"),
-    ("BH", "Fournisseurs, avances versées", ["409"], [], "all"),
+    # Fournisseurs débiteurs : 409 et tout compte 40 au solde débiteur (avance versée sur 401), sous
+    # déduction de leurs dépréciations (490).
+    ("BH", "Fournisseurs, avances versées", ["40"], [], "debit", ["409", "490"]),
     ("BI", "Clients", ["41"], ["419"], "debit", ["491"]),
     ("BJ", "Autres créances", ["42", "43", "44", "45", "46", "47", "185"], ["478", "479"], "debit",
      ["492", "493", "494", "495", "496", "497"]),
     ("BQ", "Titres de placement", ["50", "590"], [], "all"),
-    ("BR", "Valeurs à encaisser", ["51"], [], "all"),
-    ("BS", "Banques, chèques postaux, caisse et assimilés", ["52", "53", "54", "55", "57", "58"], [], "debit"),
+    ("BR", "Valeurs à encaisser", ["51", "591"], [], "all"),
+    ("BS", "Banques, chèques postaux, caisse et assimilés", ["52", "53", "54", "55", "57", "58"], [], "debit",
+     ["592", "593", "594"]),
     ("BU", "Écart de conversion actif", ["478"], [], "all"),
 ]
 BILAN_ACTIF_TOTALS = [
@@ -126,7 +129,7 @@ BILAN_PASSIF = [
     ("DJ", "Fournisseurs d'exploitation", ["40"], ["409"], "credit"),
     ("DK", "Dettes fiscales et sociales", ["42", "43", "44"], [], "credit"),
     ("DM", "Autres dettes", ["41", "45", "46", "47", "185"], ["419", "478", "479"], "credit"),
-    ("DN", "Provisions pour risques à court terme", ["499"], [], "all"),
+    ("DN", "Provisions pour risques à court terme", ["499", "599"], [], "all"),
     ("DQ", "Banques, crédits d'escompte", ["565"], [], "all"),
     ("DR", "Banques, crédits de trésorerie", ["52", "53", "54", "55", "56", "57", "58"], ["565"], "credit"),
     ("DV", "Écart de conversion passif", ["479"], [], "all"),

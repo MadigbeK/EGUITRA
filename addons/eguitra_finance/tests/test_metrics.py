@@ -44,6 +44,42 @@ class TestMetrics(FinanceDataMixin, TransactionCase):
         self.assertEqual(passif["DJ"], 236_000_000, "Dette fournisseur TTC")
         self.assertEqual(passif["CJ"], 800_000_000, "Résultat de l'exercice au passif")
 
+    def test_fournisseur_debiteur_et_depreciations(self):
+        """Avance versée sur le compte fournisseur (401 débiteur) en BH ; dépréciations 295, 490, 591 à 594 et
+        provisions 599 dans leurs rubriques : bilan équilibré, aucun compte hors états."""
+        env = self.env
+        Account = env["account.account"]
+
+        def account(prefix, kind):
+            found = Account.search([("code", "=like", prefix + "%"), ("company_ids", "in", self.company.ids)],
+                                   order="code", limit=1)
+            return found or Account.create({"code": prefix.ljust(6, "0"), "name": f"Compte {prefix} (test)",
+                                            "account_type": kind, "company_ids": [(6, 0, self.company.ids)]})
+
+        payable = self.supplier.property_account_payable_id
+        bank = self.bank.default_account_id
+        lines = [(payable, 300_000_000, 0, self.supplier), (bank, 0, 300_000_000, None)]  # avance sur 401
+        for prefix, kind, amount in (("490", "asset_current", 5_000_000), ("295", "asset_non_current", 2_000_000),
+                                     ("591", "asset_current", 1_000_000), ("592", "asset_current", 1_000_000),
+                                     ("599", "liability_current", 3_000_000)):
+            lines += [(self.acc_purchase, amount, 0, None), (account(prefix, kind), 0, amount, None)]
+        move = env["account.move"].create({
+            "move_type": "entry", "journal_id": self.bank.id, "date": self.today,
+            "line_ids": [(0, 0, {"name": "Test", "account_id": acc.id, "debit": debit, "credit": credit,
+                                 "partner_id": partner.id if partner else False})
+                         for acc, debit, credit, partner in lines],
+        })
+        move.action_post()
+        sheet = self.env["eguitra.syscohada"].balance_sheet(self.company, self.today)
+        self.assertEqual(sheet["unmapped_accounts"], {}, "Tous les comptes figurent dans le bilan")
+        self.assertAlmostEqual(sheet["difference"], 0, 0, msg="Bilan équilibré")
+        actif = {line["code"]: line["amount"] for line in sheet["actif"]}
+        passif = {line["code"]: line["amount"] for line in sheet["passif"]}
+        self.assertAlmostEqual(actif["BH"], 300_000_000 - 236_000_000 - 5_000_000, 0,
+                               msg="401 débiteur en fournisseurs, avances versées, moins sa dépréciation")
+        self.assertAlmostEqual(passif["DJ"], 0, 0, msg="Plus de dette fournisseur")
+        self.assertAlmostEqual(passif["DN"], 3_000_000, 0, msg="599 en provisions pour risques à court terme")
+
     def test_rapport_balance(self):
         result = self.env["eguitra.report.engine"].run(
             "balance", self.company, self.today.replace(month=1, day=1), self.today
