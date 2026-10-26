@@ -53,6 +53,12 @@ class TestOutilsCabinet(ApiCase):
         super().setUp()
         self.cabinet_token = self.open_session("consultant.outils", app="axispro")["access_token"]
 
+    def call(self, *args, **kwargs):
+        # Écritures du test encore en attente (état d'un dossier, d'une inscription) : en base avant
+        # que le noyau, qui répond dans un autre fil, ne les lise.
+        self.env.flush_all()
+        return super().call(*args, **kwargs)
+
     def event(self, **values):
         return self.env["portail.event"].create(dict({
             "name": "Atelier plan de trésorerie", "kind": "atelier", "start": FUTURE, "end": FUTURE + timedelta(hours=3),
