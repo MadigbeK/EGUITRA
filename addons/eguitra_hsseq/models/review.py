@@ -20,7 +20,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-from .cockpit import FAMILY, INDICATORS, WATCH_RATIO, month_label, month_start
+from .cockpit import FAMILY, INDICATORS, WATCH_RATIO, month_start, period_label
 from .common import (
     ACTION_STATUSES,
     DECISION_TOPICS,
@@ -95,7 +95,7 @@ class EguitraHsseqReview(models.Model):
     def _check_period(self):
         for review in self:
             if review.period_end < review.period_start:
-                raise ValidationError("La période de la revue se termine après son début.")
+                raise ValidationError("La fin de la période précède son début.")
             if len(review_months(review.period_start, review.period_end)) > MAX_MONTHS:
                 raise ValidationError(f"Période d'une revue : {MAX_MONTHS} mois au plus.")
 
@@ -208,8 +208,7 @@ class EguitraHsseqReview(models.Model):
                                "status": indicator_status(value, target, direction, watch_ratio=WATCH_RATIO)})
         return {
             "period": {"from": iso(start), "to": iso(end), "months": [m.strftime("%Y-%m") for m in months],
-                       "label": f"{month_label(months[0])} à {month_label(months[-1])}" if len(months) > 1
-                       else month_label(months[0])},
+                       "label": period_label(months[0], months[-1])},
             "generated_on": iso(day),
             "indicators": indicators,
             "events": self._input_events(base, start_dt, end_dt),
@@ -256,7 +255,8 @@ class EguitraHsseqReview(models.Model):
             "closed": Action.search_count(base + [("closed_at", ">=", start_dt), ("closed_at", "<=", end_dt)]),
             "on_time_rate": values.get("actions_on_time"), "effectiveness_rate": values.get("actions_effectiveness"),
             "overdue_items": [{"id": a.id, "reference": a.reference, "description": a.description[:300],
-                               "origin": a.origin, "owner": a.owner_id.name, "due_date": iso(a.due_date),
+                               "origin": a.origin, "owner": a.owner_id.name, "owner_id": a.owner_id.id,
+                               "due_date": iso(a.due_date),
                                "days_overdue": a._days_overdue(day)} for a in overdue[:LIST_LIMIT]],
         }
 
@@ -305,7 +305,7 @@ class EguitraHsseqReview(models.Model):
             "reviews_overdue": len(risks.filtered(lambda r: r._review_overdue(day))),
             "high_residual": [{"id": r.id, "reference": r.reference, "feared_event": r.feared_event[:300],
                                "residual_criticality": r.residual_criticality, "residual_level": r.residual_level,
-                               "owner": r.owner_id.name} for r in high[:LIST_LIMIT]],
+                               "owner": r.owner_id.name, "owner_id": r.owner_id.id} for r in high[:LIST_LIMIT]],
         }
 
     def _input_environment(self, base, total, values):

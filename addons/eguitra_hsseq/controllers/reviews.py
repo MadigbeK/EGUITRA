@@ -7,12 +7,14 @@ réouverture d'une revue close revient au seul Responsable HSSEQ, avec un motif.
 direction, hsseq et auditeur (lecture seule, ses sociétés, utile aux audits ISO) ; revue de société, sans
 bornage par site, que le chef de parc ne lit pas."""
 
+import copy
+
 from odoo import fields, http
 from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, require
 
-from ..models.cockpit import month_label
+from ..models.cockpit import period_label
 from ..models.common import (
     ACTION_STATUSES,
     AUDIT_STANDARDS,
@@ -42,6 +44,7 @@ from .common import (
     hsseq_route,
     ids_list,
     int_or_none,
+    is_auditor,
     is_hsseq,
     number,
     page,
@@ -72,11 +75,56 @@ def review_rights(review):
                          "can_approve": "hold" in transitions}
 
 
+def is_driver(user):
+    return bool(user) and "conducteur" in user.sudo()._eguitra_profiles()
+
+
+def person(user):
+    """Compte cité par une revue : l'auditeur lit les noms du personnel interne (participants,
+    responsables), jamais celui d'un conducteur."""
+    if not user:
+        return None
+    if is_auditor() and is_driver(user):
+        return {"id": user.id, "name": None}
+    return user_ref(user)
+
+
+def review_action(action):
+    line = action_line(action)
+    if is_auditor() and is_driver(action.sudo().owner_id):
+        line["owner"] = {"id": action.owner_id.id, "name": None}
+    return line
+
+
+def auditor_inputs(inputs):
+    """Éléments d'entrée lus par l'auditeur : sans les indicateurs d'alcootest, sans nom de conducteur."""
+    if not inputs or not is_auditor():
+        return inputs
+    inputs = copy.deepcopy(inputs)
+    inputs["indicators"] = [i for i in inputs.get("indicators") or [] if not i["code"].startswith("breath_test")]
+    items = [(item, "owner") for section, key in (("actions", "overdue_items"), ("risks", "high_residual"))
+             for item in (inputs.get(section) or {}).get(key) or []]
+    ids = {item.get("owner_id") for item, _k in items if item.get("owner_id")}
+    drivers = {u.id for u in request.env["res.users"].sudo().browse(list(ids)).exists() if is_driver(u)}
+    for item, key in items:
+        if item.get("owner_id") in drivers:
+            item[key] = None
+    return inputs
+
+
+def review_inputs(review):
+    """Éléments d'entrée servis : ceux du jour pour une revue préparée (calculés à la volée, sans écriture),
+    figés à la tenue ensuite ; bornés pour l'auditeur."""
+    review = review.sudo()
+    inputs = review._compute_inputs() if review.state == "prepared" or not review.inputs else review.inputs
+    return auditor_inputs(inputs)
+
+
 def decision_row(decision):
     decision = decision.sudo()
     return {"id": decision.id, "sequence": decision.sequence, "topic": decision.topic,
-            "description": decision.description, "owner": user_ref(decision.owner_id),
-            "due_date": decision.due_date or None, "action": action_line(decision.action_id) if decision.action_id
+            "description": decision.description, "owner": person(decision.owner_id),
+            "due_date": decision.due_date or None, "action": review_action(decision.action_id) if decision.action_id
             else None}
 
 
@@ -96,12 +144,12 @@ def review_detail(review):
     transitions, rights = review_rights(review)
     row = review_line(review)
     row.update({
-        "participants": [user_ref(u) for u in review.participant_ids],
+        "participants": [person(u) for u in review.participant_ids],
         "external_participants": review.external_participants or None, "agenda": review.agenda or None,
-        "inputs": review.inputs or None, "inputs_generated_at": review.inputs_generated_at or None,
+        "inputs": auditor_inputs(review.inputs) or None, "inputs_generated_at": review.inputs_generated_at or None,
         "minutes": review.minutes or None, "conclusion": review.conclusion or None,
         "decisions": [decision_row(d) for d in review.decision_ids],
-        "actions": [action_line(a) for a in review.action_ids],
+        "actions": [review_action(a) for a in review.action_ids],
         "closed_at": review.closed_at or None, "closed_by": user_ref(review.closed_by),
         "reopen_reason": review.reopen_reason or None, "attachments": attachments_rows("review", review),
         "history": history("review", review), "transitions": transitions, "rights": rights,
@@ -124,7 +172,7 @@ def review_values(data, review=None):
     end = values.get("period_end", review.period_end if review else None)
     if start and end:
         if end < start:
-            raise ApiError(400, "invalid_parameter", "La période se termine après son début.", fields=["period_end"])
+            raise ApiError(400, "invalid_parameter", "La fin de la période précède son début.", fields=["period_end"])
         if len(review_months(start, end)) > 24:
             raise ApiError(400, "invalid_parameter", "Période d'une revue : 24 mois au plus.", fields=["period_end"])
     for key, limit in (("title", 300), ("external_participants", 2000), ("agenda", 4000), ("minutes", 20000),
@@ -165,7 +213,7 @@ def action_values(data, review, decision=None):
     return values
 
 
-def decision_values(data, partial=False):
+def decision_values(data, partial=False, review=None):
     values = {}
     if not partial or "topic" in data:
         topic = data.get("topic") or "improvement"
@@ -178,8 +226,8 @@ def decision_values(data, partial=False):
             raise ApiError(400, "missing_fields", "Décision à rédiger.", fields=["description"])
     if "owner_id" in data:
         owner = request.env["res.users"].sudo().browse(int_or_none(data, "owner_id") or 0).exists()
-        if owner and owner.share:
-            raise ApiError(422, "business_rule", "Responsable : un compte interne.", fields=["owner_id"])
+        if owner and (owner.share or (review and review.company_id not in owner.company_ids)):
+            raise ApiError(422, "business_rule", "Responsable : un compte interne de la société.", fields=["owner_id"])
         values["owner_id"] = owner.id or False
     if "due_date" in data:
         values["due_date"] = date_value(data, "due_date")
@@ -195,10 +243,15 @@ def fmt(value, unit=None):
     return fmt_value(value, UNIT_LABELS.get(unit, unit)) or "-"
 
 
-def pdf_context(review):
-    """Compte rendu de la revue, mis en forme ; le gabarit ne fait que le disposer."""
+def pdf_context(review, inputs=None, user=None, auditor=False):
+    """Compte rendu de la revue, mis en forme ; le gabarit ne fait que le disposer. inputs : éléments d'entrée
+    servis (ceux du jour pour une revue préparée) ; auditor : sans nom de conducteur."""
     review = review.sudo()
-    inputs = review.inputs or {}
+    user = user or request.env.user
+    inputs = (review.inputs if inputs is None else inputs) or {}
+
+    def name(account):
+        return "-" if not account else "conducteur" if auditor and is_driver(account) else account.name
     statuses, levels = dict(INDICATOR_STATUSES), dict(LEVELS)
     events = inputs.get("events") or {}
     actions = inputs.get("actions") or {}
@@ -213,15 +266,15 @@ def pdf_context(review):
     status_labels = dict(ACTION_STATUSES)
     return {
         "reference": review.reference, "title": review.title, "company": review.company_id.name,
-        "period": (inputs.get("period") or {}).get("label") or
-        f"{month_label(review.period_start.replace(day=1))} à {month_label(review.period_end.replace(day=1))}",
+        "period": (inputs.get("period") or {}).get("label") or period_label(review.period_start, review.period_end),
         "planned_date": review.planned_date.strftime("%d/%m/%Y"),
         "held_on": review.held_on.strftime("%d/%m/%Y") if review.held_on else "-",
         "state": dict(REVIEW_STATES)[review.state],
-        "printed_at": fields.Datetime.context_timestamp(request.env.user, fields.Datetime.now()).strftime("%d/%m/%Y %H:%M"),
-        "generated_at": fields.Datetime.context_timestamp(request.env.user, review.inputs_generated_at).strftime(
-            "%d/%m/%Y %H:%M") if review.inputs_generated_at else "-",
-        "participants": ", ".join(review.participant_ids.mapped("name")) or "-",
+        "printed_at": fields.Datetime.context_timestamp(user, fields.Datetime.now()).strftime("%d/%m/%Y %H:%M"),
+        "generated_at": fields.Datetime.context_timestamp(user, review.inputs_generated_at).strftime(
+            "%d/%m/%Y %H:%M") if review.inputs_generated_at and review.state != "prepared" else
+        f"{fields.Datetime.context_timestamp(user, fields.Datetime.now()):%d/%m/%Y %H:%M} (revue préparée)",
+        "participants": ", ".join(name(u) for u in review.participant_ids) or "-",
         "external_participants": review.external_participants or "",
         "agenda": review.agenda or "",
         "indicators": [(i["label"], fmt(i["value"], i["unit"]), fmt(i["target"], i["unit"]),
@@ -296,7 +349,7 @@ def pdf_context(review):
                                     status_labels.get(d["action"]["status"], "") if d["action"] else "Sans action")
                                    for d in previous.get("decisions") or []]} if previous else None,
         "minutes": review.minutes or "",
-        "decisions": [(dict(DECISION_TOPICS)[d.topic], d.description, d.owner_id.name or "-",
+        "decisions": [(dict(DECISION_TOPICS)[d.topic], d.description, name(d.owner_id),
                        d.due_date.strftime("%d/%m/%Y") if d.due_date else "-", d.action_id.reference or "-",
                        status_labels.get(d.action_id.status, "") if d.action_id else "")
                       for d in review.decision_ids],
@@ -332,8 +385,7 @@ class EguitraHsseqReviews(http.Controller):
         company = companies(data)[:1] if data.get("company_id") else request.env.company
         values = review_values(data)
         if not values.get("title"):
-            values["title"] = f"Revue de direction HSSEQ, {month_label(values['period_start'].replace(day=1))} à " \
-                              f"{month_label(values['period_end'].replace(day=1))}"
+            values["title"] = f"Revue de direction HSSEQ, {period_label(values['period_start'], values['period_end'])}"
         review = request.env["eguitra.hsseq.review"].sudo().create(dict(values, company_id=company.id))
         return review_detail(review)
 
@@ -396,7 +448,7 @@ class EguitraHsseqReviews(http.Controller):
         action_data = data.get("action")
         if action_data is not None and not isinstance(action_data, dict):
             raise ApiError(400, "invalid_parameter", "Action invalide.", fields=["action"])
-        values = decision_values(data)
+        values = decision_values(data, review=review)
         decision = request.env["eguitra.hsseq.review.decision"].sudo().create(dict(values, review_id=review.id))
         if action_data is not None:
             decision._create_action(action_values(action_data, review, decision))
@@ -408,7 +460,7 @@ class EguitraHsseqReviews(http.Controller):
     def update_decision(self, review_id, decision_id, **_kw):
         review = self._editable(review_id)
         decision = self._decision(review, decision_id)
-        decision.write(decision_values(read_json(), partial=True))
+        decision.write(decision_values(read_json(), partial=True, review=review))
         review._journal("decision_updated", note=decision.description[:300])
         return review_detail(review)
 
@@ -438,8 +490,9 @@ class EguitraHsseqReviews(http.Controller):
     @hsseq_route("/hsseq/reviews/<int:review_id>/report.pdf", profiles=REVIEW_READ)
     def pdf(self, review_id, **_kw):
         review = get_review(review_id)
+        report = pdf_context(review, review_inputs(review), auditor=is_auditor())
         pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf(
-            "eguitra_hsseq.action_report_review", review.ids, data={"report": pdf_context(review)})
+            "eguitra_hsseq.action_report_review", review.ids, data={"report": report})
         name = f"revue_direction_{review.reference}".replace("/", "-").replace(" ", "_")
         return request.make_response(pdf, headers=[("Content-Type", "application/pdf"),
                                                    ("Content-Disposition", content_disposition(f"{name}.pdf"))])

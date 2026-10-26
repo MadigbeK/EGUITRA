@@ -594,6 +594,13 @@ def month_label(month):
     return f"{MONTHS_FR[month.month - 1]} {month.year}"
 
 
+def period_label(first, last):
+    """« octobre 2026 » pour un seul mois ; « d'octobre 2026 à décembre 2026 », « de mars 2026 à mai 2026 »
+    sinon (premiers jours des mois)."""
+    first, last = month_start(first), month_start(last)
+    return month_label(first) if first == last else f"{of_month(first)} à {month_label(last)}"
+
+
 def of_month(month):
     """« de mars 2026 », « d'avril 2026 », « d'août 2026 », « d'octobre 2026 » : élision devant une voyelle."""
     label = month_label(month)

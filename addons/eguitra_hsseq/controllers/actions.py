@@ -23,6 +23,7 @@ from .common import (
     hsseq_route,
     int_or_none,
     internal_only,
+    is_auditor,
     is_hsseq,
     is_yard,
     number,
@@ -60,6 +61,9 @@ def is_owner(action):
 def can_read(action):
     if reads_all() or is_owner(action):
         return True
+    # Action d'une revue de direction (sans site) : l'auditeur lit les revues de ses sociétés.
+    if is_auditor() and action.sudo().review_id:
+        return True
     if is_yard():
         return site_allowed(action.site_id)
     return False
@@ -71,6 +75,8 @@ def read_domain(kw):
     if reads_all():
         return domain
     own = [("owner_id", "=", request.env.uid)]
+    if is_auditor():
+        return domain + ["|", "|"] + own + [("review_id", "!=", False)] + yard_domain()
     if is_yard():
         return domain + ["|"] + own + yard_domain()
     return domain + own

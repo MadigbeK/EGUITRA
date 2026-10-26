@@ -63,3 +63,52 @@ class TestCorrectionsLot3(HsseqCase):
         [rejected] = imports["items"]
         self.assertEqual((rejected["id"], rejected["error_count"], rejected["errors"][0]["line"], rejected["created"]),
                          (body["import_id"], 1, 2, 0), "Trace de l'import refusé")
+
+    def test_revue_intitule_auditeur_actions_et_compte_rendu(self):
+        """Intitulé d'une période d'un mois ou de plusieurs (élision) ; message d'une période inversée ;
+        l'auditeur lit les noms du personnel interne, jamais celui d'un conducteur ni un indicateur
+        d'alcootest ; il lit les actions de la revue ; le compte rendu d'une revue préparée montre ses
+        éléments d'entrée."""
+        from datetime import date
+
+        from ..controllers.reviews import pdf_context
+        from ..models.cockpit import period_label
+
+        self.assertEqual((period_label(date(2026, 10, 1), date(2026, 10, 31)),
+                          period_label(date(2026, 10, 1), date(2026, 12, 31)),
+                          period_label(date(2026, 3, 1), date(2026, 5, 31))),
+                         ("octobre 2026", "d'octobre 2026 à décembre 2026", "de mars 2026 à mai 2026"))
+        status, body = self.api("dg.hsseq", "POST", "/hsseq/reviews", {
+            "period_start": str(self.day), "period_end": str(self.day - timedelta(days=40)), "planned_date": str(self.day)})
+        self.assertEqual((status, body["message"]), (400, "La fin de la période précède son début."))
+        event = self.event(event_type="road_accident", title="Sortie de route de démonstration")
+        event.action_classify({"potential_severity": 5, "probability": 4})
+        status, review = self.api("dg.hsseq", "POST", "/hsseq/reviews", {
+            "period_start": str(self.day.replace(day=1)), "period_end": str(self.day), "planned_date": str(self.day),
+            "participant_ids": [self.dg.id, self.conducteur.id]})
+        self.assertEqual(status, 200, review)
+        self.assertEqual(review["title"], f"Revue de direction HSSEQ, {period_label(self.day, self.day)}")
+        status, decided = self.api("dg.hsseq", "POST", f"/hsseq/reviews/{review['id']}/decisions", {
+            "description": "Recycler la conduite défensive",
+            "action": {"owner_id": self.hsseq.id, "due_date": str(self.day + timedelta(days=30))}})
+        action_id = decided["decisions"][0]["action"]["id"]
+        status, read = self.api("awa.auditrice", "GET", f"/hsseq/reviews/{review['id']}")
+        self.assertEqual(status, 200, read)
+        names = {p["id"]: p["name"] for p in read["participants"]}
+        self.assertEqual((names[self.dg.id], names[self.conducteur.id]), (self.dg.name, None),
+                         "Personnel interne nommé, conducteur jamais")
+        self.assertEqual(read["decisions"][0]["owner"], {"id": self.hsseq.id, "name": self.hsseq.name})
+        self.assertFalse([i for i in read["inputs"]["indicators"] if i["code"].startswith("breath_test")],
+                         "Aucun indicateur d'alcootest")
+        status, action = self.api("awa.auditrice", "GET", f"/hsseq/actions/{action_id}")
+        self.assertEqual((status, action["origin"]), (200, "review"), "Action de revue lisible (plus de 404)")
+        status, listing = self.api("awa.auditrice", "GET", "/hsseq/actions?origin=review")
+        self.assertEqual([a["id"] for a in listing["items"]], [action_id])
+        record = self.env["eguitra.hsseq.review"].browse(review["id"])
+        context = pdf_context(record, record._compute_inputs(), user=self.dg)
+        html, _type = self.env["ir.actions.report"]._render_qweb_html("eguitra_hsseq.action_report_review",
+                                                                      record.ids, data={"report": context})
+        html = html.decode()
+        for text in ("Indicateurs de la période", "Taux de fréquence", "Sortie de route de démonstration",
+                     "(revue préparée)"):
+            self.assertIn(text, html, "Compte rendu d'une revue préparée : ses éléments d'entrée")
