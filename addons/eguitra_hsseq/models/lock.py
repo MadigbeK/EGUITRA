@@ -379,10 +379,12 @@ class EguitraTransportRotation(models.Model):
         return waived + [{k: r[k] for k in keys} for r in self._hsseq_reasons(detail=False, attach=True)["waived"]]
 
     def _depart_refusal(self):
-        """Motif du refus du départ pour le compte, ou None ; verrou en service ou non. Le départ est donné
-        par un chef de parc (profil exploitation) sur un ensemble de ses sites (fermé par défaut : ni sans
-        site rattaché, ni pour un ensemble sans site), ou par l'administration sans borne de site ; jamais
-        par la finance ni la direction. Le verrou s'applique ensuite à tous de la même façon.
+        """Motif du refus du départ pour le compte, ou None. Le départ est donné par un chef de parc (profil
+        exploitation) ou par l'administration, jamais par la finance ni la direction (contrôle de profil de
+        Transport). Verrou HSSEQ en service pour la rotation (lock_start_date atteinte) : le chef de parc ne
+        fait partir qu'un ensemble de ses sites (fermé par défaut : ni sans site rattaché, ni un ensemble
+        sans site, que seule l'administration fait partir) ; avant, seul le contrôle de profil compte. Le
+        verrou s'applique ensuite à tous de la même façon.
 
         Crochet de Transport (branche claude/transport-depart) : super() refuse d'abord la finance et la
         direction (DEPART_PROFILES : admin, exploitation) ; tant qu'il n'est pas fusionné, le même contrôle est
@@ -401,7 +403,11 @@ class EguitraTransportRotation(models.Model):
         if "exploitation" not in user_profiles or not user.has_group(EXPLOITATION_GROUP):
             return "Le départ en route est donné par un chef de parc (profil Exploitation transport) ou par " \
                    "l'administration."
+        if not self._hsseq_lock_active():
+            return None
         site = self.sudo().vehicle_id.site_id
+        if not site:
+            return f"Rotation {self._label()} : ensemble rattaché à aucun site, seule l'administration le fait partir."
         if not site or site not in user._hsseq_site_ids():
             return f"Rotation {self._label()} : ensemble hors de vos sites."
         return None

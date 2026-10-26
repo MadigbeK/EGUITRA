@@ -111,8 +111,9 @@ class TestComplements(HsseqCase):
         self.assertEqual((status, body["error"]), (400, "invalid_parameter"))
 
     def test_regle_du_depart(self):
-        """Départ : chef de parc sur un ensemble de ses sites, administration sans borne de site ; jamais la
-        finance ni la direction ; le verrou s'applique à tous, verrou en service ou non."""
+        """Départ, verrou en service : chef de parc sur un ensemble de ses sites, administration sans borne
+        de site ; jamais la finance ni la direction ; le verrou s'applique à tous. Verrou hors service : le
+        seul contrôle de profil de Transport."""
         Users = self.env["res.users"]
         rot = self._rotation()
         self.check(rot)
@@ -127,14 +128,30 @@ class TestComplements(HsseqCase):
         self.assertFalse(self.admin._hsseq_site_ids(), "Administration rattachée à aucun site")
         rot.with_user(self.admin).action_depart()
         self.assertEqual((rot.state, rot.departed_by), ("en_route", self.admin))
-        self.settings.lock_start_date = False
-        free = self._rotation()
-        with self.assertRaises(AccessError, msg="Verrou pas en service : même règle"):
-            free.with_user(self.parc2).action_depart()
-        free.with_user(self.parc).action_depart()
-        self.assertEqual(free.state, "en_route")
+        # Verrou en service, ensemble sans site : l'administration seule.
+        loose = self.env["eguitra.transport.vehicle"].create({"name": "ER-99", "tractor_plate": "RC-9999-Z",
+                                                              "driver_id": self.driver.id})
+        orphan = self._rotation(vehicle_id=loose.id)
+        self.check(orphan)
+        self.breath(orphan)
+        with self.assertRaises(AccessError, msg="Ensemble sans site : pas le chef de parc"):
+            orphan.with_user(self.parc).action_depart()
+        orphan.with_user(self.admin).action_depart()
+        self.assertEqual(orphan.state, "en_route", "Ensemble sans site : l'administration le fait partir")
         status, body = self.api("fatou", "POST", f"/transport/rotations/{self._rotation().id}/depart")
         self.assertEqual(status, 403, body)
+        # Verrou hors service : seul le contrôle de profil (comme le test de Transport, ibrahima sans site).
+        self.settings.lock_start_date = False
+        for user in (self.parc2, nobody):
+            free = self._rotation()
+            free.with_user(user).action_depart()
+            self.assertEqual(free.state, "en_route", f"{user.login} : hors site, verrou hors service")
+        free = self._rotation(vehicle_id=loose.id)
+        free.with_user(nobody).action_depart()
+        self.assertEqual(free.state, "en_route", "Ensemble sans site, verrou hors service : chef de parc")
+        for user in (Users.search([("login", "=", "fatou")]), self.dg):
+            with self.assertRaises(AccessError, msg=f"{user.login} : jamais, verrou hors service"):
+                self._rotation().with_user(user).action_depart()
 
     def test_complements_des_listes(self):
         rot = self._rotation()
