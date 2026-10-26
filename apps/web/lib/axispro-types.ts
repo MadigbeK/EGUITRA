@@ -369,7 +369,16 @@ export interface DocFile {
   criteria: Array<{ id: number; code: string }>;
 }
 
-export interface Message { id: number; author: string; from_promoter: boolean; body: string; date: string; internal: boolean }
+export interface Message {
+  id: number;
+  author: string;
+  from_promoter: boolean;
+  body: string;
+  date: string;
+  internal: boolean;
+  /** Pièces jointes au message (elles rejoignent la data room du dossier). */
+  attachments: Array<{ id: number; name: string }>;
+}
 
 /** Saisie de temps (GET /axispro/timesheets, liste bornée : 300 par défaut). */
 export interface Timesheet {
