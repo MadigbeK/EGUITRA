@@ -230,13 +230,13 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   d'échec), tâche de fond déclarée avant le routeur. Ajouts sur le noyau HSSEQ de la session OTHER
   (branche `hsseq`, lots 2 et 3) : appels d'urgence depuis la déclaration d'accident (annuaire de
   crise), « Documents » (procédures et alertes, accusé de lecture même sans réseau), « Mon
-  dossier » du conducteur (habilitations, aptitude en statut seul). 76 tests au vert, `tsc` et
-  paquet Android au vert ; parcours vérifiés sur le bureau simulé.
+  dossier » du conducteur (habilitations, aptitude en statut seul), contrôle complémentaire d'un
+  contrôle incomplet. 77 tests au vert, `tsc` et paquet Android au vert ; parcours vérifiés sur le
+  bureau simulé.
 - Ensuite : branchement sur la recette dès l'entrée native de la passerelle (Local, après son audit)
   et l'intégration du module HSSEQ ; compte Expo de l'entreprise (EAS) pour essayer sur de vrais
   téléphones ; réponses de la Direction générale (départ sans réseau, valeur de la signature par
-  code, V05) ; contrôle complémentaire et `can_attach` des photos de levée (questions posées à
-  OTHER). Hors offre initiale : avenant à chiffrer avec HSSEQ.
+  code, V05). Hors offre initiale : avenant à chiffrer avec HSSEQ.
 
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :

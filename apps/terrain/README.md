@@ -33,8 +33,9 @@ noyau de la session OTHER (branche `hsseq`) :
 - Non-conformités (chef de parc, Responsable HSSEQ) : levée en ligne, code personnel redemandé,
   photo de la correction déposée d'abord (`role: "lift"`), puis citée par la levée ; la photo reste
   sur l'appareil jusqu'à la levée confirmée.
-- Contrôle et alcootest lancés d'un départ : rattachés à sa rotation (`rotation_id`), ce qui lève
-  V01 même quand un contrôle précédent attend un complément.
+- Contrôle et alcootest lancés d'un départ : rattachés à sa rotation (`rotation_id`). Contrôle
+  incomplet (points bloquants ajoutés à la grille après la saisie) : « Compléter le contrôle » sur
+  les seuls points attendus (`POST /hsseq/checks/<id>/complement`), ou un contrôle complet.
 - Accident : appels du chef de parc et des secours depuis la déclaration, dans l'ordre de
   l'annuaire de crise du site (`GET /hsseq/my/crisis-contacts`, gardé sur l'appareil).
 - Documents (tous les profils, lot 3) : procédures en vigueur et alertes qui visent le compte
@@ -148,10 +149,6 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
   à distance avec `expo-updates`) : décision et compte du gérant.
 - Signature par code personnel (en plus du tracé) : en attente de la Direction générale (valeur
   de la signature par code). Départ sans réseau et découpage de V05 : idem.
-- Contrôle complémentaire (`POST /hsseq/checks/<id>/complement`) : le motif V01 du noyau ne cite
-  pas le contrôle à compléter ; question posée à la session OTHER. En attendant, un contrôle
-  complet rattaché à la rotation lève V01.
-- Noyau : aligner `can_attach` sur `can_lift` pour les photos de levée (demandé à OTHER).
 - Tablette en mode kiosque (gestion de flotte Android) avec les tuiles des habitués et le badge QR :
   demande une décision sur les badges et un registre côté serveur.
 - Seconde validation des dérogations par le Responsable HSSEQ : écran web (session DESIGN).
