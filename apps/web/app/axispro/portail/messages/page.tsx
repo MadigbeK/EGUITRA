@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowUpRight, ChevronLeft, Lock, Paperclip, Send, X } from "@/components/icons";
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
-import { Coche, LectureSeule, RESERVE_CABINET, Recherche, correspond, messageErreur, useEcriture } from "@/components/portail/cabinet/outils";
+import { Coche, LectureSeule, Recherche, correspond, messageErreur, useEcriture } from "@/components/portail/cabinet/outils";
 import { FORMATS, FORMATS_TEXTE, dateLongue, heure, quand, taille } from "@/components/portail/commun";
-import { Badge, Button, classesBouton, Empty, ErrorBox, FEUILLE, Loading, Notice, PageHeader, Segmented, Textarea, cx } from "@/components/ui";
+import { Badge, Button, classesBouton, Empty, ErrorBox, Etat, FEUILLE, Loading, Notice, PageHeader, Segmented, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiUpload, useApi } from "@/lib/api-client";
+import { fmtInt } from "@/lib/format";
 import type { Attachment, Conversation, ConversationRow, MessageRow } from "@/lib/portail-types";
 
 const CHEMIN = "/axispro/portail/messages";
@@ -57,7 +58,7 @@ function Messagerie() {
   return (
     <div className="space-y-4">
       <LectureSeule ecriture={ecriture}>Lecture seule : votre profil lit les échanges. Seul le profil cabinet répond aux porteurs et écrit des notes internes.</LectureSeule>
-      {error && <ErrorBox error={error} onRetry={() => void recharger()} />}
+      {error && <ErrorBox titre={liste ? "Rechargement impossible : la liste des conversations peut dater." : undefined} error={error} onRetry={() => void recharger()} />}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,370px)_minmax(0,1fr)]">
         <section aria-label="Conversations" className={cx(PANNEAU, choisi !== null && "max-lg:hidden")}>
           <div className="space-y-2.5 border-b border-line px-4 pb-3 pt-4">
@@ -68,9 +69,9 @@ function Messagerie() {
                 value={filtre}
                 onChange={setFiltre}
                 options={[
-                  { key: "toutes", label: `Toutes (${toutes.length})` },
-                  { key: "non_lues", label: `Non lues (${nonLues})` },
-                  { key: "attente", label: `En attente (${enAttente})` },
+                  { key: "toutes", label: `Toutes (${fmtInt(toutes.length)})` },
+                  { key: "non_lues", label: `Non lues (${fmtInt(nonLues)})` },
+                  { key: "attente", label: `En attente (${fmtInt(enAttente)})` },
                 ]}
               />
             </div>
@@ -139,7 +140,7 @@ function LigneConversation({ r, actif, onOuvrir }: { r: ConversationRow; actif: 
             {last && <span className="whitespace-nowrap text-[11.5px] text-muted">{quand(last.date)}</span>}
             {r.unread > 0 && (
               <span className="min-w-[20px] rounded-full bg-accent-vif px-1.5 py-px text-center text-[11px] font-bold tabular text-white">
-                {r.unread}
+                {fmtInt(r.unread)}
                 <span className="sr-only"> {r.unread > 1 ? "messages non lus" : "message non lu"}</span>
               </span>
             )}
@@ -235,32 +236,32 @@ function Fil({ dossierId, ecriture, onRetour, onLu, onEnvoye }: { dossierId: num
       </header>
 
       <div ref={zone} className="min-h-0 flex-1 overflow-y-auto bg-panel-2/40 px-4 py-4 max-lg:max-h-[60vh] sm:px-5" aria-live="polite">
-        {error ? (
-          <ErrorBox error={error} onRetry={() => void mutate()} />
-        ) : !data ? (
-          <Loading label="Chargement des messages…" />
-        ) : data.messages.length === 0 ? (
-          <Empty title="Aucun message dans ce dossier." hint="Écrivez le premier message au porteur : il sera prévenu sur son portail." />
-        ) : (
-          <ol className="space-y-3">
-            {data.messages.map((m, i) => {
-              const precedent = data.messages[i - 1];
-              const nouveauJour = !precedent || jour(precedent.date) !== jour(m.date);
-              return (
-                <Fragment key={m.id}>
-                  {nouveauJour && (
-                    <li aria-hidden className="flex items-center gap-3 py-1 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
-                      <span className="h-px flex-1 bg-line" />
-                      {dateLongue(m.date, false)}
-                      <span className="h-px flex-1 bg-line" />
-                    </li>
-                  )}
-                  <Bulle m={m} onTelecharger={telecharger} />
-                </Fragment>
-              );
-            })}
-          </ol>
-        )}
+        <Etat data={data} error={error} onRetry={() => void mutate()} label="Chargement des messages…">
+          {(fil) =>
+            fil.messages.length === 0 ? (
+              <Empty title="Aucun message dans ce dossier." hint={ecriture ? "Écrivez le premier message au porteur : il sera prévenu sur son portail." : undefined} />
+            ) : (
+              <ol className="space-y-3">
+                {fil.messages.map((m, i) => {
+                  const precedent = fil.messages[i - 1];
+                  const nouveauJour = !precedent || jour(precedent.date) !== jour(m.date);
+                  return (
+                    <Fragment key={m.id}>
+                      {nouveauJour && (
+                        <li aria-hidden className="flex items-center gap-3 py-1 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+                          <span className="h-px flex-1 bg-line" />
+                          {dateLongue(m.date, false)}
+                          <span className="h-px flex-1 bg-line" />
+                        </li>
+                      )}
+                      <Bulle m={m} onTelecharger={telecharger} />
+                    </Fragment>
+                  );
+                })}
+              </ol>
+            )
+          }
+        </Etat>
       </div>
 
       {erreurPj && (
@@ -268,7 +269,7 @@ function Fil({ dossierId, ecriture, onRetour, onLu, onEnvoye }: { dossierId: num
           <Notice tone="danger">{erreurPj}</Notice>
         </div>
       )}
-      <Saisie dossierId={dossierId} ecriture={ecriture} onEnvoye={() => Promise.all([mutate(), onEnvoye()])} />
+      {ecriture && <Saisie dossierId={dossierId} onEnvoye={() => Promise.all([mutate(), onEnvoye()])} />}
     </>
   );
 }
@@ -319,18 +320,22 @@ function Bulle({ m, onTelecharger }: { m: MessageRow; onTelecharger: (a: Attachm
   );
 }
 
-function Saisie({ dossierId, ecriture, onEnvoye }: { dossierId: number; ecriture: boolean; onEnvoye: () => Promise<unknown> }) {
+/** Réponse au porteur ou note interne : réservée au profil cabinet (la page ne la montre qu'à lui). */
+function Saisie({ dossierId, onEnvoye }: { dossierId: number; onEnvoye: () => Promise<unknown> }) {
   const [texte, setTexte] = useState("");
   const [interne, setInterne] = useState(false);
   const [fichier, setFichier] = useState<File | null>(null);
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const champFichier = useRef<HTMLInputElement>(null);
+  // Un second envoi (double clic, Ctrl + Entrée répété) pendant le premier est ignoré.
+  const verrou = useRef(false);
   const vide = !texte.trim() && !fichier;
 
   async function envoyer(e?: FormEvent) {
     e?.preventDefault();
-    if (vide || envoi || !ecriture) return;
+    if (vide || verrou.current) return;
+    verrou.current = true;
     setEnvoi(true);
     setErreur(null);
     const form = new FormData();
@@ -346,6 +351,7 @@ function Saisie({ dossierId, ecriture, onEnvoye }: { dossierId: number; ecriture
     } catch (err) {
       setErreur(messageErreur(err));
     } finally {
+      verrou.current = false;
       setEnvoi(false);
     }
   }
@@ -371,20 +377,20 @@ function Saisie({ dossierId, ecriture, onEnvoye }: { dossierId: number; ecriture
         id={`message-${dossierId}`}
         aria-label={interne ? "Note interne, invisible du porteur" : "Réponse au porteur"}
         value={texte}
-        disabled={!ecriture}
+        disabled={envoi}
         onChange={(e) => setTexte(e.target.value)}
         onKeyDown={raccourci}
         maxLength={5000}
-        placeholder={!ecriture ? RESERVE_CABINET : interne ? "Note pour l'équipe du cabinet, invisible du porteur…" : "Votre réponse au porteur…"}
+        placeholder={interne ? "Note pour l'équipe du cabinet, invisible du porteur…" : "Votre réponse au porteur…"}
         className={cx("min-h-[72px]", interne && "border-warn/50")}
       />
       <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Coche checked={interne} onChange={setInterne} disabled={!ecriture} ariaLabel="Note interne, invisible du porteur">
+        <Coche checked={interne} onChange={setInterne} disabled={envoi} ariaLabel="Note interne, invisible du porteur">
           Note interne
         </Coche>
-        <label className={cx("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-semibold text-accent focus-within:outline focus-within:outline-2 focus-within:outline-accent-vif", ecriture ? "cursor-pointer hover:bg-accent-doux" : "cursor-not-allowed opacity-50")}>
+        <label className={cx("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-semibold text-accent focus-within:outline focus-within:outline-2 focus-within:outline-accent-vif", envoi ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-accent-doux")}>
           <Paperclip className="h-4 w-4" /> Joindre un fichier
-          <input ref={champFichier} type="file" aria-label="Joindre un fichier au message" className="sr-only" accept={FORMATS} disabled={!ecriture} onChange={(e) => setFichier(e.target.files?.[0] ?? null)} />
+          <input ref={champFichier} type="file" aria-label="Joindre un fichier au message" className="sr-only" accept={FORMATS} disabled={envoi} onChange={(e) => setFichier(e.target.files?.[0] ?? null)} />
         </label>
         {fichier && (
           <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-line bg-panel px-2 py-1 text-[12.5px] text-ink">
@@ -405,7 +411,7 @@ function Saisie({ dossierId, ecriture, onEnvoye }: { dossierId: number; ecriture
           </span>
         )}
         <span className="ml-auto hidden text-[11.5px] text-muted md:inline">Ctrl + Entrée pour envoyer</span>
-        <Button type="submit" variant="primary" loading={envoi} disabled={vide || !ecriture} title={!ecriture ? RESERVE_CABINET : undefined}>
+        <Button type="submit" variant="primary" loading={envoi} disabled={vide}>
           {interne ? <Lock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
           {interne ? "Enregistrer la note" : "Envoyer"}
         </Button>

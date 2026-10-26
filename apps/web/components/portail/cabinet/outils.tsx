@@ -32,8 +32,6 @@ export function useMonId(): number | null {
   return useMoi()?.id ?? null;
 }
 
-export const RESERVE_CABINET = "Réservé au profil cabinet";
-
 export function LectureSeule({ ecriture, children }: { ecriture: boolean; children?: ReactNode }) {
   if (ecriture) return null;
   return (
