@@ -250,7 +250,14 @@ class EguitraAdminController(http.Controller):
 
     @api_route("/admin/audit", methods=("GET",), profiles=ADMIN)
     def audit(self, **kw):
-        """Piste d'audit : création, modification, suppression, avec valeurs avant et après."""
+        """Piste d'audit : création, modification, suppression, avec valeurs avant et après ; filtres par objet
+        (model), auteur (user_id) et enregistrement (res_id).
+
+        offset compte les entrées visibles sautées, dans la limite des AUDIT_SCAN_MAX entrées examinées par
+        appel : une page profonde reviendrait vide. Avec paged=1, la réponse est {"items", "next_before_id"} et
+        la page suivante se demande par before_id (entrées plus anciennes que cet identifiant) : chaque appel
+        reprend où le précédent s'est arrêté, et la piste se parcourt en entier, de la plus récente à la plus
+        ancienne ; next_before_id est nul quand le début de la piste est atteint."""
         domain = []
         if kw.get("model"):
             domain.append(("model_id.model", "=", kw["model"]))
@@ -258,21 +265,35 @@ class EguitraAdminController(http.Controller):
             domain.append(("user_id", "=", int_arg(kw, "user_id")))
         if kw.get("res_id"):
             domain.append(("res_id", "=", int_arg(kw, "res_id")))
+        if kw.get("before_id"):
+            domain.append(("id", "<", int_arg(kw, "before_id", minimum=1)))
         env = sudo_env()
         user_ids = set(_scoped_user_ids(env))
         limit, offset = int_arg(kw, "limit", 100, 1, 500), int_arg(kw, "offset", 0, 0)
         logs, skipped, scanned = [], 0, 0
+        # Dernière entrée examinée (visible ou non) : la page suivante reprend juste après.
+        cursor, start_reached = None, False
         while len(logs) < limit and scanned < AUDIT_SCAN_MAX:
             batch = env["auditlog.log"].search(domain, limit=500, offset=scanned, order="id desc")
             if not batch:
+                start_reached = True
                 break
             scanned += len(batch)
-            for log in _audit_visible(env, batch, user_ids):
+            visible = {log.id for log in _audit_visible(env, batch, user_ids)}
+            for log in batch:
+                cursor = log.id
+                if log.id not in visible:
+                    continue
                 if skipped < offset:
                     skipped += 1
-                elif len(logs) < limit:
-                    logs.append(log)
-        return [
+                    continue
+                logs.append(log)
+                if len(logs) == limit:
+                    break
+            if len(batch) < 500 and cursor == batch[-1].id:
+                start_reached = True  # dernière tranche examinée jusqu'au bout
+                break
+        rows = [
             {
                 "id": log.id,
                 "date": log.create_date,
@@ -290,3 +311,6 @@ class EguitraAdminController(http.Controller):
             }
             for log in logs
         ]
+        if kw.get("paged") == "1":
+            return {"items": rows, "next_before_id": None if start_reached else cursor}
+        return rows
