@@ -131,6 +131,15 @@ export function EtatPaie({ state }: { state: PayrollState }) {
   return <Badge tone={TON_PAIE[state]}>{PAYROLL_STATE_LABELS[state]}</Badge>;
 }
 
+/**
+ * Forme accordée au nombre, sans le nombre : singulier jusqu'à 1 (« 0 jour », « 1,5 jour »,
+ * « 2 jours »), comme les messages du noyau. Pour un entier écrit avec son nombre : pluriel() de
+ * lib/format.ts.
+ */
+export function accord(n: number | null | undefined, un: string, plusieurs = `${un}s`): string {
+  return Math.abs(n ?? 0) < 2 ? un : plusieurs;
+}
+
 /** « 12 j », « 0,5 j ». */
 export function jours(n: number | null | undefined): string {
   return n === null || n === undefined ? "–" : `${fmtDec(n)} j`;

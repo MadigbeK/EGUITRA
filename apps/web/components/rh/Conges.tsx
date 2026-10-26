@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useSWRConfig } from "swr";
 import { ChevronLeft, ChevronRight, Plus } from "@/components/icons";
 import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, SERIES, cx, demanderConfirmation } from "@/components/ui";
-import { apiSend, useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
-import { ChoixSalarie, DecisionAbsence, EtatAbsence, FiltreSociete, avecSociete, jours, messageErreur, moisCourant, periode, useJoursOuvrables, useMeta } from "./commun";
+import { ChoixSalarie, DecisionAbsence, EtatAbsence, FiltreSociete, accord, avecSociete, jours, messageErreur, moisCourant, periode, useJoursOuvrables, useMeta } from "./commun";
 
 type Onglet = "valider" | "planning" | "absences" | "soldes";
 
@@ -21,10 +22,12 @@ export function GestionConges() {
   const [saisie, setSaisie] = useState(false);
   const [societe, setSociete] = useState<number | null>(null);
   const { data: attente, error: erreurAttente, mutate: rafraichirAttente } = useApi<Leave[]>(avecSociete("/rh/leaves?state=submitted", societe));
-  const [version, setVersion] = useState(0);
+  // Après une action, toutes les listes d'absences et les soldes se relisent, sans remonter les onglets :
+  // les filtres choisis (salarié, état, période, mois du planning) restent.
+  const { mutate: relire } = useSWRConfig();
   const rafraichir = () => {
     void rafraichirAttente();
-    setVersion((v) => v + 1);
+    void relire((cle) => typeof cle === "string" && cle.startsWith("/rh/leaves"));
   };
   return (
     <div>
@@ -58,9 +61,9 @@ export function GestionConges() {
         </div>
       )}
       {onglet === "valider" && <AValider leaves={attente} error={erreurAttente} onRetry={() => rafraichirAttente()} meta={meta} onChanged={rafraichir} />}
-      {onglet === "planning" && <Planning key={version} meta={meta} societe={societe} />}
-      {onglet === "absences" && <Absences key={version} meta={meta} societe={societe} onChanged={rafraichir} />}
-      {onglet === "soldes" && <Soldes key={version} societe={societe} />}
+      {onglet === "planning" && <Planning meta={meta} societe={societe} />}
+      {onglet === "absences" && <Absences meta={meta} societe={societe} onChanged={rafraichir} />}
+      {onglet === "soldes" && <Soldes societe={societe} />}
       {saisie && meta && (
         <SaisieAbsence
           meta={meta}
@@ -359,18 +362,21 @@ export function SaisieAbsence({ meta, employeeId, onClose, onDone }: { meta: Met
   const [note, setNote] = useState("");
   const [approuver, setApprouver] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  // Solde insuffisant pour une absence enregistrée comme approuvée : le service RH peut passer outre.
+  const [soldeInsuffisant, setSoldeInsuffisant] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { days, error: erreurJours } = useJoursOuvrables(du, au || du, demi);
   const type = types.find((t) => String(t.id) === typeId);
 
-  async function enregistrer() {
+  async function enregistrer(force = false) {
     setBusy(true);
     setErreur(null);
     try {
-      await apiSend("POST", "/rh/leaves", { employee_id: salarie, type_id: Number(typeId), date_from: du, date_to: au || du, half_day: demi && (!au || au === du), note: note.trim() || null, approve: approuver });
+      await apiSend("POST", "/rh/leaves", { employee_id: salarie, type_id: Number(typeId), date_from: du, date_to: au || du, half_day: demi && (!au || au === du), note: note.trim() || null, approve: approuver, force: approuver && force });
       onDone();
     } catch (e) {
-      setErreur(messageErreur(e));
+      if (e instanceof ApiError && e.body.error === "insufficient_balance" && approuver && meta.can_write) setSoldeInsuffisant(e.message);
+      else setErreur(messageErreur(e));
     } finally {
       setBusy(false);
     }
@@ -380,17 +386,29 @@ export function SaisieAbsence({ meta, employeeId, onClose, onDone }: { meta: Met
     <Modal
       open
       title="Saisir une absence"
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
-        <Button variant="primary" loading={busy} disabled={!salarie || !typeId || !du || Boolean(erreurJours)} onClick={enregistrer}>
-          {approuver ? "Enregistrer l'absence" : "Enregistrer la demande"}
-        </Button>
+        soldeInsuffisant !== null ? (
+          <>
+            <Button disabled={busy} onClick={() => setSoldeInsuffisant(null)}>Revenir à la saisie</Button>
+            <Button variant="primary" loading={busy} onClick={() => void enregistrer(true)}>Enregistrer quand même</Button>
+          </>
+        ) : (
+          <Button variant="primary" loading={busy} disabled={!salarie || !typeId || !du || Boolean(erreurJours)} onClick={() => void enregistrer()}>
+            {approuver ? "Enregistrer l'absence" : "Enregistrer la demande"}
+          </Button>
+        )
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
         {erreur && (
           <div className="sm:col-span-2">
             <Notice tone="danger">{erreur}</Notice>
+          </div>
+        )}
+        {soldeInsuffisant !== null && (
+          <div className="sm:col-span-2">
+            <Notice tone="warn">{soldeInsuffisant} Enregistrer quand même rend le solde négatif : les jours seront repris sur les acquisitions des mois suivants.</Notice>
           </div>
         )}
         {employeeId === undefined && (
@@ -413,7 +431,7 @@ export function SaisieAbsence({ meta, employeeId, onClose, onDone }: { meta: Met
           </label>
         )}
         <div className="text-sm sm:col-span-2">
-          {erreurJours ? <span className="text-danger">{erreurJours}</span> : days !== null ? <span className="text-ink-2">Durée : <b>{jours(days)} ouvrable(s)</b>{type?.max_days ? ` (au plus ${jours(type.max_days)} pour ce type)` : ""}</span> : null}
+          {erreurJours ? <span className="text-danger">{erreurJours}</span> : days !== null ? <span className="text-ink-2">Durée : <b>{jours(days)} {accord(days, "ouvrable")}</b>{type?.max_days ? ` (au plus ${jours(type.max_days)} pour ce type)` : ""}</span> : null}
           {type && !type.paid && <span className="mt-1 block text-warn">Absence non rémunérée : retenue sur la paie du mois au prorata des jours ouvrables.</span>}
           {type?.needs_document && <span className="mt-1 block text-muted">Ce type d&apos;absence demande un justificatif : ajoutez-le aux documents du salarié.</span>}
         </div>
