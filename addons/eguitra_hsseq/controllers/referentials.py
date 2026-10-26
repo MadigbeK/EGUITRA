@@ -61,7 +61,7 @@ SETTINGS_FIELDS = {
     "check_window_hours": "int", "breath_test_window_hours": "int", "night_start_hour": "float",
     "night_end_hour": "float", "max_driving_hours": "float", "risk_review_months": "int",
     # Lot 3.
-    "co2_factor": "float", "complaint_response_days": "int",
+    "co2_factor": "float", "complaint_response_days": "int", "read_reminder_days": "int",
 }
 
 

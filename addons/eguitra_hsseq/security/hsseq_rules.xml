@@ -174,4 +174,39 @@
         <field name="model_id" ref="model_eguitra_hsseq_complaint"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_procedure_company" model="ir.rule">
+        <field name="name">Procédures HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_procedure"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_procedure_version_company" model="ir.rule">
+        <field name="name">Versions des procédures : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_procedure_version"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_acknowledgment_company" model="ir.rule">
+        <field name="name">Accusés de lecture : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_acknowledgment"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_bulletin_company" model="ir.rule">
+        <field name="name">Alertes et retours d'expérience : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_bulletin"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_emergency_plan_company" model="ir.rule">
+        <field name="name">Plans d'intervention d'urgence : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_emergency_plan"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_drill_company" model="ir.rule">
+        <field name="name">Exercices d'urgence : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_drill"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_crisis_contact_company" model="ir.rule">
+        <field name="name">Annuaire de crise : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_crisis_contact"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>

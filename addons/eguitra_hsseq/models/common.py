@@ -49,7 +49,8 @@ TREE_FACT_KINDS = ("unusual_fact", "permanent_fact")
 ACTION_STATUSES = [("todo", "À faire"), ("in_progress", "En cours"), ("to_verify", "À vérifier"),
                    ("closed", "Close"), ("cancelled", "Annulée")]
 ACTION_ORIGINS = [("event", "Événement"), ("audit", "Audit"), ("check", "Contrôle"), ("risk", "Risque"),
-                  ("review", "Revue de direction"), ("complaint", "Réclamation client")]
+                  ("review", "Revue de direction"), ("complaint", "Réclamation client"),
+                  ("drill", "Exercice d'urgence")]
 CONTROL_LEVELS = [("elimination", "Élimination"), ("substitution", "Substitution"), ("engineering", "Ingénierie"),
                   ("administrative", "Mesure administrative"), ("ppe", "Équipement de protection")]
 REMINDER_KINDS = [("d_minus_7", "Échéance dans 7 jours"), ("d0", "Échéance du jour"), ("weekly", "Retard"),
@@ -95,9 +96,17 @@ OBJECT_MODELS = {
     "dust": "eguitra.hsseq.dust",
     "contamination": "eguitra.hsseq.contamination",
     "complaint": "eguitra.hsseq.complaint",
+    "procedure": "eguitra.hsseq.procedure",
+    "procedure_version": "eguitra.hsseq.procedure.version",
+    "bulletin": "eguitra.hsseq.bulletin",
+    "emergency_plan": "eguitra.hsseq.emergency.plan",
+    "drill": "eguitra.hsseq.drill",
+    "crisis_contact": "eguitra.hsseq.crisis.contact",
 }
+# Les alertes flash et retours d'expérience n'ont pas de pièce jointe : une photo échapperait au contrôle
+# d'anonymisation (§9.4).
 ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver", "risk", "audit", "finding", "requirement",
-                      "spill", "waste", "contamination", "complaint")
+                      "spill", "waste", "contamination", "complaint", "procedure_version", "emergency_plan", "drill")
 
 # ─── Lot 2 ────────────────────────────────────────────────────────────────
 
@@ -158,6 +167,18 @@ COMPLAINT_NATURES = [("shortage", "Manquant à la livraison"), ("quality", "Qual
                      ("other", "Autre motif")]
 COMPLAINT_SEVERITIES = [("minor", "Mineure"), ("major", "Majeure"), ("critical", "Critique")]
 COMPLAINT_STATUSES = [("received", "Reçue"), ("answered", "Répondue"), ("closed", "Close")]
+
+# Documents et urgences (§3, §9.4).
+PROCEDURE_STATUSES = [("draft", "En rédaction"), ("published", "En vigueur"), ("archived", "Archivée")]
+VERSION_STATUSES = [("draft", "Brouillon"), ("published", "En vigueur"), ("superseded", "Remplacée")]
+BULLETIN_KINDS = [("flash_alert", "Alerte flash"), ("lesson", "Retour d'expérience")]
+BULLETIN_STATUSES = [("draft", "Brouillon"), ("published", "Diffusé"), ("archived", "Archivé")]
+# Profils qu'une procédure ou une alerte peut viser.
+AUDIENCE_PROFILES = ("conducteur", "exploitation", "hsseq", "direction", "rh", "admin")
+SCENARIOS = [("spill", "Déversement"), ("fire", "Incendie"), ("road_accident", "Accident de la route"),
+             ("intrusion", "Intrusion"), ("medical", "Urgence médicale"), ("explosion", "Explosion"),
+             ("other", "Autre scénario")]
+DRILL_STATUSES = [("planned", "Planifié"), ("done", "Réalisé"), ("cancelled", "Annulé")]
 
 # Profils (codes de PROFILE_GROUPS) qui lisent toute fiche HSSEQ de leurs sociétés.
 READ_ALL = frozenset({"admin", "direction", "hsseq"})

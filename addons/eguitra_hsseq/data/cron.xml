@@ -68,4 +68,14 @@
         <!-- Chaque nuit à 03 h 20 (heure de Conakry, UTC). -->
         <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:20:00')"/>
     </record>
+    <record id="cron_read_reminders" model="ir.cron">
+        <field name="name">HSSEQ : relance des lectures non faites (procédures en vigueur, alertes diffusées)</field>
+        <field name="model_id" ref="model_eguitra_hsseq_acknowledgment"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_reminders()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque matin à 07 h 45 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:45:00')"/>
+    </record>
 </odoo>

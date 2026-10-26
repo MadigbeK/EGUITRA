@@ -2,7 +2,7 @@
 verrou de départ, dates à partir desquelles une habilitation, un dossier salarié ou un document du
 véhicule absent bloque le départ, seuils de criticité, délais d'enquête, vérification d'efficacité,
 seuil d'une action coûteuse, destinataire des notifications de la direction, cibles du cockpit ; au lot 3,
-facteur d'émission du carburant et délai de réponse aux réclamations clients."""
+facteur d'émission du carburant, délai de réponse aux réclamations clients, relance des lectures."""
 
 from datetime import timedelta
 
@@ -97,6 +97,12 @@ class EguitraHsseqSettings(models.Model):
                                    "gazole par défaut.")
     complaint_response_days = fields.Integer("Réponse à une réclamation client sous (jours)", default=15)
 
+    # ─── Documents et urgences (lot 3) ────────────────────────────────────
+    read_reminder_days = fields.Integer(
+        "Relance des lectures non faites tous les (jours)", default=7,
+        help="Procédure en vigueur ou alerte diffusée : les comptes visés qui ne l'ont pas lue sont relancés à "
+             "cet intervalle.")
+
     # ─── Cockpit (§10) ────────────────────────────────────────────────────
     targets = fields.Json("Cibles des indicateurs", help="Code de l'indicateur -> cible ; à défaut, la cible proposée.")
 
@@ -108,11 +114,12 @@ class EguitraHsseqSettings(models.Model):
             if not (0 <= s.night_start_hour < 24 and 0 <= s.night_end_hour < 24) or s.max_driving_hours < 0:
                 raise ValidationError("Heures de nuit entre 0 et 24, durée de conduite positive.")
 
-    @api.constrains("co2_factor", "complaint_response_days")
+    @api.constrains("co2_factor", "complaint_response_days", "read_reminder_days")
     def _check_lot3(self):
         for s in self:
-            if s.co2_factor <= 0 or s.complaint_response_days < 1:
-                raise ValidationError("Facteur d'émission positif ; délai de réponse d'au moins un jour.")
+            if s.co2_factor <= 0 or s.complaint_response_days < 1 or s.read_reminder_days < 1:
+                raise ValidationError("Facteur d'émission positif ; délai de réponse et intervalle de relance d'au "
+                                      "moins un jour.")
 
     @api.constrains("level_moderate_min", "level_significant_min", "level_high_min")
     def _check_levels(self):

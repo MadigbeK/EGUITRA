@@ -19,7 +19,9 @@ AUDITED_MODELS = [
     "eguitra.hsseq.report.month", "eguitra.hsseq.report.value",
     # Lot 3.
     "eguitra.hsseq.spill", "eguitra.hsseq.waste", "eguitra.hsseq.dust", "eguitra.hsseq.contamination",
-    "eguitra.hsseq.complaint",
+    "eguitra.hsseq.complaint", "eguitra.hsseq.procedure", "eguitra.hsseq.procedure.version",
+    "eguitra.hsseq.acknowledgment", "eguitra.hsseq.bulletin", "eguitra.hsseq.emergency.plan", "eguitra.hsseq.drill",
+    "eguitra.hsseq.crisis.contact",
 ]
 
 

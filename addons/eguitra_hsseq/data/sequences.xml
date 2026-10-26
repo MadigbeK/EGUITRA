@@ -78,4 +78,32 @@
         <field name="padding">4</field>
         <field name="company_id" eval="False"/>
     </record>
+    <record id="seq_bulletin_flash" model="ir.sequence">
+        <field name="name">Alertes flash HSSEQ</field>
+        <field name="code">eguitra.hsseq.bulletin.flash_alert</field>
+        <field name="prefix">ALF/%(year)s/</field>
+        <field name="padding">3</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_bulletin_lesson" model="ir.sequence">
+        <field name="name">Retours d'expérience HSSEQ</field>
+        <field name="code">eguitra.hsseq.bulletin.lesson</field>
+        <field name="prefix">REX/%(year)s/</field>
+        <field name="padding">3</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_emergency_plan" model="ir.sequence">
+        <field name="name">Plans d'intervention d'urgence HSSEQ</field>
+        <field name="code">eguitra.hsseq.emergency.plan</field>
+        <field name="prefix">PIU/</field>
+        <field name="padding">3</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_drill" model="ir.sequence">
+        <field name="name">Exercices d'urgence HSSEQ</field>
+        <field name="code">eguitra.hsseq.drill</field>
+        <field name="prefix">EXE/%(year)s/</field>
+        <field name="padding">3</field>
+        <field name="company_id" eval="False"/>
+    </record>
 </odoo>

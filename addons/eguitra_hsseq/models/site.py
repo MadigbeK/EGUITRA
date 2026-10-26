@@ -68,6 +68,22 @@ class ResUsers(models.Model):
         self.ensure_one()
         return self.env["eguitra.hsseq.site"].sudo().search([("manager_ids", "in", self.ids)])
 
+    def _hsseq_audience_sites(self):
+        """Sites auxquels se rapporte le compte pour les documents qui le visent (procédures, alertes,
+        annuaire de crise) : None pour un profil de lecture complète (tous les sites) ; sinon ceux du chef
+        de parc, de l'ensemble du conducteur et du périmètre de l'auditeur (vide : aucun site)."""
+        self.ensure_one()
+        user = self.sudo()
+        if set(user._eguitra_profiles()) & {"admin", "direction", "hsseq"}:
+            return None
+        sites = user._hsseq_site_ids()
+        driver = user._hsseq_driver()
+        if driver:
+            sites |= self.env["eguitra.transport.vehicle"].sudo().search([("driver_id", "=", driver.id)]).site_id
+        if user.has_group("eguitra_base.group_profile_auditeur"):
+            sites |= user.hsseq_audit_site_ids
+        return sites
+
     def _hsseq_employee(self):
         """Dossier salarié en cours du compte (RH), celui de la société de travail en priorité."""
         self.ensure_one()

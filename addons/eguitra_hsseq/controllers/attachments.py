@@ -13,7 +13,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
 from ..models.common import ATTACHMENT_OBJECTS, OBJECT_MODELS
-from . import actions, audits, checks, environment, events, risks, waivers
+from . import actions, audits, checks, documents, environment, events, risks, waivers
 from .common import (
     client_uuid,
     existing_by_uuid,
@@ -33,9 +33,9 @@ FORMATS = {"image/jpeg", "image/png", "application/pdf"}
 # Dépôt sans fiche (avant le formulaire) : comptes des profils de l'application.
 UPLOADERS = {"admin", "direction", "hsseq", "exploitation", "conducteur"}
 MODELS = {key: OBJECT_MODELS[key] for key in ATTACHMENT_OBJECTS}
-# Rôle d'une pièce déposée sur une fiche : preuve, document (bordereau) ou photo.
-EVIDENCE_OBJECTS = ("action", "audit", "finding", "requirement", "risk")
-DOCUMENT_OBJECTS = ("waste", "complaint")
+# Rôle d'une pièce déposée sur une fiche : preuve, document (bordereau, procédure, plan) ou photo.
+EVIDENCE_OBJECTS = ("action", "audit", "finding", "requirement", "risk", "drill")
+DOCUMENT_OBJECTS = ("waste", "procedure_version", "emergency_plan", "complaint")
 
 
 def closed(object_key, record):
@@ -51,6 +51,8 @@ def closed(object_key, record):
             "waste": record.status == "collected" if object_key == "waste" else False,
             "contamination": record.status == "closed" if object_key == "contamination" else False,
             "complaint": record.status == "closed" if object_key == "complaint" else False,
+            "procedure_version": record.status != "draft" if object_key == "procedure_version" else False,
+            "drill": record.status == "cancelled" if object_key == "drill" else False,
             }.get(object_key, False)
 
 
@@ -64,7 +66,10 @@ def can_read(object_key, record):
                "spill": lambda r: reads(environment.ENV_READ) and audits.in_scope(r.site_id),
                "waste": lambda r: reads(environment.ENV_READ) and audits.in_scope(r.site_id),
                "contamination": lambda r: reads(environment.QUALITY_READ) and audits.in_scope(r.site_id),
-               "complaint": lambda r: reads(environment.QUALITY_READ) and audits.in_scope(r.site_id)}
+               "complaint": lambda r: reads(environment.QUALITY_READ) and audits.in_scope(r.site_id),
+               "procedure_version": documents.can_read_version,
+               "emergency_plan": lambda r: reads(documents.PLAN_READ) and audits.in_scope(r.site_id),
+               "drill": lambda r: reads(documents.PLAN_READ) and audits.in_scope(r.site_id)}
     return object_key in readers and readers[object_key](record)
 
 

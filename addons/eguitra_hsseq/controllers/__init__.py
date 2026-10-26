@@ -12,5 +12,6 @@ from . import journeys
 from . import audits
 from . import reports
 from . import environment
+from . import documents
 from . import attachments
 from . import cockpit
