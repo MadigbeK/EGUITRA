@@ -47,16 +47,17 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
 
 function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
   const [tab, setTab] = useState<Tab>("synthese");
-  // Nouvelle révision et état du dossier : profil cabinet seul (POST /axispro/dossiers/<id>/new-revision,
-  // PATCH /axispro/dossiers/<id>) ; la direction et l'administration consultent.
-  const { cabinet } = useCabinet();
+  // État du dossier : profil cabinet (PATCH /axispro/dossiers/<id>). Nouvelle révision : associé du cabinet
+  // ou direction, autre que celui qui a verrouillé (POST /axispro/dossiers/<id>/new-revision, décision du
+  // gérant du 22 octobre 2026). L'administration consulte.
+  const { cabinet, scelle } = useCabinet();
   const { envoyer, enCours, occupe, bandeau } = useRetour();
   const s = d.scoring;
   const etat = ETAT_DOSSIER[d.state];
 
   async function nouvelleRevision() {
     const oui = await demanderConfirmation(
-      "Ouvrir une nouvelle révision ? La décision scellée reste au dossier, mais le dossier redevient modifiable : une nouvelle décision du comité, par au moins deux personnes, sera nécessaire. Celui qui a verrouillé la décision en vigueur ne peut pas l'ouvrir.",
+      "Ouvrir une nouvelle révision ? La décision scellée reste au dossier, mais le dossier redevient modifiable : une nouvelle décision du comité, par au moins deux personnes, sera nécessaire. Celui qui a verrouillé la décision en vigueur ne peut pas l'ouvrir : un autre associé du cabinet, ou la direction, le fait.",
       { titre: "Ouvrir une nouvelle révision", action: "Ouvrir la révision", danger: true },
     );
     if (!oui) return;
@@ -153,8 +154,8 @@ function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
                 Décision <b>{RECO[d.locked_review.decision]?.label ?? d.locked_review.decision}</b> du {fmtDate(d.locked_review.date)} scellée par {d.locked_review.locked_by ?? "le cabinet"} (révision {d.revision}) : évaluation, fiche, hypothèses et modèle financier sont figés.
                 {d.locked_review.fingerprint && <span className="ml-1 font-mono text-[11.5px]">Empreinte {d.locked_review.fingerprint.slice(0, 16)}…</span>}
               </span>
-              {/* Nouvelle révision : profil cabinet seul (POST /axispro/dossiers/<id>/new-revision). */}
-              {cabinet && <Button className="ml-auto" loading={enCours === "revision"} disabled={occupe} onClick={() => void nouvelleRevision()}><RotateCcw className="h-4 w-4" /> Ouvrir une nouvelle révision</Button>}
+              {/* Nouvelle révision : associé du cabinet ou direction (POST /axispro/dossiers/<id>/new-revision). */}
+              {scelle && <Button className="ml-auto" loading={enCours === "revision"} disabled={occupe} onClick={() => void nouvelleRevision()}><RotateCcw className="h-4 w-4" /> Ouvrir une nouvelle révision</Button>}
             </span>
           </Notice>
         </div>

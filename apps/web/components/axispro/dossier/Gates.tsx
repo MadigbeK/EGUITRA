@@ -16,8 +16,10 @@ import { RULE_LABELS, useCabinet, useRetour } from "./commun";
  */
 export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const { bandeau, setRetour } = useRetour();
-  // Passage de gate, forcé ou non : profil cabinet seul (POST /axispro/dossiers/<id>/advance-gate).
-  const { cabinet } = useCabinet();
+  // Passage de gate selon la règle : profil cabinet ; passage forcé : associé du cabinet ou direction
+  // (POST /axispro/dossiers/<id>/advance-gate avec force_reason, décision du gérant du 22 octobre 2026),
+  // toujours à deux personnes au moins.
+  const { cabinet, scelle } = useCabinet();
   const [force, setForce] = useState<string | null>(null);
   const [motif, setMotif] = useState("");
   // Refus d'un passage forcé (quatre yeux : 403 « une décision du comité engage au moins deux
@@ -26,6 +28,9 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
   const gates = d.scoring.gates;
   const courant = gates.findIndex((g) => g.code === d.current_gate?.code);
   const dernier = courant >= gates.length - 1;
+  // Gate courant que sa règle ne laisse pas franchir : seul un passage forcé le permet.
+  const gateCourant = courant >= 0 ? gates[courant] : undefined;
+  const bloque = Boolean(gateCourant && gateCourant.decision !== "go" && gateCourant.decision !== "conditional");
   // DSCR retenu par la règle de bancabilité : modèle financier, à défaut celui déclaré dans la fiche.
   const dscr = d.financial?.dscr_min ?? d.decision_inputs.dscr_manual ?? null;
   const { no_go: nogo, go, conditional, hold } = GATE_DECISION;
@@ -55,7 +60,8 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
         setRetour({ tone: "warn", text });
         onChanged();
       } else if (reason) setRefusForce(text);
-      else if (e instanceof ApiError && e.status === 422 && !d.locked) setForce(text);
+      else if (e instanceof ApiError && e.status === 422 && !d.locked && scelle) setForce(text);
+      else if (e instanceof ApiError && e.status === 422 && !d.locked) setRetour({ tone: "warn", text: `${text} Seul un associé du cabinet ou la direction peut forcer ce passage, motif à l'appui.` });
       else setRetour({ tone: "danger", text });
     } finally {
       envoi.current = false;
@@ -75,11 +81,16 @@ export function Gates({ d, onChanged }: { d: DossierDetail; onChanged: () => voi
       <Card
         title="Parcours du dossier"
         actions={
-          !dernier && cabinet && (
+          !dernier && cabinet ? (
             <Button variant="primary" loading={enCours === "passer"} disabled={d.locked || d.state === "closed" || enCours !== null} onClick={() => void passer()}>
               Passer au gate suivant <ArrowRight className="h-4 w-4" />
             </Button>
-          )
+          ) : !dernier && scelle && bloque ? (
+            // Direction sans profil cabinet : elle ne fait que forcer un passage que la règle refuse.
+            <Button variant="danger" disabled={d.locked || d.state === "closed" || enCours !== null} onClick={() => setForce(`Gate ${gateCourant?.code} : ${GATE_DECISION[gateCourant!.decision].label}. ${gateCourant!.motifs.join(" ")}`)}>
+              Forcer le passage <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : undefined
         }
       >
         <ol className="flex flex-wrap gap-2">

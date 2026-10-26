@@ -98,10 +98,11 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
   const [edition, setEdition] = useState<Review | null>(null);
   const { data: diff } = useApi<Diff>(compare.length === 2 ? `/axispro/reviews/compare?a=${compare[0]}&b=${compare[1]}` : null);
   const { agir, envoyer, enCours, occupe, bandeau, setRetour } = useRetour();
-  // Revue, correction d'un brouillon et verrouillage : profil cabinet seul (POST /axispro/dossiers/<id>/reviews,
-  // PATCH /axispro/reviews/<id>, POST /axispro/reviews/<id>/lock) ; la direction et l'administration
-  // consultent, comparent et vérifient les empreintes.
-  const { cabinet } = useCabinet();
+  // Revue et correction d'un brouillon : profil cabinet (POST /axispro/dossiers/<id>/reviews, PATCH
+  // /axispro/reviews/<id>). Sceau : associé du cabinet ou direction (POST /axispro/reviews/<id>/lock,
+  // décision du gérant du 22 octobre 2026), toujours à deux personnes. L'administration consulte,
+  // compare et vérifie les empreintes.
+  const { cabinet, scelle } = useCabinet();
   const devise = d.currency?.name ?? "GNF";
   // Le retour (dont le refus des quatre yeux, 403 « une décision du comité engage au moins deux
   // personnes… ») s'affiche près de la commande : au-dessus du formulaire pour une nouvelle revue,
@@ -138,8 +139,9 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
   async function verrouiller(r: Review) {
     setDepuisHistorique(true);
     if (motifManquant(saisieDe(r))) {
-      setRetour({ tone: "danger", text: "Motivez ce HOLD ou ce NO-GO avant de le verrouiller : corrigez le brouillon." });
-      setEdition(r);
+      // La correction du brouillon relève du cabinet : elle s'ouvre pour lui, la direction le demande.
+      setRetour({ tone: "danger", text: cabinet ? "Motivez ce HOLD ou ce NO-GO avant de le verrouiller : corrigez le brouillon." : "Ce HOLD ou ce NO-GO n'est pas motivé : demandez au cabinet de compléter le brouillon avant de le sceller." });
+      if (cabinet) setEdition(r);
       return;
     }
     if (!(await demanderConfirmation(QUESTION_SCEAU, { titre: "Sceller et verrouiller la décision", action: "Sceller et verrouiller", danger: true }))) return;
@@ -164,7 +166,7 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
           <ChampsRevue f={f} setF={setF} disabled={occupe} />
           <div className="mt-3 flex flex-wrap gap-2">
             <Button loading={enCours === "brouillon"} disabled={occupe || motifManquant(f)} onClick={() => void create(false)}>Enregistrer en brouillon</Button>
-            <Button variant="primary" loading={enCours === "sceller"} disabled={occupe || Boolean(d.locked_review) || motifManquant(f)} onClick={() => void create(true)}><Lock className="h-4 w-4" /> Enregistrer, sceller et verrouiller</Button>
+            {scelle && <Button variant="primary" loading={enCours === "sceller"} disabled={occupe || Boolean(d.locked_review) || motifManquant(f)} onClick={() => void create(true)}><Lock className="h-4 w-4" /> Enregistrer, sceller et verrouiller</Button>}
           </div>
         </Card>
       )}
@@ -187,11 +189,11 @@ export function Comites({ d, onChanged }: { d: DossierDetail; onChanged: () => v
               <Badge tone="ok"><Lock className="mr-1 h-3 w-3" />Scellée</Badge>
               {r.fingerprint && <Button size="sm" title={`Empreinte ${r.fingerprint}`} disabled={occupe} onClick={() => void verifier(r.id)}><ShieldCheck className="h-3.5 w-3.5" /> Vérifier</Button>}
             </div>
-          ) : cabinet ? (
+          ) : cabinet || scelle ? (
             <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
               <Badge>Brouillon</Badge>
-              <Button size="sm" disabled={occupe} onClick={() => setEdition(r)}><Pencil className="h-3.5 w-3.5" /> Modifier</Button>
-              <Button size="sm" loading={enCours === `verrou-${r.id}`} disabled={occupe || Boolean(d.locked_review) || d.state === "closed"} onClick={() => void verrouiller(r)}><Lock className="h-3.5 w-3.5" /> Verrouiller</Button>
+              {cabinet && <Button size="sm" disabled={occupe} onClick={() => setEdition(r)}><Pencil className="h-3.5 w-3.5" /> Modifier</Button>}
+              {scelle && <Button size="sm" loading={enCours === `verrou-${r.id}`} disabled={occupe || Boolean(d.locked_review) || d.state === "closed"} onClick={() => void verrouiller(r)}><Lock className="h-3.5 w-3.5" /> Verrouiller</Button>}
             </div>
           ) : (
             <Badge>Brouillon</Badge>
