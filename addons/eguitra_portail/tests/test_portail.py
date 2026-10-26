@@ -520,6 +520,26 @@ class TestPortail(ApiCase):
         self.assertNotIn(interne.id, ids, "Les actions du cabinet restent internes")
         self.assertNotIn(autre.id, ids, "Ni celles d'un autre dossier")
 
+    def test_decision_notifiee_a_chaque_verrou(self):
+        """Audit du noyau (I-P1) : la décision du comité est notifiée au porteur à chaque verrouillage,
+        même identique à la précédente, et un ajournement l'est aussi ; une seule notification par verrou."""
+        Review = self.env["axispro.review"]
+
+        def sceller(decision, **extra):
+            review = Review.create(dict({"dossier_id": self.dossier_a.id, "decision": decision}, **extra))
+            review.action_lock()
+            return self.notifications(self.porteur_a).filtered(lambda n: n.kind == "decision")
+
+        self.assertEqual(len(sceller("go")), 1)
+        self.dossier_a.action_new_revision()
+        decisions = sceller("go")
+        self.assertEqual(len(decisions), 2, "Même décision qu'à la révision précédente : notifiée")
+        self.dossier_a.action_new_revision()
+        decisions = sceller("postponed")
+        self.assertEqual(len(decisions), 3)
+        self.assertEqual(decisions.sorted("id")[-1].title, "Décision du comité : Examen reporté")
+        self.assertEqual(decisions.sorted("id")[-1].link, f"/portail/projet?dossier={self.dossier_a.id}")
+
     def test_rendez_vous_annule_par_le_cabinet(self):
         """Annulation par le cabinet sans motif : le message de la confirmation ne passe pas pour le
         motif ; le porteur est prévenu par un lien qui ouvre les rendez-vous du bon dossier."""
