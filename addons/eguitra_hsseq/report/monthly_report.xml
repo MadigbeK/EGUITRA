@@ -106,7 +106,7 @@
 
     <record id="action_report_monthly" model="ir.actions.report">
         <field name="name">Rapport mensuel HSSE</field>
-        <field name="model">eguitra.hsseq.report.month</field>
+        <field name="model">eguitra.hsseq.report.template</field>
         <field name="report_type">qweb-pdf</field>
         <field name="report_name">eguitra_hsseq.report_monthly</field>
         <field name="report_file">eguitra_hsseq.report_monthly</field>

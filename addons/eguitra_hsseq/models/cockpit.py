@@ -592,3 +592,9 @@ def parse_month(value, default):
 
 def month_label(month):
     return f"{MONTHS_FR[month.month - 1]} {month.year}"
+
+
+def of_month(month):
+    """« de mars 2026 », « d'avril 2026 », « d'août 2026 », « d'octobre 2026 » : élision devant une voyelle."""
+    label = month_label(month)
+    return f"d'{label}" if label[0] in "aeiouéâ" else f"de {label}"

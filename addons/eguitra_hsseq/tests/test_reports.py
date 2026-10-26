@@ -120,6 +120,10 @@ class TestReports(HsseqCase):
     def test_gel_validation_et_reouverture(self):
         template = self._template()
         previous = month_start(self.day) - relativedelta(months=1)
+        # Le modèle commence au mois précédent (sinon ses mois antérieurs à sa création ne sont pas listés).
+        status, _b = self.api("kadi.hsseq", "PATCH", f"/hsseq/reports/templates/{template['id']}",
+                              {"start_month": f"{previous:%Y-%m}"})
+        self.assertEqual(status, 200)
         self.event(event_type="road_accident", occurred_at=previous + timedelta(days=3, hours=10))
         path = f"/hsseq/reports/{template['id']}/{previous:%Y-%m}"
         status, months = self.api("kadi.hsseq", "GET", f"/hsseq/reports?template_id={template['id']}&year={previous.year}")

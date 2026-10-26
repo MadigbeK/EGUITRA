@@ -15,10 +15,23 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, r
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, xlsx_row
 from odoo.addons.eguitra_finance.controllers.exporting import XLSX_MIME
 
-from ..models.cockpit import MONTHS_FR, month_label
-from ..models.common import AGGREGATIONS, INDICATOR_STATUSES, REPORT_MODES, REPORT_NATURES
+from ..models.cockpit import MONTHS_FR, month_label, month_start
+from ..models.common import AGGREGATIONS, INDICATOR_STATUSES, REPORT_MODES, REPORT_NATURES, VEHICLE_KINDS, fr_number
 from ..models.report import REPORT_KEYS
-from .common import CONFIG, HSSEQ, companies, company_ref, history, hsseq_route, int_or_none, is_hsseq, text
+from .common import (
+    CONFIG,
+    HSSEQ,
+    companies,
+    company_ref,
+    get,
+    history,
+    hsseq_route,
+    ids_list,
+    int_or_none,
+    is_hsseq,
+    site_ref,
+    text,
+)
 
 REPORT_READ = ("admin", "direction", "hsseq")
 STATUS_LABELS = dict(INDICATOR_STATUSES)
@@ -56,6 +69,8 @@ def template_row(template, detail=False):
                                                                     "name": template.partner_id.name}
            if template.partner_id else None, "client_label": template.client_label or None,
            "compliant_ratio": template.compliant_ratio, "watch_ratio": template.watch_ratio, "active": template.active,
+           "sites": [site_ref(s) for s in template.site_ids], "vehicle_kind": template.vehicle_kind or None,
+           "start_month": template.start_month.strftime("%Y-%m"),
            "indicators_count": len(template._indicators()),
            "rights": {"can_edit": "admin" in request.env.user._eguitra_profiles() or is_hsseq(), "can_close": False,
                       "can_approve": False}}
@@ -133,7 +148,27 @@ def template_values(data):
                 raise ApiError(400, "invalid_parameter", f"Valeur invalide : {key}.", fields=[key]) from e
     if "active" in data:
         values["active"] = bool(data["active"])
+    if "site_ids" in data:
+        sites = request.env["eguitra.hsseq.site"].sudo().browse(ids_list(data, "site_ids")).exists()
+        for site in sites:
+            get("eguitra.hsseq.site", site.id, "Site")
+        values["site_ids"] = [(6, 0, sites.ids)]
+    if "vehicle_kind" in data:
+        if data["vehicle_kind"] and data["vehicle_kind"] not in dict(VEHICLE_KINDS):
+            raise ApiError(400, "invalid_parameter", "Profil de véhicule : tanker ou tipper.", fields=["vehicle_kind"])
+        values["vehicle_kind"] = data["vehicle_kind"] or False
+    if "start_month" in data:
+        values["start_month"] = parse_month(data["start_month"]) if data["start_month"] else month_start(today())
     return values
+
+
+def entry_text(known, value, comment, unit):
+    """Saisie d'un indicateur pour le journal : « valeur 1,5 litres, commentaire « … » » ou « sans valeur »."""
+    parts = [f"valeur {fr_number(value, 4, trim=True)}{f' {unit}' if unit and unit != 'nbre' else ''}"
+             if known else "sans valeur"]
+    if comment:
+        parts.append(f"commentaire « {comment} »")
+    return ", ".join(parts)
 
 
 def save_indicators(template, rows):
@@ -217,7 +252,7 @@ def month_payload(template, company, month):
 def fmt_value(value, unit):
     if value is None:
         return ""
-    text_value = f"{value:,.2f}".replace(",", " ").replace(".", ",").rstrip("0").rstrip(",")
+    text_value = fr_number(value, 2, trim=True)
     return f"{text_value} {unit}" if unit and unit not in ("nbre",) else text_value
 
 
@@ -395,11 +430,14 @@ class EguitraHsseqReports(http.Controller):
         template = get_template(int_or_none(kw, "template_id"))
         company = report_company(template, kw)
         year = int_or_none(kw, "year") or today().year
-        last = 12 if year < today().year else today().month
+        # Ni année à venir, ni mois antérieurs au premier mois du modèle.
+        last = 0 if year > today().year else 12 if year < today().year else today().month
         Month = request.env["eguitra.hsseq.report.month"]
         rows = []
         for m in range(1, last + 1):
             month = date(year, m, 1)
+            if month < template.start_month:
+                continue
             record = Month._get(template, company, month, create=False)
             rows.append({"month": month.strftime("%Y-%m"), "label": month_label(month),
                          "state": record.state if record else "draft", "frozen": bool(record and record.frozen_on),
@@ -447,11 +485,12 @@ class EguitraHsseqReports(http.Controller):
                                    fields=["values"]) from e
             if "comment" in item:
                 values["comment"] = text(item, "comment", 2000)
-            before = (row.manual_value if row.manual_known else None, row.comment or None)
+            before = entry_text(row.manual_known, row.manual_value, row.comment, indicator.unit)
             row.write(values)
-            request.env["eguitra.hsseq.journal"]._log("report", record, "write", field=indicator.code,
-                                                      old=str(before), new=str((row.manual_value if row.manual_known
-                                                                                else None, row.comment or None)))
+            after = entry_text(row.manual_known, row.manual_value, row.comment, indicator.unit)
+            if after != before:
+                request.env["eguitra.hsseq.journal"]._log("report", record, "write", field=indicator.code,
+                                                          old=before, new=after)
         if "comment" in data:
             record.write({"comment": text(data, "comment", 4000)})
         return month_payload(template, company, month)
@@ -461,13 +500,16 @@ class EguitraHsseqReports(http.Controller):
     def transition(self, template_id, month, transition, **kw):
         data = read_json()
         template, company, month = self._month(template_id, month, dict(kw, **{"company_id": data.get("company_id")}))
-        record = request.env["eguitra.hsseq.report.month"]._get(template, company, month)
+        if transition not in ("validate", "reopen"):
+            raise ApiError(404, "not_found", "Transition inconnue.")
+        # La validation crée le mois du rapport s'il n'existe pas ; la réouverture n'en crée jamais.
+        record = request.env["eguitra.hsseq.report.month"]._get(template, company, month, create=transition == "validate")
         if transition == "validate":
             record.action_validate()
-        elif transition == "reopen":
-            record.action_reopen(data.get("reason"))
+        elif not record:
+            raise ApiError(422, "invalid_transition", "Seul un mois validé se rouvre.")
         else:
-            raise ApiError(404, "not_found", "Transition inconnue.")
+            record.action_reopen(data.get("reason"))
         return month_payload(template, company, month)
 
     @hsseq_route("/hsseq/reports/<int:template_id>/<string:month>/report.xlsx", profiles=REPORT_READ)
@@ -483,9 +525,9 @@ class EguitraHsseqReports(http.Controller):
     def pdf(self, template_id, month, **kw):
         template, company, month = self._month(template_id, month, kw)
         payload = month_payload(template, company, month)
-        record = request.env["eguitra.hsseq.report.month"]._get(template, company, month)
+        # Rendu sur le modèle : la lecture du PDF ne crée ni le mois du rapport ni de ligne de journal.
         pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf(
-            "eguitra_hsseq.action_report_monthly", record.ids, data={"report": pdf_context(payload)})
+            "eguitra_hsseq.action_report_monthly", template.ids, data={"report": pdf_context(payload)})
         name = f"rapport_hsse_{(template.code or template.id)}_{month:%Y_%m}".replace("/", "-").replace(" ", "_")
         return request.make_response(pdf, headers=[("Content-Type", "application/pdf"),
                                                    ("Content-Disposition", content_disposition(f"{name}.pdf"))])

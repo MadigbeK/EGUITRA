@@ -159,3 +159,64 @@ class TestCorrections(HsseqCase):
         status, later = self.api("kadi.hsseq", "GET",
                                  f"/hsseq/qualifications/alerts?expires_from={self.day + timedelta(days=60)}")
         self.assertEqual(later, [], "Filtre de date d'expiration")
+
+    def test_rapport_mensuel_lectures_journal_perimetre_et_mois(self):
+        """Élision française ; ni le PDF ni les lectures ne créent de mois ni de ligne de journal ; journal
+        d'une saisie en texte ; valeurs calculées bornées au site et au profil de véhicule du modèle ; ni année
+        à venir ni mois antérieurs au premier mois du modèle."""
+        from datetime import date
+
+        from dateutil.relativedelta import relativedelta
+
+        from ..models.cockpit import month_start, of_month
+        from ..models.common import fr_number
+
+        self.assertEqual([of_month(date(2026, m, 1)) for m in (3, 4, 8, 10)],
+                         ["de mars 2026", "d'avril 2026", "d'août 2026", "d'octobre 2026"])
+        self.assertEqual((fr_number(1234.5), fr_number(47.8, 3), fr_number(12.0, 2, trim=True)),
+                         ("1\u202f234,50", "47,800", "12"))
+        status, template = self.api("kadi.hsseq", "POST", "/hsseq/reports/templates", {
+            "name": "Rapport d'un donneur d'ordre minier (fictif)", "vehicle_kind": "tipper", "indicators": [
+                {"code": "B-1", "label": "Départs", "nature": "reactive", "mode": "computed", "key": "departures"},
+                {"code": "B-2", "label": "Déversements (litres)", "nature": "reactive", "mode": "manual",
+                 "unit": "litres", "direction": "down", "aggregation": "sum"}]})
+        self.assertEqual((status, template["vehicle_kind"], template["start_month"]),
+                         (200, "tipper", f"{self.day:%Y-%m}"), template)
+        tipper = self.env["eguitra.transport.vehicle"].create({"name": "BN-09", "vehicle_kind": "tipper",
+                                                               "payload_tonnes": 30, "site_id": self.site2.id})
+        for vehicle in (self.truck, tipper):
+            self._rotation(vehicle_id=vehicle.id).write({"state": "done"})
+        Month = self.env["eguitra.hsseq.report.month"]
+        Journal = self.env["eguitra.hsseq.journal"]
+        journal_before = Journal.search_count([("model", "=", "report")])
+        path = f"/hsseq/reports/{template['id']}/{self.day:%Y-%m}"
+        status, report = self.api("dg.hsseq", "GET", path)
+        rows = {i["code"]: i for i in report["indicators"]}
+        self.assertEqual(rows["B-1"]["value"], 1, "Départs des seules bennes")
+        token = self.token("dg.hsseq")
+        self.env.flush_all()
+        response = self.url_open(f"/api/v1{path}/report.pdf", headers={"Authorization": f"Bearer {token}",
+                                                                        "X-Eguitra-App": "test"}, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        self.env.invalidate_all()
+        self.assertFalse(Month.search_count([("template_id", "=", template["id"])]), "Lecture et PDF : aucun mois créé")
+        self.assertEqual(Journal.search_count([("model", "=", "report")]), journal_before, "Aucune ligne de journal")
+        status, body = self.api("kadi.hsseq", "POST", f"{path}/reopen", {"reason": "x"})
+        self.assertEqual((status, body["error"]), (422, "invalid_transition"))
+        self.assertFalse(Month.search_count([("template_id", "=", template["id"])]), "Réouverture : aucun mois créé")
+        status, report = self.api("kadi.hsseq", "PATCH", path, {"values": [
+            {"indicator_id": rows["B-2"]["id"], "value": 1.5, "comment": "Fuite au quai"}]})
+        self.assertEqual(status, 200, report)
+        entry = Journal.search([("model", "=", "report"), ("field", "=", "B-2")], limit=1)
+        self.assertEqual((entry.old_value, entry.new_value),
+                         ("sans valeur", "valeur 1,5 litres, commentaire « Fuite au quai »"))
+        status, report = self.api("kadi.hsseq", "PATCH", f"/hsseq/reports/templates/{template['id']}",
+                                  {"vehicle_kind": None, "site_ids": [self.site.id]})
+        status, report = self.api("dg.hsseq", "GET", path)
+        rows = {i["code"]: i for i in report["indicators"]}
+        self.assertEqual(rows["B-1"]["value"], 1, "Départs du seul site du modèle (la citerne de Matoto)")
+        previous = month_start(self.day) - relativedelta(months=1)
+        status, months = self.api("kadi.hsseq", "GET", f"/hsseq/reports?template_id={template['id']}&year={previous.year}")
+        self.assertNotIn(f"{previous:%Y-%m}", [m["month"] for m in months["items"]], "Antérieur au modèle")
+        status, months = self.api("kadi.hsseq", "GET", f"/hsseq/reports?template_id={template['id']}&year={self.day.year + 1}")
+        self.assertEqual((status, months["items"]), (200, []), "Année à venir : aucun mois")

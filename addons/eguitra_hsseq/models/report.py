@@ -18,13 +18,14 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import api, fields, models
 
-from .cockpit import FAMILY, FREEZE_DAY, INDICATORS, MONTHS_FR, month_end, month_start, months_back
+from .cockpit import FAMILY, FREEZE_DAY, INDICATORS, month_end, month_start, months_back, of_month
 from .common import (
     AGGREGATIONS,
     EVENT_TYPES,
     REPORT_MODES,
     REPORT_NATURES,
     REPORT_STATES,
+    VEHICLE_KINDS,
     HsseqError,
     indicator_status,
     today,
@@ -137,13 +138,22 @@ class EguitraHsseqReportTemplate(models.Model):
     _description = "Modèle de rapport mensuel HSSE"
     _order = "name, id"
     _journal_key = "report_template"
-    _journal_fields = ("name", "client_label", "partner_id", "compliant_ratio", "watch_ratio", "active")
+    _journal_fields = ("name", "client_label", "partner_id", "company_id", "site_ids", "vehicle_kind", "start_month",
+                       "compliant_ratio", "watch_ratio", "active")
 
     name = fields.Char("Modèle", required=True)
     code = fields.Char("Code", index=True, copy=False, help="NIMOVA : le rapport mensuel HSSEQ fourni par le module.")
     company_id = fields.Many2one("res.company", "Société", index=True, help="Vide : les deux sociétés.")
     partner_id = fields.Many2one("res.partner", "Donneur d'ordre")
     client_label = fields.Char("Donneur d'ordre (libellé du rapport)")
+    # Périmètre des valeurs calculées : sites et profil de véhicule (vides : toute la société).
+    site_ids = fields.Many2many("eguitra.hsseq.site", "eguitra_hsseq_report_template_site_rel", "template_id",
+                                "site_id", "Sites du rapport", help="Vide : tous les sites de la société.")
+    vehicle_kind = fields.Selection(VEHICLE_KINDS, "Profil de véhicule du rapport",
+                                    help="Vide : citernes et bennes (le rapport d'un donneur d'ordre minier : bennes).")
+    start_month = fields.Date("Premier mois du rapport", required=True,
+                              default=lambda self: month_start(fields.Date.context_today(self)),
+                              help="Les mois antérieurs ne sont pas listés.")
     compliant_ratio = fields.Float("Conforme à partir de (part de la cible)", default=0.95)
     watch_ratio = fields.Float("Sous surveillance à partir de (part de la cible)", default=0.85)
     indicator_ids = fields.One2many("eguitra.hsseq.report.indicator", "template_id", "Indicateurs",
@@ -276,7 +286,9 @@ class EguitraHsseqReportMonth(models.Model):
     def _freeze(self):
         """Valeurs calculées du mois enregistrées (le 5 du mois suivant, ou à la validation si plus tard)."""
         for report in self.filtered(lambda r: not r.frozen_on):
-            computed = self.env["eguitra.hsseq.report.template"]._computed_values(report.company_id, report.month)
+            template = report.template_id
+            computed = template._computed_values(report.company_id, report.month, sites=template._scope_sites(),
+                                                 kind=template.vehicle_kind or None)
             for indicator in report.template_id._indicators().filtered(lambda i: i.mode == "computed"):
                 value = computed.get(indicator.key)
                 row = report._value(indicator) or self.env["eguitra.hsseq.report.value"].sudo().create(
@@ -293,8 +305,7 @@ class EguitraHsseqReportMonth(models.Model):
             raise HsseqError("invalid_transition", "Ce mois du rapport est déjà validé.")
         if not self.frozen_on:
             if today(self.env) < self._freeze_date(self.month):
-                raise HsseqError("month_not_frozen", f"Les valeurs de {MONTHS_FR[self.month.month - 1]} "
-                                                     f"{self.month.year} se figent le "
+                raise HsseqError("month_not_frozen", f"Les valeurs {of_month(self.month)} se figent le "
                                                      f"{self._freeze_date(self.month):%d/%m/%Y} : validation à partir "
                                                      f"de cette date.")
             self._freeze()
@@ -350,42 +361,50 @@ class EguitraHsseqReportTemplateCompute(models.Model):
 
     # ─── Valeurs calculées ────────────────────────────────────────────────
 
+    def _scope_sites(self):
+        """Sites du périmètre du modèle (None : toute la société)."""
+        self.ensure_one()
+        return self.site_ids or None
+
     @api.model
-    def _computed_values(self, company, month, comps=None):
-        """Valeurs du catalogue pour un mois et une société : indicateurs du cockpit (fenêtre de douze mois
-        pour les taux glissants), nombres du mois, situations de fin de mois (état du jour pour le mois en
-        cours ou tout juste clos). comps : composantes du cockpit déjà lues (figées ou recalculées)."""
+    def _computed_values(self, company, month, comps=None, sites=None, kind=None):
+        """Valeurs du catalogue pour un mois et une société, bornées si besoin à des sites et à un profil de
+        véhicule : indicateurs du cockpit (fenêtre de douze mois pour les taux glissants), nombres du mois,
+        situations de fin de mois (état du jour pour le mois en cours ou tout juste clos). comps : composantes
+        du cockpit déjà lues (figées ou recalculées) pour le même périmètre."""
         Cockpit = self.env["eguitra.hsseq.cockpit"]
         window = months_back(month, 12)
         if comps is None:
-            comps, _frozen = Cockpit._components(company, window)
+            comps, _frozen = Cockpit._components(company, window, sites, kind)
         month_total = Cockpit._sum(comps, company, [month])
         rolling_total = Cockpit._sum(comps, company, window)
         if month == month_start(today(self.env)):
-            drivers, valid = Cockpit._qualifications(company)
+            drivers, valid = Cockpit._qualifications(company, sites)
             month_total["drivers"], month_total["drivers_valid"] = drivers, valid
             rolling_total["drivers"], rolling_total["drivers_valid"] = drivers, valid
         values = {}
         for key, spec in REPORT_KEYS.items():
             if spec["kind"] == "cockpit":
                 rolling = next(row[6] for row in INDICATORS if row[0] == key)
-                values[key] = Cockpit._value(key, rolling_total if rolling else month_total)
+                values[key] = Cockpit._value(key, rolling_total if rolling else month_total, kind)
             elif spec["kind"] == "component":
                 values[key] = month_total.get(spec["component"]) or 0.0
-        values.update(self._state_values(company, month))
+        values.update(self._state_values(company, month, sites))
         return values
 
     @api.model
-    def _state_values(self, company, month):
+    def _state_values(self, company, month, sites=None):
         """Situations de fin de mois, connues pour le mois en cours ou le mois tout juste clos (pas encore
-        figé) ; pour un mois plus ancien non figé, pas de donnée."""
+        figé) ; pour un mois plus ancien non figé, pas de donnée. Bornées aux sites donnés (les exigences,
+        sans site, restent celles de la société)."""
         day = today(self.env)
         current = month_start(day)
         if month not in (current, current - relativedelta(months=1)):
             return dict.fromkeys((k for k, s in REPORT_KEYS.items() if s["kind"] == "state"), None)
         env = self.env
         end = min(month_end(month), day)
-        base = [("company_id", "=", company.id)]
+        company_base = [("company_id", "=", company.id)]
+        base = company_base + ([("site_id", "in", sites.ids)] if sites else [])
         return {
             "risk_reviews_overdue": env["eguitra.hsseq.risk"].sudo().search_count(
                 base + [("status", "=", "active"), ("review_date", "<", end)]),
@@ -393,8 +412,8 @@ class EguitraHsseqReportTemplateCompute(models.Model):
                 base + [("status", "=", "active"), ("residual_level", "=", "high")]),
             "findings_open": env["eguitra.hsseq.finding"].sudo().search_count(base + [("status", "=", "open")]),
             "requirements_non_compliant": env["eguitra.hsseq.requirement"].sudo().search_count(
-                base + [("status", "=", "non_compliant")]),
-            "procedures_read_rate": self._procedures_read_rate(company),
+                company_base + [("status", "=", "non_compliant")]),
+            "procedures_read_rate": self._procedures_read_rate(company, sites),
             "complaints_open": env["eguitra.hsseq.complaint"].sudo().search_count(base + [("status", "!=", "closed")]),
             "wastes_stored": env["eguitra.hsseq.waste"].sudo().search_count(base + [("status", "=", "stored")]),
         }
@@ -450,8 +469,10 @@ class EguitraHsseqReportTemplateCompute(models.Model):
                         if comps is None:
                             # Une lecture des composantes pour tous les mois de l'année et leurs fenêtres.
                             comps, _frozen = self.env["eguitra.hsseq.cockpit"]._components(
-                                company, months_back(month, 11 + month.month))
-                        live[m] = self._computed_values(company, m, comps)
+                                company, months_back(month, 11 + month.month), self._scope_sites(),
+                                self.vehicle_kind or None)
+                        live[m] = self._computed_values(company, m, comps, self._scope_sites(),
+                                                        self.vehicle_kind or None)
                     value = live[m].get(indicator.key)
                     source = "computed" if value is not None else "none"
                 target = indicator._target(m, settings)

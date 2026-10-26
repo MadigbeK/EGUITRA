@@ -220,6 +220,17 @@ def vehicle_kind(vehicle):
     return (vehicle.sudo().vehicle_kind if vehicle and "vehicle_kind" in vehicle._fields else False) or "tanker"
 
 
+def fr_number(value, digits=2, trim=False):
+    """Nombre écrit à la française : espace fine insécable des milliers, virgule décimale ; trim : sans les
+    zéros décimaux inutiles (« 47,8 », « 12 »). Vide pour une valeur absente."""
+    if value is None or value is False:
+        return ""
+    text = f"{value:,.{digits}f}".replace(",", "\u202f").replace(".", ",")
+    if trim and digits:
+        text = text.rstrip("0").rstrip(",")
+    return text
+
+
 def departed_states(env):
     """États d'une rotation partie (en route, validée, facturée) que connaît Transport."""
     selection = dict(env["eguitra.transport.rotation"]._fields["state"].selection)
