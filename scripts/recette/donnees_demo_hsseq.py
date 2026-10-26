@@ -10,6 +10,10 @@ Lot 2 : deux risques et leurs mesures, un audit interne et ses constats, deux ex
 un compte auditeur borné au site (test.auditeur, s'il existe) et un modèle de rapport mensuel générique et
 fictif (« Modèle générique de donneur d'ordre (démo) »), sans aucun indicateur ni libellé d'un donneur
 d'ordre réel.
+Lot 3 : un déversement, un déchet entreposé, deux mesures de poussières, une contamination et une réclamation
+client ; une procédure en vigueur (document PDF fictif), une alerte flash anonymisée, un plan d'intervention,
+deux exercices et l'annuaire de crise du site (numéros fictifs) ; deux violations de conduite fictives ; une
+revue de direction préparée sur les trois derniers mois.
 
   docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \\
       < ../scripts/recette/donnees_demo_hsseq.py
@@ -20,8 +24,11 @@ autres testeurs) : HSSEQ_VERROU=1 (après « exec -T -e ») le met en service à
 Relancé, le script ne crée rien en double.
 """
 
+import base64
 import os
 from datetime import timedelta
+
+from dateutil.relativedelta import relativedelta
 
 from odoo import fields
 
@@ -217,11 +224,120 @@ if not generic:
             "template_id": generic.id, "code": code, "label": label, "nature": nature, "mode": mode, "key": key,
             "unit": unit, "direction": direction, "aggregation": aggregation, "targets": [target] * 12})
 
+# ─── Lot 3 : environnement et qualité ───────────────────────────────────
+
+Spill = env["eguitra.hsseq.spill"]
+if not Spill.search_count([("location", "=", "Quai de dépotage (démo)")]):
+    Spill.with_user(reporter).sudo().create({
+        "company_id": groupe.id, "site_id": site.id, "occurred_at": NOW - timedelta(days=4),
+        "location": "Quai de dépotage (démo)", "product_label": "Gasoil (démo)", "volume_liters": 60,
+        "recovered_liters": 45, "recovery": "Absorbant répandu, terre souillée mise en fût (démo)",
+        "vehicle_id": vehicle.id or False, "reported_by": reporter.id})
+Waste = env["eguitra.hsseq.waste"]
+if not Waste.search_count([("note", "=", "Fûts au magasin (démo)")]):
+    Waste.with_user(reporter).sudo().create({"company_id": groupe.id, "site_id": site.id, "waste_kind": "used_oil",
+                                             "quantity": 400, "note": "Fûts au magasin (démo)",
+                                             "produced_on": TODAY - timedelta(days=10)})
+Dust = env["eguitra.hsseq.dust"]
+for days, value in ((7, 6.5), (2, 11.2)):
+    point = f"Piste d'accès, relevé à J-{days} (démo)"
+    if not Dust.search_count([("point", "=", point)]):
+        Dust.with_user(reporter).sudo().create({"company_id": groupe.id, "site_id": site.id, "point": point,
+                                                "measured_on": TODAY - timedelta(days=days), "value": value,
+                                                "threshold": 10, "measured_by": reporter.id})
+delivered = Rotation.search([("company_id", "=", groupe.id), ("vehicle_id", "in", vehicles.ids),
+                             ("state", "in", ("done", "invoiced"))], order="date_loading desc", limit=1)
+Contamination = env["eguitra.hsseq.contamination"]
+if not Contamination.search_count([("description", "=", "Eau au fond d'un compartiment (démo)")]):
+    Contamination.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "nature": "water", "description": "Eau au fond d'un compartiment (démo)",
+        "rotation_id": delivered.id or False, "vehicle_id": vehicle.id or False, "site_id": site.id,
+        "volume_m3": 0.2})
+Complaint = env["eguitra.hsseq.complaint"]
+if delivered and not Complaint.search_count([("description", "=", "Manquant signalé à la livraison (démo)")]):
+    Complaint.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "rotation_id": delivered.id, "nature": "shortage", "severity": "minor",
+        "description": "Manquant signalé à la livraison (démo)", "received_on": TODAY - timedelta(days=3)})
+
+# ─── Lot 3 : documents et urgences ──────────────────────────────────────
+
+Procedure = env["eguitra.hsseq.procedure"]
+procedure = Procedure.search([("company_id", "=", groupe.id), ("code", "=", "PR-HSE-DEMO-01")], limit=1)
+if not procedure:
+    procedure = Procedure.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "code": "PR-HSE-DEMO-01", "title": "Dépotage d'une citerne (démo)",
+        "domain": "environment", "audience_profiles": ["conducteur", "exploitation"], "site_ids": [(6, 0, site.ids)]})
+    version = env["eguitra.hsseq.procedure.version"].create({
+        "procedure_id": procedure.id, "version": "1", "effective_date": TODAY,
+        "change_summary": "Première version (démo)"})
+    pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+    file = env["ir.attachment"].create({"name": "procedure_depotage_demo.pdf", "datas": base64.b64encode(pdf),
+                                        "mimetype": "application/pdf", "res_model": "eguitra.hsseq.attachment",
+                                        "res_id": 0})
+    document = env["eguitra.hsseq.attachment"].create({
+        "name": "procedure_depotage_demo.pdf", "attachment_id": file.id, "role": "document",
+        "author_id": hsseq.id, "company_id": groupe.id})
+    file.res_id = document.id
+    document._link("procedure_version", version, "document")
+    version.with_user(hsseq).sudo().action_publish()
+Bulletin = env["eguitra.hsseq.bulletin"]
+if not Bulletin.search_count([("title", "=", "Recul sans guide au dépôt (démo)")]):
+    bulletin = Bulletin.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "kind": "flash_alert", "title": "Recul sans guide au dépôt (démo)",
+        "body": "Un camion a reculé sans guide sur l'aire de chargement ; un piéton a dû s'écarter (démo).",
+        "key_messages": "Pas de recul sans guide ; piétons hors de la zone de manœuvre (démo)."})
+    if not bulletin._anonymity_findings():
+        bulletin.action_publish()
+Contact = env["eguitra.hsseq.crisis.contact"]
+contacts = Contact.browse()
+for order, function, name, site_value in ((1, "Chef de dépôt (démo)", "Contact fictif 1 (démo)", site.id),
+                                          (2, "Responsable HSSEQ (démo)", "Contact fictif 2 (démo)", False),
+                                          (3, "Sapeurs-pompiers (démo)", "Standard des secours (démo)", False)):
+    contact = Contact.search([("company_id", "=", groupe.id), ("name", "=", name)], limit=1) or Contact.create({
+        "company_id": groupe.id, "site_id": site_value, "function": function, "name": name,
+        "phone": f"62000000{order}", "call_order": order})
+    contacts |= contact
+Plan = env["eguitra.hsseq.emergency.plan"]
+plan = Plan.search([("site_id", "=", site.id), ("scenario", "=", "spill")], limit=1)
+if not plan:
+    plan = Plan.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "site_id": site.id, "scenario": "spill", "title": "Déversement au dépotage (démo)",
+        "response": "Arrêter le dépotage, couper les moteurs, contenir avec le kit antidéversement, alerter le chef "
+                    "de dépôt (démo).", "resources": "Kit antidéversement, bac de rétention mobile (démo)",
+        "contact_ids": [(6, 0, contacts.ids)]})
+Drill = env["eguitra.hsseq.drill"]
+if not Drill.search_count([("plan_id", "=", plan.id)]):
+    done = Drill.create({"plan_id": plan.id, "planned_date": TODAY - timedelta(days=15), "participants_count": 8})
+    done.with_user(hsseq).sudo().action_perform(debrief="Confinement en 6 minutes ; kit du quai 2 incomplet (démo).")
+    Drill.create({"plan_id": plan.id, "planned_date": TODAY + timedelta(days=30)})
+
+# ─── Lot 3 : télématique et revue de direction ──────────────────────────
+
+Violation = env["eguitra.hsseq.telematics.violation"]
+if vehicle and not Violation.search_count([("source", "=", "Démonstration (démo)")]):
+    for hours, kind, value, limit in ((30, "speeding", 88, 70), (6, "harsh_braking", 0, 0)):
+        Violation.create({"company_id": groupe.id, "occurred_at": NOW - timedelta(hours=hours),
+                          "vehicle_id": vehicle.id, "driver_id": vehicle.driver_id.id or False,
+                          "violation_type": kind, "source": "Démonstration (démo)", "value": value,
+                          "limit_value": limit, "external_id": f"demo-{kind}"})
+Review = env["eguitra.hsseq.review"]
+if not Review.search_count([("title", "=", "Revue de direction du trimestre (démo)")]):
+    director = user("test.dg")
+    Review.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "title": "Revue de direction du trimestre (démo)",
+        "period_start": TODAY.replace(day=1) - relativedelta(months=2), "period_end": TODAY,
+        "planned_date": TODAY + timedelta(days=7), "agenda": "Indicateurs, événements, audits, actions (démo)",
+        "participant_ids": [(6, 0, (hsseq | director).ids)]})
+
 env.cr.commit()
 print("HSSEQ (démo) :", Event.search_count([("title", "like", "(démo)")]), "événements,",
       Action.search_count([("description", "like", "(démo)")]), "actions,",
       Check.search_count([("client_uuid", "like", "demo-hsseq-")]), "contrôles,",
       Risk.search_count([("feared_event", "like", "(démo)")]), "risques,",
       Audit.search_count([("title", "like", "(démo)")]), "audit(s), modèle de rapport", generic.name, "; site", site.name,
+      "; lot 3 :", Spill.search_count([("location", "like", "(démo)")]), "déversement(s),",
+      Procedure.search_count([("code", "=", "PR-HSE-DEMO-01")]), "procédure,",
+      Bulletin.search_count([("title", "like", "(démo)")]), "alerte(s),",
+      Review.search_count([("title", "like", "(démo)")]), "revue(s) de direction,",
       "; verrou",
       f"en service depuis le {settings.lock_start_date}" if settings.lock_start_date else "pas encore en service")
