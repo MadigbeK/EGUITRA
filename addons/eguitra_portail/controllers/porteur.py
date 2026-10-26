@@ -26,6 +26,7 @@ MAX_DAILY_MESSAGES = 50
 MAX_OPEN_MEETING_REQUESTS = 3
 # Messages renvoyés par appel au fil : les plus récents d'abord, la page précédente sur demande.
 FIL_PAGE = 200
+NOTIFICATIONS_MAX = 200
 # Origine d'une action telle que le porteur la lit. Un écart de la grille du cabinet se présente comme une
 # demande du consultant, au même titre qu'une saisie libre : rien ne laisse deviner la grille ni ses
 # critères. La clé interne (gap, manual…) ne sort jamais.
@@ -619,10 +620,16 @@ class EguitraPortailPorteur(http.Controller):
     # ─── Notifications ───────────────────────────────────────────────────
 
     @api_route("/portail/notifications", profiles=PORTEUR)
-    def notifications(self, **_kw):
+    def notifications(self, **kw):
+        """Notifications du porteur, les plus récentes d'abord, par pages (`limit`, `offset`) ; `total` dit
+        combien en existent, pour que l'écran propose la suite au lieu de s'arrêter en silence."""
+        limit = int_arg(kw, "limit", 100, 1, NOTIFICATIONS_MAX)
+        offset = int_arg(kw, "offset", 0, 0)
         Notification = request.env["portail.notification"].sudo()
-        items = Notification.search([("user_id", "=", _me().id)], limit=100)
-        return {"unread": _notifications_unread(), "items": [vues.notification_row(n) for n in items]}
+        domain = [("user_id", "=", _me().id)]
+        items = Notification.search(domain, limit=limit, offset=offset)
+        return {"unread": _notifications_unread(), "total": Notification.search_count(domain),
+                "items": [vues.notification_row(n) for n in items]}
 
     @api_route("/portail/notifications/lues", methods=("POST",), profiles=PORTEUR)
     def lues(self, **_kw):

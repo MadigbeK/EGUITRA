@@ -203,12 +203,15 @@ function Consultant({ dossier }: { dossier: PortailContext["dossier"] }) {
 
 /* ─── Cloche des notifications ─────────────────────────────────────────── */
 
+const CLOCHE = 12;
+
 function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
   const router = useRouter();
-  const { data, error, mutate } = useApi<Notifications>(open ? "/portail/notifications" : null);
+  // La cloche n'affiche que les dernières : la page Notifications donne la suite.
+  const { data, error, mutate } = useApi<Notifications>(open ? `/portail/notifications?limit=${CLOCHE}` : null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -249,7 +252,7 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
                 <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>
               ))}
             {data?.items.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Aucune notification.</li>}
-            {data?.items.slice(0, 12).map((n) => {
+            {data?.items.slice(0, CLOCHE).map((n) => {
               const I = KIND_ICON[n.kind] ?? Bell;
               return (
                 <li key={n.id}>

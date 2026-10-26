@@ -261,6 +261,17 @@ class TestPortail(ApiCase):
         self.assertEqual(lues["unread"], 0)
         self.assertFalse(self.notifications(self.porteur_b), "Rien pour le porteur d'un autre dossier")
 
+    def test_notifications_par_pages(self):
+        self.env["portail.notification"].sudo().create([
+            {"user_id": self.porteur_a.id, "kind": "message", "title": f"Message {i}"} for i in range(5)])
+        total = len(self.notifications(self.porteur_a))
+        _s, page = self.call("GET", "/portail/notifications?limit=2", token=self.porteur)
+        self.assertEqual((len(page["items"]), page["total"]), (2, total), "Le total dit qu'il en reste")
+        _s, fin = self.call("GET", f"/portail/notifications?limit=2&offset={total - 1}", token=self.porteur)
+        self.assertEqual(len(fin["items"]), 1, "Dernière page")
+        status, _b = self.call("GET", "/portail/notifications?limit=abc", token=self.porteur)
+        self.assertEqual(status, 400, "Paramètre illisible : refus, pas d'erreur interne")
+
     def test_avis_et_profil(self):
         status, _b = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 6}, token=self.porteur)
         self.assertEqual(status, 422, "Note de 1 à 5")

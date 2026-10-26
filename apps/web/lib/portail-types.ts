@@ -354,6 +354,8 @@ export interface NotificationRow {
 
 export interface Notifications {
   unread: number;
+  /** Nombre total de notifications du porteur : la liste reçue n'en est qu'une page (limit, offset). */
+  total: number;
   items: NotificationRow[];
 }
 
