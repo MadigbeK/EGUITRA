@@ -20,7 +20,6 @@ from .common import (
     hsseq_route,
     int_or_none,
     is_hsseq,
-    my_sites,
     page,
     page_args,
     rotation_ref,
@@ -29,6 +28,7 @@ from .common import (
     site_ref,
     user_ref,
     vehicle_ref,
+    yard_domain,
 )
 
 READ = ("admin", "direction", "hsseq", "exploitation", "auditeur")
@@ -94,10 +94,9 @@ class EguitraHsseqWaivers(http.Controller):
     def waivers(self, **kw):
         domain = [("company_id", "in", companies(kw).ids)]
         if scope_level() == "site":
-            sites = my_sites()
-            if sites:
-                domain += ["|", "|", ("site_id", "in", sites.ids), ("site_id", "=", False),
-                           ("requested_by", "=", request.env.uid)]
+            scoped = yard_domain()
+            if scoped is not None:
+                domain += ["|", ("requested_by", "=", request.env.uid)] + scoped
         if kw.get("status"):
             domain.append(("status", "in", kw["status"].split(",")))
         for key in ("rotation_id", "site_id"):

@@ -2,8 +2,9 @@
 mesures de maîtrise, cycle (à évaluer, en vigueur, archivé), revue, registre en Excel.
 
 Gestion par hsseq ; le propriétaire d'un risque le met à jour, ajoute ses mesures et en fait la revue.
-Lecture : administration, direction, hsseq ; chef de parc et auditeur pour les risques de leurs sites
-(et les risques communs à tous les sites) ; tout compte interne pour les risques dont il est propriétaire."""
+Lecture : administration, direction, hsseq ; chef de parc et auditeur pour les risques de leurs sites,
+fermée par défaut (aucun sans site rattaché ; un risque sans site n'est lu que des profils de lecture
+complète) ; tout compte interne pour les risques dont il est propriétaire."""
 
 from collections import Counter
 
@@ -33,14 +34,14 @@ from .common import (
     get,
     history,
     hsseq_route,
+    in_scope,
     int_or_none,
     internal_only,
     is_hsseq,
-    is_yard,
-    my_sites,
     page,
     page_args,
     reads_all,
+    scope_domain,
     site_ref,
     text,
     user_ref,
@@ -62,25 +63,16 @@ def is_owner(risk):
 
 
 def can_read(risk):
-    if reads_all() or is_owner(risk):
-        return True
-    if is_yard():
-        sites = my_sites()
-        return not sites or not risk.site_id or risk.site_id in sites
-    return False
+    """Lecture complète, propriétaire, ou risque d'un site du compte (portée fermée par défaut : un risque
+    sans site n'est lu que par les profils de lecture complète et son propriétaire)."""
+    return reads_all() or is_owner(risk) or in_scope(risk.site_id)
 
 
 def read_domain(kw):
     domain = [("company_id", "in", companies(kw).ids)]
     if reads_all():
         return domain
-    own = [("owner_id", "=", request.env.uid)]
-    if is_yard():
-        sites = my_sites()
-        if not sites:
-            return domain
-        return domain + ["|", "|", ("site_id", "in", sites.ids), ("site_id", "=", False)] + own
-    return domain + own
+    return domain + ["|", ("owner_id", "=", request.env.uid)] + scope_domain()
 
 
 def user_transitions(risk):

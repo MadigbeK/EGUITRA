@@ -15,6 +15,7 @@ from .common import (
     CONFIG,
     DEADLINES,
     LOG,
+    READ_ALL,
     companies,
     company_ref,
     date_value,
@@ -27,7 +28,6 @@ from .common import (
     internal_only,
     is_hsseq,
     is_self_only,
-    is_yard,
     journal_row,
     my_driver,
     my_sites,
@@ -39,6 +39,7 @@ from .common import (
     scope_level,
     site_allowed,
     site_ref,
+    site_scope,
     text,
     user_ref,
     vehicle_ref,
@@ -86,11 +87,13 @@ def driver_sites(vehicles):
 
 def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
     """Échéances des personnes (habilitations et aptitude, RH) et des véhicules (documents, Transport) dans
-    l'horizon, expirées comprises, date croissante ; bornées aux sites d'un chef de parc."""
+    l'horizon, expirées comprises, date croissante. Portée fermée par défaut : hors lecture complète
+    (admin, direction, hsseq, RH), les échéances des sites du compte seulement (aucune sans site rattaché,
+    ni celle d'une personne ou d'un véhicule sans site)."""
     env = request.env
     day = today()
     limit = day + timedelta(days=horizon)
-    yard_sites = my_sites() if is_yard() else env["eguitra.hsseq.site"]
+    scope = site_scope(READ_ALL | {"rh"})
     vehicles = env["eguitra.transport.vehicle"].sudo().search([("company_id", "in", comps.ids)])
     on_site = driver_sites(vehicles)
     Site = env["eguitra.hsseq.site"].sudo()
@@ -99,7 +102,7 @@ def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
     def keep(site_id):
         if site and site_id != site.id:
             return False
-        return not yard_sites or not site_id or site_id in yard_sites.ids
+        return scope is None or bool(site_id and site_id in scope.ids)
 
     if kind in (None, "qualification"):
         Type = env["eguitra.rh.qualification.type"].sudo().with_context(active_test=False)

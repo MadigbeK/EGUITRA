@@ -109,13 +109,21 @@ class TestRisks(HsseqCase):
         here = Risk.create(dict(base, site_id=self.site.id))
         there = Risk.create(dict(base, site_id=self.site2.id))
         common = Risk.create(base)
-        for login, expected in (("ibrahima", {here, common}), ("awa.auditrice", {here, common}),
-                                ("dg.hsseq", {here, there, common}), ("sekou.parc", {there, common})):
+        self._create_user("moussa.parc", "exploitation")  # chef de parc sans site rattaché
+        # Portée fermée par défaut : ses sites seulement ; un risque sans site, aux profils complets.
+        for login, expected in (("ibrahima", {here}), ("awa.auditrice", {here}), ("dg.hsseq", {here, there, common}),
+                                ("sekou.parc", {there}), ("moussa.parc", set())):
             status, listing = self.api(login, "GET", "/hsseq/risks")
             self.assertEqual(status, 200, listing)
             self.assertEqual({r["id"] for r in listing["items"]}, {r.id for r in expected}, login)
-        status, _b = self.api("awa.auditrice", "GET", f"/hsseq/risks/{there.id}")
-        self.assertEqual(status, 404)
+            status, matrix = self.api(login, "GET", "/hsseq/risks/matrix")
+            self.assertEqual(matrix["total"], len(expected), f"Matrice de {login}")
+        for login, risk in (("awa.auditrice", there), ("ibrahima", common), ("moussa.parc", here)):
+            status, _b = self.api(login, "GET", f"/hsseq/risks/{risk.id}")
+            self.assertEqual(status, 404, f"{login} : {risk.reference} hors de sa portée")
+        common.owner_id = self.parc
+        status, _b = self.api("ibrahima", "GET", f"/hsseq/risks/{common.id}")
+        self.assertEqual(status, 200, "Propriétaire : il lit son risque, même sans site")
         there.owner_id = self.parc
         status, _b = self.api("ibrahima", "GET", f"/hsseq/risks/{there.id}")
         self.assertEqual(status, 200, "Propriétaire : il lit son risque, quel que soit le site")

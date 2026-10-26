@@ -21,10 +21,9 @@ from .common import (
     forbidden,
     get,
     hsseq_route,
-    my_sites,
+    in_scope,
     personal_data_hidden,
-    scope_level,
-    site_allowed,
+    site_scope,
 )
 from .lock import departures
 from .referentials import deadline_items
@@ -64,12 +63,16 @@ class EguitraHsseqCockpit(http.Controller):
         comps = companies(kw)
         Site = env["eguitra.hsseq.site"].sudo()
         sites = Site
+        # Portée fermée par défaut : hors lecture complète, les sites du compte, et aucun s'il n'en a pas.
+        scope = site_scope()
         if kw.get("site_id"):
             sites = get("eguitra.hsseq.site", kw["site_id"], "Site")
-            if not site_allowed(sites):
+            if not in_scope(sites):
                 raise forbidden("Site non autorisé.")
-        elif scope_level() == "site":
-            sites = my_sites()
+        elif scope is not None:
+            if not scope:
+                raise forbidden("Aucun site n'est rattaché à votre compte : le cockpit se lit par site.")
+            sites = scope
         result = env["eguitra.hsseq.cockpit"]._compute(comps, month, period, sites or None, vehicle_kind)
         Event = env["eguitra.hsseq.event"].sudo()
         event_domain = [("company_id", "in", comps.ids)] + ([("site_id", "in", sites.ids)] if sites else [])

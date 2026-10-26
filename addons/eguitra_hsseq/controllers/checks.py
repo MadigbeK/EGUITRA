@@ -37,7 +37,6 @@ from .common import (
     is_self_only,
     is_yard,
     my_driver,
-    my_sites,
     number,
     page,
     page_args,
@@ -53,6 +52,7 @@ from .common import (
     text,
     user_ref,
     vehicle_ref,
+    yard_domain,
 )
 
 TEMPLATE_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
@@ -127,10 +127,7 @@ def read_domain(kw):
     if reads_all():
         return domain
     if is_yard():
-        sites = my_sites()
-        if sites:
-            domain += ["|", ("site_id", "in", sites.ids), ("site_id", "=", False)]
-        return domain
+        return domain + (yard_domain() or [])
     driver = my_driver()
     own = [("author_id", "=", request.env.uid)]
     return domain + (["|", ("driver_id", "=", driver.id)] + own if driver else own)
@@ -382,11 +379,10 @@ class EguitraHsseqChecks(http.Controller):
         states = [s for s in ("en_route", "done", "invoiced") if s in dict(Rotation._fields["state"].selection)]
         domain = [("company_id", "in", companies(kw).ids), ("state", "in", states), ("date_loading", ">=", start),
                   ("date_loading", "<=", end)]
-        sites = my_sites() if is_yard() else None
         if kw.get("site_id"):
             domain.append(("vehicle_id.site_id", "=", int_or_none(kw, "site_id")))
-        elif sites:
-            domain.append(("vehicle_id.site_id", "in", sites.ids))
+        elif is_yard():
+            domain += yard_domain("vehicle_id.site_id") or []
         rotations = Rotation.search(domain)
         checked = request.env["eguitra.hsseq.check"].sudo().search(
             [("rotation_id", "in", rotations.ids), ("kind", "=", "pre_departure")]).rotation_id
@@ -487,9 +483,8 @@ class EguitraHsseqChecks(http.Controller):
     @hsseq_route("/hsseq/checks/nonconformities", profiles=NC_READ)
     def nonconformities(self, **kw):
         domain = [("company_id", "in", companies(kw).ids)]
-        sites = my_sites() if is_yard() else None
-        if sites:
-            domain += ["|", ("site_id", "in", sites.ids), ("site_id", "=", False)]
+        if is_yard():
+            domain += yard_domain() or []
         if kw.get("status"):
             domain.append(("status", "in", kw["status"].split(",")))
         if str(kw.get("blocking", "")) in ("1", "true"):

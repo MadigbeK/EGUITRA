@@ -53,6 +53,22 @@ class TestQualifications(HsseqCase):
             self.assertTrue(row, f"{login} lit la matrice")
         _matrix, row = self._row("sekou.parc")
         self.assertIsNone(row, "Chef de parc d'un autre site : pas ce conducteur")
+        self._create_user("moussa.parc", "exploitation")
+        matrix, _row = self._row("moussa.parc")
+        self.assertEqual((matrix["items"], matrix["counts"]["drivers"]), ([], 0),
+                         "Chef de parc sans site rattaché : liste vide (portée fermée par défaut)")
+        status, _b = self.api("moussa.parc", "GET", "/hsseq/cockpit")
+        self.assertEqual(status, 403, "Cockpit fermé sans site rattaché")
+        status, deadlines = self.api("moussa.parc", "GET", "/hsseq/deadlines")
+        self.assertEqual((status, deadlines["items"]), (200, []), "Échéances fermées sans site rattaché")
+        # Conducteur sans site connu (chauffeur d'aucun ensemble) : lu des seuls profils de lecture complète.
+        driver = self.env["eguitra.transport.driver"].create({"name": "Ousmane Camara", "company_id": self.company.id})
+        loner = self.env["eguitra.rh.employee"].create({
+            "name": "Ousmane Camara", "hire_date": self.day - timedelta(days=100), "base_salary": 2_500_000,
+            "driver_id": driver.id})
+        for login, visible in (("kadi.hsseq", True), ("rh.hsseq", True), ("ibrahima", False), ("sekou.parc", False)):
+            matrix, _row = self._row(login)
+            self.assertEqual(loner.id in [r["employee"]["id"] for r in matrix["items"]], visible, login)
         auditor = self._create_user("awa.auditrice", "auditeur")
         auditor.hsseq_audit_until = self.day + timedelta(days=5)
         for login in ("fatou", "awa.auditrice"):

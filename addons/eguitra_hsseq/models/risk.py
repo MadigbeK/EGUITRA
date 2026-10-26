@@ -50,7 +50,8 @@ class EguitraHsseqRisk(models.Model):
     vehicle_kind = fields.Selection(VEHICLE_KINDS, "Profil de véhicule", help="Vide : tous les profils.")
     activity = fields.Char("Activité", help="Chargement au dépôt, circulation sur site minier, dépotage…")
     site_id = fields.Many2one("eguitra.hsseq.site", "Site", check_company=True, index=True,
-                              help="Vide : risque commun à tous les sites.")
+                              help="Vide : risque commun, lu par les profils de lecture complète et son "
+                                   "propriétaire (portée fermée par défaut).")
     hazard = fields.Text("Danger", required=True)
     feared_event = fields.Text("Événement redouté", required=True)
     raw_severity = fields.Integer("Gravité brute (1 à 5)", required=True, default=1)

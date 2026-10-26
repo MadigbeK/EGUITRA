@@ -50,7 +50,6 @@ from .common import (
     is_self_only,
     is_yard,
     my_driver,
-    my_sites,
     number,
     page,
     page_args,
@@ -59,11 +58,13 @@ from .common import (
     reads_all,
     reported_at,
     rotation_ref,
+    site_allowed,
     site_ref,
     terrain_source,
     text,
     user_ref,
     vehicle_ref,
+    yard_domain,
 )
 
 READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
@@ -85,8 +86,7 @@ def can_read(event):
     if reads_all() or is_declarant(event):
         return True
     if is_yard():
-        sites = my_sites()
-        return not sites or not event.site_id or event.site_id in sites
+        return site_allowed(event.site_id)
     return False
 
 
@@ -96,10 +96,8 @@ def read_domain(kw):
         return domain
     own = [("reported_by", "=", request.env.uid)]
     if is_yard():
-        sites = my_sites()
-        if not sites:
-            return domain
-        return domain + ["|", "|", ("site_id", "in", sites.ids), ("site_id", "=", False)] + own
+        scoped = yard_domain()
+        return domain if scoped is None else domain + ["|"] + own + scoped
     return domain + own
 
 

@@ -25,15 +25,16 @@ from .common import (
     internal_only,
     is_hsseq,
     is_yard,
-    my_sites,
     number,
     page,
     page_args,
     profiles,
     reads_all,
+    site_allowed,
     site_ref,
     text,
     user_ref,
+    yard_domain,
 )
 
 SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "created_at": "create_date"}
@@ -55,8 +56,7 @@ def can_read(action):
     if reads_all() or is_owner(action):
         return True
     if is_yard():
-        sites = my_sites()
-        return not sites or not action.site_id or action.site_id in sites
+        return site_allowed(action.site_id)
     return False
 
 
@@ -67,10 +67,8 @@ def read_domain(kw):
         return domain
     own = [("owner_id", "=", request.env.uid)]
     if is_yard():
-        sites = my_sites()
-        if not sites:
-            return domain
-        return domain + ["|", "|", ("site_id", "in", sites.ids), ("site_id", "=", False)] + own
+        scoped = yard_domain()
+        return domain if scoped is None else domain + ["|"] + own + scoped
     return domain + own
 
 

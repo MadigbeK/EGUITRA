@@ -14,6 +14,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 
 from ..models.qualification import STATUS_RANK, driver_sites
 from .common import (
+    READ_ALL,
     companies,
     company_ref,
     date_value,
@@ -21,14 +22,15 @@ from .common import (
     forbidden,
     get,
     hsseq_route,
-    is_yard,
-    my_sites,
+    in_scope,
     page,
-    site_allowed,
     site_ref,
+    site_scope,
 )
 
 QUAL_READ = ("admin", "direction", "hsseq", "rh", "exploitation")
+# Lecture complète de la matrice ; tout autre compte (chef de parc) : ses sites seulement, fermé par défaut.
+QUAL_FULL = READ_ALL | {"rh"}
 ALERTS_READ = ("admin", "direction", "hsseq", "rh")
 
 
@@ -41,21 +43,22 @@ def qualification_types(codes=None):
 
 
 def matrix_rows(comps, day, site=None, types=None):
-    """Conducteurs en poste (salariés RH liés à un chauffeur) des sociétés, bornés aux sites du chef de
-    parc ; un conducteur sans site connu reste visible."""
+    """Conducteurs en poste (salariés RH liés à un chauffeur) des sociétés. Portée fermée par défaut : hors
+    lecture complète, les conducteurs des sites du compte seulement (aucun sans site rattaché) ; un
+    conducteur sans site connu n'est lu que par les profils de lecture complète."""
     env = request.env
     types = types if types is not None else qualification_types()
     employees = env["eguitra.rh.employee"].sudo().search([
         ("company_id", "in", comps.ids), ("driver_id", "!=", False), ("hire_date", "<=", day),
         "|", ("exit_date", "=", False), ("exit_date", ">=", day)], order="name")
     on_site = driver_sites(env["eguitra.transport.vehicle"].sudo().search([("company_id", "in", comps.ids)]))
-    yard_sites = my_sites() if is_yard() else env["eguitra.hsseq.site"]
+    scope = site_scope(QUAL_FULL)
     rows = []
     for employee in employees:
         driver_site = on_site.get(employee.driver_id.id)
         if site and driver_site != site:
             continue
-        if yard_sites and driver_site and driver_site not in yard_sites:
+        if scope is not None and not (driver_site and driver_site in scope):
             continue
         row = employee._hsseq_matrix_row(types, day)
         row.update(driver=driver_ref(employee.driver_id), site=site_ref(driver_site),
@@ -72,7 +75,7 @@ class EguitraHsseqQualifications(http.Controller):
         site = None
         if kw.get("site_id"):
             site = get("eguitra.hsseq.site", kw["site_id"], "Site")
-            if not site_allowed(site):
+            if not in_scope(site, QUAL_FULL):
                 raise forbidden("Site non autorisé.")
         codes = [c for c in (kw.get("type") or "").split(",") if c]
         types = qualification_types(codes or None)

@@ -5,9 +5,15 @@ site (chef de parc ou auditeur rattaché à des sites) et de la propriété (con
 responsable d'une action), comme le libre-service RH : l'identité du compte est conservée (create_uid,
 journal, piste d'audit). Le résultat d'un alcootest n'est servi qu'au profil hsseq.
 
-Profil auditeur : lecture seule (toute route d'écriture refusée), bornée à ses sites comme un chef de
-parc, et à sa date de fin d'accès (au-delà, ou sans date, toute route est refusée en 403) ; jamais les
-alcootests, et les noms des personnes en cause retirés (personal_data_hidden).
+Profil auditeur : lecture seule (toute route d'écriture refusée), bornée à ses sites, fermée par défaut
+(sans site audité, toute route est refusée ; un objet sans site lui reste invisible), et à sa date de fin
+d'accès (au-delà, ou sans date, toute route est refusée en 403) ; jamais les alcootests, et les noms des
+personnes en cause retirés (personal_data_hidden).
+
+Portée par site des fonctions du lot 2 et du cockpit, « fermée par défaut » (site_scope) : un compte sans
+profil de lecture complète ne lit que les objets de ses sites (aucun s'il n'a pas de site) ; un objet sans
+site n'est lu que par les profils de lecture complète. Les routes du lot 1 gardent, pour le chef de parc,
+la règle du contrat (sans site rattaché : tous les sites ; objet sans site : visible).
 """
 
 import functools
@@ -39,11 +45,14 @@ def auditor_guard():
     """Compte auditeur : refusé (403) au-delà de sa date de fin d'accès, ou sans date ; en lecture seule."""
     if "auditeur" not in profiles():
         return
-    until = request.env.user.sudo().hsseq_audit_until
+    user = request.env.user.sudo()
+    until = user.hsseq_audit_until
     if not until or today(request.env) > until:
         raise ApiError(403, "forbidden", "Accès d'auditeur échu ou sans date de fin : demandez sa prolongation au "
                                          "Responsable HSSEQ." if until else
                                          "Accès d'auditeur sans date de fin : le Responsable HSSEQ la fixe d'abord.")
+    if "exploitation" not in profiles() and not user.hsseq_audit_site_ids and not reads_all():
+        raise ApiError(403, "forbidden", "Périmètre d'audit sans site : le Responsable HSSEQ le définit d'abord.")
     if request.httprequest.method not in ("GET", "HEAD"):
         raise ApiError(403, "forbidden", "Profil auditeur : lecture seule.")
 
@@ -150,13 +159,50 @@ def companies(kw=None):
     return allowed.browse(wanted)
 
 
+def auditor_only():
+    """Auditeur sans profil d'exploitation ni de lecture complète : portée fermée par défaut partout."""
+    return is_auditor() and "exploitation" not in profiles() and not reads_all()
+
+
 def site_allowed(site):
-    """Un chef de parc ou un auditeur rattaché à des sites ne lit que leurs objets (un objet sans site reste
-    visible)."""
+    """Routes du lot 1 : un chef de parc rattaché à des sites ne lit que leurs objets (un objet sans site
+    reste visible ; sans site rattaché, tous) ; l'auditeur, ses seuls sites."""
     if not is_yard():
         return True
     sites = my_sites()
+    if auditor_only():
+        return bool(site) and site in sites
     return not sites or not site or site in sites
+
+
+def yard_domain(field="site_id"):
+    """Domaine de site d'un compte borné par site (is_yard), selon site_allowed ; None : aucun bornage."""
+    sites = my_sites()
+    if auditor_only():
+        return [(field, "in", sites.ids)]
+    if not sites:
+        return None
+    return ["|", (field, "in", sites.ids), (field, "=", False)]
+
+
+def site_scope(full=READ_ALL):
+    """Portée « fermée par défaut » : None pour un profil de lecture complète (full) ; sinon les sites du
+    compte (chef de parc, auditeur), vide s'il n'en a pas."""
+    if profiles() & set(full):
+        return None
+    return my_sites()
+
+
+def in_scope(site, full=READ_ALL):
+    """L'objet de ce site est-il dans la portée fermée par défaut ? (sans site : profils complets seuls)"""
+    scope = site_scope(full)
+    return scope is None or bool(site and site in scope)
+
+
+def scope_domain(field="site_id", full=READ_ALL):
+    """Domaine de la portée fermée par défaut ([] : tout ; liste vide de sites : rien)."""
+    scope = site_scope(full)
+    return [] if scope is None else [(field, "in", scope.ids)]
 
 
 def get(model, record_id, label="Fiche"):
