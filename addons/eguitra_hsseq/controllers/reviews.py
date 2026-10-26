@@ -4,7 +4,8 @@ compte rendu en PDF rendu par le noyau.
 
 Droits : la direction et hsseq préparent, tiennent et closent la revue et y enregistrent les décisions ; la
 réouverture d'une revue close revient au seul Responsable HSSEQ, avec un motif. Lecture : administration,
-direction, hsseq (revue de société, sans bornage par site : ni le chef de parc ni l'auditeur)."""
+direction, hsseq et auditeur (lecture seule, ses sociétés, utile aux audits ISO) ; revue de société, sans
+bornage par site, que le chef de parc ne lit pas."""
 
 from odoo import fields, http
 from odoo.http import content_disposition, request
@@ -51,7 +52,7 @@ from .common import (
 )
 from .reports import fmt_value
 
-REVIEW_READ = ("admin", "direction", "hsseq")
+REVIEW_READ = ("admin", "direction", "hsseq", "auditeur")
 REVIEW_WRITE = ("direction", "hsseq")
 TRANSITIONS = ("refresh", "hold", "close", "reopen")
 SORTS = {"planned_date": "planned_date", "reference": "reference", "state": "state"}

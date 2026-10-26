@@ -143,11 +143,18 @@ class TestReviews(HsseqCase):
         for login in ("ibrahima", "rh.hsseq", "awa.auditrice", "fatou"):
             status, _b = self._review(login=login)
             self.assertEqual(status, 403, f"{login} ne prépare pas de revue")
-            for method, sub, payload in (("GET", "", None), ("PATCH", "", {"agenda": "x"}),
+            for method, sub, payload in (("PATCH", "", {"agenda": "x"}),
                                          ("POST", "/hold", {"participant_ids": [self.dg.id]}),
-                                         ("POST", "/decisions", {"description": "x"}), ("GET", "/report.pdf", None)):
+                                         ("POST", "/decisions", {"description": "x"})):
                 status, _b = self.api(login, method, path + sub, payload)
                 self.assertEqual(status, 403, f"{login} {method} {sub}")
+        for login in ("ibrahima", "rh.hsseq", "fatou"):
+            for sub in ("", "/report.pdf"):
+                status, _b = self.api(login, "GET", path + sub)
+                self.assertEqual(status, 403, f"{login} ne lit pas la revue {sub}")
+        status, read = self.api("awa.auditrice", "GET", path)
+        self.assertEqual((status, read["rights"]["can_edit"], read["transitions"]), (200, False, []),
+                         "L'auditeur lit la revue, en lecture seule")
         status, _b = self.driver_api("GET", "/hsseq/reviews")
         self.assertEqual(status, 403)
         status, body = self._review(period_end=str(self.day - relativedelta(years=3)))

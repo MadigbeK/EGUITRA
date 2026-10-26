@@ -106,5 +106,5 @@ class TestAuditor(HsseqCase):
         self.auditor.write({"hsseq_audit_until": self.day + timedelta(days=5), "hsseq_audit_site_ids": [(5, 0, 0)]})
         status, _b = self.api("awa.auditrice", "GET", "/hsseq/events")
         self.assertEqual(status, 403, "Sans site audité : aucun accès (fermé par défaut)")
-        both = self._create_user("double.audit", "auditeur", "hsseq")
-        self.assertIn("hsseq", both._eguitra_apps(), "Un autre profil garde l'application")
+        with self.assertRaises(ValueError, msg="Le profil auditeur ne se combine avec aucun autre"):
+            self._create_user("double.audit", "auditeur", "hsseq")

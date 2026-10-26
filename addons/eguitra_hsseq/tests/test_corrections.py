@@ -290,3 +290,24 @@ class TestCorrections(HsseqCase):
         self.api("kadi.hsseq", "POST", f"/hsseq/vehicles/{self.truck.id}/release", {"reason": "Freins remplacés"})
         status, detail = self.api("kadi.hsseq", "GET", f"/hsseq/events/{high.id}")
         self.assertNotIn("immobilize", detail["transitions"], "Levée : plus de nouvelle proposition")
+
+    def test_auditeur_exclusif_et_revues_de_direction(self):
+        """Le profil auditeur ne se combine avec aucun autre (refus à l'attribution, comme le porteur) ;
+        l'auditeur lit les revues de direction de ses sociétés, sans rien y écrire."""
+        with self.assertRaises(ValueError):
+            self._create_user("mixte.audit", "auditeur", "exploitation")
+        status, body = self.api("admin.hsseq", "PATCH", f"/admin/users/{self.auditor.id}",
+                                {"profiles": ["auditeur", "direction"]})
+        self.assertEqual((status, body["error"]), (422, "business_rule"), "Refus à l'attribution")
+        self.assertEqual(self.auditor._eguitra_profiles(), ["auditeur"])
+        status, review = self.api("kadi.hsseq", "POST", "/hsseq/reviews", {
+            "period_start": str(self.day.replace(day=1)), "period_end": str(self.day), "planned_date": str(self.day)})
+        self.assertEqual(status, 200, review)
+        status, listing = self.api("awa.auditrice", "GET", "/hsseq/reviews")
+        self.assertEqual((status, [r["id"] for r in listing["items"]]), (200, [review["id"]]))
+        status, detail = self.api("awa.auditrice", "GET", f"/hsseq/reviews/{review['id']}")
+        self.assertEqual((status, detail["transitions"]), (200, []))
+        for method, sub, payload in (("PATCH", "", {"agenda": "x"}), ("POST", "/refresh", {}),
+                                     ("POST", "/decisions", {"description": "x"})):
+            status, _b = self.api("awa.auditrice", method, f"/hsseq/reviews/{review['id']}{sub}", payload)
+            self.assertEqual(status, 403, f"Auditeur en écriture : {method} {sub}")

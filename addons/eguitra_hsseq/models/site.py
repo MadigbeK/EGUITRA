@@ -7,9 +7,6 @@ from odoo.exceptions import ValidationError
 
 from .common import EXPLOITATION_GROUP, VEHICLE_KINDS, today
 
-# Profils qui ouvrent NIMOVA · HSSEQ sans être bornés comme l'auditeur.
-HSSEQ_APP_PROFILES = {"admin", "direction", "hsseq", "exploitation"}
-
 
 class EguitraHsseqSite(models.Model):
     _name = "eguitra.hsseq.site"
@@ -57,6 +54,13 @@ class ResUsers(models.Model):
     hsseq_audit_site_ids = fields.Many2many("eguitra.hsseq.site", "eguitra_hsseq_auditor_site_rel", "user_id", "site_id",
                                             "Sites audités", help="Vide : tous les sites des sociétés du compte.")
 
+    def _eguitra_set_profiles(self, profiles):
+        """Le profil auditeur (lecture seule bornée à des sites et à une durée) ne se combine avec aucun
+        autre, comme le porteur de projet : un compte mixte n'a pas à être borné à moitié."""
+        if "auditeur" in profiles and len(set(profiles)) > 1:
+            raise ValueError("Le profil auditeur ne se combine avec aucun autre.")
+        return super()._eguitra_set_profiles(profiles)
+
     def _hsseq_audit_expired(self, day=None):
         """Accès d'auditeur échu (ou sans date de fin)."""
         self.ensure_one()
@@ -102,8 +106,7 @@ class ResUsers(models.Model):
         user_profiles = self._eguitra_profiles()
         if user_profiles == ["conducteur"]:
             return [app for app in apps if app == "terrain"]
-        # Auditeur seul, au-delà de sa date de fin d'accès : plus d'application HSSEQ.
-        if ("auditeur" in user_profiles and not set(user_profiles) & HSSEQ_APP_PROFILES
-                and self._hsseq_audit_expired()):
+        # Auditeur (profil exclusif), au-delà de sa date de fin d'accès : plus d'application HSSEQ.
+        if user_profiles == ["auditeur"] and self._hsseq_audit_expired():
             return [app for app in apps if app != "hsseq"]
         return apps

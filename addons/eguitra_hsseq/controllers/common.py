@@ -5,10 +5,10 @@ site (chef de parc ou auditeur rattaché à des sites) et de la propriété (con
 responsable d'une action), comme le libre-service RH : l'identité du compte est conservée (create_uid,
 journal, piste d'audit). Le résultat d'un alcootest n'est servi qu'au profil hsseq.
 
-Profil auditeur : lecture seule (toute route d'écriture refusée), bornée à ses sites, fermée par défaut
-(sans site audité, toute route est refusée ; un objet sans site lui reste invisible), et à sa date de fin
-d'accès (au-delà, ou sans date, toute route est refusée en 403) ; jamais les alcootests, et les noms des
-personnes en cause retirés (personal_data_hidden).
+Profil auditeur, exclusif de tout autre profil : lecture seule (toute route d'écriture refusée), bornée à
+ses sites, fermée par défaut (sans site audité, toute route est refusée ; un objet sans site lui reste
+invisible), et à sa date de fin d'accès (au-delà, ou sans date, toute route est refusée en 403) ; jamais
+les alcootests, et les noms des personnes en cause retirés (personal_data_hidden).
 
 Portée par site « fermée par défaut », sur toutes les routes (site_allowed, yard_domain, site_scope) : un
 compte sans profil de lecture complète (chef de parc, auditeur) ne lit que les objets de ses sites, et
@@ -51,7 +51,7 @@ def auditor_guard():
         raise ApiError(403, "forbidden", "Accès d'auditeur échu ou sans date de fin : demandez sa prolongation au "
                                          "Responsable HSSEQ." if until else
                                          "Accès d'auditeur sans date de fin : le Responsable HSSEQ la fixe d'abord.")
-    if "exploitation" not in profiles() and not user.hsseq_audit_site_ids and not reads_all():
+    if not user.hsseq_audit_site_ids:
         raise ApiError(403, "forbidden", "Périmètre d'audit sans site : le Responsable HSSEQ le définit d'abord.")
     if request.httprequest.method not in ("GET", "HEAD"):
         raise ApiError(403, "forbidden", "Profil auditeur : lecture seule.")
@@ -104,7 +104,7 @@ def is_yard():
 
 def personal_data_hidden():
     """Les noms des personnes (conducteurs, victimes, témoins, déclarants) ne sont pas servis à l'auditeur."""
-    return is_auditor() and not reads_all()
+    return is_auditor()
 
 
 def scope_level():
@@ -126,7 +126,7 @@ def is_self_only():
 def my_sites():
     """Sites du chef de parc, sinon ceux de l'auditeur (vide : aucun bornage)."""
     user = request.env.user
-    if is_auditor() and "exploitation" not in profiles():
+    if is_auditor():
         return user.sudo().hsseq_audit_site_ids
     return user._hsseq_site_ids()
 
