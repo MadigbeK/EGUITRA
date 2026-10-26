@@ -4,10 +4,13 @@ import { useState } from "react";
 import { Pencil, Plus } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader } from "@/components/ui";
 import { MoveStatus } from "@/components/finance/MovesPage";
-import { CREATION_TIERS, MODIFICATION_TIERS } from "@/components/finance/communPieces";
+import { CREATION_TIERS, MODIFICATION_TIERS, PagesListe } from "@/components/finance/communPieces";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
+
+/** Fournisseurs par page ; le noyau découpe la liste (offset) et en donne le total. */
+const PAGE = 100;
 
 interface SupplierDetail extends Partner {
   street: string | null;
@@ -24,7 +27,8 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [editing, setEditing] = useState<SupplierDetail | "new" | null>(null);
-  const params = new URLSearchParams({ kind: "supplier", limit: "300" });
+  const [offset, setOffset] = useState(0);
+  const params = new URLSearchParams({ kind: "supplier", limit: String(PAGE), offset: String(offset) });
   if (search) params.set("search", search);
   const { data, error, isLoading, mutate } = useApi<Paged<Partner>>(`/finance/partners?${params.toString()}`);
   const creation = useAutorise(CREATION_TIERS);
@@ -44,15 +48,15 @@ export default function SuppliersPage() {
       />
       <Card padded={false}>
         <div className="flex flex-wrap items-center justify-end gap-3 px-4 pt-3">
-          <Input aria-label="Rechercher un fournisseur" className="max-w-xs" placeholder="Nom, NIF, code ou téléphone…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input aria-label="Rechercher un fournisseur" className="max-w-xs" placeholder="Nom, NIF, code ou téléphone…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
         </div>
         {error && (
           <div className="p-4">
             <ErrorBox error={error} onRetry={() => mutate()} />
           </div>
         )}
-        {isLoading && !data ? (
-          <Loading />
+        {!data ? (
+          !error && isLoading && <Loading />
         ) : (
           <DataTable
             rows={data?.items ?? []}
@@ -69,6 +73,7 @@ export default function SuppliersPage() {
             ]}
           />
         )}
+        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Fournisseurs" onPage={setOffset} />}
       </Card>
       {selected !== null && (
         <SupplierModal
@@ -95,7 +100,7 @@ export default function SuppliersPage() {
 }
 
 function SupplierModal({ id, onClose, onEdit }: { id: number; onClose: () => void; onEdit: (p: SupplierDetail) => void }) {
-  const { data: p, error } = useApi<SupplierDetail>(`/finance/partners/${id}`);
+  const { data: p, error, mutate } = useApi<SupplierDetail>(`/finance/partners/${id}`);
   const modification = useAutorise(MODIFICATION_TIERS);
   return (
     <Modal
@@ -111,7 +116,7 @@ function SupplierModal({ id, onClose, onEdit }: { id: number; onClose: () => voi
         )
       }
     >
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!p && !error && <Loading />}
       {p && (
         <div className="space-y-5">
