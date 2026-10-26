@@ -552,6 +552,32 @@ class TestAnalyseCabinet(ApiCase):
                                msg="35 h sur la période, deux consultants : moyenne par consultant")
         self.assertIn("cabinet.temps_non_facture", [i["id"] for i in body["insights"]])
 
+    def test_avoir_et_carnet(self):
+        """Honoraires facturés nets des avoirs (partiels, lettrés ou non) ; « à facturer » : la définition
+        d'AxisPro, temps facturable rattaché à aucune facture."""
+        refund = self.invoice._reverse_moves(default_values_list=[{"invoice_date": self.today, "date": self.today}])
+        for line in refund.invoice_line_ids:
+            line.price_unit = line.price_unit * 0.2
+        refund.with_context(eguitra_approval_granted=True).action_post()
+        self.env.flush_all()
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, body = self._get("activite", token)
+        self.assertEqual(status, 200, body)
+        real = body["realization"]
+        self.assertAlmostEqual(real["billed"], 8_000_000, delta=1, msg="10 M facturés, avoir de 2 M")
+        self.assertEqual(body["forecast"]["backlog_hours"], 13.0, "B 8 h et C 5 h, rattachées à aucune facture")
+
+    def test_dossier_suspendu_hors_goulot(self):
+        """Un dossier suspendu n'attend pas la décision de son gate : il ne fait pas le goulot."""
+        self.b.state = "on_hold"
+        self.env.flush_all()
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, body = self._get("portefeuille", token)
+        self.assertEqual(status, 200, body)
+        # G2 : E seul (150 j) ; G1 : C et D, 2 × 77,5 j = 155 : le goulot passe en G1.
+        self.assertEqual(body["bottleneck"]["gate"], "G1")
+        self.assertNotIn(self.b.id, [x["id"] for x in body["bottleneck"]["dossiers"]])
+
     def test_risques(self):
         token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
         status, body = self._get("risques", token)

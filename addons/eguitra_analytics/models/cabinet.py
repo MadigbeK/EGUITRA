@@ -396,9 +396,10 @@ class Bundle:
 
     @cached_property
     def waiting(self):
-        """Séjours en cours des dossiers du portefeuille, par gate : [(dossier, âge en jours)]."""
+        """Séjours en cours des dossiers actifs, par gate : [(dossier, âge en jours)]. Un dossier suspendu
+        n'attend pas une décision du gate : il ne fait ni goulot ni dossier bloqué."""
         result = defaultdict(list)
-        for d in self.live:
+        for d in self.live.filtered(lambda d: d.state == "open"):
             t = self.timeline(d)
             if not t["incomplete"]:
                 result[t["gate"]].append((d, t["age"]))
@@ -1504,7 +1505,8 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                                                   ("dossier_id", "in", b.dossiers.ids)])
         actions = actions.filtered(lambda a: a.create_date.date() <= b.date_to)
         open_actions = actions.filtered(lambda a: a.state in ACTION_OPEN)
-        late = open_actions.filtered(lambda a: a.is_overdue(b.date_to))
+        # Conditions en retard : celles des seuls dossiers actifs (suspendu ou clos : rien à relancer).
+        late = open_actions.filtered(lambda a: a.is_overdue(b.date_to) and a.dossier_id.state == "open")
         decided = actions.filtered(lambda a: a.state != "cancelled")
         conditions = {"count": len(actions), "done": len(actions.filtered(lambda a: a.state == "done")),
                       "open": len(open_actions), "overdue": len(late),
@@ -1732,7 +1734,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "expected_gnf": round(open_live * success / 100) if success is not None else None,
             "success_pct": _r(success), "rows": sorted(coverage_rows, key=lambda x: -x["gap"]),
         }
-        follow_ups = open_all.filtered(lambda f: f.next_date and f.next_date < b.date_to).sorted("next_date")
+        # Relances : démarches des seuls dossiers actifs (un dossier suspendu ou clos ne se relance pas).
+        follow_ups = open_all.filtered(lambda f: f.next_date and f.next_date < b.date_to
+                                       and f.dossier_id.state == "open").sorted("next_date")
         stale = open_all.filtered(lambda f: f.state in ("submitted", "review") and f.state_date
                                   and (b.date_to - f.state_date).days > STALE_FUNDING_DAYS)
         notes = []
@@ -1883,7 +1887,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         invoices = sheets.invoice_id.filtered(
             lambda m: _billed(m) and m.invoice_date and year_ago < m.invoice_date <= b.date_to)
         hours = sum(sheets.filtered(lambda t: t.invoice_id in invoices).mapped("hours"))
-        amount = sum(invoices.mapped("amount_untaxed_signed"))
+        amount = sum(_net_billed(b.env, invoices, b.date_to).values())
         if hours and amount > 0:
             return amount / hours, "derived"
         return None, None
@@ -1970,13 +1974,17 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         invoice_hours = defaultdict(float)
         for t in sheets.filtered(lambda t: t.invoice_id in invoices):
             invoice_hours[t.invoice_id.id] += t.hours
-        effective = {m.id: m.amount_untaxed_signed / invoice_hours[m.id] for m in invoices if invoice_hours[m.id]}
+        net = _net_billed(env, invoices, b.date_to)
+        effective = {m.id: net[m.id] / invoice_hours[m.id] for m in invoices if invoice_hours[m.id]}
 
         def billed_value(t):
             return t.hours * effective.get(t.invoice_id.id, 0.0) if t.invoice_id in invoices else 0.0
 
         def unbilled(t):
-            return t.billable and t.invoice_id not in invoices
+            # « À facturer », la définition d'AxisPro : temps facturable encore rattaché à aucune facture. Le
+            # temps d'une facture annulée, contrepassée ou en brouillon n'y est pas : il ne se refacture pas
+            # tant que la facture le garde (signalé dans la fiabilité des données).
+            return t.billable and not t.invoice_id
 
         def blank():
             return {"hours": 0.0, "billable_hours": 0.0, "billed": 0.0, "billed_hours": 0.0, "wip_hours": 0.0,
@@ -2187,8 +2195,13 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                           min(20, 20 * abs(unassigned_period) / abs(period_total))))
         drafts = sheets.invoice_id.filtered(lambda m: m.state == "draft")
         if drafts:
-            notes.append((f"{_n(len(drafts), 'facture d’honoraires', 'factures d’honoraires')} en brouillon : temps "
-                          "compté dans le carnet.", 5))
+            notes.append((f"{_n(len(drafts), 'facture d’honoraires', 'factures d’honoraires')} en brouillon : temps ni "
+                          "facturé ni « à facturer » tant qu'elle n'est pas validée.", 5))
+        stuck = [t for t in sheets if t.billable and t.invoice_id and t.invoice_id not in invoices
+                 and t.invoice_id.state != "draft"]
+        if stuck:
+            notes.append((f"{_fr(sum(t.hours for t in stuck), 1)} h rattachées à des factures annulées ou contrepassées : "
+                          "ni facturées ni refacturables tant qu'elles restent attachées à la facture (AxisPro).", 10))
         candidates = self._activite_insights(b, rate, ratio, realization_block, profit_rows, forecast, revenue_block,
                                              summary, by_service)
         return {
@@ -2604,3 +2617,15 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
 def _billed(move):
     """Facture d'honoraires validée et non contrepassée."""
     return move.state == "posted" and move.move_type == "out_invoice" and move.payment_state != "reversed"
+
+
+def _net_billed(env, invoices, day):
+    """Montant hors taxes de chaque facture d'honoraires, net des avoirs validés qui la contrepassent
+    (reversed_entry_id), lettrés ou non, partiels compris, jusqu'à la date d'arrêté."""
+    net = {m.id: m.amount_untaxed_signed for m in invoices}
+    if invoices:
+        refunds = env["account.move"].search([("reversed_entry_id", "in", invoices.ids), ("state", "=", "posted"),
+                                              ("move_type", "=", "out_refund"), ("date", "<=", day)])
+        for refund in refunds:
+            net[refund.reversed_entry_id.id] += refund.amount_untaxed_signed
+    return net
