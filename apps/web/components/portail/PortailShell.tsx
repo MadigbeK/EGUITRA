@@ -8,7 +8,7 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
-import { ErrorBox, FEUILLE, PANNEAU, cx } from "@/components/ui";
+import { ErrorBox, FEUILLE, PANNEAU, Select, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
@@ -27,6 +27,24 @@ type PortailContext = {
 
 const Contexte = createContext<PortailContext | null>(null);
 const MEMOIRE = "portail-dossier";
+
+/** Dossier choisi lors d'une visite précédente (rien côté serveur, ni si le stockage est indisponible). */
+function lireMemoire(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return Number(window.localStorage.getItem(MEMOIRE)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function ecrireMemoire(id: number) {
+  try {
+    window.localStorage.setItem(MEMOIRE, String(id));
+  } catch {
+    // Stockage indisponible : le choix vaut pour la visite.
+  }
+}
 
 /** Espace du porteur, dossier choisi (plusieurs dossiers possibles) et rafraîchissement des compteurs. */
 export function usePortail(): PortailContext {
@@ -176,6 +194,27 @@ function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Sur téléphone et tablette, la colonne du dossier est dans le tiroir : un porteur à plusieurs dossiers voit
+ * ici, sur chaque page, le dossier où il écrit et dépose, et en change sans ouvrir le menu.
+ */
+function BandeauDossier({ espace, dossier, choisir }: { espace: Espace | undefined; dossier: PortailContext["dossier"]; choisir: (id: number) => void }) {
+  if (!espace || espace.dossiers.length < 2 || !dossier) return null;
+  return (
+    <div className="no-print flex items-center gap-2.5 border-b border-line bg-panel-2 px-4 py-2 sm:px-6 lg:hidden">
+      <FolderOpen className="h-4 w-4 flex-none text-accent" />
+      <span className="flex-none text-[12.5px] font-medium text-muted">Dossier</span>
+      <Select
+        aria-label="Dossier en cours"
+        value={dossier.id}
+        onChange={(e) => choisir(Number(e.target.value))}
+        options={espace.dossiers.map((d) => ({ value: d.id, label: `${d.reference} · ${d.name}` }))}
+        className="min-h-8 min-w-0 flex-1 py-1 text-[13px] font-semibold"
+      />
     </div>
   );
 }
@@ -347,34 +386,36 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   const router = useRouter();
   const [tiroir, setTiroir] = useState(false);
   const { data: espace, error: erreurEspace, mutate } = useApi<Espace>("/portail/espace", { refreshInterval: 60_000 });
-  const [choisi, setChoisi] = useState<number | null>(null);
+  const voulu = Number(params.get("dossier")) || null;
+  const [memo, setMemo] = useState<number | null>(lireMemoire);
 
+  // Un dossier désigné par l'adresse (lien d'une notification, d'une étape, d'un agenda) devient le dossier
+  // choisi et mémorisé : les pages ouvertes ensuite par le menu restent sur lui, au lieu de revenir en
+  // silence au dossier d'avant. Une adresse qui désigne un dossier qui n'est pas le sien est ignorée.
   useEffect(() => {
-    const voulu = Number(params.get("dossier"));
-    if (voulu) {
-      setChoisi(voulu);
-      return;
+    if (!espace || !voulu || voulu === memo) return;
+    if (espace.dossiers.some((d) => d.id === voulu)) {
+      setMemo(voulu);
+      ecrireMemoire(voulu);
     }
-    try {
-      const memo = Number(window.localStorage.getItem(MEMOIRE));
-      if (memo) setChoisi(memo);
-    } catch {
-      // stockage indisponible : premier dossier
-    }
-  }, [params]);
+  }, [espace, voulu, memo]);
 
-  const dossier = useMemo(() => espace?.dossiers.find((d) => d.id === choisi) ?? espace?.dossiers[0], [espace, choisi]);
+  const dossier = useMemo(() => {
+    const dossiers = espace?.dossiers ?? [];
+    return dossiers.find((d) => d.id === voulu) ?? dossiers.find((d) => d.id === memo) ?? dossiers[0];
+  }, [espace, voulu, memo]);
   const choisir = useCallback(
     (id: number) => {
-      setChoisi(id);
-      try {
-        window.localStorage.setItem(MEMOIRE, String(id));
-      } catch {
-        // stockage indisponible : le choix vaut pour la page
+      setMemo(id);
+      ecrireMemoire(id);
+      // L'adresse ne doit plus imposer l'autre dossier ; ses autres paramètres restent.
+      if (voulu && voulu !== id) {
+        const reste = new URLSearchParams(params.toString());
+        reste.delete("dossier");
+        router.replace(reste.size ? `${pathname}?${reste.toString()}` : pathname);
       }
-      if (params.get("dossier")) router.replace(pathname);
     },
-    [params, pathname, router],
+    [voulu, params, pathname, router],
   );
   const rafraichir = useCallback(() => void mutate(), [mutate]);
   const valeur = useMemo(() => ({ espace, dossier, choisir, rafraichir, me }), [espace, dossier, choisir, rafraichir, me]);
@@ -441,6 +482,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
             </div>
             <div aria-hidden className="h-[3px] bg-accent" />
           </header>
+          <BandeauDossier espace={espace} dossier={dossier} choisir={choisir} />
           {me.password_change_required && (
             <div className="flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink lg:px-10">
               <AlertTriangle className="h-4 w-4 flex-none text-warn" />
