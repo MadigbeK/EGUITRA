@@ -7,7 +7,7 @@ import { AlertTriangle, BookOpen, Calculator, Check, ChevronLeft, FileSpreadshee
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
-import type { Anomaly, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
+import type { Anomaly, CompanyRef, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
 import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const TON_ANOMALIE: Record<Anomaly["severity"], Tone> = { danger: "danger", warn: "warn", info: "accent" };
@@ -85,6 +85,8 @@ export function ListePaies() {
       {creation && (
         <NouvellePaie
           proposition={dejaCourant ? "" : courant.slice(0, 7)}
+          companies={meta?.companies ?? []}
+          societe={societe}
           onClose={() => setCreation(false)}
           onDone={(p) => {
             setCreation(false);
@@ -100,15 +102,21 @@ export function ListePaies() {
   );
 }
 
-function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; onClose: () => void; onDone: (p: Payroll) => void }) {
+/**
+ * Préparation d'une paie : celle de la société choisie (défaut : le filtre « Société » de la liste), ou
+ * celle de chaque société qui a du personnel ce mois-là. La paie d'une société non voulue ne pourrait
+ * être ni supprimée ni validée par son préparateur.
+ */
+function NouvellePaie({ proposition, companies, societe: filtre, onClose, onDone }: { proposition: string; companies: CompanyRef[]; societe: number | null; onClose: () => void; onDone: (p: Payroll) => void }) {
   const [mois, setMois] = useState(proposition);
+  const [societe, setSociete] = useState<string>(filtre ? String(filtre) : companies.length === 1 ? String(companies[0]!.id) : "");
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function creer() {
     setBusy(true);
     setErreur(null);
     try {
-      onDone(await apiSend<Payroll>("POST", "/rh/payrolls", { month: `${mois}-01` }));
+      onDone(await apiSend<Payroll>("POST", "/rh/payrolls", { month: `${mois}-01`, ...(societe ? { company_id: Number(societe) } : {}) }));
     } catch (e) {
       setErreur(messageErreur(e));
     } finally {
@@ -119,7 +127,7 @@ function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; o
     <Modal
       open
       title="Préparer une paie"
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
         <Button variant="primary" loading={busy} disabled={!mois} onClick={creer}>
           <Calculator className="h-4 w-4" /> Calculer les bulletins
@@ -129,11 +137,16 @@ function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; o
       <div className="space-y-3 text-sm">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <p className="text-ink-2">
-          La paie du mois est préparée pour chaque société qui a du personnel (chacune reste l&apos;employeur légal et a sa propre paie). Tous les salariés présents dans le mois reçoivent un bulletin : salaire de base et éléments fixes au prorata de la présence, absences non rémunérées retenues, échéances d&apos;avances et de prêts, primes de rotation des chauffeurs. Les éléments du mois se saisissent ensuite sur chaque bulletin.
+          {societe ? <>La paie du mois est préparée pour la société choisie (chaque société reste l&apos;employeur légal et a sa propre paie).</> : <>La paie du mois est préparée pour chaque société qui a du personnel et pas encore de paie ce mois-là (chacune reste l&apos;employeur légal et a sa propre paie).</>} Tous les salariés présents dans le mois reçoivent un bulletin : salaire de base et éléments fixes au prorata de la présence, absences non rémunérées retenues, échéances d&apos;avances et de prêts, primes de rotation des chauffeurs. Les éléments du mois se saisissent ensuite sur chaque bulletin.
         </p>
         <Field label="Mois de paie">
           <Input type="month" value={mois} onChange={(e) => setMois(e.target.value)} />
         </Field>
+        {companies.length > 1 && (
+          <Field label="Société">
+            <Select value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Toutes les sociétés qui ont du personnel" options={companies.map((c) => ({ value: c.id, label: c.name }))} />
+          </Field>
+        )}
       </div>
     </Modal>
   );
