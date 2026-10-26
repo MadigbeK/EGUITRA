@@ -22,7 +22,7 @@ interface Referentials {
 interface SentRotation {
   id: number;
   name: string | null;
-  state: "draft" | "done" | "invoiced" | "cancelled";
+  state: "draft" | "en_route" | "done" | "invoiced" | "cancelled";
   date_loading: string;
   vehicle: { name: string } | null;
   client: { name: string } | null;
@@ -53,6 +53,7 @@ type View = "saisie" | "attente" | "envoyees";
 /** Mot de l'état d'une rotation envoyée ; son ton vient de la table commune des états (ETAT_TON). */
 const STATE_LABEL: Record<SentRotation["state"], string> = {
   draft: "Reçue au bureau",
+  en_route: "En route",
   done: "Validée",
   invoiced: "Facturée",
   cancelled: "Annulée",

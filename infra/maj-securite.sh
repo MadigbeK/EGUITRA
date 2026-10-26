@@ -23,8 +23,10 @@ report="$LOG_DIR/maj-securite/$(date +%Y-%m).md"
 BASES=(odoo:19.0 node:22-alpine postgres:16 caddy:2.10)
 
 image_state() {
-  docker image inspect -f '{{.Created}} {{index .RepoDigests 0}}' "$1" 2>/dev/null \
-    | sed -E 's/^([0-9-]+)T.* .*@sha256:(.{12}).*/\1, empreinte \2/' || echo "absente"
+  local out
+  out=$(docker image inspect -f '{{.Created}} {{index .RepoDigests 0}}' "$1" 2>/dev/null) || out=""
+  [ -n "$out" ] || { echo "absente du serveur"; return 0; }
+  echo "$out" | sed -E 's/^([0-9-]+)T.* .*@sha256:(.{12}).*/\1, empreinte \2/'
 }
 
 wait_url() {
@@ -53,7 +55,7 @@ case "${1:-}" in
     # développement). Une vulnérabilité élevée se corrige dans le code (package.json), puis repasse
     # par la recette.
     audit=$(docker run --rm -v "$PWD/../apps/web:/app:ro" -w /app node:22-alpine \
-      npm audit --omit=dev --audit-level=high 2>&1 | tail -3 | tr '\n' ' ') || true
+      npm --no-update-notifier audit --omit=dev 2>&1 | grep -iE "vulnerabilit" | tail -1) || true
     {
       echo "## Recette, $(date '+%d/%m/%Y %H:%M')"
       echo

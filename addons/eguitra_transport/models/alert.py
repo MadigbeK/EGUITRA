@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
-from ..nombres import fmt_money, fmt_volume
+from ..nombres import fmt_money, fmt_volume, pluriel
 
 
 class EguitraAlertThreshold(models.Model):
@@ -42,7 +42,7 @@ class EguitraAlertThreshold(models.Model):
                 names = ", ".join(r["label"] for r in weak[:5])
                 alerts.append(self._alert(
                     t, "Marge transport sous le seuil",
-                    f"{len(weak)} ensemble(s) sous {t.value:.0f} % de marge sur 30 jours : {names}.",
+                    f"{pluriel(len(weak), 'ensemble')} sous {t.value:.0f} % de marge sur 30 jours : {names}.",
                     None, "/transport/rentabilite",
                 ))
         t = thresholds.get("transport_shortage_excess")
@@ -58,7 +58,8 @@ class EguitraAlertThreshold(models.Model):
                 valued = f", valorisés {fmt_money(value)}" if value else ", non valorisés (prix du produit à saisir)"
                 alerts.append(self._alert(
                     t, "Manquants au-delà de la tolérance",
-                    f"{count} rotation(s), {fmt_volume(excess)} hors tolérance sur 30 jours{valued}. Chauffeurs : {worst}.",
+                    f"{pluriel(count, 'rotation')}, {fmt_volume(excess)} hors tolérance sur 30 jours{valued}. "
+                    f"Chauffeurs : {worst}.",
                     excess, "/transport/manquants",
                 ))
         return alerts
@@ -77,7 +78,7 @@ class EguitraPeriodClose(models.Model):
         for control in self.env["eguitra.transport.analysis"].sudo().controls(company):
             detail = "; ".join(control["items"][:6])
             if control["count"] > 6:
-                detail += f" (et {control['count'] - 6} autre(s))"
+                detail += f" (et {pluriel(control['count'] - 6, 'autre')})"
             checks.append(self._check(f"transport_{control['code']}", control["label"], control["ok"], False,
                                       f"{detail}. {control['hint']}", control["count"]))
         return checks
