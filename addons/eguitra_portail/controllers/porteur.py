@@ -162,7 +162,7 @@ class EguitraPortailPorteur(http.Controller):
         promoter = dossiers[:1].promoter_id
         return {
             "user": {"id": me.id, "name": me.name, "login": me.login, "company": promoter.name or None},
-            "dossiers": [dict(vues.dossier_ref(d), unread_messages=unread.get(d.id, 0)) for d in dossiers],
+            "dossiers": [dict(vues.dossier_ref(d, porteur=True), unread_messages=unread.get(d.id, 0)) for d in dossiers],
             "counts": {
                 "notifications": _notifications_unread(),
                 "messages": sum(unread.values()),
@@ -239,7 +239,8 @@ class EguitraPortailPorteur(http.Controller):
                                                  not a.featured))
         fundings = dossier.funding_ids
         return {
-            "dossier": dict(vues.dossier_ref(dossier), gates=vues.gates_of(dossier), location=dossier.location or None),
+            "dossier": dict(vues.dossier_ref(dossier, porteur=True), gates=vues.gates_of(dossier),
+                            location=dossier.location or None),
             "preparation": vues.preparation(dossier, docs, tasks),
             "next_steps": steps[:8],
             "upcoming": upcoming[:6],
@@ -260,7 +261,7 @@ class EguitraPortailPorteur(http.Controller):
                 team.append(dict(vues.person(assignment.user_id), role=f"Référent {assignment.compartment_id.name}"))
         return {
             "dossier": dict(
-                vues.dossier_ref(dossier), gates=vues.gates_of(dossier), location=dossier.location or None,
+                vues.dossier_ref(dossier, porteur=True), gates=vues.gates_of(dossier), location=dossier.location or None,
                 capacity=dossier.capacity or None, investment=dossier.investment, financing_need=dossier.financing_need,
                 currency={"name": dossier.currency_id.name, "symbol": dossier.currency_id.symbol},
                 date_start=dossier.date_start, description=dossier.description or None,

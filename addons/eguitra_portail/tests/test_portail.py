@@ -273,3 +273,17 @@ class TestPortail(ApiCase):
         texte = json.dumps(actions, ensure_ascii=False).lower()
         for mot in ("gap", "manual", "écart", "grille"):
             self.assertNotIn(mot, texte)
+
+    def test_decision_dans_les_mots_du_porteur(self):
+        self.dossier_a.write({"decision": "no_go"})
+        _s, espace = self.call("GET", "/portail/espace", token=self.porteur)
+        _s, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        _s, projet = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/projet", token=self.porteur)
+        self.assertEqual((espace["dossiers"][0]["decision_label"], tableau["dossier"]["decision_label"],
+                          projet["dossier"]["decision_label"]), ("Avis défavorable",) * 3)
+        decision = self.notifications(self.porteur_a).filtered(lambda n: n.kind == "decision")
+        self.assertEqual(decision.title, "Décision du comité : Avis défavorable")
+        for vue in (espace, tableau, projet):
+            texte = json.dumps(vue, ensure_ascii=False)
+            for jargon in ("NO-GO", "HOLD", "CONDITIONAL GO"):
+                self.assertNotIn(jargon, texte, "Jamais le vocabulaire interne du comité")

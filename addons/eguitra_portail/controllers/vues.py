@@ -10,6 +10,7 @@ from odoo.addons.eguitra_axispro.models.pilotage import FUNDING_STATES, INSTRUME
 
 from ..models.agenda import EVENT_KINDS, MEETING_MODES, MEETING_STATES, REGISTRATION_STATES
 from ..models.audience import split_list
+from ..models.axispro import decision_porteur
 from ..models.contenu import ANNOUNCEMENT_KINDS, ARTICLE_KINDS
 from ..models.suivi import FEEDBACK_TOPICS
 
@@ -47,11 +48,16 @@ def gates_of(dossier):
             for g in dossier.policy_id.gate_ids.sorted("sequence")]
 
 
-def dossier_ref(dossier):
+def dossier_ref(dossier, porteur=False):
+    """Résumé d'un dossier. porteur : la décision du comité dans les mots du porteur (jamais GO, NO-GO…)."""
+    if not dossier.decision:
+        label = None
+    else:
+        label = decision_porteur(dossier.decision) if porteur else DECISIONS.get(dossier.decision)
     return {"id": dossier.id, "reference": dossier.reference, "name": dossier.name, "state": dossier.state,
             "sector": dossier.sector or None, "current_gate": gate_ref(dossier.current_gate_id),
             "consultant": person(dossier.consultant_id), "decision": dossier.decision or None,
-            "decision_label": DECISIONS.get(dossier.decision) if dossier.decision else None}
+            "decision_label": label}
 
 
 def preparation(dossier, docs, actions):
@@ -93,7 +99,7 @@ def timeline(dossier, limit=None):
             items.append({"date": entry.date, "kind": "gate", "title": f"Étape franchie : {gate.name}", "detail": None})
     for review in dossier.sudo().review_ids.filtered(lambda r: r.state == "locked" and r.decision):
         items.append({"date": review.locked_at or at_noon(review.date), "kind": "decision",
-                      "title": f"Décision du comité : {DECISIONS.get(review.decision, review.decision)}",
+                      "title": f"Décision du comité : {decision_porteur(review.decision)}",
                       "detail": None})
     for doc in dossier.sudo().document_ids.filtered("portal_visible"):
         from_cabinet = not doc.uploaded_by.share
