@@ -96,6 +96,11 @@ describe("contrôle avant départ", () => {
     expect(autres.map((p) => p.id)).toEqual([5]);
   });
 
+  it("ne fait pas répondre aux points retirés de la grille", () => {
+    const grille = { ...GRILLE, items: [...GRILLE.items, { id: 7, label: "Ancien point", blocking: true, sequence: 5, linked_to: null, active: false }] };
+    expect(pointsDuControle(grille).critiques.map((p) => p.id)).toEqual([1, 3]);
+  });
+
   it("exige une réponse à chaque point et une photo pour toute non-conformité", () => {
     const reponses = { 1: { answer: "ok" as const }, 3: { answer: "not_ok" as const } };
     const m = manques(GRILLE, reponses, {});
@@ -170,6 +175,38 @@ describe("envoi des fiches HSSEQ", () => {
     );
     await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ created: 1, errors: 1, echec: null });
     expect(await store.queue.all()).toEqual([expect.objectContaining({ client_uuid: "a1", status: "error", message: "Point de la grille sans réponse." })]);
+  });
+
+  it("une erreur passagère du bureau (503, 429) laisse la fiche en attente et arrête l'envoi", async () => {
+    for (const erreur of [new ApiError(503, "unavailable", "Service indisponible."), new ApiError(429, "rate_limited", "Trop de demandes.")]) {
+      const store = memoryStore();
+      await store.queue.put(fiche("a1", "event", { type: "hazard" }));
+      await store.queue.put(fiche("b22", "event", { type: "hazard" }));
+      const { api, appels } = bureau(() => erreur);
+      const bilan = await envoyerFiches(store, api, appareil(), 7);
+      expect(bilan?.errors).toBe(0);
+      expect(appels).toHaveLength(1);
+      expect((await store.queue.all()).map((i) => i.status)).toEqual(["pending", "pending"]);
+    }
+  });
+
+  it("une session à refaire (mot de passe provisoire) n'est pas un refus de la fiche", async () => {
+    const store = memoryStore();
+    await store.queue.put(fiche("a1", "event", { type: "hazard" }));
+    const { api } = bureau(() => new ApiError(403, "password_change_required", "Mot de passe à remplacer."));
+    await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ errors: 0 });
+    expect((await store.queue.get("a1"))?.status).toBe("pending");
+  });
+
+  it("une heure de saisie refusée (horloge en avance) garde la fiche en attente et envoie les suivantes", async () => {
+    const store = memoryStore();
+    await store.queue.put(fiche("a1", "event", { type: "hazard" }));
+    await store.queue.put(fiche("b22", "event", { type: "hazard" }));
+    const { api } = bureau((a) =>
+      a.body?.client_uuid === "a1" ? new ApiError(422, "invalid_parameter", "Heure à venir.", { fields: ["reported_at"] }) : { id: 5 },
+    );
+    await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ created: 1, errors: 0 });
+    expect(await store.queue.all()).toEqual([expect.objectContaining({ client_uuid: "a1", status: "pending" })]);
   });
 
   it("refuse une fiche dont l'identifiant appartient à un autre compte (409)", async () => {

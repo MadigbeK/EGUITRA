@@ -2,14 +2,15 @@ import { randomUUID } from "expo-crypto";
 import { useKeepAwake } from "expo-keep-awake";
 import { useRouter } from "expo-router";
 import { usePreventScreenCapture } from "expo-screen-capture";
-import { useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { revenir } from "../accueil/retour";
 import type { Utilisateur } from "../auth/coffre";
 import { useEnvoi } from "../sync/Envoi";
 import { BarreAction, Bandeau, Bouton, Champ, Choix, EnTete, Ecran, Feuille, Texte, vibrer } from "../ui/elements";
 import { espaces, marque, mesures, rayons, textes, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
-import { garderResultat } from "./appareil";
+import { appareil, garderResultat } from "./appareil";
 import type { NewBreathTest } from "./types";
 import { useHsseq } from "./useHsseq";
 
@@ -45,7 +46,13 @@ function Contenu({ user }: { user: Utilisateur }) {
   const [motif, setMotif] = useState("");
   const [autreMotif, setAutreMotif] = useState("");
   const [enregistrement, setEnregistrement] = useState(false);
-  const [fait, setFait] = useState(false);
+  /** Enregistré : « realise » si l'alcootest a été fait, « non_realise » sinon. */
+  const [fait, setFait] = useState<"realise" | "non_realise" | null>(null);
+  const [echec, setEchec] = useState(false);
+  const sortie = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (sortie.current) clearTimeout(sortie.current);
+  }, []);
 
   // Un conducteur ne saisit que pour lui-même ; le chef de parc choisit le conducteur.
   const driverId = conducteurSeul ? (refs?.me.driver_id ?? null) : conducteurId ? Number(conducteurId) : null;
@@ -62,6 +69,7 @@ function Contenu({ user }: { user: Utilisateur }) {
   async function enregistrer() {
     if (!pret || enregistrement || fait) return;
     setEnregistrement(true);
+    setEchec(false);
     const fiche: NewBreathTest & { offline: boolean } = {
       rotation_id: null,
       driver_id: driverId,
@@ -76,16 +84,19 @@ function Contenu({ user }: { user: Utilisateur }) {
       }
       await envoi.enregistrer({ client_uuid: uuid.current, kind: "breath_test", user_id: user.id, created_at: new Date().toISOString(), status: "pending", payload: { ...fiche } });
     } catch {
+      // Rien d'enregistré : le résultat ne reste pas seul au coffre.
+      await appareil.effacerResultat(uuid.current).catch(() => undefined);
       setEnregistrement(false);
+      setEchec(true);
       vibrer.erreur();
       return;
     }
     vibrer.succes();
-    setFait(true);
+    setFait(realise ? "realise" : "non_realise");
     setLecture("");
     setResultat(null);
     void envoi.sync("saisie");
-    setTimeout(() => router.back(), 1500);
+    sortie.current = setTimeout(() => revenir(router), 1500);
   }
 
   return (
@@ -94,12 +105,13 @@ function Contenu({ user }: { user: Utilisateur }) {
         titre="Alcootest"
         sousTitre="Avant le départ"
         gauche={(
-          <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => router.back()} style={styles.retour}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => revenir(router)} style={styles.retour}>
             <Text style={[textes.libelle, { color: c.enteteEncre }]}>‹</Text>
           </Pressable>
         )}
       />
-      <ScrollView contentContainerStyle={styles.page}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         {refs === null ? <Bandeau ton="attention" texte="Les listes ne sont pas encore sur cet appareil. Ouvrez l'application une première fois avec du réseau." /> : null}
         {conducteurSeul ? (
           refs && refs.me.driver_id === null ? <Bandeau ton="attention" texte="Votre compte n'est relié à aucun conducteur : voyez le bureau." /> : null
@@ -113,10 +125,15 @@ function Contenu({ user }: { user: Utilisateur }) {
           />
         )}
 
-        {fait ? (
+        {fait === "realise" ? (
           <Feuille style={{ borderColor: c.ok, borderWidth: traits.fort }}>
             <Texte variante="titre" ton="ok">Alcootest fait</Texte>
             <Texte>Le résultat est chiffré sur le téléphone, puis envoyé au seul Responsable HSSEQ.</Texte>
+          </Feuille>
+        ) : fait === "non_realise" ? (
+          <Feuille style={{ borderColor: c.warn, borderWidth: traits.fort }}>
+            <Texte variante="titre" ton="warn">Alcootest non réalisé, enregistré</Texte>
+            <Texte>Le départ reste bloqué (V03) tant qu'un alcootest réalisé et négatif n'est pas enregistré.</Texte>
           </Feuille>
         ) : (
           <>
@@ -174,11 +191,21 @@ function Contenu({ user }: { user: Utilisateur }) {
         )}
       </ScrollView>
       <BarreAction
-        etat={fait ? "Alcootest enregistré." : !pret ? "Répondez aux questions pour enregistrer." : !envoi.online ? "Hors réseau : l'alcootest partira seul dès que le réseau passe." : "Prêt à enregistrer."}
-        tonEtat={fait ? "ok" : "second"}
+        etat={fait === "realise" ? "Alcootest enregistré." : fait === "non_realise" ? "Non réalisé, enregistré : le départ reste bloqué (V03)."
+          : echec ? "Enregistrement impossible sur cet appareil : réessayez. Si cela recommence, prévenez le bureau."
+            : !pret ? "Répondez aux questions pour enregistrer." : !envoi.online ? "Hors réseau : l'alcootest partira seul dès que le réseau passe." : "Prêt à enregistrer."}
+        tonEtat={fait === "realise" ? "ok" : fait === "non_realise" ? "warn" : echec ? "dangerTexte" : "second"}
       >
-        <Bouton style={{ flex: 1 }} titre={fait ? "Alcootest fait" : "Enregistrer l'alcootest"} fait={fait} desactive={!pret && !fait} chargement={enregistrement && !fait} onPress={() => void enregistrer()} />
+        <Bouton
+          style={{ flex: 1 }}
+          titre={fait === "realise" ? "Alcootest fait" : fait === "non_realise" ? "Enregistré" : "Enregistrer l'alcootest"}
+          fait={fait !== null}
+          desactive={!pret && !fait}
+          chargement={enregistrement && !fait}
+          onPress={() => void enregistrer()}
+        />
       </BarreAction>
+      </KeyboardAvoidingView>
     </Ecran>
   );
 }

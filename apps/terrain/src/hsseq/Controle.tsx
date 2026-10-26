@@ -3,11 +3,13 @@ import { useKeepAwake } from "expo-keep-awake";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Image, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { revenir } from "../accueil/retour";
 import type { Utilisateur } from "../auth/coffre";
 import { duree, heure, pluriel } from "../format";
 import type { Piece } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
-import { BarreAction, Bandeau, Bouton, Champ, Choix, EnTete, Ecran, Feuille, Tampon, Texte, vibrer } from "../ui/elements";
+import { BarreAction, Bandeau, Bouton, Champ, Choix, demanderConfirmation, EnTete, Ecran, Feuille, Tampon, Texte, vibrer } from "../ui/elements";
 import { Appareil, Cadenas, Coche, Losange } from "../ui/icones";
 import { espaces, mesures, rayons, textes, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
@@ -51,6 +53,31 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
   const [fait, setFait] = useState<string | null>(null);
   const [signature, setSignature] = useState<{ image: string; at: string } | null>(null);
   const [signer, setSigner] = useState(false);
+  const [echec, setEchec] = useState(false);
+  const insets = useSafeAreaInsets();
+  const sortie = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Photos d'un contrôle non enregistré : elles quittent l'appareil avec l'écran.
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  const enregistre = useRef(false);
+  useEffect(() => () => {
+    if (sortie.current) clearTimeout(sortie.current);
+    if (enregistre.current) return;
+    for (const ph of Object.values(photosRef.current)) void supprimerPhoto(ph.uri).catch(() => undefined);
+  }, []);
+
+  /** Photo d'un point : une reprise remplace la précédente, qui quitte l'appareil. */
+  function joindre(ph: Piece) {
+    const avant = photos[ph.item_id!];
+    if (avant && avant.uri !== ph.uri) void supprimerPhoto(avant.uri).catch(() => undefined);
+    setPhotos((x) => ({ ...x, [ph.item_id!]: ph }));
+  }
+
+  /** Toutes les photos abandonnées (changement de véhicule). */
+  function oublierPhotos() {
+    for (const ph of Object.values(photos)) void supprimerPhoto(ph.uri).catch(() => undefined);
+    setPhotos({});
+  }
 
   // Véhicule pré-rempli : celui du conducteur, s'il en a un.
   useEffect(() => {
@@ -71,10 +98,25 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
   const points = grille ? pointsDuControle(grille) : { critiques: [], autres: [] };
   const critique = points.critiques[index];
 
-  // Retour Android : point précédent ou étape précédente ; la saisie reste en brouillon.
+  const commence = Object.keys(reponses).length > 0;
+
+  /** Sortie du contrôle : une saisie commencée ne se perd pas sans confirmation. */
+  async function quitter() {
+    if (commence && !fait && !(await demanderConfirmation("Abandonner ce contrôle ? Les réponses et les photos seront effacées.", { action: "Abandonner", danger: true }))) return;
+    revenir(router);
+  }
+  const quitterRef = useRef(quitter);
+  quitterRef.current = quitter;
+
+  // Retour Android : point précédent ou étape précédente ; la saisie reste en brouillon. Depuis le
+  // choix du véhicule, une saisie commencée demande confirmation avant de quitter.
   useEffect(() => {
     const abonnement = BackHandler.addEventListener("hardwareBackPress", () => {
       if (fait) return false;
+      if (etape === "vehicule" && commence) {
+        void quitterRef.current();
+        return true;
+      }
       if (etape === "critiques" && index > 0) {
         setIndex(index - 1);
         return true;
@@ -95,10 +137,15 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
       return false;
     });
     return () => abonnement.remove();
-  }, [etape, index, fait, points.critiques.length, points.autres.length]);
+  }, [etape, index, fait, commence, points.critiques.length, points.autres.length]);
 
-  function repondre(item: TemplateItem, answer: Answer) {
-    setReponses((r) => ({ ...r, [item.id]: { ...r[item.id], answer } }));
+  async function repondre(item: TemplateItem, answer: Answer) {
+    const avant = reponses[item.id];
+    // Un défaut déjà noté ne s'efface pas d'un toucher : sa photo et son commentaire partiraient avec.
+    const defautNote = answer === "ok" && avant?.answer === "not_ok" && (!!photos[item.id] || !!avant.comment?.trim());
+    if (defautNote && !(await demanderConfirmation("Passer ce point en « Conforme » ? La photo et le commentaire du défaut seront effacés.", { action: "Conforme" }))) return;
+    // « Conforme » efface le commentaire du défaut ; « Non conforme » garde celui déjà écrit.
+    setReponses((r) => ({ ...r, [item.id]: answer === "ok" ? { answer } : { ...r[item.id], answer } }));
     if (answer === "ok") {
       vibrer.selection();
       const retiree = photos[item.id];
@@ -106,7 +153,8 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
         void supprimerPhoto(retiree.uri).catch(() => undefined);
         setPhotos(({ [item.id]: _retiree, ...reste }) => reste);
       }
-      if (etape === "critiques") avancer();
+      // Après un changement d'avis, on reste sur le point pour le relire.
+      if (etape === "critiques" && !defautNote) avancer();
     } else {
       vibrer.avertissement();
       if (!photos[item.id]) setPhotoPour(item.id);
@@ -123,6 +171,7 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
     const { sansReponse, sansPhoto } = manques(grille, reponses, photos);
     if (sansReponse.length || sansPhoto.length) return;
     setEnregistrement(true);
+    setEchec(false);
     const secondes = Math.round((Date.now() - (debut ?? Date.now())) / 1000);
     const fiche = ficheControle(grille, reponses, {
       vehicle_id: vehicule.id,
@@ -138,13 +187,15 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
       );
     } catch {
       setEnregistrement(false);
+      setEchec(true);
       vibrer.erreur();
       return;
     }
+    enregistre.current = true;
     vibrer.succes();
     setFait(`Contrôle enregistré en ${duree(secondes)}.`);
     void envoi.sync("saisie");
-    setTimeout(() => router.back(), 1500);
+    sortie.current = setTimeout(() => revenir(router), 1500);
   }
 
   const entete = (
@@ -152,7 +203,7 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
       titre="Contrôle"
       sousTitre={vehicule ? `Avant départ, ${vehicule.name}` : "Avant départ"}
       gauche={(
-        <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => router.back()} style={styles.retour}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => void quitter()} style={styles.retour}>
           <Text style={[textes.libelle, { color: c.enteteEncre }]}>‹</Text>
         </Pressable>
       )}
@@ -198,7 +249,7 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
             onChange={(id) => {
               setVehiculeId(id);
               setReponses({});
-              setPhotos({});
+              oublierPhotos();
               setIndex(0);
             }}
           />
@@ -238,22 +289,24 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
           </View>
           <Texte variante="titreFort">{critique.label}</Texte>
           {r?.answer === "not_ok" ? (
-            <ZonePhoto photo={photo} onPrendre={() => setPhotoPour(critique.id)} commentaire={r.comment ?? ""} onCommentaire={(t) => setReponses((x) => ({ ...x, [critique.id]: { answer: "not_ok", comment: t } }))} />
+            <>
+              <ZonePhoto photo={photo} onPrendre={() => setPhotoPour(critique.id)} commentaire={r.comment ?? ""} onCommentaire={(t) => setReponses((x) => ({ ...x, [critique.id]: { answer: "not_ok", comment: t } }))} />
+              <Bouton titre="Changer la réponse : conforme" variante="discret" onPress={() => void repondre(critique, "ok")} />
+            </>
           ) : null}
           {index > 0 ? <Bouton titre="Point précédent" variante="discret" onPress={() => setIndex(index - 1)} /> : null}
         </ScrollView>
         {r?.answer === "not_ok" ? (
           <BarreAction etat={photo ? "Photo jointe." : "Photo obligatoire pour une non-conformité."} tonEtat={photo ? "ok" : "dangerTexte"}>
-            <Bouton titre="Conforme" variante="secondaire" onPress={() => repondre(critique, "ok")} />
             <Bouton style={{ flex: 1 }} titre={photo ? "Continuer" : "Prendre la photo"} onPress={() => (photo ? avancer() : setPhotoPour(critique.id))} />
           </BarreAction>
         ) : (
-          <View style={[styles.reponses, { backgroundColor: c.surface, borderTopColor: c.filetFort }]}>
-            <GrandeReponse answer="not_ok" choisie={false} onPress={() => repondre(critique, "not_ok")} />
-            <GrandeReponse answer="ok" choisie={r?.answer === "ok"} onPress={() => repondre(critique, "ok")} />
+          <View style={[styles.reponses, { backgroundColor: c.surface, borderTopColor: c.filetFort, paddingBottom: Math.max(insets.bottom, espaces[4]) }]}>
+            <GrandeReponse answer="not_ok" choisie={false} onPress={() => void repondre(critique, "not_ok")} />
+            <GrandeReponse answer="ok" choisie={r?.answer === "ok"} onPress={() => void repondre(critique, "ok")} />
           </View>
         )}
-        <PrisePhoto visible={photoPour !== null} rattachement={{ parent_uuid: uuid.current, model: "nonconformity", item_id: photoPour }} onFermer={() => setPhotoPour(null)} onPhoto={(p) => setPhotos((x) => ({ ...x, [p.item_id!]: p }))} />
+        <PrisePhoto visible={photoPour !== null} rattachement={{ parent_uuid: uuid.current, model: "nonconformity", item_id: photoPour }} onFermer={() => setPhotoPour(null)} onPhoto={joindre} />
       </Ecran>
     );
   }
@@ -275,8 +328,8 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
                 <Feuille key={p.id}>
                   <Texte variante="texteDemi">{p.label}</Texte>
                   <View style={styles.deux}>
-                    <PetiteReponse answer="not_ok" choisie={r?.answer === "not_ok"} onPress={() => repondre(p, "not_ok")} />
-                    <PetiteReponse answer="ok" choisie={r?.answer === "ok"} onPress={() => repondre(p, "ok")} />
+                    <PetiteReponse answer="not_ok" choisie={r?.answer === "not_ok"} onPress={() => void repondre(p, "not_ok")} />
+                    <PetiteReponse answer="ok" choisie={r?.answer === "ok"} onPress={() => void repondre(p, "ok")} />
                   </View>
                   {r?.answer === "not_ok" ? (
                     <ZonePhoto photo={photos[p.id]} onPrendre={() => setPhotoPour(p.id)} commentaire={r.comment ?? ""} onCommentaire={(t) => setReponses((x) => ({ ...x, [p.id]: { answer: "not_ok", comment: t } }))} />
@@ -292,7 +345,7 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
             <Bouton style={{ flex: 1 }} titre="Voir le récapitulatif" desactive={!manque || restants > 0 || sansPhoto > 0} onPress={() => setEtape("recap")} />
           </BarreAction>
         </KeyboardAvoidingView>
-        <PrisePhoto visible={photoPour !== null} rattachement={{ parent_uuid: uuid.current, model: "nonconformity", item_id: photoPour }} onFermer={() => setPhotoPour(null)} onPhoto={(p) => setPhotos((x) => ({ ...x, [p.item_id!]: p }))} />
+        <PrisePhoto visible={photoPour !== null} rattachement={{ parent_uuid: uuid.current, model: "nonconformity", item_id: photoPour }} onFermer={() => setPhotoPour(null)} onPhoto={joindre} />
       </Ecran>
     );
   }
@@ -353,8 +406,10 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
       </ScrollView>
       <Signature visible={signer} onFermer={() => setSigner(false)} onSignee={(image) => setSignature({ image, at: new Date().toISOString() })} />
       <BarreAction
-        etat={fait ?? (manque.sansReponse.length || manque.sansPhoto.length ? "Des points restent à compléter." : !envoi.online ? "Hors réseau : le contrôle partira seul dès que le réseau passe. Rien à refaire." : `Durée : ${duree(ecoule)}.`)}
-        tonEtat={fait ? "ok" : "second"}
+        etat={fait ?? (echec
+          ? "Enregistrement impossible sur cet appareil : réessayez. Si cela recommence, prévenez le bureau."
+          : manque.sansReponse.length || manque.sansPhoto.length ? "Des points restent à compléter." : !envoi.online ? "Hors réseau : le contrôle partira seul dès que le réseau passe. Rien à refaire." : `Durée : ${duree(ecoule)}.`)}
+        tonEtat={fait ? "ok" : echec ? "dangerTexte" : "second"}
       >
         <Bouton
           style={{ flex: 1 }}

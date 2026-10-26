@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { randomUUID } from "expo-crypto";
-import { useRef, useState } from "react";
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, AppState, Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SIMULATION } from "../config";
 import type { Piece } from "../store/types";
@@ -22,8 +22,19 @@ export function PrisePhoto({
   onFermer: () => void;
   onPhoto: (piece: Piece) => void;
 }) {
-  const [permission, demander] = useCameraPermissions();
+  const [permission, demander, relire] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
+
+  // Autorisation donnée dans les réglages du téléphone : relue à chaque ouverture et au retour dans
+  // l'application, sans redémarrage.
+  useEffect(() => {
+    if (!visible) return;
+    void relire().catch(() => undefined);
+    const abonnement = AppState.addEventListener("change", (etat) => {
+      if (etat === "active") void relire().catch(() => undefined);
+    });
+    return () => abonnement.remove();
+  }, [visible, relire]);
   const [lampe, setLampe] = useState(false);
   const [travail, setTravail] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -69,7 +80,10 @@ export function PrisePhoto({
             {permission.canAskAgain ? (
               <Bouton titre="Autoriser l'appareil photo" onPress={() => void demander()} />
             ) : (
-              <Texte style={{ color: marque.or, textAlign: "center" }}>Autorisation refusée : ouvrez les réglages du téléphone, Applications, NIMOVA Terrain, Autorisations.</Texte>
+              <>
+                <Texte style={{ color: marque.or, textAlign: "center" }}>Autorisation refusée : dans les réglages, Autorisations, Appareil photo.</Texte>
+                <Bouton titre="Ouvrir les réglages" onPress={() => void Linking.openSettings().catch(() => undefined)} />
+              </>
             )}
           </View>
         ) : (

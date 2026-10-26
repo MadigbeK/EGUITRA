@@ -11,9 +11,9 @@ export interface Reponse {
   comment?: string;
 }
 
-/** Points à répondre, dans l'ordre de la grille : critiques, puis non bloquants. */
+/** Points à répondre, dans l'ordre de la grille : critiques, puis non bloquants ; ni point retiré, ni point relié. */
 export function pointsDuControle(grille: CheckTemplate): { critiques: TemplateItem[]; autres: TemplateItem[] } {
-  const repondus = grille.items.filter((i) => !i.linked_to).sort((a, b) => a.sequence - b.sequence);
+  const repondus = grille.items.filter((i) => !i.linked_to && i.active !== false).sort((a, b) => a.sequence - b.sequence);
   return { critiques: repondus.filter((i) => i.blocking), autres: repondus.filter((i) => !i.blocking) };
 }
 
