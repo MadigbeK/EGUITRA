@@ -53,7 +53,8 @@ REQUIREMENT_ALIASES = {
 
 class AxisproPolicy(models.Model):
     _name = "axispro.policy"
-    _description = "Politique d'évaluation AxisPro"
+    # Lu dans les messages de refus d'accès que l'écran relaie : le nom entier du cabinet.
+    _description = "Politique d'évaluation de MB AxisPro Consulting"
     _order = "version desc"
 
     name = fields.Char("Intitulé", required=True)
