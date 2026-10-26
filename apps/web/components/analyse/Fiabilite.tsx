@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { type CSSProperties } from "react";
 import { ArrowUpRight, CheckCircle2, AlertTriangle, XCircle } from "@/components/icons";
 import { Anneau, Badge, Card, cx } from "@/components/ui";
-import { AttenteSection, ErreurLecture, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtValeur, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienSuivi, Vide, fmtValeur, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeFiabilite, Status } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -118,9 +117,9 @@ function Corps() {
                           </div>
                         </div>
                         {c.link && c.status !== "good" ? (
-                          <Link href={c.link} className="no-print inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
+                          <LienSuivi href={c.link} className="no-print inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
                             Corriger <ArrowUpRight className="h-3.5 w-3.5" />
-                          </Link>
+                          </LienSuivi>
                         ) : (
                           <span />
                         )}

@@ -15,7 +15,7 @@ import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet
 import { Badge, Button, Delta, Empty, ErrorBox, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, useMouvementReduit, type Teinte, type Tone } from "@/components/ui";
 import { ApiError, apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
-import type { EntiteSociete } from "@/lib/config";
+import { APPS, appFromPath, type AppCode, type EntiteSociete } from "@/lib/config";
 import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { COULEUR, fmtValeur, moisCourt } from "@/components/analyse/charts/commun";
 
@@ -247,6 +247,16 @@ export function QualiteDonnees({ quality }: { quality: Quality }) {
 
 /* ─── Garde de société ─────────────────────────────────────────────────── */
 
+/** Donne à une application sa société de travail (cookie de société propre à chaque application). */
+function choisirSociete(companyId: number, app: AppCode): Promise<boolean> {
+  return fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: companyId, app }), keepalive: true })
+    .then((res) => res.ok)
+    .catch(() => false);
+}
+
+/** Bascules de l'Analyse en cours dans la page, par société : une seule requête, même si la garde est remontée. */
+const bascules = new Map<number, Promise<boolean>>();
+
 /**
  * Les sections d'une société ne s'ouvrent que dans ses livres. Un compte ouvert à cette société y
  * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique. Le
@@ -258,30 +268,31 @@ export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; ch
   const [echec, setEchec] = useState(false);
   useEffect(() => {
     if (!cible) return;
-    // Un seul essai par société en quelques secondes : jamais de rechargements en boucle.
-    const essai = `garde-societe-${cible.id}`;
-    try {
-      if (Date.now() - Number(sessionStorage.getItem(essai) ?? 0) < 10_000) return setEchec(true);
-      sessionStorage.setItem(essai, String(Date.now()));
-    } catch {
-      return setEchec(true);
-    }
-    let abandon = false;
-    fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: cible.id, app: "analyse" }) })
-      .then((res) => {
-        if (abandon) return;
-        // Rechargement complet, comme au changement de société : rien de l'autre société ne reste affiché.
-        if (res.ok) window.location.reload();
-        else setEchec(true);
-      })
-      .catch(() => !abandon && setEchec(true));
-    return () => {
-      abandon = true;
+    let bascule = bascules.get(cible.id);
+    if (!bascule) {
+      // Un seul essai par société en quelques secondes : jamais de rechargements en boucle.
+      const essai = `garde-societe-${cible.id}`;
       try {
-        sessionStorage.removeItem(essai);
+        if (Date.now() - Number(sessionStorage.getItem(essai) ?? 0) < 10_000) return setEchec(true);
+        sessionStorage.setItem(essai, String(Date.now()));
       } catch {
-        // stockage indisponible : rien à effacer
+        return setEchec(true);
       }
+      bascule = choisirSociete(cible.id, "analyse");
+      bascules.set(cible.id, bascule);
+    }
+    let monte = true;
+    void bascule.then((ok) => {
+      // Le cookie a changé dès la réponse : rechargement complet, comme au changement de société, même
+      // si l'on a quitté la section entre-temps (l'écran ouvert garderait sinon l'autre société).
+      if (ok) window.location.reload();
+      else {
+        bascules.delete(cible.id);
+        if (monte) setEchec(true);
+      }
+    });
+    return () => {
+      monte = false;
     };
   }, [cible]);
   if (!contexte) return error ? <ErreurLecture error={error} onRetry={() => void mutate()} titre="L'analyse n'a pas pu lire la société de travail." /> : <AttenteSection />;
@@ -449,22 +460,50 @@ export function BandeauCible({ children, absent }: { children: ReactNode; absent
 }
 
 /**
- * Lien d'un constat ou d'un contrôle vers son objet. Vers la page même (constat d'une section qui
- * vise l'un de ses blocs), l'adresse change sans navigation : la section relit sa cible, y défile et
- * la met en évidence, même quand le lien est suivi une seconde fois.
+ * Lien d'un constat ou d'un contrôle vers son objet.
+ * - Vers la page même (constat d'une section qui vise l'un de ses blocs) : l'adresse change sans
+ *   navigation, la section relit sa cible, y défile et la met en évidence, même suivi deux fois.
+ * - Vers une application qui sert les deux sociétés et garde chacune la sienne (Finance, RH) : elle
+ *   reçoit d'abord la société affichée par l'Analyse, puis la page se charge en entier ; on n'ouvre
+ *   jamais les livres de l'autre société sans le voir. Transport et MB AxisPro Consulting imposent la
+ *   leur.
  */
 export function LienSuivi({ href, className, children, title }: { href: string; className?: string; children: ReactNode; title?: string }) {
+  const { data: contexte } = useContexte();
+  const societe = contexte?.company.id ?? null;
+  function aAligner(url: URL): AppCode | null {
+    const app = appFromPath(url.pathname);
+    return societe !== null && app !== null && app !== "analyse" && APPS[app].entity === null ? app : null;
+  }
   function suivre(e: MouseEvent<HTMLAnchorElement>) {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (e.defaultPrevented) return;
     const url = new URL(href, window.location.href);
-    if (url.origin !== window.location.origin || url.pathname !== window.location.pathname) return;
-    e.preventDefault();
-    window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
-    tourCible += 1;
-    window.dispatchEvent(new Event(EVENEMENT_CIBLE));
+    if (url.origin !== window.location.origin) return;
+    const app = aAligner(url);
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+      // Nouvel onglet ou fenêtre : le navigateur l'ouvre seul, la société suit au mieux.
+      if (app && societe !== null) void choisirSociete(societe, app);
+      return;
+    }
+    if (url.pathname === window.location.pathname) {
+      e.preventDefault();
+      window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      tourCible += 1;
+      window.dispatchEvent(new Event(EVENEMENT_CIBLE));
+      return;
+    }
+    if (app && societe !== null) {
+      e.preventDefault();
+      void choisirSociete(societe, app).then(() => window.location.assign(url.href));
+    }
+  }
+  function suivreAilleurs(e: MouseEvent<HTMLAnchorElement>) {
+    // Clic du milieu : nouvel onglet, la société suit au mieux.
+    const app = e.button === 1 ? aAligner(new URL(href, window.location.href)) : null;
+    if (app && societe !== null) void choisirSociete(societe, app);
   }
   return (
-    <Link href={href} onClick={suivre} className={className} title={title}>
+    <Link href={href} onClick={suivre} onAuxClick={suivreAilleurs} className={className} title={title}>
       {children}
     </Link>
   );
