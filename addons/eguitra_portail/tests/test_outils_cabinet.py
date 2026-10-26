@@ -255,3 +255,38 @@ class TestOutilsCabinet(ApiCase):
         self.call("PATCH", path, {"action": "minutes", "minutes": "Décision : dossier à la banque le 12."},
                   token=self.cabinet_token)
         self.assertEqual(len(self.notes(self.pa, "Compte rendu mis à jour : Point bancaire")), 1)
+
+    # ─── M3 : saisies mal formées ────────────────────────────────────────
+
+    def test_saisies_mal_formees_refusees_en_400(self):
+        """Une saisie mal formée est refusée (400, invalid_parameter), jamais une erreur interne ni un 0."""
+        event = self.event(capacity=2)
+        registration = event.register(self.pa)
+        meeting = self.env["portail.meeting"].create({"dossier_id": self.dossier_a.id, "subject": "Point",
+                                                      "slot_1": FUTURE})
+        start, end = FUTURE.isoformat(), (FUTURE + timedelta(hours=2)).isoformat()
+        cases = [
+            ("POST", "/axispro/portail/evenements", {"name": "X", "start": start, "end": end, "capacity": "vingt"}),
+            ("POST", "/axispro/portail/evenements", {"name": "X", "start": start, "end": end, "capacity": 2.5}),
+            ("PATCH", f"/axispro/portail/evenements/{event.id}", {"dossier_ids": ["abc"]}),
+            ("PATCH", f"/axispro/portail/evenements/{event.id}", {"dossier_ids": 12}),
+            ("PATCH", f"/axispro/portail/evenements/{event.id}", {"kind": ["atelier"]}),
+            ("PATCH", f"/axispro/portail/evenements/{event.id}", {"start": "bientôt"}),
+            ("POST", "/axispro/portail/annonces", {"title": "X", "expire_date": "bientôt"}),
+            ("POST", "/axispro/portail/annonces", {"title": "X", "audience": {"all": True}}),
+            ("POST", "/axispro/portail/rubriques", {"name": "X", "sequence": "dix"}),
+            ("POST", "/axispro/portail/rubriques", {"name": "X", "color": ["azur"]}),
+            ("POST", "/axispro/portail/articles", {"title": "X", "category_id": "abc"}),
+            ("POST", "/axispro/portail/rendez-vous", {"dossier_id": "abc", "subject": "X", "start": start}),
+            ("POST", "/axispro/portail/rendez-vous",
+             {"dossier_id": self.dossier_a.id, "subject": "X", "start": start, "duration": "une heure"}),
+            ("PATCH", f"/axispro/portail/rendez-vous/{meeting.id}", {"action": "confirm", "start": start, "duration": "1h"}),
+            ("PATCH", f"/axispro/portail/rendez-vous/{meeting.id}", {"action": "confirm", "start": start, "mode": ["video"]}),
+            ("PATCH", f"/axispro/portail/inscriptions/{registration.id}", {"state": ["registered"]}),
+        ]
+        for method, path, payload in cases:
+            with self.subTest(method=method, path=path, payload=payload):
+                status, body = self.call(method, path, payload, token=self.cabinet_token)
+                self.assertEqual((status, body.get("error")), (400, "invalid_parameter"), body)
+        self.env.invalidate_all()
+        self.assertEqual((event.capacity, meeting.state), (2, "requested"), "Rien n'a changé")
