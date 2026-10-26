@@ -700,3 +700,9 @@ export type PlanDossier = PlanPayload & {
 /** Action du plan, telle que la liste du cabinet la reçoit : intitulé du critère d'une action tirée d'un
  * écart (son titre, lui, est neutre pour le porteur). Absent des réponses antérieures. */
 export type ActionCabinet = Action & { criterion_name?: string | null };
+
+/** Totaux d'un montant par devise (code : « GNF », « USD ») : jamais une devise additionnée à une autre. */
+export type MontantsParDevise = Record<string, number>;
+
+/** Démarche de financement : ses montants sont dans la devise de son dossier (`currency`). */
+export type FinancementDevise = Funding & { currency?: string | null };
