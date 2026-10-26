@@ -228,7 +228,7 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
           }}
         />
       )}
-      <MoveDetailModal moveId={selected} onClose={() => setSelected(null)} onChanged={() => mutate()} />
+      <MoveDetailModal moveId={selected} onClose={() => setSelected(null)} onChanged={() => mutate()} onOpen={setSelected} />
     </div>
   );
 }

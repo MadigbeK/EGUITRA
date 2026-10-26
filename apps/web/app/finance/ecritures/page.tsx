@@ -71,7 +71,7 @@ export default function EntriesPage() {
         )}
       </Card>
       {creating && <EntryForm onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); }} />}
-      <MoveDetailModal moveId={selected} onClose={() => setSelected(null)} onChanged={() => mutate()} />
+      <MoveDetailModal moveId={selected} onClose={() => setSelected(null)} onChanged={() => mutate()} onOpen={setSelected} />
     </div>
   );
 }

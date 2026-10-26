@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Wallet, XCircle } from "@/components/icons";
+import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Undo2, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
 import { CHAMP_INVALIDE, montantDevise, nombreDevise } from "./communPieces";
@@ -10,7 +10,8 @@ import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
-type Message = { tone: "danger" | "ok" | "accent"; text: string };
+/** Message de la fiche ; ouvrir : pièce créée par l'action (avoir, extourne), à ouvrir d'un clic. */
+type Message = { tone: "danger" | "ok" | "accent"; text: string; ouvrir?: { id: number; libelle: string } };
 
 /** Règlement retenu par le circuit d'approbation : comptabilisé et lettré à la dernière approbation. */
 interface ReglementEnAttente {
@@ -30,9 +31,10 @@ type Fiche = MoveDetail & { payments_awaiting_approval?: ReglementEnAttente[] | 
 /**
  * Fiche d'une pièce : lignes, statut, règlement, impression, pièces jointes, avoir ; un brouillon d'achat se
  * modifie ou se supprime. Le profil Achats seul y joint ses justificatifs, imprime, modifie, supprime ou
- * soumet ses brouillons ; règlement, avoir, litige et annulation relèvent de la finance.
+ * soumet ses brouillons ; règlement, avoir, litige et annulation relèvent de la finance. onOpen : ouvre une
+ * autre pièce dans la fiche (l'avoir ou l'extourne qui vient d'être créé).
  */
-export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number | null; onClose: () => void; onChanged: () => void }) {
+export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId: number | null; onClose: () => void; onChanged: () => void; onOpen?: (id: number) => void }) {
   const { data: move, error, mutate } = useApi<Fiche>(moveId ? `/finance/moves/${moveId}` : null);
   const { achats } = useAchatsSeul(moveId !== null);
   const [paying, setPaying] = useState(false);
@@ -114,6 +116,50 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
     }
   }
 
+  /**
+   * Annulation : une pièce validée repasse en brouillon (ses règlements sont délettrés) puis est annulée.
+   * Le bouton rouge en pied de fiche se lisait comme « fermer » : il demande désormais confirmation.
+   */
+  async function annuler(m: MoveDetail) {
+    const nom = m.name ?? "en brouillon";
+    const oui = await demanderConfirmation(
+      m.state === "posted"
+        ? `Annuler la pièce ${nom} ? Elle repasse en brouillon puis est annulée : ses règlements sont délettrés et elle sort de la comptabilité. Pour corriger une pièce validée, préférez l'avoir.`
+        : `Annuler la pièce ${nom} ? Elle ne pourra plus être validée sans être remise en brouillon.`,
+      { action: "Annuler la pièce", danger: true },
+    );
+    if (oui) await act("cancel", () => apiSend("POST", `/finance/moves/${m.id}/cancel`), () => ({ tone: "ok", text: "Pièce annulée." }));
+  }
+
+  /** Remise en brouillon d'une pièce annulée : elle redevient modifiable et se valide à nouveau. */
+  async function remettreEnBrouillon(m: MoveDetail) {
+    const oui = await demanderConfirmation(`Remettre la pièce ${m.name ?? ""} en brouillon ? Elle redevient modifiable et devra être validée à nouveau ; ses anciens lettrages ne reviennent pas.`, {
+      action: "Remettre en brouillon",
+    });
+    if (oui) await act("reset", () => apiSend("POST", `/finance/moves/${m.id}/reset`), () => ({ tone: "ok", text: "Pièce remise en brouillon." }));
+  }
+
+  /** Avoir (facture) ou extourne (opération diverse), créé en brouillon : confirmé, puis annoncé avec un lien. */
+  async function avoir(m: MoveDetail) {
+    const facture = m.move_type !== "entry";
+    const oui = await demanderConfirmation(
+      facture
+        ? `Établir un avoir sur ${m.name} ? L'avoir, créé en brouillon, reprend toutes les lignes de la pièce ; il ne compte qu'une fois validé.`
+        : `Extourner l'opération ${m.name} ? L'extourne, créée en brouillon, inverse toutes les lignes ; elle ne compte qu'une fois validée.`,
+      { action: facture ? "Établir l'avoir" : "Extourner" },
+    );
+    if (!oui) return;
+    await act(
+      "reverse",
+      () => apiSend<MoveDetail>("POST", `/finance/moves/${m.id}/reverse`, { reason: `${facture ? "Avoir" : "Extourne"} sur ${m.name}` }),
+      (r) => ({
+        tone: "ok",
+        text: facture ? "Avoir créé en brouillon : vérifiez-le, puis validez-le." : "Extourne créée en brouillon : vérifiez-la, puis validez-la.",
+        ouvrir: { id: r.id, libelle: facture ? "Ouvrir l'avoir" : "Ouvrir l'extourne" },
+      }),
+    );
+  }
+
   const title = move ? `${move.name ?? "Brouillon"}, ${move.partner?.name ?? ""}` : "Pièce";
   const achat = move ? move.move_type === "in_invoice" || move.move_type === "in_refund" : false;
 
@@ -138,7 +184,16 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
       {!move && !error && <Loading />}
       {move && (
         <div className="space-y-5">
-          {message && <Notice tone={message.tone}>{message.text}</Notice>}
+          {message && (
+            <Notice tone={message.tone}>
+              {message.text}
+              {message.ouvrir && onOpen && (
+                <button type="button" className="ml-2 font-semibold text-accent underline underline-offset-2" onClick={() => onOpen(message.ouvrir!.id)}>
+                  {message.ouvrir.libelle}
+                </button>
+              )}
+            </Notice>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={MOVE_STATES[move.state]?.tone}>{MOVE_STATES[move.state]?.label ?? move.state}</Badge>
             {move.state === "posted" && <Badge tone={PAYMENT_STATES[move.payment_state]?.tone}>{PAYMENT_STATES[move.payment_state]?.label ?? move.payment_state}</Badge>}
@@ -286,8 +341,8 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               </Button>
             )}
             {!achats && move.state === "posted" && (
-              <Button loading={busy === "reverse"} onClick={() => act("reverse", () => apiSend("POST", `/finance/moves/${move.id}/reverse`, { reason: `Avoir sur ${move.name}` }))}>
-                <RotateCcw className="h-4 w-4" /> Avoir / extourne
+              <Button loading={busy === "reverse"} onClick={() => void avoir(move)}>
+                <RotateCcw className="h-4 w-4" /> {move.move_type === "entry" ? "Extourner" : "Établir un avoir"}
               </Button>
             )}
             {!achats && move.move_type !== "entry" && move.state !== "cancel" && (
@@ -316,9 +371,14 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
                 <Button onClick={() => setDisputing(true)}>Déclarer un litige</Button>
               )
             )}
+            {!achats && move.state === "cancel" && (
+              <Button loading={busy === "reset"} onClick={() => void remettreEnBrouillon(move)}>
+                <Undo2 className="h-4 w-4" /> Remettre en brouillon
+              </Button>
+            )}
             {!achats && move.state !== "cancel" && (
-              <Button variant="danger" loading={busy === "cancel"} onClick={() => act("cancel", () => apiSend("POST", `/finance/moves/${move.id}/cancel`))}>
-                <XCircle className="h-4 w-4" /> Annuler
+              <Button variant="danger" loading={busy === "cancel"} onClick={() => void annuler(move)}>
+                <XCircle className="h-4 w-4" /> Annuler la pièce
               </Button>
             )}
           </div>
