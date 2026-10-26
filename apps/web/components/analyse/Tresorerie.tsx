@@ -4,7 +4,7 @@ import { type CSSProperties } from "react";
 import { Landmark } from "@/components/icons";
 import { AreaChart, Badge, Card, Compteur, DataTable, SERIES, IconTile, cx } from "@/components/ui";
 import { CarteChaleur, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { moisCourt } from "@/components/analyse/charts/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTresorerie } from "@/lib/analyse-types";
@@ -152,7 +152,7 @@ function Corps() {
                   label="Encaissements attendus par client et par semaine"
                   rows={collections.map((c) => ({ key: String(c.id), label: c.name }))}
                   cols={semaines}
-                  cells={collections.flatMap((c) => c.expected_by_week.map((v, i) => ({ row: String(c.id), col: `S${i + 1}`, value: v > 0 ? v : null, detail: `${fmtGNF(c.open)} ouverts, ${fmtGNF(c.overdue)} échus · délai réel ${c.avg_days_late === null ? "inconnu" : `${c.avg_days_late >= 0 ? "+" : ""}${fmtInt(c.avg_days_late)} j`} (${c.history_source === "client" ? `${c.history_n} factures du client` : "délai moyen global"})` })))}
+                  cells={collections.flatMap((c) => c.expected_by_week.map((v, i) => ({ row: String(c.id), col: `S${i + 1}`, value: v > 0 ? v : null, detail: `${fmtGNF(c.open)} ouverts, ${fmtGNF(c.overdue)} échus · délai réel ${c.avg_days_late === null ? "inconnu" : `${c.avg_days_late >= 0 ? "+" : ""}${fmtInt(c.avg_days_late)} j`} (${c.history_source === "client" ? `${pluriel(c.history_n, "facture")} du client` : "délai moyen global"})` })))}
                   echelle="sequentielle"
                   format={(v) => fmtShort(v)}
                   hauteurLigne={28}

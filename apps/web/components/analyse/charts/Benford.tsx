@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { scaleBand, scaleLinear } from "d3-scale";
 import type { BenfordDigit } from "@/lib/analyse-types";
-import { fmtInt, fmtPct } from "@/lib/format";
+import { fmtInt, fmtPct, pluriel } from "@/lib/format";
 import { Bulle, COULEUR, Cadre, Legende, TableRepli, deplacer } from "./commun";
 
 const M = { haut: 16, droite: 10, bas: 30, gauche: 40 };
@@ -20,7 +20,7 @@ export function Benford({ digits, n, suspicious, conformity, hauteur = 240, labe
     <div>
       <Legende className="mb-3" items={[{ key: "obs", label: "Observé", couleur: COULEUR.accent, forme: "carre" }, { key: "att", label: "Attendu (Benford)", couleur: "var(--ink)", forme: "trait" }, ...(suspicious.length ? [{ key: "sus", label: "Chiffre en excès", couleur: COULEUR.mauvais, forme: "carre" as const }] : [])]} />
       <Cadre
-        label={`${label} : ${conformity}, ${fmtInt(n)} pièces`}
+        label={`${label} : ${conformity}, ${pluriel(n, "pièce")}`}
         hauteur={hauteur}
         tabIndex={0}
         onKeyDown={(e) => setFocus((f) => deplacer(e, f, digits.length, 0))}

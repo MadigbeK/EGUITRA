@@ -55,7 +55,7 @@ export function Lorenz({ points, gini, paretoCount, clientsCount, hauteur = 280,
               <line x1={x(0)} x2={x(pareto.x)} y1={y(pareto.y)} y2={y(pareto.y)} stroke={COULEUR.or} strokeDasharray="3 4" className="an-fondu" style={{ "--i": 6 } as CSSProperties} />
               <circle cx={x(pareto.x)} cy={y(pareto.y)} r={5.5} fill={COULEUR.or} stroke="var(--panel)" strokeWidth={2} className="an-eclore" style={{ "--i": 10 } as CSSProperties} />
               <text x={Math.min(x(pareto.x) + 10, W - 150)} y={y(pareto.y) - 10} fontSize={11.5} fontWeight={600} fill="var(--ink)" className="an-fondu" style={{ "--i": 12 } as CSSProperties}>
-                {paretoCount} client{paretoCount > 1 ? "s" : ""} sur {clientsCount} font 80 % du CA
+                {paretoCount} client{paretoCount > 1 ? "s" : ""} sur {clientsCount} {paretoCount > 1 ? "font" : "fait"} 80 % du CA
               </text>
               <text x={x(62)} y={y(30)} fontSize={11} fill="var(--muted)" textAnchor="middle" transform={`rotate(-${Math.round((Math.atan2(y(0) - y(100), x(100) - x(0)) * 180) / Math.PI)} ${x(62)} ${y(30)})`}>
                 Égalité parfaite

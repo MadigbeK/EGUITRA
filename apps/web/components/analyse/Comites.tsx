@@ -41,7 +41,7 @@ function Corps() {
     <>
       {ag && ag.agreement_pct !== null ? (
         <>
-          Le comité suit la recommandation de la méthode dans <strong className="font-semibold text-ink">{fmtPct(ag.agreement_pct, 0)} des cas</strong> ({ag.agreed} sur {ag.n} revues ; {ag.lenient} plus indulgente{ag.lenient > 1 ? "s" : ""}, {ag.strict} plus sévère{ag.strict > 1 ? "s" : ""}).
+          Le comité suit la recommandation de la méthode dans <strong className="font-semibold text-ink">{fmtPct(ag.agreement_pct, 0)} des cas</strong> ({ag.agreed} sur {pluriel(ag.n, "revue")} ; {ag.lenient} plus indulgente{ag.lenient > 1 ? "s" : ""}, {ag.strict} plus sévère{ag.strict > 1 ? "s" : ""}).
         </>
       ) : (
         <>Pas encore de revue verrouillée avec recommandation : le taux d&apos;accord n&apos;est pas calculable{ag?.excluded ? ` (${pluriel(ag.excluded, "revue exclue", "revues exclues")})` : ""}.</>
@@ -142,7 +142,7 @@ function Corps() {
             <Card title="Score global au moment de la décision" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Un point par revue · trait : médiane</span>}>
               {(d.score_at_decision ?? []).some((s) => s.scores.length > 0) ? <Bandes series={d.score_at_decision} /> : <Vide compact titre="Aucune revue avec score" />}
               <div className="mt-3 grid grid-cols-2 gap-2.5">
-                <Chiffre label="Conditions posées" value={String(d.conditions?.count ?? 0)} hint={d.conditions ? `${d.conditions.done} levées · ${d.conditions.open} ouvertes${d.conditions.overdue ? ` · ${d.conditions.overdue} en retard` : ""}` : undefined} tone={d.conditions?.overdue ? "warn" : undefined} />
+                <Chiffre label="Conditions posées" value={String(d.conditions?.count ?? 0)} hint={d.conditions ? `${pluriel(d.conditions.done, "levée")} · ${pluriel(d.conditions.open, "ouverte")}${d.conditions.overdue ? ` · ${d.conditions.overdue} en retard` : ""}` : undefined} tone={d.conditions?.overdue ? "warn" : undefined} />
                 <Chiffre label="Conditions levées" value={pctOu(d.conditions?.done_rate_pct ?? null, 0)} hint="part des conditions des CONDITIONAL GO" />
               </div>
             </Card>

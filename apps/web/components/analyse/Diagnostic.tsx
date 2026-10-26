@@ -332,7 +332,7 @@ function Corps() {
             </div>
           </div>
 
-          <Card title="Progression des scores, revue après revue" actions={<span className="text-[12.5px] text-muted">Score Readiness aux instantanés de comité et à ce jour{d.progression?.median_velocity_per_month !== null && d.progression?.median_velocity_per_month !== undefined ? ` · vitesse médiane ${d.progression.median_velocity_per_month.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} points par mois` : ""}</span>}>
+          <Card title="Progression des scores, revue après revue" actions={<span className="text-[12.5px] text-muted">Score Readiness aux instantanés de comité et à ce jour{d.progression?.median_velocity_per_month !== null && d.progression?.median_velocity_per_month !== undefined ? ` · vitesse médiane ${d.progression.median_velocity_per_month.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} point${Math.abs(d.progression.median_velocity_per_month) >= 2 ? "s" : ""} par mois` : ""}</span>}>
             {d.progression?.dossiers?.length && d.progression.dates.length >= 2 ? (
               <>
                 <PetitsMultiples

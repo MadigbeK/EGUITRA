@@ -212,7 +212,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
                 <div className="text-[12px] font-medium text-muted">Atterrissage EBE simulé</div>
                 <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", atterrissage < 0 ? "text-danger" : "text-ink")}>{fmtShort(atterrissage)} GNF</div>
-                <div className="text-[11.5px] text-muted">effet appliqué aux {restant} mois restants</div>
+                <div className="text-[11.5px] text-muted">{restant > 1 ? `effet appliqué aux ${restant} mois restants` : restant === 1 ? "effet appliqué au dernier mois de l'exercice" : "exercice achevé : aucun mois restant"}</div>
               </div>
             </div>
             <div className="mt-4">

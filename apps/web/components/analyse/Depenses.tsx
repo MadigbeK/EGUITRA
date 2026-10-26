@@ -57,7 +57,7 @@ function Corps() {
       )}
       {benford && benford.n > 0 && (
         <>
-          {" "}La loi de Benford conclut à une <strong className="font-semibold text-ink">{benford.conformity_label.toLowerCase()}</strong> sur {benford.n} montants
+          {" "}La loi de Benford conclut à une <strong className="font-semibold text-ink">{benford.conformity_label.toLowerCase()}</strong> sur {pluriel(benford.n, "montant")}
           {benford.suspicious.length > 0 && ` (chiffre${benford.suspicious.length > 1 ? "s" : ""} ${benford.suspicious.join(", ")} en excès)`}
           {benford.warning ? ", à prendre avec réserve" : ""}.
         </>
@@ -98,7 +98,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Fournisseurs : qui pèse" className="xl:col-span-7" actions={d.suppliers ? <span className="text-[12.5px] text-muted">{d.suppliers.pareto_count} fournisseur{d.suppliers.pareto_count > 1 ? "s" : ""} font 80 % · HHI {d.suppliers.hhi === null ? "–" : fmtInt(d.suppliers.hhi)}</span> : undefined}>
+            <Card title="Fournisseurs : qui pèse" className="xl:col-span-7" actions={d.suppliers ? <span className="text-[12.5px] text-muted">{d.suppliers.pareto_count} fournisseur{d.suppliers.pareto_count > 1 ? "s" : ""} {d.suppliers.pareto_count > 1 ? "font" : "fait"} 80 % · HHI {d.suppliers.hhi === null ? "–" : fmtInt(d.suppliers.hhi)}</span> : undefined}>
               {d.suppliers?.pareto?.length ? (
                 <>
                   <Pareto label="Achats par fournisseur et part cumulée" items={d.suppliers.pareto.map((s, i) => ({ key: String(s.id ?? i), label: s.name, value: s.amount, cumulative_pct: s.cumulative_pct }))} hauteur={280} />

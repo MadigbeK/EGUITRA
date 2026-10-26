@@ -60,7 +60,7 @@ function Corps() {
         <>Aucun chiffre d&apos;affaires par client sur la période.</>
       ) : (
         <>
-          <strong className="font-semibold text-ink">{c.pareto_count} client{c.pareto_count > 1 ? "s" : ""} sur {c.clients}</strong> font 80 % du chiffre d&apos;affaires
+          <strong className="font-semibold text-ink">{c.pareto_count} client{c.pareto_count > 1 ? "s" : ""} sur {c.clients}</strong> {c.pareto_count > 1 ? "font" : "fait"} 80 % du chiffre d&apos;affaires
           {c.gini !== null && ` (Gini ${c.gini.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`}
           {c.top_share.first !== null && `${c.gini !== null ? ", " : " ("}le premier, ${c.top_share.first_name ?? "–"}, pèse ${fmtPct(c.top_share.first, 0)}`}
           {(c.gini !== null || c.top_share.first !== null) && ")"}. {clients.filter((s) => s.segment === "strategiques").length} client{clients.filter((s) => s.segment === "strategiques").length > 1 ? "s" : ""} stratégique{clients.filter((s) => s.segment === "strategiques").length > 1 ? "s" : ""} porte{clients.filter((s) => s.segment === "strategiques").length > 1 ? "nt" : ""} la valeur ; {surveiller.length} à surveiller. Échus : {fmtShort(echu)} GNF, perte attendue {fmtShort(ecl)} GNF.

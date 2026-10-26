@@ -46,7 +46,7 @@ function Corps() {
           {rm.mitigated_pct !== null && <> ; {pctOu(rm.mitigated_pct, 0)} ont une mesure d&apos;atténuation</>}.
         </>
       )}{" "}
-      {act.overdue > 0 ? `${act.overdue} action${act.overdue > 1 ? "s" : ""} sur ${act.open} ${act.overdue > 1 ? "sont" : "est"} en retard` : `Aucune des ${act.open} actions ouvertes n'est en retard`}
+      {act.overdue > 0 ? `${act.overdue} action${act.overdue > 1 ? "s" : ""} sur ${act.open} ${act.overdue > 1 ? "sont" : "est"} en retard` : act.open > 1 ? `Aucune des ${act.open} actions ouvertes n'est en retard` : act.open === 1 ? "L'action ouverte n'est pas en retard" : "Aucune action ouverte"}
       {act.submitted > 0 && `, ${act.submitted} attend${act.submitted > 1 ? "ent" : ""} une validation`}
       {rep.n > 0 ? ` ; les porteurs répondent en ${joursOu(rep.median_days)} en médiane` : " ; aucune pièce demandée n'a encore été déposée"}
       {rep.pending > 0 && `, ${pluriel(rep.pending, "pièce", "pièces")} en attente`}

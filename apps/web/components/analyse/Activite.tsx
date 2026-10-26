@@ -137,7 +137,7 @@ function Corps() {
       {d && r && (
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Heures par consultant et par semaine" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">{semaines.length} dernières semaines · une case vide : pas de temps saisi</span>}>
+            <Card title="Heures par consultant et par semaine" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">{semaines.length > 1 ? `${semaines.length} dernières semaines` : "Dernière semaine"} · une case vide : pas de temps saisi</span>}>
               {consultants.length && semaines.length ? (
                 <CarteChaleur
                   label="Heures saisies par consultant et par semaine"
