@@ -30,6 +30,7 @@ class EguitraHsseqAudit(models.Model):
     _name = "eguitra.hsseq.audit"
     _inherit = ["eguitra.hsseq.journaled"]
     _description = "Audit HSSEQ"
+    _rec_name = "reference"
     _order = "planned_date desc, id desc"
     _check_company_auto = True
     _journal_key = "audit"
@@ -125,6 +126,7 @@ class EguitraHsseqFinding(models.Model):
     _name = "eguitra.hsseq.finding"
     _inherit = ["eguitra.hsseq.journaled"]
     _description = "Constat d'audit HSSEQ"
+    _rec_name = "reference"
     _order = "audit_id, sequence, id"
     _journal_key = "finding"
     _journal_fields = ("classification", "description", "requirement_id", "status")
@@ -164,6 +166,7 @@ class EguitraHsseqRequirement(models.Model):
     _name = "eguitra.hsseq.requirement"
     _inherit = ["eguitra.hsseq.journaled"]
     _description = "Exigence légale, normative ou contractuelle"
+    _rec_name = "reference"
     _order = "source, source_reference, id"
     _check_company_auto = True
     _journal_key = "requirement"

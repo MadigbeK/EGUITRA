@@ -65,3 +65,36 @@ class TestCorrections(HsseqCase):
         self.assertEqual(settings["risk_review_months"], 12)
         status, refs = self.api("ibrahima", "GET", "/hsseq/referentials")
         self.assertEqual(refs["risk_review_months"], 12, "Délai de revue servi aux écrans du registre")
+
+    def test_constats_audits_et_export_des_exigences(self):
+        """Fiche d'un constat avec son historique et l'état de son audit ; date de réalisation future refusée
+        à la modification ; l'export garde toutes les exigences malgré les filtres de la liste des audits."""
+        status, audit = self.api("kadi.hsseq", "POST", "/hsseq/audits", {
+            "title": "Audit interne du parc", "standard": "iso_45001", "site_id": self.site.id,
+            "planned_date": str(self.day - timedelta(days=1))})
+        self.assertEqual(status, 200, audit)
+        status, body = self.api("kadi.hsseq", "PATCH", f"/hsseq/audits/{audit['id']}",
+                                {"actual_date": str(self.day + timedelta(days=3))})
+        self.assertEqual((status, body["error"], body["fields"]), (422, "invalid_parameter", ["actual_date"]))
+        status, done = self.api("kadi.hsseq", "POST", f"/hsseq/audits/{audit['id']}/findings",
+                                {"classification": "minor", "description": "Registre incomplet"})
+        finding_id = done["findings_list"][0]["id"]
+        self.api("kadi.hsseq", "PATCH", f"/hsseq/findings/{finding_id}", {"description": "Registre des extincteurs incomplet"})
+        status, finding = self.api("kadi.hsseq", "GET", f"/hsseq/findings/{finding_id}")
+        self.assertEqual(finding["audit"], {"id": audit["id"], "reference": audit["reference"], "status": "planned"})
+        self.assertEqual([h["action"] for h in finding["history"]][-1], "create")
+        self.assertIn("description", [h["field"] for h in finding["history"]])
+        self.env["eguitra.hsseq.requirement"].create({
+            "company_id": self.company.id, "source": "law", "source_reference": "Texte fictif, art. 2",
+            "title": "Exigence non conforme du registre", "status": "non_compliant", "standard": "iso_14001"})
+        token = self.token("kadi.hsseq")
+        self.env.flush_all()
+        response = self.url_open("/api/v1/hsseq/audits/export.xlsx?status=planned&standard=iso_45001",
+                                 headers={"Authorization": f"Bearer {token}", "X-Eguitra-App": "test"}, timeout=60)
+        self.assertEqual(response.status_code, 200)
+        import io
+        import zipfile
+
+        book = zipfile.ZipFile(io.BytesIO(response.content))
+        self.assertIn("Exigence non conforme du registre", book.read("xl/sharedStrings.xml").decode(),
+                      "Filtres des audits sans effet sur la feuille des exigences")

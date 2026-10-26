@@ -100,18 +100,22 @@ def audit_rights(audit):
                          "can_approve": False}
 
 
-def finding_row(finding):
+def finding_row(finding, detail=False):
     finding = finding.sudo()
-    return {"id": finding.id, "reference": finding.reference, "audit": {"id": finding.audit_id.id,
-                                                                        "reference": finding.audit_id.reference},
-            "classification": finding.classification, "description": finding.description,
-            "requirement": {"id": finding.requirement_id.id, "reference": finding.requirement_id.reference,
-                            "title": finding.requirement_id.title} if finding.requirement_id else None,
-            "status": finding.status, "site": site_ref(finding.site_id),
-            "actions": [action_line(a) for a in finding.action_ids],
-            "attachments": attachments_rows("finding", finding),
-            "rights": {"can_edit": is_hsseq() and finding.audit_id.status in ("planned", "done"), "can_close": False,
-                       "can_approve": False}}
+    row = {"id": finding.id, "reference": finding.reference,
+           "audit": {"id": finding.audit_id.id, "reference": finding.audit_id.reference,
+                     "status": finding.audit_id.status},
+           "classification": finding.classification, "description": finding.description,
+           "requirement": {"id": finding.requirement_id.id, "reference": finding.requirement_id.reference,
+                           "title": finding.requirement_id.title} if finding.requirement_id else None,
+           "status": finding.status, "site": site_ref(finding.site_id),
+           "actions": [action_line(a) for a in finding.action_ids],
+           "attachments": attachments_rows("finding", finding),
+           "rights": {"can_edit": is_hsseq() and finding.audit_id.status in ("planned", "done"), "can_close": False,
+                      "can_approve": False}}
+    if detail:
+        row["history"] = history("finding", finding)
+    return row
 
 
 def audit_line(audit):
@@ -168,6 +172,9 @@ def audit_values(data, audit=None):
             values[key] = date_value(data, key)
     if "planned_date" in values and not values["planned_date"]:
         raise ApiError(400, "missing_fields", "Date prévue manquante.", fields=["planned_date"])
+    if values.get("actual_date") and values["actual_date"] > today():
+        raise ApiError(422, "invalid_parameter", "Un audit se déclare réalisé à une date passée ou du jour.",
+                       fields=["actual_date"])
     if "site_id" in data:
         site = get("eguitra.hsseq.site", data["site_id"], "Site") if data["site_id"] else None
         values["site_id"] = site.id if site else False
@@ -338,7 +345,7 @@ class EguitraHsseqAudits(http.Controller):
         finding = get("eguitra.hsseq.finding", finding_id, "Constat")
         if not in_scope(finding.site_id):
             raise ApiError(404, "not_found", "Constat introuvable.")
-        return finding_row(finding)
+        return finding_row(finding, detail=True)
 
     @hsseq_route("/hsseq/findings/<int:finding_id>", methods=("PATCH",), profiles=HSSEQ)
     def update_finding(self, finding_id, **_kw):
@@ -346,7 +353,7 @@ class EguitraHsseqAudits(http.Controller):
         if finding.audit_id.status not in ("planned", "done"):
             raise ApiError(422, "invalid_transition", "Audit clos ou annulé : le constat ne se modifie plus.")
         finding.write(finding_values(read_json(), partial=True))
-        return finding_row(finding)
+        return finding_row(finding, detail=True)
 
     # ─── Exigences ────────────────────────────────────────────────────────
 
@@ -430,8 +437,13 @@ class EguitraHsseqAudits(http.Controller):
                        ", ".join(f.action_ids.mapped("reference"))] for f in audits.finding_ids], "totals": None},
         ]
         if reads_requirements():
+            # Les filtres status et standard de la liste des audits ne s'appliquent pas aux exigences : la
+            # feuille a les siens (requirement_status, requirement_source, requirement_standard).
+            requirement_kw = {k: v for k, v in kw.items() if k not in ("status", "standard", "source")}
+            requirement_kw.update({k[len("requirement_"):]: v for k, v in kw.items()
+                                   if k in ("requirement_status", "requirement_source", "requirement_standard")})
             requirements = request.env["eguitra.hsseq.requirement"].sudo().search(
-                self._requirement_domain(kw), order="source, source_reference, id", limit=10000)
+                self._requirement_domain(requirement_kw), order="source, source_reference, id", limit=10000)
             sheets.append({
                 "title": "Registre des exigences", "meta": meta,
                 "columns": [("Référence", "text"), ("Source", "text"), ("Référence du texte", "text"),
