@@ -167,6 +167,23 @@ def _section_link(section, anchor=None, **params):
     return f"/analyse/{section}" + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else "")
 
 
+def _knockouts_confirmes(snapshot):
+    """Knock-outs constatés à la décision : ceux de l'instantané scellé, moins ceux dont le critère n'était
+    pas encore évalué (la méthode compte un critère non évalué comme non disponible)."""
+    snap = snapshot or {}
+    return max(0, len(snap.get("knockouts") or []) - int(snap.get("knockouts_pending") or 0))
+
+
+def _recommandation_scellee(recommendation, snapshot):
+    """Recommandation de la méthode à la décision, pour l'accord avec le comité : un NO-GO qui ne tient qu'à
+    des knock-outs non encore évalués (gate non atteint) n'est pas un verdict de la méthode, il reste hors
+    du calcul comme une recommandation à compléter."""
+    snap = snapshot or {}
+    if recommendation == "no_go" and snap.get("knockouts") and not _knockouts_confirmes(snap):
+        return "pending"
+    return recommendation or "pending"
+
+
 def _brief(dossier):
     return {"id": dossier.id, "reference": dossier.reference, "name": dossier.name}
 
@@ -1414,7 +1431,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                         "values": [counts[(m, key)] for m in months]} for key in DECISION_KEYS],
             "totals": {key: sum(1 for r in period_reviews if r.decision == key) for key in DECISION_KEYS},
         }
-        pairs = [(r.recommendation or "pending", r.decision) for r in period_reviews]
+        pairs = [(_recommandation_scellee(r.recommendation, r.snapshot), r.decision) for r in period_reviews]
+        ko_pending = sum(1 for r in period_reviews if r.recommendation == "no_go"
+                         and _recommandation_scellee(r.recommendation, r.snapshot) == "pending")
         matrix = [[sum(1 for rec, dec in pairs if rec == rk and dec == dk) for dk in DECISION_KEYS]
                   for rk in RECOMMENDATION_KEYS]
         stats = pf.agreement(pairs)
@@ -1479,7 +1498,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         conditions = {"count": len(actions), "done": len(actions.filtered(lambda a: a.state == "done")),
                       "open": len(open_actions), "overdue": len(late),
                       "done_rate_pct": _r(_share(len(actions.filtered(lambda a: a.state == "done")), len(decided)))}
-        favorable_ko = [r for r in period_reviews if r.decision in PASSING_DECISIONS and (r.snapshot or {}).get("knockouts")]
+        favorable_ko = [r for r in period_reviews if r.decision in PASSING_DECISIONS and _knockouts_confirmes(r.snapshot)]
         notes = []
         if drafts:
             notes.append((f"{_n(len(drafts), 'revue de comité', 'revues de comité')} de la période non verrouillée(s) : "
@@ -1487,6 +1506,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         missing = period_reviews.filtered(lambda r: not r.recommendation)
         if missing:
             notes.append((f"{_n(len(missing), 'décision')} sans recommandation calculée.", 10))
+        if ko_pending:
+            notes.append((f"{_n(ko_pending, 'décision écartée', 'décisions écartées')} de l'accord : le NO-GO de la "
+                          "méthode n'y tenait qu'à des knock-outs non encore évalués.", 5))
         if not period_reviews:
             notes.append(("Aucune décision de comité verrouillée sur la période.", 0))
         candidates = self._comites_insights(b, agreement, forced_summary, forced_rows, time_to_decision,
@@ -1549,11 +1571,12 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 f"cabinet.decision_ko.{r.id}", "comites", "critical",
                 f"Décision {DECISION_LABELS[r.decision]} sur {d.reference} malgré un knock-out actif",
                 f"Le comité du {r.date:%d/%m/%Y} a rendu une décision favorable alors que l'instantané scellé portait "
-                f"{_n(len(r.snapshot.get('knockouts', [])), 'knock-out')}.",
-                metric={"label": "Knock-outs à la décision", "value": len(r.snapshot.get("knockouts", [])),
+                f"{_n(_knockouts_confirmes(r.snapshot), 'knock-out constaté', 'knock-outs constatés')}.",
+                metric={"label": "Knock-outs à la décision", "value": _knockouts_confirmes(r.snapshot),
                         "unit": "count", "reference": 0, "reference_label": "Règle de la méthode"},
                 impact_gnf=b.need(d), confidence=0.95,
-                method="Instantané scellé de la revue de comité : knock-outs actifs au verrouillage.",
+                method="Instantané scellé de la revue de comité : knock-outs actifs au verrouillage, sur des critères "
+                       "évalués (un critère pas encore évalué n'est pas un knock-out constaté).",
                 action="Faire lever le knock-out avant tout engagement auprès d'un financeur, ou motiver la dérogation.",
                 link=_dossier_link(d),
             ))

@@ -14,7 +14,7 @@ from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_analytics.engine import portfolio as pf
-from odoo.addons.eguitra_analytics.models.cabinet import _section_link
+from odoo.addons.eguitra_analytics.models.cabinet import _knockouts_confirmes, _recommandation_scellee, _section_link
 from odoo.addons.eguitra_api.tests.common import ApiCase
 
 HEADER = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
@@ -119,6 +119,19 @@ class TestPortefeuilleMethodes(TransactionCase):
         self.assertEqual(pf.agreement_kind("bankable", "hold"), "strict")
         self.assertIsNone(pf.agreement_kind("pending", "go"), "À compléter : hors calcul")
         self.assertIsNone(pf.agreement_kind("go", "postponed"), "Ajourné : hors calcul")
+
+    def test_knockouts_non_evalues(self):
+        """Un knock-out dont le critère n'est pas encore évalué n'est pas constaté : ni « décision favorable
+        malgré un knock-out », ni NO-GO de la méthode compté dans l'accord avec le comité."""
+        pending = {"knockouts": [{"code": "C002"}], "knockouts_pending": 1}
+        confirmed = {"knockouts": [{"code": "C002"}, {"code": "C009"}], "knockouts_pending": 1}
+        self.assertEqual(_knockouts_confirmes(pending), 0)
+        self.assertEqual(_knockouts_confirmes(confirmed), 1)
+        self.assertEqual(_knockouts_confirmes({"knockouts": [{"code": "C002"}]}), 1, "Ancien instantané : constaté")
+        self.assertEqual(_recommandation_scellee("no_go", pending), "pending", "NO-GO dû au seul critère non évalué")
+        self.assertEqual(_recommandation_scellee("no_go", confirmed), "no_go")
+        self.assertEqual(_recommandation_scellee("hold", pending), "hold")
+        self.assertEqual(_recommandation_scellee(None, None), "pending")
 
     def test_liens_vers_les_sections(self):
         self.assertEqual(_section_link("portefeuille", "temps", gate="G2"), "/analyse/portefeuille?gate=G2#temps")
