@@ -22,8 +22,11 @@ from ..models.suivi import FEEDBACK_TOPICS
 from . import vues
 
 PORTEUR = ("porteur",)
+# Messages d'un porteur sur un dossier en 24 heures, par la messagerie comme par une demande de mise à
+# jour de sa fiche (qui écrit dans la messagerie du consultant).
 MAX_DAILY_MESSAGES = 50
 MAX_OPEN_MEETING_REQUESTS = 3
+MAX_DAILY_MEETING_REQUESTS = 10
 # Messages renvoyés par appel au fil : les plus récents d'abord, la page précédente sur demande.
 FIL_PAGE = 200
 NOTIFICATIONS_MAX = 200
@@ -140,6 +143,15 @@ def _published_articles(dossiers):
 
 def _notifications_unread():
     return request.env["portail.notification"].sudo().search_count([("user_id", "=", _me().id), ("read_at", "=", False)])
+
+
+def _check_message_quota(dossier):
+    """Refus (429) au-delà de 50 messages du porteur sur ce dossier en 24 heures, quelle que soit la route."""
+    recent = request.env["axispro.message"].sudo().search_count(
+        [("dossier_id", "=", dossier.id), ("author_id", "=", _me().id),
+         ("date", ">=", fields.Datetime.now() - timedelta(days=1))])
+    if recent >= MAX_DAILY_MESSAGES:
+        raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
 
 
 def _visible_messages(dossier):
@@ -372,10 +384,7 @@ class EguitraPortailPorteur(http.Controller):
         if not body and not has_file:
             raise ApiError(400, "missing_fields", "Écrivez un message ou joignez un fichier.", fields=["body"])
         Message = request.env["axispro.message"].sudo()
-        recent = Message.search_count([("dossier_id", "=", dossier.id), ("author_id", "=", me.id),
-                                       ("date", ">=", fields.Datetime.now() - timedelta(days=1))])
-        if recent >= MAX_DAILY_MESSAGES:
-            raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
+        _check_message_quota(dossier)
         documents = store_upload(dossier, quota=True) if has_file else request.env["axispro.document"]
         # Aucun repère de lecture ici : ses propres messages ne comptent jamais comme non lus, et un message du
         # cabinet arrivé juste avant l'envoi resterait sinon marqué lu sans avoir été affiché.
@@ -411,6 +420,13 @@ class EguitraPortailPorteur(http.Controller):
         pending = dossier.sudo().meeting_ids.filtered(lambda m: m.state == "requested")
         if len(pending) >= MAX_OPEN_MEETING_REQUESTS:
             raise ApiError(422, "business_rule", "Trois demandes attendent déjà une réponse du cabinet.")
+        # Demander puis retirer sans fin contournerait la limite des demandes en attente : chaque demande
+        # prévient le consultant.
+        recent = request.env["portail.meeting"].sudo().search_count(
+            [("requested_by", "=", me.id), ("create_date", ">=", now - timedelta(days=1))])
+        if recent >= MAX_DAILY_MEETING_REQUESTS:
+            raise ApiError(429, "too_many_requests",
+                           "Trop de demandes de rendez-vous en 24 heures : appelez votre consultant.")
         meeting = request.env["portail.meeting"].sudo().create({
             "dossier_id": dossier.id, "requested_by": me.id, "consultant_id": dossier.consultant_id.id or False,
             "subject": str(subject)[:200], "agenda": str(data.get("agenda") or "")[:3000] or False, "mode": mode,
@@ -682,6 +698,8 @@ class EguitraPortailPorteur(http.Controller):
                    if f in company and (promoter[f] or False) != company[f]] if promoter else []
         if changes:
             dossier = dossiers.filtered(lambda d: d.promoter_id == promoter)[:1]
+            # La demande s'écrit dans la messagerie : même quota que les messages du porteur.
+            _check_message_quota(dossier)
             request.env["axispro.message"].sudo().create({
                 "dossier_id": dossier.id, "author_id": me.id, "internal": False,
                 "body": "\n".join([f"Demande de mise à jour de la fiche de {promoter.name} :", *changes]),

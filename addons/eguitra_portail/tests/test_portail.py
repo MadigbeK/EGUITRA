@@ -297,6 +297,22 @@ class TestPortail(ApiCase):
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
 
+    def test_quota_quotidien_sans_contournement(self):
+        self.env["axispro.message"].sudo().create([
+            {"dossier_id": self.dossier_a.id, "author_id": self.porteur_a.id, "body": f"Message {i}"} for i in range(50)])
+        status, _b = self.post_form(f"/portail/dossiers/{self.dossier_a.id}/fil", self.porteur, {"body": "Encore un"})
+        self.assertEqual(status, 429, "Quota de la messagerie")
+        status, _b = self.call("PATCH", "/portail/profil", {"entreprise": {"city": "Mamou"}}, token=self.porteur)
+        self.assertEqual(status, 429, "La demande de mise à jour de la fiche écrit dans la messagerie : même quota")
+        self.assertFalse(self.dossier_a.message_ids.filtered(lambda m: "Mamou" in m.body))
+        Meeting = self.env["portail.meeting"].sudo()
+        Meeting.create([{"dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": f"Demande {i}",
+                         "slot_1": FUTURE, "state": "cancelled", "cancelled_by": "porteur"} for i in range(10)])
+        status, body = self.call("POST", f"/portail/dossiers/{self.dossier_a.id}/rendez-vous", {
+            "subject": "Encore une demande", "slots": [FUTURE.isoformat()]}, token=self.porteur)
+        self.assertEqual(status, 429, "Demander puis retirer sans fin ne contourne pas la limite")
+        self.assertIn("rendez-vous", body["message"])
+
     def test_avis_bas_previent_le_consultant(self):
         status, bas = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 2, "topic": "consultant",
                                                           "comment": "Difficile à joindre."}, token=self.porteur)
