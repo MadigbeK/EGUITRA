@@ -54,7 +54,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#142f29"
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

@@ -88,7 +88,8 @@ const alcootests = new Map<number, { performed: boolean; result?: string }>();
 const nonConformites: Nonconformity[] = [];
 const enRoute = new Set<number>();
 const derogations = new Map<string, number>();
-const aujourdhui = () => new Date().toISOString().slice(0, 10);
+/** Date du jour, ou décalée de quelques jours (échéances de la simulation). */
+const aujourdhui = (decalage = 0) => new Date(Date.now() + decalage * 86_400_000).toISOString().slice(0, 10);
 
 const DEPARTS = [
   { id: 501, name: null, vehicle: { id: 2, name: "ER-02", vehicle_kind: "tanker" as const }, driver: { id: 2, name: "Chauffeur 2" }, route_name: "Conakry - Kindia" },
@@ -169,6 +170,31 @@ function recevoir(uuid: unknown, creer: (id: number) => unknown): unknown {
   return creer(id);
 }
 
+/** Documents de la simulation : une alerte flash, un retour d'expérience lu, une procédure et son document. */
+const documents = {
+  procedures: [
+    {
+      id: 31, code: "PRO-HSE-012", title: "Dépotage en station : arrêt moteur et mise à la terre", domain: "safety" as const,
+      version: { id: 312, version: 3, effective_date: "2026-10-20", published_at: "2026-10-18 09:00:00", change_summary: "La mise à la terre se fait avant l'ouverture des trappes, plus après." },
+      document: [{ id: 901, name: "PRO-HSE-012 v3.pdf", mimetype: "application/pdf", size: 248_000, is_photo: false, caption: null, url: "/hsseq/attachments/901/download" }],
+      read: false, read_at: null as string | null,
+    },
+  ],
+  bulletins: [
+    {
+      id: 41, reference: "AF-2026-014", kind: "flash_alert" as const, title: "Renversement en virage sur la route de Kindia",
+      body: "Un ensemble chargé s'est couché dans un virage serré à la sortie de Coyah, de nuit. Pas de blessé. Vitesse inadaptée et chargement non centré.",
+      key_messages: "Réduire la vitesse avant le virage, pas dedans. Vérifier le centrage au départ.",
+      published_at: "2026-10-25 07:30:00", read: false, read_at: null as string | null,
+    },
+    {
+      id: 42, reference: "REX-2026-006", kind: "lesson" as const, title: "Fuite au raccord de dépotage",
+      body: "Un joint usé a laissé fuir quelques litres au dépotage. Le bac de rétention a contenu la fuite.",
+      key_messages: null, published_at: "2026-10-10 10:00:00", read: true, read_at: "2026-10-11 06:12:00" as string | null,
+    },
+  ],
+};
+
 function repondre(path: string, body: Record<string, unknown>): [number, unknown] {
   const depart = /^\/transport\/rotations\/(\d+)\/depart$/.exec(path);
   if (depart) {
@@ -178,6 +204,23 @@ function repondre(path: string, body: Record<string, unknown>): [number, unknown
     if (!ev.allowed) return [422, { error: "departure_blocked", message: "Départ bloqué.", blockers: ev.reasons.filter((r) => !r.waiver_id) }];
     enRoute.add(id);
     return [200, { id, state: "en_route" }];
+  }
+  const lu = /^\/hsseq\/(procedures|bulletins)\/(\d+)\/acknowledge$/.exec(path);
+  if (lu) {
+    const id = Number(lu[2]);
+    if (lu[1] === "procedures") {
+      const p = documents.procedures.find((x) => x.id === id);
+      if (!p) return [404, { error: "not_found", message: "Procédure introuvable." }];
+      if (body.version_id && Number(body.version_id) !== p.version.id) {
+        return [409, { error: "conflict", message: "Une nouvelle version est en vigueur : lisez-la avant d'en accuser lecture.", fields: ["version_id"] }];
+      }
+      Object.assign(p, { read: true, read_at: p.read_at ?? String(body.read_at ?? new Date().toISOString()) });
+      return [200, p];
+    }
+    const b = documents.bulletins.find((x) => x.id === id);
+    if (!b) return [404, { error: "not_found", message: "Alerte introuvable." }];
+    Object.assign(b, { read: true, read_at: b.read_at ?? String(body.read_at ?? new Date().toISOString()) });
+    return [200, b];
   }
   const levee = /^\/hsseq\/checks\/(\d+)\/lift$/.exec(path);
   if (levee) {
@@ -213,6 +256,25 @@ function repondre(path: string, body: Record<string, unknown>): [number, unknown
       return [200, HSSEQ()];
     case "/hsseq/checks/templates":
       return [200, GRILLES];
+    case "/hsseq/my/documents":
+      return [200, {
+        ...documents,
+        unread_count: [...documents.procedures, ...documents.bulletins].filter((d) => !d.read).length,
+      }];
+    case "/hsseq/me":
+      return [200, {
+        employee: { id: 7, name: connecte.name, matricule: "SIM-007" },
+        driver: connecte.profiles.includes("conducteur") ? { id: 2, name: "Chauffeur 2" } : null,
+        fitness: "fit",
+        qualifications: [
+          { code: "PERMIS_C", name: "Permis poids lourd", mandatory: true, status: "valid", obtained_on: "2019-03-12", expires_on: "2029-03-12", days_left: 1233 },
+          { code: "ADR", name: "Matières dangereuses (ADR)", mandatory: true, status: "to_renew", obtained_on: "2021-11-20", expires_on: aujourdhui(24), days_left: 24 },
+          { code: "DEFENSIVE", name: "Conduite défensive", mandatory: true, status: "valid", obtained_on: "2025-02-03", expires_on: "2028-02-03", days_left: 830 },
+          { code: "SECOURISME", name: "Secourisme", mandatory: false, status: "missing", obtained_on: null, expires_on: null, days_left: null },
+        ],
+        qualifications_status: "to_renew",
+        departure_blocked: false,
+      }];
     case "/hsseq/my/crisis-contacts":
       // Numéros fictifs de la simulation : rien n'appelle un vrai poste.
       return [200, {

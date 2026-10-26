@@ -1,15 +1,16 @@
-import { useRouter } from "expo-router";
-import { PHOTO_REFUSEE } from "../hsseq/envoi";
-import { useContactsCrise } from "../hsseq/useHsseq";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
 import { ENVIRONNEMENT, SIMULATION } from "../config";
 import { heure, pluriel, quand } from "../format";
+import { PHOTO_REFUSEE } from "../hsseq/envoi";
+import { useContactsCrise, useMesDocuments } from "../hsseq/useHsseq";
+import type { QueuedItem } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
 import { RECUE_AVANT_CORRECTION } from "../sync/outbox";
-import type { QueuedItem } from "../store/types";
 import { Bandeau, Bouton, EnTete, Ecran, Feuille, PastilleReseau, Tampon, Texte, demanderConfirmation, type EtatReseau } from "../ui/elements";
 import { espaces, marque, mesures, modules, rayons, traits } from "../ui/terrain";
 import { useTerrain } from "../ui/useTerrain";
@@ -21,6 +22,23 @@ function AnnuaireGarde() {
   return null;
 }
 
+/**
+ * Documents à lire, comptés sur la tuile ; la liste reste sur l'appareil pour la lecture sans réseau.
+ * Relue au retour sur « Ma journée » : une lecture faite dans le module change le compte.
+ */
+function useALire(ouvert: boolean): number {
+  const { liste, recharger } = useMesDocuments();
+  // Le premier affichage vient de charger la liste : seuls les retours la relisent.
+  const premier = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (premier.current) premier.current = false;
+      else recharger();
+    }, [recharger]),
+  );
+  return ouvert && liste ? liste.unread_count : 0;
+}
+
 /** Saisie reçue au bureau malgré le message qu'elle porte (photo refusée, correction arrivée trop tard). */
 const recue = (i: QueuedItem) => i.message === PHOTO_REFUSEE || i.message === RECUE_AVANT_CORRECTION;
 
@@ -29,6 +47,7 @@ const NATURE: Record<string, string> = {
   check: "Contrôle avant départ",
   breath_test: "Alcootest",
   event: "Déclaration",
+  lecture: "Accusé de lecture",
 };
 
 /**
@@ -41,6 +60,7 @@ export function MaJournee({ user }: { user: Utilisateur }) {
   const envoi = useEnvoi();
   const { c, mode } = useTerrain();
   const ouverts = modulesOuverts(user.profiles);
+  const aLire = useALire(peutOuvrir(user.profiles, "documents"));
   const aEnvoyer = envoi.mine.length;
   const etatReseau: EtatReseau = !envoi.online ? "hors" : envoi.faible ? "faible" : "en_ligne";
 
@@ -117,7 +137,11 @@ export function MaJournee({ user }: { user: Utilisateur }) {
                 style={[styles.tuile, { backgroundColor: c.surface, borderColor: teinte.accent, borderLeftColor: teinte.accentPlein }]}
               >
                 <Texte variante="libelle" style={{ color: teinte.accentTexte }}>{m.titre}</Texte>
-                <Texte variante="service" ton="second">{m.detail}</Texte>
+                {m.cle === "documents" && aLire ? (
+                  <Tampon mot={pluriel(aLire, "à lire", "à lire")} ton="warn" />
+                ) : (
+                  <Texte variante="service" ton="second">{m.detail}</Texte>
+                )}
               </Pressable>
             );
           })}

@@ -132,6 +132,15 @@ export class ApiClient {
     }
   }
 
+  /**
+   * Téléchargement d'un fichier du bureau (document d'une procédure) par une fonction de l'appareil,
+   * avec les en-têtes de la session : le jeton d'accès est renouvelé au besoin, jamais rendu ailleurs.
+   */
+  async fichier<T>(path: string, telecharger: (url: string, enTetes: Record<string, string>) => Promise<T>): Promise<T> {
+    if (!this.access || this.maintenant() >= this.echeance - MARGE) await this.renouveler();
+    return telecharger(this.base + path, { "X-Eguitra-App": APP_CODE, Authorization: `Bearer ${this.access}` });
+  }
+
   /** Fin de session au bureau, puis oubli sur l'appareil. Sans réseau, rien n'est oublié. */
   async deconnecter(): Promise<void> {
     const refresh = await this.coffre.lire();

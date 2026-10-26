@@ -181,3 +181,67 @@ export interface MyCrisisContacts {
   sites: Array<{ id: number; name: string }> | null;
   items: CrisisContact[];
 }
+
+/** Pièce jointe d'une fiche (noyau : models/attachment.py, _row) ; `url` relative à l'API. */
+export interface PieceJointe {
+  id: number;
+  name: string;
+  mimetype: string | null;
+  size: number | null;
+  is_photo: boolean;
+  caption: string | null;
+  url: string;
+}
+
+/** Procédure en vigueur qui vise le compte (GET /hsseq/my/documents ; noyau : my_procedure_row). */
+export interface MyProcedure {
+  id: number;
+  code: string;
+  title: string;
+  domain: "safety" | "health" | "security" | "environment" | "quality" | null;
+  version: { id: number; version: number | string; effective_date: string | null; published_at: string | null; change_summary: string | null };
+  document: PieceJointe[];
+  read: boolean;
+  read_at: string | null;
+}
+
+/** Alerte publiée qui vise le compte, texte anonymisé (noyau : my_bulletin_row). */
+export interface MyBulletin {
+  id: number;
+  reference: string | null;
+  kind: "flash_alert" | "lesson";
+  title: string;
+  body: string;
+  key_messages: string | null;
+  published_at: string | null;
+  read: boolean;
+  read_at: string | null;
+}
+
+export interface MyDocuments {
+  procedures: MyProcedure[];
+  bulletins: MyBulletin[];
+  unread_count: number;
+}
+
+/** Habilitation du compte (GET /hsseq/me) : statut et dates, jamais le détail médical. */
+export interface MyQualification {
+  code: string;
+  name: string;
+  mandatory: boolean;
+  status: "valid" | "to_renew" | "expired" | "missing" | null;
+  obtained_on: string | null;
+  expires_on: string | null;
+  days_left: number | null;
+}
+
+/** Espace du conducteur (GET /hsseq/me ; noyau : controllers/referentials.py, me). */
+export interface MyFile {
+  employee: { id: number; name: string; matricule: string | null } | null;
+  driver: { id: number; name: string | null } | null;
+  /** Aptitude médicale en statut seul. */
+  fitness: "fit" | "review" | "unfit" | null;
+  qualifications: MyQualification[];
+  qualifications_status: "valid" | "to_renew" | "expired" | "missing" | null;
+  departure_blocked: boolean | null;
+}

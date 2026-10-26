@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DELAI_LISTE } from "../config";
 import { useSession } from "../auth/session";
 import { useEnvoi } from "../sync/Envoi";
-import type { CheckTemplate, HsseqReferentials, MyCrisisContacts } from "./types";
+import type { CheckTemplate, HsseqReferentials, MyCrisisContacts, MyDocuments, MyFile } from "./types";
 
 /**
  * Listes HSSEQ gardées sur l'appareil pour saisir sans réseau : référentiels (sites, véhicules et
@@ -39,7 +39,50 @@ export function useHsseq() {
   return { refs, grilles };
 }
 
-const CLE_CONTACTS = "hsseq.crisis_contacts";
+/**
+ * Liste du bureau gardée sur l'appareil : la dernière connue s'affiche tout de suite, puis la fraîche
+ * la remplace si le bureau répond. undefined pendant le premier chargement, null sans liste du tout.
+ * `recharger` relit le bureau ; `remplacer` écrit une version corrigée sur l'appareil (lecture faite).
+ */
+export function useListeGardee<T>(cle: string, chemin: string) {
+  const { api, store } = useSession();
+  const { echanger } = useEnvoi();
+  const [liste, setListe] = useState<T | null | undefined>(undefined);
+  const [chargement, setChargement] = useState(false);
+  const [tour, setTour] = useState(0);
+
+  useEffect(() => {
+    let actif = true;
+    void (async () => {
+      setChargement(true);
+      const garde = await store.cache.get<T>(cle).catch(() => undefined);
+      if (garde && actif) setListe(garde);
+      try {
+        const frais = await echanger(() => api.appel<T>("GET", chemin, { timeout: DELAI_LISTE }));
+        if (!actif) return;
+        setListe(frais);
+        await store.cache.set(cle, frais);
+      } catch {
+        if (!garde && actif) setListe(null);
+      } finally {
+        if (actif) setChargement(false);
+      }
+    })();
+    return () => {
+      actif = false;
+    };
+  }, [api, store, echanger, cle, chemin, tour]);
+
+  const recharger = useCallback(() => setTour((t) => t + 1), []);
+  const remplacer = useCallback(
+    async (suite: T) => {
+      setListe(suite);
+      await store.cache.set(cle, suite).catch(() => undefined);
+    },
+    [store, cle],
+  );
+  return { liste, chargement, recharger, remplacer };
+}
 
 /**
  * Annuaire de crise du compte (contrat HSSEQ, documents) : les numéros à appeler en cas d'accident,
@@ -47,30 +90,17 @@ const CLE_CONTACTS = "hsseq.crisis_contacts";
  * arrive souvent loin du réseau : « Ma journée » le rafraîchit à chaque ouverture.
  */
 export function useContactsCrise() {
-  const { api, store } = useSession();
-  const { echanger } = useEnvoi();
-  const [contacts, setContacts] = useState<MyCrisisContacts | null | undefined>(undefined);
+  return useListeGardee<MyCrisisContacts>("hsseq.crisis_contacts", "/hsseq/my/crisis-contacts").liste;
+}
 
-  useEffect(() => {
-    let actif = true;
-    void (async () => {
-      const garde = await store.cache.get<MyCrisisContacts>(CLE_CONTACTS).catch(() => undefined);
-      if (garde && actif) setContacts(garde);
-      try {
-        const frais = await echanger(() => api.appel<MyCrisisContacts>("GET", "/hsseq/my/crisis-contacts", { timeout: DELAI_LISTE }));
-        if (!actif) return;
-        setContacts(frais);
-        await store.cache.set(CLE_CONTACTS, frais);
-      } catch {
-        if (!garde && actif) setContacts(null);
-      }
-    })();
-    return () => {
-      actif = false;
-    };
-  }, [api, store, echanger]);
+/** Procédures en vigueur et alertes publiées qui visent le compte, avec leur état de lecture. */
+export function useMesDocuments() {
+  return useListeGardee<MyDocuments>("hsseq.my_documents", "/hsseq/my/documents");
+}
 
-  return contacts;
+/** Espace du conducteur : aptitude en statut seul, habilitations et leurs échéances. */
+export function useMonDossier() {
+  return useListeGardee<MyFile>("hsseq.me", "/hsseq/me");
 }
 
 /** Numéro composable : chiffres et « + » de tête seulement. */

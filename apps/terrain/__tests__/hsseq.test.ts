@@ -61,20 +61,21 @@ const photo = (uuid: string, parent: string, model: Piece["model"], item_id: num
 });
 
 describe("modules de « Ma journée » selon le profil", () => {
-  it("ouvre au conducteur les seules fiches HSSEQ, sans Rotations", () => {
-    expect(modulesOuverts(["conducteur"]).map((m) => m.cle)).toEqual(["depart", "controle", "alcootest", "declaration"]);
+  it("ouvre au conducteur les seules fiches HSSEQ, ses documents et son dossier, sans Rotations", () => {
+    expect(modulesOuverts(["conducteur"]).map((m) => m.cle)).toEqual(["depart", "controle", "alcootest", "declaration", "documents", "dossier"]);
     expect(peutOuvrir(["conducteur"], "nonconformites")).toBe(false);
     expect(peutOuvrir(["conducteur"], "rotations")).toBe(false);
   });
 
-  it("ouvre tout au chef de parc", () => {
-    expect(modulesOuverts(["exploitation"]).map((m) => m.cle)).toEqual(["rotations", "depart", "controle", "alcootest", "declaration", "nonconformites"]);
+  it("ouvre tout au chef de parc, sauf l'espace du conducteur", () => {
+    expect(modulesOuverts(["exploitation"]).map((m) => m.cle)).toEqual(["rotations", "depart", "controle", "alcootest", "declaration", "nonconformites", "documents"]);
+    expect(peutOuvrir(["exploitation"], "dossier")).toBe(false);
   });
 
   it("suit la matrice du contrat : l'administration ne contrôle pas, la direction déclare seulement", () => {
-    expect(modulesOuverts(["admin"]).map((m) => m.cle)).toEqual(["rotations", "depart", "declaration"]);
-    expect(modulesOuverts(["hsseq"]).map((m) => m.cle)).toEqual(["depart", "controle", "alcootest", "declaration", "nonconformites"]);
-    expect(modulesOuverts(["direction"]).map((m) => m.cle)).toEqual(["declaration"]);
+    expect(modulesOuverts(["admin"]).map((m) => m.cle)).toEqual(["rotations", "depart", "declaration", "documents"]);
+    expect(modulesOuverts(["hsseq"]).map((m) => m.cle)).toEqual(["depart", "controle", "alcootest", "declaration", "nonconformites", "documents"]);
+    expect(modulesOuverts(["direction"]).map((m) => m.cle)).toEqual(["declaration", "documents"]);
     expect(modulesOuverts(["finance", "achats"])).toEqual([]);
   });
 });
@@ -207,6 +208,26 @@ describe("envoi des fiches HSSEQ", () => {
     );
     await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ created: 1, errors: 0 });
     expect(await store.queue.all()).toEqual([expect.objectContaining({ client_uuid: "a1", status: "pending" })]);
+  });
+
+  it("envoie l'accusé de lecture vers son document, avec l'heure de lecture sur l'appareil", async () => {
+    const store = memoryStore();
+    await store.queue.put(fiche("l1", "lecture", { objet: "procedure", id: 31, version_id: 312 }));
+    await store.queue.put(fiche("l22", "lecture", { objet: "bulletin", id: 41 }));
+    const { api, appels } = bureau(() => ({ id: 1 }));
+    await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ created: 2, errors: 0 });
+    const lus = Object.fromEntries(appels.map((a) => [a.path, a.body]));
+    expect(lus["/hsseq/procedures/31/acknowledge"]).toEqual({ version_id: 312, read_at: fiche("l1", "lecture", {}).created_at });
+    expect(lus["/hsseq/bulletins/41/acknowledge"]).toEqual({ version_id: undefined, read_at: fiche("l22", "lecture", {}).created_at });
+    expect(await store.queue.all()).toEqual([]);
+  });
+
+  it("une procédure changée de version depuis la lecture est à relire (409)", async () => {
+    const store = memoryStore();
+    await store.queue.put(fiche("l1", "lecture", { objet: "procedure", id: 31, version_id: 311 }));
+    const { api } = bureau(() => new ApiError(409, "conflict", "Une nouvelle version est en vigueur : lisez-la avant d'en accuser lecture.", { fields: ["version_id"] }));
+    await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ errors: 1 });
+    expect(await store.queue.get("l1")).toMatchObject({ status: "error", message: expect.stringContaining("nouvelle version") });
   });
 
   it("refuse une fiche dont l'identifiant appartient à un autre compte (409)", async () => {

@@ -26,7 +26,24 @@ export const ROUTES: Partial<Record<Kind, string>> = {
   event: "/hsseq/events",
 };
 
-export const FICHES: Kind[] = ["check", "breath_test", "event"];
+export const FICHES: Kind[] = ["check", "breath_test", "event", "lecture"];
+
+/** Accusé de lecture : `objet` et `id` du document lu, `version_id` de la procédure lue. */
+export interface Lecture {
+  objet: "procedure" | "bulletin";
+  id: number;
+  version_id?: number;
+}
+
+/**
+ * Route d'une saisie. L'accusé de lecture part vers son document (idempotent au bureau) ; une
+ * procédure dont la version a changé depuis la lecture est refusée (409) : elle est à relire.
+ */
+function routeDe(fiche: QueuedItem): string | undefined {
+  if (fiche.kind !== "lecture") return ROUTES[fiche.kind];
+  const l = fiche.payload as unknown as Lecture;
+  return `/hsseq/${l.objet === "procedure" ? "procedures" : "bulletins"}/${Number(l.id)}/acknowledge`;
+}
 
 /**
  * Refus définitif propre à une fiche ou à une photo : le bureau l'a lue et n'en veut pas en l'état
@@ -44,7 +61,7 @@ export function refusDefinitif(e: unknown): e is ApiError {
 /** Refus pour une heure de saisie que le bureau juge à venir : l'horloge de l'appareil avance. */
 function horlogeDecalee(e: ApiError): boolean {
   const champs = e.extra.fields;
-  return Array.isArray(champs) && champs.includes("reported_at");
+  return Array.isArray(champs) && (champs.includes("reported_at") || champs.includes("read_at"));
 }
 
 /** Une photo refusée par le bureau (format, taille) : la fiche est reçue, la photo reste à refaire. */
@@ -83,14 +100,16 @@ export async function envoyerFiches(
   try {
     for (const fiche of fiches) {
       if (api.numero !== session) break;
-      const corps: Record<string, unknown> = { ...fiche.payload, client_uuid: fiche.client_uuid, reported_at: fiche.created_at };
+      const corps: Record<string, unknown> = fiche.kind === "lecture"
+        ? { version_id: (fiche.payload as unknown as Lecture).version_id, read_at: fiche.created_at }
+        : { ...fiche.payload, client_uuid: fiche.client_uuid, reported_at: fiche.created_at };
       if (fiche.kind === "breath_test" && fiche.payload.performed) {
         const resultat = await appareil.lireResultat(fiche.client_uuid);
         if (resultat) Object.assign(corps, resultat);
       }
       let reponse: { id: number };
       try {
-        reponse = await api.appel<{ id: number }>("POST", ROUTES[fiche.kind]!, { body: corps, timeout: DELAI_ENVOI });
+        reponse = await api.appel<{ id: number }>("POST", routeDe(fiche)!, { body: corps, timeout: DELAI_ENVOI });
       } catch (e) {
         if (!refusDefinitif(e)) throw e;
         // Heure de saisie refusée (horloge de l'appareil en avance) : la fiche reste en attente et
