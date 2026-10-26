@@ -244,7 +244,7 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   seuls les codes terrain et mobile et les routes du compte, de /transport/ et de /hsseq/ ; 9 tests
   `npm test`) et sessions `terrain` bornées à leurs routes dans le noyau
   (`SESSION_ROUTES["terrain"]`, seule action `depart` sur une rotation ; tests eguitra_api et
-  eguitra_transport écrits, à lancer sur le serveur). `next build` non lancé : disque du poste plein.
+  eguitra_transport écrits, à lancer sur le serveur). `tsc` et `next build` au vert.
   Intégration par la recette après RH et HSSEQ (Local).
 - 26 octobre : relecture indépendante du socle, défauts corrigés (renouvellement de session,
   réseau Android, envois concurrents, bord à bord) ; système de conception « terrain » de DESIGN ;
