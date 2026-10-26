@@ -82,3 +82,20 @@ class TestClosingAndLoans(FinanceDataMixin, TransactionCase):
         close = self.env["eguitra.period.close"]._get(self.company, self.month)
         checks = {c["code"]: c for c in close.action_check()}
         self.assertEqual(checks["previous_closed"]["status"], "blocking")
+
+    def test_alertes_evaluees_a_la_fin_du_mois(self):
+        """Un virement interne saisi le lendemain du mois, sans sa contrepartie (585 non soldé), ne bloque pas la
+        clôture du mois : les alertes s'évaluent à sa fin."""
+        end = self.month + relativedelta(months=1, days=-1)
+        self.env["account.move"].create({
+            "move_type": "entry", "journal_id": self.bank.id, "date": end + relativedelta(days=1),
+            "line_ids": [(0, 0, {"name": "Virement", "account_id": self.company.transfer_account_id.id, "debit": 5_000_000}),
+                         (0, 0, {"name": "Virement", "account_id": self.bank.default_account_id.id, "credit": 5_000_000})],
+        }).action_post()
+        close = self.env["eguitra.period.close"]._get(self.company, self.month)
+        checks = {c["code"]: c for c in close.action_check()}
+        self.assertEqual(checks["blocking_alerts"]["status"], "ok", checks["blocking_alerts"])
+        self.assertEqual(checks["transit_account"]["status"], "ok")
+        later = self.env["eguitra.period.close"]._get(self.company, end + relativedelta(days=1))
+        self.assertEqual({c["code"]: c for c in later.action_check()}["transit_account"]["status"], "blocking",
+                         "Le mois du virement, lui, le voit")

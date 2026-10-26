@@ -135,9 +135,9 @@ class EguitraPeriodClose(models.Model):
         checks.append(self._check("statement_mapping", "Tous les comptes figurent dans les états", not unmapped, False,
                                   "Comptes hors états SYSCOHADA : " + ", ".join(sorted(unmapped)[:10]), len(unmapped)))
 
+        # Alertes évaluées à la fin du mois : une opération du lendemain ne bloque pas la clôture du mois.
         blocking_alerts = [
-            a for a in self.env["eguitra.alert.threshold"]._company_alerts(company, end + relativedelta(days=1))
-            if a["severity"] == "blocking"
+            a for a in self.env["eguitra.alert.threshold"]._company_alerts(company, end) if a["severity"] == "blocking"
         ]
         checks.append(self._check("blocking_alerts", "Aucune alerte bloquante active", not blocking_alerts, True,
                                   "; ".join(a["title"] for a in blocking_alerts), len(blocking_alerts)))
