@@ -6,7 +6,7 @@ Moteur d'approbation spécifique, retenu à la place de base_tier_validation (no
 l'interface d'approbation vit dans les applications EGUITRA, le noyau n'en porte que les règles,
 les demandes, les décisions et le blocage de la comptabilisation.
 """,
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.2.1",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",
