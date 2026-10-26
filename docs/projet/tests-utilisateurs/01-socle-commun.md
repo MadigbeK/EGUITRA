@@ -27,12 +27,10 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 « Démo ». Rien de ce que vous y faites ne touche les vrais comptes : vous pouvez tout essayer, y
 compris les erreurs.
 
-1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge.
+1. Se connecter. Ouvrez l'adresse de votre application (tableau ci-dessous), dans Chrome ou Edge.
    Identifiant : le compte de test indiqué dans le scénario. Mot de passe : le mot de passe commun de
    la recette, communiqué par E-VOLUTION XP. La double authentification est suspendue sur la recette
-   pendant les tests, sauf mention contraire. L'adresse de la recette ouvre la connexion à Finance :
-   un compte sans Finance (cabinet, RH, salarié, porteur) se connecte par l'adresse de la recette
-   suivie de /axispro, /rh ou /portail.
+   pendant les tests, sauf mention contraire.
 2. Jouer un scénario. Suivez les étapes dans l'ordre, avec les données indiquées. Un scénario à deux
    comptes se joue dans deux navigateurs (Chrome et Edge) ou sur deux postes.
 3. Noter le résultat. Cochez « Réussi » si l'écran correspond au résultat attendu, sinon « Échoué ».
@@ -45,6 +43,20 @@ compris les erreurs.
    reçu (DEM-…) dans les remarques du scénario.
 5. Ne saisissez aucune information réelle confidentielle : ni compte bancaire, ni salaire, ni mot de
    passe dans une demande ou un message.
+
+La connexion se fait toujours dans une application : celle de l'adresse ouverte. L'adresse de la
+recette, seule, ouvre la connexion à Finance, puis l'accueil NIMOVA, d'où l'on passe aux autres
+applications du compte. Un compte qui n'a pas Finance doit ouvrir l'adresse de son application ;
+sinon la connexion répond « Votre profil ne donne pas accès à cette application. ».
+
+| Application {30} | Adresse à ouvrir {34} | Comptes de test {36} |
+|---|---|---|
+| Finance, Transport, Analyse, RH (par l'accueil NIMOVA) | l'adresse de la recette | test.dg, test.daf, test.comptable, test.achats, test.exploitation, test.parc, test.chantiers, test.immobilier, test.admin |
+| MB AxisPro Consulting (AxisPro Suite) | l'adresse de la recette suivie de /axispro | test.consultant, test.associe |
+| Analyse, pour le cabinet | l'adresse de la recette suivie de /analyse | test.consultant, test.associe |
+| RH et « Mon espace » | l'adresse de la recette suivie de /rh | test.rh, test.salarie |
+| Rotations, au téléphone | l'adresse de la recette suivie de /mobile | test.exploitation, test.parc |
+| Portail des porteurs de projets | l'adresse de la recette suivie de /portail | test.porteur, porteur.demo |
 
 ## Comptes de test
 
@@ -598,15 +610,16 @@ Compte : test.comptable, dans la conversation du scénario SOC-22.
 
 Données : aucune.
 
-1. Survolez le message de test.daf et cliquez sur « Répondre ». La citation s'affiche au-dessus du
-   champ ; écrivez une réponse et envoyez-la.
-2. Sur votre propre message, cliquez sur « Retirer ». À la question « Retirer ce message ? »,
-   cliquez sur « Retirer ».
-3. Regardez la conversation avec test.daf.
+1. Sous le message de test.daf, cliquez sur « Répondre ». La citation s'affiche au-dessus du champ ;
+   écrivez une réponse et envoyez-la.
+2. Sous votre propre message, cliquez sur « Retirer ». À la question « Retirer ce message ? »,
+   cliquez d'abord sur « Annuler », puis recommencez et cliquez sur « Retirer ».
+3. Regardez la conversation chez test.daf.
 
-Résultat attendu : la réponse montre l'extrait du message cité. Le message retiré affiche « Message
-retiré par vous. » chez test.comptable et « Message retiré par son auteur. » chez test.daf ; son
-texte n'est plus lisible.
+Résultat attendu : la réponse porte « En réponse à … » et l'extrait du message cité. « Annuler »
+garde le message. Le message retiré affiche « Message retiré par vous. » chez test.comptable et
+« Message retiré par son auteur. » chez test.daf ; son texte n'est plus lisible. Seuls vos propres
+messages proposent « Retirer ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -620,17 +633,19 @@ clair.
 
 Compte : test.daf.
 
-Données : un fichier PDF ; une archive .zip ; un fichier de plus de 20 Mo.
+Données : un fichier PDF ; une archive .zip ; un fichier de plus de 20 Mo ; six petits fichiers PDF.
 
 1. Dans une conversation, cliquez sur le trombone « Joindre des fichiers », choisissez le PDF et
    envoyez.
 2. Recommencez avec l'archive .zip (dans la fenêtre de choix, affichez « Tous les fichiers »).
 3. Recommencez avec le fichier de plus de 20 Mo.
+4. Choisissez les six PDF d'un coup.
 
-Résultat attendu : le PDF arrive et s'ouvre chez le correspondant. L'archive est refusée : « (nom du
-fichier) : format refusé. Formats acceptés : PDF, JPEG, PNG, Word (.docx) ou Excel (.xlsx).
-Enregistrez le document dans l'un de ces formats. ». Le gros fichier est refusé : « (nom du
-fichier) : fichier trop volumineux (20 Mo au plus). ».
+Résultat attendu : le PDF arrive et se télécharge chez le correspondant. L'archive est refusée à
+l'envoi : « (nom du fichier) : format refusé. Formats acceptés : PDF, JPEG, PNG, Word (.docx) ou
+Excel (.xlsx). Enregistrez le document dans l'un de ces formats. ». Le gros fichier est refusé dès
+son choix : « (nom du fichier) : fichier trop volumineux (20 Mo au plus). ». Les six PDF aussi :
+« 5 pièces jointes au plus par message. ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -649,16 +664,18 @@ Données : nom « Clôture d'octobre (essai) » ; membres Test - Comptable et Te
 1. test.daf : « Nouvelle », « Groupe ». Saisissez le « Nom du groupe », ajoutez les deux membres sous
    « Membres du groupe », puis « Créer le groupe ».
 2. Écrivez un premier message.
-3. Cliquez sur « Membres (3) ». Vérifiez la mention « Responsable » à côté de votre nom.
-4. test.comptable : ouvrez le groupe, puis « Membres (3) ».
+3. En haut de la conversation, cliquez sur le bouton des membres (icône et nombre 3). La vue
+   « Membres (3) » s'ouvre : vérifiez la mention « Responsable » à côté de votre nom.
+4. test.comptable : ouvrez le groupe, puis le bouton des membres.
 5. test.comptable : cliquez sur « Quitter la conversation », puis sur « Quitter ».
-6. test.daf : dans « Membres », ajoutez de nouveau Test - Comptable avec « Ajouter un collègue ».
+6. test.daf : dans « Membres », cliquez sur « Ajouter des membres », puis, sous « Ajouter un
+   collègue », choisissez Test - Comptable.
 
 Résultat attendu : le bouton « Créer le groupe » reste grisé sans nom ou sans membre. Chez test.daf,
-« Renommer », « Retirer » (pour chaque membre) et « Ajouter un collègue » sont proposés ; chez
+« Renommer », « Retirer » (pour chaque membre) et « Ajouter des membres » sont proposés ; chez
 test.comptable, ils ne le sont pas. Avant de quitter, la question « Quitter ce groupe ? Seul son
-responsable pourra vous y ajouter de nouveau. » s'affiche. Rajouté, test.comptable relit tout
-l'historique.
+responsable pourra vous y ajouter de nouveau. » s'affiche. À l'étape 6, « Test - Comptable a rejoint
+le groupe. » ; rajouté, test.comptable relit tout l'historique.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -677,11 +694,11 @@ Données : le chantier « Entrepôt de stockage (démo) ».
 1. test.chantiers : Finance > Métiers > BTP, ouvrez le chantier, puis cliquez sur « Discussion ».
 2. Écrivez « Point sur la situation du mois (essai). » et envoyez.
 3. test.daf : ouvrez le même chantier, puis « Discussion ».
-4. test.daf : dans la conversation, cliquez sur le lien qui ouvre la fiche.
+4. test.daf : en haut de la conversation, cliquez sur « Fiche ».
 
 Résultat attendu : le panneau s'ouvre sur « Discussion de la fiche », avec la mention « Discussion de
-la fiche, ouverte à ses lecteurs ». test.daf y lit le message de test.chantiers et peut répondre. Le
-lien ramène à l'écran BTP. Le même bouton existe sur une rotation (Transport), un bien (Immobilier)
+la fiche, ouverte à ses lecteurs ». test.daf y lit le message de test.chantiers et peut répondre.
+« Fiche » ramène à l'écran BTP. Le même bouton existe sur une rotation (Transport), un bien (Immobilier)
 et un dossier (AxisPro).
 
 | Résultat {22} | Remarques {78} |
@@ -712,9 +729,37 @@ pas comme une activité.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+### SOC-28. Retirer un compte désactivé de ses discussions
+
+Objectif : vérifier que l'administration retire un compte parti de toutes ses conversations, sans
+les lire.
+
+Compte : test.admin, avec test.daf.
+
+Données : le groupe « Clôture d'octobre (essai) » de SOC-25 ; un compte créé pour l'essai, ouvert
+aux deux sociétés (par exemple celui du scénario FIN-38 du cahier Finance).
+
+1. test.daf : dans les membres du groupe, ajoutez le compte d'essai (« Ajouter des membres »).
+2. test.admin : Finance > Administration > Utilisateurs, ouvrez la fiche du compte d'essai, cliquez
+   sur « Désactiver » et confirmez.
+3. test.daf : ouvrez les membres du groupe.
+4. test.admin : sur la fiche du compte désactivé, cliquez sur « Retirer des discussions ». Lisez la
+   fenêtre, puis « Retirer ».
+5. test.daf : rouvrez les membres du groupe.
+
+Résultat attendu : à l'étape 3, le compte figure avec la mention « Compte archivé ». La fenêtre
+« Retirer des discussions » précise que les autres membres gardent l'historique et que
+l'administration n'en lira aucune ; ensuite, « Compte retiré de 1 conversation. ». À l'étape 5, le
+compte n'est plus membre ; les messages du groupe restent.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## G. Refus attendus
 
-### SOC-28. Application non ouverte au profil
+### SOC-29. Application non ouverte au profil
 
 Objectif : vérifier qu'un compte ne peut pas ouvrir une application que son profil n'ouvre pas.
 
@@ -739,7 +784,7 @@ AxisPro.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### SOC-29. Collègue d'une autre société non proposé
+### SOC-30. Collègue d'une autre société non proposé
 
 Objectif : vérifier que la discussion ne propose que des collègues qui partagent une société avec
 vous.
@@ -760,7 +805,7 @@ Direction générale, ouvert aux deux sociétés, est proposé.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### SOC-30. Conversation fermée à l'administration
+### SOC-31. Conversation fermée à l'administration
 
 Objectif : vérifier que l'administration ne lit pas une conversation dont elle n'est pas membre.
 
@@ -779,7 +824,7 @@ voit que ses propres conversations.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### SOC-31. Pas de discussion ni de demandes pour le salarié et le porteur
+### SOC-32. Pas de discussion ni de demandes pour le salarié et le porteur
 
 Objectif : vérifier que la discussion interne est réservée aux comptes internes qui ont un profil, et
 « Mes demandes » aux comptes internes.
@@ -803,7 +848,7 @@ discussion ni « Mes demandes » : il écrit au cabinet par « Messages » du po
 
 ## H. Contrôles de saisie et de sécurité
 
-### SOC-32. Message clair en cas de coupure du réseau
+### SOC-33. Message clair en cas de coupure du réseau
 
 Objectif : vérifier qu'une coupure du réseau est annoncée par un message en français.
 
@@ -824,19 +869,19 @@ réessayez. » s'affiche ; aucun message en anglais ni code. Le bouton redevient
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### SOC-33. Un double clic ne dépose qu'une demande
+### SOC-34. Un double clic ne dépose qu'une demande
 
 Objectif : vérifier qu'un double clic sur un bouton d'enregistrement n'enregistre qu'une fois.
 
 Compte : test.comptable.
 
-Données : type « Question » ; titre « SOC-33 : double clic » ; description « Essai du double clic. ».
+Données : type « Question » ; titre « SOC-34 : double clic » ; description « Essai du double clic. ».
 
 1. « Mes demandes » > « Nouvelle demande ». Remplissez la demande.
 2. Double-cliquez rapidement sur « Déposer la demande ».
 3. Revenez à la liste « Mes demandes ».
 
-Résultat attendu : le bouton tourne pendant l'envoi ; une seule demande « SOC-33 : double clic »
+Résultat attendu : le bouton tourne pendant l'envoi ; une seule demande « SOC-34 : double clic »
 figure dans la liste.
 
 | Résultat {22} | Remarques {78} |
@@ -853,10 +898,10 @@ figure dans la liste.
 | C. Direction et finance : société de travail | 3 | | | |
 | D. Tous les comptes internes : Mes demandes | 5 | | | |
 | E. Administration : traitement des demandes | 2 | | | |
-| F. Tous les comptes internes : discussion | 6 | | | |
+| F. Tous les comptes internes : discussion | 7 | | | |
 | G. Refus attendus | 4 | | | |
 | H. Contrôles de saisie et de sécurité | 2 | | | |
-| Total | 33 | | | |
+| Total | 34 | | | |
 
 Réserves et anomalies relevées :
 
