@@ -4,19 +4,20 @@ import { BackHandler, KeyboardAvoidingView, Modal, Pressable, RefreshControl, Sc
 import { SafeAreaView } from "react-native-safe-area-context";
 import { peutOuvrir } from "../accueil/modules";
 import { revenir } from "../accueil/retour";
+import type { ApiClient } from "../api/client";
 import { ApiError, DelaiDepasse } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
 import { useConfirmerCode } from "../auth/Verrou";
 import { DELAI_LISTE } from "../config";
-import { fmtDate, heure, pluriel } from "../format";
+import { aujourdhui, fmtDate, heure, pluriel } from "../format";
 import { useEnvoi } from "../sync/Envoi";
 import { signalerActivite } from "../ui/activite";
 import { BarreAction, Bandeau, Bouton, EnTete, Ecran, Feuille, Tampon, Texte, vibrer } from "../ui/elements";
 import { Cadenas } from "../ui/icones";
 import { espaces, mesures, polices, rayons, textes, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
-import type { LockEvaluation, LockReason, MyRotation, MyRotations } from "./types";
+import type { CheckDetail, CheckLine, LockEvaluation, LockReason, MyRotation, MyRotations } from "./types";
 import { derogeables, etatDepart, JAMAIS_DEROGEABLES, JUSTIFICATION_MIN, motifsOuverts, sansDoublon, TAMPON_DEPART, titreMotif } from "./verrou";
 
 const CLE = "hsseq.me.rotations";
@@ -39,6 +40,29 @@ function verifieA(garde: Garde, r: MyRotation): number | null {
 }
 
 const heureDe = (ms: number | null) => (ms === null ? "–" : heure(new Date(ms).toISOString()));
+
+interface ACompleter {
+  id: number;
+  reference: string;
+  points: number;
+}
+
+/**
+ * Contrôle incomplet d'un départ (V01 « contrôle complémentaire attendu ») : le motif du noyau ne
+ * cite pas le contrôle ; il se retrouve parmi ceux de la rotation, sinon parmi les contrôles récents
+ * de son ensemble, à son détail (awaiting_items, transition « complement »).
+ */
+async function chercherComplement(api: ApiClient, r: MyRotation): Promise<ACompleter | null> {
+  const chercher = async (filtre: string) =>
+    (await api.appel<{ items: CheckLine[] }>("GET", `/hsseq/checks?${filtre}&limit=5`, { timeout: DELAI_LISTE })).items;
+  let lignes = await chercher(`rotation_id=${r.id}`);
+  if (!lignes.length && r.vehicle) lignes = await chercher(`vehicle_id=${r.vehicle.id}&date_from=${aujourdhui(-1)}`);
+  for (const l of lignes.filter((x) => !x.complement_of)) {
+    const d = await api.appel<CheckDetail>("GET", `/hsseq/checks/${l.id}`, { timeout: DELAI_LISTE });
+    if (d.transitions.includes("complement") && d.awaiting_items.length) return { id: d.id, reference: d.reference, points: d.awaiting_items.length };
+  }
+  return null;
+}
 
 /**
  * Départs du jour et verrou (système « terrain », § 3.8 ; contrat HSSEQ, § 9). Le conducteur voit
@@ -70,6 +94,8 @@ function Contenu({ user }: { user: Utilisateur }) {
   const [action, setAction] = useState(false);
   const [retour, setRetour] = useState<{ ton: "ok" | "attention" | "danger"; texte: string } | null>(null);
   const [derogation, setDerogation] = useState(false);
+  // Contrôle à compléter, par rotation : undefined tant qu'il n'est pas cherché, null s'il n'y en a pas.
+  const [aCompleter, setACompleter] = useState<Record<string, ACompleter | null>>({});
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -79,6 +105,7 @@ function Contenu({ user }: { user: Utilisateur }) {
       const liste = await echanger(() => api.appel<MyRotations>("GET", "/hsseq/me/rotations", { timeout: DELAI_LISTE }));
       const frais: Garde = { liste, at: Date.now() };
       setGarde(frais);
+      setACompleter({});
       await store.cache.set(CLE, frais);
     } catch {
       if (!cache) setGarde(null);
@@ -95,6 +122,24 @@ function Contenu({ user }: { user: Utilisateur }) {
   );
 
   const rotation = garde?.liste.items.find((r) => r.id === choisie) ?? null;
+
+  // V01 avec son détail : un contrôle existe mais attend un complément ; il est cherché au bureau.
+  const v01Incomplet = !!rotation?.lock && motifsOuverts(rotation.lock.reasons).some((r) => r.code === "V01" && !!r.detail);
+  const rotationId = rotation?.id ?? null;
+  const dejaCherche = rotationId !== null && aCompleter[String(rotationId)] !== undefined;
+  useEffect(() => {
+    if (!rotation || !v01Incomplet || !envoi.online || dejaCherche || !peutOuvrir(user.profiles, "controle")) return;
+    let actif = true;
+    void echanger(() => chercherComplement(api, rotation))
+      .catch(() => null)
+      .then((trouve) => {
+        if (actif) setACompleter((x) => ({ ...x, [String(rotation.id)]: trouve }));
+      });
+    return () => {
+      actif = false;
+    };
+    // La rotation se relit par son identifiant : la liste remplacée ne relance pas la recherche.
+  }, [rotationId, v01Incomplet, envoi.online, dejaCherche, api, echanger]);
 
   // Retour Android sur la fiche d'un départ : retour à la liste, pas à « Ma journée ».
   useEffect(() => {
@@ -289,10 +334,16 @@ function Contenu({ user }: { user: Utilisateur }) {
             </View>
             {r.detail ? <Texte>{r.detail}</Texte> : null}
             {r.resolution ? <Texte variante="service" ton="second">Lève ce motif : {r.resolution}</Texte> : null}
+            {r.code === "V01" && controle && aCompleter[String(rotation.id)] ? (
+              <Bouton
+                titre={`Compléter le contrôle ${aCompleter[String(rotation.id)]!.reference} : ${pluriel(aCompleter[String(rotation.id)]!.points, "point")}`}
+                onPress={() => router.push({ pathname: "/controle", params: { complement: String(aCompleter[String(rotation.id)]!.id) } })}
+              />
+            ) : null}
             {r.code === "V01" && controle ? (
               <Bouton
-                titre="Faire le contrôle avant départ"
-                variante="secondaire"
+                titre={aCompleter[String(rotation.id)] ? "Faire plutôt un contrôle complet" : "Faire le contrôle avant départ"}
+                variante={aCompleter[String(rotation.id)] ? "discret" : "secondaire"}
                 onPress={() => router.push({ pathname: "/controle", params: rotation.vehicle ? { vehicule: String(rotation.vehicle.id), rotation: String(rotation.id) } : {} })}
               />
             ) : null}

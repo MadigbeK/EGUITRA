@@ -6,7 +6,9 @@ import { BackHandler, Image, KeyboardAvoidingView, Pressable, ScrollView, StyleS
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { revenir } from "../accueil/retour";
 import type { Utilisateur } from "../auth/coffre";
-import { duree, heure, pluriel } from "../format";
+import { useSession } from "../auth/session";
+import { DELAI_LISTE } from "../config";
+import { duree, fmtDate, heure, pluriel } from "../format";
 import type { Piece } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
 import { BarreAction, Bandeau, Bouton, Champ, Choix, demanderConfirmation, EnTete, Ecran, Feuille, Tampon, Texte, vibrer } from "../ui/elements";
@@ -18,24 +20,63 @@ import { ficheControle, manques, pointsDuControle, resultat, type Reponse } from
 import { positionDeLaFiche, usePosition } from "./position";
 import { PrisePhoto } from "./PrisePhoto";
 import { Signature } from "./Signature";
-import type { Answer, TemplateItem } from "./types";
+import type { Answer, CheckDetail, CheckTemplate, TemplateItem } from "./types";
 import { grilleDe, NATURE_VEHICULE, useHsseq } from "./useHsseq";
 
 type Etape = "vehicule" | "critiques" | "autres" | "recap";
 
-/** Contrôle avant départ (système « terrain », § 3.3 à 3.5 ; contrat HSSEQ, § 7). Couleur : pétrole. */
-export function Controle({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateur; vehiculeInitial?: string; rotationInitiale?: string }) {
+interface Proprietes {
+  user: Utilisateur;
+  vehiculeInitial?: string;
+  rotationInitiale?: string;
+  /** Contrôle à compléter : ses seuls points ajoutés à la grille après la saisie. */
+  complementDe?: string;
+}
+
+/** Grille du complément : les points attendus par le contrôle d'origine, dans leur ordre. */
+function grilleDuComplement(origine: CheckDetail): CheckTemplate {
+  return {
+    id: origine.template.id,
+    name: `Complément du contrôle ${origine.reference}`,
+    kind: "pre_departure",
+    vehicle_kind: origine.vehicle?.vehicle_kind ?? "tanker",
+    version: origine.template.version ?? 0,
+    active: true,
+    items: origine.awaiting_items.map((a, n) => ({ id: a.item_id, label: a.label, blocking: a.blocking, sequence: n, linked_to: null })),
+  };
+}
+
+/**
+ * Contrôle avant départ (système « terrain », § 3.3 à 3.5 ; contrat HSSEQ, § 7). Couleur : pétrole.
+ * En complément d'un contrôle incomplet, les mêmes écrans sur les seuls points attendus
+ * (POST /hsseq/checks/<id>/complement), sans choix du véhicule.
+ */
+export function Controle(props: Proprietes) {
   return (
     <Module nom="hsseq">
-      <Contenu user={user} vehiculeInitial={vehiculeInitial} rotationInitiale={rotationInitiale} />
+      <Contenu {...props} />
     </Module>
   );
 }
 
-function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateur; vehiculeInitial?: string; rotationInitiale?: string }) {
+function Contenu({ user, vehiculeInitial, rotationInitiale, complementDe }: Proprietes) {
   useKeepAwake();
   const router = useRouter();
+  const { api } = useSession();
   const envoi = useEnvoi();
+  const { echanger } = envoi;
+  // Contrôle d'origine d'un complément, lu au bureau à l'ouverture (geste lancé d'un départ, en ligne).
+  const [origine, setOrigine] = useState<CheckDetail | null | undefined>(complementDe ? undefined : null);
+  useEffect(() => {
+    if (!complementDe) return;
+    let actif = true;
+    echanger(() => api.appel<CheckDetail>("GET", `/hsseq/checks/${Number(complementDe)}`, { timeout: DELAI_LISTE }))
+      .then((d) => actif && setOrigine(d))
+      .catch(() => actif && setOrigine(null));
+    return () => {
+      actif = false;
+    };
+  }, [api, echanger, complementDe]);
   const { refs, grilles } = useHsseq();
   const { c } = useTerrain();
   const position = usePosition();
@@ -93,8 +134,11 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
     return () => clearInterval(t);
   }, [debut, fait]);
 
-  const vehicule = refs?.vehicles.find((v) => String(v.id) === vehiculeId);
-  const grille = vehicule ? grilleDe(grilles, vehicule.vehicle_kind) : null;
+  const complement = origine ? grilleDuComplement(origine) : null;
+  const vehicule = origine?.vehicle
+    ? (refs?.vehicles.find((v) => v.id === origine.vehicle!.id) ?? { ...origine.vehicle, site_id: origine.site?.id ?? null, driver_id: null })
+    : refs?.vehicles.find((v) => String(v.id) === vehiculeId);
+  const grille = complement ?? (vehicule ? grilleDe(grilles, vehicule.vehicle_kind) : null);
   const points = grille ? pointsDuControle(grille) : { critiques: [], autres: [] };
   const critique = points.critiques[index];
 
@@ -175,7 +219,7 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
     const secondes = Math.round((Date.now() - (debut ?? Date.now())) / 1000);
     // Contrôle lancé depuis un départ, sur son ensemble : rattaché à la rotation, il lève V01 même si
     // un contrôle précédent attend un complément ; le conducteur est celui de la rotation (noyau).
-    const rotationId = rotationInitiale && vehiculeId === vehiculeInitial ? Number(rotationInitiale) : null;
+    const rotationId = !origine && rotationInitiale && vehiculeId === vehiculeInitial ? Number(rotationInitiale) : null;
     const fiche = ficheControle(grille, reponses, {
       vehicle_id: vehicule.id,
       rotation_id: rotationId,
@@ -183,9 +227,17 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
       duration_s: secondes,
       ...positionDeLaFiche(position),
     });
+    // Complément : les réponses aux seuls points attendus, la durée et la position ; la grille et
+    // l'ensemble sont ceux du contrôle d'origine.
+    const payload = origine
+      ? { check_id: origine.id, answers: fiche.answers, duration_s: fiche.duration_s, latitude: fiche.latitude, longitude: fiche.longitude, gps_accuracy: fiche.gps_accuracy }
+      : fiche;
     try {
       await envoi.enregistrer(
-        { client_uuid: uuid.current, kind: "check", user_id: user.id, created_at: new Date().toISOString(), status: "pending", payload: { ...fiche, ...(signature ? { signature: signature.image } : {}), offline: !envoi.online } },
+        {
+          client_uuid: uuid.current, kind: origine ? "complement" : "check", user_id: user.id, created_at: new Date().toISOString(), status: "pending",
+          payload: { ...payload, ...(signature ? { signature: signature.image } : {}), offline: !envoi.online },
+        },
         Object.values(photos),
       );
     } catch {
@@ -196,7 +248,7 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
     }
     enregistre.current = true;
     vibrer.succes();
-    setFait(`Contrôle enregistré en ${duree(secondes)}.`);
+    setFait(`${origine ? "Complément" : "Contrôle"} enregistré en ${duree(secondes)}.`);
     void envoi.sync("saisie");
     sortie.current = setTimeout(() => revenir(router), 1500);
   }
@@ -204,7 +256,7 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
   const entete = (
     <EnTete
       titre="Contrôle"
-      sousTitre={vehicule ? `Avant départ, ${vehicule.name}` : "Avant départ"}
+      sousTitre={vehicule ? `${complementDe ? "Complément" : "Avant départ"}, ${vehicule.name}` : complementDe ? "Complément" : "Avant départ"}
       gauche={(
         <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => void quitter()} style={styles.retour}>
           <Text style={[textes.libelle, { color: c.enteteEncre }]}>‹</Text>
@@ -213,10 +265,28 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
     />
   );
 
-  if (refs === undefined || grilles === undefined) {
+  if (complementDe) {
+    if (origine === undefined) return <Ecran>{entete}<Texte ton="second" style={styles.vide}>Chargement du contrôle à compléter…</Texte></Ecran>;
+    if (origine === null || !origine.transitions.includes("complement") || !origine.awaiting_items.length) {
+      return (
+        <Ecran>
+          {entete}
+          <View style={styles.page}>
+            <Bandeau
+              ton="attention"
+              texte={origine === null
+                ? "Contrôle à compléter indisponible : le bureau n'a pas pu être joint. Réessayez avec du réseau."
+                : "Ce contrôle n'attend plus de complément, ou il ne vous revient pas : vérifiez le départ à nouveau."}
+            />
+            <Bouton titre="Retour" variante="secondaire" onPress={() => revenir(router)} />
+          </View>
+        </Ecran>
+      );
+    }
+  } else if (refs === undefined || grilles === undefined) {
     return <Ecran>{entete}<Texte ton="second" style={styles.vide}>Chargement des grilles…</Texte></Ecran>;
   }
-  if (refs === null || grilles === null) {
+  if (!complementDe && (refs === null || grilles === null)) {
     return (
       <Ecran>
         {entete}
@@ -244,21 +314,30 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
       <Ecran>
         {entete}
         <ScrollView contentContainerStyle={styles.page}>
-          <Choix
+          {origine ? (
+            <Feuille>
+              <Texte variante="libelle">Complément du contrôle {origine.reference}</Texte>
+              <Texte>
+                {pluriel(origine.awaiting_items.length, "point ajouté", "points ajoutés")} à la grille après le contrôle du {fmtDate(origine.reported_at)} à {heure(origine.reported_at)}.
+                {origine.awaiting_items.some((a) => a.blocking) ? " Le départ reste bloqué (V01) jusqu'à ce complément." : ""}
+              </Texte>
+            </Feuille>
+          ) : null}
+          {origine ? null : <Choix
             libelle="Véhicule contrôlé"
             invite="Choisir le véhicule"
             valeur={vehiculeId}
-            options={refs.vehicles.map((v) => ({ valeur: String(v.id), libelle: v.name, detail: [NATURE_VEHICULE[v.vehicle_kind], v.plate].filter(Boolean).join(", ") }))}
+            options={(refs?.vehicles ?? []).map((v) => ({ valeur: String(v.id), libelle: v.name, detail: [NATURE_VEHICULE[v.vehicle_kind], v.plate].filter(Boolean).join(", ") }))}
             onChange={(id) => {
               setVehiculeId(id);
               setReponses({});
               oublierPhotos();
               setIndex(0);
             }}
-          />
+          />}
           {vehicule ? <Tampon mot={NATURE_VEHICULE[vehicule.vehicle_kind]} ton="neutre" /> : null}
           {vehicule && !grille ? <Bandeau ton="attention" texte={`Aucune grille de contrôle en vigueur pour une ${NATURE_VEHICULE[vehicule.vehicle_kind].toLowerCase()} : prévenez le Responsable HSSEQ.`} /> : null}
-          {grille ? (
+          {grille && !origine ? (
             <Feuille>
               <Texte variante="libelle">{grille.name}</Texte>
               <Texte>
@@ -268,7 +347,7 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
           ) : null}
         </ScrollView>
         <BarreAction etat={!vehicule ? "Choisissez le véhicule contrôlé." : !grille ? "Pas de grille pour ce véhicule." : "Prêt à commencer."}>
-          <Bouton style={{ flex: 1 }} titre="Commencer le contrôle" desactive={!grille} onPress={() => {
+          <Bouton style={{ flex: 1 }} titre={origine ? "Commencer le complément" : "Commencer le contrôle"} desactive={!grille} onPress={() => {
             setDebut((d) => d ?? Date.now());
             setEtape(points.critiques.length ? "critiques" : points.autres.length ? "autres" : "recap");
           }} />
@@ -416,7 +495,7 @@ function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateu
       >
         <Bouton
           style={{ flex: 1 }}
-          titre={fait ? "Contrôle enregistré" : "Enregistrer le contrôle"}
+          titre={fait ? (origine ? "Complément enregistré" : "Contrôle enregistré") : origine ? "Enregistrer le complément" : "Enregistrer le contrôle"}
           fait={!!fait}
           chargement={enregistrement && !fait}
           desactive={manque.sansReponse.length > 0 || manque.sansPhoto.length > 0}

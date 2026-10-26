@@ -26,7 +26,7 @@ export const ROUTES: Partial<Record<Kind, string>> = {
   event: "/hsseq/events",
 };
 
-export const FICHES: Kind[] = ["check", "breath_test", "event", "lecture"];
+export const FICHES: Kind[] = ["check", "breath_test", "event", "complement", "lecture"];
 
 /** Accusé de lecture : `objet` et `id` du document lu, `version_id` de la procédure lue. */
 export interface Lecture {
@@ -40,6 +40,8 @@ export interface Lecture {
  * procédure dont la version a changé depuis la lecture est refusée (409) : elle est à relire.
  */
 function routeDe(fiche: QueuedItem): string | undefined {
+  // Contrôle complémentaire : vers le contrôle d'origine, cité par `check_id` sur l'appareil seulement.
+  if (fiche.kind === "complement") return `/hsseq/checks/${Number(fiche.payload.check_id)}/complement`;
   if (fiche.kind !== "lecture") return ROUTES[fiche.kind];
   const l = fiche.payload as unknown as Lecture;
   return `/hsseq/${l.objet === "procedure" ? "procedures" : "bulletins"}/${Number(l.id)}/acknowledge`;
@@ -100,9 +102,10 @@ export async function envoyerFiches(
   try {
     for (const fiche of fiches) {
       if (api.numero !== session) break;
+      const { check_id: _origine, ...champs } = fiche.payload;
       const corps: Record<string, unknown> = fiche.kind === "lecture"
         ? { version_id: (fiche.payload as unknown as Lecture).version_id, read_at: fiche.created_at }
-        : { ...fiche.payload, client_uuid: fiche.client_uuid, reported_at: fiche.created_at };
+        : { ...champs, client_uuid: fiche.client_uuid, reported_at: fiche.created_at };
       if (fiche.kind === "breath_test" && fiche.payload.performed) {
         const resultat = await appareil.lireResultat(fiche.client_uuid);
         if (resultat) Object.assign(corps, resultat);

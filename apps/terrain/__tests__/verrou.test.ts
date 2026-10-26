@@ -68,6 +68,7 @@ describe("verrou de départ", () => {
     expect(titreMotif(motif("V04"))).toBe("Votre permis ou une habilitation ne permet pas le départ");
     expect(titreMotif(motif("V04"), { conducteur: false })).toBe("Le dossier du conducteur ne permet pas le départ");
     expect(titreMotif(motif("V05"))).toBe("Un document du camion manque ou est expiré");
+    expect(titreMotif(motif("V01", { detail: "Contrôle CTL/90 incomplet : complément attendu." }))).toBe("Le contrôle avant départ attend un complément");
   });
 
   it("garde le libellé du noyau pour un avertissement, et retire les motifs en double", () => {

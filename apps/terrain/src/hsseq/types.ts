@@ -245,3 +245,25 @@ export interface MyFile {
   qualifications_status: "valid" | "to_renew" | "expired" | "missing" | null;
   departure_blocked: boolean | null;
 }
+
+/** Ligne d'un contrôle (GET /hsseq/checks ; noyau : check_line). */
+export interface CheckLine {
+  id: number;
+  reference: string;
+  template: { id: number; name: string; version: number | null };
+  vehicle: { id: number; name: string; vehicle_kind: VehicleKind; plate: string | null } | null;
+  rotation: { id: number } | null;
+  site: { id: number; name: string } | null;
+  reported_at: string;
+  complement_of: { id: number; reference: string } | null;
+}
+
+/**
+ * Détail d'un contrôle (GET /hsseq/checks/<id> ; noyau : check_detail), réduit à ce que lit le
+ * terrain : les points ajoutés à la grille après la saisie, à répondre par un contrôle
+ * complémentaire, et la transition « complement » si ce compte peut le faire.
+ */
+export interface CheckDetail extends CheckLine {
+  awaiting_items: Array<{ item_id: number; label: string; blocking: boolean }>;
+  transitions: string[];
+}

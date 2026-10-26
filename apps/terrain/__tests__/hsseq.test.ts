@@ -222,6 +222,22 @@ describe("envoi des fiches HSSEQ", () => {
     expect(await store.queue.all()).toEqual([]);
   });
 
+  it("envoie un contrôle complémentaire vers le contrôle d'origine, sans citer l'origine dans le corps", async () => {
+    const store = memoryStore();
+    await store.queue.put(fiche("k1", "complement", { check_id: 90, answers: [{ item_id: 77, answer: "not_ok", comment: "Plomb cassé" }], duration_s: 40 }));
+    await store.pieces.put(photo("ph", "k1", "nonconformity", 77));
+    const { api, appels } = bureau((a) =>
+      a.path === "/hsseq/checks/90/complement" ? { id: 120, nonconformities: [{ id: 1201, item: { id: 77 } }], complement_of: { id: 90 } } : { id: 5 },
+    );
+    await expect(envoyerFiches(store, api, appareil(), 7)).resolves.toMatchObject({ created: 1, errors: 0 });
+    expect(appels[0]!.body).toEqual({ answers: [{ item_id: 77, answer: "not_ok", comment: "Plomb cassé" }], duration_s: 40, client_uuid: "k1", reported_at: fiche("k1", "complement", {}).created_at });
+    // La photo du point se rattache à la non-conformité ouverte par le complément.
+    expect(appels[1]!.path).toBe("/hsseq/attachments");
+    expect(champ(appels[1]!.form!, "model")).toBe("nonconformity");
+    expect(champ(appels[1]!.form!, "id")).toBe("1201");
+    expect(await store.queue.all()).toEqual([]);
+  });
+
   it("une procédure changée de version depuis la lecture est à relire (409)", async () => {
     const store = memoryStore();
     await store.queue.put(fiche("l1", "lecture", { objet: "procedure", id: 31, version_id: 311 }));

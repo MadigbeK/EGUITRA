@@ -47,6 +47,7 @@ const NATURE: Record<string, string> = {
   check: "Contrôle avant départ",
   breath_test: "Alcootest",
   event: "Déclaration",
+  complement: "Contrôle complémentaire",
   lecture: "Accusé de lecture",
 };
 

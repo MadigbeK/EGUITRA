@@ -6,10 +6,11 @@
 
 /**
  * Nature d'une saisie en attente : une rotation (envoi groupé, /transport/sync), une fiche HSSEQ
- * envoyée seule par sa route (contrat HSSEQ, § 1 : pas d'envoi groupé au lot 1), ou l'accusé de
- * lecture d'une procédure ou d'une alerte (lot 3), avec l'heure de lecture sur l'appareil.
+ * envoyée seule par sa route (contrat HSSEQ, § 1 : pas d'envoi groupé au lot 1), le contrôle
+ * complémentaire d'un contrôle incomplet (points ajoutés à la grille après sa saisie), ou l'accusé
+ * de lecture d'une procédure ou d'une alerte (lot 3), avec l'heure de lecture sur l'appareil.
  */
-export type Kind = "rotation" | "check" | "breath_test" | "event" | "lecture";
+export type Kind = "rotation" | "check" | "breath_test" | "event" | "complement" | "lecture";
 
 export interface QueuedItem {
   client_uuid: string;

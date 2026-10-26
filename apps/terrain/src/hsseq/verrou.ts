@@ -24,8 +24,13 @@ const TITRES: Record<string, string> = {
  * sinon, au chef de parc ou au Responsable HSSEQ (« le dossier du conducteur »). Un avertissement
  * (échéance proche) garde le libellé du noyau : rien ne bloque encore.
  */
-export function titreMotif(r: Pick<LockReason, "code" | "label"> & { severity?: LockReason["severity"] }, { conducteur = true }: { conducteur?: boolean } = {}): string {
+export function titreMotif(
+  r: Pick<LockReason, "code" | "label"> & { severity?: LockReason["severity"]; detail?: string | null },
+  { conducteur = true }: { conducteur?: boolean } = {},
+): string {
   if (r.severity === "warn") return r.label;
+  // V01 avec un détail : le contrôle est fait, mais des points bloquants ajoutés depuis attendent un complément.
+  if (r.code === "V01" && r.detail) return "Le contrôle avant départ attend un complément";
   if (r.code === "V04") return conducteur ? "Votre permis ou une habilitation ne permet pas le départ" : "Le dossier du conducteur ne permet pas le départ";
   return TITRES[r.code] ?? r.label;
 }

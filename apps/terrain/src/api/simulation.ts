@@ -84,6 +84,16 @@ const envoyees: SentRotation[] = [];
 
 // Verrou simulé : saisies de terrain du jour, non-conformités, départs, dérogations.
 const controles = new Set<number>();
+/**
+ * Contrôle d'ER-02 saisi avant l'ajout d'un point bloquant à la grille : il attend un contrôle
+ * complémentaire, et V01 reste « à faire » jusque-là (noyau : models/lock.py).
+ */
+const incomplets = new Map<number, { id: number; reference: string; rotation_id: number; reported_at: string; awaiting_items: Array<{ item_id: number; label: string; blocking: boolean }> }>([
+  [2, {
+    id: 90, reference: "CTL/90", rotation_id: 501, reported_at: new Date(Date.now() - 50 * 60_000).toISOString(),
+    awaiting_items: [{ item_id: 77, label: "Extincteur : plombage et date de vérification", blocking: true }],
+  }],
+]);
 const alcootests = new Map<number, { performed: boolean; result?: string }>();
 const nonConformites: Nonconformity[] = [];
 const enRoute = new Set<number>();
@@ -103,7 +113,12 @@ const motif = (code: string, label: string, waivable: boolean, pending: boolean,
 function evaluer(id: number): LockEvaluation {
   const d = DEPARTS.find((x) => x.id === id)!;
   const reasons: LockReason[] = [];
-  if (!controles.has(d.vehicle.id)) reasons.push(motif("V01", "Contrôle avant départ non fait", false, true, "Le conducteur ou le chef de parc fait le contrôle"));
+  const incomplet = incomplets.get(d.vehicle.id);
+  if (!controles.has(d.vehicle.id)) {
+    reasons.push(motif("V01", "Contrôle avant départ non fait", false, true, "Le conducteur ou le chef de parc fait le contrôle", incomplet
+      ? `Contrôle ${incomplet.reference} incomplet : contrôle complémentaire attendu sur ${incomplet.awaiting_items.map((a) => a.label).join(", ")} (points bloquants ajoutés à la grille après la saisie).`
+      : null));
+  }
   for (const nc of nonConformites.filter((n) => n.status === "open" && n.item.blocking && n.vehicle?.id === d.vehicle.id)) {
     reasons.push(motif("V02", "Point critique du contrôle avant départ non conforme", true, false, "Chef de parc après correction, photo obligatoire", nc.item.label));
   }
@@ -195,7 +210,53 @@ const documents = {
   ],
 };
 
-function repondre(path: string, body: Record<string, unknown>): [number, unknown] {
+/** Ligne et détail d'un contrôle incomplet, comme check_line et check_detail du noyau. */
+function controleIncomplet(i: NonNullable<ReturnType<typeof incomplets.get>>, vehicule: { id: number; name: string; vehicle_kind: "tanker" | "tipper" }, detail: boolean) {
+  const ligne = {
+    id: i.id, reference: i.reference, template: { id: 1, name: "Citerne, avant départ", version: 3 }, vehicle: { ...vehicule, plate: null },
+    rotation: { id: i.rotation_id }, site: { id: 1, name: "Parc de simulation" }, reported_at: i.reported_at, complement_of: null,
+  };
+  return detail ? { ...ligne, awaiting_items: i.awaiting_items, transitions: ["complement"] } : ligne;
+}
+
+function repondre(path: string, body: Record<string, unknown>, methode = "GET", requete = new URLSearchParams()): [number, unknown] {
+  if (path === "/hsseq/checks" && methode === "GET") {
+    const rotation = Number(requete.get("rotation_id") ?? 0);
+    const vehiculeId = Number(requete.get("vehicle_id") ?? 0);
+    const items = DEPARTS.filter((d) => d.id === rotation || d.vehicle.id === vehiculeId)
+      .flatMap((d) => (incomplets.has(d.vehicle.id) ? [controleIncomplet(incomplets.get(d.vehicle.id)!, d.vehicle, false)] : []));
+    return [200, { items, total_count: items.length, offset: 0, limit: 5, counts: {} }];
+  }
+  const detailControle = /^\/hsseq\/checks\/(\d+)$/.exec(path);
+  if (detailControle && methode === "GET") {
+    const d = DEPARTS.find((x) => incomplets.get(x.vehicle.id)?.id === Number(detailControle[1]));
+    if (!d) return [404, { error: "not_found", message: "Contrôle introuvable." }];
+    return [200, controleIncomplet(incomplets.get(d.vehicle.id)!, d.vehicle, true)];
+  }
+  const complement = /^\/hsseq\/checks\/(\d+)\/complement$/.exec(path);
+  if (complement) {
+    const d = DEPARTS.find((x) => incomplets.get(x.vehicle.id)?.id === Number(complement[1]));
+    const deja = recues.get(String(body.client_uuid ?? ""));
+    if (deja) return [200, { id: deja, nonconformities: [], complement_of: { id: Number(complement[1]) } }];
+    if (!d) return [422, { error: "invalid_transition", message: "Ce contrôle n'attend aucun contrôle complémentaire." }];
+    const reponses = (body.answers as Array<{ item_id: number; answer: string }>) ?? [];
+    const attendus = incomplets.get(d.vehicle.id)!.awaiting_items;
+    incomplets.delete(d.vehicle.id);
+    controles.add(d.vehicle.id);
+    return [200, recevoir(body.client_uuid, (id) => {
+      const ncs = reponses.filter((r) => r.answer === "not_ok").map((r, n) => {
+        const item = attendus.find((a) => a.item_id === r.item_id);
+        const nc: Nonconformity = {
+          id: id * 10 + n, check: { id, reference: `CTL/${id}` }, item: { id: r.item_id, label: item?.label ?? "Point", blocking: item?.blocking ?? false },
+          vehicle: { id: d.vehicle.id, name: d.vehicle.name }, site: { id: 1, name: "Parc de simulation" },
+          found_at: new Date().toISOString(), comment: null, photos_missing: false, status: "open", rights: { can_close: true },
+        };
+        nonConformites.push(nc);
+        return nc;
+      });
+      return { id, nonconformities: ncs, complement_of: { id: Number(complement[1]) } };
+    })];
+  }
   const depart = /^\/transport\/rotations\/(\d+)\/depart$/.exec(path);
   if (depart) {
     const id = Number(depart[1]);
@@ -307,6 +368,7 @@ function repondre(path: string, body: Record<string, unknown>): [number, unknown
       return [200, recevoir(body.client_uuid, (id) => {
         const vehicule = HSSEQ().vehicles.find((v) => v.id === Number(body.vehicle_id));
         controles.add(Number(body.vehicle_id));
+        incomplets.delete(Number(body.vehicle_id));
         const points = GRILLES.flatMap((g) => g.items);
         const ncs = reponses.filter((r) => r.answer === "not_ok").map((r, n) => {
           const item = points.find((i) => i.id === r.item_id);
@@ -335,9 +397,9 @@ function repondre(path: string, body: Record<string, unknown>): [number, unknown
 
 export const simulationFetch = (async (input: string, init?: RequestInit) => {
   await attendre(350);
-  const path = String(input).split("?")[0]!;
+  const [path, requete] = String(input).split("?") as [string, string | undefined];
   // Un envoi de fichier (multipart) n'est pas du JSON : le bureau simulé ne lit pas la photo.
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
-  const [status, data] = repondre(path, body);
+  const [status, data] = repondre(path, body, String(init?.method ?? "GET").toUpperCase(), new URLSearchParams(requete ?? ""));
   return { status, text: async () => JSON.stringify(data) };
 }) as unknown as typeof fetch;
