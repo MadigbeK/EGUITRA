@@ -28,8 +28,9 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 « Démo ». Rien de ce que vous y faites ne touche les vrais dossiers : vous pouvez tout essayer, y
 compris les erreurs.
 
-1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge,
-   puis la tuile MB AxisPro Consulting de l'accueil. Identifiant : le compte de test indiqué dans le
+1. Se connecter. Ouvrez, dans Chrome ou Edge, l'adresse de la recette communiquée par E-VOLUTION XP
+   suivie de /axispro (la direction peut aussi passer par l'accueil, tuile « Dossiers » du rayon MB
+   AxisPro Consulting). Identifiant : le compte de test indiqué dans le
    scénario. Mot de passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP.
 2. Deux consultants. Plusieurs scénarios demandent deux comptes du cabinet (un consultant et un
    associé) : une décision du comité engage toujours au moins deux personnes. Demandez à E-VOLUTION
@@ -684,7 +685,7 @@ Compte : test.daf, puis test.porteur.
 
 Données : aucune.
 
-1. test.daf : l'accueil ne montre pas de tuile MB AxisPro Consulting. Dans la barre d'adresse,
+1. test.daf : l'accueil ne montre pas de rayon MB AxisPro Consulting. Dans la barre d'adresse,
    remplacez la fin de l'adresse par /axispro.
 2. test.porteur : faites de même depuis le portail.
 

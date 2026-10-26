@@ -30,7 +30,9 @@ compris les erreurs.
 1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge.
    Identifiant : le compte de test indiqué dans le scénario. Mot de passe : le mot de passe commun de
    la recette, communiqué par E-VOLUTION XP. La double authentification est suspendue sur la recette
-   pendant les tests, sauf mention contraire.
+   pendant les tests, sauf mention contraire. L'adresse de la recette ouvre la connexion à Finance :
+   un compte sans Finance (cabinet, RH, salarié, porteur) se connecte par l'adresse de la recette
+   suivie de /axispro, /rh ou /portail.
 2. Jouer un scénario. Suivez les étapes dans l'ordre, avec les données indiquées. Un scénario à deux
    comptes se joue dans deux navigateurs (Chrome et Edge) ou sur deux postes.
 3. Noter le résultat. Cochez « Réussi » si l'écran correspond au résultat attendu, sinon « Échoué ».
@@ -73,12 +75,13 @@ Données : identifiant test.comptable ; mot de passe commun de la recette.
 3. Dans « Mot de passe », saisissez le mot de passe commun. Cliquez sur l'œil au bout du champ : le
    mot de passe s'affiche en clair. Cliquez de nouveau : il est masqué.
 4. Cliquez sur « Se connecter ».
-5. Cliquez sur la tuile Finance, puis sur le rond à vos initiales, en haut à droite.
+5. Dans le rayon Finance de l'accueil, cliquez sur la tuile « Tableau de bord », puis sur le rond à
+   vos initiales, en haut à droite.
 
-Résultat attendu : l'accueil NIMOVA s'ouvre sur les tuiles des applications du compte (Finance,
-Transport, Analyse). Dans Finance, le menu du compte affiche « Test - Comptable » et
-« test.comptable », puis « Changer le mot de passe », « Mes demandes », les autres applications du
-compte et « Se déconnecter ».
+Résultat attendu : l'accueil NIMOVA s'ouvre sur les rayons des applications du compte (Finance,
+Transport, Analyse), chacun avec ses tuiles. Dans Finance, le menu du compte affiche « Test -
+Comptable » et « test.comptable », puis « Changer le mot de passe », « Mes demandes », les autres
+applications du compte et « Se déconnecter ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -112,7 +115,8 @@ Objectif : vérifier qu'après cinq mots de passe faux de suite, le compte est b
 Compte : test.salarie (le blocage vaut pour tous les testeurs du bureau qui utilisent ce compte :
 prévenez-les, jouez ce scénario en fin de journée).
 
-Données : un mot de passe faux, puis le bon.
+Données : un mot de passe faux, puis le bon ; l'adresse de la recette suivie de /rh (test.salarie
+n'a que « Mon espace »).
 
 1. Saisissez test.salarie et un mot de passe faux, puis « Se connecter ». Recommencez jusqu'à cinq
    essais faux.
@@ -718,14 +722,17 @@ Compte : test.consultant.
 
 Données : aucune.
 
-1. Connectez-vous : l'accueil ne montre pas de tuile Finance.
-2. Dans la barre d'adresse du navigateur, remplacez la fin de l'adresse par /finance et validez.
-3. Cliquez sur le bouton proposé.
+1. Ouvrez l'adresse de la recette (connexion à Finance) et connectez-vous avec test.consultant.
+2. Ouvrez l'adresse de la recette suivie de /axispro et connectez-vous : l'accueil ne montre pas de
+   rayon Finance.
+3. Dans la barre d'adresse du navigateur, remplacez la fin de l'adresse par /finance et validez.
+4. Cliquez sur le bouton proposé.
 
-Résultat attendu : la page « Accès non ouvert à votre profil » s'affiche : « Votre profil ne donne
-pas accès à NIMOVA · Finance. Si votre travail le demande, l'administrateur de la plateforme peut
-vous ouvrir ce profil. ». Aucun chiffre de Finance n'est montré. Le bouton « Aller à MB AxisPro
-Consulting » ouvre AxisPro.
+Résultat attendu : à l'étape 1, « Votre profil ne donne pas accès à cette application. ». À l'étape
+3, la page « Accès non ouvert à votre profil » s'affiche : « Votre profil ne donne pas accès à NIMOVA
+· Finance. Si votre travail le demande, l'administrateur de la plateforme peut vous ouvrir ce
+profil. ». Aucun chiffre de Finance n'est montré. Le bouton « Aller à MB AxisPro Consulting » ouvre
+AxisPro.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -781,8 +788,10 @@ Compte : test.salarie, puis test.porteur.
 
 Données : aucune.
 
-1. test.salarie : connectez-vous. Regardez la barre du haut de « Mon espace ».
-2. test.porteur : connectez-vous au portail. Ouvrez le menu de votre compte.
+1. test.salarie : ouvrez l'adresse de la recette suivie de /rh et connectez-vous. Regardez la barre
+   du haut de « Mon espace ».
+2. test.porteur : ouvrez l'adresse de la recette suivie de /portail et connectez-vous. Ouvrez le menu
+   de votre compte.
 
 Résultat attendu : test.salarie ne voit pas l'icône de discussion. test.porteur ne voit ni l'icône de
 discussion ni « Mes demandes » : il écrit au cabinet par « Messages » du portail.

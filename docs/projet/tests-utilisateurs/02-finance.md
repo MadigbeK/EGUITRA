@@ -29,7 +29,7 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 compris les erreurs.
 
 1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge,
-   puis la tuile Finance de l'accueil. Identifiant : le compte de test indiqué dans le scénario. Mot
+   puis une tuile du rayon Finance de l'accueil (par exemple « Tableau de bord »). Identifiant : le compte de test indiqué dans le scénario. Mot
    de passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP.
 2. Société. Sauf mention contraire, travaillez dans EGUITRA GROUP SARLU : vérifiez le nom affiché en
    haut à droite avant de commencer.

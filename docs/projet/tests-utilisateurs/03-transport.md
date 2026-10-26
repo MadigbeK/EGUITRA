@@ -30,7 +30,7 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 compris les erreurs.
 
 1. Se connecter. Au bureau : ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans
-   Chrome ou Edge, puis la tuile Transport de l'accueil. Au parc : sur le téléphone, ouvrez dans
+   Chrome ou Edge, puis la tuile « Transport » du rayon Transport de l'accueil. Au parc : sur le téléphone, ouvrez dans
    Chrome l'adresse de la recette suivie de /mobile. Identifiant : le compte de test indiqué dans le
    scénario. Mot de passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP.
 2. Jouer un scénario. Suivez les étapes dans l'ordre, avec les données indiquées. Un scénario à deux

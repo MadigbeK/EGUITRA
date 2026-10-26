@@ -28,8 +28,8 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 « Démo ». Rien de ce que vous y faites ne touche les vrais dossiers : vous pouvez tout essayer, y
 compris les erreurs.
 
-1. Se connecter. Ouvrez l'adresse du portail de la recette communiquée par E-VOLUTION XP, dans
-   Chrome ou Edge, sur ordinateur ou sur téléphone. Identifiant : le compte de test indiqué dans le
+1. Se connecter. Ouvrez l'adresse du portail de la recette communiquée par E-VOLUTION XP (l'adresse
+   de la recette suivie de /portail), dans Chrome ou Edge, sur ordinateur ou sur téléphone. Identifiant : le compte de test indiqué dans le
    scénario. Mot de passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP.
 2. Le cabinet. Plusieurs scénarios demandent une réponse du cabinet : un testeur du cabinet joue en
    même temps le compte test.consultant (cahier AxisPro Suite).

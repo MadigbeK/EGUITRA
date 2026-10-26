@@ -27,7 +27,8 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 « Démo ». L'Analyse lit les données sans jamais les modifier : vous pouvez tout essayer.
 
 1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge,
-   puis la tuile Analyse de l'accueil. Identifiant : le compte de test indiqué dans le scénario. Mot
+   puis la tuile « Analyse » de l'accueil (test.consultant, qui n'a pas Finance, ouvre l'adresse de la
+   recette suivie de /analyse). Identifiant : le compte de test indiqué dans le scénario. Mot
    de passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP.
 2. Société. Le contenu de l'Analyse dépend de la société de travail, choisie en haut à droite :
    vérifiez-la avant chaque scénario.
@@ -338,7 +339,7 @@ Compte : test.exploitation.
 
 Données : aucune.
 
-1. Connectez-vous : l'accueil ne montre pas de tuile Analyse.
+1. Connectez-vous : l'accueil ne montre pas de rayon Analyse.
 2. Dans la barre d'adresse, remplacez la fin de l'adresse par /analyse.
 
 Résultat attendu : la page « Accès non ouvert à votre profil » s'affiche, sans aucune donnée.

@@ -28,8 +28,9 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des salar
 les erreurs. Les taux de paie de la recette restent à valider par l'expert-comptable et la CNSS : on
 contrôle ici le fonctionnement, pas les taux.
 
-1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge,
-   puis la tuile RH de l'accueil. Identifiant : le compte de test indiqué dans le scénario. Mot de
+1. Se connecter. Ouvrez, dans Chrome ou Edge, l'adresse de la recette communiquée par E-VOLUTION XP
+   suivie de /rh : test.rh et test.salarie n'ont pas Finance, l'adresse seule les refuse. Les autres
+   comptes peuvent aussi passer par l'accueil, rayon RH. Identifiant : le compte de test indiqué dans le scénario. Mot de
    passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP.
 2. Une seule gestion pour deux sociétés. Les listes réunissent le personnel des deux sociétés ; le
    filtre « Société » restreint l'affichage. Chaque société garde sa paie.
@@ -472,7 +473,8 @@ Compte : test.salarie.
 
 Données : aucune.
 
-1. Connectez-vous : l'application s'ouvre sur « Mon espace » (« Bonjour, Thierno »).
+1. Ouvrez l'adresse de la recette suivie de /rh et connectez-vous : l'application s'ouvre sur « Mon
+   espace » (« Bonjour, Thierno »).
 2. Lisez « Solde de congés », « Ancienneté », « Dernier bulletin » et « Mon dossier ».
 3. Dans « Mes bulletins de paie », cliquez sur « Ouvrir », puis « Imprimer ».
 
@@ -616,7 +618,7 @@ Compte : test.daf, puis test.dg.
 
 Données : aucune.
 
-1. test.daf : l'accueil ne montre pas de tuile RH. Remplacez la fin de l'adresse par /rh.
+1. test.daf : l'accueil ne montre pas de rayon RH. Remplacez la fin de l'adresse par /rh.
 2. test.dg : ouvrez Personnel > Salariés, puis un dossier.
 
 Résultat attendu : test.daf voit la page « Accès non ouvert à votre profil ». test.dg lit les dossiers

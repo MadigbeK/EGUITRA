@@ -28,7 +28,7 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 compris les erreurs.
 
 1. Se connecter. Ouvrez l'adresse de la recette communiquée par E-VOLUTION XP, dans Chrome ou Edge,
-   puis la tuile Finance de l'accueil. Identifiant : le compte de test indiqué dans le scénario. Mot
+   puis la tuile « BTP » ou « Immobilier » du rayon Finance de l'accueil. Identifiant : le compte de test indiqué dans le scénario. Mot
    de passe : le mot de passe commun de la recette, communiqué par E-VOLUTION XP. Les comptes BTP et
    immobilier s'ouvrent directement sur leur écran.
 2. Société. Le BTP et l'immobilier ne servent qu'EGUITRA GROUP SARLU : vérifiez ce nom en haut à
