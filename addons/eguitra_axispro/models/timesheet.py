@@ -10,6 +10,13 @@ CABINET_ACTIVITIES = (PROJECT_ACTIVITY, "Formation et coaching", "Conseil", "Aud
                       "Certification")
 
 
+def heures(value):
+    """Heures écrites à la française, deux décimales au plus, sans zéro inutile : « 2 », « 7,5 »,
+    « 1 234,25 » (et non « 7.5 »), dans le libellé imprimé sur la facture d'honoraires."""
+    text = f"{round(value, 2):,.2f}".replace(",", " ").replace(".", ",")
+    return text.rstrip("0").rstrip(",")
+
+
 class AxisproTimesheet(models.Model):
     _name = "axispro.timesheet"
     _description = "Temps passé sur un dossier"
@@ -62,7 +69,7 @@ class AxisproTimesheet(models.Model):
         for user in lines.user_id:
             hours = sum(lines.filtered(lambda t, u=user: t.user_id == u).mapped("hours"))
             invoice_lines.append(Command.create({
-                "name": f"Honoraires {dossier.reference} - {dossier.name} - {user.name} ({hours:g} h)",
+                "name": f"Honoraires {dossier.reference} - {dossier.name} - {user.name} ({heures(hours)} h)",
                 "quantity": hours, "price_unit": hourly_rate, "account_id": income.id,
                 "analytic_distribution": distribution,
                 "tax_ids": [Command.set(company.account_sale_tax_id.ids)],

@@ -1,11 +1,16 @@
-"""Modules du cabinet (audit du noyau et de l'application web, lot 3) : seuil partiel égal à 0 (I-X4)."""
+"""Modules du cabinet (audit du noyau et de l'application web, lot 3) : seuil partiel égal à 0 (I-X4),
+nombres à la française dans les textes (M8)."""
+
+import re
 
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_axispro import engine
+from odoo.addons.eguitra_axispro.models.timesheet import heures
 from odoo.addons.eguitra_axispro.tests.test_expert import SIMPLE, SIMPLE_PARAMS
 
+NBSP = " "
 HEADER = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
           "indicateur", "seuil", "seuil_partiel", "criteres")
 ROWS = (
@@ -38,6 +43,32 @@ class TestModulesCabinetMoteur(TransactionCase):
         self.assertEqual(engine.suggest("npv", 1000, 0.0, {"npv": 1000})["status"], "met")
         self.assertEqual(engine.suggest("payback", 3, 0.0, {"payback": 2})["status"], "met", "Plus bas est meilleur")
         self.assertEqual(engine.suggest("npv", 1000, 0.0, {"npv": None}), {"status": None, "value": None})
+
+    def test_nombres_a_la_francaise(self):
+        """M8 : virgule décimale et milliers groupés dans les textes du noyau, jamais « 1.3 »."""
+        self.assertEqual(engine.nombre(1234567.4), "1 234 567")
+        self.assertEqual(engine.nombre(1.254, 2), "1,25")
+        self.assertEqual(engine.nombre(-0.4), "0", "Jamais « -0 »")
+        self.assertEqual((engine.taux(12.5), engine.taux(12), engine.taux(1.3), engine.taux(0)), ("12,5", "12", "1,3", "0"))
+        self.assertEqual((heures(7.5), heures(8), heures(1234.25), heures(0.75)), ("7,5", "8", "1 234,25", "0,75"))
+
+    def test_alertes_du_modele_a_la_francaise(self):
+        """M8 : alertes du modèle sans point décimal (« 12,5 % », « 2,50 »)."""
+        params = {"horizon": 5, "discount_rate": 12.5, "tax_rate": 0, "receivable_days": 0, "inventory_days": 0,
+                  "payable_days": 0, "residual_value": False, "dscr_target": 2.5, "equity_target": 50.5}
+        lines = [
+            {"kind": "capex", "name": "Usine", "amount": 1000, "year": 0, "life": 5},
+            {"kind": "revenue", "name": "Ventes", "quantity": 10, "price": 10},
+            {"kind": "funding", "name": "Apport", "funding_type": "equity", "amount": 100},
+            {"kind": "funding", "name": "Prêt", "funding_type": "loan", "amount": 300, "rate": 10, "life": 10},
+        ]
+        alerts = engine.analyse(params, lines)["alerts"]
+        text = " ".join(alerts)
+        self.assertIn(f"VAN négative au taux d'actualisation de 12,5{NBSP}%", text)
+        self.assertIn("sous l'exigence de 2,50.", text)
+        self.assertIn(f"sous le minimum de 50,5{NBSP}%.", text)
+        self.assertIn("Plan de financement initial déséquilibré : 600 de ressources manquantes.", alerts)
+        self.assertFalse(re.search(r"\d\.\d", text), f"Point décimal dans les alertes : {text}")
 
 
 @tagged("post_install", "-at_install")
@@ -92,3 +123,12 @@ class TestModulesCabinetApi(ApiCase):
         self._evaluation(dossier, "C002").write({"status": "met"})
         self.assertTrue([a for a in dossier.evaluate()["anomalies"] if a.startswith("C002")],
                         "Statut contraire à la suggestion : anomalie")
+
+    # ─── M8 : nombres à la française ──────────────────────────────────────
+
+    def test_heures_de_la_facture_a_la_francaise(self):
+        """M8 : la facture d'honoraires imprime « (1,5 h) », jamais « (1.5 h) »."""
+        dossier = self._dossier()
+        sheets = self.env["axispro.timesheet"].create({"dossier_id": dossier.id, "hours": 1.5, "description": "Analyse"})
+        names = sheets.action_invoice(200_000).invoice_line_ids.mapped("name")
+        self.assertTrue(any(name.endswith("(1,5 h)") for name in names), names)

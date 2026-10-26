@@ -72,6 +72,25 @@ def _num(value, default=0.0):
         return default
 
 
+INSECABLE = " "  # entre un nombre et son unité, comme à l'écran (apps/web/lib/format.ts)
+
+
+def nombre(value, digits=0):
+    """Nombre écrit à la française dans un texte : milliers groupés par une espace, virgule décimale,
+    `digits` décimales fixes, jamais « -0 » (« 1 234 567 », « 1,25 »)."""
+    rounded = round(value, digits)
+    if rounded == 0:
+        rounded = 0.0
+    return f"{rounded:,.{digits}f}".replace(",", " ").replace(".", ",")
+
+
+def taux(value):
+    """Taux ou seuil écrit au plus juste, deux décimales au plus, sans zéro inutile : « 12 », « 12,5 »,
+    « 1,3 » (et non « 12.5 » ni « 1.3 »)."""
+    text = nombre(value, 2)
+    return text.rstrip("0").rstrip(",") if "," in text else text
+
+
 def npv(rate, flows):
     """Valeur actuelle nette au taux `rate` (fraction) ; flows[0] en t = 0."""
     return sum(f / (1 + rate) ** t for t, f in enumerate(flows))
@@ -416,25 +435,27 @@ def analyse(params, lines, factors=None, first_year=None):
         row("breakeven", "Point mort (chiffre d'affaires)", breakeven),
     ]
 
+    # Textes lus à l'écran et dans l'export : nombres à la française (virgule décimale, jamais « 1.3 »).
     alerts = []
     if not revenue_lines:
         alerts.append("Aucun produit saisi : le modèle ne génère pas de chiffre d'affaires.")
     if indicators["npv"] < 0:
-        alerts.append(f"VAN négative au taux d'actualisation de {p['discount_rate']:g} % : le projet ne crée pas de valeur.")
+        alerts.append(f"VAN négative au taux d'actualisation de {taux(p['discount_rate'])}{INSECABLE}% : le projet ne "
+                      "crée pas de valeur.")
     if dscr_values and indicators["dscr_min"] < p["dscr_target"]:
-        alerts.append(f"DSCR minimal de {indicators['dscr_min']:.2f} en {labels[indicators['dscr_min_year']]}, "
-                      f"sous l'exigence de {p['dscr_target']:g}.")
+        alerts.append(f"DSCR minimal de {nombre(indicators['dscr_min'], 2)} en {labels[indicators['dscr_min_year']]}, "
+                      f"sous l'exigence de {nombre(p['dscr_target'], 2)}.")
     if cash_min < 0:
         alerts.append(f"Trésorerie cumulée négative en {labels[cash_min_year]} : un financement complémentaire "
-                      f"de {-cash_min:,.0f} est nécessaire.".replace(",", " "))
+                      f"de {nombre(-cash_min)} est nécessaire.")
     if financing_plan["gap"] < 0:
-        alerts.append(f"Plan de financement initial déséquilibré : {-financing_plan['gap']:,.0f} de ressources "
-                      "manquantes.".replace(",", " "))
+        alerts.append(f"Plan de financement initial déséquilibré : {nombre(-financing_plan['gap'])} de "
+                      "ressources manquantes.")
     if resources and indicators["equity_share"] < p["equity_target"]:
-        alerts.append(f"Apport des promoteurs de {indicators['equity_share']:.0f} % des ressources, "
-                      f"sous le minimum de {p['equity_target']:g} %.")
+        alerts.append(f"Apport des promoteurs de {taux(indicators['equity_share'])}{INSECABLE}% des ressources, "
+                      f"sous le minimum de {taux(p['equity_target'])}{INSECABLE}%.")
     if debt_end > 0.5:
-        alerts.append(f"Dette restant due en fin d'horizon : {debt_end:,.0f}.".replace(",", " "))
+        alerts.append(f"Dette restant due en fin d'horizon : {nombre(debt_end)}.")
 
     return {
         "params": p,
