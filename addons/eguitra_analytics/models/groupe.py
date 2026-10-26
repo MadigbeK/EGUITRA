@@ -67,6 +67,15 @@ RUBRICS = {"60": "Achats et fournitures", "61": "Transports", "62": "Services ex
 OPEX_PREFIXES = ("60", "61", "62", "63", "64", "65", "66")
 SEGMENTS = {"strategiques": "Stratégiques", "a_securiser": "À sécuriser", "a_developper": "À développer",
             "a_surveiller": "À surveiller"}
+# Client d'une ligne de produit (alias aml, contact rp) : société mère de son tiers ; sans tiers (pièce
+# reprise en écriture), celui de la créance client (41) de la même pièce.
+CLIENT_OF_LINE = """COALESCE(rp.commercial_partner_id, aml.partner_id, (
+    SELECT COALESCE(crp.commercial_partner_id, c.partner_id)
+      FROM account_move_line c
+      JOIN account_account ca ON ca.id = c.account_id
+ LEFT JOIN res_partner crp ON crp.id = c.partner_id
+     WHERE c.move_id = aml.move_id AND ca.account_type = 'asset_receivable' AND c.partner_id IS NOT NULL
+  ORDER BY c.id LIMIT 1))"""
 # Liens des constats vers un onglet : l'écran lit ?onglet= et l'ouvre (Analyse > Rentabilité, Finance >
 # Activités et budget).
 COST_STRUCTURE_LINK = "/analyse/rentabilite?onglet=structure"
@@ -359,14 +368,36 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                     "stocks": values.get("stock", 0.0)}
         return ctx.get(("balances", day), load)
 
+    def documents_ttc(self, company, start, end):
+        """Ventes et achats TTC par mois ({AAAA-MM: (ventes, achats)}), lus sur les lignes de tiers des
+        journaux : créances clients (41) des journaux de vente, dettes fournisseurs (40) des journaux d'achat,
+        comme le contrôle de la reprise (eguitra_finance.reprise_reference). Les pièces reprises en
+        écritures (« entry ») de ces journaux y figurent ; le seul type facture et avoir les ignorait (DSO
+        de l'Analyse dix fois trop élevé après une reprise en cours d'exercice)."""
+        rows = self._rows(
+            f"""SELECT to_char(date_trunc('month', aml.date), 'YYYY-MM'),
+                       COALESCE(SUM(CASE WHEN aj.type = 'sale' AND {ACC_CODE} LIKE '41%%'
+                                         THEN aml.debit - aml.credit END), 0),
+                       COALESCE(SUM(CASE WHEN aj.type = 'purchase' AND {ACC_CODE} LIKE '40%%'
+                                         THEN aml.credit - aml.debit END), 0)
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                  JOIN account_journal aj ON aj.id = aml.journal_id
+                 WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aml.date BETWEEN %s AND %s
+                   AND aj.type IN ('sale', 'purchase')
+              GROUP BY 1""",
+            (company.id, start, end),
+        )
+        return {month: (float(sales), float(purchases)) for month, sales, purchases in rows}
+
     def _wc(self, ctx, start, end):
         """Besoin en fonds de roulement et délais d'une période (définitions de working_capital), sur les
         soldes comptables à la date de fin : exacts pour une date passée, égaux à la balance âgée au jour."""
         def load():
             balances = self._balances_at(ctx, end)
-            metrics = self._metrics()
-            sales = metrics._invoiced_ttc(ctx.company, "sale", start, end)
-            purchases = metrics._invoiced_ttc(ctx.company, "purchase", start, end)
+            documents = self.documents_ttc(ctx.company, start, end).values()
+            sales = sum(s for s, _p in documents)
+            purchases = sum(p for _s, p in documents)
             days = (end - start).days + 1
             rec, pay, stock = balances["receivables"], balances["payables"], balances["stocks"]
             dso = rec / sales * days if sales > 0 else None
@@ -403,21 +434,9 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                     running[bucket] += float(amount)
                 else:
                     by_month.setdefault(month, {})[bucket] = float(amount)
-            docs = self._rows(
-                """SELECT to_char(date_trunc('month', am.date), 'YYYY-MM'),
-                          COALESCE(SUM(CASE am.move_type WHEN 'out_invoice' THEN ABS(am.amount_total_signed)
-                                                         WHEN 'out_refund' THEN -ABS(am.amount_total_signed) ELSE 0 END), 0),
-                          COALESCE(SUM(CASE am.move_type WHEN 'in_invoice' THEN ABS(am.amount_total_signed)
-                                                         WHEN 'in_refund' THEN -ABS(am.amount_total_signed) ELSE 0 END), 0)
-                     FROM account_move am
-                    WHERE am.state = 'posted' AND am.company_id = %(company)s
-                      AND am.move_type IN ('out_invoice', 'out_refund', 'in_invoice', 'in_refund')
-                      AND am.date BETWEEN %(start)s AND %(end)s
-                 GROUP BY 1""",
-                {"company": ctx.company.id, "start": months[0] - relativedelta(months=2), "end": ctx.date_to},
-            )
-            sales = {m: float(s) for m, s, _p in docs}
-            purchases = {m: float(p) for m, _s, p in docs}
+            docs = self.documents_ttc(ctx.company, months[0] - relativedelta(months=2), ctx.date_to)
+            sales = {m: s for m, (s, _p) in docs.items()}
+            purchases = {m: p for m, (_s, p) in docs.items()}
             result = []
             for month in months:
                 for bucket, amount in by_month.get(_key(month), {}).items():
@@ -481,7 +500,9 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         """Règlements des factures clients par banque ou caisse sur les 24 mois précédant la date d'arrêté
         (lettrages) : par facture, date de règlement moyenne pondérée par les montants réglés, retard (jours
         après l'échéance, négatif si payé en avance) et délai (jours après la date de la facture). Les avoirs
-        et les retenues de garantie, qui soldent une facture sans encaissement, n'en font pas partie."""
+        et les retenues de garantie, qui soldent une facture sans encaissement, n'en font pas partie. Une
+        facture est une ligne de créance débitrice d'un journal de vente : les pièces reprises en écritures
+        y comptent comme les factures."""
         def load():
             rows = self._rows(
                 """SELECT COALESCE(rp.commercial_partner_id, inv.partner_id), inv.move_id, inv.date,
@@ -490,11 +511,11 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                      JOIN account_move_line inv ON inv.id = apr.debit_move_id
                      JOIN account_move_line pay ON pay.id = apr.credit_move_id
                      JOIN account_account aa ON aa.id = inv.account_id
-                     JOIN account_move im ON im.id = inv.move_id
+                     JOIN account_journal ij ON ij.id = inv.journal_id
                      JOIN account_journal pj ON pj.id = pay.journal_id
                 LEFT JOIN res_partner rp ON rp.id = inv.partner_id
                     WHERE inv.company_id = %(company)s AND inv.parent_state = 'posted' AND pay.parent_state = 'posted'
-                      AND aa.account_type = 'asset_receivable' AND im.move_type = 'out_invoice'
+                      AND aa.account_type = 'asset_receivable' AND ij.type = 'sale'
                       AND pj.type IN ('bank', 'cash') AND pay.date > %(start)s AND pay.date <= %(end)s""",
                 {"company": ctx.company.id, "start": ctx.date_to - relativedelta(months=24), "end": ctx.date_to},
             )
@@ -516,15 +537,18 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return ctx.get("history", load)
 
     def _client_revenue(self, ctx, start, end):
-        """Chiffre d'affaires (comptes 70) par client, société mère des contacts ; clé None : ventes sans tiers."""
+        """Chiffre d'affaires (comptes 70) par client, société mère des contacts ; clé None : ventes sans tiers.
+        Une ligne de produit sans tiers (pièce reprise en écriture) prend le tiers de la créance (411) de sa
+        pièce."""
         def load():
             rows = self._rows(
-                f"""SELECT COALESCE(rp.commercial_partner_id, aml.partner_id), -SUM(aml.balance)
-                      FROM account_move_line aml
-                      JOIN account_account aa ON aa.id = aml.account_id
-                 LEFT JOIN res_partner rp ON rp.id = aml.partner_id
-                     WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aml.date BETWEEN %s AND %s
-                       AND {ACC_CODE} LIKE '70%%'
+                f"""SELECT x.partner, SUM(x.amount) FROM (
+                        SELECT {CLIENT_OF_LINE} AS partner, -aml.balance AS amount
+                          FROM account_move_line aml
+                          JOIN account_account aa ON aa.id = aml.account_id
+                     LEFT JOIN res_partner rp ON rp.id = aml.partner_id
+                         WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aml.date BETWEEN %s AND %s
+                           AND {ACC_CODE} LIKE '70%%') x
                   GROUP BY 1""",
                 (ctx.company.id, start, end),
             )
@@ -1878,13 +1902,15 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if not partner_ids:
             return {"months": keys, "series": []}
         rows = self._rows(
-            f"""SELECT to_char(date_trunc('month', aml.date), 'YYYY-MM'), COALESCE(rp.commercial_partner_id, aml.partner_id),
-                       -SUM(aml.balance)
-                  FROM account_move_line aml
-                  JOIN account_account aa ON aa.id = aml.account_id
-             LEFT JOIN res_partner rp ON rp.id = aml.partner_id
-                 WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aml.date BETWEEN %s AND %s
-                   AND {ACC_CODE} LIKE '70%%' AND COALESCE(rp.commercial_partner_id, aml.partner_id) = ANY(%s)
+            f"""SELECT x.month, x.partner, SUM(x.amount) FROM (
+                    SELECT to_char(date_trunc('month', aml.date), 'YYYY-MM') AS month, {CLIENT_OF_LINE} AS partner,
+                           -aml.balance AS amount
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                 LEFT JOIN res_partner rp ON rp.id = aml.partner_id
+                     WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aml.date BETWEEN %s AND %s
+                       AND {ACC_CODE} LIKE '70%%') x
+                 WHERE x.partner = ANY(%s)
               GROUP BY 1, 2""",
             (ctx.company.id, months[0], ctx.date_to, list(partner_ids)),
         )

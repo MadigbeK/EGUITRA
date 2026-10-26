@@ -5,6 +5,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command
 from odoo.tests import tagged
 
+from odoo.addons.eguitra_analytics.models.groupe import _Ctx
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
 
@@ -399,6 +400,33 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(checks["bank_reconciled"]["status"], "neutral", "Aucun relevé importé")
         self.assertTrue(0 <= body["score"] <= 100)
         self.assertIn("fiabilite.unbilled_rotations", self._ids(body))
+
+    def _ctx(self):
+        return _Ctx(self.company, {"code": "ytd", "date_from": date(2026, 1, 1), "date_to": DATE_TO, "label": "",
+                                   "previous": {"date_from": date(2025, 1, 1), "date_to": date(2025, 6, 30)}})
+
+    def test_ecritures_reprises(self):
+        """Pièces reprises en écritures (« entry ») dans le journal de vente : comptées dans les ventes TTC du
+        DSO, dans l'historique de paiement, et chiffre d'affaires rattaché au tiers de la créance (la ligne de
+        produit n'a pas de tiers)."""
+        groupe = self.env["eguitra.analytics.groupe"]
+        before = groupe._wc(self._ctx(), date(2026, 1, 1), DATE_TO)["sales_ttc"]
+        sale = self.env["account.journal"].search([("company_id", "=", self.company.id), ("type", "=", "sale")], limit=1)
+        client = self.env["res.partner"].create({"name": "MINES DE BOKÉ SA (fictif)", "customer_rank": 1})
+        receivable = client.with_company(self.company).property_account_receivable_id
+        vat = self._account("443") or self._account("44")
+        entry = self._entry([(receivable, 118_000_000, 0, client), (self.acc_services, 0, 100_000_000, None),
+                             (vat, 0, 18_000_000, None)], date(2026, 3, 10), journal=sale)
+        payment = self._entry([(receivable, 0, 118_000_000, client), (self.bank_account, 118_000_000, 0, None)],
+                              date(2026, 4, 20))
+        (entry.line_ids | payment.line_ids).filtered(lambda line: line.account_id == receivable).reconcile()
+        self.env.flush_all()
+        ctx = self._ctx()
+        self.assertAlmostEqual(groupe._wc(ctx, date(2026, 1, 1), DATE_TO)["sales_ttc"] - before, 118_000_000, delta=1,
+                               msg="Ventes TTC lues sur la créance du journal de vente")
+        self.assertAlmostEqual(groupe._client_revenue(ctx, date(2026, 1, 1), DATE_TO).get(client.id), 100_000_000,
+                               delta=1, msg="Chiffre d'affaires rattaché au tiers de la ligne 411")
+        self.assertIn(entry.id, {r["move"] for r in groupe._payment_history(ctx)}, "Règlement appris sur la reprise")
 
     def test_liens_des_constats(self):
         """Chaque constat mène à son objet, que l'écran visé sait lire : une ligne (?route=, ?ensemble=,
