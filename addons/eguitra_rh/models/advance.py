@@ -7,6 +7,8 @@ Quatre yeux : créer, modifier ou annuler une avance inscrit son auteur parmi le
 en préparation concernées ; seul le suivi du solde par la paie (validation, réouverture) ne le fait pas.
 """
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
@@ -41,7 +43,7 @@ class EguitraRhAdvance(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         records = super().create(vals_list)
-        records._draft_payrolls()._mark_prepared()
+        records._draft_payrolls()._mark_stale()
         return records
 
     def write(self, vals):
@@ -49,11 +51,11 @@ class EguitraRhAdvance(models.Model):
             return super().write(vals)
         payrolls = self._draft_payrolls()
         result = super().write(vals)
-        (payrolls | self._draft_payrolls())._mark_prepared()
+        (payrolls | self._draft_payrolls())._mark_stale()
         return result
 
     def unlink(self):
-        self._draft_payrolls()._mark_prepared()
+        self._draft_payrolls()._mark_stale()
         return super().unlink()
 
     def _draft_payrolls(self):
@@ -78,18 +80,40 @@ class EguitraRhAdvance(models.Model):
         self.ensure_one()
         return max(self.amount - self._reimbursed(exclude_payslip), 0.0)
 
+    def _pending_before(self, payslip):
+        """Retenues de cette avance sur les bulletins des paies encore en préparation des mois antérieurs
+        à celui du bulletin (septembre attend la direction quand octobre se calcule)."""
+        self.ensure_one()
+        inputs = self.env["eguitra.rh.payslip.input"].sudo().search([
+            ("advance_id", "=", self.id), ("payslip_id", "!=", payslip.id),
+            ("payslip_id.payroll_id.state", "=", "draft"), ("payslip_id.month", "<", payslip.month)])
+        return sum(inputs.mapped("amount"))
+
     def _due_for(self, payslip):
-        """Retenue du mois du bulletin : la mensualité, bornée au reste dû."""
+        """Retenue du mois du bulletin : la mensualité, bornée au reste dû, retenues des paies antérieures
+        encore en préparation déduites (sans quoi l'avance serait retenue deux fois)."""
         self.ensure_one()
         if self.state != "open" or self.first_month > payslip.month:
             return 0.0
-        return min(self.installment, self._remaining(exclude_payslip=payslip))
+        remaining = self._remaining(exclude_payslip=payslip) - self._pending_before(payslip)
+        return max(min(self.installment, remaining), 0.0)
 
     def _update_state(self):
         """Solde suivi par la paie (validation, réouverture) : écriture de confiance, qui n'inscrit personne
         parmi les préparateurs."""
         for adv in trusted(self.filtered(lambda a: a.state in ("open", "done"))):
             adv.write({"state": "done" if adv._remaining() <= 0 else "open"})
+
+    def action_postpone(self, month):
+        """Report de la retenue : rien n'est retenu avant le mois qui suit « month » (net du mois trop faible,
+        accord avec le salarié). Le reste dû ne change pas ; les paies en préparation concernées sont à
+        recalculer (write)."""
+        following = month.replace(day=1) + relativedelta(months=1)
+        for adv in self:
+            if adv.state != "open":
+                raise UserError("Seule une avance ou un prêt en cours se reporte.")
+            if adv.first_month < following:
+                adv.first_month = following
 
     def action_cancel(self):
         for adv in self:

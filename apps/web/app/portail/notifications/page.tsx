@@ -3,51 +3,79 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Bell, CheckCheck, ChevronRight } from "@/components/icons";
-import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx } from "@/components/ui";
-import { EnTete, KIND_ICON, heure } from "@/components/portail/commun";
-import { usePortail } from "@/components/portail/PortailShell";
-import { cleDate, depuisCle, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
-import { apiSend, useApi } from "@/lib/api-client";
+import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx, demanderConfirmation } from "@/components/ui";
+import { EnTete, KIND_ICON, aujourdhui, decalerJour, depuisCle, formatConakry, heure, jourConakry, lienNotification } from "@/components/portail/commun";
+import { texteToutLire, usePortail } from "@/components/portail/PortailShell";
+import { majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { erreurLisible } from "@/components/portail/projet/outils";
+import { apiGet, apiSend, useApi } from "@/lib/api-client";
 import type { NotificationRow, Notifications } from "@/lib/portail-types";
 
 type Filtre = "toutes" | "non-lues";
 
+/** Titre d'un jour (AAAA-MM-JJ à Conakry) : « Aujourd'hui », « Hier », sinon la date. */
 function titreJour(cle: string): string {
-  const auj = new Date();
-  const hier = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() - 1);
-  if (cle === cleDate(auj)) return "Aujourd'hui";
-  if (cle === cleDate(hier)) return "Hier";
-  const d = depuisCle(cle);
-  return majuscule(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() !== auj.getFullYear() ? "numeric" : undefined }));
+  const auj = aujourdhui();
+  if (cle === auj) return "Aujourd'hui";
+  if (cle === decalerJour(auj, -1)) return "Hier";
+  return majuscule(formatConakry(depuisCle(cle), { weekday: "long", day: "numeric", month: "long", year: cle.slice(0, 4) !== auj.slice(0, 4) ? "numeric" : undefined }));
 }
+
+/** Notifications chargées par page : la suite se demande, la liste ne s'arrête plus en silence. */
+const PAGE = 50;
 
 /** Toutes les notifications du porteur, par jour ; un clic les marque lues et ouvre leur page. */
 export default function NotificationsPage() {
   const router = useRouter();
   const { rafraichir } = usePortail();
-  const { data, error, mutate } = useApi<Notifications>("/portail/notifications");
+  const { data, error, mutate } = useApi<Notifications>(`/portail/notifications?limit=${PAGE}`);
+  const [suite, setSuite] = useState<NotificationRow[]>([]);
+  const [chargementSuite, setChargementSuite] = useState(false);
+  const [erreurSuite, setErreurSuite] = useState<unknown>(null);
   const [filtre, setFiltre] = useState<Filtre>("toutes");
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
 
+  // Première page et pages suivantes, sans doublon (une notification arrivée entre-temps décale les pages).
+  const toutes = useMemo(() => {
+    const vues = new Set<number>();
+    return [...(data?.items ?? []), ...suite].filter((n) => !vues.has(n.id) && vues.add(n.id));
+  }, [data, suite]);
+
+  async function chargerSuite() {
+    setChargementSuite(true);
+    setErreurSuite(null);
+    try {
+      const page = await apiGet<Notifications>(`/portail/notifications?limit=${PAGE}&offset=${toutes.length}`);
+      setSuite((avant) => [...avant, ...page.items]);
+    } catch (e) {
+      setErreurSuite(e);
+    } finally {
+      setChargementSuite(false);
+    }
+  }
+
   const groupes = useMemo(() => {
-    const liste = (data?.items ?? []).filter((n) => filtre === "toutes" || !n.read);
+    const liste = toutes.filter((n) => filtre === "toutes" || !n.read);
     const out: Array<{ cle: string; items: NotificationRow[] }> = [];
     for (const n of liste) {
-      const cle = jourLocal(n.date);
+      const cle = jourConakry(n.date);
       const dernier = out[out.length - 1];
       if (dernier?.cle === cle) dernier.items.push(n);
       else out.push({ cle, items: [n] });
     }
     return out;
-  }, [data, filtre]);
+  }, [toutes, filtre]);
 
   async function marquer(ids?: number[]) {
     if (!data) return;
     const vise = ids ? new Set(ids) : null;
-    const items = data.items.map((n) => (!vise || vise.has(n.id) ? { ...n, read: true } : n));
+    const lire = (n: NotificationRow) => (!vise || vise.has(n.id) ? { ...n, read: true } : n);
+    const items = data.items.map(lire);
+    const marquees = toutes.filter((n) => !n.read && (!vise || vise.has(n.id))).length;
     // Affichage immédiat, puis le compte exact renvoyé par l'API.
-    void mutate({ unread: items.filter((n) => !n.read).length, items }, false);
+    void mutate({ ...data, unread: Math.max(0, data.unread - marquees), items }, false);
+    setSuite((avant) => avant.map(lire));
     try {
       const r = await apiSend<{ unread: number }>("POST", "/portail/notifications/lues", ids ? { ids } : {});
       void mutate((d) => (d ? { ...d, unread: r.unread } : d), false);
@@ -59,6 +87,9 @@ export default function NotificationsPage() {
   }
 
   async function toutLire() {
+    if (!data) return;
+    const oui = await demanderConfirmation(texteToutLire(data.unread), { titre: "Tout marquer comme lu ?", action: "Tout marquer comme lu" });
+    if (!oui) return;
     setEnvoi(true);
     setErreur(null);
     await marquer();
@@ -67,13 +98,16 @@ export default function NotificationsPage() {
 
   function ouvrir(n: NotificationRow) {
     if (!n.read) void marquer([n.id]);
-    if (n.link) router.push(n.link);
+    const lien = lienNotification(n);
+    if (lien) router.push(lien);
   }
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de vos notifications…" />;
 
-  const nonLues = data.items.filter((n) => !n.read).length;
+  // Compte du noyau, sur toutes les notifications, et non sur la seule page affichée.
+  const nonLues = data.unread;
+  const reste = Math.max(0, data.total - toutes.length);
 
   return (
     <div className="space-y-6">
@@ -92,16 +126,16 @@ export default function NotificationsPage() {
         value={filtre}
         onChange={setFiltre}
         options={[
-          { key: "toutes", label: `Toutes (${data.items.length})` },
+          { key: "toutes", label: `Toutes (${data.total})` },
           { key: "non-lues", label: `Non lues (${nonLues})` },
         ]}
       />
 
-      {erreur !== null && <ErrorBox error={erreur} />}
+      {erreur !== null && <ErrorBox error={erreurLisible(erreur)} />}
 
       {groupes.length === 0 ? (
         <Card>
-          {filtre === "non-lues" && data.items.length > 0 ? (
+          {filtre === "non-lues" && toutes.length > 0 ? (
             <Empty title="Tout est lu." hint="Les prochaines nouvelles de votre dossier apparaîtront ici." />
           ) : (
             <Empty title="Aucune notification." hint="Vous serez prévenu ici des messages de votre consultant, des pièces validées, des rendez-vous et des actualités du cabinet." />
@@ -145,7 +179,17 @@ export default function NotificationsPage() {
               </ul>
             </section>
           ))}
-          <p className="px-1 text-[12px] text-muted">Les notifications sont conservées six mois.</p>
+          {reste > 0 && (
+            <div className="flex flex-col items-center gap-2">
+              <Button onClick={() => void chargerSuite()} loading={chargementSuite}>
+                Afficher les suivantes ({pluriel(reste, "notification plus ancienne", "notifications plus anciennes")})
+              </Button>
+              {erreurSuite !== null && <ErrorBox error={erreurLisible(erreurSuite)} titre="Les notifications suivantes n'ont pas pu être chargées." onRetry={() => void chargerSuite()} />}
+            </div>
+          )}
+          <p className="px-1 text-[12px] text-muted">
+            {pluriel(toutes.length, "notification affichée", "notifications affichées")} sur {data.total}. Les notifications lues sont conservées six mois.
+          </p>
         </div>
       )}
     </div>

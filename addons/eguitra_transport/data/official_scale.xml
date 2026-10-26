@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Barème officiel du transport des hydrocarbures : l'en-tête ici, les 200 destinations dans
+         eguitra.transport.official.rate.csv (chiffres de l'annexe signée, qui fait foi). -->
+    <record id="official_scale_2019" model="eguitra.transport.official.scale">
+        <field name="name">Arrêté A/2019/816/MH</field>
+        <field name="authority">Ministère des Hydrocarbures</field>
+        <field name="date_signed">2019-03-19</field>
+        <field name="date_from">2019-04-01</field>
+        <field name="note">Nouveaux tarifs de transport du carburant en République de Guinée, en GNF par litre, établis par l'Office National des Pétroles (ONAP) le 13 mars 2019. Quatre dépôts : Conakry SGP (116 destinations), Kankan SGP (51), N'Zérékoré SGP (19), Kamsar CBG (14). Les distances sont des estimations dérivées du tarif.</field>
+    </record>
+</odoo>

@@ -1,9 +1,9 @@
 "use client";
 
 import { Card, Gauge, Notice, Segmented, cx } from "@/components/ui";
-import { fmtGNF } from "@/lib/format";
+import { fmtGNF, fmtPct, fmtRatio, pluriel } from "@/lib/format";
 import { ChampMontant, Ligne } from "./champs";
-import { DSCR_CIBLE, calculerDscr, capitalPourEcheance, decimal, type ParamsDscr, type ParamsPret, type ResultatPret } from "./calculs";
+import { DSCR_CIBLE, calculerDscr, capitalPourEcheance, type ParamsDscr, type ParamsPret, type ResultatPret } from "./calculs";
 
 export function SimulateurDscr({ params, onChange, pret, resultatPret }: { params: ParamsDscr; onChange: (p: ParamsDscr) => void; pret: ParamsPret; resultatPret: ResultatPret }) {
   const maj = (champ: Partial<ParamsDscr>) => onChange({ ...params, ...champ });
@@ -15,13 +15,14 @@ export function SimulateurDscr({ params, onChange, pret, resultatPret }: { param
   const r = resultatPret.ok ? resultatPret.tauxMensuel : pret.taux / 1200;
   const n = resultatPret.ok ? resultatPret.moisAmortissement : Math.max(0, pret.duree - pret.differe);
   const empruntMax = capitalPourEcheance(c.echeanceMax, r, n);
+  const baisse = ratio !== null && ratio > 0 ? fmtPct((1 - 1 / ratio) * 100, 0) : null;
 
   let phrase: string;
   if (c.flux <= 0) phrase = "L'activité ne dégage pas encore de flux disponible pour rembourser une dette : revoyez d'abord la rentabilité d'exploitation.";
   else if (ratio === null) phrase = "Indiquez le service annuel de la dette pour mesurer la couverture.";
   else if (ratio < 1) phrase = `Les flux de l'activité ne couvrent pas les remboursements : il manque ${fmtGNF(-c.ecart)} par an. Allongez la durée, réduisez le montant emprunté ou renforcez l'apport.`;
-  else if (ratio < DSCR_CIBLE) phrase = `Les remboursements sont couverts, mais la marge est mince : une baisse de ${decimal((1 - 1 / ratio) * 100, 0)} % des flux suffit à les mettre en défaut. Les banques demandent souvent 1,3 au moins.`;
-  else phrase = `Confortable : les flux couvrent ${decimal(ratio, 2)} fois les remboursements. Ils peuvent baisser de ${decimal((1 - 1 / ratio) * 100, 0)} % avant de manquer.`;
+  else if (ratio < DSCR_CIBLE) phrase = `Les remboursements sont couverts, mais la marge est mince : une baisse de ${baisse} des flux suffit à les mettre en défaut. Les banques demandent souvent ${fmtRatio(DSCR_CIBLE)} au moins.`;
+  else phrase = `Confortable : les flux couvrent ${fmtRatio(ratio)} fois les remboursements. Ils peuvent baisser de ${baisse} avant de manquer.`;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
@@ -57,11 +58,11 @@ export function SimulateurDscr({ params, onChange, pret, resultatPret }: { param
       <div className="min-w-0 space-y-6">
         <Card title="Couverture du service de la dette">
           <div className="grid items-center gap-6 md:grid-cols-[260px_minmax(0,1fr)]">
-            <div role="img" aria-label={ratio === null ? "DSCR non calculable" : `DSCR de ${decimal(ratio, 2)}, ${zone === "ok" ? "confortable" : zone === "warn" ? "limite" : "insuffisant"}`}>
+            <div role="img" aria-label={ratio === null ? "DSCR non calculable" : `DSCR de ${fmtRatio(ratio)}, ${zone === "ok" ? "confortable" : zone === "warn" ? "limite" : "insuffisant"}`}>
               <Gauge
                 value={ratio === null ? null : Math.max(0, ratio)}
                 max={2.5}
-                format={(v) => decimal(v, 2)}
+                format={(v) => fmtRatio(v)}
                 vide="Non calculable"
                 sousTitre="DSCR"
                 zones={[
@@ -84,13 +85,13 @@ export function SimulateurDscr({ params, onChange, pret, resultatPret }: { param
               <dl className="mt-3">
                 <Ligne label="Flux disponible pour la dette" valeur={fmtGNF(c.flux)} ton={c.flux <= 0 ? "danger" : undefined} />
                 <Ligne label="Service annuel de la dette" valeur={fmtGNF(service)} />
-                <Ligne label="DSCR = flux disponible ÷ service" valeur={ratio === null ? "–" : decimal(ratio, 2)} fort ton={zone === "danger" ? "danger" : zone === "warn" ? "warn" : zone === "ok" ? "ok" : undefined} />
+                <Ligne label="DSCR = flux disponible ÷ service" valeur={ratio === null ? "–" : fmtRatio(ratio)} fort ton={zone === "danger" ? "danger" : zone === "warn" ? "warn" : zone === "ok" ? "ok" : undefined} />
               </dl>
             </div>
           </div>
         </Card>
 
-        <Card title={`Ce que l'activité peut supporter (DSCR de ${decimal(DSCR_CIBLE, 1)})`}>
+        <Card title={`Ce que l'activité peut supporter (DSCR de ${fmtRatio(DSCR_CIBLE)})`}>
           {c.flux <= 0 ? (
             <p className="text-[13.5px] text-muted">Sans flux disponible, aucune échéance n'est supportable.</p>
           ) : (
@@ -107,7 +108,7 @@ export function SimulateurDscr({ params, onChange, pret, resultatPret }: { param
               </div>
               {n > 0 && (
                 <p className="mt-4 text-[13.5px] leading-relaxed text-ink-2">
-                  Au taux de {decimal(pret.taux, 2)} % sur {n} mois d'amortissement (hypothèses de l'onglet « Prêt »), cette échéance rembourse un emprunt d'environ{" "}
+                  Au taux de {fmtPct(pret.taux, 2)} sur {pluriel(n, "mois", "mois")} d'amortissement (hypothèses de l'onglet « Prêt »), cette échéance rembourse un emprunt d'environ{" "}
                   <b className="text-ink">{fmtGNF(empruntMax)}</b>
                   {resultatPret.ok && empruntMax < resultatPret.capitalAmorti ? ", moins que le montant simulé." : "."}
                 </p>

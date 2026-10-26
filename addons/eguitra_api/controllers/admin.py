@@ -55,15 +55,34 @@ def _all_companies(env):
 
 AUDIT_SCAN_MAX = 5000  # entrées examinées au plus par appel (pagination après filtrage)
 
+# Modèles sans société propre, qui relèvent de celle de leur parent (champ du parent) : éléments fixes
+# du salaire (dossier salarié), saisies d'un bulletin (bulletin de paie), tarifs d'une route. Sans ce
+# rattachement, leur piste d'audit passait pour partagée : un administrateur d'une seule société y
+# lisait les salaires et les tarifs de l'autre. Un nouveau modèle enfant suivi par l'audit s'inscrit ici.
+PARENT_COMPANY = {
+    "eguitra.rh.employee.line": "employee_id",
+    "eguitra.rh.payslip.input": "payslip_id",
+    "eguitra.transport.tariff": "route_id",
+}
+
+
+def _parent_field(env, model):
+    """Champ du parent d'un modèle enfant de PARENT_COMPANY, s'il existe dans cette base."""
+    field = PARENT_COMPANY.get(model)
+    return field if field and model in env and field in env[model]._fields else None
+
 
 def _owner(record):
     """Sociétés dont relève un enregistrement : la société elle-même pour sa fiche, toutes les sociétés
-    d'un compte utilisateur (comme _scope_domain), sa société, ou celles d'un compte du plan comptable
-    (account.account n'a pas de company_id mais company_ids)."""
+    d'un compte utilisateur (comme _scope_domain), sa société, celles d'un compte du plan comptable
+    (account.account n'a pas de company_id mais company_ids), ou celle de son parent (PARENT_COMPANY)."""
     if record._name == "res.company":
         return record
     if record._name == "res.users":
         return record.company_ids
+    parent = _parent_field(record.env, record._name)
+    if parent:
+        return _owner(record[parent])
     if "company_id" in record._fields:
         return record.company_id
     return record.company_ids
@@ -87,7 +106,7 @@ def _audit_visible(env, logs, user_ids):
             continue
         fields = env[model]._fields
         multi = "company_ids" in fields and fields["company_ids"].comodel_name == "res.company"
-        if model != "res.company" and "company_id" not in fields and not multi:
+        if model != "res.company" and "company_id" not in fields and not multi and not _parent_field(env, model):
             continue
         ids = logs.filtered(lambda log, m=model: log.model_id.model == m).mapped("res_id")
         records = env[model].with_context(active_test=False).browse(ids).exists()

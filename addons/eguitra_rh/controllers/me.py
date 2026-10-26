@@ -10,7 +10,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
-from ..engine import fmt_days
+from ..engine import jours
 from .common import MANAGERS, date_value, int_or_false, internal_only, leave_row, leave_type_row, ref, today
 from .hsseq import fitness_row
 from .paie import payslip_detail
@@ -82,9 +82,10 @@ class EguitraRhMe(http.Controller):
         if leave_type.deducts_balance:
             balance = emp._leave_balance(leave.date_from)
             if balance["balance"] - balance["pending"] < 0:
+                pending = balance["pending"] - leave.days
                 raise ApiError(422, "insufficient_balance",
-                               f"Solde insuffisant : {fmt_days(balance['balance'])} jour(s) acquis, dont "
-                               f"{fmt_days(balance['pending'] - leave.days)} déjà demandé(s).")
+                               f"Solde insuffisant : {jours(balance['balance'])} acquis, dont {jours(pending)} déjà "
+                               f"{'demandés' if abs(pending) >= 2 else 'demandé'}.")
         return leave_row(leave)
 
     @api_route("/rh/me/leaves/<int:leave_id>/cancel", methods=("POST",), profiles=None)

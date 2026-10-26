@@ -133,7 +133,7 @@ recette d'abord :
 ```bash
 cd ~/eguitra/infra
 ./maj-securite.sh recette            # images rafraîchies et recette relancée, audit des dépendances web
-./test.sh eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh
+./test.sh --rebuild eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh
 #                                      contrôle des écrans de la recette, annonce au client, puis :
 ./maj-securite.sh production --annoncee "AAAA-MM-JJ HH:MM"
 ```

@@ -173,6 +173,15 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
                                  headers={"Authorization": f"Bearer {self.token}"}, method="POST", timeout=60)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.content.startswith(b"PK"))
+        # Un export tronqué le dit dans le fichier (il était coupé à 5 000 lignes sans avertissement).
+        self.make_invoice("out_invoice", 1_000_000)
+        engine = self.env["eguitra.report.engine"]
+        partial = engine.run("ventes", self.env.company, date_from=self.today.replace(day=1), date_to=self.today, limit=1)
+        self.assertGreater(partial["total_count"], 1)
+        self.assertTrue(partial["has_next"])
+        self.assertIn(f"Export limité aux 1 premières lignes sur {partial['total_count']}",
+                      engine.to_csv(partial).decode("utf-8"))
+        self.assertTrue(engine.to_xlsx(partial, partial["label"]).startswith(b"PK"))
 
     def test_etats_et_tva(self):
         self.make_invoice("out_invoice", 100_000_000)

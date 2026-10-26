@@ -10,11 +10,14 @@ from odoo.addons.eguitra_axispro.models.pilotage import FUNDING_STATES, INSTRUME
 
 from ..models.agenda import EVENT_KINDS, MEETING_MODES, MEETING_STATES, REGISTRATION_STATES
 from ..models.audience import split_list
+from ..models.axispro import decision_porteur
 from ..models.contenu import ANNOUNCEMENT_KINDS, ARTICLE_KINDS
 from ..models.suivi import FEEDBACK_TOPICS
 
 DECISIONS = dict(COMMITTEE_DECISIONS)
 GATE_NOTE = re.compile(r"de (\S+) à ([^\s.(]+)")
+# Pistes de financement closes : ni comptées ni additionnées dans les résumés du porteur.
+FUNDING_CLOSED = ("rejected", "withdrawn")
 
 
 def excerpt(text, size=220):
@@ -47,11 +50,16 @@ def gates_of(dossier):
             for g in dossier.policy_id.gate_ids.sorted("sequence")]
 
 
-def dossier_ref(dossier):
+def dossier_ref(dossier, porteur=False):
+    """Résumé d'un dossier. porteur : la décision du comité dans les mots du porteur (jamais GO, NO-GO…)."""
+    if not dossier.decision:
+        label = None
+    else:
+        label = decision_porteur(dossier.decision) if porteur else DECISIONS.get(dossier.decision)
     return {"id": dossier.id, "reference": dossier.reference, "name": dossier.name, "state": dossier.state,
             "sector": dossier.sector or None, "current_gate": gate_ref(dossier.current_gate_id),
             "consultant": person(dossier.consultant_id), "decision": dossier.decision or None,
-            "decision_label": DECISIONS.get(dossier.decision) if dossier.decision else None}
+            "decision_label": label}
 
 
 def preparation(dossier, docs, actions):
@@ -93,7 +101,7 @@ def timeline(dossier, limit=None):
             items.append({"date": entry.date, "kind": "gate", "title": f"Étape franchie : {gate.name}", "detail": None})
     for review in dossier.sudo().review_ids.filtered(lambda r: r.state == "locked" and r.decision):
         items.append({"date": review.locked_at or at_noon(review.date), "kind": "decision",
-                      "title": f"Décision du comité : {DECISIONS.get(review.decision, review.decision)}",
+                      "title": f"Décision du comité : {decision_porteur(review.decision)}",
                       "detail": None})
     for doc in dossier.sudo().document_ids.filtered("portal_visible"):
         from_cabinet = not doc.uploaded_by.share
@@ -124,8 +132,21 @@ def timeline(dossier, limit=None):
 def funding_row(f):
     return {"id": f.id, "funder": f.funder_id.name, "instrument": f.instrument,
             "instrument_label": dict(INSTRUMENTS)[f.instrument], "amount_requested": f.amount_requested,
-            "amount_granted": f.amount_granted, "state": f.state, "state_label": dict(FUNDING_STATES)[f.state],
-            "state_date": f.state_date, "next_step": f.next_step or None, "next_date": f.next_date}
+            "amount_granted": f.amount_granted, "currency": f.currency_id.name or None, "state": f.state,
+            "state_label": dict(FUNDING_STATES)[f.state], "state_date": f.state_date,
+            "next_step": f.next_step or None, "next_date": f.next_date}
+
+
+def fundings_summary(dossier):
+    """Financements du dossier tels que l'accueil et « Mon projet » les résument, à l'identique : pistes
+    actives (ni refusées ni abandonnées), montants sollicités et accordés de ces seules pistes, dans la
+    devise des financements."""
+    fundings = dossier.sudo().funding_ids
+    active = fundings.filtered(lambda f: f.state not in FUNDING_CLOSED)
+    currency = fundings[:1].currency_id or dossier.company_id.currency_id
+    return {"count": len(active), "closed": len(fundings) - len(active),
+            "requested": sum(active.mapped("amount_requested")), "granted": sum(active.mapped("amount_granted")),
+            "currency": currency.name or ""}
 
 
 def announcement_row(a, read=None, full=False):
@@ -210,11 +231,14 @@ def feedback_row(f):
             "comment": f.comment or None, "date": f.create_date}
 
 
-def message_row(m, me):
+def message_row(m, me, porteur=False):
+    """Message du fil. porteur : sans les pièces jointes que le cabinet a retirées de sa vue (pièce masquée),
+    que la route de téléchargement refuse de toute façon."""
+    documents = m.document_ids.filtered("portal_visible") if porteur else m.document_ids
     return {"id": m.id, "author": m.author_id.name, "from_promoter": m.author_id.share, "from_me": m.author_id == me,
             "date": m.date, "body": m.body, "internal": m.internal,
             "attachments": [{"id": d.id, "name": d.name, "mimetype": d.attachment_id.mimetype,
-                             "size": d.attachment_id.file_size} for d in m.document_ids]}
+                             "size": d.attachment_id.file_size} for d in documents]}
 
 
 def window(days_before, days_after):

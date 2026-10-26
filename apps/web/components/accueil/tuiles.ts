@@ -1,9 +1,12 @@
-import { APPS, ESPACES, type AppCode, type EspaceCode } from "@/lib/config";
+import { APPS, ESPACES, appFromPath, type AppCode, type EntiteSociete, type EspaceCode } from "@/lib/config";
 import { navFor } from "@/lib/nav";
-import type { Me } from "@/lib/types";
+import type { Company, Me } from "@/lib/types";
 
-/** Module ouvert au compte : une tuile de l'accueil, une entrée du lanceur. */
-export type Tuile = { cle: string; libelle: string; href: string; motsCles: string };
+/**
+ * Module ouvert au compte : une tuile de l'accueil, une entrée du lanceur. entite : module réservé à
+ * une société (BTP et Immobilier : EGUITRA GROUP), ouvert dans ses livres (societePour).
+ */
+export type Tuile = { cle: string; libelle: string; href: string; motsCles: string; entite?: EntiteSociete };
 
 /** Modules d'un espace (Finance, AxisPro, Analyse) ou outils communs (Rotations, Réglages). */
 export type Rayon = { cle: EspaceCode | "outils"; titre: string; tuiles: Tuile[] };
@@ -55,25 +58,47 @@ const COURT: Record<string, string> = {
 };
 
 /**
- * Modules ouverts au compte, rangés par espace : Finance, puis AxisPro, puis Analyse, puis Rotations
- * et Réglages. L'administration des espaces tient en une seule tuile, Réglages.
+ * Société transmise par l'accueil aux modules qu'il ouvre : celle qu'il affiche, seulement si elle s'y
+ * choisit. Un accueil lu sous une application qui impose sa société (AxisPro : le cabinet ; Transport :
+ * le groupe) n'aligne rien : l'utilisateur n'a pas choisi cette société, et Finance, Analyse ou RH
+ * auraient changé de livres en silence.
  */
-export function rayonsDe(me: Me, app: AppCode): Rayon[] {
+function societeTransmise(me: Me, app: AppCode): Company | undefined {
+  return APPS[app].entity ? undefined : me.companies.find((c) => c.id === me.company_id);
+}
+
+/**
+ * Modules ouverts au compte, rangés par espace : Finance, puis AxisPro, puis Analyse, puis Rotations
+ * et Réglages. L'administration des espaces tient en une seule tuile, Réglages. `accueil` : la grille
+ * de l'accueil, qui transmet sa société aux modules qu'il ouvre (societeTransmise) ; le lanceur ne le
+ * fait pas.
+ */
+export function rayonsDe(me: Me, app: AppCode, accueil = false): Rayon[] {
   const company = me.companies.find((c) => c.id === me.company_id);
+  const transmise = accueil ? societeTransmise(me, app) : undefined;
   const rayons: Rayon[] = [];
   let reglages: string | null = null;
   for (const a of ESPACES) {
     if (!me.apps.includes(a)) continue;
     const tuiles: Tuile[] = [];
-    // Analyse suit la société de travail quelle que soit l'application ouverte : ses sections
-    // sont celles du groupe ou du cabinet.
-    const entite = a === app || a === "analyse" ? company?.entity : APPS[a].entity;
+    // Société dans laquelle le module s'ouvrira, quand on la connaît : celle de l'application ouverte,
+    // celle que l'accueil lui transmet, celle qu'impose l'application. Analyse suit la société de
+    // travail quelle que soit l'application ouverte : ses sections sont celles du groupe ou du cabinet.
+    const servie = APPS[a].entity;
+    const entite =
+      a === app || a === "analyse" ? company?.entity : transmise && (!servie || servie === transmise.entity) ? transmise.entity : servie;
     for (const s of navFor(a, me.profiles, entite)) {
       if (s.label === "Administration") {
         reglages ??= s.items[0]?.href ?? null;
         continue;
       }
-      for (const i of s.items) tuiles.push({ cle: i.href, libelle: COURT[i.href] ?? i.label, href: i.href, motsCles: `${i.label} ${s.label} ${APPS[a].name}` });
+      for (const i of s.items) {
+        // Module réservé à une société, quand celle de l'application n'est pas connue ici (Finance vue
+        // depuis AxisPro) : proposé si le compte est ouvert à cette société, et ouvert dans ses livres
+        // (societePour) ; jamais proposé pour répondre « ne concerne qu'EGUITRA GROUP ».
+        if (i.entity && !entite && !me.companies.some((c) => c.entity === i.entity)) continue;
+        tuiles.push({ cle: i.href, libelle: COURT[i.href] ?? i.label, href: i.href, motsCles: `${i.label} ${s.label} ${APPS[a].name}`, entite: i.entity });
+      }
     }
     if (tuiles.length) rayons.push({ cle: a, titre: APPS[a].name.replace("NIMOVA · ", ""), tuiles });
   }
@@ -82,6 +107,41 @@ export function rayonsDe(me: Me, app: AppCode): Rayon[] {
   if (reglages) outils.push({ cle: "reglages", libelle: "Réglages", href: reglages, motsCles: "Réglages administration utilisateurs sociétés seuils audit" });
   if (outils.length) rayons.push({ cle: "outils", titre: "Outils", tuiles: outils });
   return rayons;
+}
+
+/**
+ * Société à donner à l'application d'une tuile avant de l'ouvrir ; null : rien à changer.
+ * - Module réservé à une société (BTP, Immobilier) : ses livres (ceux de la page s'ils le sont).
+ * - Depuis l'accueil (`accueil`), la société qu'il affiche si elle s'y choisit et si l'application
+ *   ouverte l'accepte (AxisPro ne sert que le cabinet).
+ * - Rien pour un module de l'application ouverte : il est déjà dans ses livres.
+ */
+export function societePour(me: Me, app: AppCode, tuile: Tuile, accueil: boolean): Company | null {
+  const cible = appFromPath(tuile.href);
+  if (!cible || cible === app) return null;
+  const company = me.companies.find((c) => c.id === me.company_id);
+  if (tuile.entite) return company?.entity === tuile.entite ? company : (me.companies.find((c) => c.entity === tuile.entite) ?? null);
+  const transmise = accueil ? societeTransmise(me, app) : undefined;
+  if (!transmise) return null;
+  const servie = APPS[cible].entity;
+  return servie && servie !== transmise.entity ? null : transmise;
+}
+
+/**
+ * Donne sa société à l'application d'une tuile (societePour) avant de l'ouvrir. Vrai si rien n'était à
+ * changer ou si la société est mémorisée ; faux sur un échec (le module s'ouvre alors dans la société
+ * qu'il avait, affichée dans son en-tête).
+ */
+export async function alignerSociete(me: Me, app: AppCode, tuile: Tuile, accueil: boolean): Promise<boolean> {
+  const cible = appFromPath(tuile.href);
+  const societe = societePour(me, app, tuile, accueil);
+  if (!cible || !societe) return true;
+  const res = await fetch("/api/session/company", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company_id: societe.id, app: cible }),
+  }).catch(() => null);
+  return Boolean(res?.ok);
 }
 
 export function sansAccents(s: string) {

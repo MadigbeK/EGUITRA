@@ -2,3 +2,5 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_eguitra_api_token_system,eguitra.api.token système,model_eguitra_api_token,base.group_system,1,0,0,0
 access_eguitra_api_access_log_system,eguitra.api.access.log système,model_eguitra_api_access_log,base.group_system,1,0,0,0
 access_eguitra_api_login_attempt_system,eguitra.api.login.attempt système,model_eguitra_api_login_attempt,base.group_system,1,0,0,0
+access_eguitra_support_request_user,eguitra.support.request comptes internes,model_eguitra_support_request,base.group_user,1,1,1,0
+access_eguitra_support_comment_user,eguitra.support.comment comptes internes,model_eguitra_support_comment,base.group_user,1,0,1,0

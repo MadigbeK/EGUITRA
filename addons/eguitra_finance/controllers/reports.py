@@ -5,7 +5,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json
 
-from ..models.report_registry import REPORTS, list_catalog
+from ..models.report_registry import MAX_EXPORT, MAX_LIMIT, REPORTS, list_catalog
 from .common import FIN_READ, companies, parse_date, today
 
 PERIODS = ("today", "month", "last_month", "quarter", "year", "12m", "all")
@@ -32,7 +32,7 @@ def _period(token, day):
     raise ApiError(400, "invalid_parameter", "Période inconnue.")
 
 
-def _run(data, limit=None):
+def _run(data, limit=None, max_limit=MAX_LIMIT):
     key = data.get("report")
     if key not in REPORTS:
         raise ApiError(404, "not_found", "Rapport inconnu.")
@@ -52,6 +52,7 @@ def _run(data, limit=None):
             sort_dir=data.get("sort_dir", "desc"),
             limit=limit or data.get("limit", 200),
             offset=data.get("offset", 0),
+            max_limit=max_limit,
         )
     except ValueError as e:
         raise ApiError(400, "invalid_parameter", str(e)) from e
@@ -69,7 +70,7 @@ class EguitraFinanceReports(http.Controller):
     @api_route("/finance/reports/export", methods=("POST",), profiles=FIN_READ)
     def export(self, **_kw):
         data = read_json()
-        result = _run(data, limit=5000)
+        result = _run(data, limit=MAX_EXPORT, max_limit=MAX_EXPORT)
         engine = request.env["eguitra.report.engine"]
         stamp = today().isoformat()
         if data.get("format") == "xlsx":

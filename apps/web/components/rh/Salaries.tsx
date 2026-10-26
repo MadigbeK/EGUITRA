@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Plus, Search } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Input, PageHeader, Segmented, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDate, fmtGNF } from "@/lib/format";
+import { fmtDate, fmtGNF, pluriel } from "@/lib/format";
 import { CONTRACT_LABELS, type EmployeeRow } from "@/lib/rh-types";
 import { EtatSalarie, FiltreSociete, PastilleSociete, avecSociete, jours, useMeta } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
@@ -74,7 +74,7 @@ export function ListeSalaries() {
         </div>
         {incomplets > 0 && (
           <span className="flex items-center gap-1.5 text-[13px] text-warn">
-            <AlertTriangle className="h-4 w-4" /> {incomplets} dossier(s) à compléter
+            <AlertTriangle className="h-4 w-4" /> {pluriel(incomplets, "dossier à compléter", "dossiers à compléter")}
           </span>
         )}
       </div>

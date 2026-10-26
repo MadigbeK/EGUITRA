@@ -73,3 +73,17 @@ class TestChartOfAccounts(FinanceDataMixin, ApiCase):
         self.assertEqual(checks["analytic_consistency"]["status"], "warning")
         self.assertEqual(checks["analytic_consistency"]["count"], 1)
         self.assertIn("Atelier (vigilance)", checks["analytic_consistency"]["detail"])
+
+    def test_coherence_des_references(self):
+        close = self.env["eguitra.period.close"]._get(self.company, self.today.replace(day=1))
+        first = self.make_invoice("in_invoice", 2_000_000, post=False)
+        first.ref = "FAC-ELEC-0042"
+        first.with_context(eguitra_approval_granted=True).action_post()
+        checks = {c["code"]: c for c in close._run_controls()}
+        self.assertEqual(checks["reference_consistency"]["status"], "ok")
+        second = self.make_invoice("in_invoice", 2_000_000, post=False)
+        second.ref = " fac-elec-0042 "
+        second.with_context(eguitra_approval_granted=True).action_post()
+        checks = {c["code"]: c for c in close._run_controls()}
+        self.assertEqual(checks["reference_consistency"]["status"], "warning", "Facture de fournisseur en double")
+        self.assertIn("saisie 2 fois", checks["reference_consistency"]["detail"])

@@ -53,13 +53,31 @@ export function setSessionCookies(jar: CookieJar, tokens: SessionTokens, app?: s
 
 export function clearSessionCookies(jar: CookieJar) {
   // Effacement par un cookie expiré aux mêmes attributs : un cookie « __Host- » sans Secure serait refusé.
-  const names = [...Object.values(COOKIES), ...Object.keys(APPS).map((app) => companyCookie(app as AppCode))];
-  for (const name of names) jar.set(name, "", base(0));
+  for (const name of Object.values(COOKIES)) jar.set(name, "", base(0));
+  clearCompanyCookies(jar);
 }
 
 /** Société de travail mémorisée par application : la finance et AxisPro Suite ne se contaminent pas. */
 export function companyCookie(app: AppCode): string {
   return `${COOKIES.company}_${app}`;
+}
+
+/** Mémorise la société de travail d'une application (un an ; le noyau la contrôle à chaque appel). */
+export function setCompanyCookie(jar: CookieJar, app: AppCode, companyId: number) {
+  jar.set(companyCookie(app), String(companyId), base(60 * 60 * 24 * 365));
+}
+
+/** Oublie la société de travail d'une application : elle reprend la société par défaut du compte. */
+export function clearCompanyCookie(jar: CookieJar, app: AppCode) {
+  jar.set(companyCookie(app), "", base(0));
+}
+
+/**
+ * Oublie la société de travail de toutes les applications. À la connexion : une société retirée du
+ * compte depuis la dernière session ne reste pas mémorisée.
+ */
+export function clearCompanyCookies(jar: CookieJar) {
+  for (const app of Object.keys(APPS) as AppCode[]) clearCompanyCookie(jar, app);
 }
 
 export function setStepCookie(jar: CookieJar, name: string, value: string, maxAge = 600) {
@@ -82,6 +100,8 @@ export interface OdooCallOptions {
   userAgent?: string | null;
   rawBody?: BodyInit | null;
   contentType?: string | null;
+  /** Abandon de l'appel (délai). */
+  signal?: AbortSignal;
 }
 
 /** Appel serveur à l'API du noyau. */
@@ -112,20 +132,41 @@ export async function odooFetch(path: string, opts: OdooCallOptions = {}): Promi
     body,
     cache: "no-store",
     redirect: "manual",
+    signal: opts.signal,
   });
 }
 
-/** Renouvelle la session ; renvoie les nouveaux jetons ou null si la session est perdue. */
-export async function refreshSession(refreshToken: string, clientIp?: string | null): Promise<SessionTokens | null> {
+/**
+ * Issue d'un renouvellement de session : nouveaux jetons ; refus du noyau (la session est perdue) ;
+ * ou noyau injoignable (la session reste valable, on ne sait simplement pas la renouveler).
+ */
+export type Renouvellement = { etat: "ok"; jetons: SessionTokens } | { etat: "refuse" } | { etat: "indisponible" };
+
+/** Au-delà, un noyau qui ne répond pas est tenu pour injoignable : la page n'attend pas indéfiniment. */
+const DELAI_RENOUVELLEMENT_MS = 20_000;
+
+/**
+ * Renouvelle la session. Seul un refus du noyau la perd : 401 (jeton expiré, révoqué ou réutilisé),
+ * 403 (application retirée au profil), 400 (demande invalide). Une panne la garde : noyau arrêté
+ * (redémarrage après une mise à jour des modules), erreur 5xx, route absente pendant le chargement,
+ * réponse illisible ou trop lente. L'appelant répond alors 503 sans toucher aux cookies : l'essai
+ * suivant renouvellera la session.
+ */
+export async function renouvelerSession(refreshToken: string, clientIp?: string | null): Promise<Renouvellement> {
+  let res: Response;
   try {
-    const res = await odooFetch("/auth/refresh", { body: { refresh_token: refreshToken }, clientIp });
-    if (!res.ok) return null;
-    const data = (await res.json()) as SessionTokens & { status: string };
-    return data.status === "ok" ? data : null;
+    res = await odooFetch("/auth/refresh", { body: { refresh_token: refreshToken }, clientIp, signal: AbortSignal.timeout(DELAI_RENOUVELLEMENT_MS) });
   } catch {
-    return null;
+    return { etat: "indisponible" };
   }
+  if (res.status === 400 || res.status === 401 || res.status === 403) return { etat: "refuse" };
+  if (!res.ok) return { etat: "indisponible" };
+  const data = (await res.json().catch(() => null)) as (SessionTokens & { status?: string }) | null;
+  return data?.status === "ok" && data.access_token && data.refresh_token ? { etat: "ok", jetons: data } : { etat: "indisponible" };
 }
+
+/** Réponse JSON de la passerelle quand le noyau ne répond pas (503) : les cookies ne sont pas touchés. */
+export const MESSAGE_INDISPONIBLE = "Service momentanément indisponible. Réessayez dans un instant.";
 
 /**
  * Adresse du client telle que l'a vue notre proxy d'entrée (Caddy écrase X-Real-IP à chaque requête).

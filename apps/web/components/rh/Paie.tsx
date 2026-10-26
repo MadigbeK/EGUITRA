@@ -6,9 +6,9 @@ import { useState } from "react";
 import { AlertTriangle, BookOpen, Calculator, Check, ChevronLeft, FileSpreadsheet, FileText, Lock, Plus, RefreshCw, RotateCcw, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
-import type { Anomaly, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
-import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, avecSociete, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { INSECABLE, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
+import type { Anomaly, CompanyRef, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
+import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, accord, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const TON_ANOMALIE: Record<Anomaly["severity"], Tone> = { danger: "danger", warn: "warn", info: "accent" };
 
@@ -85,6 +85,8 @@ export function ListePaies() {
       {creation && (
         <NouvellePaie
           proposition={dejaCourant ? "" : courant.slice(0, 7)}
+          companies={meta?.companies ?? []}
+          societe={societe}
           onClose={() => setCreation(false)}
           onDone={(p) => {
             setCreation(false);
@@ -100,15 +102,21 @@ export function ListePaies() {
   );
 }
 
-function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; onClose: () => void; onDone: (p: Payroll) => void }) {
+/**
+ * Préparation d'une paie : celle de la société choisie (défaut : le filtre « Société » de la liste), ou
+ * celle de chaque société qui a du personnel ce mois-là. La paie d'une société non voulue ne pourrait
+ * être ni supprimée ni validée par son préparateur.
+ */
+function NouvellePaie({ proposition, companies, societe: filtre, onClose, onDone }: { proposition: string; companies: CompanyRef[]; societe: number | null; onClose: () => void; onDone: (p: Payroll) => void }) {
   const [mois, setMois] = useState(proposition);
+  const [societe, setSociete] = useState<string>(filtre ? String(filtre) : companies.length === 1 ? String(companies[0]!.id) : "");
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function creer() {
     setBusy(true);
     setErreur(null);
     try {
-      onDone(await apiSend<Payroll>("POST", "/rh/payrolls", { month: `${mois}-01` }));
+      onDone(await apiSend<Payroll>("POST", "/rh/payrolls", { month: `${mois}-01`, ...(societe ? { company_id: Number(societe) } : {}) }));
     } catch (e) {
       setErreur(messageErreur(e));
     } finally {
@@ -119,7 +127,7 @@ function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; o
     <Modal
       open
       title="Préparer une paie"
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
         <Button variant="primary" loading={busy} disabled={!mois} onClick={creer}>
           <Calculator className="h-4 w-4" /> Calculer les bulletins
@@ -129,11 +137,16 @@ function NouvellePaie({ proposition, onClose, onDone }: { proposition: string; o
       <div className="space-y-3 text-sm">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <p className="text-ink-2">
-          La paie du mois est préparée pour chaque société qui a du personnel (chacune reste l&apos;employeur légal et a sa propre paie). Tous les salariés présents dans le mois reçoivent un bulletin : salaire de base et éléments fixes au prorata de la présence, absences non rémunérées retenues, échéances d&apos;avances et de prêts, primes de rotation des chauffeurs. Les éléments du mois se saisissent ensuite sur chaque bulletin.
+          {societe ? <>La paie du mois est préparée pour la société choisie (chaque société reste l&apos;employeur légal et a sa propre paie).</> : <>La paie du mois est préparée pour chaque société qui a du personnel et pas encore de paie ce mois-là (chacune reste l&apos;employeur légal et a sa propre paie).</>} Tous les salariés présents dans le mois reçoivent un bulletin : salaire de base et éléments fixes au prorata de la présence, absences non rémunérées retenues, échéances d&apos;avances et de prêts, primes de rotation des chauffeurs. Les éléments du mois se saisissent ensuite sur chaque bulletin.
         </p>
         <Field label="Mois de paie">
           <Input type="month" value={mois} onChange={(e) => setMois(e.target.value)} />
         </Field>
+        {companies.length > 1 && (
+          <Field label="Société">
+            <Select value={societe} onChange={(e) => setSociete(e.target.value)} placeholder="Toutes les sociétés qui ont du personnel" options={companies.map((c) => ({ value: c.id, label: c.name }))} />
+          </Field>
+        )}
       </div>
     </Modal>
   );
@@ -145,12 +158,26 @@ export function DetailPaie({ id }: { id: string }) {
   const { data: meta } = useMeta();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(null);
+  async function exporter(nom: string) {
+    setBusy("export");
+    setMessage(null);
+    try {
+      await apiDownload(`/rh/payrolls/${id}/export.xlsx`, nom);
+    } catch (e) {
+      setMessage({ tone: "danger", text: messageErreur(e) });
+    } finally {
+      setBusy(null);
+    }
+  }
   const [saisie, setSaisie] = useState<PayslipRow | null>(null);
   const [filtre, setFiltre] = useState<"tous" | "anomalies">("tous");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!p) return <Loading label="Chargement de la paie…" />;
   const ecrit = p.can_write;
   const bloquantes = p.payslips.flatMap((s) => s.anomalies).filter((a) => a.severity === "danger").length;
+  // Donnée de la paie changée depuis son calcul (dossier, absence, avance, paramètres) : le noyau refuse la
+  // validation tant qu'elle n'est pas recalculée.
+  const aRecalculer = p.state === "draft" && Boolean((p as Payroll & { needs_compute?: boolean }).needs_compute);
 
   async function action(nom: "compute" | "validate" | "reopen" | "account", reussite: string) {
     setBusy(nom);
@@ -194,7 +221,7 @@ export function DetailPaie({ id }: { id: string }) {
         }
         actions={
           <>
-            <Button onClick={() => void apiDownload(`/rh/payrolls/${id}/export.xlsx`, `paie_${p.month.slice(0, 7)}_${p.company.entity ?? p.company.id}.xlsx`)}>
+            <Button loading={busy === "export"} onClick={() => void exporter(`paie_${p.month.slice(0, 7)}_${p.company.entity ?? p.company.id}.xlsx`)}>
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
             {ecrit && p.state === "draft" && (
@@ -205,7 +232,7 @@ export function DetailPaie({ id }: { id: string }) {
             {/* Quatre yeux (eguitra_rh/controllers/paie.py, can_validate) : la direction ou l'administration
                 valide une paie en préparation qu'elle n'a pas préparée ; la RH ne valide jamais. */}
             {p.can_validate && (
-              <Button variant="primary" loading={busy === "validate"} disabled={bloquantes > 0} title={bloquantes ? "Corrigez d'abord les anomalies bloquantes" : undefined} onClick={() => void action("validate", "Paie validée : les bulletins sont figés et consultables par les salariés.")}>
+              <Button variant="primary" loading={busy === "validate"} disabled={bloquantes > 0 || aRecalculer} title={aRecalculer ? "Données changées depuis le calcul : la paie se recalcule d'abord" : bloquantes ? "Corrigez d'abord les anomalies bloquantes" : undefined} onClick={() => void action("validate", "Paie validée : les bulletins sont figés et consultables par les salariés.")}>
                 <Lock className="h-4 w-4" /> Valider la paie
               </Button>
             )}
@@ -230,6 +257,11 @@ export function DetailPaie({ id }: { id: string }) {
       <div className="mb-6">
         <Etapes steps={etapes} />
       </div>
+      {aRecalculer && (
+        <div className="mb-4">
+          <Notice tone="warn">Des données de la paie ont changé depuis son calcul (dossier, absence, avance, paramètres) : {ecrit ? "recalculez-la" : "le service RH la recalcule"} avant sa validation.</Notice>
+        </div>
+      )}
       {p.state === "draft" && !p.can_validate && (
         <div className="mb-4">
           <Notice tone="neutral">La paie est validée par la direction, et jamais par une personne qui l&apos;a préparée (création, calcul ou éléments variables).</Notice>
@@ -242,14 +274,14 @@ export function DetailPaie({ id }: { id: string }) {
       )}
       {bloquantes > 0 && p.state === "draft" && (
         <div className="mb-4">
-          <Notice tone="danger">{bloquantes} anomalie(s) bloquante(s) : la paie ne peut être validée qu&apos;une fois corrigées.</Notice>
+          <Notice tone="danger">{bloquantes > 1 ? `${fmtInt(bloquantes)} anomalies bloquantes : la paie ne peut être validée qu'une fois corrigées.` : "1 anomalie bloquante : la paie ne peut être validée qu'une fois corrigée."}</Notice>
         </div>
       )}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Net à payer" value={fmtShort(p.totals.net)} hint={`${p.totals.headcount} bulletin(s)`} />
+        <Kpi label="Net à payer" value={fmtShort(p.totals.net)} hint={pluriel(p.totals.headcount, "bulletin")} />
         <Kpi label="Brut" value={fmtShort(p.totals.gross)} hint={`Retenues diverses : ${fmtGNF(p.totals.deductions)}`} />
         <Kpi label="Cotisations et impôts" value={fmtShort(p.totals.cnss_employee + p.totals.cnss_employer + p.totals.rts + p.totals.vf + p.totals.training_tax)} hint={`CNSS ${fmtGNF(p.totals.cnss_employee + p.totals.cnss_employer)}, RTS ${fmtGNF(p.totals.rts)}, VF et formation ${fmtGNF(p.totals.vf + p.totals.training_tax)}`} />
-        <Kpi label="Coût employeur" value={fmtShort(p.totals.employer_cost)} tone="accent" hint={p.totals.gross ? `${fmtDec(p.totals.employer_cost / p.totals.gross)} fois le brut` : undefined} />
+        <Kpi label="Coût employeur" value={fmtShort(p.totals.employer_cost)} tone="accent" hint={p.totals.gross ? `${fmtRatio(p.totals.employer_cost / p.totals.gross)} fois le brut` : undefined} />
       </div>
 
       <Card
@@ -285,7 +317,7 @@ export function DetailPaie({ id }: { id: string }) {
                 </span>
               ),
             },
-            { key: "days", label: "Jours", align: "right", render: (s) => <span title={`${s.worked_days} payé(s) sur ${s.month_days} ouvrables, ${s.unpaid_days} non rémunéré(s)`}>{`${fmtDec(s.worked_days - s.unpaid_days)} / ${fmtDec(s.month_days)}`}</span> },
+            { key: "days", label: "Jours", align: "right", render: (s) => <span title={`${fmtDec(s.worked_days)} ${accord(s.worked_days, "jour payé", "jours payés")} sur ${fmtDec(s.month_days)} ouvrables, ${fmtDec(s.unpaid_days)} ${accord(s.unpaid_days, "non rémunéré", "non rémunérés")}`}>{`${fmtDec(s.worked_days - s.unpaid_days)} / ${fmtDec(s.month_days)}`}</span> },
             { key: "gross", label: "Brut", align: "right", render: (s) => fmtGNF(s.gross), sortValue: (s) => s.gross },
             { key: "cnss", label: "CNSS", align: "right", render: (s) => fmtGNF(s.cnss_employee) },
             { key: "rts", label: "RTS", align: "right", render: (s) => fmtGNF(s.rts) },
@@ -401,17 +433,21 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
     }
   }
 
+  const [retrait, setRetrait] = useState<number | null>(null);
   async function retirer(inputId: number) {
     setErreur(null);
+    setRetrait(inputId);
     try {
       await mutate(await apiSend<Payslip>("DELETE", `/rh/payslips/${payslipId}/inputs/${inputId}`), { revalidate: false });
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setRetrait(null);
     }
   }
 
   return (
-    <Modal open wide title={b ? `Éléments du mois, ${b.employee.name}` : "Éléments du mois"} onClose={onClose} footer={<Button onClick={onClose}>Fermer</Button>}>
+    <Modal open wide title={b ? `Éléments du mois, ${b.employee.name}` : "Éléments du mois"} onClose={() => !busy && retrait === null && onClose()} footer={<Button disabled={busy || retrait !== null} onClick={onClose}>Fermer</Button>}>
       {!b ? (
         <Etat error={error} onRetry={() => mutate()} />
       ) : (
@@ -436,7 +472,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
             columns={[
               { key: "rubric", label: "Rubrique", render: (i) => i.rubric.name },
               { key: "source", label: "Origine", render: (i) => SOURCE[i.source] ?? i.source },
-              { key: "value", label: "Valeur", align: "right", render: (i) => (i.rubric.input === "hours" ? `${fmtDec(i.quantity)} h` : fmtGNF(i.amount)) },
+              { key: "value", label: "Valeur", align: "right", render: (i) => (i.rubric.input === "hours" ? `${fmtDec(i.quantity)}${INSECABLE}h` : fmtGNF(i.amount)) },
               { key: "note", label: "Motif", render: (i) => i.note ?? "–" },
               {
                 key: "x",
@@ -444,7 +480,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
                 align: "right",
                 render: (i) =>
                   i.source === "manual" ? (
-                    <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void retirer(i.id)}>
+                    <Button variant="ghost" size="sm" aria-label="Retirer" loading={retrait === i.id} disabled={retrait !== null || busy} onClick={() => void retirer(i.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   ) : null,
@@ -455,15 +491,15 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
             <Field label="Rubrique">
               <Select value={rubriqueId} onChange={(e) => setRubriqueId(e.target.value)} placeholder="Choisir" options={rubriques.map((r) => ({ value: r.id, label: `${r.name}${r.kind === "deduction" ? " (retenue)" : ""}` }))} />
             </Field>
-            <Field label={rubrique?.input === "hours" ? "Heures" : "Montant (GNF)"}>
+            <Field label={rubrique?.input === "hours" ? "Heures" : "Montant (GNF)"} error={erreurNombre(valeur)}>
               <ChampMontant value={valeur} onChange={setValeur} />
             </Field>
             <Field label="Motif" className="sm:col-span-2">
               <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
             <div className="flex items-center justify-between gap-3 sm:col-span-2">
-              <span className="text-[12.5px] text-muted">{rubrique?.input === "hours" ? `Payées au taux horaire majoré de ${fmtDec(rubrique.overtime_rate)} %.` : rubrique ? `${rubrique.cnss ? "Soumis à la CNSS" : "Hors CNSS"}, ${rubrique.taxable ? (rubrique.exempt_allowance ? "exonéré de RTS dans la limite de 25 % du brut" : "soumis à la RTS") : "hors RTS"}.` : ""}</span>
-              <Button variant="primary" loading={busy} disabled={!rubrique || !nombre(valeur)} onClick={ajouter}>
+              <span className="text-[12.5px] text-muted">{rubrique?.input === "hours" ? `Payées au taux horaire majoré de ${fmtDec(rubrique.overtime_rate)}${INSECABLE}%.` : rubrique ? `${rubrique.cnss ? "Soumis à la CNSS" : "Hors CNSS"}, ${rubrique.taxable ? (rubrique.exempt_allowance ? `exonéré de RTS dans la limite de 25${INSECABLE}% du brut` : "soumis à la RTS") : "hors RTS"}.` : ""}</span>
+              <Button variant="primary" loading={busy} disabled={!rubrique || !nombre(valeur) || Boolean(erreurNombre(valeur))} onClick={ajouter}>
                 <Check className="h-4 w-4" /> Ajouter
               </Button>
             </div>

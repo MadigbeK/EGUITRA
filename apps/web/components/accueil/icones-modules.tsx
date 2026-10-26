@@ -777,6 +777,7 @@ const PAR_ADRESSE: Record<string, string> = {
   "/transport/taxes": "tr-taxes",
   "/transport/flotte": "tr-flotte",
   "/transport/routes": "tr-routes",
+  "/transport/bareme": "tr-taxes",
   "/transport/parametres": "tr-parametres",
   "/finance/chantiers": "chantiers",
   "/finance/immobilier": "immobilier",

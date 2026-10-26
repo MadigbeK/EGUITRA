@@ -1,6 +1,6 @@
 from .models.approval import DEFAULT_RULES
 
-AUDITED_MODELS = ["eguitra.approval.rule", "eguitra.approval.request", "eguitra.commitment"]
+AUDITED_MODELS = ["eguitra.approval.rule", "eguitra.approval.request", "eguitra.approval.step", "eguitra.commitment"]
 
 
 def post_init_hook(env):

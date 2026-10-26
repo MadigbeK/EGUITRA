@@ -201,6 +201,18 @@ class EguitraTransportOwnerStatement(models.Model):
             self.company_id, self.date_from, self.date_to, column, [], account_id=account.id)
         return amounts.get(account.id, 0.0)
 
+    @api.constrains("vehicle_id", "date_from", "date_to")
+    def _check_period(self):
+        """Une période par relevé, sans chevauchement pour un même ensemble : une rotation n'est reversée
+        qu'une fois (audit du 25 octobre, M12)."""
+        for st in self:
+            if st.date_from > st.date_to:
+                raise ValidationError("Le relevé commence après sa date de fin.")
+            other = self.search([("id", "!=", st.id), ("vehicle_id", "=", st.vehicle_id.id),
+                                 ("date_from", "<=", st.date_to), ("date_to", ">=", st.date_from)], limit=1)
+            if other:
+                raise ValidationError(f"{st.vehicle_id.name} : la période chevauche celle du relevé {other.name}.")
+
     def _compute_statement(self):
         Rotation = self.env["eguitra.transport.rotation"].sudo()
         Rule = self.env["eguitra.transport.share.rule"]
@@ -237,11 +249,15 @@ class EguitraTransportOwnerStatement(models.Model):
                                          "amount": currency.round(base * rate / 100)})
             commissions = sum(line["amount"] for line in commission_lines)
             owner = vehicle._owner()
-            owner_amount = currency.round(margin - commissions)
+            # Un propriétaire désigné bénéficiaire d'une règle garde sa commission : elle s'ajoute à sa part,
+            # qui seule donne lieu à une pièce (audit du 25 octobre, I-T2).
+            owner_commission = sum(line["amount"] for line in commission_lines if line["partner_id"] == owner.id)
+            owner_amount = currency.round(margin - commissions + owner_commission)
             company_partner = company.partner_id
             operator = sum(line["amount"] for line in commission_lines if line["partner_id"] == company_partner.id)
             if vehicle.ownership != "managed":
-                operator += owner_amount
+                # Ensemble propre : le propriétaire est la société, sa part comprend déjà sa commission.
+                operator = owner_amount
             lines = [Command.clear()]
             for seq, (charge, months, amount) in enumerate(charges):
                 lines.append(Command.create({
@@ -250,9 +266,13 @@ class EguitraTransportOwnerStatement(models.Model):
             names = {p.id: p.display_name for p in self.env["res.partner"].browse([c["partner_id"] for c in commission_lines])}
             for seq, line in enumerate(commission_lines, 100):
                 name = f"{names[line['partner_id']]} : {fmt_rate(line['rate'])} du chiffre d'affaires brut"
+                if line["partner_id"] == owner.id:
+                    name += ", versée avec la part du propriétaire"
                 lines.append(Command.create(dict(line, sequence=seq, name=name)))
             lines.append(Command.create({"kind": "owner", "sequence": 1000, "partner_id": owner.id,
-                                         "name": f"{owner.display_name} : résiduel de la marge", "amount": owner_amount}))
+                                         "name": f"{owner.display_name} : résiduel de la marge"
+                                                 + (", commission comprise" if owner_commission else ""),
+                                         "amount": owner_amount}))
             st.write({
                 "ownership": vehicle.ownership, "owner_id": owner.id,
                 "basis": basis,

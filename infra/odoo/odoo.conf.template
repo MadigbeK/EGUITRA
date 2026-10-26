@@ -16,6 +16,9 @@ list_db = False
 db_name = ${OD_DB}
 dbfilter = ^${OD_DB}$
 proxy_mode = True
+; Écoute de toutes les interfaces du conteneur : seul Docker publie le port, sur 127.0.0.1 du serveur
+; (compose.yaml). Écrit explicitement, la valeur par défaut passant à 127.0.0.1 avec Odoo 20.
+http_interface = 0.0.0.0
 
 ; Dimensionnement pour 6 vCPU / 12 Go : production à 4 processus, recette à 2.
 workers = ${OD_WORKERS}

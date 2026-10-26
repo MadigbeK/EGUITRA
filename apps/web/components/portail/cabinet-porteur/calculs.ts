@@ -215,9 +215,5 @@ export function calculerBfr(p: ParamsBfr) {
   return { creances, stocks, fournisseurs, bfr, joursCa: ca > 0 ? (bfr / ca) * ANNEE_JOURS : null };
 }
 
-/* ─── Formats ──────────────────────────────────────────────────────────── */
-
-/** 1,25 (virgule décimale, sans séparateur de milliers). */
-export function decimal(v: number, chiffres = 2): string {
-  return v.toLocaleString("fr-FR", { minimumFractionDigits: chiffres, maximumFractionDigits: chiffres, useGrouping: false });
-}
+// Les nombres s'écrivent à l'écran avec les fonctions de lib/format.ts (milliers groupés, espace insécable
+// avant l'unité) ; l'export CSV du tableau d'amortissement a son écriture propre (SimulateurPret).

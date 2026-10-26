@@ -6,9 +6,18 @@ d'eguitra_axispro."""
 from . import controllers, models
 from .ressources_initiales import ARTICLES, RUBRIQUES
 
+# Modèles suivis par la piste d'audit : contenus publiés par le cabinet, rendez-vous, inscriptions et
+# avis des porteurs (les notifications, accusés de lecture et réactions n'y sont pas).
+AUDITED_MODELS = [
+    "portail.category", "portail.article", "portail.announcement", "portail.event", "portail.event.registration",
+    "portail.meeting", "portail.feedback",
+]
+
 
 def post_init_hook(env):
-    """Rubriques du centre de ressources et contenus proposés au cabinet (en brouillon, à relire)."""
+    """Piste d'audit ; rubriques du centre de ressources et contenus proposés au cabinet (en brouillon,
+    à relire)."""
+    env["eguitra.setup"].ensure_audit_rules(AUDITED_MODELS)
     cabinet = env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
     if not cabinet or env["portail.category"].search_count([("company_id", "=", cabinet.id)]):
         return

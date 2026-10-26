@@ -25,6 +25,34 @@ function fixe(r: number, d: 0 | 1 | 2): string {
   return fixes[d]!.format(r === 0 ? 0 : r);
 }
 
+/** Message sous un champ dont la saisie n'est pas un nombre lisible (voir lireNombre). */
+export const AIDE_NOMBRE = "Nombre illisible : écrivez par exemple 750 000 ou 2,5.";
+
+/**
+ * Nombre saisi dans un champ, à la française : espaces ignorés (y compris insécables), virgule
+ * décimale. Un point n'est lu comme décimale que seul et suivi d'un, de deux ou de plus de trois
+ * chiffres (« 2.5 », « 39.75 ») : « 12.500 » ou « 2.500.000 » sont ambigus (point des milliers) et
+ * refusés, pour ne jamais diviser un montant par mille. Rend null si le champ est vide ou illisible :
+ * l'écran signale une saisie illisible avec nombreIllisible et AIDE_NOMBRE, et bloque l'envoi, au lieu
+ * d'enregistrer 0.
+ */
+export function lireNombre(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const v = (value ?? "").replace(/[\s  ]/g, "");
+  if (!v) return null;
+  let texte: string;
+  if (/^[+-]?(\d+(,\d*)?|,\d+)$/.test(v)) texte = v.replace(",", ".");
+  else if (/^[+-]?\d+\.(\d{1,2}|\d{4,})$/.test(v)) texte = v;
+  else return null;
+  const n = Number(texte);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Saisie non vide qui n'est pas un nombre lisible (« 2.500.000 », « 30 j », « 1,3x »). */
+export function nombreIllisible(value: string | null | undefined): boolean {
+  return !!(value ?? "").trim() && lireNombre(value) === null;
+}
+
 export function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
@@ -171,18 +199,108 @@ export function fmtM3(value: unknown): string {
   return v === "–" ? v : `${v}${INSECABLE}m³`;
 }
 
-export function fmtDate(value: unknown): string {
-  if (!value || typeof value !== "string") return "–";
-  const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("fr-FR");
+/* ─── Dates et heures, à l'heure de Conakry ─────────────────────────────── */
+
+/**
+ * Fuseau de l'entreprise. Les dates et heures s'écrivent à l'heure de Conakry quel que soit le réglage
+ * du poste (un ordinateur resté à l'heure de Paris décalait toutes les heures, et les dates proches de
+ * minuit). Le noyau écrit ses dates-heures en UTC, souvent sans fuseau (isoformat() d'un champ
+ * Datetime, « AAAA-MM-JJ HH:MM:SS ») : elles sont lues comme telles, jamais à l'heure du poste.
+ */
+export const FUSEAU = "Africa/Conakry";
+
+const DATE_SEULE = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_HEURE_SANS_FUSEAU = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+const jourCalendrier = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC" });
+const jourConakry = new Intl.DateTimeFormat("fr-FR", { timeZone: FUSEAU });
+const jourHeureConakry = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: FUSEAU });
+const heureConakry = new Intl.DateTimeFormat("fr-FR", { timeStyle: "short", timeZone: FUSEAU });
+const partiesConakry = new Intl.DateTimeFormat("en-CA", { timeZone: FUSEAU, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/**
+ * Instant d'une date ou d'une date-heure du noyau. Une date seule vaut minuit UTC (un jour du
+ * calendrier, écrit en UTC pour qu'aucun fuseau ne le déplace) ; une date-heure sans fuseau est en UTC.
+ */
+function instant(value: string): Date | null {
+  const v = value.trim();
+  const iso = DATE_SEULE.test(v) ? `${v}T00:00:00Z` : DATE_HEURE_SANS_FUSEAU.test(v) ? `${v.replace(" ", "T")}Z` : v;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Année, mois, jour, heure et minute d'un instant à Conakry (chiffres sur deux positions). */
+function partiesA(d: Date): { annee: string; mois: string; jour: string; heure: string; minute: string } {
+  const p: Record<string, string> = {};
+  for (const x of partiesConakry.formatToParts(d)) p[x.type] = x.value;
+  return { annee: p.year ?? "", mois: p.month ?? "", jour: p.day ?? "", heure: p.hour ?? "", minute: p.minute ?? "" };
+}
+
+/** « 25/10/2026 » : une date seule telle quelle, une date-heure à l'heure de Conakry. */
+export function fmtDate(value: unknown): string {
+  if (!value || typeof value !== "string") return "–";
+  const d = instant(value);
+  if (!d) return value;
+  return DATE_SEULE.test(value.trim()) ? jourCalendrier.format(d) : jourConakry.format(d);
+}
+
+/** « 25/10/2026 14:30 », à l'heure de Conakry. */
 export function fmtDateTime(value: unknown): string {
   if (!value || typeof value !== "string") return "–";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  const d = instant(value);
+  return d ? jourHeureConakry.format(d) : value;
+}
+
+/** « 14:30 », heure d'une date-heure du noyau à Conakry. */
+export function fmtHeure(value: unknown): string {
+  if (!value || typeof value !== "string") return "–";
+  const d = instant(value);
+  return d ? heureConakry.format(d) : value;
+}
+
+/**
+ * Date du jour à Conakry, « AAAA-MM-JJ » : valeur par défaut d'un champ date, borne d'une période,
+ * comparaison avec une échéance. À la place de `new Date().toISOString().slice(0, 10)` (date UTC,
+ * juste à Conakry par coïncidence) ou d'un calcul à l'heure du poste.
+ */
+export function aujourdhui(maintenant: Date = new Date()): string {
+  const p = partiesA(maintenant);
+  return `${p.annee}-${p.mois}-${p.jour}`;
+}
+
+/** Mois en cours à Conakry, « AAAA-MM ». */
+export function moisCourant(maintenant: Date = new Date()): string {
+  return aujourdhui(maintenant).slice(0, 7);
+}
+
+/** Date « AAAA-MM-JJ » décalée de `jours` jours du calendrier (négatif : vers le passé). */
+export function decalerJours(date: string, jours: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  d.setUTCDate(d.getUTCDate() + jours);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Valeur d'un champ datetime-local (« AAAA-MM-JJTHH:MM », heure de Conakry) pour une date-heure du noyau. */
+export function versSaisieHeure(value: string | null | undefined): string {
+  const d = value ? instant(value) : null;
+  if (!d) return "";
+  const p = partiesA(d);
+  return `${p.annee}-${p.mois}-${p.jour}T${p.heure}:${p.minute}`;
+}
+
+/**
+ * Date-heure ISO en UTC (« …Z ») d'une saisie datetime-local, lue à l'heure de Conakry (et non à
+ * celle du poste) ; null si la saisie est vide ou incomplète.
+ */
+export function depuisSaisieHeure(saisie: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(saisie ?? "");
+  if (!m) return null;
+  const mur = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  // Conakry est à UTC+0 toute l'année ; le décalage est tout de même lu, pour ne rien supposer.
+  const p = partiesA(new Date(mur));
+  const decalage = Date.UTC(Number(p.annee), Number(p.mois) - 1, Number(p.jour), Number(p.heure), Number(p.minute)) - mur;
+  return new Date(mur - decalage).toISOString();
 }
 
 export const MONTHS_FR = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];

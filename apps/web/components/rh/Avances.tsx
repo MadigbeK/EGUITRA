@@ -5,9 +5,9 @@ import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Segmented, Select, Textarea, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 import type { Advance, AdvanceState, Meta } from "@/lib/rh-types";
-import { ChampMontant, ChoixSalarie, FiltreSociete, avecSociete, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { ChampMontant, ChoixSalarie, FiltreSociete, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const ETAT: Record<AdvanceState, { label: string; tone: "warn" | "ok" | "neutral" }> = {
   open: { label: "En cours", tone: "warn" },
@@ -26,15 +26,38 @@ export function AvancesPrets() {
   const { data, error, mutate } = useApi<Advance[]>(avecSociete(`/rh/advances${filtre === "open" ? "?state=open" : ""}`, societe));
   const [creation, setCreation] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [annulation, setAnnulation] = useState<number | null>(null);
   const encours = (data ?? []).filter((a) => a.state === "open");
 
+  // Le noyau n'annule qu'une avance sur laquelle aucune retenue n'a encore été faite (une paie validée
+  // l'a remboursée en partie : elle se solde par la paie).
   async function annuler(a: Advance) {
-    if (!(await demanderConfirmation(`Annuler ${a.kind === "pret" ? "le prêt" : "l'avance"} de ${a.employee.name} ? Les retenues déjà faites restent acquises.`, { action: a.kind === "pret" ? "Annuler le prêt" : "Annuler l'avance", danger: true }))) return;
+    if (!(await demanderConfirmation(`Annuler ${a.kind === "pret" ? "le prêt" : "l'avance"} de ${a.employee.name} ? Aucune retenue n'a encore été faite : rien ne sera retenu sur la paie.`, { action: a.kind === "pret" ? "Annuler le prêt" : "Annuler l'avance", danger: true }))) return;
+    setErreur(null);
+    setAnnulation(a.id);
     try {
       await apiSend("POST", `/rh/advances/${a.id}/cancel`);
       void mutate();
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setAnnulation(null);
+    }
+  }
+
+  // Report de la retenue du mois (net trop faible) : rien n'est retenu avant le mois suivant (POST postpone).
+  async function reporter(a: Advance) {
+    const mois = moisCourant();
+    if (!(await demanderConfirmation(`Reporter la retenue de ${a.kind === "pret" ? "ce prêt" : "cette avance"} de ${a.employee.name} ? Rien ne sera retenu sur la paie ${moisLong(mois)} ; les retenues reprennent le mois suivant, le reste dû ne change pas.`, { titre: "Reporter la retenue ?", action: "Reporter" }))) return;
+    setErreur(null);
+    setAnnulation(a.id);
+    try {
+      await apiSend("POST", `/rh/advances/${a.id}/postpone`, { month: mois });
+      void mutate();
+    } catch (e) {
+      setErreur(messageErreur(e));
+    } finally {
+      setAnnulation(null);
     }
   }
 
@@ -89,9 +112,18 @@ export function AvancesPrets() {
                 align: "right",
                 render: (a) =>
                   meta?.can_write && a.state === "open" ? (
-                    <Button variant="ghost" size="sm" onClick={() => void annuler(a)}>
-                      Annuler
-                    </Button>
+                    <span className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" disabled={annulation !== null} onClick={() => void reporter(a)} title="Rien n'est retenu ce mois-ci">
+                        Reporter
+                      </Button>
+                      {!a.reimbursed ? (
+                        <Button variant="ghost" size="sm" loading={annulation === a.id} disabled={annulation !== null} onClick={() => void annuler(a)}>
+                          Annuler
+                        </Button>
+                      ) : (
+                        <span className="self-center text-[12px] text-muted" title="Des retenues ont déjà été faites : l'avance se solde par la paie.">Retenues commencées</span>
+                      )}
+                    </span>
                   ) : null,
               },
             ]}
@@ -144,9 +176,9 @@ function NouvelleAvance({ meta, onClose, onDone }: { meta: Meta; onClose: () => 
     <Modal
       open
       title="Nouvelle avance ou prêt"
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
-        <Button variant="primary" loading={busy} disabled={!salarie || !m || !mens || !premier} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!salarie || !m || !mens || !premier || Boolean(erreurNombre(montant) || erreurNombre(mensualite))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -166,16 +198,16 @@ function NouvelleAvance({ meta, onClose, onDone }: { meta: Meta; onClose: () => 
         <Field label="Date du versement">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        <Field label="Montant (GNF)">
+        <Field label="Montant (GNF)" error={erreurNombre(montant)}>
           <ChampMontant value={montant} onChange={setMontant} />
         </Field>
-        <Field label="Mensualité retenue (GNF)" hint={kind === "avance" ? "Vide : retenue en une fois" : undefined}>
+        <Field label="Mensualité retenue (GNF)" error={erreurNombre(mensualite)} hint={kind === "avance" ? "Vide : retenue en une fois" : undefined}>
           <ChampMontant value={mensualite} onChange={setMensualite} />
         </Field>
         <Field label="Premier mois de retenue">
           <Input type="month" value={premier} onChange={(e) => setPremier(e.target.value)} />
         </Field>
-        <div className="self-end pb-2 text-sm text-ink-2">{nbMois ? `${nbMois} retenue(s) mensuelle(s)` : ""}</div>
+        <div className="self-end pb-2 text-sm text-ink-2">{nbMois ? pluriel(nbMois, "retenue mensuelle", "retenues mensuelles") : ""}</div>
         <Field label="Commentaire" className="sm:col-span-2">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>

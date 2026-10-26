@@ -29,7 +29,7 @@ import {
   type QualificationType,
   type SafetySummary,
 } from "@/lib/rh-types";
-import { FiltreSociete, Ligne, PastilleSociete, avecSociete, libelle, messageErreur, nombre, useMeta } from "./commun";
+import { FiltreSociete, Ligne, PastilleSociete, avecSociete, erreurNombre, libelle, messageErreur, nombre, useMeta } from "./commun";
 
 /* ─── Pastilles d'état ─────────────────────────────────────────────────── */
 
@@ -489,7 +489,7 @@ function RemiseEpi({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; onCl
       title={`Remise d'équipement, ${e.name}`}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!f.item || !f.date} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!f.item || !f.date || Boolean(erreurNombre(f.quantity, true))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -509,7 +509,7 @@ function RemiseEpi({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; onCl
         <Field label="Taille">
           <Input value={f.size} onChange={(ev) => setF({ ...f, size: ev.target.value })} />
         </Field>
-        <Field label="Quantité">
+        <Field label="Quantité" error={erreurNombre(f.quantity, true)}>
           <Input inputMode="numeric" value={f.quantity} onChange={(ev) => setF({ ...f, quantity: ev.target.value })} />
         </Field>
         <Field label="Date de remise">
@@ -935,7 +935,7 @@ function EditionTypeHabilitation({ type, onClose, onDone }: { type: Qualificatio
       title={type ? type.name : "Nouveau type d'habilitation"}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim()} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim() || Boolean(erreurNombre(f.validity_months, true))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -949,7 +949,7 @@ function EditionTypeHabilitation({ type, onClose, onDone }: { type: Qualificatio
         <Field label="Code">
           <Input className="font-mono uppercase" value={f.code} onChange={(ev) => setF({ ...f, code: ev.target.value })} />
         </Field>
-        <Field label="Durée de validité (mois, 0 : sans échéance)">
+        <Field label="Durée de validité (mois, 0 : sans échéance)" error={erreurNombre(f.validity_months, true)}>
           <Input inputMode="numeric" value={f.validity_months} onChange={(ev) => setF({ ...f, validity_months: ev.target.value })} />
         </Field>
         <Field label="Libellé" className="sm:col-span-2">

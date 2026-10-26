@@ -192,6 +192,8 @@ def pieces_context(dossier):
         "gaps": [{"name": g["name"], "action": g["action"], "due": _date(g["due_date"])} for g in gaps],
         "tasks": [{"name": a.name, "due": _date(a.due_date)} for a in tasks],
         "consultant": dossier.consultant_id.name or "",
+        # Politique d'évaluation rappelée dans chaque rapport (offre, chapitre 2.3).
+        "policy": f"{dossier.policy_id.name}, version {dossier.policy_id.version}",
         "generated": fields.Datetime.context_timestamp(dossier, fields.Datetime.now()).strftime("%d/%m/%Y"),
     }
 

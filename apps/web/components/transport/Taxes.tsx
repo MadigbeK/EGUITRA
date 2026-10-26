@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Download } from "@/components/icons";
 import { Button, Card, DataTable, Etat, Field, Input, Notice } from "@/components/ui";
 import { ApiError, apiDownload, useApi } from "@/lib/api-client";
-import { fmtGNF, fmtInt } from "@/lib/format";
+import { fmtGNF, fmtInt, fmtMonth } from "@/lib/format";
 
 interface NatureRow { code: string; label: string; months: Record<string, number>; total: number; rebillable: number; lines: number }
 interface Statement {
@@ -14,7 +14,8 @@ interface Statement {
   booked: Array<{ account: { id: number; code: string; name: string }; months: Record<string, number>; total: number }>;
 }
 
-const monthLabel = (m: string) => new Date(`${m}-01T00:00:00`).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+/** « janv. 2026 » : l'écriture commune des mois (fmtMonth), et non « janv. 26 ». */
+const monthLabel = (m: string) => fmtMonth(m.slice(0, 7));
 
 /** État mensuel des taxes spécifiques par nature, rapproché des montants comptabilisés. */
 export function Taxes() {
@@ -22,12 +23,16 @@ export function Taxes() {
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const { data, error, mutate } = useApi<Statement>(`/transport/taxes/statement?date_from=${from}&date_to=${to}`);
   const [message, setMessage] = useState<string | null>(null);
+  const [export_, setExport] = useState(false);
   async function exporter() {
     setMessage(null);
+    setExport(true);
     try {
       await apiDownload(`/transport/taxes/statement.xlsx?date_from=${from}&date_to=${to}`, "taxes_transport.xlsx");
     } catch (e) {
-      setMessage(e instanceof ApiError ? e.message : "Export impossible.");
+      setMessage(e instanceof ApiError ? e.message : "Export impossible : vérifiez le réseau, puis réessayez.");
+    } finally {
+      setExport(false);
     }
   }
   const months = data?.months ?? [];
@@ -39,7 +44,7 @@ export function Taxes() {
           <Field label="Du"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label="Au"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
-        <Button onClick={() => void exporter()}><Download className="h-4 w-4" /> Export XLSX</Button>
+        <Button loading={export_} onClick={() => void exporter()}><Download className="h-4 w-4" /> Export XLSX</Button>
       </div>
       {message && <Notice tone="danger">{message}</Notice>}
       <Card title="Taxes spécifiques par nature, en GNF (rotations validées et facturées)" padded={false}>

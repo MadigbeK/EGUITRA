@@ -392,7 +392,7 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual([s["key"] for s in body["sections"]], ["synthese", "rentabilite", "tresorerie", "clients",
                                                                 "transport", "depenses", "previsions", "fiabilite"])
         self.assertTrue(all({"key", "label", "question", "icon", "path"} <= set(s) for s in body["sections"]))
-        self.assertEqual(body["sections"][0]["path"], "/analyse/synthese")
+        self.assertEqual(body["sections"][0]["path"], "/analyse", "La synthèse est la page d'accueil de l'Analyse")
         self.assertFalse(body["can_switch"], "Compte ouvert au seul groupe")
         self.assertGreaterEqual(body["last_entry_date"], "2026-06-28", "Derniers salaires du jeu d'essai")
         self.assertEqual(body["fiscal_year"]["date_from"][5:], "01-01")
