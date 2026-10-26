@@ -158,6 +158,17 @@ export function DetailPaie({ id }: { id: string }) {
   const { data: meta } = useMeta();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(null);
+  async function exporter(nom: string) {
+    setBusy("export");
+    setMessage(null);
+    try {
+      await apiDownload(`/rh/payrolls/${id}/export.xlsx`, nom);
+    } catch (e) {
+      setMessage({ tone: "danger", text: messageErreur(e) });
+    } finally {
+      setBusy(null);
+    }
+  }
   const [saisie, setSaisie] = useState<PayslipRow | null>(null);
   const [filtre, setFiltre] = useState<"tous" | "anomalies">("tous");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
@@ -207,7 +218,7 @@ export function DetailPaie({ id }: { id: string }) {
         }
         actions={
           <>
-            <Button onClick={() => void apiDownload(`/rh/payrolls/${id}/export.xlsx`, `paie_${p.month.slice(0, 7)}_${p.company.entity ?? p.company.id}.xlsx`)}>
+            <Button loading={busy === "export"} onClick={() => void exporter(`paie_${p.month.slice(0, 7)}_${p.company.entity ?? p.company.id}.xlsx`)}>
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
             {ecrit && p.state === "draft" && (

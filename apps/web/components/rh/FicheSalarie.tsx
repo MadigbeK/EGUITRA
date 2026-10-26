@@ -362,13 +362,30 @@ function CongesSalarie({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta;
 function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit: boolean; onChanged: () => void }) {
   const [depot, setDepot] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  // Document en cours d'ouverture ou de suppression : son bouton est en chargement.
+  const [encours, setEncours] = useState<number | null>(null);
   async function supprimer(d: EmployeeDocument) {
     if (!(await demanderConfirmation(`Supprimer le document « ${d.name} » ?`, { action: "Supprimer", danger: true }))) return;
+    setErreur(null);
+    setEncours(d.id);
     try {
       await apiSend("DELETE", `/rh/documents/${d.id}`);
       onChanged();
     } catch (err) {
       setErreur(messageErreur(err));
+    } finally {
+      setEncours(null);
+    }
+  }
+  async function ouvrir(d: EmployeeDocument) {
+    setErreur(null);
+    setEncours(d.id);
+    try {
+      await apiDownload(`/rh/documents/${d.id}/file`, d.name);
+    } catch (err) {
+      setErreur(messageErreur(err));
+    } finally {
+      setEncours(null);
     }
   }
   return (
@@ -418,12 +435,12 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
               render: (d) => (
                 <span className="flex justify-end gap-1.5">
                   {d.has_file && (
-                    <Button size="sm" onClick={() => void apiDownload(`/rh/documents/${d.id}/file`, d.name)}>
+                    <Button size="sm" loading={encours === d.id} disabled={encours !== null} onClick={() => void ouvrir(d)}>
                       <Download className="h-3.5 w-3.5" /> Ouvrir
                     </Button>
                   )}
                   {ecrit && (
-                    <Button variant="ghost" size="sm" aria-label="Supprimer" onClick={() => void supprimer(d)}>
+                    <Button variant="ghost" size="sm" aria-label="Supprimer" disabled={encours !== null} onClick={() => void supprimer(d)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
