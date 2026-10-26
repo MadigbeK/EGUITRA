@@ -378,17 +378,39 @@ class EguitraTransportRotation(models.Model):
         keys = ("code", "label", "source", "since", "waivable", "severity", "waiver_id")
         return waived + [{k: r[k] for k in keys} for r in self._hsseq_reasons(detail=False, attach=True)["waived"]]
 
+    def _depart_refusal(self):
+        """Motif du refus du départ pour le compte, ou None ; verrou en service ou non. Le départ est donné
+        par un chef de parc (profil exploitation) sur un ensemble de ses sites (fermé par défaut : ni sans
+        site rattaché, ni pour un ensemble sans site), ou par l'administration sans borne de site ; jamais
+        par la finance ni la direction. Le verrou s'applique ensuite à tous de la même façon.
+
+        Crochet de Transport (branche claude/transport-depart) : super() refuse d'abord la finance et la
+        direction (DEPART_PROFILES : admin, exploitation) ; tant qu'il n'est pas fusionné, le même contrôle est
+        fait ici, et la surcharge d'action_depart ci-dessous l'appelle. À la fusion, elle disparaît."""
+        self.ensure_one()
+        parent = getattr(super(), "_depart_refusal", None)
+        refusal = parent() if parent else None
+        if refusal:
+            return refusal
+        if self.env.su:
+            return None
+        user = self.env.user
+        user_profiles = user._eguitra_profiles()
+        if "admin" in user_profiles:
+            return None
+        if "exploitation" not in user_profiles or not user.has_group(EXPLOITATION_GROUP):
+            return "Le départ en route est donné par un chef de parc (profil Exploitation transport) ou par " \
+                   "l'administration."
+        site = self.sudo().vehicle_id.site_id
+        if not site or site not in user._hsseq_site_ids():
+            return f"Rotation {self._label()} : ensemble hors de vos sites."
+        return None
+
     def action_depart(self):
-        """Verrou en service : le départ en route est donné par un chef de parc (profil Exploitation
-        transport), sur une rotation de ses sites (s'il est rattaché à des sites)."""
-        if not self.env.su:
-            user = self.env.user
-            for rot in self.filtered(lambda r: r._hsseq_lock_active()):
-                if not user.has_group(EXPLOITATION_GROUP):
-                    raise AccessError("Le départ en route est donné par un chef de parc (profil Exploitation transport).")
-                sites, site = user._hsseq_site_ids(), rot.sudo().vehicle_id.site_id
-                if sites and site and site not in sites:
-                    raise AccessError(f"Rotation {rot._label()} : ensemble d'un autre site que les vôtres.")
+        for rot in self:
+            refusal = rot._depart_refusal()
+            if refusal:
+                raise AccessError(refusal)
         return super().action_depart()
 
     def _validation_blockers(self):

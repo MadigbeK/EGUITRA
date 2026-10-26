@@ -1,7 +1,10 @@
 from datetime import timedelta
 
 from odoo import fields
+from odoo.exceptions import AccessError
 from odoo.tests import tagged
+
+from odoo.addons.eguitra_transport.blocking import RotationBlocked
 
 from .common import HsseqCase
 
@@ -106,6 +109,32 @@ class TestComplements(HsseqCase):
             "client_uuid": "decl-2", "type": "hazard", "title": "x", "description": "x",
             "occurred_at": "2026-10-20T06:40:00Z", "probability": 6})
         self.assertEqual((status, body["error"]), (400, "invalid_parameter"))
+
+    def test_regle_du_depart(self):
+        """Départ : chef de parc sur un ensemble de ses sites, administration sans borne de site ; jamais la
+        finance ni la direction ; le verrou s'applique à tous, verrou en service ou non."""
+        Users = self.env["res.users"]
+        rot = self._rotation()
+        self.check(rot)
+        self.breath(rot)
+        nobody = self._create_user("moussa.parc", "exploitation")
+        for user in (Users.search([("login", "=", "fatou")]), self.dg, self.parc2, nobody, self.hsseq):
+            with self.assertRaises(AccessError, msg=user.login):
+                rot.with_user(user).action_depart()
+        blocked = self._rotation()
+        with self.assertRaises(RotationBlocked, msg="L'administration ne contourne aucun motif"):
+            blocked.with_user(self.admin).action_depart()
+        self.assertFalse(self.admin._hsseq_site_ids(), "Administration rattachée à aucun site")
+        rot.with_user(self.admin).action_depart()
+        self.assertEqual((rot.state, rot.departed_by), ("en_route", self.admin))
+        self.settings.lock_start_date = False
+        free = self._rotation()
+        with self.assertRaises(AccessError, msg="Verrou pas en service : même règle"):
+            free.with_user(self.parc2).action_depart()
+        free.with_user(self.parc).action_depart()
+        self.assertEqual(free.state, "en_route")
+        status, body = self.api("fatou", "POST", f"/transport/rotations/{self._rotation().id}/depart")
+        self.assertEqual(status, 403, body)
 
     def test_complements_des_listes(self):
         rot = self._rotation()
