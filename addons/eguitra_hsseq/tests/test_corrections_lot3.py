@@ -174,3 +174,29 @@ class TestCorrectionsLot3(HsseqCase):
         content = export("/hsseq/documents/export.xlsx?drills_status=done")
         self.assertIn("Évacuation réussie", content)
         self.assertIn("Incendie au parc", content, "Plans sans le filtre des exercices")
+
+    def test_actions_de_revue_bornees_pour_l_auditeur(self):
+        """L'auditeur ne lit une action de revue que pour une société de son compte et tant que son accès
+        court ; le nom d'un responsable conducteur ne lui est jamais servi."""
+        other = self.env["res.company"].create({"name": "MB AxisPro Consulting (test)"})
+        Review = self.env["eguitra.hsseq.review"]
+
+        def review_action(company, owner):
+            review = Review.create({"company_id": company.id, "title": "Revue (test)", "period_start": self.day,
+                                    "period_end": self.day, "planned_date": self.day})
+            decision = self.env["eguitra.hsseq.review.decision"].create({"review_id": review.id,
+                                                                         "description": "Décision (test)"})
+            return decision._create_action({"owner_id": owner.id, "due_date": self.day + timedelta(days=30)})
+
+        mine = review_action(self.company, self.conducteur)
+        theirs = review_action(other, self.hsseq)
+        status, action = self.api("awa.auditrice", "GET", f"/hsseq/actions/{mine.id}")
+        self.assertEqual((status, action["owner"]), (200, {"id": self.conducteur.id, "name": None}),
+                         "Responsable conducteur sans nom")
+        status, _b = self.api("awa.auditrice", "GET", f"/hsseq/actions/{theirs.id}")
+        self.assertEqual(status, 404, "Action de revue d'une autre société")
+        status, listing = self.api("awa.auditrice", "GET", "/hsseq/actions?origin=review")
+        self.assertEqual([a["id"] for a in listing["items"]], [mine.id])
+        self.auditor.hsseq_audit_until = self.day - timedelta(days=1)
+        status, _b = self.api("awa.auditrice", "GET", f"/hsseq/actions/{mine.id}")
+        self.assertEqual(status, 403, "Après la date de fin d'accès")

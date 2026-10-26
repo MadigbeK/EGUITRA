@@ -61,12 +61,27 @@ def is_owner(action):
 def can_read(action):
     if reads_all() or is_owner(action):
         return True
-    # Action d'une revue de direction (sans site) : l'auditeur lit les revues de ses sociétés.
-    if is_auditor() and action.sudo().review_id:
+    # Action d'une revue de direction (sans site) : l'auditeur lit les revues des sociétés de son compte,
+    # tant que son accès court.
+    if is_auditor() and auditor_reads_review(action):
         return True
     if is_yard():
         return site_allowed(action.site_id)
     return False
+
+
+def auditor_reads_review(action):
+    """L'auditeur lit l'action d'une revue d'une société de son compte, son accès courant."""
+    review = action.sudo().review_id
+    user = request.env.user.sudo()
+    return bool(review) and review.company_id in user.company_ids and not user._hsseq_audit_expired()
+
+
+def owner_ref(user):
+    """Responsable d'une action : jamais le nom d'un conducteur pour l'auditeur."""
+    if user and is_auditor() and "conducteur" in user.sudo()._eguitra_profiles():
+        return {"id": user.id, "name": None}
+    return user_ref(user)
 
 
 def read_domain(kw):
@@ -76,7 +91,11 @@ def read_domain(kw):
         return domain
     own = [("owner_id", "=", request.env.uid)]
     if is_auditor():
-        return domain + ["|", "|"] + own + [("review_id", "!=", False)] + yard_domain()
+        user = request.env.user.sudo()
+        if user._hsseq_audit_expired():
+            return domain + ["|"] + own + yard_domain()
+        reviews = ["&", ("review_id", "!=", False), ("review_id.company_id", "in", user.company_ids.ids)]
+        return domain + ["|", "|"] + own + reviews + yard_domain()
     if is_yard():
         return domain + ["|"] + own + yard_domain()
     return domain + own
@@ -130,7 +149,7 @@ def action_line(action):
         or action.finding_id.id or action.complaint_id.id or action.drill_id.id or action.review_id.id or None,
         "origin_label": origin_label,
         "event": {"id": action.event_id.id, "reference": action.event_id.reference} if action.event_id else None,
-        "control_level": action.control_level or None, "owner": user_ref(action.owner_id), "due_date": action.due_date,
+        "control_level": action.control_level or None, "owner": owner_ref(action.owner_id), "due_date": action.due_date,
         "status": action.status, "overdue": action._days_overdue(day) > 0, "days_overdue": action._days_overdue(day),
         "verification_required": action._verification_required(), "verification_date": action.verification_date or None,
         "site": site_ref(action.site_id), "estimated_cost": action.estimated_cost or 0,

@@ -90,10 +90,8 @@ def person(user):
 
 
 def review_action(action):
-    line = action_line(action)
-    if is_auditor() and is_driver(action.sudo().owner_id):
-        line["owner"] = {"id": action.owner_id.id, "name": None}
-    return line
+    """Action d'une revue (action_line masque déjà, pour l'auditeur, le nom d'un responsable conducteur)."""
+    return action_line(action)
 
 
 def auditor_inputs(inputs):
