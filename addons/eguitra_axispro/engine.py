@@ -522,7 +522,8 @@ INDICATORS = {
 
 def suggest(indicator, threshold, partial, indicators):
     """Statut suggéré pour un critère adossé à un indicateur : satisfait au seuil, partiel au seuil
-    partiel (facultatif), non satisfait sinon ; None si l'indicateur n'est pas calculable."""
+    partiel (facultatif : None quand il n'est pas défini), non satisfait sinon ; None si l'indicateur
+    n'est pas calculable."""
     if indicator not in INDICATORS:
         return None
     value = indicators.get(indicator)
@@ -535,7 +536,9 @@ def suggest(indicator, threshold, partial, indicators):
 
     if passes(threshold):
         status = "met"
-    elif partial not in (None, False) and passes(partial):
+    # Un seuil partiel de 0 compte (audit du noyau, I-X4) : « 0.0 in (None, False) » est vrai en
+    # Python, la VAN positive d'un critère « partiel à 0 » sortait non satisfaite.
+    elif partial is not None and passes(partial):
         status = "partial"
     else:
         status = "not_met"
