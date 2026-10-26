@@ -5,11 +5,11 @@ import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
-import { ECRITURE_FINANCE, enSaisie } from "@/components/finance/communPieces";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, PagesListe, aujourdhui, enSaisie } from "@/components/finance/communPieces";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, type Account, type Journal, type MoveDetail, type MoveLine, type MoveSummary, type Paged } from "@/lib/finance-types";
 import type { Me } from "@/lib/types";
-import { fmtDate, fmtGNF } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
 /**
  * Ligne d'OD saisie. partner_id : tiers de la ligne relue d'un brouillon, renvoyé tel quel ; original :
@@ -32,7 +32,10 @@ function lineOf(l: MoveLine): Line {
 }
 /** Les axes se proposent sur les comptes de gestion et d'immobilisation (classes 2, 6, 7 et 8). */
 const ANALYTIC_CLASSES = /^[2678]/;
-const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+/** Débit ou crédit lu à la française (« 1 500 000 ») ; vide ou illisible : 0, l'illisible étant signalé et bloquant. */
+const num = (v: string) => lireNombre(v) ?? 0;
+/** Opérations diverses par page. */
+const PAGE = 100;
 
 /** Modèles d'OD guidées : comptes proposés selon la nature de l'opération. */
 const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; side: "debit" | "credit"; name: string }> }> = {
@@ -44,7 +47,8 @@ const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; 
 };
 
 export default function EntriesPage() {
-  const { data, error, mutate } = useApi<Paged<MoveSummary>>("/finance/moves?type=entry&limit=100");
+  const [offset, setOffset] = useState(0);
+  const { data, error, mutate } = useApi<Paged<MoveSummary>>(`/finance/moves?type=entry&limit=${PAGE}&offset=${offset}`);
   const { data: me } = useApi<Me>("/auth/me");
   // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes », et la route
   // (POST /finance/moves, opération diverse) à la finance et à l'administration.
@@ -93,6 +97,7 @@ export default function EntriesPage() {
             ]}
           />
         )}
+        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Opérations" onPage={setOffset} />}
       </Card>
       {creating && <EntryForm onClose={() => setCreating(false)} onDone={() => { setCreating(false); void mutate(); }} />}
       {editing && (
@@ -136,7 +141,7 @@ function EntryForm({ move, onClose, onDone }: { move?: MoveDetail; onClose: () =
   const { data: accounts } = useApi<Account[]>("/finance/accounts?limit=3000");
   const { data: journals } = useApi<Journal[]>("/finance/journals");
   const [journalId, setJournalId] = useState(move?.journal ? String(move.journal.id) : "");
-  const [date, setDate] = useState(move?.date ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(move?.date ?? aujourdhui());
   const [ref, setRef] = useState(move?.ref ?? "");
   const [template, setTemplate] = useState("libre");
   const [lines, setLines] = useState<Line[]>(() => (move ? move.lines.map(lineOf) : [emptyLine(), emptyLine()]));
@@ -147,6 +152,8 @@ function EntryForm({ move, onClose, onDone }: { move?: MoveDetail; onClose: () =
   const debit = lines.reduce((a, l) => a + num(l.debit), 0);
   const credit = lines.reduce((a, l) => a + num(l.credit), 0);
   const balanced = Math.abs(debit - credit) < 0.5 && debit > 0;
+  // Débit ou crédit illisible (« 1.500.000 » était lu 0) ou négatif : signalé sous le tableau, envoi bloqué.
+  const saisieInvalide = lines.some((l) => nombreIllisible(l.debit) || nombreIllisible(l.credit) || num(l.debit) < 0 || num(l.credit) < 0);
   const accountOptions = (accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }));
   const { data: axes } = useAxes();
   const codeOf = (id: string) => accounts?.find((a) => String(a.id) === id)?.code ?? "";
@@ -225,10 +232,10 @@ function EntryForm({ move, onClose, onDone }: { move?: MoveDetail; onClose: () =
       onClose={onClose}
       footer={
         <>
-          <Button onClick={() => submit(false)} loading={busy} disabled={!balanced || !journalId}>
+          <Button onClick={() => submit(false)} loading={busy} disabled={!balanced || !journalId || saisieInvalide}>
             Brouillon
           </Button>
-          <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={!balanced || !journalId}>
+          <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={!balanced || !journalId || saisieInvalide}>
             Valider
           </Button>
         </>
@@ -274,10 +281,10 @@ function EntryForm({ move, onClose, onDone }: { move?: MoveDetail; onClose: () =
                   {l.partner && <div className="mt-0.5 text-[12px] text-muted">Tiers : {l.partner.name}</div>}
                 </td>
                 <td className="px-2 py-1">
-                  <Input className="text-right font-mono" inputMode="numeric" value={l.debit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, debit: e.target.value, credit: "" } : x)))} aria-label={`Débit, ligne ${i + 1}`} />
+                  <Input className={`text-right font-mono ${CHAMP_INVALIDE}`} inputMode="decimal" aria-invalid={nombreIllisible(l.debit) || num(l.debit) < 0} value={l.debit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, debit: e.target.value, credit: "" } : x)))} aria-label={`Débit, ligne ${i + 1}`} />
                 </td>
                 <td className="px-2 py-1">
-                  <Input className="text-right font-mono" inputMode="numeric" value={l.credit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, credit: e.target.value, debit: "" } : x)))} aria-label={`Crédit, ligne ${i + 1}`} />
+                  <Input className={`text-right font-mono ${CHAMP_INVALIDE}`} inputMode="decimal" aria-invalid={nombreIllisible(l.credit) || num(l.credit) < 0} value={l.credit} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, credit: e.target.value, debit: "" } : x)))} aria-label={`Crédit, ligne ${i + 1}`} />
                 </td>
                 <td>
                   {lines.length > 2 && (
@@ -310,7 +317,10 @@ function EntryForm({ move, onClose, onDone }: { move?: MoveDetail; onClose: () =
             </tr>
           </tfoot>
         </table>
-        {!balanced && debit + credit > 0 && <Notice tone="warn">Écart débit - crédit : {fmtGNF(debit - credit)}. Une pièce doit être équilibrée.</Notice>}
+        {saisieInvalide && (
+          <Notice tone="danger">{lines.some((l) => nombreIllisible(l.debit) || nombreIllisible(l.credit)) ? AIDE_NOMBRE : "Un débit ou un crédit se saisit sans signe moins : le sens vient de sa colonne."}</Notice>
+        )}
+        {!saisieInvalide && !balanced && debit + credit > 0 && <Notice tone="warn">Écart débit - crédit : {fmtGNF(debit - credit)}. Une pièce doit être équilibrée.</Notice>}
       </div>
     </Modal>
   );
