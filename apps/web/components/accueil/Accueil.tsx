@@ -7,6 +7,7 @@ import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
 import { alignerSociete, rayonsDe, sansAccents, voisine, type Rayon, type Tuile } from "@/components/accueil/tuiles";
+import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
 import { MESSAGE_RESEAU } from "@/lib/erreurs";
@@ -302,6 +303,8 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
 
   return (
     <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-bg text-ink">
+      {/* Déconnexion après inactivité, comme dans les applications (jamais pour une session de Rotations). */}
+      {me.session_app !== "mobile" && <VeilleInactivite app={app} />}
       {/* Rubans de lumière en diagonale, comme le fond de l'accueil d'Odoo ; ils dérivent et suivent le curseur. */}
       <div aria-hidden className="accueil-ruban pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_38%,rgb(255_255_255/0.62)_38%,rgb(255_255_255/0.62)_58%,transparent_58%)]" />
       <div aria-hidden className="accueil-ruban-2 pointer-events-none absolute -inset-[10%] bg-[linear-gradient(118deg,transparent_64%,rgb(165_230_194/0.2)_64%,rgb(165_230_194/0.2)_80%,transparent_80%)]" />
@@ -547,6 +550,8 @@ function Compte({ me, app }: { me: Me; app: AppCode }) {
   const box = useFermeture(open, setOpen);
   async function sortir() {
     await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    // Les autres onglets du navigateur rejoignent aussi la page de connexion.
+    annoncerDeconnexion("volontaire");
     window.location.href = `/login?app=${app}`;
   }
   return (

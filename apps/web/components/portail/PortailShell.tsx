@@ -8,6 +8,7 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
+import { VeilleInactivite } from "@/components/shell/VeilleInactivite";
 import { ErrorBox, FEUILLE, PANNEAU, cx } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
@@ -391,6 +392,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   return (
     <Contexte.Provider value={valeur}>
       <div data-app="portail" data-societe="cabinet" className="min-h-screen bg-bg text-ink">
+        <VeilleInactivite app="portail" />
         {tiroir && (
           <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
             <div className="n-apparaitre absolute inset-0 bg-foret/45" onClick={() => setTiroir(false)} />

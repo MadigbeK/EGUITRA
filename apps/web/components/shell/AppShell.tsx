@@ -14,6 +14,7 @@ import { MESSAGE_RESEAU } from "@/lib/erreurs";
 import type { Company, Me } from "@/lib/types";
 import { PANNEAU, Squelette, cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
+import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
 
 function initials(name: string) {
@@ -106,6 +107,8 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 
   const logout = useCallback(async () => {
     await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    // Les autres onglets du navigateur rejoignent aussi la page de connexion.
+    annoncerDeconnexion("volontaire");
     window.location.href = `/login?app=${app}`;
   }, [app]);
 
@@ -137,8 +140,11 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
     }).catch(() => undefined);
   }, [me.societe_retiree, app]);
 
+  // Déconnexion après inactivité (VeilleInactivite), sauf pour une session de Rotations (page du mot de
+  // passe ouverte depuis Rotations) : sa session longue et ses saisies hors réseau doivent rester.
   const passwordBanner = (
     <>
+      {me.session_app !== "mobile" && <VeilleInactivite app={app} />}
       {me.password_change_required && (
         <div className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
           <AlertTriangle className="h-4 w-4 flex-none text-warn" />

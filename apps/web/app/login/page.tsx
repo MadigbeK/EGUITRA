@@ -10,6 +10,7 @@ const MESSAGES: Record<string, string> = {
   app_forbidden: "Votre profil ne donne pas accès à cette application.",
   password_changed: "Mot de passe modifié. Reconnectez-vous avec le nouveau mot de passe.",
   session_rotations: "Votre session de Rotations ne sert qu'à la saisie des rotations : connectez-vous à cette application.",
+  inactivite: "Vous avez été déconnecté après une période d'inactivité.",
 };
 
 type Params = Record<string, string | undefined>;

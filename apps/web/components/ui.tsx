@@ -997,7 +997,11 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
 /** Fenêtres ouvertes, de la plus ancienne à la plus récente : seule la dernière répond à Échap. */
 const PILE: string[] = [];
 
-export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/**
+ * Fenêtre modale. `alerte` : fenêtre qui exige une réponse (role « alertdialog »), décrite par
+ * l'élément d'identifiant `descriptionId` (lu à l'ouverture par les lecteurs d'écran).
+ */
+export function Modal({ open, title, onClose, children, footer, wide, alerte, descriptionId }: { open: boolean; title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; wide?: boolean; alerte?: boolean; descriptionId?: string }) {
   const fenetre = useRef<HTMLDivElement>(null);
   const titreId = useId();
   // onClose change à chaque rendu de l'écran : lu par référence, il ne relance pas l'effet (qui
@@ -1041,7 +1045,7 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
   if (!open) return null;
   return (
     <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
-      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
+      <div ref={fenetre} tabIndex={-1} role={alerte ? "alertdialog" : "dialog"} aria-modal="true" aria-labelledby={titreId} aria-describedby={descriptionId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
           <h2 id={titreId} className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="-mr-1 grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-panel-3 hover:text-ink" aria-label="Fermer">
