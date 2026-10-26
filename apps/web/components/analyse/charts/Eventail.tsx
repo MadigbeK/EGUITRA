@@ -4,7 +4,7 @@ import { useState, type CSSProperties } from "react";
 import { scalePoint, scaleLinear } from "d3-scale";
 import { area, line, curveMonotoneX } from "d3-shape";
 import { fmtShort } from "@/lib/format";
-import { Bulle, COULEUR, Cadre, Legende, TableRepli, deplacer, graduations, plusProche, positionDans } from "./commun";
+import { Bulle, COULEUR, Cadre, Legende, TableRepli, deplacer, graduations, plusProche, positionDans, fmtValeur } from "./commun";
 
 export interface PointEventail {
   label: string;
@@ -36,7 +36,7 @@ export function Eventail({ points, hauteur = 280, label, format, formatAxe, cibl
   zero?: boolean;
 }) {
   const [focus, setFocus] = useState<number | null>(null);
-  const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
+  const show = format ?? ((v: number) => fmtValeur(v, "gnf"));
   const axe = formatAxe ?? ((v: number) => fmtShort(v));
   const valeurs = points.flatMap((p) => [p.actual, p.forecast, p.low, p.high]).filter((v): v is number => v !== null);
   if (cible !== null && cible !== undefined) valeurs.push(cible);

@@ -3,6 +3,9 @@
 import base64
 import io
 import logging
+from contextlib import contextmanager
+
+from psycopg2 import IntegrityError
 
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
@@ -41,6 +44,11 @@ FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortag
                            "volume_correction")
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
               "partner_id": "res.partner", "route_id": "eguitra.transport.route"}
+# Nom de chaque référence et message quand elle est inconnue (audit du 25 octobre, M2).
+REF_LABELS = {"vehicle_id": ("Ensemble routier", "Ensemble routier inconnu."),
+              "driver_id": ("Chauffeur", "Chauffeur inconnu."), "partner_id": ("Client", "Client inconnu."),
+              "route_id": ("Route", "Route inconnue."), "product_ids": ("Produit", "Produit inconnu."),
+              "route_ids": ("Route", "Route inconnue.")}
 # Mesures saisies au parc (application Rotations), hors montants ; températures et masse volumique
 # seulement si les manquants se calculent à 15 °C.
 MEASURES = [("fuel_liters", "Carburant (litres)")]
@@ -58,6 +66,14 @@ ROTATION_SORTS = {
 }
 
 
+def _int(value, label):
+    """Identifiant ou nombre entier envoyé par l'écran ; mal formé : 400 (et non une erreur 500)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"{label} : identifiant invalide.") from e
+
+
 def _ref(record):
     return {"id": record.id, "name": record.display_name} if record else None
 
@@ -66,7 +82,16 @@ def _move_ref(move):
     return {"id": move.id, "name": move.name if move.name and move.name != "/" else None, "state": move.state} if move else None
 
 
-def _rotation_row(rot):
+def _depart_fields(rot):
+    """Départ permis à l'utilisateur (écrans : bouton « Faire partir ») et, sinon, pourquoi."""
+    if rot.state != "draft":
+        return {"can_depart": False, "depart_refusal": None}
+    refusal = rot._depart_refusal()
+    return {"can_depart": not refusal, "depart_refusal": refusal}
+
+
+def _rotation_row(rot, detail=False, official=None):
+    """Ligne de rotation ; detail : avec les motifs qui s'opposent au départ (fiche, pas la liste)."""
     return {
         "id": rot.id, "name": rot.name if rot.name != "/" else None, "state": rot.state, "source": rot.source,
         "date_loading": rot.date_loading, "date_delivery": rot.date_delivery, "date_return": rot.date_return,
@@ -102,19 +127,39 @@ def _rotation_row(rot):
         "weigh_ticket": rot.weigh_ticket or None, "weight_gross": rot.weight_gross or None,
         "weight_tare": rot.weight_tare or None, "weight_net": rot.weight_net or None, "over_payload": rot.over_payload,
         "vehicle_kind": rot.vehicle_id.vehicle_kind or None,
-        "departure_blockers": rot._departure_blockers() if rot.state == "draft" else [],
-        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by),
+        "departure_blockers": rot._departure_blockers() if detail and rot.state == "draft" else None,
+        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by), **_depart_fields(rot),
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
-        **_rotation_official(rot),
+        **_rotation_official(rot, official),
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
+        # Saisie par le compte connecté : il ne la valide pas lui-même (validation par un autre compte).
+        "created_by": rot.create_uid.name or None, "self_entered": rot.create_uid == rot.env.user,
     }
 
 
-def _rotation_official(rot):
-    line, gap = rot._official_gap()
+def _rotation_official(rot, cache=None):
+    """Tarif officiel à la date de chargement et écart du tarif de la rotation ; cache : par route et date."""
+    if cache is None:
+        line, gap = rot._official_gap()
+    else:
+        key = (rot.route_id.id, rot.date_loading)
+        if key not in cache:
+            cache[key] = rot._official_gap()[0]
+        line = cache[key]
+        gap = gap_pct(rot.rate, line)
     return {"official_rate": _official_ref(line), "official_rate_gap": _gap(gap)}
+
+
+@contextmanager
+def _blockers(action):
+    """Départ ou validation refusés : 422 avec la liste des motifs ouverts, pour l'écran et l'application."""
+    try:
+        yield
+    except RotationBlocked as e:
+        error = "departure_blocked" if action == "depart" else "validation_blocked"
+        raise ApiError(422, error, str(e.args[0]), blockers=e.blockers) from e
 
 
 def _rotation_order(sort):
@@ -207,9 +252,9 @@ def _rotation_values(data):
             values[key] = as_float(data[key] or 0, key)
     for key, model in REF_FIELDS.items():
         if data.get(key):
-            record = request.env[model].browse(int(data[key])).exists()
+            record = request.env[model].browse(_int(data[key], REF_LABELS[key][0])).exists()
             if not record:
-                raise ApiError(422, "business_rule", f"Référence inconnue : {key}.")
+                raise ApiError(422, "business_rule", REF_LABELS[key][1])
             values[key] = record.id
     return values
 
@@ -236,7 +281,7 @@ def _tariff_terms(data):
 
 def _tariff_row(t):
     return {"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None, "product_id": t.product_id.id or None,
-            "rate": t.rate, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
+            "rate": t.rate, "date_from": t.date_from or None, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
             "shortage_price": t.shortage_price or None, "official_gap": _gap(t._official_gap()[1])}
 
 
@@ -380,7 +425,8 @@ class EguitraTransport(http.Controller):
                           "payload_tonnes": v.payload_tonnes or None} for v in vehicles],
             "drivers": [{"id": d.id, "name": d.name, "phone": d.phone} for d in env["eguitra.transport.driver"].search([])],
             "routes": [{"id": r.id, "name": r.name, "distance_km": r.distance_km, "default_rate": r.default_rate,
-                        "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids],
+                        "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate,
+                                     "date_from": t.date_from or None} for t in r.tariff_ids],
                         **{k: r[k] for k in ROUTE_STANDARDS}}
                        for r in routes],
             # Prix du litre en vigueur : coût standard estimé à la saisie (le noyau le recalcule).
@@ -408,28 +454,28 @@ class EguitraTransport(http.Controller):
              "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
              "monthly_charges": sum(c._monthly() for c in v.charge_ids),
              "vehicle_kind": v.vehicle_kind, "payload_tonnes": v.payload_tonnes or None,
-             "documents": [_document_row(d) for d in v.document_ids], "document_issues": v._document_issues()}
+             "documents": [_document_row(d) for d in v._active_documents()], "document_issues": v._document_issues()}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
 
     def _vehicle_values(self, data):
         values = {k: data[k] or False for k in ("name", "tractor_plate", "trailer_plate", "brand") if k in data}
         if "capacity_liters" in data:
-            values["capacity_liters"] = int(data["capacity_liters"] or 0)
+            values["capacity_liters"] = _int(data["capacity_liters"] or 0, "Capacité")
         if "year" in data:
-            values["year"] = int(data["year"] or 0)
+            values["year"] = _int(data["year"] or 0, "Année")
         if "date_service" in data:
             values["date_service"] = parse_date(data, "date_service") or False
         if data.get("state") in VEHICLE_STATES:
             values["state"] = data["state"]
         if "driver_id" in data:
-            values["driver_id"] = int(data["driver_id"]) if data["driver_id"] else False
+            values["driver_id"] = _int(data["driver_id"], "Chauffeur") if data["driver_id"] else False
         if "asset_id" in data:
             if not _is_finance():
                 raise ApiError(403, "forbidden", "Le rattachement à une immobilisation relève de la finance.")
             asset = request.env["account.asset"]
             if data["asset_id"]:
-                asset = asset.browse(int(data["asset_id"])).exists()
+                asset = asset.browse(_int(data["asset_id"], "Immobilisation")).exists()
                 if not asset or asset.company_id != request.env.company:
                     raise ApiError(422, "business_rule", "Immobilisation inconnue dans la société de travail.")
             values["asset_id"] = asset.id or False
@@ -469,8 +515,12 @@ class EguitraTransport(http.Controller):
     def _document_commands(vehicle, documents):
         """Documents renvoyés en entier : un document cité par son id est mis à jour, un nouveau est créé,
         un document absent de la liste est retiré. Un renouvellement s'ajoute : l'ancien reste à l'historique."""
+        if not isinstance(documents or [], list):
+            raise ApiError(400, "invalid_parameter", "Liste de documents attendue.")
         commands, seen = [], set()
         for d in documents or []:
+            if not isinstance(d, dict):
+                raise ApiError(400, "invalid_parameter", "Document attendu sous forme d'objet.")
             if d.get("kind") not in dict(DOCUMENT_KINDS):
                 raise ApiError(400, "invalid_parameter", "Nature de document inconnue.")
             expiry = parse_date(d, "expiry_date")
@@ -480,14 +530,19 @@ class EguitraTransport(http.Controller):
                     "date_start": parse_date(d, "date_start") or False, "expiry_date": expiry,
                     "note": d.get("note") or False}
             if d.get("id"):
-                doc = vehicle.document_ids.filtered(lambda x, i=int(d["id"]): x.id == i)
+                try:
+                    wanted = int(d["id"])
+                except (TypeError, ValueError) as e:
+                    raise ApiError(400, "invalid_parameter", "Identifiant de document invalide.") from e
+                doc = vehicle._active_documents().filtered(lambda x, i=wanted: x.id == i)
                 if not doc:
                     raise ApiError(422, "business_rule", "Document inconnu pour cet ensemble.")
                 seen.add(doc.id)
                 commands.append((1, doc.id, line))
             else:
                 commands.append((0, 0, line))
-        return commands + [(2, doc.id) for doc in vehicle.document_ids if doc.id not in seen]
+        # Document retiré de la liste : archivé, il reste à l'historique (audit du 25 octobre, M15).
+        return commands + [(1, doc.id, {"active": False}) for doc in vehicle._active_documents() if doc.id not in seen]
 
     @api_route("/transport/vehicles", methods=("POST",), profiles=WRITE)
     def create_vehicle(self, **_kw):
@@ -521,10 +576,12 @@ class EguitraTransport(http.Controller):
         mimetype = detect_type(content)
         if not mimetype:
             raise ApiError(415, "unsupported_type", f"Pièce jointe au format {ACCEPTED}.")
+        previous = doc.sudo().attachment_id
         doc.attachment_id = request.env["ir.attachment"].create({
             "name": checked_name(upload.filename, mimetype, "document"), "datas": base64.b64encode(content),
             "res_model": doc._name, "res_id": doc.id, "mimetype": mimetype,
         })
+        previous.unlink()  # la pièce remplacée ne reste pas rattachée au document
         return _document_row(doc)
 
     @api_route("/transport/vehicles/<int:vehicle_id>/documents/<int:document_id>/file", profiles=READ)
@@ -561,7 +618,7 @@ class EguitraTransport(http.Controller):
             # Fiche tiers du chauffeur : frais de mission, créance des manquants.
             partner = request.env["res.partner"]
             if data["partner_id"]:
-                partner = partner.browse(int(data["partner_id"])).exists()
+                partner = partner.browse(_int(data["partner_id"], "Tiers")).exists()
                 if not partner:
                     raise ApiError(422, "business_rule", "Tiers inconnu.")
             values["partner_id"] = partner.id or False
@@ -634,7 +691,7 @@ class EguitraTransport(http.Controller):
         values = {k: data[k] or False for k in ("name", "origin", "destination") if k in data}
         for key in ("distance_km", "distance_return_km"):
             if key in data:
-                values[key] = int(data[key] or 0)
+                values[key] = _int(data[key] or 0, "Distance")
         if "duration_days" in data:
             values["duration_days"] = as_float(data["duration_days"] or 0, "duration_days")
         if "default_rate" in data:
@@ -655,23 +712,39 @@ class EguitraTransport(http.Controller):
                     raise ApiError(422, "business_rule", "Destination du barème inconnue.")
             values["official_rate_id"] = line.id or False
         if "tariffs" in data:
-            # Les tarifs sont renvoyés en entier ; les conditions de manquant fixées par la finance
-            # (tolérance, prix du m³) suivent le tarif du même client et du même produit.
-            kept = {(t.partner_id.id, t.product_id.id): t for t in (route.tariff_ids if route else [])}
+            # Les tarifs sont renvoyés en entier. Le tarif du même client et du même produit est mis à jour
+            # (il garde ses conditions de manquant, fixées par la finance), un nouveau est créé ; retirer un
+            # tarif de la liste le supprime, ce que seule la finance peut faire.
+            # Clé d'un tarif : client, produit et date de début (un tarif renégocié commence à sa date).
+            kept = {(t.partner_id.id, t.product_id.id, t.date_from or False): t for t in (route.tariff_ids if route else [])}
             finance = _is_finance()
-            commands = [(5, 0, 0)]
+            commands, seen, couples = [], set(), set()
             for t in data["tariffs"] or []:
+                if not isinstance(t, dict):
+                    raise ApiError(400, "invalid_parameter", "Tarif attendu sous forme d'objet.")
                 product = _product(t).id if (t.get("product") or t.get("product_id")) else False
-                line = {"partner_id": int(t["partner_id"]), "product_id": product,
-                        "rate": as_float(t.get("rate", 0), "rate")}
-                previous = kept.get((line["partner_id"], product))
-                if previous:
-                    line.update(tolerance_custom=previous.tolerance_custom, shortage_tolerance=previous.shortage_tolerance,
-                                shortage_price=previous.shortage_price)
+                start = parse_date(t, "date_from") or False
+                line = {"partner_id": _int(t.get("partner_id"), "Client"), "product_id": product,
+                        "rate": as_float(t.get("rate", 0), "rate"), "date_from": start}
+                if line["rate"] < 0:
+                    raise ApiError(400, "invalid_parameter", "Un tarif ne peut pas être négatif.")
+                key = (line["partner_id"], product, start)
+                if key in couples:
+                    raise ApiError(400, "invalid_parameter", "Un seul tarif par client, par produit et par date de "
+                                   "début sur une route : le nouveau remplace l'ancien.")
+                couples.add(key)
                 if finance:
                     line.update(_tariff_terms(t))
-                commands.append((0, 0, line))
-            values["tariff_ids"] = commands
+                previous = kept.get(key)
+                if previous and previous.id not in seen:
+                    seen.add(previous.id)
+                    commands.append((1, previous.id, line))
+                else:
+                    commands.append((0, 0, line))
+            removed = [t for t in kept.values() if t.id not in seen]
+            if removed and not finance:
+                raise ApiError(403, "forbidden", "La suppression d'un tarif client relève de la finance.")
+            values["tariff_ids"] = commands + [(2, t.id) for t in removed]
         return values
 
     @api_route("/transport/routes", methods=("POST",), profiles=WRITE)
@@ -708,7 +781,7 @@ class EguitraTransport(http.Controller):
         if "code" in data:
             values["code"] = str(data["code"] or "").strip().lower() or False
         if "sequence" in data:
-            values["sequence"] = int(data["sequence"] or 0)
+            values["sequence"] = _int(data["sequence"] or 0, "Ordre")
         if "active" in data:
             values["active"] = bool(data["active"])
         for key in ("density_15", "shortage_price"):
@@ -770,7 +843,7 @@ class EguitraTransport(http.Controller):
             if key in data:
                 account = request.env["account.account"]
                 if data[key]:
-                    account = account.browse(int(data[key])).exists()
+                    account = account.browse(_int(data[key], "Compte")).exists()
                     if not account or company not in account.company_ids:
                         raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
                 values[field] = account.id or False
@@ -840,19 +913,19 @@ class EguitraTransport(http.Controller):
             if key in data:
                 values[key] = parse_date(data, key) or False
         if "sequence" in data:
-            values["sequence"] = int(data["sequence"] or 0)
+            values["sequence"] = _int(data["sequence"] or 0, "Ordre")
         for key, model in (("product_ids", "eguitra.transport.product"), ("route_ids", "eguitra.transport.route")):
             if key in data:
-                ids = [int(i) for i in data[key] or []]
+                ids = [_int(i, REF_LABELS[key][0]) for i in data[key] or []]
                 records = request.env[model].browse(ids).exists()
                 if len(records) != len(set(ids)):
-                    raise ApiError(422, "business_rule", f"Référence inconnue : {key}.")
+                    raise ApiError(422, "business_rule", REF_LABELS[key][1])
                 values[key] = [(6, 0, records.ids)]
         for key in ("account_id", "income_account_id"):
             if key in data:
                 account = request.env["account.account"]
                 if data[key]:
-                    account = account.browse(int(data[key])).exists()
+                    account = account.browse(_int(data[key], "Compte")).exists()
                     if not account or request.env.company not in account.company_ids:
                         raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
                 values[key] = account.id or False
@@ -978,7 +1051,8 @@ class EguitraTransport(http.Controller):
         limit, offset = int_arg(kw, "limit", 100, 1, 1000), int_arg(kw, "offset", 0, 0)
         rots = Rotation.search(domain, limit=limit, offset=offset, order=_rotation_order(kw.get("sort")))
         [(revenue, margin, volume)] = Rotation._read_group(domain, aggregates=["revenue:sum", "margin:sum", "volume_delivered:sum"])
-        return {"items": [_rotation_row(r) for r in rots], "total_count": Rotation.search_count(domain),
+        official = {}  # tarif officiel par route et date de chargement, lu une fois pour la page
+        return {"items": [_rotation_row(r, official=official) for r in rots], "total_count": Rotation.search_count(domain),
                 "offset": offset, "limit": limit,
                 "totals": {"revenue": revenue or 0.0, "margin": margin or 0.0, "volume": volume or 0.0},
                 # Marge minimale de la règle d'alerte, pour juger le taux de chaque ligne (comme /transport/summary).
@@ -986,7 +1060,7 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/rotations/<int:rotation_id>", profiles=READ)
     def rotation(self, rotation_id, **_kw):
-        return _rotation_row(_get("eguitra.transport.rotation", rotation_id, "Rotation"))
+        return _rotation_row(_get("eguitra.transport.rotation", rotation_id, "Rotation"), detail=True)
 
     @api_route("/transport/rotations", methods=("POST",), profiles=WRITE)
     def create_rotation(self, **_kw):
@@ -994,15 +1068,21 @@ class EguitraTransport(http.Controller):
         require(data, "vehicle_id", "partner_id", "route_id")
         rot = request.env["eguitra.transport.rotation"].create(_rotation_values(data))
         if data.get("validate"):
-            rot.action_validate()
-        return _rotation_row(rot)
+            with _blockers("validate"):
+                rot.action_validate()
+        return _rotation_row(rot, detail=True)
 
     @api_route("/transport/rotations/<int:rotation_id>", methods=("PATCH",), profiles=WRITE)
     def update_rotation(self, rotation_id, **_kw):
         rot = _get("eguitra.transport.rotation", rotation_id, "Rotation")
         if rot.state not in ("draft", "en_route", "done"):
             raise ApiError(422, "business_rule", "Seule une rotation saisie ou validée se modifie.")
-        rot.write(_rotation_values(read_json()))
+        values = _rotation_values(read_json())
+        # Règle des quatre yeux (audit du 25 octobre, I-T5) : corriger une rotation validée la remet en
+        # saisie ; un autre compte que celui qui l'a saisie la revalide. Une note seule ne la change pas.
+        if rot.state == "done" and set(values) - {"note"}:
+            rot.action_reset()
+        rot.write(values)
         return _rotation_row(rot)
 
     @api_route("/transport/rotations/<int:rotation_id>/<string:action>", methods=("POST",), profiles=WRITE)
@@ -1012,24 +1092,21 @@ class EguitraTransport(http.Controller):
                     "depart": rot.action_depart}
         if action not in handlers:
             raise ApiError(404, "not_found", "Action inconnue.")
-        try:
+        with _blockers(action):
             handlers[action]()
-        except RotationBlocked as e:
-            # Départ ou validation refusés : la liste des motifs ouverts, pour l'écran et l'application.
-            error = "departure_blocked" if action == "depart" else "validation_blocked"
-            raise ApiError(422, error, str(e.args[0]), blockers=e.blockers) from e
-        return _rotation_row(rot)
+        return _rotation_row(rot, detail=True)
 
     @api_route("/transport/rotations/validate", methods=("POST",), profiles=WRITE)
     def validate_many(self, **_kw):
-        ids = [int(i) for i in read_json().get("ids") or []]
+        ids = [_int(i, "Rotation") for i in read_json().get("ids") or []]
         rots = request.env["eguitra.transport.rotation"].browse(ids).exists()
-        rots.action_validate()
+        with _blockers("validate"):
+            rots.action_validate()
         return [_rotation_row(r) for r in rots]
 
     @api_route("/transport/invoice", methods=("POST",), profiles=("admin", "finance"))
     def invoice(self, **_kw):
-        ids = [int(i) for i in read_json().get("rotation_ids") or []]
+        ids = [_int(i, "Rotation") for i in read_json().get("rotation_ids") or []]
         rots = request.env["eguitra.transport.rotation"].browse(ids).exists()
         invoices = rots.action_invoice()
         claims = rots.shortage_claim_move_id
@@ -1044,6 +1121,8 @@ class EguitraTransport(http.Controller):
         """Rentabilité : coûts déclarés et comptabilisés, km, structure, résultat net, indicateurs, contrôles."""
         end = parse_date(kw, "date_to", today())
         start = parse_date(kw, "date_from", end.replace(month=1, day=1))
+        if start > end:
+            raise ApiError(400, "invalid_parameter", "Période attendue : date_from avant date_to.")
         group = kw.get("group", "vehicle")
         if group not in ("vehicle", "route", "driver", "client", "month"):
             raise ApiError(400, "invalid_parameter", "Regroupement inconnu.")
@@ -1084,7 +1163,12 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/sync", methods=("POST",), profiles=WRITE)
     def sync(self, **_kw):
-        """Rotations saisies hors réseau : chaque saisie porte un identifiant unique (idempotence)."""
+        """Rotations saisies hors réseau : chaque saisie porte un identifiant unique (idempotence).
+
+        Une saisie déjà reçue répond « exists », sauf si le téléphone la renvoie corrigée (« correction » :
+        l'agent l'a modifiée après un premier envoi dont la réponse s'est perdue, ou pendant un envoi) : le
+        brouillon est alors mis à jour (« updated ») s'il est encore en saisie, saisi par ce compte et pas
+        retouché au bureau depuis ; sinon il reste tel quel et le bureau le corrige depuis sa fiche."""
         items = read_json().get("rotations") or []
         if not isinstance(items, list) or len(items) > MAX_SYNC:
             raise ApiError(400, "invalid_parameter", f"Liste de rotations invalide ({MAX_SYNC} au plus par envoi).")
@@ -1101,19 +1185,28 @@ class EguitraTransport(http.Controller):
             # Recherche sous les droits de l'agent : une saisie d'une autre société n'est pas révélée.
             existing = Rotation.search([("client_uuid", "=", uuid)], limit=1)
             if existing:
-                results.append({"client_uuid": uuid, "status": "exists", "id": existing.id})
+                results.append(self._sync_existing(existing, item, uuid))
                 continue
             missing = [k for k in ("vehicle_id", "partner_id", "route_id") if not item.get(k)]
             if missing:
                 results.append({"client_uuid": uuid, "status": "error",
                                 "message": "Ensemble, client et route sont obligatoires."})
                 continue
+            # Le tarif vient des tarifs de la route à la date de chargement, jamais du téléphone (M12).
+            item = {k: v for k, v in item.items() if k != "rate"}
             try:
                 with request.env.cr.savepoint():
                     values = _rotation_values(item)
                     values.update({"client_uuid": uuid, "source": "mobile"})
                     rot = Rotation.create(values)
                 results.append({"client_uuid": uuid, "status": "created", "id": rot.id})
+            except IntegrityError as e:
+                if "client_uuid" in (e.diag.constraint_name or ""):
+                    # Même saisie envoyée deux fois en même temps : l'autre envoi l'a enregistrée (M12).
+                    results.append({"client_uuid": uuid, "status": "exists"})
+                else:
+                    _logger.exception("Synchronisation mobile : saisie %s rejetée", uuid)
+                    results.append({"client_uuid": uuid, "status": "error", "message": "Saisie invalide."})
             except (ApiError, UserError, ValidationError) as e:
                 message = e.message if isinstance(e, ApiError) else str(e.args[0])
                 results.append({"client_uuid": uuid, "status": "error", "message": message})
@@ -1121,3 +1214,33 @@ class EguitraTransport(http.Controller):
                 _logger.exception("Synchronisation mobile : saisie %s rejetée", uuid)
                 results.append({"client_uuid": uuid, "status": "error", "message": "Saisie invalide."})
         return {"results": results}
+
+    def _sync_existing(self, rot, item, uuid):
+        """Réponse à une saisie déjà reçue (voir sync) : « exists », ou correction du brouillon de son auteur."""
+        exists = {"client_uuid": uuid, "status": "exists", "id": rot.id, "state": rot.state}
+        if not item.get("correction"):
+            return exists
+        user = request.env.user
+        # Retouchée au bureau (dernière écriture d'un autre compte), validée, facturée ou annulée, ou saisie
+        # par un autre compte : la correction du téléphone n'écrase rien.
+        if rot.state != "draft" or rot.create_uid != user or rot.write_uid != user:
+            return dict(exists, message="Déjà reçue au bureau, qui l'a traitée ou modifiée : la correction n'y est "
+                                        "pas portée. Faites corriger la rotation au bureau, depuis sa fiche.")
+        if any(not item.get(k) for k in ("vehicle_id", "partner_id", "route_id")):
+            return {"client_uuid": uuid, "status": "error", "message": "Ensemble, client et route sont obligatoires."}
+        try:
+            with request.env.cr.savepoint():
+                before = (rot.partner_id, rot.route_id, rot.product_id, rot.vehicle_id)
+                rot.write(_rotation_values(item))
+                # Comme à la création : tarif du client et de la route, chauffeur habituel de l'ensemble.
+                if (rot.partner_id, rot.route_id, rot.product_id) != before[:3]:
+                    rot.rate = rot.route_id._rate_for(rot.partner_id, rot.product_id)
+                if rot.vehicle_id != before[3] and not item.get("driver_id"):
+                    rot.driver_id = rot.vehicle_id.driver_id
+        except (ApiError, UserError, ValidationError) as e:
+            message = e.message if isinstance(e, ApiError) else str(e.args[0])
+            return {"client_uuid": uuid, "status": "error", "message": message}
+        except Exception:  # noqa: BLE001 - une correction défectueuse ne bloque pas les autres saisies
+            _logger.exception("Synchronisation mobile : correction de la saisie %s rejetée", uuid)
+            return {"client_uuid": uuid, "status": "error", "message": "Correction invalide."}
+        return {"client_uuid": uuid, "status": "updated", "id": rot.id}

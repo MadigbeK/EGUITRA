@@ -1,7 +1,8 @@
 import json
 from datetime import date, timedelta
+from unittest.mock import patch
 
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import tagged
 
 from ..blocking import RotationBlocked, motif
@@ -38,6 +39,8 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual(len(self.truck.document_ids.filtered(lambda d: d.kind == "calibration")), 2)
         issues = {i["code"]: i for i in self.truck._document_issues()}
         self.assertEqual(issues["document_expiring:inspection"]["severity"], "warn")
+        insurance = self.truck.document_ids.filtered(lambda d: d.kind == "insurance")
+        self.assertTrue(insurance.display_name.startswith("Assurance de ER-01 jusqu'au"), insurance.display_name)
         self.truck.vehicle_kind = "tipper"
         self.assertEqual(self.truck._missing_documents(kinds=["calibration"]), [])
         self.assertEqual(self.truck._required_kinds(), ("insurance", "inspection"))
@@ -55,6 +58,8 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual((rot._overload(), rot.over_payload), (0.0, False))
         with self.assertRaises(ValidationError):
             rot.weight_tare = 50
+        with self.assertRaises(ValidationError):
+            self.truck.payload_tonnes = -1
 
     def test_depart_en_route_et_validation(self):
         rot = self._rotation()
@@ -89,19 +94,15 @@ class TestFlotteSecurite(TransportCase):
         rot = self._rotation()
         warn = motif("V05", "Assurance à renouveler", "hsseq", severity="warn")
         waived = motif("V08", "Plan de trajet absent", "hsseq", waivable=True)
-        originals = (Rotation._departure_blockers, Rotation._departure_waived, Rotation._validation_blockers)
-        try:
-            Rotation._departure_blockers = lambda self: [warn]
-            Rotation._departure_waived = lambda self: [waived]
+        with patch.object(Rotation, "_departure_blockers", lambda self: [warn]), \
+                patch.object(Rotation, "_departure_waived", lambda self: [waived]):
             rot.action_depart()
-            log = json.loads(rot.departure_log)
-            self.assertEqual(([w["code"] for w in log["warnings"]], [w["code"] for w in log["waived"]]), (["V05"], ["V08"]))
-            Rotation._validation_blockers = lambda self: [motif("H01", "Départ non enregistré", "hsseq")]
+        log = json.loads(rot.departure_log)
+        self.assertEqual(([w["code"] for w in log["warnings"]], [w["code"] for w in log["waived"]]), (["V05"], ["V08"]))
+        with patch.object(Rotation, "_validation_blockers", lambda self: [motif("H01", "Départ non enregistré", "hsseq")]):
             with self.assertRaises(RotationBlocked):
                 rot.action_validate()
-            self.assertEqual(rot.state, "en_route")
-        finally:
-            Rotation._departure_blockers, Rotation._departure_waived, Rotation._validation_blockers = originals
+        self.assertEqual(rot.state, "en_route")
 
     def test_api_documents_depart_et_profils(self):
         token = self.open_session("ibrahima")["access_token"]
@@ -116,7 +117,7 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual((row["payload_tonnes"], len(row["documents"])), (32, 2))
         self.assertEqual({i["code"] for i in row["document_issues"]},
                          {"document_missing:calibration", "document_missing:tightness"})
-        # Mise à jour par identifiant : le document garde son id (et sa pièce jointe), l'absent est retiré.
+        # Mise à jour par identifiant : le document garde son id (et sa pièce jointe), l'absent est archivé.
         insurance = next(d for d in row["documents"] if d["kind"] == "insurance")
         status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {
             "documents": [{"id": insurance["id"], "kind": "insurance", "reference": "AS-78", "expiry_date": expiry}]}, token)
@@ -126,6 +127,11 @@ class TestFlotteSecurite(TransportCase):
         status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {"documents": [{"kind": "lune", "expiry_date": expiry}]}, token)
         self.assertEqual(status, 400, body)
         status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {"documents": [{"kind": "insurance"}]}, token)
+        self.assertEqual(status, 400, body)
+        status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {"documents": ["insurance"]}, token)
+        self.assertEqual(status, 400, body)
+        status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {"documents": [
+            {"id": "x", "kind": "insurance", "expiry_date": expiry}]}, token)
         self.assertEqual(status, 400, body)
         # Ticket de pesée saisi avec la rotation ; départ refusé par le serveur avec ses motifs.
         status, rot = self.call("POST", "/transport/rotations", {
@@ -138,6 +144,8 @@ class TestFlotteSecurite(TransportCase):
         self.truck.state = "service"
         status, body = self.call("POST", f"/transport/rotations/{rot['id']}/depart", None, token)
         self.assertEqual((status, body["state"]), (200, "en_route"), body)
+        status, listed = self.call("GET", "/transport/rotations?state=draft,en_route", token=token)
+        self.assertIsNone(listed["items"][0]["departure_blockers"], "Motifs de départ lus dans la fiche, pas la liste")
         agent = self.env["res.users"].search([("login", "=", "ibrahima")])
         self.assertEqual(body["departed_by"]["id"], agent.id, "Trace : le compte qui a donné le départ")
         status, listed = self.call("GET", "/transport/rotations?state=en_route", token=token)
@@ -150,6 +158,27 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual(status, 403)
         status, _b = self.call("POST", f"/transport/rotations/{rot['id']}/depart", None, reader)
         self.assertEqual(status, 403)
+
+    def test_depart_reserve_au_parc(self):
+        """Faire partir un camion est un geste du parc : admin et exploitation, jamais finance ni direction."""
+        rot = self._rotation()
+        finance = self.open_session("fatou")["access_token"]
+        status, row = self.call("GET", f"/transport/rotations/{rot.id}", token=finance)
+        self.assertEqual(status, 200, row)
+        self.assertFalse(row["can_depart"])
+        self.assertIn("parc", row["depart_refusal"])
+        status, body = self.call("POST", f"/transport/rotations/{rot.id}/depart", None, finance)
+        self.assertEqual(status, 403, body)
+        self.assertEqual(rot.state, "draft")
+        fatou = self.env["res.users"].search([("login", "=", "fatou")])
+        with self.assertRaises(AccessError):
+            rot.with_user(fatou).action_depart()
+        agent = self.open_session("ibrahima")["access_token"]
+        status, listed = self.call("GET", "/transport/rotations?state=draft", token=agent)
+        row = next(r for r in listed["items"] if r["id"] == rot.id)
+        self.assertEqual((row["can_depart"], row["depart_refusal"]), (True, None))
+        status, body = self.call("POST", f"/transport/rotations/{rot.id}/depart", None, agent)
+        self.assertEqual((status, body["state"], body["can_depart"]), (200, "en_route", False), body)
 
     def test_pluriels_des_messages(self):
         self.assertEqual((pluriel(1, "rotation"), pluriel(3, "rotation"), pluriel(0, "ensemble")),

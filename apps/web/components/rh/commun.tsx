@@ -9,9 +9,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { LogoSociete } from "@/components/brand";
 import { Check, X } from "@/components/icons";
-import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, type Tone } from "@/components/ui";
-import { ApiError, apiGet, apiSend, useApi } from "@/lib/api-client";
-import { fmtDec } from "@/lib/format";
+import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, cx, type Tone } from "@/components/ui";
+import { ApiError, DelaiDepasse, apiGet, apiSend, useApi } from "@/lib/api-client";
+import { AIDE_NOMBRE, fmtDec, lireNombre, nombreIllisible } from "@/lib/format";
 import {
   LEAVE_STATE_LABELS,
   PAYROLL_STATE_LABELS,
@@ -77,15 +77,33 @@ export function useSocieteDeTravail(): number | null {
   return data?.work_company_id ?? null;
 }
 
-/** Message d'une erreur d'appel, tel que le noyau l'a rédigé. */
+/**
+ * Message d'une erreur d'appel : celui du noyau ; sans réponse (coupure du réseau, délai dépassé), une
+ * phrase en français au lieu du « Failed to fetch » du navigateur.
+ */
 export function messageErreur(e: unknown): string {
-  return e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Une erreur est survenue.";
+  if (e instanceof ApiError) return e.message;
+  if (e instanceof DelaiDepasse) return "Le serveur ne répond pas à temps : réessayez dans un instant.";
+  if (e instanceof TypeError) return "Réseau indisponible : vérifiez la connexion, puis réessayez.";
+  return "Une erreur est survenue : réessayez.";
 }
 
-/** « 1 250 000 », « 1 250 000,5 » ou « 1250000 » vers un nombre (vide : 0). */
+/**
+ * « 1 250 000 », « 1 250 000,5 » ou « 1250000 » vers un nombre (vide : 0). Une saisie illisible
+ * (« 1.500.000 ») vaut aussi 0 : le formulaire la refuse avant l'envoi avec nombreIllisible.
+ */
 export function nombre(v: string): number {
-  const n = Number(v.replace(/[\s  ]/g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
+  return lireNombre(v) ?? 0;
+}
+
+/**
+ * Message sous un champ de nombre : saisie illisible (« 1.500.000 », « 30 j »), ou champ vide quand une
+ * valeur est exigée (un plafond ou un taux vide vaudrait 0). undefined : la saisie est lisible.
+ */
+export function erreurNombre(v: string, requis = false): string | undefined {
+  if (nombreIllisible(v)) return AIDE_NOMBRE;
+  if (requis && !v.trim()) return "Indiquez une valeur (0 si sans objet).";
+  return undefined;
 }
 
 /** Libellé d'une option d'une liste du noyau, à défaut le code. */
@@ -111,6 +129,15 @@ export function EtatAbsence({ state }: { state: LeaveState }) {
 const TON_PAIE: Record<PayrollState, Tone> = { draft: "warn", validated: "accent", accounted: "ok" };
 export function EtatPaie({ state }: { state: PayrollState }) {
   return <Badge tone={TON_PAIE[state]}>{PAYROLL_STATE_LABELS[state]}</Badge>;
+}
+
+/**
+ * Forme accordée au nombre, sans le nombre : singulier jusqu'à 1 (« 0 jour », « 1,5 jour »,
+ * « 2 jours »), comme les messages du noyau. Pour un entier écrit avec son nombre : pluriel() de
+ * lib/format.ts.
+ */
+export function accord(n: number | null | undefined, un: string, plusieurs = `${un}s`): string {
+  return Math.abs(n ?? 0) < 2 ? un : plusieurs;
 }
 
 /** « 12 j », « 0,5 j ». */
@@ -158,9 +185,10 @@ export function ChoixSalarie({ meta, value, onChange, placeholder = "Choisir un 
   );
 }
 
-/** Champ de montant en GNF, saisi librement (espaces acceptés). */
+/** Champ de montant en GNF, saisi librement (espaces acceptés) ; une saisie illisible le met en erreur. */
 export function ChampMontant({ value, onChange, placeholder, disabled }: { value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
-  return <Input inputMode="numeric" className="font-mono" value={value} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />;
+  const illisible = nombreIllisible(value);
+  return <Input inputMode="numeric" aria-invalid={illisible || undefined} className={cx("font-mono", illisible && "border-danger ring-2 ring-danger/15")} value={value} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />;
 }
 
 /**
@@ -238,7 +266,8 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
           <X className="h-3.5 w-3.5" /> Refuser
         </Button>
       </span>
-      {erreur && !refus && (
+      {/* L'erreur s'affiche dans la fenêtre ouverte (refus, solde insuffisant), jamais derrière elle. */}
+      {erreur && !refus && soldeInsuffisant === null && (
         <div className="mt-2">
           <Notice tone="danger">{erreur}</Notice>
         </div>
@@ -247,7 +276,11 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
         <Modal
           open
           title="Solde de congés insuffisant"
-          onClose={() => setSoldeInsuffisant(null)}
+          onClose={() => {
+            if (busy) return;
+            setSoldeInsuffisant(null);
+            setErreur(null);
+          }}
           footer={
             peutForcer ? (
               <Button variant="primary" loading={busy} onClick={() => approuver(true)}>
@@ -257,6 +290,7 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
           }
         >
           <div className="space-y-3 text-sm">
+            {erreur && <Notice tone="danger">{erreur}</Notice>}
             <Notice tone="warn">{soldeInsuffisant}</Notice>
             <p className="text-ink-2">
               {peutForcer
@@ -270,7 +304,11 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
         <Modal
           open
           title={`Refuser la demande de ${leave.employee.name}`}
-          onClose={() => setRefus(false)}
+          onClose={() => {
+            if (busy) return;
+            setRefus(false);
+            setErreur(null);
+          }}
           footer={
             <Button variant="danger" loading={busy} disabled={!motif.trim()} onClick={refuser}>
               Refuser la demande

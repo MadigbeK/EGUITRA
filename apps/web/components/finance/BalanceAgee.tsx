@@ -5,7 +5,7 @@ import { Badge, Card, DataTable, ErrorBox, Kpi, Loading, ProgressBar, Segmented,
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import type { Aging } from "@/lib/finance-types";
-import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { fmtInt, fmtJours, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
 interface PartnerAging {
   partner_id: number | null;
@@ -47,7 +47,7 @@ const STATUT: Record<PartnerAging["status"], { label: string; tone: Tone }> = {
 export function BalanceAgee() {
   const [kind, setKind] = useState<"customer" | "supplier">("customer");
   const [scope, setScope] = useState<"company" | "group">("company");
-  const { data, error } = useApi<AgingReport>(`/finance/partners/aging?kind=${kind}&scope=${scope}`);
+  const { data, error, mutate } = useApi<AgingReport>(`/finance/partners/aging?kind=${kind}&scope=${scope}`);
   const qui = kind === "customer" ? "Client" : "Fournisseur";
   return (
     <div className="space-y-4">
@@ -55,7 +55,7 @@ export function BalanceAgee() {
         <Segmented label="Nature" options={[{ key: "customer", label: "Créances clients" }, { key: "supplier", label: "Dettes fournisseurs" }]} value={kind} onChange={setKind} />
         <ScopeToggle value={scope} onChange={setScope} />
       </div>
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
         <>
@@ -63,7 +63,7 @@ export function BalanceAgee() {
             <Kpi label={kind === "customer" ? "Créances clients" : "Dettes fournisseurs"} value={fmtShort(data.total)} hint={`${pluriel(data.partners.length, "compte ouvert", "comptes ouverts")}, ${pluriel(data.documents, "pièce")}`} />
             <Kpi label="Dont échu" value={fmtShort(data.overdue)} hint={`${fmtPct(data.total ? (data.overdue / data.total) * 100 : null)} de l'encours`} tone={data.overdue > 0.5 ? (kind === "customer" ? "danger" : "warn") : "ok"} />
             <Kpi label="Plus de 90 jours" value={fmtShort(data.aging.plus_90)} hint={pluriel(data.aging_count.plus_90, "pièce")} tone={data.aging.plus_90 > 0.5 ? "danger" : "ok"} />
-            <Kpi label="Tiers en contentieux" value={fmtInt(data.partners.filter((p) => p.status === "contentieux").length)} hint={`${data.partners.filter((p) => p.status === "retard").length} en retard`} tone={data.partners.some((p) => p.status === "contentieux") ? "danger" : "neutral"} />
+            <Kpi label="Tiers en contentieux" value={fmtInt(data.partners.filter((p) => p.status === "contentieux").length)} hint={`${fmtInt(data.partners.filter((p) => p.status === "retard").length)} en retard`} tone={data.partners.some((p) => p.status === "contentieux") ? "danger" : "neutral"} />
           </div>
           <Card title={`Balance âgée des ${kind === "customer" ? "créances clients" : "dettes fournisseurs"}`} padded={false}>
             <DataTable
@@ -73,7 +73,7 @@ export function BalanceAgee() {
               columns={[
                 { key: "label", label: "Tranche" },
                 { key: "count", label: "Pièces", align: "right", render: (t) => fmtInt(t.count) },
-                { key: "amount", label: "Montant", align: "right", render: (t) => fmtInt(t.amount) },
+                { key: "amount", label: "Montant (GNF)", align: "right", render: (t) => fmtInt(t.amount) },
                 { key: "part", label: "Part", align: "right", render: (t) => fmtPct(data.total ? (t.amount / data.total) * 100 : null) },
                 { key: "bar", label: "", className: "w-40", render: (t) => <ProgressBar value={data.total ? (t.amount / data.total) * 100 : 0} tone={t.tone} epaisseur={7} /> },
               ]}
@@ -97,9 +97,9 @@ export function BalanceAgee() {
                 { key: "ref", label: "Code", render: (p) => p.ref ?? "–" },
                 { key: "name", label: qui },
                 { key: "documents", label: "Pièces", align: "right", render: (p) => fmtInt(p.documents) },
-                { key: "total", label: "Encours", align: "right", render: (p) => fmtGNF(p.total) },
-                { key: "overdue", label: "Dont échu", align: "right", render: (p) => (p.overdue ? fmtGNF(p.overdue) : "–") },
-                { key: "max_late_days", label: "Retard max", align: "right", render: (p) => (p.max_late_days ? `${p.max_late_days} j` : "–") },
+                { key: "total", label: "Encours (GNF)", align: "right", render: (p) => fmtInt(p.total) },
+                { key: "overdue", label: "Dont échu (GNF)", align: "right", render: (p) => (p.overdue ? fmtInt(p.overdue) : "–") },
+                { key: "max_late_days", label: "Retard max", align: "right", render: (p) => (p.max_late_days ? fmtJours(p.max_late_days) : "–") },
                 { key: "status", label: "Statut", render: (p) => <Badge tone={STATUT[p.status].tone}>{STATUT[p.status].label}</Badge> },
               ]}
             />

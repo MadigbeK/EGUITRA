@@ -5,9 +5,9 @@ import { ChevronLeft, Printer } from "@/components/icons";
 import { CachetDocument } from "@/components/brand";
 import { Button, ErrorBox, Loading } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtGNF, fmtInt } from "@/lib/format";
 import { CONTRACT_LABELS, type Payslip, type PayslipLine } from "@/lib/rh-types";
-import { moisLong } from "./commun";
+import { accord, moisLong } from "./commun";
 
 const MODE: Record<string, string> = { virement: "Virement", especes: "Espèces", mobile: "Paiement mobile" };
 
@@ -17,8 +17,8 @@ const MODE: Record<string, string> = { virement: "Virement", especes: "Espèces"
  * source : /rh/payslips/<id> (gestion) ou /rh/me/payslips/<id> (le salarié lui-même).
  */
 export function BulletinPaie({ source, retour }: { source: string; retour: { href: string; label: string } }) {
-  const { data: b, error } = useApi<Payslip>(source);
-  if (error) return <ErrorBox error={error} />;
+  const { data: b, error, mutate } = useApi<Payslip>(source);
+  if (error && !b) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!b) return <Loading label="Chargement du bulletin…" />;
 
   const gains = b.lines.filter((l) => l.kind === "gain");
@@ -66,7 +66,7 @@ export function BulletinPaie({ source, retour }: { source: string; retour: { hre
           <Info label="Fonction" value={b.employee_detail.job_title ?? "–"} />
           <Info label="Catégorie" value={b.employee_detail.category ?? "–"} />
           <Info label="Contrat" value={CONTRACT_LABELS[b.employee_detail.contract as keyof typeof CONTRACT_LABELS] ?? b.employee_detail.contract} />
-          <Info label="Embauche" value={`${fmtDate(b.employee_detail.hire_date)} (${fmtDec(b.employee_detail.seniority_years)} an(s))`} />
+          <Info label="Embauche" value={`${fmtDate(b.employee_detail.hire_date)} (${fmtDec(b.employee_detail.seniority_years)} ${accord(b.employee_detail.seniority_years, "an")})`} />
           <Info label="N° CNSS" value={b.employee_detail.cnss_number ?? "–"} />
           <Info label="Paiement" value={`${MODE[b.employee_detail.payment_method] ?? b.employee_detail.payment_method}${b.employee_detail.bank_account ? `, ${b.employee_detail.bank_account}` : ""}`} />
           <Info label="Jours payés" value={`${fmtDec(b.worked_days - b.unpaid_days)} sur ${fmtDec(b.month_days)} jours ouvrables`} />
@@ -139,7 +139,7 @@ export function BulletinPaie({ source, retour }: { source: string; retour: { hre
                 <tr key={i} className="border-b border-[#eef2ef]">
                   <td className="py-1 pr-2">{l.name}</td>
                   <td className="py-1 pr-2 text-right font-mono tabular">{l.base !== null ? fmtInt(l.base) : ""}</td>
-                  <td className="py-1 pr-2 text-right font-mono tabular">{l.rate !== null ? `${fmtDec(l.rate)} %` : ""}</td>
+                  <td className="py-1 pr-2 text-right font-mono tabular">{l.rate !== null ? `${fmtDec(l.rate)}${INSECABLE}%` : ""}</td>
                   <td className="py-1 text-right font-mono tabular">{fmtInt(l.amount)}</td>
                 </tr>
               ))}
@@ -160,7 +160,7 @@ export function BulletinPaie({ source, retour }: { source: string; retour: { hre
           <Cumul label="Net de l'année" value={b.ytd.net} />
           <div>
             <div className="text-[#4a5e57]">Solde de congés</div>
-            <div className="font-semibold tabular">{fmtDec(b.leave_balance)} jour(s)</div>
+            <div className="font-semibold tabular">{fmtDec(b.leave_balance)} {accord(b.leave_balance, "jour")}</div>
           </div>
         </section>
 
@@ -181,7 +181,7 @@ function Info({ label, value, fort }: { label: string; value: string; fort?: boo
 }
 
 function LigneBulletin({ l, colonne }: { l: PayslipLine; colonne: "gain" | "retenue" }) {
-  const taux = l.rate !== null ? `${fmtDec(l.rate)} %` : l.quantity !== null ? fmtDec(l.quantity) : "";
+  const taux = l.rate !== null ? `${fmtDec(l.rate)}${INSECABLE}%` : l.quantity !== null ? fmtDec(l.quantity) : "";
   return (
     <tr className="border-b border-[#eef2ef]">
       <td className="py-1 pr-2">{l.name}</td>

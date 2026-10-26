@@ -189,5 +189,15 @@ if not Policy.search([("company_id", "=", cabinet.id)]):
                                         "body": "Bonjour, merci de déposer vos statuts et votre extrait RCCM."})
     print("AxisPro : grille de démonstration en vigueur, 2 dossiers.")
 
+# Cloche des notifications du cabinet : le dossier suivi par test.porteur (comptes_test.py) a pour
+# responsable test.consultant, qui reçoit donc les notifications du porteur (message, pièce, rendez-vous).
+# Rejoué à chaque lancement : le compte peut avoir été créé après les dossiers.
+consultant_test = env["res.users"].search([("login", "=", "test.consultant")], limit=1)
+dossier_porteur = cenv["axispro.dossier"].search([("name", "=", "Unité de séchage de mangues (démo)"),
+                                                ("company_id", "=", cabinet.id)], limit=1)
+if consultant_test and dossier_porteur and dossier_porteur.consultant_id != consultant_test:
+    dossier_porteur.with_context(axispro_unlocked=True).write({"consultant_id": consultant_test.id})
+    print(f"AxisPro : {dossier_porteur.reference} confié à test.consultant (notifications du porteur de test).")
+
 env.cr.commit()
 print("Données de démonstration prêtes.")

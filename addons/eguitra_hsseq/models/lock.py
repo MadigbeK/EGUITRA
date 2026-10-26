@@ -35,7 +35,6 @@ Format d'un motif : {code, label, source, since, waivable, severity}, plus detai
 from datetime import timedelta
 
 from odoo import api, fields, models
-from odoo.exceptions import AccessError
 
 from odoo.addons.eguitra_transport.blocking import motif
 
@@ -386,12 +385,10 @@ class EguitraTransportRotation(models.Model):
         sans site, que seule l'administration fait partir) ; avant, seul le contrôle de profil compte. Le
         verrou s'applique ensuite à tous de la même façon.
 
-        Crochet de Transport (branche claude/transport-depart) : super() refuse d'abord la finance et la
-        direction (DEPART_PROFILES : admin, exploitation) ; tant qu'il n'est pas fusionné, le même contrôle est
-        fait ici, et la surcharge d'action_depart ci-dessous l'appelle. À la fusion, elle disparaît."""
+        Crochet de Transport, appelé par action_depart et par la route du départ : super() refuse d'abord la
+        finance et la direction (DEPART_PROFILES : admin, exploitation)."""
         self.ensure_one()
-        parent = getattr(super(), "_depart_refusal", None)
-        refusal = parent() if parent else None
+        refusal = super()._depart_refusal()
         if refusal:
             return refusal
         if self.env.su:
@@ -408,16 +405,9 @@ class EguitraTransportRotation(models.Model):
         site = self.sudo().vehicle_id.site_id
         if not site:
             return f"Rotation {self._label()} : ensemble rattaché à aucun site, seule l'administration le fait partir."
-        if not site or site not in user._hsseq_site_ids():
+        if site not in user._hsseq_site_ids():
             return f"Rotation {self._label()} : ensemble hors de vos sites."
         return None
-
-    def action_depart(self):
-        for rot in self:
-            refusal = rot._depart_refusal()
-            if refusal:
-                raise AccessError(refusal)
-        return super().action_depart()
 
     def _validation_blockers(self):
         """Une rotation soumise au verrou ne se valide qu'après son départ « en route »."""

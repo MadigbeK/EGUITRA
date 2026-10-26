@@ -1,9 +1,9 @@
 "use client";
 
 import { Card, FEUILLE, Notice, Segmented, cx } from "@/components/ui";
-import { fmtGNF, fmtShort } from "@/lib/format";
+import { INSECABLE, fmtAxe, fmtFixe, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { ChampMontant, ChampNombre, Ligne } from "./champs";
-import { calculerSeuil, decimal, type ParamsSeuil } from "./calculs";
+import { calculerSeuil, type ParamsSeuil } from "./calculs";
 
 const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
@@ -56,11 +56,11 @@ function GraphiqueSeuil({ ca, tauxCv, cf, seuil }: { ca: number; tauxCv: number;
         {ticksY.map((v) => (
           <g key={`y${v}`}>
             <line x1={G} x2={W - D} y1={sy(v)} y2={sy(v)} stroke={v === 0 ? "var(--line-strong)" : "var(--line)"} strokeDasharray={v === 0 ? undefined : "4 5"} />
-            <text x={G - 8} y={sy(v)} dy="0.32em" textAnchor="end" fontSize="11" fill="var(--muted)">{fmtShort(v)}</text>
+            <text x={G - 8} y={sy(v)} dy="0.32em" textAnchor="end" fontSize="11" fill="var(--muted)">{fmtAxe(v)}</text>
           </g>
         ))}
         {ticksX.map((v) => (
-          <text key={`x${v}`} x={sx(v)} y={H - B + 18} textAnchor="middle" fontSize="11" fill="var(--muted)">{fmtShort(v)}</text>
+          <text key={`x${v}`} x={sx(v)} y={H - B + 18} textAnchor="middle" fontSize="11" fill="var(--muted)">{fmtAxe(v)}</text>
         ))}
         {seuilVisible && seuil !== null && (
           <>
@@ -137,14 +137,14 @@ export function SimulateurSeuil({ params, onChange }: { params: ParamsSeuil; onC
           <div className={cx(FEUILLE, "p-5")}>
             <div className="text-[12.5px] font-medium text-ink-2">Point mort</div>
             <div className="mt-1.5 font-display text-[22px] font-bold leading-tight tabular text-ink">
-              {s.moisPointMort === null ? "–" : `${decimal(s.moisPointMort, 1)} mois`}
+              {s.moisPointMort === null ? "–" : `${fmtFixe(s.moisPointMort, 1)}${INSECABLE}mois`}
             </div>
-            <div className="mt-1 text-[12px] text-muted">{s.joursPointMort === null ? "Chiffre d'affaires à renseigner" : `soit ${Math.round(s.joursPointMort)} jours d'activité`}</div>
+            <div className="mt-1 text-[12px] text-muted">{s.joursPointMort === null ? "Chiffre d'affaires à renseigner" : `soit ${pluriel(Math.round(s.joursPointMort), "jour")} d'activité`}</div>
           </div>
           <div className={cx("rounded-[20px] p-5 shadow-[var(--ombre-feuille)]", atteint ? "bg-ok-doux" : "bg-danger-doux")}>
             <div className="text-[12.5px] font-medium text-ink-2">Marge de sécurité</div>
             <div className={cx("mt-1.5 font-display text-[22px] font-bold leading-tight tabular", atteint ? "text-ok-texte" : "text-danger")}>
-              {s.indiceSecurite === null ? "–" : `${decimal(s.indiceSecurite * 100, 0)} %`}
+              {s.indiceSecurite === null ? "–" : fmtPct(s.indiceSecurite * 100, 0)}
             </div>
             <div className="mt-1 text-[12px] text-ink-2">{s.margeSecurite === null ? "Aucun seuil" : fmtGNF(s.margeSecurite)}</div>
           </div>
@@ -154,7 +154,7 @@ export function SimulateurSeuil({ params, onChange }: { params: ParamsSeuil; onC
           <Notice tone="danger">Les charges variables absorbent tout le chiffre d'affaires : chaque vente coûte plus qu'elle ne rapporte. Revoyez vos prix ou vos coûts d'achat.</Notice>
         ) : atteint ? (
           <Notice tone="ok">
-            Le seuil est franchi{quandSeuil(s.moisPointMort)}, si l'exercice commence en janvier et que les ventes sont régulières. Au-delà, chaque vente dégage {decimal(s.tauxMcv * 100, 0)} % de marge.
+            Le seuil est franchi{quandSeuil(s.moisPointMort)}, si l'exercice commence en janvier et que les ventes sont régulières. Au-delà, chaque vente dégage {fmtPct(s.tauxMcv * 100, 0)} de marge.
           </Notice>
         ) : (
           <Notice tone="warn">
@@ -169,8 +169,8 @@ export function SimulateurSeuil({ params, onChange }: { params: ParamsSeuil; onC
         <Card title="Le calcul">
           <dl>
             <Ligne label="Chiffre d'affaires" valeur={fmtGNF(s.ca)} />
-            <Ligne label="Charges variables" valeur={`${fmtGNF(s.cv)} (${decimal(s.tauxCv * 100, 1)} %)`} />
-            <Ligne label="Marge sur coûts variables" valeur={`${fmtGNF(s.mcv)} (${decimal(s.tauxMcv * 100, 1)} %)`} />
+            <Ligne label="Charges variables" valeur={`${fmtGNF(s.cv)} (${fmtPct(s.tauxCv * 100, 1)})`} />
+            <Ligne label="Marge sur coûts variables" valeur={`${fmtGNF(s.mcv)} (${fmtPct(s.tauxMcv * 100, 1)})`} />
             <Ligne label="Charges fixes" valeur={fmtGNF(s.cf)} />
             <Ligne label="Résultat d'exploitation" valeur={fmtGNF(s.resultat)} fort ton={s.resultat >= 0 ? "ok" : "danger"} />
           </dl>

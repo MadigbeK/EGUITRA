@@ -9,19 +9,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
+import { fmtInt } from "@/lib/format";
 import type { Synthese } from "@/lib/portail-types";
 
 const RACINE = "/axispro/portail";
 
-type Onglet = { href: string; label: string; compte?: (s: Synthese) => number; titre?: string };
+/** titre : ce que compte la pastille, au singulier et au pluriel (lu par le lecteur d'écran). */
+type Onglet = { href: string; label: string; compte?: (s: Synthese) => number; titre?: [string, string] };
 
 const ONGLETS: Onglet[] = [
   { href: RACINE, label: "Synthèse" },
-  { href: `${RACINE}/messages`, label: "Messages", compte: (s) => s.messages.unread, titre: "messages non lus" },
+  { href: `${RACINE}/messages`, label: "Messages", compte: (s) => s.messages.unread, titre: ["message non lu", "messages non lus"] },
   { href: `${RACINE}/communications`, label: "Communications" },
-  { href: `${RACINE}/ressources`, label: "Ressources", compte: (s) => s.articles.drafts, titre: "brouillons à relire" },
+  { href: `${RACINE}/ressources`, label: "Ressources", compte: (s) => s.articles.drafts, titre: ["brouillon à relire", "brouillons à relire"] },
   { href: `${RACINE}/evenements`, label: "Événements" },
-  { href: `${RACINE}/rendez-vous`, label: "Rendez-vous", compte: (s) => s.meetings.requested, titre: "demandes en attente" },
+  { href: `${RACINE}/rendez-vous`, label: "Rendez-vous", compte: (s) => s.meetings.requested, titre: ["demande en attente", "demandes en attente"] },
   { href: `${RACINE}/porteurs`, label: "Porteurs et avis" },
 ];
 
@@ -47,8 +49,8 @@ export function OngletsPortail() {
                 {o.label}
                 {n > 0 && (
                   <span className={cx("rounded-full px-1.5 py-px text-[11.5px] font-semibold tabular", actif ? "bg-accent-doux text-accent" : "bg-warn-doux text-warn")}>
-                    {n}
-                    <span className="sr-only"> {o.titre}</span>
+                    {fmtInt(n)}
+                    {o.titre && <span className="sr-only"> {n > 1 ? o.titre[1] : o.titre[0]}</span>}
                   </span>
                 )}
                 {actif && <span aria-hidden className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent-vif" />}

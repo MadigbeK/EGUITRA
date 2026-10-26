@@ -9,6 +9,8 @@ export type Profile =
   | "chantiers"
   | "immobilier"
   | "cabinet"
+  /** Associé du cabinet : porte aussi « cabinet » ; scelle les décisions, force un gate, rouvre une révision. */
+  | "associe"
   | "porteur"
   | "rh";
 
@@ -33,6 +35,14 @@ export interface Me {
   tz: string;
   /** Droits complémentaires aux profils (free_accounts : saisie libre des comptes, eguitra_finance). */
   rights?: { free_accounts?: boolean };
+  /** Application où la session a été ouverte ; une session de Rotations (« mobile ») n'ouvre que Rotations. */
+  session_app?: string | null;
+  /**
+   * Posé par le serveur web (requireUser), jamais par le noyau : la société mémorisée pour
+   * l'application n'est plus ouverte au compte ; la page travaille dans sa société par défaut
+   * (company_id). La coque le dit et met la société mémorisée à jour.
+   */
+  societe_retiree?: boolean;
 }
 
 export interface ApiErrorBody {

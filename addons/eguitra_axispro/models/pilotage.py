@@ -49,6 +49,9 @@ FUNDING_STATES = [
 FUNDING_OPEN = ("identified", "submitted", "review", "agreed")
 FUNDING_WON = ("signed", "disbursed")
 ACTION_DELAY_DAYS = 30
+# Titre d'une action tirée d'un écart sans document à produire : le porteur ne lit jamais l'intitulé
+# d'un critère de la grille.
+NEUTRAL_ACTION = "Pièce ou information à fournir : votre consultant vous la précise"
 CONDITION_BULLET = re.compile(r"^\s*(?:[-•*·–]|\d{1,2}[.)])\s*")
 
 
@@ -149,16 +152,25 @@ class AxisproAction(models.Model):
 
     @api.model
     def from_gaps(self, dossier, limit=5):
-        """Actions du porteur tirées des écarts prioritaires, sans doublon d'une action encore ouverte."""
+        """Actions du porteur tirées des écarts prioritaires, sans doublon d'une action encore ouverte.
+        Le porteur lit le titre de l'action (portail, notification) : jamais l'intitulé du critère de la
+        grille ni son aide d'évaluation, seulement le document à produire (livrable saisi sur le critère,
+        livrable du critère ou de son domaine), à défaut un titre neutre. Le cabinet garde le lien au
+        critère (criterion_id)."""
         open_criteria = dossier.action_ids.filtered(lambda a: a.state in ACTION_OPEN).criterion_id
         due = fields.Date.context_today(self) + timedelta(days=ACTION_DELAY_DAYS)
+        evaluations = {e.criterion_id.id: e for e in dossier.evaluation_ids}
         values = []
         for gap in dossier.gaps(limit):
             if gap["criterion_id"] in open_criteria.ids:
                 continue
+            criterion = self.env["axispro.criterion"].browse(gap["criterion_id"])
+            evaluation = evaluations.get(criterion.id)
+            todo = ((evaluation and evaluation.deliverable) or criterion.deliverable or criterion.domain_id.deliverable
+                    or NEUTRAL_ACTION)
             values.append({
-                "dossier_id": dossier.id, "name": gap["name"], "description": gap["action"],
-                "source": "gap", "criterion_id": gap["criterion_id"], "assignee": "porteur", "due_date": due,
+                "dossier_id": dossier.id, "name": " ".join(todo.split())[:200], "description": False,
+                "source": "gap", "criterion_id": criterion.id, "assignee": "porteur", "due_date": due,
             })
         return self.create(values)
 
@@ -186,7 +198,9 @@ class AxisproFunding(models.Model):
 
     dossier_id = fields.Many2one("axispro.dossier", required=True, ondelete="cascade", index=True)
     company_id = fields.Many2one(related="dossier_id.company_id", store=True)
-    currency_id = fields.Many2one(related="company_id.currency_id")
+    # Une démarche se chiffre dans la devise de son dossier, à laquelle le besoin se compare (audit du
+    # noyau, I-X3 : 2 000 000 USD sollicités comptaient comme 2 000 000 GNF). Champ calculé, non stocké.
+    currency_id = fields.Many2one(related="dossier_id.currency_id")
     funder_id = fields.Many2one("res.partner", "Financeur", required=True)
     instrument = fields.Selection(INSTRUMENTS, "Instrument", required=True, default="bank_loan")
     amount_requested = fields.Monetary("Montant sollicité")
@@ -227,12 +241,14 @@ class AxisproDossierPilotage(models.Model):
     funding_ids = fields.One2many("axispro.funding", "dossier_id", "Financements recherchés")
 
     def financial_indicators(self):
-        """Indicateurs du modèle financier ; None tant qu'aucune hypothèse n'est saisie."""
+        """Indicateurs du modèle financier ; None tant qu'aucune hypothèse n'est saisie. `currency` :
+        code de la devise du dossier, dans laquelle s'expriment les montants (VAN, trésorerie) ; la
+        suggestion d'un critère adossé à un indicateur en montant en tire son unité."""
         self.ensure_one()
         plan = self.plan_ids[:1]
         if not plan or not plan.line_ids:
             return None
-        return plan.analysis()["indicators"]
+        return dict(plan.analysis()["indicators"], currency=self.currency_id.name)
 
     def risk_summary(self):
         self.ensure_one()

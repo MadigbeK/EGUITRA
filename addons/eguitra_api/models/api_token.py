@@ -63,6 +63,12 @@ class EguitraApiToken(models.Model):
     user_agent = fields.Char()
     last_used_at = fields.Datetime()
     rotated_at = fields.Datetime(help="Date de remplacement d'un jeton de renouvellement par le suivant.")
+    mfa_passed = fields.Boolean(
+        "Second facteur passé",
+        help="La connexion à l'origine de la lignée a passé la double authentification. Une lignée ouverte "
+             "pendant sa suspension (paramètre eguitra_api.mfa_required à 0) ne la porte pas : elle est "
+             "refusée dès que la double authentification est de nouveau exigée.",
+    )
 
     _token_hash_unique = models.Constraint("unique(token_hash)", "Jeton déjà existant.")
 
@@ -83,7 +89,8 @@ class EguitraApiToken(models.Model):
         return self._ttl(kind, app)
 
     @api.model
-    def _issue(self, user, kind, app=None, family=None, payload=None, ip=None, user_agent=None, started=None):
+    def _issue(self, user, kind, app=None, family=None, payload=None, ip=None, user_agent=None, started=None,
+               mfa_passed=False):
         """Crée un jeton et renvoie (valeur en clair, enregistrement). Seule l'empreinte est stockée."""
         raw = secrets.token_urlsafe(32)
         ttl = self._ttl_for(user, kind, app)
@@ -100,6 +107,7 @@ class EguitraApiToken(models.Model):
                 "expires_at": now + timedelta(seconds=ttl),
                 "ip": ip,
                 "user_agent": (user_agent or "")[:250] or False,
+                "mfa_passed": bool(mfa_passed),
             }
         )
         return raw, record
@@ -130,11 +138,14 @@ class EguitraApiToken(models.Model):
         return fields.Datetime.now() - self._session_started() > limit
 
     @api.model
-    def _issue_session(self, user, app, family=None, ip=None, user_agent=None, started=None):
+    def _issue_session(self, user, app, family=None, ip=None, user_agent=None, started=None, mfa_passed=False):
+        """Jetons d'accès et de renouvellement d'une lignée ; mfa_passed : la connexion a passé le code."""
         family = family or uuid.uuid4().hex
         started = started or fields.Datetime.now()
-        access, access_rec = self._issue(user, "access", app, family, ip=ip, user_agent=user_agent, started=started)
-        refresh, refresh_rec = self._issue(user, "refresh", app, family, ip=ip, user_agent=user_agent, started=started)
+        access, access_rec = self._issue(user, "access", app, family, ip=ip, user_agent=user_agent, started=started,
+                                         mfa_passed=mfa_passed)
+        refresh, refresh_rec = self._issue(user, "refresh", app, family, ip=ip, user_agent=user_agent, started=started,
+                                           mfa_passed=mfa_passed)
         now = fields.Datetime.now()
         return {
             "access_token": access,

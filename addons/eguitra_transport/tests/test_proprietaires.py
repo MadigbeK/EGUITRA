@@ -184,6 +184,12 @@ class TestProprietaires(TransportCase):
         status, body = self.call("POST", "/transport/share-rules", {"partner_id": self.partner_c.id, "rate": 15,
                                                                      "vehicle_id": self.truck.id}, token, headers)
         self.assertEqual(status, 200, body)
+        # L'écran modifie la règle sur place (taux, période, fondement) au lieu de la recréer.
+        rule_id = body["id"]
+        status, body = self.call("PATCH", f"/transport/share-rules/{rule_id}", {
+            "partner_id": self.partner_c.id, "rate": 15, "vehicle_id": self.truck.id, "ownership": None,
+            "date_from": None, "date_to": None, "note": "Contrat de gestion 2026"}, token, headers)
+        self.assertEqual((status, body["rate"], body["note"]), (200, 15, "Contrat de gestion 2026"), body)
         status, body = self.call("POST", "/transport/fuel-prices", {"date_from": str(self.first), "price": 12_000,
                                                                      "note": "SPP"}, token, headers)
         self.assertEqual((status, body["current"]), (200, 12_000), body)

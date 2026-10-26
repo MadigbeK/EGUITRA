@@ -6,6 +6,8 @@
  */
 const VERSION = "rotations-v8"; // aussi dans lib/offline-store.ts (effacé à la déconnexion)
 const SHELL = "/mobile";
+// Au-delà, la page gardée s'ouvre sans attendre le réseau (réseau faible au parc).
+const DELAI_PAGE = 3500;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -44,25 +46,60 @@ self.addEventListener("message", (event) => {
   );
 });
 
+/**
+ * Page de l'application : réseau d'abord (session et données à jour), mais la page gardée s'ouvre
+ * - si le réseau ne répond pas dans DELAI_PAGE (réseau faible) : la réponse tardive met encore la
+ *   copie à jour ;
+ * - si le réseau répond en erreur (proxy pendant une mise en production, noyau arrêté) ;
+ * - sans réseau.
+ * Une redirection (vers la connexion, session expirée) passe telle quelle. Sans copie gardée (première
+ * ouverture), la réponse du réseau est servie, quelle qu'elle soit.
+ */
+function page(event) {
+  const reseau = fetch(event.request);
+  // Copie prise avant que la page ne lise la réponse (rappel inscrit en premier), et menée à son terme
+  // même quand la page gardée a déjà été servie.
+  const miseAJour = reseau
+    .then((res) => {
+      if (!res.ok || res.redirected || !new URL(res.url).pathname.startsWith(SHELL)) return undefined;
+      const copy = res.clone();
+      return caches.open(VERSION).then((cache) => cache.put(SHELL, copy));
+    })
+    .catch(() => undefined);
+  event.waitUntil(miseAJour);
+  const copie = () => caches.match(SHELL).catch(() => undefined);
+  return new Promise((resolve) => {
+    let servie = false;
+    const servir = (res) => {
+      if (servie) return;
+      servie = true;
+      clearTimeout(minuterie);
+      resolve(res);
+    };
+    const minuterie = setTimeout(() => {
+      copie().then((hit) => hit && servir(hit));
+    }, DELAI_PAGE);
+    reseau.then(
+      (res) => {
+        if (res.ok || res.type === "opaqueredirect" || res.redirected || (res.status >= 300 && res.status < 400)) {
+          servir(res);
+          return;
+        }
+        copie().then((hit) => servir(hit || res));
+      },
+      () => copie().then((hit) => servir(hit || Response.error())),
+    );
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
-  // Page de l'application : réseau d'abord (session et données à jour), copie locale sans réseau.
   if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok && !res.redirected && new URL(res.url).pathname.startsWith(SHELL)) {
-            const copy = res.clone();
-            caches.open(VERSION).then((cache) => cache.put(SHELL, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(SHELL).then((hit) => hit || Response.error())),
-    );
+    event.respondWith(page(event));
     return;
   }
 

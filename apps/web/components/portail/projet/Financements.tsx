@@ -62,9 +62,13 @@ export function FriseFinancement({ state }: { state: Etat }) {
   );
 }
 
-/** Carte d'une demande de financement : financeur, instrument, montants, avancement, prochaine étape. */
-export function CarteFinancement({ f, devise }: { f: FundingRow; devise: string }) {
+/**
+ * Carte d'une demande de financement : financeur, instrument, montants, avancement, prochaine étape.
+ * Les montants portent la devise du financement ; celle du dossier ne sert qu'à défaut.
+ */
+export function CarteFinancement({ f, devise: deviseDossier }: { f: FundingRow; devise: string }) {
   const ferme = f.state === "rejected" || f.state === "withdrawn";
+  const devise = f.currency || deviseDossier;
   return (
     <article className={cx("flex flex-col rounded-2xl border bg-panel p-5", ferme ? "border-line/70" : "border-line")}>
       <header className="flex items-start gap-3">

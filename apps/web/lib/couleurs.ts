@@ -126,6 +126,15 @@ export const ETAT_TON: Readonly<Record<string, TonEtat>> = {
   Rejetée: "danger",
   Bloquée: "danger",
 
+  // Suivi des demandes au support (Mes demandes) : état, gravité et délai engagé.
+  Déposée: "warn",
+  "Prise en charge": "neutral",
+  Résolue: "ok",
+  Close: "neutral",
+  Majeure: "warn",
+  Mineure: "neutral",
+  "Hors délai": "danger",
+
   // Règlement.
   "Non payée": "warn",
   Partielle: "warn",

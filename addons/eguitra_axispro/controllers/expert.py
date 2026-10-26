@@ -58,31 +58,49 @@ def _int(value, name):
         raise ApiError(400, "invalid_parameter", f"Nombre entier invalide : {name}.") from e
 
 
-def _options():
+def _options(currency=None):
     return {
         "kinds": dict(LINE_KINDS), "categories": dict(FIXED_CATEGORIES), "funding_types": dict(FUNDING_TYPES),
         "repayments": dict(REPAYMENTS), "factors": engine.FACTORS,
-        "indicators": {k: {"label": v[0], "higher": v[1], "unit": v[2]} for k, v in engine.INDICATORS.items()},
+        "indicators": {k: {"label": v[0], "higher": v[1], "unit": engine.indicator_unit(k, currency),
+                           "money": v[2] == engine.MONEY} for k, v in engine.INDICATORS.items()},
     }
+
+
+def _add(totals, currency, amount):
+    """Ajoute `amount` au total de sa devise : jamais une devise ajoutée à une autre."""
+    totals[currency] = totals.get(currency, 0.0) + (amount or 0.0)
+    return totals
 
 
 # ─── Modèle financier ─────────────────────────────────────────────────────
 
 
+def _analysis(plan, currency):
+    """Analyse du modèle, alertes chiffrées dans la devise du dossier."""
+    params, lines, first_year = plan._inputs()
+    return engine.analyse(params, lines, first_year=first_year, currency=currency)
+
+
 def _plan_payload(dossier):
+    """Modèle financier d'un dossier. `dossier.currency` : devise des montants du modèle (celle du
+    dossier) ; `dossier.locked` : décision du comité verrouillée, le modèle est figé (l'écran ne
+    propose alors aucune saisie, le noyau la refuserait)."""
     plan = dossier.plan_ids[:1]
+    currency = dossier.currency_id.name
     if plan:
         params = {key: plan[key] for key in PLAN_PARAMS}
-        analysis = plan.analysis()
+        analysis = _analysis(plan, currency)
         header = {"id": plan.id, "first_year": plan.first_year or None, "notes": plan.notes or None, **params}
         lines = [dict({key: line[key] for key in LINE_FIELDS}, id=line.id) for line in plan.line_ids]
     else:
         first_year = dossier.date_start.year if dossier.date_start else None
-        analysis = engine.analyse({}, [], first_year=first_year)
+        analysis = engine.analyse({}, [], first_year=first_year, currency=currency)
         header = {"id": None, "first_year": None, "notes": None, **engine.DEFAULT_PARAMS}
         lines = []
-    return {"plan": header, "lines": lines, "analysis": analysis, "options": _options(),
-            "dossier": {"investment": dossier.investment, "financing_need": dossier.financing_need}}
+    return {"plan": header, "lines": lines, "analysis": analysis, "options": _options(currency),
+            "dossier": {"investment": dossier.investment, "financing_need": dossier.financing_need,
+                        "currency": currency, "locked": bool(dossier.locked_review_id)}}
 
 
 def _ensure_plan(dossier):
@@ -113,7 +131,7 @@ def _plan_xlsx(dossier):
     import xlsxwriter
 
     plan = dossier.plan_ids[:1]
-    analysis, stress = plan.analysis(), plan.stress()
+    analysis, stress = _analysis(plan, dossier.currency_id.name), plan.stress()
     out = io.BytesIO()
     book = xlsxwriter.Workbook(out, XLSX_OPTIONS)
     head = book.add_format({"bold": True, "bg_color": "#11221D", "font_color": "#FFFFFF"})
@@ -127,6 +145,7 @@ def _plan_xlsx(dossier):
     ind = analysis["indicators"]
     rows = [
         ("Dossier", f"{dossier.reference} - {dossier.name}"),
+        ("Devise des montants", dossier.currency_id.name),
         ("VAN du projet", ind["npv"]), ("TRI du projet (%)", ind["irr_project"]),
         ("TRI des fonds propres (%)", ind["irr_equity"]), ("DSCR minimal", ind["dscr_min"]),
         ("DSCR moyen", ind["dscr_avg"]), ("LLCR", ind["llcr"]), ("Délai de récupération (ans)", ind["payback"]),
@@ -228,7 +247,8 @@ def risk_row(risk):
 def action_row(action, with_dossier=False, today_=None):
     row = {
         "id": action.id, "name": action.name, "description": action.description or None, "source": action.source,
-        "criterion": action.criterion_id.code or None, "review_id": action.review_id.id or None,
+        "criterion": action.criterion_id.code or None, "criterion_name": action.criterion_id.name or None,
+        "review_id": action.review_id.id or None,
         "compartment": action.criterion_id.domain_id.compartment_id.code or None,
         "compartment_name": action.criterion_id.domain_id.compartment_id.name or None,
         "risk_id": action.risk_id.id or None, "assignee": action.assignee, "user": action.user_id.name or None,
@@ -243,8 +263,10 @@ def action_row(action, with_dossier=False, today_=None):
 
 
 def funding_row(funding, with_dossier=False):
+    """Démarche de financement ; `currency` : devise de ses montants, celle de son dossier."""
     row = {
         "id": funding.id, "funder": {"id": funding.funder_id.id, "name": funding.funder_id.name},
+        "currency": funding.currency_id.name or None,
         "instrument": funding.instrument, "amount_requested": funding.amount_requested,
         "amount_granted": funding.amount_granted, "rate": funding.rate or None,
         "duration_months": funding.duration_months or None, "state": funding.state, "state_date": funding.state_date,
@@ -501,25 +523,44 @@ class EguitraAxisproExpert(http.Controller):
     @api_route("/axispro/portfolio", profiles=READ)
     def portfolio(self, **_kw):
         """Tableau de bord du cabinet : entonnoir des gates, recommandations, rentabilité, besoins et
-        financements obtenus, actions en retard, risques critiques, relances, charge et honoraires."""
+        financements obtenus, actions en retard, risques critiques, relances, charge et honoraires.
+
+        Devises (audit du noyau, I-X3) : un dossier se chiffre dans sa devise, que suivent ses démarches
+        de financement. Aucun montant d'une devise ne s'ajoute à une autre : les montants simples
+        (need, investment, requested, granted) ne portent que sur la devise de la société (`currency`),
+        et chaque devise a ses totaux (`by_currency`, `need_by_currency`, `investment_by_currency`).
+        Pas de conversion : sans cours saisi, le noyau compterait 1 USD pour 1 GNF, et le cours du jour
+        ne dit rien d'un besoin à financer sur plusieurs années, que les financeurs instruisent dans la
+        devise du dossier. Les honoraires facturés sont lus dans la devise de la société."""
         env = request.env
         day = today()
+        company_currency = env.company.currency_id.name
         dossiers = env["axispro.dossier"].search([("state", "in", ("open", "on_hold"))])
         funnel, recommendations, sectors, projects = {}, {}, {}, []
+        by_currency = {}
+
+        def bucket(currency):
+            return by_currency.setdefault(currency, {"currency": currency, "need": 0.0, "investment": 0.0,
+                                                     "requested": 0.0, "granted": 0.0})
+
         for d in dossiers:
+            currency = d.currency_id.name
             gate = d.current_gate_id
             if gate:
                 entry = funnel.setdefault(gate.code, {"code": gate.code, "name": gate.name, "sequence": gate.sequence,
-                                                      "count": 0, "need": 0.0})
+                                                      "count": 0, "need_by_currency": {}})
                 entry["count"] += 1
-                entry["need"] += d.financing_need
+                _add(entry["need_by_currency"], currency, d.financing_need)
             result = d.evaluate()
             score = d.scoring(result)
             recommendations[score["recommendation"]] = recommendations.get(score["recommendation"], 0) + 1
             sector = (d.sector or "Non renseigné").strip()
-            item = sectors.setdefault(sector, {"label": sector, "count": 0, "investment": 0.0})
+            item = sectors.setdefault(sector, {"label": sector, "count": 0, "investment_by_currency": {}})
             item["count"] += 1
-            item["investment"] += d.investment
+            _add(item["investment_by_currency"], currency, d.investment)
+            totals = bucket(currency)
+            totals["need"] += d.financing_need
+            totals["investment"] += d.investment
             fin = result.get("financial")
             projects.append({
                 "id": d.id, "reference": d.reference, "name": d.name, "promoter": d.promoter_id.name,
@@ -528,18 +569,37 @@ class EguitraAxisproExpert(http.Controller):
                 "assessed": score["assessed"],
                 "classification": score["classification"], "knockouts": len(score["knockouts"]),
                 "recommendation": score["recommendation"], "financing_need": d.financing_need,
+                "currency": currency,
                 "npv": fin["npv"] if fin else None, "irr_project": fin["irr_project"] if fin else None,
                 "dscr_min": fin["dscr_min"] if fin else None, "consultant": d.consultant_id.name or None,
                 "risks": d.risk_summary(), "actions": d.action_summary(),
             })
+        for entry in funnel.values():
+            entry["need"] = entry["need_by_currency"].get(company_currency, 0.0)
+        for item in sectors.values():
+            item["investment"] = item["investment_by_currency"].get(company_currency, 0.0)
         fundings = env["axispro.funding"].search([("dossier_id", "in", dossiers.ids)])
         pipeline = []
         for key, label in FUNDING_STATES:
             subset = fundings.filtered(lambda f, k=key: f.state == k)
+            split = {}
+            for f in subset:
+                row = split.setdefault(f.currency_id.name, {"currency": f.currency_id.name, "count": 0,
+                                                            "requested": 0.0, "granted": 0.0})
+                row["count"] += 1
+                row["requested"] += f.amount_requested
+                row["granted"] += f.amount_granted
+            own = split.get(company_currency, {})
             pipeline.append({"state": key, "label": label, "count": len(subset),
-                             "requested": sum(subset.mapped("amount_requested")),
-                             "granted": sum(subset.mapped("amount_granted"))})
+                             "requested": own.get("requested", 0.0), "granted": own.get("granted", 0.0),
+                             "by_currency": sorted(split.values(),
+                                                   key=lambda r: (r["currency"] != company_currency, r["currency"]))})
         won = fundings.filtered(lambda f: f.state in FUNDING_WON)
+        for f in fundings.filtered(lambda f: f.state not in ("rejected", "withdrawn")):
+            bucket(f.currency_id.name)["requested"] += f.amount_requested
+        for f in won:
+            bucket(f.currency_id.name)["granted"] += f.amount_granted
+        main = by_currency.get(company_currency) or {"need": 0.0, "investment": 0.0, "requested": 0.0, "granted": 0.0}
         follow_ups = fundings.filtered(
             lambda f: f.state in FUNDING_OPEN and f.next_date and f.next_date <= day + timedelta(days=FOLLOW_UP_DAYS)
         ).sorted("next_date")
@@ -567,17 +627,20 @@ class EguitraAxisproExpert(http.Controller):
         reviews = env["axispro.review"].search([("date", ">=", day - timedelta(days=90))])
         return {
             "generated_at": fields.Datetime.now(),
+            "currency": company_currency,
             "counts": {"open": len(dossiers.filtered(lambda d: d.state == "open")),
                        "on_hold": len(dossiers.filtered(lambda d: d.state == "on_hold"))},
             "funnel": sorted(funnel.values(), key=lambda x: x["sequence"]),
             "recommendations": recommendations,
-            "sectors": sorted(sectors.values(), key=lambda x: -x["investment"]),
+            "sectors": sorted(sectors.values(), key=lambda x: (-x["investment"], -x["count"], x["label"])),
             "projects": projects,
             "financing": {
-                "need": sum(dossiers.mapped("financing_need")),
-                "investment": sum(dossiers.mapped("investment")),
-                "requested": sum(fundings.filtered(lambda f: f.state not in ("rejected", "withdrawn")).mapped("amount_requested")),
-                "granted": sum(won.mapped("amount_granted")),
+                "need": main["need"],
+                "investment": main["investment"],
+                "requested": main["requested"],
+                "granted": main["granted"],
+                "by_currency": sorted(by_currency.values(),
+                                      key=lambda r: (r["currency"] != company_currency, r["currency"])),
                 "pipeline": pipeline,
             },
             "follow_ups": [funding_row(f, with_dossier=True) for f in follow_ups[:10]],
@@ -588,8 +651,9 @@ class EguitraAxisproExpert(http.Controller):
                       "list": [dict(risk_row(r), dossier={"id": r.dossier_id.id, "reference": r.dossier_id.reference,
                                                           "name": r.dossier_id.name}) for r in risks[:8]]},
             "workload": sorted(workload.values(), key=lambda x: -x["hours"]),
+            # Montant hors taxes dans la devise de la société, quelle que soit la devise d'une facture.
             "fees": {"unbilled_hours": sum(unbilled.mapped("hours")),
-                     "invoiced_year": sum(invoices.mapped("amount_untaxed"))},
+                     "invoiced_year": sum(invoices.mapped("amount_untaxed_signed")), "currency": company_currency},
             "committees": {"last_90_days": len(reviews),
                            "decisions": {k: len(reviews.filtered(lambda r, k=k: r.decision == k))
                                          for k in ("go", "conditional", "hold", "no_go", "postponed")}},

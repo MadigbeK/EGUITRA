@@ -17,7 +17,7 @@ from odoo import SUPERUSER_ID, api, http
 from odoo.exceptions import AccessDenied, AccessError, MissingError, UserError, ValidationError
 from odoo.http import request
 
-from ..organisation import APPS, module_entity, wrong_company_message
+from ..organisation import APPS, SESSION_ROUTES, module_entity, wrong_company_message
 
 _logger = logging.getLogger(__name__)
 
@@ -113,17 +113,39 @@ def _bearer_token():
     return None
 
 
+def mfa_required(env):
+    """La double authentification est-elle exigée (paramètre eguitra_api.mfa_required, 1 par défaut) ?"""
+    return env["ir.config_parameter"].sudo().get_param("eguitra_api.mfa_required", "1") != "0"
+
+
+# Session ouverte sans second facteur (pendant une suspension de la double authentification) alors
+# qu'il est de nouveau exigé : refusée, au renouvellement comme à chaque appel.
+MFA_AGAIN_MESSAGE = "La double authentification est de nouveau exigée : reconnectez-vous avec votre code."
+
+
 def _authenticate():
     raw = _bearer_token()
     token = sudo_env()["eguitra.api.token"]._find(raw, "access")
     if not token or not token._is_valid():
         raise ApiError(401, "unauthenticated", "Session expirée ou invalide.")
+    if not token.mfa_passed and mfa_required(token.env):
+        raise ApiError(401, "mfa_required", MFA_AGAIN_MESSAGE)
     # Pas d'écriture sur le jeton ici : les appels parallèles d'un même écran se bloqueraient.
     user = token.user_id
     request.update_env(user=user.id)
-    request.update_context(lang=user.lang or "fr_FR", tz=user.tz or "Africa/Conakry")
+    # eguitra_session_app : application où la session a été ouverte (/auth/me la rend au serveur web).
+    request.update_context(lang=user.lang or "fr_FR", tz=user.tz or "Africa/Conakry", eguitra_session_app=token.app)
     _set_companies(request.env.user)
     return request.env.user, token
+
+
+def _check_session_routes(token, route):
+    """Une session ouverte depuis une application qui n'ouvre que certaines routes (Rotations) s'y tient."""
+    scope = SESSION_ROUTES.get(token.app)
+    if scope and (request.httprequest.method, route) not in scope["routes"]:
+        raise ApiError(403, "session_restricted",
+                       f"Cette session, ouverte depuis {scope['name']}, ne sert qu'à cette application : "
+                       "connectez-vous à l'application voulue.")
 
 
 def _set_companies(user):
@@ -182,11 +204,13 @@ def _error(status, code, message=None, **extra):
     return json_response(payload, status)
 
 
-def api_route(route, methods=("GET",), profiles=None, auth=True):
+def api_route(route, methods=("GET",), profiles=None, auth=True, journal=True):
     """Déclare une route de l'API.
 
     :param profiles: profils autorisés (codes de PROFILE_GROUPS) ; None = tout utilisateur connecté.
     :param auth: False pour les routes publiques (connexion, santé).
+    :param journal: False pour une relecture périodique de l'écran (discussion : toutes les 5 et 30
+        secondes) ; seuls ses refus et ses erreurs entrent alors au journal des accès, qu'elle noierait.
     Un module réservé à une société (organisation.MODULE_ENTITY) refuse de travailler dans l'autre.
     La fonction décorée reçoit les paramètres d'URL et renvoie un objet sérialisable en JSON,
     ou une réponse HTTP déjà construite (fichier).
@@ -203,8 +227,9 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
             status = 500
             try:
                 if auth:
-                    user, _token = _authenticate()
+                    user, token = _authenticate()
                     user_id = user.id
+                    _check_session_routes(token, route)
                     if user.eguitra_password_temporary and route not in TEMPORARY_PASSWORD_ROUTES:
                         raise ApiError(403, "password_change_required",
                                        "Remplacez d'abord votre mot de passe provisoire.")
@@ -234,7 +259,7 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
                 return _error(500, "server_error", "Erreur interne. L'incident est journalisé.")
             finally:
                 # Le contrôle de santé (conteneur, supervision : toutes les 30 s) n'est pas un accès.
-                if route != "/health":
+                if route != "/health" and (journal or status >= 400):
                     _log_access(user_id, status, started, app)
 
         return http.route(

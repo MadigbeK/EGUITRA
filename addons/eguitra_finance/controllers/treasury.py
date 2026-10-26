@@ -3,6 +3,7 @@ rapprochement assisté avec les factures et règlements en attente."""
 
 import csv
 import io
+import math
 import re
 from datetime import datetime
 
@@ -18,6 +19,7 @@ from .common import (
     FIN_WRITE,
     analytic_labels,
     as_float,
+    as_int,
     check_mandatory_analytic,
     companies,
     describe_distribution,
@@ -86,6 +88,8 @@ def _line_rows(lines):
             "amount": line.amount,
             "reconciled": line.is_reconciled,
             "posted": line.move_id.state == "posted",
+            # Devise du compte : le montant de l'opération est dans cette devise (USD pour une caisse en USD).
+            "currency": (line.journal_id.currency_id or line.company_id.currency_id).name,
             "approval": line.move_id._eguitra_approval_info() if line.move_id.state == "draft" else None,
             "statement": line.statement_id.name or None,
             "move_id": line.move_id.id,
@@ -141,7 +145,7 @@ def _statement_row(statement):
 def _payment_mode(value):
     if not value:
         return request.env["eguitra.payment.mode"]
-    mode = request.env["eguitra.payment.mode"].sudo().browse(int(value)).exists()
+    mode = request.env["eguitra.payment.mode"].sudo().browse(as_int(value, "payment_mode_id")).exists()
     if not mode or (mode.company_id and mode.company_id != request.env.company):
         raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
     return mode.sudo(False)
@@ -150,7 +154,7 @@ def _payment_mode(value):
 def _operation_type(value, company):
     if not value:
         return request.env["eguitra.treasury.operation.type"]
-    kind = request.env["eguitra.treasury.operation.type"].sudo().browse(int(value)).exists()
+    kind = request.env["eguitra.treasury.operation.type"].sudo().browse(as_int(value, "operation_type_id")).exists()
     if not kind or kind.company_id != company or not kind.active:
         raise ApiError(422, "business_rule", "Type d'opération inconnu dans la société.")
     return kind.sudo(False)
@@ -170,7 +174,7 @@ def _loan_of(value, company):
     if not value:
         raise ApiError(400, "missing_fields", "Indiquez le financement concerné (déblocage, remboursement ou intérêts).",
                        fields=["loan_id"])
-    loan = request.env["eguitra.loan"].browse(int(value)).exists()
+    loan = request.env["eguitra.loan"].browse(as_int(value, "loan_id")).exists()
     if not loan or loan.company_id != company:
         raise ApiError(404, "not_found", "Financement introuvable dans la société.")
     return loan
@@ -197,19 +201,50 @@ def _impute_analytic(line, value, account):
     check_mandatory_analytic(counterpart)
 
 
-def _number(text):
+def _decimal_separator(values):
+    """Séparateur décimal d'un relevé : celui qui précède un ou deux chiffres finaux dans un montant
+    (« 25 000,00 », « 1500.50 ») ; None si aucun montant n'en porte (montants entiers, en GNF)."""
+    for value in values:
+        if isinstance(value, str):
+            found = re.search(r"([.,])\d{1,2}$", re.sub(r"[\s  ]", "", value).replace("GNF", ""))
+            if found:
+                return found.group(1)
+    return None
+
+
+def _number(text, decimal=None):
+    """Montant d'un relevé ou d'un solde saisi. Les deux séparateurs présents : le dernier est décimal
+    (« 1.500.000,00 », « 1,500,000.00 »). Un seul : décimal s'il est celui du fichier (decimal) ou, sans
+    indice, s'il précède un ou deux chiffres ; séparateur des milliers s'il groupe par trois (« 150.000 »,
+    « 1,500,000 »), le GNF n'ayant pas de décimales. Toute autre écriture lève ValueError : la ligne est
+    signalée, jamais lue de travers (« 150.000 » lu 150) ni écartée en silence."""
     if text is None:
         return 0.0
+    if isinstance(text, bool):
+        raise ValueError(f"Montant illisible : {text}")
     if isinstance(text, (int, float)):
         return float(text)
     cleaned = re.sub(r"[\s  ]", "", str(text)).replace("GNF", "")
     if not cleaned or cleaned in ("-", "—"):
         return 0.0
     if "," in cleaned and "." in cleaned:
-        cleaned = cleaned.replace(".", "").replace(",", ".")
-    elif "," in cleaned:
-        cleaned = cleaned.replace(",", ".")
-    return float(cleaned)
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif "," in cleaned or "." in cleaned:
+        sep = "," if "," in cleaned else "."
+        groups = cleaned.lstrip("+-").split(sep)
+        if len(groups) == 2 and (sep == decimal or (decimal is None and len(groups[1]) in (1, 2))):
+            cleaned = cleaned.replace(sep, ".")
+        elif groups[0] and all(len(g) == 3 for g in groups[1:]):
+            cleaned = cleaned.replace(sep, "")
+        else:
+            raise ValueError(f"Montant illisible : {text}")
+    number = float(cleaned)
+    if not math.isfinite(number):
+        raise ValueError(f"Montant illisible : {text}")
+    return number
 
 
 def _date(text):
@@ -353,15 +388,20 @@ def parse_statement(name, content):
         raise ApiError(422, "business_rule", "Colonnes non reconnues : il faut une date, un libellé et un montant "
                                              "(ou un débit et un crédit).")
 
+    # Séparateur décimal du fichier, lu sur toutes ses colonnes de montant : « 150.000 » d'un relevé aux
+    # montants entiers est 150 000, pas 150.
+    amount_columns = [i for i in (i_amount, i_debit, i_credit, i_balance) if i is not None]
+    decimal = _decimal_separator(_cell(row, i) for row in rows[start + 1:] for i in amount_columns)
+
     def amount_of(row):
         if i_amount is not None and _cell(row, i_amount) not in (None, ""):
-            return _number(_cell(row, i_amount))
+            return _number(_cell(row, i_amount), decimal)
         if i_debit is not None or i_credit is not None:
-            return _number(_cell(row, i_credit)) - _number(_cell(row, i_debit))
+            return _number(_cell(row, i_credit), decimal) - _number(_cell(row, i_debit), decimal)
         return 0.0
 
-    lines, running, marked = [], [], []
-    for row in rows[start + 1:]:
+    lines, running, marked, unreadable = [], [], [], []
+    for position, row in enumerate(rows[start + 1:], start=start + 2):
         label = str(_cell(row, i_label) or "").strip()
         texts = [str(c).strip() for c in row if isinstance(c, str) and c.strip()]
         kind = _balance_kind(label) or (_balance_kind(texts[0]) if texts else None)
@@ -369,26 +409,37 @@ def parse_statement(name, content):
             try:
                 value = amount_of(row)
                 if not value and i_balance is not None:
-                    value = _number(_cell(row, i_balance))
+                    value = _number(_cell(row, i_balance), decimal)
                 if not value:
                     value = next((_number(c) for c in row if isinstance(c, (int, float)) and not isinstance(c, bool)), 0.0)
-            except ValueError:
+            except ValueError as e:
+                unreadable.append(f"ligne {position} ({e})")
                 continue
             if "débiteur" in label.lower() or "debiteur" in label.lower():
                 value = -abs(value)
             marked.append((kind, value, len(lines)))
             continue
-        if _cell(row, i_date) in (None, ""):
+        raw_date = _cell(row, i_date)
+        # Sans date, ou un texte sans chiffre (« Total », « Report ») : pas une opération.
+        if raw_date in (None, "") or (isinstance(raw_date, str) and not re.search(r"\d", raw_date)):
             continue
         try:
-            day = _date(_cell(row, i_date))
+            day = _date(raw_date)
             amount = amount_of(row)
-            balance = _number(_cell(row, i_balance)) if i_balance is not None and _cell(row, i_balance) not in (None, "") else None
-        except ValueError:
+            balance = _number(_cell(row, i_balance), decimal) if i_balance is not None and _cell(row, i_balance) not in (None, "") else None
+        except ValueError as e:
+            unreadable.append(f"ligne {position} ({e})")
             continue
         if amount:
             lines.append({"date": day, "label": label[:250] or "/", "amount": amount})
             running.append(balance)
+    if unreadable:
+        # Une ligne illisible écartée en silence faussait le relevé, et l'import « réussissait ».
+        shown = ", ".join(unreadable[:10]) + (f" et {len(unreadable) - 10} autres" if len(unreadable) > 10 else "")
+        raise ApiError(422, "statement_unreadable", f"Relevé refusé, {'une ligne illisible' if len(unreadable) == 1 else f'{len(unreadable)} lignes illisibles'} : "
+                                                    f"{shown}. Corrigez le fichier (montants « 1 500 000 » ou "
+                                                    "« 1 500 000,00 », dates « 31/10/2026 ») puis importez-le de nouveau.",
+                       lines=unreadable)
 
     balance_start = balance_end = source = None
     for kind, value, position in marked:
@@ -436,7 +487,8 @@ class EguitraFinanceTreasury(http.Controller):
         Line = request.env["account.bank.statement.line"]
         lines = Line.search(domain, limit=int_arg(kw, "limit", 100, 1, 1000), offset=int_arg(kw, "offset", 0, 0),
                             order="date desc, id desc")
-        return {"journal": {"id": journal.id, "name": journal.name, "type": journal.type},
+        return {"journal": {"id": journal.id, "name": journal.name, "type": journal.type,
+                            "currency": (journal.currency_id or journal.company_id.currency_id).name},
                 "items": _line_rows(lines), "total_count": Line.search_count(domain)}
 
     @api_route("/finance/treasury/<int:journal_id>/lines", methods=("POST",), profiles=FIN_WRITE)
@@ -474,7 +526,7 @@ class EguitraFinanceTreasury(http.Controller):
             if loan:
                 values["eguitra_loan_id"] = loan.id
         if data.get("partner_id"):
-            partner = request.env["res.partner"].browse(int(data["partner_id"])).exists()
+            partner = request.env["res.partner"].browse(as_int(data["partner_id"], "partner_id")).exists()
             if not partner:
                 raise ApiError(404, "not_found", "Tiers introuvable.")
             values["partner_id"] = partner.id
@@ -486,7 +538,7 @@ class EguitraFinanceTreasury(http.Controller):
         if data.get("reference"):
             values["ref"] = str(data["reference"]).strip()[:200]
         if loan:
-            if data.get("counterpart_account_id") and int(data["counterpart_account_id"]) != typed.id:
+            if data.get("counterpart_account_id") and as_int(data["counterpart_account_id"], "counterpart_account_id") != typed.id:
                 raise ApiError(422, "business_rule", f"« {kind.name} » : la contrepartie est le compte "
                                                      f"{typed.with_company(company).code} du financement {loan.name}.")
             counterpart = typed
@@ -584,8 +636,9 @@ class EguitraFinanceTreasury(http.Controller):
             }
             own_total = total - sum(i["amount"] for i in skipped)
             if skipped and (start is not None or end is not None):
-                warnings.append(f"{len(skipped)} opération(s) figuraient déjà dans un relevé importé : le solde "
-                                "initial de ce relevé est recalculé sur ses seules opérations nouvelles.")
+                deja = "Une opération figurait" if len(skipped) == 1 else f"{len(skipped)} opérations figuraient"
+                warnings.append(f"{deja} déjà dans un relevé importé : le solde initial de ce relevé est recalculé "
+                                "sur ses seules opérations nouvelles.")
             if end is not None:
                 values["balance_end_real"] = end
                 values["balance_start"] = currency.round(end - own_total) if skipped or start is None else start
@@ -634,6 +687,13 @@ class EguitraFinanceTreasury(http.Controller):
         statement = request.env["account.bank.statement"].browse(statement_id).exists()
         if not statement or statement.journal_id.company_id not in request.env.user.company_ids:
             raise ApiError(404, "not_found", "Relevé introuvable.")
+        company = statement.journal_id.company_id
+        locks = [d for d in (company.fiscalyear_lock_date, getattr(company, "hard_lock_date", None)) if d]
+        if locks and statement.date and statement.date <= max(locks):
+            # Les soldes d'un relevé d'une période clôturée fondent son état de rapprochement et le contrôle
+            # de clôture : ils ne changent plus.
+            raise ApiError(422, "business_rule", f"Relevé d'une période clôturée (jusqu'au {max(locks):%d/%m/%Y}) : "
+                                                 "ses soldes ne se modifient plus.")
         data = read_json()
         values = {}
         for key in ("balance_start", "balance_end_real"):
@@ -810,7 +870,7 @@ class EguitraFinanceTreasury(http.Controller):
         ):
             raise ApiError(409, "conflict", f"Le code {values['code']} est déjà pris par un autre journal de la société.")
         if data.get("currency_id"):
-            values["currency_id"] = int(data["currency_id"])
+            values["currency_id"] = as_int(data["currency_id"], "currency_id")
         if data.get("bank_account_number"):
             values["bank_acc_number"] = data["bank_account_number"]
         journal = request.env["account.journal"].create(values)

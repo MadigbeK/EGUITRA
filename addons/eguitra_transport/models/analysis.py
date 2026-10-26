@@ -116,16 +116,22 @@ class EguitraTransportAnalysis(models.AbstractModel):
         revenue, km = (revenue or 0.0) + (rebilled or 0.0), km or 0.0
         direct = (cost or 0.0) + (net_shortage or 0.0)
         fleet_moves, depreciation, source = self._fleet_moves(company, date_from, date_to)
+        # Pièces des relevés de propriétaires (part du propriétaire, commissions, charges refacturées) : la
+        # marge d'un ensemble reversée à ses bénéficiaires, pas une charge de structure à répartir sur toute
+        # la flotte (audit du 25 octobre, I-T9). Elles restent dans les coûts comptabilisés de l'ensemble.
+        statements = self.env["eguitra.transport.owner.statement"].sudo().search(
+            [("company_id", "=", company.id), ("move_ids", "!=", False)])
+        excluded = list(set(fleet_moves) | set(statements.move_ids.ids))
         activity = Rotation._activity_account(company)
-        activity_charges = self._analytic_costs(company, date_from, date_to, activity_col, fleet_moves,
+        activity_charges = self._analytic_costs(company, date_from, date_to, activity_col, excluded,
                                                 account_id=activity.id).get(activity.id, 0.0)
         # Charges non affectées : classe 6 moins ce que l'axe Activité a reçu (toutes activités).
-        attributed = sum(self._analytic_costs(company, date_from, date_to, activity_col, fleet_moves).values())
-        charges = self._ledger(company, date_from, date_to, "6", fleet_moves)
+        attributed = sum(self._analytic_costs(company, date_from, date_to, activity_col, excluded).values())
+        charges = self._ledger(company, date_from, date_to, "6", excluded)
         corporate = max(0.0, charges - attributed)
-        income = -self._ledger(company, date_from, date_to, "7", [])
+        income = -self._ledger(company, date_from, date_to, "7", excluded)
         share = min(1.0, revenue / income) if income > 0 else None
-        booked_direct = sum(self._analytic_costs(company, date_from, date_to, vehicle_col, fleet_moves).values())
+        booked_direct = sum(self._analytic_costs(company, date_from, date_to, vehicle_col, excluded).values())
         pool = activity_charges + corporate * (share or 0.0) + depreciation
         return {
             "company": {"id": company.id, "name": company.name},
@@ -276,7 +282,7 @@ class EguitraTransportAnalysis(models.AbstractModel):
         fleet = Vehicle.search([("company_id", "in", companies.ids), ("state", "!=", "sold")])
         base = [("company_id", "in", companies.ids), ("date_loading", ">=", date_from), ("date_loading", "<=", date_to)]
         rotations = Rotation.search(base + [("state", "in", ("done", "invoiced"))])
-        days = (date_to - date_from).days + 1
+        days = max(1, (date_to - date_from).days + 1)
         filled = rotations.filtered(lambda r: r.vehicle_id.capacity_liters and r.volume_loaded)
         timed = rotations.filtered(lambda r: (r.date_return or r.date_delivery) and r.route_id.duration_days)
         on_time = timed.filtered(lambda r: r.duration_days <= r.route_id.duration_days)
@@ -343,10 +349,13 @@ class EguitraTransportAnalysis(models.AbstractModel):
             checks.append({"code": code, "label": label, "ok": not items, "count": len(items),
                            "items": items[:20], "hint": hint})
 
+        # Ensembles dont le parc a commencé à saisir les documents : avant, tous seraient « non renseignés ».
         check("vehicle_documents",
               "Documents des ensembles en service à jour (assurance, visite technique ; barémage et étanchéité des citernes)",
-              [issue["label"] for v in in_service for issue in v._document_issues()],
-              "Un document manquant ou expiré s'opposera au départ de l'ensemble ; renouvelez-le (Flotte et chauffeurs).")
+              [issue["label"] for v in in_service.filtered(lambda v: v._active_documents())
+               for issue in v._document_issues()],
+              "Renouvelez les documents expirés ou à échéance et complétez les manquants (Flotte et chauffeurs). Le "
+              "module HSSEQ en fera des motifs de départ.")
         check("vehicle_without_asset", "Ensembles en service rattachés à une immobilisation",
               [v.name for v in in_service.sudo().filtered(lambda v: not v.asset_id)],
               "Rattachez la fiche d'immobilisation (Flotte) : ses dotations entrent dans la structure du transport.")
@@ -390,3 +399,15 @@ class EguitraTransportAnalysis(models.AbstractModel):
               [f"{r.name} : {r.driver_id.name or 'chauffeur non renseigné'}" for r in unclaimed],
               "Chauffeur sans fiche tiers : créez sa fiche, puis passez la créance en opération diverse.")
         return checks
+
+
+class EguitraFinanceMetrics(models.AbstractModel):
+    _inherit = "eguitra.finance.metrics"
+
+    def _transport_vehicle_results(self, companies, date_from, date_to):
+        """Résultat de chaque ensemble routier après charges de structure (rentabilité complète du
+        transport) : le pilotage et l'alerte « ensembles déficitaires » jugent le résultat net, et non la
+        seule marge directe (audit du 25 octobre, I-T1)."""
+        report = self.env["eguitra.transport.analysis"].sudo().report(companies, date_from, date_to, "vehicle")
+        return [{key: row.get(key) for key in ("key", "label", "km", "revenue", "margin", "structure", "net_result")}
+                for row in report["rows"]]

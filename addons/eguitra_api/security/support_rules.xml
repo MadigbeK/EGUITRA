@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Espace partagé de suivi des demandes. Chaque compte interne voit ses demandes (et les fait avancer
+        dans les bornes du modèle : clôture, réouverture) ; la direction lit celles de ses sociétés ;
+        l'administration (E-VOLUTION XP) les voit et les traite toutes. Les comptes du portail n'ont
+        aucun droit sur ces modèles (ir.model.access.csv).
+    -->
+    <record id="rule_support_request_own" model="ir.rule">
+        <field name="name">Demandes de suivi : les siennes</field>
+        <field name="model_id" ref="model_eguitra_support_request"/>
+        <field name="domain_force">[('author_id', '=', user.id)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_support_request_direction" model="ir.rule">
+        <field name="name">Demandes de suivi : celles des sociétés de la direction (lecture)</field>
+        <field name="model_id" ref="model_eguitra_support_request"/>
+        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_direction'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="rule_support_request_admin" model="ir.rule">
+        <field name="name">Demandes de suivi : toutes pour l'administration</field>
+        <field name="model_id" ref="model_eguitra_support_request"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_admin'))]"/>
+    </record>
+
+    <record id="rule_support_comment_own" model="ir.rule">
+        <field name="name">Fil des demandes de suivi : celui de ses demandes</field>
+        <field name="model_id" ref="model_eguitra_support_comment"/>
+        <field name="domain_force">[('request_id.author_id', '=', user.id)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_support_comment_direction" model="ir.rule">
+        <field name="name">Fil des demandes de suivi : celui des sociétés de la direction (lecture)</field>
+        <field name="model_id" ref="model_eguitra_support_comment"/>
+        <field name="domain_force">[('request_id.company_id', 'in', user.company_ids.ids)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_direction'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="rule_support_comment_admin" model="ir.rule">
+        <field name="name">Fil des demandes de suivi : tout pour l'administration</field>
+        <field name="model_id" ref="model_eguitra_support_comment"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_admin'))]"/>
+    </record>
+</odoo>

@@ -32,11 +32,11 @@ APPS = {
     # Achats : pièces d'achat, engagements de dépense et fournisseurs, dans l'une ou l'autre société.
     "finance": {"profiles": {"admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"},
                 "entity": None},
-    "axispro": {"profiles": {"admin", "direction", "cabinet"}, "entity": "cabinet"},
+    "axispro": {"profiles": {"admin", "direction", "cabinet", "associe"}, "entity": "cabinet"},
     "portail": {"profiles": {"porteur"}, "entity": "cabinet"},
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
     "transport": {"profiles": {"admin", "direction", "finance", "exploitation"}, "entity": "groupe"},
-    "analyse": {"profiles": {"admin", "direction", "finance", "cabinet"}, "entity": None},
+    "analyse": {"profiles": {"admin", "direction", "finance", "cabinet", "associe"}, "entity": None},
     # RH (NIMOVA · RH) : personnel, absences et paie, gestion commune aux deux sociétés. Un compte lié
     # à un dossier salarié l'ouvre aussi, réduite à « Mon espace » (eguitra_rh, res.users._eguitra_apps).
     # model : l'application n'existe que là où son module est installé (la production peut recevoir le
@@ -70,7 +70,26 @@ PROFILE_ENTITY = {
     "chantiers": "groupe",
     "immobilier": "groupe",
     "cabinet": "cabinet",
+    "associe": "cabinet",
     "porteur": "cabinet",
+}
+
+
+# Application dont la session n'ouvre que certaines routes (méthode, route déclarée) : la session de
+# Rotations, jusqu'à 90 jours sur un téléphone du parc, ne sert qu'à la saisie des rotations et au
+# compte (profil, mot de passe). Elle n'ouvre ni Transport (rentabilité, tarifs) ni Finance dans le même
+# navigateur : il faut s'y connecter.
+SESSION_ROUTES = {
+    "mobile": {
+        "name": "Rotations",
+        "routes": frozenset({
+            ("GET", "/auth/me"),
+            ("POST", "/auth/password"),
+            ("GET", "/transport/referentials"),
+            ("GET", "/transport/rotations"),
+            ("POST", "/transport/sync"),
+        }),
+    },
 }
 
 
@@ -78,6 +97,12 @@ def module_entity(route):
     return next((entity for prefix, entity in MODULE_ENTITY.items() if route.startswith(prefix)), None)
 
 
+def _que(nom):
+    """« que » élidé devant une voyelle : « qu'EGUITRA GROUP », « que MB AxisPro Consulting »."""
+    return "qu'" if nom[:1].upper() in "AEIOUYÉÈÊÀÂÎÔÛ" else "que "
+
+
 def wrong_company_message(entity):
-    return (f"Ce module ne concerne que {ENTITY_NAMES[entity]} : choisissez cette société dans la colonne "
-            "de gauche, ou ouvrez l'application qui la sert.")
+    nom = ENTITY_NAMES[entity]
+    return (f"Ce module ne concerne {_que(nom)}{nom} : choisissez cette société en haut de l'écran, "
+            "ou ouvrez l'application qui la sert.")

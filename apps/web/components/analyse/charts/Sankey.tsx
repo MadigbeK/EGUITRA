@@ -3,8 +3,8 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { sankey, sankeyJustify, sankeyLinkHorizontal, type SankeyLink as D3Link, type SankeyNode as D3Node } from "d3-sankey";
 import type { SankeyLink, SankeyNode } from "@/lib/analyse-types";
-import { fmtShort } from "@/lib/format";
-import { Bulle, COULEUR, Cadre, SERIES, TableRepli, tronquer } from "./commun";
+
+import { Bulle, COULEUR, Cadre, SERIES, TableRepli, tronquer, fmtValeur } from "./commun";
 
 type Noeud = SankeyNode & { couleur: string };
 type Lien = { source: string; target: string; value: number };
@@ -20,7 +20,7 @@ const GROUPES: Record<SankeyNode["group"], string> = { sector: "Secteur", funder
 export function Sankey({ nodes, links, hauteur = 360, label, format }: { nodes: SankeyNode[]; links: SankeyLink[]; hauteur?: number; label: string; format?: (v: number) => string }) {
   const [focusLien, setFocusLien] = useState<number | null>(null);
   const [focusNoeud, setFocusNoeud] = useState<string | null>(null);
-  const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
+  const show = format ?? ((v: number) => fmtValeur(v, "gnf"));
   const noeuds = useMemo<Noeud[]>(() => {
     const parGroupe: Record<string, number> = {};
     return nodes.map((n) => {

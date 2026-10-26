@@ -182,7 +182,9 @@ class AccountBankStatementLine(models.Model):
             ("account_id.account_type", "=", "asset_receivable" if incoming else "liability_payable"),
             ("amount_residual", "!=", 0),
         ]
-        items = self.env["account.move.line"].search(domain, limit=200, order="date_maturity asc")
+        # Toutes les pièces ouvertes du sens de l'opération (2 000 au plus) : bornée à 200, la recherche
+        # écartait les pièces récentes dès que 200 plus anciennes restaient ouvertes.
+        items = self.env["account.move.line"].search(domain, limit=2000, order="date_maturity asc")
         amount = abs(self.amount)
 
         def score(ml):

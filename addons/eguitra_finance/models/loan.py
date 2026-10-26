@@ -15,8 +15,10 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_round
+
+from ..formats import accord, pluriel
 
 PERIOD_MONTHS = {"monthly": 1, "quarterly": 3, "semiannual": 6, "annual": 12}
 # Écart toléré entre la sortie de banque et le montant de l'échéance (arrondis).
@@ -69,6 +71,25 @@ class EguitraLoan(models.Model):
         for loan in self:
             loan.outstanding = sum(loan.line_ids.filtered(lambda l: not l.paid).mapped("principal"))
 
+    @api.constrains("principal", "annual_rate", "duration_months", "grace_months")
+    def _check_terms(self):
+        """Conditions du financement : montant positif, taux annuel de 0 à 100 %, durée d'au moins un
+        mois, différé plus court que la durée."""
+        for loan in self:
+            if loan.principal <= 0:
+                raise ValidationError(f"{loan.name} : le montant emprunté doit être positif.")
+            if not 0 <= (loan.annual_rate or 0.0) <= 100:
+                raise ValidationError(f"{loan.name} : le taux annuel est un pourcentage, de 0 à 100.")
+            if loan.duration_months < 1:
+                raise ValidationError(f"{loan.name} : la durée est d'au moins un mois.")
+            if (loan.grace_months or 0) < 0 or (loan.grace_months or 0) >= loan.duration_months:
+                raise ValidationError(f"{loan.name} : le différé doit être positif et plus court que la durée.")
+
+    def outstanding_at(self, day):
+        """Capital restant dû à la date : échéances non réglées à cette date (un règlement daté après
+        la date ne la diminue pas), pour la comparer au solde comptable de la même date."""
+        return sum(line.principal for loan in self for line in loan.line_ids if not line._paid_at(day))
+
     def _period_rate(self):
         self.ensure_one()
         return (self.annual_rate or 0.0) / 100.0 * PERIOD_MONTHS[self.periodicity] / 12.0
@@ -114,6 +135,9 @@ class EguitraLoan(models.Model):
 
     def action_activate(self):
         for loan in self:
+            if loan.state != "draft":
+                raise UserError(f"Le financement {loan.name} est déjà "
+                                f"{'soldé : il ne se remet pas en service' if loan.state == 'closed' else 'en service'}.")
             if not loan.line_ids:
                 loan.compute_schedule()
             if not (loan.principal_account_id and loan.interest_account_id and loan.journal_id):
@@ -177,7 +201,9 @@ class EguitraLoan(models.Model):
         lines = self.env["eguitra.loan.line"].sudo().search([
             ("loan_id.company_id", "in", companies.ids), ("loan_id.state", "in", ("active", "closed")),
         ])
-        unpaid = lines.filtered(lambda l: not l.paid)
+        # Réglées à la date (et non aujourd'hui) : le capital restant dû se compare au solde comptable
+        # de la même date (contrôle de clôture d'un mois passé, séries mensuelles).
+        unpaid = lines.filtered(lambda l: not l._paid_at(today))
         next_line = unpaid.filtered(lambda l: l.due_date >= today).sorted("due_date")[:1]
         year_ago, year_ahead = today - relativedelta(years=1), today + relativedelta(years=1)
         return {
@@ -217,6 +243,62 @@ class EguitraLoanLine(models.Model):
         for line in self:
             line.total = line.principal + line.interest
 
+    # ─── État du règlement ────────────────────────────────────────────────
+
+    def _paid_at(self, day):
+        """Réglée à cette date : règlement comptabilisé et daté au plus tard ce jour-là (une échéance
+        réglée sans écriture, à la reprise, compte comme réglée)."""
+        self.ensure_one()
+        if not self.paid:
+            return False
+        return not (day and self.move_id and self.move_id.state == "posted" and self.move_id.date > day)
+
+    def _approval_request(self):
+        """Dernière demande d'approbation (module eguitra_approval) de la pièce de règlement en brouillon."""
+        self.ensure_one()
+        move = self.move_id
+        if not move or move.state != "draft" or not hasattr(move, "_eguitra_last_request"):
+            return None
+        return move._eguitra_last_request() or None
+
+    def settlement_state(self):
+        """paid : réglée ; pending : règlement soumis au circuit des décaissements, comptabilisé à la
+        dernière approbation ; rejected : règlement refusé (un nouveau règlement le remplace) ; draft :
+        pièce de règlement en brouillon hors circuit ; due : à régler."""
+        self.ensure_one()
+        if self.paid:
+            return "paid"
+        if self.move_id.state == "draft":
+            request = self._approval_request()
+            if request and request.state in ("pending", "rejected"):
+                return request.state
+            return "draft"
+        return "due"
+
+    def _drop_pending_move(self):
+        """Pièce de règlement en brouillon abandonnée (refusée, ou remplacée par la ligne du relevé) :
+        annulée avec ses demandes d'approbation en cours, pour qu'elle ne soit jamais comptabilisée en
+        plus du nouveau règlement."""
+        for line in self:
+            move = line.move_id
+            if not move or move.state != "draft":
+                continue
+            if "eguitra.approval.request" in self.env:
+                self.env["eguitra.approval.request"].sudo().search([
+                    ("res_model", "=", "account.move"), ("res_id", "=", move.id),
+                    ("state", "in", ("pending", "rejected")),
+                ]).write({"state": "cancelled"})
+            move.sudo().button_cancel()
+            line.move_id = False
+
+    def _reopen(self):
+        """Règlement défait (écriture remise en brouillon ou annulée, extournée, rapprochement défait) :
+        l'échéance redevient due et le financement soldé repasse en cours."""
+        for line in self.filtered("paid"):
+            line.write({"paid": False, "statement_line_id": False})
+            if line.loan_id.state == "closed":
+                line.loan_id.state = "active"
+
     def action_pay(self, date=None):
         """Comptabilise le règlement de l'échéance : dette et intérêts au débit, banque au crédit."""
         for line in self:
@@ -225,6 +307,15 @@ class EguitraLoanLine(models.Model):
                 raise UserError("Cette échéance est déjà réglée.")
             if loan.state != "active":
                 raise UserError("Le financement n'est pas en cours.")
+            state = line.settlement_state()
+            if state == "pending":
+                raise UserError(f"Le règlement de l'échéance {line.sequence} attend déjà l'approbation du décaissement "
+                                "(À valider) : il sera comptabilisé à la dernière approbation.")
+            if state == "draft":
+                raise UserError(f"Le règlement de l'échéance {line.sequence} est en brouillon ({line.move_id.display_name}) : "
+                                "validez-le depuis les pièces, ou annulez-le, avant d'en passer un autre.")
+            if state == "rejected":
+                line._drop_pending_move()  # règlement refusé : le nouveau repart au circuit
             journal = loan.journal_id
             label = f"{loan.name} - échéance {line.sequence}"
             entries = []
@@ -256,7 +347,8 @@ class EguitraLoanLine(models.Model):
         """Échéance déjà réglée par action_pay sur ce journal, sans ligne de relevé : si le relevé
         est importé, la sortie de banque y figure une seconde fois."""
         self.ensure_one()
-        return bool(self.paid and not self.statement_line_id and self.move_id and self.move_id.journal_id == journal)
+        return bool(self.paid and not self.statement_line_id and self.move_id and self.move_id.state == "posted"
+                    and self.move_id.journal_id == journal)
 
     @api.model
     def _statement_candidates(self, st_line, limit=10):
@@ -309,7 +401,10 @@ class EguitraLoanLine(models.Model):
                 "score": score(line),
                 "already_paid": direct,
                 "hint": ("Déjà réglée directement en banque : son règlement sera extourné, la ligne du relevé le remplace."
-                         if direct else "Capital et intérêts en contrepartie de la sortie de banque."),
+                         if direct else
+                         "Règlement direct en attente d'approbation : il sera annulé, la ligne du relevé le remplace."
+                         if line.settlement_state() == "pending" else
+                         "Capital et intérêts en contrepartie de la sortie de banque."),
             }
             for line, direct in found[:limit]
         ]
@@ -335,6 +430,9 @@ class EguitraLoanLine(models.Model):
         if not (loan.principal_account_id and loan.interest_account_id):
             raise UserError("Renseignez le compte de dette et le compte de charges financières du financement.")
         label = f"{loan.name} - échéance {self.sequence}"
+        # Règlement direct encore en brouillon (en attente d'approbation, refusé) : la ligne du relevé le
+        # remplace ; il est annulé avec sa demande, sinon la banque serait créditée deux fois à l'approbation.
+        self._drop_pending_move()
         if self.paid:
             if not self._paid_directly_on(st_line.journal_id):
                 raise UserError("Cette échéance est déjà réglée par un autre compte : rien à rapprocher.")
@@ -384,7 +482,7 @@ class EguitraPeriodClose(models.Model):
         checks = super()._run_controls()
         company = self.company_id
         _start, end = self._bounds()
-        summary = self.env["eguitra.loan"].debt_summary(company, end)
+        summary = self.env["eguitra.loan"].debt_summary(company, end)  # capital restant dû à la fin du mois
         accounting = -self.env["eguitra.finance.metrics"]._sum_balance(company, ["16", "17"], None, end)
         gap = accounting - summary["outstanding"]
         checks.append(self._check(
@@ -400,8 +498,9 @@ class EguitraPeriodClose(models.Model):
         ]).filtered(lambda l: Line.search_count([("journal_id", "=", l.move_id.journal_id.id)], limit=1))
         checks.append(self._check(
             "loan_bank_statement", "Échéances d'emprunt rapprochées des relevés", not direct, False,
-            f"{len(direct)} échéance(s) réglée(s) directement sur un compte bancaire à relevés : rapprochez la "
-            "sortie du relevé de l'échéance (Trésorerie, Rapprocher) pour ne pas la compter deux fois.", len(direct),
+            f"{pluriel(len(direct), 'échéance')} {accord(len(direct), 'réglée')} directement sur un compte bancaire "
+            "à relevés : rapprochez la sortie du relevé de l'échéance (Trésorerie, Rapprocher) pour ne pas la compter "
+            "deux fois.", len(direct),
         ))
         return checks
 
@@ -411,11 +510,23 @@ class AccountMove(models.Model):
 
     def _post(self, soft=True):
         """Échéance d'emprunt réglée quand son écriture de règlement est comptabilisée (aussitôt, ou à
-        l'approbation du décaissement) ; financement soldé avec sa dernière échéance."""
+        l'approbation du décaissement) ; financement soldé avec sa dernière échéance. L'extourne validée
+        d'un règlement le défait : l'échéance redevient due."""
         posted = super()._post(soft)
-        lines = self.env["eguitra.loan.line"].sudo().search([("move_id", "in", posted.ids), ("paid", "=", False)])
+        Line = self.env["eguitra.loan.line"].sudo()
+        reversed_moves = posted.mapped("reversed_entry_id")
+        if reversed_moves:
+            Line.search([("move_id", "in", reversed_moves.ids), ("paid", "=", True)])._reopen()
+        lines = Line.search([("move_id", "in", posted.ids), ("paid", "=", False)])
         for line in lines:
             line.paid = True
             if all(line.loan_id.line_ids.mapped("paid")):
                 line.loan_id.state = "closed"
         return posted
+
+    def button_draft(self):
+        """Règlement d'échéance remis en brouillon (correction ou annulation) : l'échéance redevient due ;
+        il la règle de nouveau s'il est revalidé."""
+        result = super().button_draft()
+        self.env["eguitra.loan.line"].sudo().search([("move_id", "in", self.ids), ("paid", "=", True)])._reopen()
+        return result

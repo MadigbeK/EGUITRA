@@ -7,7 +7,7 @@ import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, M
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Leave, type LeaveType, type MySpace } from "@/lib/rh-types";
-import { DecisionAbsence, EtatAbsence, Ligne, jours, messageErreur, moisLong, periode, useJoursOuvrables } from "./commun";
+import { DecisionAbsence, EtatAbsence, Ligne, accord, jours, messageErreur, moisLong, periode, useJoursOuvrables } from "./commun";
 import { MesHabilitations } from "./Securite";
 
 /**
@@ -19,6 +19,7 @@ export function MonEspace() {
   const { data, error, mutate } = useApi<MySpace>("/rh/me");
   const [demande, setDemande] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [annulation, setAnnulation] = useState<number | null>(null);
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!data) return <Loading label="Chargement de votre espace…" />;
   const e = data.employee;
@@ -37,11 +38,14 @@ export function MonEspace() {
   async function annuler(l: Leave) {
     if (!(await demanderConfirmation(`Annuler votre demande (${l.type.name}, ${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler la demande", danger: true }))) return;
     setErreur(null);
+    setAnnulation(l.id);
     try {
       await apiSend("POST", `/rh/me/leaves/${l.id}/cancel`);
       void mutate();
     } catch (err) {
       setErreur(messageErreur(err));
+    } finally {
+      setAnnulation(null);
     }
   }
 
@@ -64,7 +68,7 @@ export function MonEspace() {
       )}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Kpi label="Solde de congés" value={data.balance ? jours(data.balance.balance) : "–"} hint={data.balance?.pending ? `${jours(data.balance.pending)} en attente de validation` : "Acquis au fil des mois de service"} tone={data.balance && data.balance.balance < 0 ? "danger" : "ok"} />
-        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} an(s)`} hint={`Depuis le ${fmtDate(e.hire_date)}, ${CONTRACT_LABELS[e.contract_type]}`} />
+        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} ${accord(e.seniority_years, "an")}`} hint={`Depuis le ${fmtDate(e.hire_date)}, ${CONTRACT_LABELS[e.contract_type]}`} />
         <Kpi label="Dernier bulletin" value={data.payslips[0] ? fmtGNF(data.payslips[0].net) : "–"} hint={data.payslips[0] ? `Net de ${moisLong(data.payslips[0].month)}` : "Aucun bulletin validé"} />
       </div>
 
@@ -105,7 +109,7 @@ export function MonEspace() {
                   <span className="flex items-center gap-2">
                     <EtatAbsence state={l.state} />
                     {(l.state === "submitted" || (l.state === "approved" && l.date_from > aujourdhui)) && (
-                      <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
+                      <Button variant="ghost" size="sm" loading={annulation === l.id} disabled={annulation !== null} onClick={() => void annuler(l)}>
                         Annuler
                       </Button>
                     )}
@@ -178,7 +182,7 @@ export function MonEspace() {
       {demande && (
         <DemandeAbsence
           types={data.leave_types}
-          solde={data.balance?.balance ?? null}
+          solde={data.balance ? data.balance.balance - data.balance.pending : null}
           onClose={() => setDemande(false)}
           onDone={() => {
             setDemande(false);
@@ -190,6 +194,7 @@ export function MonEspace() {
   );
 }
 
+/** solde : jours disponibles, demandes en attente déduites, comme le contrôle du noyau (POST /rh/me/leaves). */
 function DemandeAbsence({ types, solde, onClose, onDone }: { types: LeaveType[]; solde: number | null; onClose: () => void; onDone: () => void }) {
   const actifs = types.filter((t) => t.active);
   const [typeId, setTypeId] = useState(String(actifs[0]?.id ?? ""));
@@ -220,7 +225,7 @@ function DemandeAbsence({ types, solde, onClose, onDone }: { types: LeaveType[];
     <Modal
       open
       title="Demander une absence"
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
         <Button variant="primary" loading={busy} disabled={!typeId || !du || Boolean(erreurJours)} onClick={envoyer}>
           Envoyer la demande
@@ -248,8 +253,8 @@ function DemandeAbsence({ types, solde, onClose, onDone }: { types: LeaveType[];
           </label>
         )}
         <div className="text-sm sm:col-span-2">
-          {erreurJours ? <span className="text-danger">{erreurJours}</span> : days !== null ? <span className="text-ink-2">Durée : <b>{jours(days)} ouvrable(s)</b></span> : null}
-          {depasse && <span className="mt-1 block text-warn">Votre solde ({jours(solde)}) ne couvre pas cette demande : le service RH devra l&apos;accepter.</span>}
+          {erreurJours ? <span className="text-danger">{erreurJours}</span> : days !== null ? <span className="text-ink-2">Durée : <b>{jours(days)} {accord(days, "ouvrable")}</b></span> : null}
+          {depasse && <span className="mt-1 block text-warn">Votre solde disponible ({jours(solde)}, demandes en attente déduites) ne couvre pas cette demande : elle sera refusée, sauf si les jours acquis d&apos;ici au début de l&apos;absence suffisent. Au-delà du solde, voyez le service RH.</span>}
           {type && !type.paid && <span className="mt-1 block text-warn">Absence non rémunérée : retenue sur votre salaire du mois.</span>}
           {type?.needs_document && <span className="mt-1 block text-muted">Un justificatif sera demandé : remettez-le au service RH.</span>}
         </div>

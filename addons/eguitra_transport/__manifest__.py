@@ -4,7 +4,7 @@
                "spécifiques, facturation, rentabilité (coûts standard, déclarés, comptabilisés, structure), "
                "ensembles gérés pour des propriétaires (répartition, relevés), barème officiel des hydrocarbures, "
                "saisie mobile",
-    "version": "19.0.1.5.0",
+    "version": "19.0.1.6.0",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

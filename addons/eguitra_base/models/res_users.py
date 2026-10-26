@@ -10,6 +10,8 @@ PROFILE_GROUPS = {
     "chantiers": "eguitra_base.group_profile_chantiers",
     "immobilier": "eguitra_base.group_profile_immobilier",
     "cabinet": "eguitra_base.group_profile_cabinet",
+    # Associé du cabinet : porte le profil cabinet ; scelle, force un gate, rouvre une révision.
+    "associe": "eguitra_base.group_profile_associe",
     "rh": "eguitra_base.group_profile_rh",
     "hsseq": "eguitra_base.group_profile_hsseq",
     "conducteur": "eguitra_base.group_profile_conducteur",

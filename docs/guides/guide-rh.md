@@ -120,16 +120,26 @@ dont le module HSSEQ a besoin pour autoriser ou refuser le départ d'un conducte
 - **Habilitations** : permis poids lourd, conduite défensive, matières dangereuses, accès au site
   minier, secourisme (liste réglable dans les paramètres). Saisissez la date d'obtention : l'expiration
   est proposée selon la durée de validité du type. Joignez le justificatif.
-- **Aptitude médicale** : seulement « apte » ou « inapte », la date de la visite et sa date de validité.
-  N'enregistrez jamais de détail médical.
+- **Aptitude médicale** : seulement « apte », « apte avec réserve » ou « inapte », la date de la visite
+  et sa date de validité. N'enregistrez jamais de détail médical, ni la nature d'une réserve.
 - **EPI remis** : casque, chaussures, gilet… avec la date de remise et celle du renouvellement.
 - **Accident du travail** : saisissez l'arrêt avec le type d'absence « Accident du travail ». Il entre
-  dans les taux de fréquence et de gravité, calculés sur les heures réellement travaillées.
+  dans les taux de fréquence et de gravité, calculés sur les heures payées par les bulletins validés
+  (estimées par la présence pour un mois sans paie validée : l'écran l'indique).
 
 Un conducteur sans permis, conduite défensive ou habilitation aux matières dangereuses valide, ou dont
 l'aptitude est « inapte » ou dépassée, ne peut pas partir en rotation (motif V04 du verrou HSSEQ). La
-matrice le signale par « départ refusé ». L'échéancier prévient 30 jours puis 7 jours avant chaque
-expiration. Chaque conducteur voit ses habilitations dans « Mon espace ».
+matrice le signale par « départ refusé ». Une aptitude non saisie ou avec réserve, ou une habilitation
+à renouveler, est signalée sans bloquer le départ. L'échéancier prévient 30 jours puis 7 jours avant
+chaque expiration (délais réglables dans les paramètres). Chaque conducteur voit ses habilitations dans
+« Mon espace ». **Saisissez les habilitations de tous les conducteurs avant la mise en service du
+verrou HSSEQ** : sans elles, aucun départ n'est autorisé.
+
+Pour une première saisie en nombre, « Modèle de reprise » donne un classeur avec une rangée par
+conducteur et par habilitation, et une rangée d'aptitude par conducteur, déjà remplies de ce qui est
+connu. Complétez les dates (JJ/MM/AAAA), la référence et l'organisme, puis « Importer » : rien n'est
+enregistré tant qu'une rangée est en erreur, et chaque erreur est indiquée avec sa ligne. Réimporter le
+même classeur ne crée pas de doublon. Les justificatifs se déposent ensuite sur chaque fiche.
 
 ## Mon espace (tous les salariés)
 

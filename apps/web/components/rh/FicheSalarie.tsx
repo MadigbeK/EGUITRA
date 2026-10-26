@@ -5,9 +5,10 @@ import { useState } from "react";
 import { ChevronLeft, Download, FileText, LogOut, Pencil, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
-import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
+import type { Me } from "@/lib/types";
+import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, accord, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
 import { SecuriteSalarie } from "./Securite";
@@ -21,9 +22,12 @@ export function FicheSalarie({ id }: { id: string }) {
   const [onglet, setOnglet] = useState<Onglet>("identite");
   const [edition, setEdition] = useState(false);
   const [sortie, setSortie] = useState(false);
+  const { data: moi } = useApi<Me>("/auth/me");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!e || !meta) return <Etat error={erreurMeta} onRetry={() => rafraichirMeta()} label="Chargement du dossier…" />;
-  const ecrit = meta.can_write;
+  // Quatre yeux (refuse_own du noyau) : personne ne modifie son propre dossier ni ses éléments de paie.
+  const propre = Boolean(moi && e.user?.id === moi.id);
+  const ecrit = meta.can_write && !propre;
   const rafraichir = () => void mutate();
 
   return (
@@ -57,6 +61,11 @@ export function FicheSalarie({ id }: { id: string }) {
           )
         }
       />
+      {propre && meta.can_write && (
+        <div className="mb-4">
+          <Notice tone="neutral">Votre propre dossier : un autre membre du service RH le modifie.</Notice>
+        </div>
+      )}
       {e.issues.length > 0 && (
         <div className="mb-4">
           <Notice tone="warn">À compléter : {e.issues.join(" ; ")}.</Notice>
@@ -64,7 +73,7 @@ export function FicheSalarie({ id }: { id: string }) {
       )}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Brut mensuel" value={fmtGNF(e.monthly_gross)} hint={`Salaire de base ${fmtGNF(e.base_salary)}`} />
-        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} an(s)`} hint={`Embauché le ${fmtDate(e.hire_date)}`} />
+        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} ${accord(e.seniority_years, "an")}`} hint={`Embauché le ${fmtDate(e.hire_date)}`} />
         <Kpi label="Solde de congés" value={jours(e.balance.balance)} hint={e.balance.pending ? `${jours(e.balance.pending)} en attente de validation` : "Aucune demande en attente"} tone={e.balance.balance < 0 ? "danger" : "neutral"} />
         <Kpi label="Contrat" value={CONTRACT_LABELS[e.contract_type]} hint={e.contract_end ? `Jusqu'au ${fmtDate(e.contract_end)}` : e.trial_end ? `Essai jusqu'au ${fmtDate(e.trial_end)}` : "Sans terme"} tone={e.state === "essai" ? "warn" : "neutral"} />
       </div>
@@ -186,7 +195,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
                 <tr key={l.id} className="border-b border-line/70">
                   <td className="py-2 text-ink-2">
                     {l.rubric.name}
-                    {l.rubric.input === "hours" && <span className="text-muted"> ({fmtDec(l.quantity)} h)</span>}
+                    {l.rubric.input === "hours" && <span className="text-muted"> ({fmtDec(l.quantity)}{INSECABLE}h)</span>}
                   </td>
                   <td className="py-2 text-right font-mono tabular">{l.rubric.input === "hours" ? "selon le taux horaire" : fmtGNF(l.amount)}</td>
                 </tr>
@@ -213,7 +222,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
                 { key: "date", label: "Date", render: (h) => fmtDate(h.date) },
                 { key: "old", label: "Avant", align: "right", render: (h) => fmtGNF(h.old_salary) },
                 { key: "new", label: "Après", align: "right", render: (h) => fmtGNF(h.new_salary) },
-                { key: "var", label: "Écart", align: "right", render: (h) => (h.old_salary ? `${h.new_salary >= h.old_salary ? "+" : ""}${fmtDec(((h.new_salary - h.old_salary) / h.old_salary) * 100)} %` : "–") },
+                { key: "var", label: "Écart", align: "right", render: (h) => (h.old_salary ? `${h.new_salary >= h.old_salary ? "+" : ""}${fmtDec(((h.new_salary - h.old_salary) / h.old_salary) * 100)}${INSECABLE}%` : "–") },
                 { key: "reason", label: "Motif", render: (h) => `${h.reason ?? "–"} (${h.user})` },
               ]}
             />
@@ -238,10 +247,12 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
 /** Primes et indemnités versées chaque mois : remplacées en bloc (PATCH fixed_lines). */
 function ElementsFixes({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; onClose: () => void; onDone: () => void }) {
   const rubriques = meta.rubrics.filter((r) => r.active && !r.system && r.kind === "gain");
-  const [lignes, setLignes] = useState(e.fixed_lines.map((l) => ({ rubric_id: String(l.rubric.id), valeur: String(l.rubric.input === "hours" ? l.quantity : l.amount) })));
+  const [lignes, setLignes] = useState(e.fixed_lines.map((l) => ({ rubric_id: String(l.rubric.id), valeur: String(l.rubric.input === "hours" ? l.quantity : l.amount).replace(".", ",") })));
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const rubrique = (id: string) => rubriques.find((r) => r.id === Number(id));
+  // Montant ou heures illisible : en erreur sous le champ, et rien n'est envoyé (il valait 0).
+  const illisible = lignes.some((l) => l.rubric_id && erreurNombre(l.valeur));
 
   async function enregistrer() {
     setBusy(true);
@@ -264,9 +275,9 @@ function ElementsFixes({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; 
       open
       wide
       title={`Éléments fixes, ${e.name}`}
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
-        <Button variant="primary" loading={busy} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={illisible} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -284,7 +295,7 @@ function ElementsFixes({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; 
               <Field label={i === 0 ? "Rubrique" : ""}>
                 <Select value={l.rubric_id} placeholder="Choisir" onChange={(ev) => setLignes(lignes.map((x, j) => (j === i ? { ...x, rubric_id: ev.target.value } : x)))} options={rubriques.map((x) => ({ value: x.id, label: x.name }))} />
               </Field>
-              <Field label={i === 0 ? "Montant ou heures" : ""}>
+              <Field label={i === 0 ? "Montant ou heures" : ""} error={erreurNombre(l.valeur)}>
                 <ChampMontant value={l.valeur} placeholder={r?.input === "hours" ? "heures" : "GNF"} onChange={(v) => setLignes(lignes.map((x, j) => (j === i ? { ...x, valeur: v } : x)))} />
               </Field>
               <Button variant="ghost" aria-label="Retirer" onClick={() => setLignes(lignes.filter((_, j) => j !== i))}>
@@ -363,13 +374,30 @@ function CongesSalarie({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta;
 function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit: boolean; onChanged: () => void }) {
   const [depot, setDepot] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  // Document en cours d'ouverture ou de suppression : son bouton est en chargement.
+  const [encours, setEncours] = useState<number | null>(null);
   async function supprimer(d: EmployeeDocument) {
     if (!(await demanderConfirmation(`Supprimer le document « ${d.name} » ?`, { action: "Supprimer", danger: true }))) return;
+    setErreur(null);
+    setEncours(d.id);
     try {
       await apiSend("DELETE", `/rh/documents/${d.id}`);
       onChanged();
     } catch (err) {
       setErreur(messageErreur(err));
+    } finally {
+      setEncours(null);
+    }
+  }
+  async function ouvrir(d: EmployeeDocument) {
+    setErreur(null);
+    setEncours(d.id);
+    try {
+      await apiDownload(`/rh/documents/${d.id}/file`, d.name);
+    } catch (err) {
+      setErreur(messageErreur(err));
+    } finally {
+      setEncours(null);
     }
   }
   return (
@@ -419,12 +447,12 @@ function Documents({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecr
               render: (d) => (
                 <span className="flex justify-end gap-1.5">
                   {d.has_file && (
-                    <Button size="sm" onClick={() => void apiDownload(`/rh/documents/${d.id}/file`, d.name)}>
+                    <Button size="sm" loading={encours === d.id} disabled={encours !== null} onClick={() => void ouvrir(d)}>
                       <Download className="h-3.5 w-3.5" /> Ouvrir
                     </Button>
                   )}
                   {ecrit && (
-                    <Button variant="ghost" size="sm" aria-label="Supprimer" onClick={() => void supprimer(d)}>
+                    <Button variant="ghost" size="sm" aria-label="Supprimer" disabled={encours !== null} onClick={() => void supprimer(d)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}

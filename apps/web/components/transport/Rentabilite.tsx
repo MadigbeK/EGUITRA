@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2 } from "@/components/icons";
 import { Badge, Card, DataTable, Etat, Field, Input, Kpi, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
-import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { fmtGNF, fmtInt, fmtMonth, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { INSECABLE, TauxMarge, fmtFixe, fmtVolume } from "./commun";
 import type { ProfitRow } from "./types";
 
@@ -123,7 +123,8 @@ export function Rentabilite() {
       <Card padded={false}>
         {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data.rows} rowKey={(r, i) => `${r.key}-${i}`} empty="Aucune rotation validée sur la période." columns={[
-            { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé" },
+            // Mois servis « 2026-01 » par le noyau : écrits « janv. 2026 », triés sur la clé.
+            { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé", render: (r) => (group === "month" ? fmtMonth(r.label) : r.label), sortValue: (r) => r.label },
             { key: "rotations", label: "Rot.", align: "right", render: (r) => fmtInt(r.rotations) },
             { key: "km", label: "km", align: "right", render: (r) => fmtInt(r.km) },
             { key: "volume", label: "Volume (m³)", align: "right", render: (r) => fmtVolume(r.volume) },

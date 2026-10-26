@@ -10,10 +10,18 @@ vérifient à la main (calculs rappelés en commentaire).
 
 from datetime import datetime, time, timedelta
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_analytics.engine import portfolio as pf
+from odoo.addons.eguitra_analytics.models.cabinet import (
+    _historique_clos,
+    _knockouts_confirmes,
+    _recommandation_scellee,
+    _section_link,
+)
 from odoo.addons.eguitra_api.tests.common import ApiCase
 
 HEADER = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
@@ -111,6 +119,40 @@ class TestPortefeuilleMethodes(TransactionCase):
                          "À compléter et ajourné écartés ; deux décisions plus favorables que la méthode")
         # po = 1/3 ; pe = (1/3 × 1/3) [GO] + (1/3 × 1/3) [HOLD] = 2/9 ; kappa = (1/3 - 2/9) / (7/9) = 1/7.
         self.assertAlmostEqual(stats["kappa"], 1 / 7)
+        # Lecture des cases : la recommandation ramenée à l'échelle des décisions, pas la diagonale.
+        self.assertEqual(pf.agreement_kind("apd_ready", "go"), "agree", "APD READY vaut GO")
+        self.assertEqual(pf.agreement_kind("conditional", "conditional"), "agree")
+        self.assertEqual(pf.agreement_kind("hold", "conditional"), "lenient")
+        self.assertEqual(pf.agreement_kind("bankable", "hold"), "strict")
+        self.assertIsNone(pf.agreement_kind("pending", "go"), "À compléter : hors calcul")
+        self.assertIsNone(pf.agreement_kind("go", "postponed"), "Ajourné : hors calcul")
+
+    def test_prevision_sans_mois_entame(self):
+        """Le 3 octobre, trois jours d'honoraires ne valent pas un mois : la prévision part de septembre."""
+        months, values = ["2026-08", "2026-09", "2026-10"], [300.0, 310.0, 30.0]
+        self.assertEqual(_historique_clos(months, values, fields.Date.to_date("2026-10-03")),
+                         (["2026-08", "2026-09"], [300.0, 310.0], True))
+        self.assertEqual(_historique_clos(months, values, fields.Date.to_date("2026-10-31")), (months, values, False),
+                         "Mois clos : gardé")
+
+    def test_knockouts_non_evalues(self):
+        """Un knock-out dont le critère n'est pas encore évalué n'est pas constaté : ni « décision favorable
+        malgré un knock-out », ni NO-GO de la méthode compté dans l'accord avec le comité."""
+        pending = {"knockouts": [{"code": "C002"}], "knockouts_pending": 1}
+        confirmed = {"knockouts": [{"code": "C002"}, {"code": "C009"}], "knockouts_pending": 1}
+        self.assertEqual(_knockouts_confirmes(pending), 0)
+        self.assertEqual(_knockouts_confirmes(confirmed), 1)
+        self.assertEqual(_knockouts_confirmes({"knockouts": [{"code": "C002"}]}), 1, "Ancien instantané : constaté")
+        self.assertEqual(_recommandation_scellee("no_go", pending), "pending", "NO-GO dû au seul critère non évalué")
+        self.assertEqual(_recommandation_scellee("no_go", confirmed), "no_go")
+        self.assertEqual(_recommandation_scellee("hold", pending), "hold")
+        self.assertEqual(_recommandation_scellee(None, None), "pending")
+
+    def test_liens_vers_les_sections(self):
+        self.assertEqual(_section_link("portefeuille", "temps", gate="G2"), "/analyse/portefeuille?gate=G2#temps")
+        self.assertEqual(_section_link("diagnostic", criterion="C 1/2"), "/analyse/diagnostic?criterion=C%201%2F2",
+                         "Code encodé : l'écran le relit tel quel")
+        self.assertEqual(_section_link("portefeuille", gate=None), "/analyse/portefeuille")
 
     def test_calendrier(self):
         self.assertEqual(pf.month_keys(fields.Date.to_date("2025-11-15"), fields.Date.to_date("2026-02-01")),
@@ -384,7 +426,14 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual((sectors["Agro-industrie"]["count"], sectors["Agro-industrie"]["need"]), (2, 3.8 * MD))
         self.assertLessEqual({"apd_3m", "apd_6m", "bankability_3m", "bankability_6m", "velocity"}, set(body["forecast"]))
         self.assertEqual([t["gate"] for t in body["forecast"]["targets"]], ["G3", "G4"])
-        self.assertIn("cabinet.goulot.G2", [i["id"] for i in body["insights"]])
+        links = {i["id"]: i["link"] for i in body["insights"]}
+        # Le lien mène au gate (mis en évidence par l'écran) et au bloc qui explique le constat.
+        self.assertEqual(links.get("cabinet.goulot.G2"), "/analyse/portefeuille?gate=G2#temps")
+        for key, link in links.items():
+            if key.startswith("cabinet.prevision."):
+                self.assertEqual(link, f"/analyse/portefeuille?gate={key.rsplit('.', 1)[1]}#prevision")
+            if key.startswith("cabinet.conversion."):
+                self.assertEqual(link, f"/analyse/portefeuille?gate={key.rsplit('.', 1)[1]}#entonnoir")
 
     def test_diagnostic(self):
         c1 = self.policy.compartment_ids.filtered(lambda k: k.code == "C1")
@@ -414,7 +463,12 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual(evidence["missing"], 11, "A 1, B 2, C 3, D 2, E 3 pièces attendues manquantes")
         self.assertEqual(len(body["domain_heatmap"]["cells"]), 15, "5 dossiers × 3 domaines")
         self.assertIn(self.c.id, body["progression"]["stagnating"], "Aucun progrès depuis la revue de T-100")
-        self.assertIn("cabinet.faiblesse.C006", [i["id"] for i in body["insights"]])
+        links = {i["id"]: i["link"] for i in body["insights"]}
+        # Faiblesse systémique : la ligne du critère parmi les critères manquants ; knock-out actif sur
+        # deux dossiers (C et E, 21 % du besoin) : le critère parmi les éliminatoires.
+        self.assertEqual(links.get("cabinet.faiblesse.C006"), "/analyse/diagnostic?criterion=C006")
+        self.assertEqual(links.get("cabinet.knockout.C002"), "/analyse/diagnostic?criterion=C002")
+        self.assertIn("C006", {g["code"] for g in body["top_gaps"]}, "Le critère visé figure à l'écran")
 
     def test_comites(self):
         token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
@@ -426,6 +480,14 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual((matrix[("bankable", "go")], matrix[("hold", "conditional")], matrix[("no_go", "hold")]),
                          (1, 1, 1))
         self.assertEqual(sum(matrix.values()), 3)
+        kinds = {(r, d): agreement["matrix_kinds"][i][j] for i, r in enumerate(agreement["recommendations"])
+                 for j, d in enumerate(agreement["decisions"])}
+        self.assertEqual((kinds[("bankable", "go")], kinds[("hold", "conditional")], kinds[("no_go", "hold")]),
+                         ("agree", "lenient", "lenient"), "La lecture des cases rejoint le décompte (1 accord, 2 indulgences)")
+        self.assertEqual((kinds[("apd_ready", "go")], kinds[("go", "go")], kinds[("go", "hold")]),
+                         ("agree", "agree", "strict"), "Hors de la diagonale, APD READY et GO face à GO sont des accords")
+        self.assertIsNone(kinds[("pending", "go")])
+        self.assertIsNone(kinds[("go", "postponed")])
         self.assertEqual((agreement["agreement_pct"], agreement["kappa"], agreement["lenient"], agreement["strict"]),
                          (33.3, 0.143, 2, 0))
         self.assertEqual(body["decisions"]["totals"], {"go": 1, "conditional": 1, "hold": 1, "no_go": 0, "postponed": 0})
@@ -479,9 +541,68 @@ class TestAnalyseCabinet(ApiCase):
         projets = next(s for s in body["revenue"]["monthly"]["series"] if s["key"] == "projets")
         self.assertEqual(projets["values"][-1], 10_000_000, "Gestion de projets, mois de la facture")
         self.assertGreaterEqual(body["revenue"]["receivables"]["open"], 10_000_000)
+        # DSO de la finance : créances TTC / ventes TTC × jours ; la seule facture, du jour, est toute ouverte.
+        days_12m = (self.today - (self.today - relativedelta(years=1) + timedelta(days=1))).days + 1
+        self.assertAlmostEqual(body["revenue"]["receivables"]["dso_days"], days_12m, delta=0.1,
+                               msg="Créances TTC rapportées aux ventes TTC, et non au chiffre d'affaires hors taxes")
         self.assertEqual((len(body["forecast"]["fees"]), body["forecast"]["backlog_hours"]), (3, 13.0))
         self.assertEqual(body["time"]["consultants"], ["Awa Camara", "Moussa Diallo"])
+        weeks = len(body["time"]["weeks"])
+        self.assertAlmostEqual(body["time"]["hours_per_week"], round(35 / weeks / 2, 1), delta=0.05,
+                               msg="35 h sur la période, deux consultants : moyenne par consultant")
         self.assertIn("cabinet.temps_non_facture", [i["id"] for i in body["insights"]])
+
+    def test_reglages_du_temps(self):
+        """Taux horaire de référence et taux de revient réglés depuis la plateforme (administration et
+        direction) ; une valeur enregistrée illisible est signalée au lieu d'être ignorée en silence."""
+        params = self.env["ir.config_parameter"].sudo()
+        self.addCleanup(params.set_param, "eguitra_analytics.cabinet_hourly_rate", False)
+        self.addCleanup(params.set_param, "eguitra_analytics.cabinet_cost_ratio", False)
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, body = self.call("GET", "/analyse/cabinet/reglages", token=token)
+        self.assertEqual((status, body.get("hourly_rate"), body.get("cost_ratio_default_pct")), (200, None, 40.0), body)
+        status, _body = self.call("PATCH", "/analyse/cabinet/reglages", {"hourly_rate": 600000}, token=token)
+        self.assertEqual(status, 403, "Le cabinet lit les réglages, la direction les fixe")
+        dg = self.open_session("dg.deux.societes", app="analyse")["access_token"]
+        cabinet = {"X-Eguitra-Company": str(self.cabinet.id)}
+        status, body = self.call("PATCH", "/analyse/cabinet/reglages", {"hourly_rate": 600000, "cost_ratio_pct": 35},
+                                 token=dg, headers=cabinet)
+        self.assertEqual((status, body.get("hourly_rate"), body.get("cost_ratio_pct")), (200, 600000.0, 35.0), body)
+        status, body = self._get("activite", token)
+        self.assertEqual((body["realization"]["standard_rate"], body["realization"]["rate_source"],
+                          body["profitability"]["cost_rate_pct"]), (600000, "parameter", 35.0))
+        status, body = self.call("PATCH", "/analyse/cabinet/reglages", {"hourly_rate": -5}, token=dg, headers=cabinet)
+        self.assertEqual((status, body.get("error")), (422, "invalid_parameter"), body)
+        params.set_param("eguitra_analytics.cabinet_hourly_rate", "six cents")
+        status, body = self._get("activite", token)
+        self.assertEqual(body["realization"]["rate_source"], "derived", "Valeur illisible ignorée")
+        self.assertTrue(any("illisible" in note for note in body["quality"]["notes"]), body["quality"])
+
+    def test_avoir_et_carnet(self):
+        """Honoraires facturés nets des avoirs (partiels, lettrés ou non) ; « à facturer » : la définition
+        d'AxisPro, temps facturable rattaché à aucune facture."""
+        refund = self.invoice._reverse_moves(default_values_list=[{"invoice_date": self.today, "date": self.today}])
+        for line in refund.invoice_line_ids:
+            line.price_unit = line.price_unit * 0.2
+        refund.with_context(eguitra_approval_granted=True).action_post()
+        self.env.flush_all()
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, body = self._get("activite", token)
+        self.assertEqual(status, 200, body)
+        real = body["realization"]
+        self.assertAlmostEqual(real["billed"], 8_000_000, delta=1, msg="10 M facturés, avoir de 2 M")
+        self.assertEqual(body["forecast"]["backlog_hours"], 13.0, "B 8 h et C 5 h, rattachées à aucune facture")
+
+    def test_dossier_suspendu_hors_goulot(self):
+        """Un dossier suspendu n'attend pas la décision de son gate : il ne fait pas le goulot."""
+        self.b.state = "on_hold"
+        self.env.flush_all()
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, body = self._get("portefeuille", token)
+        self.assertEqual(status, 200, body)
+        # G2 : E seul (150 j) ; G1 : C et D, 2 × 77,5 j = 155 : le goulot passe en G1.
+        self.assertEqual(body["bottleneck"]["gate"], "G1")
+        self.assertNotIn(self.b.id, [x["id"] for x in body["bottleneck"]["dossiers"]])
 
     def test_risques(self):
         token = self.open_session("analyste.cabinet", app="analyse")["access_token"]

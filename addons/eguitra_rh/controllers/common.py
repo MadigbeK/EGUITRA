@@ -143,7 +143,11 @@ def can_decide(leave, user=None):
     profiles = set(user._eguitra_profiles())
     if profiles & MANAGERS and leave.company_id in user.company_ids:
         return True
-    return bool(leave.employee_id.manager_id.user_id) and leave.employee_id.manager_id.user_id == user
+    # Responsable hiérarchique : seulement tant que son propre dossier est en cours (un responsable sorti
+    # ne tranche plus les absences de son ancienne équipe).
+    manager = leave.sudo().employee_id.manager_id
+    in_office = not manager.exit_date or manager.exit_date >= today()
+    return bool(manager.user_id) and manager.user_id == user and in_office
 
 
 def leave_row(leave):

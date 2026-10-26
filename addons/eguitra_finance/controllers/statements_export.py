@@ -14,7 +14,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route
 
-from ..models.finance_metrics import ACC_CODE
+from ..models.finance_metrics import ACC_CODE, CARRIED_LINES
 from ..models.report_registry import ACC_NAME
 from ..models.syscohada import OPENING_JOURNAL
 from .common import FIN_READ, companies, parse_date, today
@@ -48,6 +48,12 @@ def income_with_month(scope, start, end):
 
 def _fy_start(day):
     return request.env["eguitra.finance.metrics"].fiscal_year_bounds(request.env.company, day)[0]
+
+
+def _previous_results(scope, before):
+    """Résultat des exercices précédents (avant `before`), au compte d'affectation du résultat de chaque
+    société : [(code, libellé, solde)] (finance_metrics.previous_results)."""
+    return request.env["eguitra.finance.metrics"].sudo().previous_results(scope, before)
 
 
 def _bounds(kw):
@@ -138,7 +144,11 @@ class EguitraFinanceStatementsExport(http.Controller):
 
     def _trial_balance(self, scope, start, end, meta):
         """Balance : soldes d'ouverture (antérieurs à la période, et à-nouveaux de la période),
-        mouvements de la période, soldes débiteur et créditeur ; sous-total par classe."""
+        mouvements de la période, soldes débiteur et créditeur ; sous-total par classe. Les comptes de
+        gestion (classes 6 à 8) repartent de zéro au début de l'exercice : le résultat des exercices
+        précédents figure à l'ouverture du compte d'affectation du résultat, comme dans le noyau, et la
+        balance reste équilibrée d'un exercice à l'autre."""
+        fy_start = _fy_start(end)
         request.env.flush_all()
         request.env.cr.execute(
             f"""SELECT {ACC_CODE} AS code, MAX({ACC_NAME}) AS name,
@@ -149,18 +159,19 @@ class EguitraFinanceStatementsExport(http.Controller):
                   JOIN account_account aa ON aa.id = aml.account_id
                   JOIN account_journal aj ON aj.id = aml.journal_id
                  WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s) AND aml.date <= %(end)s
-                   AND (aml.date >= %(fy_start)s OR {ACC_CODE} < '6')
-              GROUP BY 1 ORDER BY 1""",
-            {"companies": list(scope.ids), "start": start, "end": end, "an": OPENING_JOURNAL,
-             "fy_start": _fy_start(end)},
+                   AND (aml.date >= %(fy_start)s OR {CARRIED_LINES})
+              GROUP BY 1""",
+            {"companies": list(scope.ids), "start": start, "end": end, "an": OPENING_JOURNAL, "fy_start": fy_start},
         )
+        accounts = {code: [name, float(opening), float(debit), float(credit)]
+                    for code, name, opening, debit, credit in request.env.cr.fetchall() if code}
+        for code, name, balance in _previous_results(scope, fy_start):
+            accounts.setdefault(code, [name, 0.0, 0.0, 0.0])[1] += balance
         rows, styles = [], []
         totals = [0.0] * 6
         klass, sub = None, [0.0] * 6
-        for code, name, opening, debit, credit in request.env.cr.fetchall():
-            if not code:
-                continue
-            opening, debit, credit = float(opening), float(debit), float(credit)
+        for code in sorted(accounts):
+            name, opening, debit, credit = accounts[code]
             closing = opening + debit - credit
             values = [max(opening, 0.0), max(-opening, 0.0), debit, credit, max(closing, 0.0), max(-closing, 0.0)]
             if not any(values):
@@ -232,17 +243,22 @@ class EguitraFinanceStatementsExport(http.Controller):
             raise ApiError(422, "business_rule", "Grand livre limité à un exercice.")
         request.env.flush_all()
         cr = request.env.cr
-        params = {"companies": list(scope.ids), "start": start, "end": end, "fy_start": _fy_start(end)}
-        # Report à nouveau : comptes de bilan depuis l'origine, comptes de gestion depuis le début de l'exercice.
+        fy_start = _fy_start(end)
+        params = {"companies": list(scope.ids), "start": start, "end": end, "fy_start": fy_start}
+        # Report à nouveau : comptes de bilan depuis l'origine, comptes de gestion depuis le début de
+        # l'exercice ; le résultat des exercices précédents s'ajoute à celui du compte d'affectation du
+        # résultat (noyau), dont le solde progressif reste ainsi juste après l'OD d'affectation.
         cr.execute(
             f"""SELECT {ACC_CODE}, COALESCE(SUM(aml.balance), 0) FROM account_move_line aml
                   JOIN account_account aa ON aa.id = aml.account_id
                  WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s) AND aml.date < %(start)s
-                   AND ({ACC_CODE} < '6' OR aml.date >= %(fy_start)s)
+                   AND ({CARRIED_LINES} OR aml.date >= %(fy_start)s)
               GROUP BY 1""",
             params,
         )
         openings = {code: float(b) for code, b in cr.fetchall() if code}
+        for code, _name, balance in _previous_results(scope, min(start, fy_start)):
+            openings[code] = openings.get(code, 0.0) + balance
         cr.execute(
             f"""SELECT {ACC_CODE}, {ACC_NAME}, aml.date, aj.code, am.name, COALESCE(p.name, ''), COALESCE(aml.name, ''),
                        aml.analytic_distribution, aml.debit, aml.credit

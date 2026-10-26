@@ -2,7 +2,7 @@
 
 import { Card, Notice } from "@/components/ui";
 import { SERIES } from "@/lib/couleurs";
-import { fmtGNF, fmtShort } from "@/lib/format";
+import { fmtGNF, fmtShort, pluriel } from "@/lib/format";
 import { ChampMontant, ChampNombre, Ligne } from "./champs";
 import { ANNEE_JOURS, calculerBfr, type ParamsBfr } from "./calculs";
 
@@ -62,7 +62,7 @@ export function SimulateurBfr({ params, onChange }: { params: ParamsBfr; onChang
             {fmtGNF(Math.abs(b.bfr))}
           </div>
           <div className="mt-2 text-[13.5px] text-white/80">
-            {b.joursCa === null ? "Renseignez le chiffre d'affaires." : `soit ${Math.round(Math.abs(b.joursCa))} jours de chiffre d'affaires ${b.bfr >= 0 ? "à financer en permanence" : "financés par vos fournisseurs"}.`}
+            {b.joursCa === null ? "Renseignez le chiffre d'affaires." : `soit ${pluriel(Math.round(Math.abs(b.joursCa)), "jour")} de chiffre d'affaires ${b.bfr >= 0 ? "à financer en permanence" : "financés par vos fournisseurs"}.`}
           </div>
         </section>
 
@@ -92,9 +92,9 @@ export function SimulateurBfr({ params, onChange }: { params: ParamsBfr; onChang
             />
           </div>
           <dl className="mt-4">
-            <Ligne label={<span className="inline-flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: COULEURS.stocks }} />Stocks ({params.stock} jours d'achats)</span>} valeur={fmtGNF(b.stocks)} />
-            <Ligne label={<span className="inline-flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: COULEURS.creances }} />Créances clients ({params.delaiClients} jours de CA)</span>} valeur={fmtGNF(b.creances)} />
-            <Ligne label={<span className="inline-flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: COULEURS.fournisseurs }} />Dettes fournisseurs ({params.delaiFournisseurs} jours d'achats)</span>} valeur={`− ${fmtGNF(b.fournisseurs)}`} />
+            <Ligne label={<span className="inline-flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: COULEURS.stocks }} />Stocks ({pluriel(params.stock, "jour")} d'achats)</span>} valeur={fmtGNF(b.stocks)} />
+            <Ligne label={<span className="inline-flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: COULEURS.creances }} />Créances clients ({pluriel(params.delaiClients, "jour")} de CA)</span>} valeur={fmtGNF(b.creances)} />
+            <Ligne label={<span className="inline-flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: COULEURS.fournisseurs }} />Dettes fournisseurs ({pluriel(params.delaiFournisseurs, "jour")} d'achats)</span>} valeur={`− ${fmtGNF(b.fournisseurs)}`} />
             <Ligne label="Besoin en fonds de roulement" valeur={fmtGNF(b.bfr)} fort ton={b.bfr > 0 ? "warn" : "ok"} />
           </dl>
           <p className="mt-3 text-[12px] leading-relaxed text-muted">Calcul sur une année de {ANNEE_JOURS} jours, montants hors taxes, activité régulière sur l'année.</p>

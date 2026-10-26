@@ -13,6 +13,11 @@
   la société à l'ouverture. Un compte ouvert aux deux passe de l'une à l'autre sans se reconnecter ;
   chaque comptabilité reste séparée.
 - Départ d'un collaborateur : désactiver le compte (ses sessions sont fermées, l'historique reste).
+  Puis, sur la fiche du compte désactivé, « Retirer des discussions » le retire de toutes ses
+  conversations de la discussion interne : leurs membres gardent l'historique, un groupe dont il
+  était responsable passe à son plus ancien membre. Seul le nombre de conversations est affiché :
+  l'administration ne lit aucune conversation dont elle n'est pas membre, et les messages
+  n'entrent pas au journal d'audit (les conversations et leurs membres, si).
 - Téléphone perdu : « Réinitialiser la double authentification ». Mot de passe oublié :
   « Nouveau mot de passe », provisoire.
 

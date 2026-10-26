@@ -30,6 +30,8 @@ def commitment_row(c, detail=False):
     request_ = c._eguitra_last_request()
     step = request_.current_step_id if request_ else None
     profiles = dict(request_._fields["pending_profile"].selection) if request_ else {}
+    # Refusé : le motif et son auteur, pour que le demandeur corrige l'engagement avant de le resoumettre.
+    refusal = request_.step_ids.filtered(lambda s: s.state == "rejected")[:1] if request_ and request_.state == "rejected" else None
     data = {
         "id": c.id, "name": c.name, "object": c.object, "date": c.date, "date_expected": c.date_expected,
         "partner": {"id": c.partner_id.id, "name": c.partner_id.name},
@@ -39,7 +41,9 @@ def commitment_row(c, detail=False):
         "state": c.state, "state_label": states[c.state], "requested_by": c.requested_by.name,
         "quote": {"id": c.quote_id.id, "name": c.quote_id.name} if c.quote_id else None,
         "approval": {"request_id": request_.id, "state": request_.state,
-                     "pending_with": profiles.get(step.profile) if step and request_.state == "pending" else None}
+                     "pending_with": profiles.get(step.profile) if step and request_.state == "pending" else None,
+                     "rejected_by": refusal.decided_by.name if refusal else None,
+                     "rejected_reason": (refusal.comment or None) if refusal else None}
         if request_ else None,
         "company": c.company_id.name,
     }
@@ -71,7 +75,12 @@ class EguitraCommitments(http.Controller):
 
     def _values(self, data):
         values = {k: data[k] or False for k in ("object", "note") if k in data}
+        # Modification (PATCH) : l'objet et le fournisseur se changent, ils ne se vident pas.
+        if "object" in data and not str(data["object"] or "").strip():
+            raise ApiError(400, "missing_fields", "L'objet de la dépense est obligatoire.", fields=["object"])
         if "partner_id" in data:
+            if not data["partner_id"]:
+                raise ApiError(400, "missing_fields", "Le fournisseur est obligatoire.", fields=["partner_id"])
             values["partner_id"] = int(data["partner_id"])
         if data.get("category_id"):
             # Catégorie de dépense active de la société de travail (contrôlée) : l'engagement prend son compte,
@@ -107,6 +116,9 @@ class EguitraCommitments(http.Controller):
 
     @api_route("/finance/commitments/<int:commitment_id>", methods=("PATCH",), profiles=INTERNAL)
     def update(self, commitment_id, **_kw):
+        """Modification d'un engagement : objet, fournisseur, montant, compte (ou catégorie de dépense pour
+        le profil Achats), répartition et dates. Objet, fournisseur, montant, compte et répartition ne
+        changent qu'en brouillon ou après un refus (modèle), avant une nouvelle soumission."""
         rec = _commitment(commitment_id)
         rec.write(self._values(read_json()))
         return commitment_row(rec, detail=True)

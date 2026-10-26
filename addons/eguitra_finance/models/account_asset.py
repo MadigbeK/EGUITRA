@@ -16,10 +16,14 @@ dotation de l'exercice (« first », règle du module, par défaut) ou sur la de
 argument de eguitra_takeover.
 """
 
+import logging
+
 from dateutil.relativedelta import relativedelta
 
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
+
+_logger = logging.getLogger(__name__)
 
 TAKEOVER_GAP_PARAM = "eguitra_finance.takeover_gap"
 TAKEOVER_GAPS = [("first", "Première dotation de l'exercice"), ("last", "Dernière dotation du plan")]
@@ -136,14 +140,36 @@ class AccountAsset(models.Model):
                                 "dotations à venir ; vérifiez la durée ou la date de mise en service.".replace(",", " "))
 
     @api.model
+    def eguitra_compute_entries(self, assets, date_end):
+        """Dotations des biens jusqu'à date_end : (écritures, journal des erreurs). Le module OCA rend un
+        couple (écritures, journal d'erreurs) quand une dotation échoue sans arrêter les autres (à confirmer
+        en 19) ; ses erreurs ne sont plus ignorées."""
+        if not assets:
+            return self.env["account.move"], ""
+        result = assets._compute_entries(date_end, check_triggers=True)
+        if isinstance(result, tuple):
+            moves, errors = result[0], result[1] if len(result) > 1 else ""
+        else:
+            moves, errors = result, ""
+        return moves, (errors or "").strip()
+
+    @api.model
     def _eguitra_cron_depreciate(self):
         """Chaque nuit : dotations échues de toutes les sociétés (les lignes datées en fin de mois
-        sont comptabilisées dès que le mois est écoulé)."""
+        sont comptabilisées dès que le mois est écoulé). Une société en erreur est annulée seule et
+        journalisée ; les suivantes passent leurs dotations."""
         today = fields.Date.context_today(self)
         for company in self.env["res.company"].search([]):
             assets = self.with_company(company).search([("company_id", "=", company.id), ("state", "=", "open")])
-            if assets:
-                assets._compute_entries(today, check_triggers=True)
+            if not assets:
+                continue
+            try:
+                with self.env.cr.savepoint():
+                    _moves, errors = self.eguitra_compute_entries(assets, today)
+                if errors:
+                    _logger.warning("Dotations aux amortissements de %s : %s", company.name, errors)
+            except Exception:
+                _logger.exception("Dotations aux amortissements impossibles pour %s", company.name)
 
     @api.model
     def _eguitra_pending_lines(self, company, date_end):
@@ -338,9 +364,11 @@ class AccountAsset(models.Model):
         book_account = self._eguitra_account(book_prefix)
         if not book_account:
             raise UserError(f"Compte {book_prefix} absent du plan de comptes.")
+        # Sortie anticipée (dotation jusqu'à la sortie) pour un bien amortissable qui n'est pas totalement
+        # amorti ; jamais pour un bien non amortissable (terrain), qui n'a pas de plan (à confirmer en 19).
         wizard = self.env["account.asset.remove"].with_context(
             active_id=self.id, active_ids=self.ids, active_model="account.asset",
-            early_removal=not self.currency_id.is_zero(self.value_residual),
+            early_removal=not self.eguitra_non_depreciable and not self.currency_id.is_zero(self.value_residual),
         ).create({
             "date_remove": date_remove, "posting_regime": "residual_value",
             "account_residual_value_id": book_account.id, "note": note or False,

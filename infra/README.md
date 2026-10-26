@@ -53,7 +53,7 @@ sociétés (sélecteur en haut de l'écran, vue « Groupe consolidé »).
 scripts/dev/sync.sh                  # 1. poste de développement : le code devient celui de la recette
 ssh eguitra-vps
 cd ~/eguitra/infra
-./test.sh eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_hsseq
+./test.sh eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_chat eguitra_hsseq
 docker compose stop odoo-recette     # 2. recette : mise à jour des modules modifiés
 docker compose run --rm -T odoo-recette odoo -c /etc/odoo/odoo.conf -d eguitra_recette -u eguitra_finance --stop-after-init --workers 0
 docker compose up -d --build odoo-recette web-recette
@@ -133,7 +133,7 @@ recette d'abord :
 ```bash
 cd ~/eguitra/infra
 ./maj-securite.sh recette            # images rafraîchies et recette relancée, audit des dépendances web
-./test.sh eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_hsseq
+./test.sh --rebuild eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_chat eguitra_hsseq
 #                                      contrôle des écrans de la recette, annonce au client, puis :
 ./maj-securite.sh production --annoncee "AAAA-MM-JJ HH:MM"
 ```

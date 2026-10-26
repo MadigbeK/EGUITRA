@@ -13,7 +13,7 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
-from ..engine import fmt_days
+from ..engine import fmt_days, fmt_gnf, pluriel
 from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASONS, MARITAL, PAYMENT_METHODS
 from ..models.hsseq import PPE_ITEMS
 from ..models.leave import InsufficientBalance
@@ -58,6 +58,12 @@ def options(pairs):
     return [{"code": code, "label": label} for code, label in pairs]
 
 
+# Libellés des références d'un dossier salarié dans les messages (jamais le nom technique du champ).
+REFERENCE_LABELS = {"department_id": "Département", "manager_id": "Responsable hiérarchique",
+                    "driver_id": "Chauffeur du transport", "activity_id": "Activité d'imputation",
+                    "user_id": "Compte NIMOVA"}
+
+
 def _check_reference(key, record_id, company):
     """Chaque identifiant écrit dans un dossier salarié est cohérent avec son employeur (mêmes listes que
     /rh/meta) : département commun ou de l'employeur, responsable d'une des sociétés du compte (la
@@ -81,7 +87,7 @@ def _check_reference(key, record_id, company):
         record = env["res.users"].sudo().browse(record_id).exists()
         valid = record and not record.share and company in record.company_ids
     if not valid:
-        raise ApiError(422, "business_rule", f"Référence invalide pour cette société : {key}.")
+        raise ApiError(422, "business_rule", f"{REFERENCE_LABELS.get(key, key)} : choix invalide pour cette société.")
 
 
 def approve(leave, force=False):
@@ -243,8 +249,15 @@ class EguitraRh(http.Controller):
                     else emp.hire_date.replace(year=day.year, day=28)
                 if day <= anniversary <= day + timedelta(days=7):
                     years = day.year - emp.hire_date.year
-                    add("anniversary", "info", anniversary, emp, f"{emp.name} fête ses {years} an(s) dans l'entreprise.",
-                        href)
+                    add("anniversary", "info", anniversary, emp, f"{emp.name} fête ses {pluriel(years, 'an')} dans "
+                        "l'entreprise.", href)
+            if emp.exit_date and emp.exit_date <= day + timedelta(days=settings.contract_alert_days):
+                due = sum(a._remaining() for a in request.env["eguitra.rh.advance"].sudo().search(
+                    [("employee_id", "=", emp.id), ("state", "=", "open")]))
+                if due:
+                    add("advance_exit", "warn", emp.exit_date, emp, f"{emp.name} quitte l'entreprise le "
+                        f"{emp.exit_date:%d/%m/%Y} avec {fmt_gnf(due)} d'avances ou de prêts encore dus : retenez-les "
+                        "sur le solde de tout compte.", href)
         previous = (day.replace(day=1) - relativedelta(months=1))
         Payroll = request.env["eguitra.rh.payroll"]
         for company in companies:
@@ -252,6 +265,19 @@ class EguitraRh(http.Controller):
             if current.filtered(lambda e, c=company: e.company_id == c) and (not last or last.state == "draft"):
                 add("payroll", "warn", None, None, f"La paie {of_month(previous)} de {company.name} n'est pas "
                     "validée.", f"/rh/paie/{last.id}" if last else "/rh/paie")
+        # Fêtes religieuses à date mobile : à saisir chaque année (aucune n'est connue d'avance).
+        Holiday = request.env["eguitra.rh.holiday"].sudo()
+        for year in (day.year, day.year + 1) if day.month >= 10 else (day.year,):
+            if not Holiday.search_count([("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")]):
+                add("holidays", "warn", None, None, f"Aucun jour férié saisi pour {year} : ajoutez-les dans les "
+                    "paramètres RH (fêtes religieuses à date mobile comprises).", "/rh/parametres")
+            elif year == day.year and not Holiday.search_count([
+                    ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), "|", "|", "|",
+                    ("name", "ilike", "aïd"), ("name", "ilike", "tabaski"), ("name", "ilike", "maouloud"),
+                    ("name", "ilike", "ramadan")]):
+                add("holidays", "info", None, None, f"Aucune fête religieuse à date mobile saisie pour {year} "
+                    "(Aïd el-Fitr, Tabaski, Maouloud) : les jours ouvrables les comptent comme travaillés.",
+                    "/rh/parametres")
         order = {"danger": 0, "warn": 1, "info": 2}
         alerts.sort(key=lambda a: (order[a["severity"]], str(a["date"] or "9999")))
         return alerts
@@ -555,7 +581,8 @@ class EguitraRh(http.Controller):
         settings = Settings._get(company)
         values, own = {}, {}
         for key in ("cnss_employee_rate", "cnss_employer_rate", "cnss_ceiling", "smig", "allowance_exempt_cap",
-                    "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours", "rotation_bonus"):
+                    "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours", "rotation_bonus",
+                    "intern_exemption"):
             if key in data:
                 target = own if key == "training_tax_rate" else values
                 target[key] = number(data, key)
@@ -648,8 +675,11 @@ class EguitraRh(http.Controller):
         data = read_json()
         require(data, "employee_id", "type_id", "date_from", "date_to")
         emp = get("eguitra.rh.employee", int_or_false(data, "employee_id"), "Salarié")
+        leave_type = request.env["eguitra.rh.leave.type"].browse(int_or_false(data, "type_id")).exists()
+        if not leave_type or not leave_type.active:
+            raise ApiError(422, "business_rule", "Type d'absence inconnu ou archivé.")
         leave = request.env["eguitra.rh.leave"].create({
-            "employee_id": emp.id, "type_id": int_or_false(data, "type_id"), "date_from": date_value(data, "date_from"),
+            "employee_id": emp.id, "type_id": leave_type.id, "date_from": date_value(data, "date_from"),
             "date_to": date_value(data, "date_to"), "half_day": bool(data.get("half_day")),
             "note": (data.get("note") or "").strip() or False,
         })
@@ -735,6 +765,18 @@ class EguitraRh(http.Controller):
         })
         return advance_row(advance)
 
+    @api_route("/rh/advances/<int:advance_id>/postpone", methods=("POST",), profiles=WRITE)
+    def postpone_advance(self, advance_id, **_kw):
+        """Reporte la retenue d'une avance ou d'un prêt : plus rien n'est retenu avant le mois suivant celui
+        indiqué (net trop faible ce mois-là). Le reste dû est inchangé."""
+        advance = get("eguitra.rh.advance", advance_id, "Avance")
+        refuse_own(advance.employee_id)
+        data = read_json()
+        require(data, "month")
+        month = date_value(data, "month").replace(day=1)
+        advance.action_postpone(month)
+        return advance_row(advance)
+
     @api_route("/rh/advances/<int:advance_id>/cancel", methods=("POST",), profiles=WRITE)
     def cancel_advance(self, advance_id, **_kw):
         advance = get("eguitra.rh.advance", advance_id, "Avance")
@@ -751,7 +793,8 @@ def _settings_row(s):
         "rts_brackets": [{"from": b.threshold, "rate": b.rate} for b in s.bracket_ids],
         "vf_rate": s.vf_rate, "training_tax_rate": s.training_tax_rate,
         "training_tax_label": s.training_tax_label or "", "leave_days_per_month": s.leave_days_per_month,
-        "monthly_hours": s.monthly_hours, "rotation_bonus": s.rotation_bonus, "trial_alert_days": s.trial_alert_days,
+        "monthly_hours": s.monthly_hours, "rotation_bonus": s.rotation_bonus, "intern_exemption": s.intern_exemption,
+        "trial_alert_days": s.trial_alert_days,
         "contract_alert_days": s.contract_alert_days, "document_alert_days": s.document_alert_days,
         "qualification_alert_days": s.qualification_alert_days, "qualification_urgent_days": s.qualification_urgent_days,
         "cnss_employer_number": s.cnss_employer_number or None,
@@ -769,6 +812,6 @@ def _payroll_row(p):
     slips = p.payslip_ids
     return {
         "id": p.id, "name": p.name, "company": company_ref(p.company_id), "month": p.month, "state": p.state, "totals": p._totals(),
-        "anomalies": sum(len(s._anomalies()) for s in slips),
+        "anomalies": sum(len(s._anomalies()) for s in slips), "needs_compute": p.needs_compute,
         "move": {"id": move.id, "name": move.name, "state": move.state} if move.exists() else None,
     }

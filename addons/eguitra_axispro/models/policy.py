@@ -20,12 +20,12 @@ import re
 import unicodedata
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, workbook_sheets, xlsx_row
 
 from .. import grille_cabinet
-from ..engine import INDICATORS, suggest
+from ..engine import INDICATORS, MONEY, indicator_unit, suggest
 from ..scoring import DEFAULT_POLICY, REQUIREMENTS, RULES, accord, pluriel
 
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
@@ -53,7 +53,8 @@ REQUIREMENT_ALIASES = {
 
 class AxisproPolicy(models.Model):
     _name = "axispro.policy"
-    _description = "Politique d'évaluation AxisPro"
+    # Lu dans les messages de refus d'accès que l'écran relaie : le nom entier du cabinet.
+    _description = "Politique d'évaluation de MB AxisPro Consulting"
     _order = "version desc"
 
     name = fields.Char("Intitulé", required=True)
@@ -580,6 +581,13 @@ class AxisproDomain(models.Model):
     deliverable = fields.Char("Livrable type pour combler un écart")
     compartment_id = fields.Many2one("axispro.compartment", "Compartiment", ondelete="set null", index=True)
 
+    @api.constrains("weight")
+    def _check_weight(self):
+        # Un poids négatif retrancherait des points au score (audit du noyau, M8) ; 0 retire le domaine.
+        for domain in self:
+            if domain.weight < 0:
+                raise ValidationError(f"Domaine {domain.code} : pondération positive ou nulle attendue.")
+
 
 class AxisproCriterion(models.Model):
     _name = "axispro.criterion"
@@ -606,20 +614,32 @@ class AxisproCriterion(models.Model):
     indicator_has_partial = fields.Boolean("Seuil partiel défini")
     indicator_partial = fields.Float("Seuil de satisfaction partielle")
 
+    @api.constrains("weight")
+    def _check_weight(self):
+        # Un poids négatif retrancherait des points au score (audit du noyau, M8) ; 0 retire le critère.
+        for criterion in self:
+            if criterion.weight < 0:
+                raise ValidationError(f"Critère {criterion.code} : poids positif ou nul attendu.")
+
     def default_deliverable(self):
         self.ensure_one()
         return self.deliverable or self.domain_id.deliverable or self.guidance or f"Compléter : {self.name}"
 
     def suggestion(self, indicators):
-        """Statut suggéré par le modèle financier (None sans indicateur ou sans modèle)."""
+        """Statut suggéré par le modèle financier (None sans indicateur ou sans modèle). Un indicateur
+        en montant (VAN, trésorerie : `money`) s'exprime dans la devise du dossier, que porte
+        `indicators["currency"]` (dossier.financial_indicators) ; à défaut, celle de la société de la
+        grille. `unit` en est alors le code (« GNF », « USD »), jamais une devise écrite en dur."""
         self.ensure_one()
         if not self.indicator or indicators is None:
             return None
         result = suggest(self.indicator, self.indicator_threshold,
                          self.indicator_partial if self.indicator_has_partial else None, indicators)
         label, higher, unit = INDICATORS[self.indicator]
-        return dict(result, indicator=self.indicator, label=label, unit=unit, higher=higher,
-                    threshold=self.indicator_threshold,
+        money = unit == MONEY
+        currency = (indicators.get("currency") or self.policy_id.company_id.currency_id.name) if money else None
+        return dict(result, indicator=self.indicator, label=label, unit=indicator_unit(self.indicator, currency),
+                    money=money, currency=currency, higher=higher, threshold=self.indicator_threshold,
                     partial=self.indicator_partial if self.indicator_has_partial else None)
 
 

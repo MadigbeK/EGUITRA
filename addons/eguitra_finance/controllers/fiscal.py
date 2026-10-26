@@ -46,7 +46,8 @@ def _return_row(record):
     return {
         "id": record.id, "period": record.period, "kind": record.kind, "state": record.state,
         "amount_base": record.amount_base, "amount_collected": record.amount_collected,
-        "amount_deductible": record.amount_deductible, "amount_due": record.amount_due,
+        "amount_deductible": record.amount_deductible, "amount_credit_prior": record.amount_credit_prior,
+        "amount_due": record.amount_due,
         "amount_credit": record.amount_credit, "prepared_by": record.prepared_by.name or None,
         "prepared_at": record.prepared_at, "filed_date": record.filed_date, "filed_reference": record.filed_reference or None,
         "paid_date": record.paid_date, "paid_reference": record.paid_reference or None,
@@ -132,10 +133,11 @@ class EguitraFinanceFiscal(http.Controller):
                 ["Base des achats (hors taxes)", "", None, data["base_purchases"]],
                 ["TVA collectée", "", None, data["vat_collected"]],
                 ["TVA déductible", "", None, data["vat_deductible"]],
+                ["Crédit reporté du mois précédent", "", None, data["vat_credit_prior"]],
                 ["TVA à payer", "", None, data["vat_due"]],
-                ["Crédit de TVA", "", None, data["vat_credit"]],
+                ["Crédit de TVA à reporter", "", None, data["vat_credit"]],
             ],
-            "styles": [None] * len(data["taxes"]) + [None, None, "total", "total", "total", "total"],
+            "styles": [None] * len(data["taxes"]) + [None, None, "total", "total", "total", "total", "total"],
             "totals": None,
         }
         annex_sheet = {
@@ -419,12 +421,14 @@ class EguitraFinanceFiscal(http.Controller):
 
     @api_route("/finance/ifrs", profiles=FIN_READ)
     def ifrs(self, **kw):
-        """Passerelle IFRS : agrégats SYSCOHADA regroupés selon les postes IFRS usuels."""
+        """Passerelle IFRS : agrégats SYSCOHADA regroupés selon les postes IFRS usuels. Résultat de
+        l'exercice comptable de la date (et non de l'année civile), comme les retraitements chiffrés."""
         end = parse_date(kw, "date", today())
-        start = end.replace(month=1, day=1)
+        scope = companies(kw)
+        start = request.env["eguitra.finance.metrics"].sudo().fiscal_year_bounds(scope[:1], end)[0]
         syscohada = request.env["eguitra.syscohada"].sudo()
-        sheet = syscohada.balance_sheet(companies(kw), end)
-        result = syscohada.income_statement(companies(kw), start, end)
+        sheet = syscohada.balance_sheet(scope, end)
+        result = syscohada.income_statement(scope, start, end)
         values = {line["code"]: line["amount"] for line in sheet["actif"] + sheet["passif"] + result["lines"]}
         lines = []
         for label, kind, codes in IFRS_MAP:
@@ -433,7 +437,7 @@ class EguitraFinanceFiscal(http.Controller):
             else:
                 amount = sum(values.get(c, 0.0) for c in codes)
             lines.append({"label": label, "section": kind.split("_")[0], "amount": amount, "syscohada": codes})
-        bridge = request.env["eguitra.ifrs.policy"].sudo().restatements(companies(kw), end)
+        bridge = request.env["eguitra.ifrs.policy"].sudo().restatements(scope, end)
         return dict(bridge, date=end, lines=lines,
                     note="Correspondance indicative et retraitements à valider avec l'expert-comptable.")
 

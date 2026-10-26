@@ -9,6 +9,19 @@ retard, comptes rendus des porteurs à valider, risques critiques, relances des 
 les quatorze jours), la rentabilité des projets modélisés (TRI, DSCR, VAN) et la charge des
 consultants. Les dossiers s'affichent en colonnes par étape (« Tableau ») ou en « Liste ».
 
+## Qui décide : consultant, associé, direction
+
+- Le consultant (profil « Cabinet AxisPro ») évalue, rédige les revues de comité en brouillon et fait
+  passer un gate quand sa règle le permet.
+- Sceller la décision du comité, forcer le passage d'un gate contre sa règle et ouvrir une nouvelle
+  révision d'un dossier verrouillé sont réservés à l'associé du cabinet (profil « Associé du
+  cabinet », donné par l'administration) et à la direction ouverte à MB AxisPro Consulting.
+  L'administration seule ne le fait pas ; un administrateur qui est aussi associé le fait par son
+  profil d'associé.
+- Ces décisions engagent toujours deux personnes au moins : on ne scelle pas seul la révision dont on
+  est le seul auteur, et celui qui a verrouillé une décision n'ouvre pas la révision qui la défait.
+  Les commandes n'apparaissent qu'aux profils qui y ont droit.
+
 ## La méthode MB AxisPro Consulting
 
 AxisPro Suite applique la méthode du cabinet « Project Readiness & Bankability Assessment » (réf.
@@ -119,8 +132,8 @@ d'évaluation, investissement, besoin de financement. La fiche du dossier compor
   l'encadré « Modèle financier » donne la valeur, le seuil et le statut suggéré.
 - Stage gates : pour chaque gate, sa règle, sa décision (GO, CONDITIONAL GO, HOLD, NO-GO) et ses
   motifs, les exigences d'entrée, les livrables et les critères de passage. « Passer au gate
-  suivant » suit la décision du gate courant ; le cabinet peut passer outre avec un motif, inscrit
-  au journal.
+  suivant » suit la décision du gate courant (tout consultant) ; passer outre, avec un motif inscrit
+  au journal, est réservé à un associé du cabinet ou à la direction (voir « Qui décide »).
 - Modèle financier : voir ci-dessous.
 - Risques : registre des risques du projet, matrice probabilité × impact avant et après
   traitement, mesures d'atténuation ; « Créer l'action de traitement » ajoute l'action au plan.
@@ -140,11 +153,14 @@ d'évaluation, investissement, besoin de financement. La fiche du dossier compor
   .doc et .xls sont refusés. L'espace d'un dossier est limité à 400 pièces ou 1 Go pour les dépôts
   du porteur.
 - Comités : revue avec décision (GO, CONDITIONAL GO, HOLD, NO-GO, ajourné), instance, membres,
-  motif (obligatoire pour HOLD et NO-GO), conditions et compte rendu. « Enregistrer, sceller et
-  verrouiller » fige la décision avec un instantané des scores et des indicateurs financiers et la
-  scelle par une empreinte ; le dossier est alors figé (évaluation, fiche, hypothèses, modèle
-  financier) jusqu'à « Ouvrir une nouvelle révision ». « Vérifier » contrôle l'empreinte à tout
-  moment. Cocher deux revues pour les comparer (scores, gates, domaines, indicateurs financiers).
+  motif (obligatoire pour HOLD et NO-GO, dès le brouillon), conditions et compte rendu. Le
+  consultant enregistre la revue en brouillon et la corrige (« Modifier ») tant qu'elle n'est pas
+  scellée. « Sceller et verrouiller » fige la décision avec un instantané des scores et des
+  indicateurs financiers et la scelle par une empreinte ; le dossier est alors figé (évaluation,
+  fiche, hypothèses, modèle financier) jusqu'à « Ouvrir une nouvelle révision ». Sceller et rouvrir
+  sont réservés à un associé ou à la direction (voir « Qui décide »). « Vérifier » contrôle
+  l'empreinte à tout moment. Cocher deux revues pour les comparer (scores, gates, domaines,
+  indicateurs financiers).
 - Journal : chaque changement de statut, dépôt, validation, passage de gate, décision, révision et
   import, avec son auteur et son heure.
 - Échanges : messages au porteur, ou notes internes invisibles du porteur.
