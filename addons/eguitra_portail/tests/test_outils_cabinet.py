@@ -10,6 +10,7 @@ from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_axispro.tests.test_axispro import GRID
+from odoo.addons.eguitra_portail.controllers import cabinet as cabinet_api
 from odoo.addons.eguitra_portail.models.agenda import PortailEvent
 
 FUTURE = (fields.Datetime.now() + timedelta(days=20)).replace(microsecond=0)
@@ -255,6 +256,57 @@ class TestOutilsCabinet(ApiCase):
         self.call("PATCH", path, {"action": "minutes", "minutes": "Décision : dossier à la banque le 12."},
                   token=self.cabinet_token)
         self.assertEqual(len(self.notes(self.pa, "Compte rendu mis à jour : Point bancaire")), 1)
+
+    def test_rendez_vous_demandes_toujours_rendues_historique_borne(self):
+        Meeting = self.env["portail.meeting"]
+        base = {"dossier_id": self.dossier_a.id, "subject": "Rendez-vous"}
+        demande = Meeting.create(dict(base, state="requested", slot_1=FUTURE))
+        confirme = Meeting.create(dict(base, state="confirmed", start=FUTURE))
+        Meeting.create([dict(base, state="done", start=FUTURE - timedelta(days=40 + i)) for i in range(3)])
+        with patch.object(cabinet_api, "MEETING_HISTORY_LIMIT", 1):
+            status, rows = self.call("GET", "/axispro/portail/rendez-vous", token=self.cabinet_token)
+        self.assertEqual(status, 200, rows)
+        ids = [r["id"] for r in rows]
+        self.assertIn(demande.id, ids)
+        self.assertIn(confirme.id, ids)
+        self.assertEqual(len([r for r in rows if r["state"] == "done"]), 1, "Historique borné")
+
+    # ─── M9 : compteurs de la synthèse ───────────────────────────────────
+
+    def test_compteurs_des_accuses_de_lecture(self):
+        """Accusés en attente : les porteurs du public sans accusé. L'accusé d'un ancien lecteur, sorti
+        du public, ne compense pas celui d'un porteur visé."""
+        self.dossier_d.state = "closed"
+        announcement = self.env["portail.announcement"].create({"name": "À lire et confirmer", "require_ack": True,
+                                                                "company_id": self.cabinet.id})
+        announcement.action_publish()
+        now = fields.Datetime.now()
+        self.env["portail.announcement.read"].create([
+            {"announcement_id": announcement.id, "user_id": u.id, "acknowledged_at": now} for u in (self.pa, self.pd)])
+        status, synthese = self.call("GET", "/axispro/portail/synthese", token=self.cabinet_token)
+        self.assertEqual(status, 200, synthese)
+        self.assertEqual(synthese["announcements"]["ack_pending"], 2, "B et C n'ont pas accusé lecture")
+        _s, admin = self.call("GET", "/axispro/portail/annonces", token=self.cabinet_token)
+        stats = next(a for a in admin if a["id"] == announcement.id)["stats"]
+        self.assertEqual(stats, {"audience": 3, "read": 1, "acknowledged": 1})
+
+    def test_satisfaction_calculee_sur_tous_les_avis(self):
+        Feedback = self.env["portail.feedback"]
+        Feedback.create([
+            {"dossier_id": self.dossier_a.id, "user_id": self.pa.id, "score": 5, "recommend": 10},
+            {"dossier_id": self.dossier_b.id, "user_id": self.pb.id, "score": 4, "recommend": 9},
+            {"dossier_id": self.dossier_c.id, "user_id": self.pc.id, "score": 2, "recommend": 3, "topic": "consultant"},
+        ])
+        with patch.object(cabinet_api, "FEEDBACK_LIMIT", 2):
+            _s, avis = self.call("GET", "/axispro/portail/avis", token=self.cabinet_token)
+            status, synthese = self.call("GET", "/axispro/portail/synthese", token=self.cabinet_token)
+        self.assertEqual(status, 200, synthese)
+        self.assertEqual(len(avis), 2, "Détail borné")
+        fb = synthese["feedback"]
+        self.assertEqual((fb["count"], fb["average"], fb["nps"], fb["promoters"], fb["passives"], fb["detractors"]),
+                         (3, 3.7, 33, 2, 0, 1))
+        self.assertEqual(fb["scores"], {"1": 0, "2": 1, "3": 0, "4": 1, "5": 1})
+        self.assertEqual({t["topic"]: t["count"] for t in fb["topics"]}, {"global": 2, "consultant": 1})
 
     # ─── M3 : saisies mal formées ────────────────────────────────────────
 

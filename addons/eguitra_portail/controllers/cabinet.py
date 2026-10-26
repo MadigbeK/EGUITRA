@@ -18,11 +18,17 @@ from odoo.addons.eguitra_axispro.controllers.common import MAX_FILE, store_uploa
 from ..models.agenda import EVENT_KINDS, MEETING_MODES, REGISTRATION_STATES
 from ..models.audience import AUDIENCES
 from ..models.contenu import ANNOUNCEMENT_KINDS, ARTICLE_KINDS, CATEGORY_COLORS
+from ..models.suivi import FEEDBACK_TOPICS
 from . import vues
 
 READ = ("admin", "direction", "cabinet")
 WRITE = ("cabinet",)
 AUDIENCE_FIELDS = ("audience", "gate_codes", "sector_keywords")
+# Listes bornées : l'historique des rendez-vous (tenus, déclinés, annulés ; les demandes et les
+# rendez-vous confirmés sont toujours tous rendus) et le détail des avis. Les totaux de la synthèse
+# portent sur tout. L'écran dit quand une liste atteint sa limite.
+MEETING_HISTORY_LIMIT = 300
+FEEDBACK_LIMIT = 500
 
 
 def _company():
@@ -108,11 +114,33 @@ def _audience_row(record):
 
 
 def _announcement_admin(a):
+    """Lectures et accusés comptés parmi le public actuel : une jauge ne dépasse jamais son total,
+    même quand un lecteur a quitté le public (dossier clos, public resserré)."""
     audience = a._audience_users() if a.state in ("published", "archived") else request.env["res.users"]
     reads = a.read_ids
     return dict(vues.announcement_row(a, full=True), **_audience_row(a), state=a.state,
-                stats={"audience": len(audience), "read": len(reads),
-                       "acknowledged": len(reads.filtered("acknowledged_at"))})
+                stats={"audience": len(audience), "read": len(reads.user_id & audience),
+                       "acknowledged": len(reads.filtered("acknowledged_at").user_id & audience)})
+
+
+def _feedback_summary(feedback):
+    """Satisfaction calculée sur tous les avis : moyenne, NPS (promoteurs 9 et 10 moins détracteurs
+    0 à 6, sur les avis qui donnent une recommandation), répartition des notes et des sujets."""
+    recommend = [r for r in feedback.mapped("recommend") if r >= 0]
+    promoters = len([r for r in recommend if r >= 9])
+    detractors = len([r for r in recommend if r <= 6])
+    topics = []
+    for key, _label in FEEDBACK_TOPICS:
+        lot = feedback.filtered(lambda f, k=key: f.topic == k)
+        if lot:
+            topics.append({"topic": key, "count": len(lot), "average": round(sum(lot.mapped("score")) / len(lot), 1)})
+    return {"count": len(feedback),
+            "average": round(sum(feedback.mapped("score")) / len(feedback), 1) if feedback else None,
+            "nps": round(100 * (promoters - detractors) / len(recommend)) if recommend else None,
+            "recommend_count": len(recommend), "promoters": promoters, "detractors": detractors,
+            "passives": len(recommend) - promoters - detractors,
+            "scores": {str(n): len(feedback.filtered(lambda f, n=n: f.score == n)) for n in range(1, 6)},
+            "topics": topics}
 
 
 def _article_admin(a):
@@ -158,9 +186,6 @@ class EguitraPortailCabinet(http.Controller):
         waiting = [d for d in dossiers if d.message_ids.filtered(lambda m: not m.internal)[-1:].author_id.share]
         Meeting = request.env["portail.meeting"].sudo()
         feedback = request.env["portail.feedback"].sudo().search([("company_id", "=", company.id)])
-        recommend = [r for r in feedback.mapped("recommend") if r >= 0]
-        promoters = len([r for r in recommend if r >= 9])
-        detractors = len([r for r in recommend if r <= 6])
         actions = request.env["axispro.action"].sudo().search(
             [("company_id", "=", company.id), ("state", "=", "submitted"), ("assignee", "=", "porteur")])
         events = request.env["portail.event"].sudo().search(
@@ -179,14 +204,14 @@ class EguitraPortailCabinet(http.Controller):
             "actions_submitted": len(actions),
             "events": {"upcoming": len(events),
                        "registrations": len(events.registration_ids.filtered(lambda r: r.state == "registered"))},
-            "feedback": {"count": len(feedback),
-                         "average": round(sum(feedback.mapped("score")) / len(feedback), 1) if feedback else None,
-                         "nps": round(100 * (promoters - detractors) / len(recommend)) if recommend else None},
+            "feedback": _feedback_summary(feedback),
             "articles": {"published": Article.search_count([("company_id", "=", company.id), ("state", "=", "published")]),
                          "drafts": Article.search_count([("company_id", "=", company.id), ("state", "=", "draft")]),
                          "views": sum(Article.search([("company_id", "=", company.id)]).mapped("view_count"))},
+            # Accusés attendus : porteurs du public qui n'ont pas encore accusé lecture (l'accusé d'un
+            # ancien lecteur, sorti du public, ne compense pas celui d'un porteur visé).
             "announcements": {"published": len(announcements),
-                              "ack_pending": sum(max(0, len(a._audience_users()) - len(a.read_ids.filtered("acknowledged_at")))
+                              "ack_pending": sum(len(a._audience_users() - a.read_ids.filtered("acknowledged_at").user_id)
                                                  for a in announcements.filtered("require_ack"))},
             "to_do": [
                 *({"kind": "meeting", "title": f"Rendez-vous demandé : {m.subject}",
@@ -582,7 +607,12 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/rendez-vous", profiles=READ)
     def rendez_vous(self, **_kw):
-        meetings = request.env["portail.meeting"].sudo().search([("company_id", "=", _company().id)], limit=300)
+        """Toutes les demandes et tous les rendez-vous confirmés ; de l'historique (tenus, déclinés,
+        annulés), les MEETING_HISTORY_LIMIT plus récents."""
+        Meeting = request.env["portail.meeting"].sudo()
+        company = [("company_id", "=", _company().id)]
+        meetings = Meeting.search(company + [("state", "in", ("requested", "confirmed"))]) | Meeting.search(
+            company + [("state", "not in", ("requested", "confirmed"))], limit=MEETING_HISTORY_LIMIT)
         order = {"requested": 0, "confirmed": 1, "done": 2, "declined": 3, "cancelled": 4}
         rows = [vues.meeting_row(m, request.env.user) for m in meetings]
         rows.sort(key=lambda r: (order[r["state"]], r["start"] or r["create_date"]))
@@ -638,7 +668,9 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/avis", profiles=READ)
     def avis(self, **_kw):
-        feedback = request.env["portail.feedback"].sudo().search([("company_id", "=", _company().id)], limit=500)
+        """Les FEEDBACK_LIMIT avis les plus récents ; moyenne et NPS de tous les avis : la synthèse."""
+        feedback = request.env["portail.feedback"].sudo().search([("company_id", "=", _company().id)],
+                                                                 limit=FEEDBACK_LIMIT)
         return [vues.feedback_row(f) for f in feedback]
 
     # ─── Notifications du cabinet ────────────────────────────────────────
