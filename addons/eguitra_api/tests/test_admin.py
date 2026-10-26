@@ -1,5 +1,6 @@
 from odoo.tests import tagged
 
+from ..organisation import wrong_company_message
 from .common import ApiCase
 
 
@@ -206,3 +207,8 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 404, "Société hors du périmètre de l'administrateur")
         status, _b = self.call("GET", "/admin/companies", token=self.open_session("fatou")["access_token"])
         self.assertEqual(status, 403)
+
+    def test_message_de_module_d_une_autre_societe(self):
+        """Audit du noyau, M2 : « qu'EGUITRA GROUP SARLU », « que MB AxisPro Consulting »."""
+        self.assertIn("ne concerne qu'EGUITRA GROUP SARLU :", wrong_company_message("groupe"))
+        self.assertIn("ne concerne que MB AxisPro Consulting :", wrong_company_message("cabinet"))

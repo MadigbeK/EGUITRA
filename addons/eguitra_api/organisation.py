@@ -68,6 +68,12 @@ def module_entity(route):
     return next((entity for prefix, entity in MODULE_ENTITY.items() if route.startswith(prefix)), None)
 
 
+def _que(nom):
+    """« que » élidé devant une voyelle : « qu'EGUITRA GROUP », « que MB AxisPro Consulting »."""
+    return "qu'" if nom[:1].upper() in "AEIOUYÉÈÊÀÂÎÔÛ" else "que "
+
+
 def wrong_company_message(entity):
-    return (f"Ce module ne concerne que {ENTITY_NAMES[entity]} : choisissez cette société dans la colonne "
-            "de gauche, ou ouvrez l'application qui la sert.")
+    nom = ENTITY_NAMES[entity]
+    return (f"Ce module ne concerne {_que(nom)}{nom} : choisissez cette société en haut de l'écran, "
+            "ou ouvrez l'application qui la sert.")
