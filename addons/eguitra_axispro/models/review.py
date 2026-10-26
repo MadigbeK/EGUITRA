@@ -82,6 +82,7 @@ class AxisproReview(models.Model):
             dossier = review.dossier_id
             if motive_missing(review.decision, review.motive):
                 raise UserError("Motivez une décision HOLD ou NO-GO avant de la verrouiller : complétez le brouillon.")
+            dossier._check_open()
             if dossier.locked_review_id:
                 raise UserError(f"Une décision est déjà verrouillée pour la révision {dossier.revision} : ouvrez une "
                                 "nouvelle révision avant d'en verrouiller une autre.")

@@ -371,6 +371,75 @@ class TestAxispro(ApiCase):
         self.assertGreaterEqual(summary["hours"], 11.0)
         self.assertEqual({dossier.id, autre.id} - {r["id"] for r in summary["dossiers"]}, set())
 
+    def test_acces_du_porteur_retire_et_responsable_change(self):
+        """Audit du noyau (I-X5, M8) : l'accès d'un porteur se retire, le responsable du dossier se
+        change, chaque fois au journal ; un compte porteur existant garde son mot de passe et l'écran le
+        sait (password_changed) ; refus 403 des profils autres que le cabinet."""
+        dossier = self._dossier()
+        dossier.consultant_id = self.consultant
+        token = self.open_session("consultant", app="axispro")["access_token"]
+        path = f"/axispro/dossiers/{dossier.id}/portal-access"
+        status, body = self.call("POST", path, {"login": "porteur.retrait", "name": "Porteur", "password": "court"},
+                                 token=token)
+        self.assertEqual((status, body.get("fields")), (400, ["password"]), "Mot de passe provisoire trop court")
+        status, body = self.call("POST", path, {"login": "porteur.retrait", "name": "Porteur", "password": PASSWORD},
+                                 token=token)
+        self.assertEqual((status, body["portal_access"]["created"]), (200, True), body)
+        autre = self.env["axispro.dossier"].create({"name": "Extension", "promoter_id": self.promoter.id,
+                                                    "company_id": self.cabinet.id})
+        status, body = self.call("POST", f"/axispro/dossiers/{autre.id}/portal-access",
+                                 {"login": "porteur.retrait", "name": "Porteur"}, token=token)
+        self.assertEqual((status, body["portal_access"]["password_changed"]), (200, False),
+                         "Compte existant : rattaché sans mot de passe, et l'écran le dit")
+        porteur = self.env["res.users"].search([("login", "=", "porteur.retrait")])
+        self._create_user("dg.portail", "direction", company_id=self.cabinet.id, company_ids=[(6, 0, self.cabinet.ids)])
+        dg = self.open_session("dg.portail", app="axispro")["access_token"]
+        for method, route, payload in (("DELETE", f"{path}/{porteur.id}", None),
+                                       ("POST", f"/axispro/dossiers/{dossier.id}/lead", {"user_id": self.consultant.id})):
+            status, body = self.call(method, route, payload, token=dg)
+            self.assertEqual((status, body.get("error")), (403, "forbidden"), f"{route} : direction refusée")
+        status, body = self.call("DELETE", f"{path}/{porteur.id}", token=token)
+        self.assertEqual((status, [u["id"] for u in body["portal_users"]]), (200, []), body)
+        self.env.invalidate_all()
+        self.assertTrue(porteur.active, "Le compte sert encore l'autre dossier du promoteur")
+        status, body = self.call("DELETE", f"/axispro/dossiers/{autre.id}/portal-access/{porteur.id}", token=token)
+        self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        self.assertFalse(porteur.active, "Plus aucun dossier : compte désactivé")
+        self.assertIn("Accès au portail retiré", " ".join(dossier.journal_ids.mapped("note")))
+        second = self._create_user("consultant.relais", "cabinet", company_id=self.cabinet.id,
+                                   company_ids=[(6, 0, self.cabinet.ids)])
+        relais = self.open_session("consultant.relais", app="axispro")["access_token"]
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/lead", {"user_id": second.id}, token=relais)
+        self.assertEqual(status, 403, "Seul le responsable en place confie le dossier")
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/lead", {"user_id": second.id}, token=token)
+        self.assertEqual((status, body["consultant_id"]), (200, second.id), body)
+        self.env.invalidate_all()
+        entry = dossier.journal_ids.filtered(lambda j: j.note == "Responsable du dossier")
+        self.assertEqual((entry.before, entry.after), (self.consultant.name, second.name))
+
+    def test_dossier_clos_fige_cote_cabinet(self):
+        """Audit du noyau (M8) : un dossier clos se consulte mais ne s'évalue plus et ne reçoit plus de
+        revue tant qu'il n'est pas rouvert ; chaque changement d'état est au journal."""
+        dossier = self._dossier()
+        token = self.open_session("consultant", app="axispro")["access_token"]
+        evaluation = dossier.evaluation_ids[:1]
+        status, body = self.call("PATCH", f"/axispro/dossiers/{dossier.id}", {"state": "closed"}, token=token)
+        self.assertEqual((status, body["state"]), (200, "closed"), body)
+        status, body = self.call("PATCH", f"/axispro/evaluations/{evaluation.id}", {"status": "met"}, token=token)
+        self.assertEqual(status, 422, "Évaluation refusée sur un dossier clos")
+        self.assertIn("clos", body["message"])
+        status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/reviews", {"decision": "go"}, token=token)
+        self.assertEqual(status, 422, "Pas de revue de comité sur un dossier clos")
+        self.assertEqual(self.call("GET", f"/axispro/dossiers/{dossier.id}", token=token)[0], 200, "Il se consulte")
+        status, body = self.call("PATCH", f"/axispro/dossiers/{dossier.id}", {"state": "open"}, token=token)
+        self.assertEqual((status, body["state"]), (200, "open"), body)
+        status, body = self.call("PATCH", f"/axispro/evaluations/{evaluation.id}", {"status": "met"}, token=token)
+        self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        states = dossier.journal_ids.filtered(lambda j: j.kind == "state")
+        self.assertEqual(sorted(states.mapped("after")), ["Clos", "En cours"])
+
     def test_statut_zero_lu_dans_un_classeur(self):
         """Audit du noyau (M8) : un statut 0 (nombre lu dans un classeur) vaut « non disponible »."""
         from odoo.addons.eguitra_axispro.controllers.rapports import _status_of

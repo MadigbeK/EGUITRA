@@ -29,6 +29,7 @@ WRITE = ("cabinet",)
 THRESHOLDS = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable")
 POLICY_FLAGS = ("ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check")
 MIN_FORCE_REASON = 10
+MIN_PORTAL_PASSWORD = 10
 
 
 def int_value(value, key):
@@ -457,11 +458,15 @@ class EguitraAxispro(http.Controller):
         le dossier d'un autre."""
         dossier = _dossier(dossier_id)
         data = read_json()
-        login, name, password = require(data, "login", "name", "password")
+        login, name = require(data, "login", "name")
+        password = data.get("password") or ""
         Users = request.env["res.users"].sudo().with_context(no_reset_password=True)
         user = Users.with_context(active_test=False).search([("login", "=", str(login).strip().lower())], limit=1)
         if user and not user.share:
             raise ApiError(409, "conflict", "Cet identifiant appartient à un utilisateur interne.")
+        if not user and len(str(password)) < MIN_PORTAL_PASSWORD:
+            raise ApiError(400, "missing_fields", f"Mot de passe provisoire de {MIN_PORTAL_PASSWORD} caractères au "
+                                                  "moins pour un nouveau compte porteur.", fields=["password"])
         if user:
             promoter = dossier.promoter_id.commercial_partner_id
             others = request.env["axispro.dossier"].sudo().search([("portal_user_ids", "in", user.id)]).filtered(
@@ -473,14 +478,51 @@ class EguitraAxispro(http.Controller):
                     f"d'un autre promoteur ({', '.join(sorted(set(others.mapped('promoter_id.name'))))}) : un compte "
                     "porteur ne sert qu'un promoteur. Vérifiez l'identifiant ou choisissez-en un autre pour ce porteur.",
                 )
-        if not user:
+        created = not user
+        if user and not user.active:
+            user.active = True
+        if created:
             user = Users.create({
                 "name": name, "login": str(login).strip().lower(), "password": password,
                 "email": data.get("email") or False, "eguitra_password_temporary": True,
                 "company_id": dossier.company_id.id, "company_ids": [(6, 0, dossier.company_id.ids)],
             })
             user._eguitra_set_profiles(["porteur"])
-        dossier.sudo().portal_user_ids = [(4, user.id)]
+        if user not in dossier.sudo().portal_user_ids:
+            dossier.sudo().portal_user_ids = [(4, user.id)]
+            dossier.log("portal", note=f"Accès au portail ouvert : {user.name} ({user.login})"
+                                       + ("" if created else ", compte existant") + ".")
+        # Compte existant : son mot de passe ne change pas (l'écran le dit, au lieu d'ignorer la saisie).
+        return dict(dossier_detail(dossier), portal_access={"login": user.login, "created": created,
+                                                             "password_changed": created})
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/portal-access/<int:user_id>", methods=("DELETE",), profiles=WRITE)
+    def portal_revoke(self, dossier_id, user_id, **_kw):
+        """Retire au porteur l'accès au dossier (inscrit au journal) ; son compte reste, pour ses autres
+        dossiers du même promoteur, et se désactive s'il n'en suit plus aucun."""
+        dossier = _dossier(dossier_id)
+        user = dossier.sudo().portal_user_ids.filtered(lambda u: u.id == user_id)
+        if not user:
+            raise ApiError(404, "not_found", "Ce porteur n'a pas accès à ce dossier.")
+        dossier.sudo().portal_user_ids = [(3, user.id)]
+        dossier.log("portal", note=f"Accès au portail retiré : {user.name} ({user.login}).")
+        if not request.env["axispro.dossier"].sudo().search_count([("portal_user_ids", "in", user.id)]):
+            user.sudo().active = False
+        return dossier_detail(dossier)
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/lead", methods=("POST",), profiles=WRITE)
+    def change_lead(self, dossier_id, **_kw):
+        """Confie le dossier à un autre responsable : {user_id}, consultant du cabinet ouvert à la
+        société. Seul le responsable en place le fait (ou tout le cabinet si le dossier n'en a pas),
+        changement inscrit au journal ; figé, comme la fiche, par une décision verrouillée."""
+        dossier = _dossier(dossier_id)
+        (user_id,) = require(read_json(), "user_id")
+        wanted = int_value(user_id, "user_id")
+        user = _consultants().filtered(lambda u: u.id == wanted)
+        if not user:
+            raise ApiError(422, "business_rule", "Seul un consultant du cabinet ouvert à cette société peut être "
+                                                 "responsable du dossier.")
+        dossier.change_lead(user)
         return dossier_detail(dossier)
 
     # ─── Évaluation ───────────────────────────────────────────────────────
@@ -687,6 +729,7 @@ class EguitraAxispro(http.Controller):
         if decision not in dict(COMMITTEE_DECISIONS):
             raise ApiError(400, "invalid_parameter", "Décision inconnue.")
         _check_motive(decision, data.get("motive"))
+        dossier._check_open()
         result = dossier.evaluate()
         scoring = dossier.scoring(result)
         financial = result.get("financial")

@@ -164,7 +164,12 @@ class AxisproDossier(models.Model):
             self._check_unlocked()
         if DECISION_FIELDS & set(vals) and _input_author(self.env):
             vals = dict(vals, decision_inputs_by=[Command.link(self.env.uid)])
-        return super().write(vals)
+        before = {d.id: d.state for d in self} if "state" in vals else {}
+        result = super().write(vals)
+        labels = dict(self._fields["state"].selection)
+        for dossier in self.filtered(lambda d: d.id in before and before[d.id] != d.state):
+            dossier.log("state", before=labels[before[dossier.id]], after=labels[dossier.state])
+        return result
 
     def _note_decision_input(self):
         """Inscrit l'utilisateur parmi les auteurs de la révision en cours (évaluation des critères,
@@ -177,10 +182,34 @@ class AxisproDossier(models.Model):
             todo.write({"decision_inputs_by": [Command.link(uid)]})
 
     def _check_unlocked(self):
+        """Refus d'écrire ce que la décision fige (évaluation, fiche, hypothèses, modèle financier, pièces
+        antérieures) : dossier verrouillé par une décision du comité, ou dossier clos (il se rouvre
+        d'abord)."""
         for dossier in self:
             if dossier.locked_review_id:
                 raise UserError(f"Dossier {dossier.reference} verrouillé par la décision du comité (révision "
                                 f"{dossier.revision}) : ouvrez une nouvelle révision pour le modifier.")
+            dossier._check_open()
+
+    def _check_open(self):
+        """Un dossier clos se consulte ; il ne s'évalue plus, ne passe plus de gate et ne reçoit plus de
+        revue de comité tant qu'il n'est pas rouvert."""
+        for dossier in self:
+            if dossier.state == "closed":
+                raise UserError(f"Dossier {dossier.reference} clos : rouvrez-le (état « En cours ») pour le modifier.")
+
+    def change_lead(self, user):
+        """Nouveau responsable du dossier, choisi par le responsable en place (tout le cabinet si le
+        dossier n'en a pas), inscrit au journal ; figé comme la fiche par une décision verrouillée."""
+        self.ensure_one()
+        lead = self.sudo().consultant_id.filtered(lambda u: u.id != SUPERUSER_ID)
+        if lead and lead != self.env.user and not _system(self.env):
+            raise AccessError(f"Seul {_lead_label(self)} confie le dossier à un autre responsable.")
+        if user == lead:
+            return True
+        self.write({"consultant_id": user.id})
+        self.log("assignment", note="Responsable du dossier", before=lead.name or "Aucun", after=user.name)
+        return True
 
     def evaluators(self):
         """Comptes auteurs de la révision en cours (decision_inputs_by) : ceux qui, depuis son
@@ -685,7 +714,7 @@ class AxisproJournal(models.Model):
     kind = fields.Selection(
         [("status", "Statut d'un critère"), ("document", "Data room"), ("gate", "Stage gate"),
          ("decision", "Décision de comité"), ("revision", "Révision"), ("import", "Import"),
-         ("assignment", "Équipe du dossier")],
+         ("assignment", "Équipe du dossier"), ("portal", "Portail du porteur"), ("state", "État du dossier")],
         required=True, readonly=True,
     )
     criterion_id = fields.Many2one("axispro.criterion", "Critère", ondelete="set null", readonly=True)
