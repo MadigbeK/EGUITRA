@@ -172,15 +172,18 @@ class EguitraPeriodClose(models.Model):
 
     def _reference_consistency_check(self, start, end):
         """Cohérence des références (offre, chapitre 3.3), vigilance : une même référence de fournisseur
-        saisie deux fois chez un même fournisseur (facture en double probable), et des numéros manquants
-        dans la numérotation des factures et des avoirs du mois."""
+        saisie deux fois chez un même fournisseur (facture en double probable ; une facture extournée puis
+        ressaisie n'en est pas une), et des numéros manquants dans la numérotation des factures et des
+        avoirs du mois. Les trous se cherchent sur tout le préfixe, jusqu'au dernier numéro du mois et
+        pièces annulées comprises (elles gardent leur numéro) : une facture datée du mois mais validée
+        le mois suivant n'en crée pas."""
         cr = self.env.cr
         company = self.company_id
         cr.execute(
             """SELECT p.name, MAX(am.ref), COUNT(*) FROM account_move am
                  JOIN res_partner p ON p.id = am.commercial_partner_id
                 WHERE am.company_id = %s AND am.state = 'posted' AND am.move_type IN ('in_invoice', 'in_refund')
-                  AND COALESCE(TRIM(am.ref), '') <> ''
+                  AND COALESCE(TRIM(am.ref), '') <> '' AND am.payment_state IS DISTINCT FROM 'reversed'
              GROUP BY p.name, am.commercial_partner_id, am.move_type, LOWER(TRIM(am.ref))
                HAVING COUNT(*) > 1 AND MAX(am.date) BETWEEN %s AND %s
              ORDER BY p.name""",
@@ -188,14 +191,20 @@ class EguitraPeriodClose(models.Model):
         )
         duplicates = cr.fetchall()
         cr.execute(
-            """SELECT am.sequence_prefix,
-                      MAX(am.sequence_number) - MIN(am.sequence_number) + 1 - COUNT(DISTINCT am.sequence_number)
-                 FROM account_move am JOIN account_journal j ON j.id = am.journal_id
-                WHERE am.company_id = %s AND am.state = 'posted' AND j.type IN ('sale', 'purchase')
-                  AND am.date BETWEEN %s AND %s AND am.sequence_prefix IS NOT NULL
-             GROUP BY am.journal_id, am.sequence_prefix
-               HAVING MAX(am.sequence_number) - MIN(am.sequence_number) + 1 > COUNT(DISTINCT am.sequence_number)
-             ORDER BY am.sequence_prefix""",
+            """WITH month AS (
+                    SELECT am.journal_id, am.sequence_prefix, MAX(am.sequence_number) AS last
+                      FROM account_move am JOIN account_journal j ON j.id = am.journal_id
+                     WHERE am.company_id = %s AND am.state = 'posted' AND j.type IN ('sale', 'purchase')
+                       AND am.date BETWEEN %s AND %s AND am.sequence_prefix IS NOT NULL
+                  GROUP BY am.journal_id, am.sequence_prefix
+               )
+               SELECT m.sequence_prefix, m.last - MIN(am.sequence_number) + 1 - COUNT(DISTINCT am.sequence_number)
+                 FROM month m
+                 JOIN account_move am ON am.journal_id = m.journal_id AND am.sequence_prefix = m.sequence_prefix
+                                     AND am.sequence_number <= m.last AND am.name <> '/'
+             GROUP BY m.journal_id, m.sequence_prefix, m.last
+               HAVING m.last - MIN(am.sequence_number) + 1 > COUNT(DISTINCT am.sequence_number)
+             ORDER BY m.sequence_prefix""",
             (company.id, start, end),
         )
         gaps = cr.fetchall()
