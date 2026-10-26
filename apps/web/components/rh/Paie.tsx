@@ -6,7 +6,7 @@ import { useState } from "react";
 import { AlertTriangle, BookOpen, Calculator, Check, ChevronLeft, FileSpreadsheet, FileText, Lock, Plus, RefreshCw, RotateCcw, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
 import type { Anomaly, CompanyRef, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
 import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, accord, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
@@ -273,7 +273,7 @@ export function DetailPaie({ id }: { id: string }) {
         <Kpi label="Net à payer" value={fmtShort(p.totals.net)} hint={pluriel(p.totals.headcount, "bulletin")} />
         <Kpi label="Brut" value={fmtShort(p.totals.gross)} hint={`Retenues diverses : ${fmtGNF(p.totals.deductions)}`} />
         <Kpi label="Cotisations et impôts" value={fmtShort(p.totals.cnss_employee + p.totals.cnss_employer + p.totals.rts + p.totals.vf + p.totals.training_tax)} hint={`CNSS ${fmtGNF(p.totals.cnss_employee + p.totals.cnss_employer)}, RTS ${fmtGNF(p.totals.rts)}, VF et formation ${fmtGNF(p.totals.vf + p.totals.training_tax)}`} />
-        <Kpi label="Coût employeur" value={fmtShort(p.totals.employer_cost)} tone="accent" hint={p.totals.gross ? `${fmtDec(p.totals.employer_cost / p.totals.gross)} fois le brut` : undefined} />
+        <Kpi label="Coût employeur" value={fmtShort(p.totals.employer_cost)} tone="accent" hint={p.totals.gross ? `${fmtRatio(p.totals.employer_cost / p.totals.gross)} fois le brut` : undefined} />
       </div>
 
       <Card
@@ -460,7 +460,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
             columns={[
               { key: "rubric", label: "Rubrique", render: (i) => i.rubric.name },
               { key: "source", label: "Origine", render: (i) => SOURCE[i.source] ?? i.source },
-              { key: "value", label: "Valeur", align: "right", render: (i) => (i.rubric.input === "hours" ? `${fmtDec(i.quantity)} h` : fmtGNF(i.amount)) },
+              { key: "value", label: "Valeur", align: "right", render: (i) => (i.rubric.input === "hours" ? `${fmtDec(i.quantity)}${INSECABLE}h` : fmtGNF(i.amount)) },
               { key: "note", label: "Motif", render: (i) => i.note ?? "–" },
               {
                 key: "x",
@@ -486,7 +486,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
               <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
             <div className="flex items-center justify-between gap-3 sm:col-span-2">
-              <span className="text-[12.5px] text-muted">{rubrique?.input === "hours" ? `Payées au taux horaire majoré de ${fmtDec(rubrique.overtime_rate)} %.` : rubrique ? `${rubrique.cnss ? "Soumis à la CNSS" : "Hors CNSS"}, ${rubrique.taxable ? (rubrique.exempt_allowance ? "exonéré de RTS dans la limite de 25 % du brut" : "soumis à la RTS") : "hors RTS"}.` : ""}</span>
+              <span className="text-[12.5px] text-muted">{rubrique?.input === "hours" ? `Payées au taux horaire majoré de ${fmtDec(rubrique.overtime_rate)}${INSECABLE}%.` : rubrique ? `${rubrique.cnss ? "Soumis à la CNSS" : "Hors CNSS"}, ${rubrique.taxable ? (rubrique.exempt_allowance ? `exonéré de RTS dans la limite de 25${INSECABLE}% du brut` : "soumis à la RTS") : "hors RTS"}.` : ""}</span>
               <Button variant="primary" loading={busy} disabled={!rubrique || !nombre(valeur) || Boolean(erreurNombre(valeur))} onClick={ajouter}>
                 <Check className="h-4 w-4" /> Ajouter
               </Button>

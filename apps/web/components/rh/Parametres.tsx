@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
 import { ChampMontant, PastilleSociete, avecSociete, erreurNombre, messageErreur, nombre, nomCourt, useMeta } from "./commun";
 
@@ -286,7 +286,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </Button>
         )}
         <p className="mt-3 text-[12.5px] text-muted">
-          Tranches actuelles : {settings.rts_brackets.map((b) => `${fmtInt(b.from)} → ${fmtDec(b.rate)} %`).join(" ; ")}.
+          Tranches actuelles : {settings.rts_brackets.map((b) => `${fmtInt(b.from)} → ${fmtDec(b.rate)}${INSECABLE}%`).join(" ; ")}.
         </p>
       </Card>
     </div>
@@ -314,7 +314,7 @@ function Rubriques({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; onC
           { key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span>, sortValue: (r) => r.code },
           { key: "name", label: "Rubrique", render: (r) => r.name, sortValue: (r) => r.name },
           { key: "kind", label: "Nature", render: (r) => (r.kind === "gain" ? "Gain" : "Retenue") },
-          { key: "input", label: "Saisie", render: (r) => (r.input === "hours" ? `Heures (+${fmtDec(r.overtime_rate)} %)` : "Montant") },
+          { key: "input", label: "Saisie", render: (r) => (r.input === "hours" ? `Heures (+${fmtDec(r.overtime_rate)}${INSECABLE}%)` : "Montant") },
           {
             key: "regles",
             label: "Règles",
@@ -460,7 +460,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
           { key: "paid", label: "Rémunérée", render: (t) => (t.paid ? "Oui" : <span className="text-warn">Non : retenue</span>) },
           { key: "balance", label: "Décompte du solde", render: (t) => (t.deducts_balance ? "Oui" : "Non") },
           { key: "doc", label: "Justificatif", render: (t) => (t.needs_document ? "Exigé" : "–") },
-          { key: "max", label: "Durée maximale", align: "right", render: (t) => (t.max_days ? `${fmtDec(t.max_days)} j` : "–") },
+          { key: "max", label: "Durée maximale", align: "right", render: (t) => (t.max_days ? `${fmtDec(t.max_days)}${INSECABLE}j` : "–") },
           { key: "active", label: "", render: (t) => (!t.active ? <Badge>Archivé</Badge> : null) },
           {
             key: "x",

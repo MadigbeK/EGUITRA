@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
 import { Button, Card, Empty, Field, Kpi, Notice, PageHeader, Segmented, Select, cx } from "@/components/ui";
 import { apiSend } from "@/lib/api-client";
-import { fmtDec, fmtGNF, fmtInt, fmtPct } from "@/lib/format";
+import { INSECABLE, fmtDec, fmtGNF, fmtInt, fmtPct, fmtRatio } from "@/lib/format";
 import type { ContractType, Simulation, SimulationInput } from "@/lib/rh-types";
 import { ChampMontant, erreurNombre, messageErreur, nombre, useMeta } from "./commun";
 
@@ -108,7 +108,7 @@ export function SimulateurSalaire() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Kpi label={mode === "net" ? "Salaire de base à proposer" : "Salaire brut"} value={fmtGNF(mode === "net" ? resultat.base_salary : resultat.gross)} hint={mode === "net" ? `Brut ${fmtGNF(resultat.gross)}` : undefined} />
                 <Kpi label="Net à payer" value={fmtGNF(resultat.net)} tone="ok" hint={resultat.gross ? `${fmtPct((resultat.net / resultat.gross) * 100, 0)} du brut` : undefined} />
-                <Kpi label="Coût employeur" value={fmtGNF(resultat.employer_cost)} tone="accent" hint={resultat.gross ? `${fmtDec(resultat.employer_cost / resultat.gross)} fois le brut` : undefined} />
+                <Kpi label="Coût employeur" value={fmtGNF(resultat.employer_cost)} tone="accent" hint={resultat.gross ? `${fmtRatio(resultat.employer_cost / resultat.gross)} fois le brut` : undefined} />
               </div>
               <Card title="Détail du calcul">
                 <table className="w-full text-sm">
@@ -129,7 +129,7 @@ export function SimulateurSalaire() {
                           {l.kind === "employer" && <span> (employeur)</span>}
                         </td>
                         <td className="py-1.5 text-right font-mono tabular">{l.base !== null ? fmtInt(l.base) : ""}</td>
-                        <td className="py-1.5 text-right font-mono tabular">{l.rate !== null ? `${fmtDec(l.rate)} %` : l.quantity !== null ? fmtDec(l.quantity) : ""}</td>
+                        <td className="py-1.5 text-right font-mono tabular">{l.rate !== null ? `${fmtDec(l.rate)}${INSECABLE}%` : l.quantity !== null ? fmtDec(l.quantity) : ""}</td>
                         <td className={cx("py-1.5 text-right font-mono tabular", l.kind === "deduction" && "text-danger")}>{l.kind === "deduction" ? `− ${fmtInt(l.amount)}` : fmtInt(l.amount)}</td>
                       </tr>
                     ))}

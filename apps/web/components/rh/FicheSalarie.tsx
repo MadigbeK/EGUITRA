@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ChevronLeft, Download, FileText, LogOut, Pencil, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
 import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, accord, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
@@ -183,7 +183,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
                 <tr key={l.id} className="border-b border-line/70">
                   <td className="py-2 text-ink-2">
                     {l.rubric.name}
-                    {l.rubric.input === "hours" && <span className="text-muted"> ({fmtDec(l.quantity)} h)</span>}
+                    {l.rubric.input === "hours" && <span className="text-muted"> ({fmtDec(l.quantity)}{INSECABLE}h)</span>}
                   </td>
                   <td className="py-2 text-right font-mono tabular">{l.rubric.input === "hours" ? "selon le taux horaire" : fmtGNF(l.amount)}</td>
                 </tr>
@@ -210,7 +210,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
                 { key: "date", label: "Date", render: (h) => fmtDate(h.date) },
                 { key: "old", label: "Avant", align: "right", render: (h) => fmtGNF(h.old_salary) },
                 { key: "new", label: "Après", align: "right", render: (h) => fmtGNF(h.new_salary) },
-                { key: "var", label: "Écart", align: "right", render: (h) => (h.old_salary ? `${h.new_salary >= h.old_salary ? "+" : ""}${fmtDec(((h.new_salary - h.old_salary) / h.old_salary) * 100)} %` : "–") },
+                { key: "var", label: "Écart", align: "right", render: (h) => (h.old_salary ? `${h.new_salary >= h.old_salary ? "+" : ""}${fmtDec(((h.new_salary - h.old_salary) / h.old_salary) * 100)}${INSECABLE}%` : "–") },
                 { key: "reason", label: "Motif", render: (h) => `${h.reason ?? "–"} (${h.user})` },
               ]}
             />

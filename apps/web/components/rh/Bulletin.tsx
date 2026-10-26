@@ -5,7 +5,7 @@ import { ChevronLeft, Printer } from "@/components/icons";
 import { CachetDocument } from "@/components/brand";
 import { Button, ErrorBox, Loading } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtGNF, fmtInt } from "@/lib/format";
 import { CONTRACT_LABELS, type Payslip, type PayslipLine } from "@/lib/rh-types";
 import { accord, moisLong } from "./commun";
 
@@ -139,7 +139,7 @@ export function BulletinPaie({ source, retour }: { source: string; retour: { hre
                 <tr key={i} className="border-b border-[#eef2ef]">
                   <td className="py-1 pr-2">{l.name}</td>
                   <td className="py-1 pr-2 text-right font-mono tabular">{l.base !== null ? fmtInt(l.base) : ""}</td>
-                  <td className="py-1 pr-2 text-right font-mono tabular">{l.rate !== null ? `${fmtDec(l.rate)} %` : ""}</td>
+                  <td className="py-1 pr-2 text-right font-mono tabular">{l.rate !== null ? `${fmtDec(l.rate)}${INSECABLE}%` : ""}</td>
                   <td className="py-1 text-right font-mono tabular">{fmtInt(l.amount)}</td>
                 </tr>
               ))}
@@ -181,7 +181,7 @@ function Info({ label, value, fort }: { label: string; value: string; fort?: boo
 }
 
 function LigneBulletin({ l, colonne }: { l: PayslipLine; colonne: "gain" | "retenue" }) {
-  const taux = l.rate !== null ? `${fmtDec(l.rate)} %` : l.quantity !== null ? fmtDec(l.quantity) : "";
+  const taux = l.rate !== null ? `${fmtDec(l.rate)}${INSECABLE}%` : l.quantity !== null ? fmtDec(l.quantity) : "";
   return (
     <tr className="border-b border-[#eef2ef]">
       <td className="py-1 pr-2">{l.name}</td>
