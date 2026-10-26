@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { revenir } from "../accueil/retour";
 import { Garde } from "../accueil/Garde";
 import { useSession } from "../auth/session";
 import { RotationsEcran } from "../rotations/RotationsEcran";
@@ -10,7 +11,7 @@ export default function Ecran() {
   if (etape.nom !== "ouverte") return null;
   return (
     <Garde user={etape.user} module="rotations">
-      <RotationsEcran user={etape.user} onRetour={() => router.back()} />
+      <RotationsEcran user={etape.user} onRetour={() => revenir(router)} />
     </Garde>
   );
 }

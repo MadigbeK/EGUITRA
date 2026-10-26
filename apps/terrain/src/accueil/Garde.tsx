@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
+import { revenir } from "./retour";
 import type { Utilisateur } from "../auth/coffre";
 import { Bouton, Ecran, Texte } from "../ui/elements";
 import { espaces } from "../ui/terrain";
@@ -15,7 +16,8 @@ export function Garde({ user, module, children }: { user: Utilisateur; module: M
       <View style={styles.page}>
         <Texte variante="titre">Accès non autorisé pour votre profil</Texte>
         <Texte>Ce module ne fait pas partie de votre travail dans l'application. Voyez le bureau si c'est une erreur.</Texte>
-        <Bouton titre="Retour à Ma journée" onPress={() => router.back()} />
+        {/* Module ouvert par une adresse directe : rien derrière, retour à l'accueil. */}
+        <Bouton titre="Retour à Ma journée" onPress={() => revenir(router)} />
       </View>
     </Ecran>
   );
