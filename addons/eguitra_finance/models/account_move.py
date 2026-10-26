@@ -98,3 +98,10 @@ class AccountMove(models.Model):
         """État d'approbation affiché dans les applications (complété par eguitra_approval)."""
         self.ensure_one()
         return None
+
+    def _eguitra_payments_awaiting(self):
+        """Règlements de la pièce enregistrés mais retenus avant leur comptabilisation, en attente d'une
+        décision (circuit d'approbation, complété par eguitra_approval) : une liste de
+        {id, amount, currency, date, journal, request_id, level, pending_with} ; vide sans circuit."""
+        self.ensure_one()
+        return []

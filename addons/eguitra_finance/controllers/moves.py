@@ -556,12 +556,22 @@ class EguitraFinanceMoves(http.Controller):
     def register_payment(self, move_id, **_kw):
         """Règlement d'une pièce validée. Sans montant, tout le reste dû est réglé. Un règlement partiel
         (montant transmis, ou partial=true) exige un montant positif lisible : un montant absent, nul,
-        négatif ou illisible est refusé (400), au lieu de régler tout le reste dû."""
+        négatif ou illisible est refusé (400), au lieu de régler tout le reste dû. Un règlement retenu par
+        le circuit d'approbation reste en attente (payment_status « submitted ») ; tant qu'il n'est pas
+        tranché, un second règlement de la pièce est refusé (422)."""
         move = _move(move_id)
         data = read_json()
         (journal_id,) = require(data, "journal_id")
         if move.state != "posted" or move.payment_state not in ("not_paid", "partial"):
             raise ApiError(422, "business_rule", "Cette pièce n'attend pas de règlement.")
+        awaiting = move._eguitra_payments_awaiting()
+        if awaiting:
+            who = awaiting[0].get("pending_with")
+            raise ApiError(422, "business_rule",
+                           "Un règlement de cette pièce attend déjà une approbation"
+                           + (f" ({who})" if who else "")
+                           + " : il sera comptabilisé à la dernière approbation. Attendez la décision avant d'en "
+                             "saisir un autre, sans quoi la pièce serait payée deux fois.")
         values = {"journal_id": int(journal_id), "payment_date": parse_date(data, "date", today())}
         if "amount" in data or data.get("partial"):
             values["amount"] = _partial_amount(data.get("amount"))
@@ -579,7 +589,9 @@ class EguitraFinanceMoves(http.Controller):
         payments = wizard._create_payments()
         if mode:
             payments.write({"eguitra_payment_mode_id": mode.id})
-        return move_detail(move)
+        # « submitted » : règlement retenu par le circuit (brouillon), comptabilisé à la dernière approbation.
+        status = "submitted" if payments.filtered(lambda p: p.state == "draft") else "posted"
+        return dict(move_detail(move), payment_status=status)
 
     @api_route("/finance/moves/<int:move_id>/pdf", profiles=PURCHASE_READ)
     def move_pdf(self, move_id, **_kw):

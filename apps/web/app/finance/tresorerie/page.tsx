@@ -588,12 +588,14 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
   const [form, setForm] = useState({ from: "", to: "", amount: "", date: today(), ref: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Virement retenu par le circuit des décaissements : annoncé, la fenêtre ne propose plus que « Fermer ». */
+  const [soumis, setSoumis] = useState<string | null>(null);
   const options = accounts.map((a) => ({ value: a.journal_id, label: a.name }));
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      await apiSend("POST", "/finance/transfers", {
+      const res = await apiSend<{ status: "ok" | "submitted"; moves: Array<{ approval?: { pending_with: string | null } | null }> }>("POST", "/finance/transfers", {
         from_journal_id: Number(form.from),
         to_journal_id: Number(form.to),
         amount: Number(form.amount.replace(/\s/g, "")),
@@ -601,6 +603,13 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
         ref: form.ref || undefined,
       });
       onDone();
+      if (res.status === "submitted") {
+        const qui = res.moves[0]?.approval?.pending_with;
+        setSoumis(
+          `Virement soumis à l'approbation${qui ? ` (${qui})` : ""} : ses deux écritures restent en attente et ne comptent qu'à la dernière approbation. Ne le saisissez pas une seconde fois ; la demande se suit dans « À valider ».`,
+        );
+        return;
+      }
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Virement impossible.");
@@ -609,10 +618,26 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
     }
   }
   return (
-    <Modal open title="Virement interne" onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.from || !form.to || !form.amount}>Enregistrer le virement</Button>}>
+    <Modal
+      open
+      title="Virement interne"
+      onClose={onClose}
+      footer={
+        soumis ? (
+          <Button variant="primary" onClick={onClose}>
+            Fermer
+          </Button>
+        ) : (
+          <Button variant="primary" loading={busy} onClick={submit} disabled={!form.from || !form.to || !form.amount}>
+            Enregistrer le virement
+          </Button>
+        )
+      }
+    >
       <div className="space-y-3">
         <p className="text-xs text-muted">Le virement passe par le compte de passage 585, soldé dès que les deux écritures sont passées.</p>
         {error && <Notice tone="danger">{error}</Notice>}
+        {soumis && <Notice tone="warn">{soumis}</Notice>}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Depuis">
             <Select value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="Choisir…" options={options} />

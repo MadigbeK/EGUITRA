@@ -155,3 +155,31 @@ class AccountMove(models.Model):
             "level": step.sequence if step else None,
             "pending_with": labels.get(step.profile) if step and request.state == "pending" else None,
         }
+
+    def _eguitra_payments_awaiting(self):
+        """Règlements de la pièce retenus par le circuit (paiement en brouillon, demande en attente) : tant
+        qu'ils ne sont pas tranchés, « Régler » est masqué et un second règlement refusé, sans quoi deux
+        demandes approuvées paieraient deux fois le fournisseur."""
+        self.ensure_one()
+        rows = super()._eguitra_payments_awaiting()
+        payments = self.sudo().matched_payment_ids.filtered(lambda p: p.state == "draft")
+        if not payments:
+            return rows
+        requests = self.env["eguitra.approval.request"].sudo().search([
+            ("res_model", "=", "account.payment"), ("res_id", "in", payments.ids), ("state", "=", "pending"),
+        ], order="id")
+        labels = dict(requests._fields["pending_profile"].selection)
+        for request in requests:
+            payment = payments.filtered(lambda p, rid=request.res_id: p.id == rid)
+            step = request.current_step_id
+            rows.append({
+                "id": payment.id,
+                "amount": payment.amount,
+                "currency": payment.currency_id.name,
+                "date": payment.date,
+                "journal": {"id": payment.journal_id.id, "name": payment.journal_id.display_name},
+                "request_id": request.id,
+                "level": step.sequence if step else None,
+                "pending_with": labels.get(step.profile) if step else None,
+            })
+        return rows

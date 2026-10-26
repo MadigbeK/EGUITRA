@@ -38,8 +38,9 @@ def without_settlement(data):
     """Profil Achats seul : la pièce sans son reste dû ni ses règlements, qui relèvent de la trésorerie ;
     son état de paiement (payée, partielle, non payée) reste lisible."""
     data["amount_residual"] = None
-    if "payments" in data:
-        data["payments"] = None
+    for key in ("payments", "payments_awaiting_approval"):
+        if key in data:
+            data[key] = None
     return data
 
 
@@ -279,6 +280,9 @@ def move_detail(move):
     data = move_summary(move)
     lines = move.invoice_line_ids if move.is_invoice(include_receipts=True) else move.line_ids
     labels = analytic_labels(lines.mapped("analytic_distribution"))
+    # Règlement retenu par le circuit d'approbation : la pièce reste « à régler » au sens du noyau, mais un
+    # second règlement paierait deux fois ; « Régler » attend la décision.
+    awaiting = move._eguitra_payments_awaiting()
     data.update({
         "narration": move.narration or None,
         "lines": [
@@ -306,8 +310,10 @@ def move_detail(move):
             for a in request.env["ir.attachment"].search([("res_model", "=", "account.move"), ("res_id", "=", move.id)])
         ],
         "payments": move.invoice_payments_widget or None,
+        "payments_awaiting_approval": awaiting,
         "can_post": move.state == "draft",
-        "can_pay": move.state == "posted" and move.payment_state in ("not_paid", "partial") and move.is_invoice(),
+        "can_pay": (move.state == "posted" and move.payment_state in ("not_paid", "partial") and move.is_invoice()
+                    and not awaiting),
     })
     return data
 

@@ -12,13 +12,28 @@ import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib
 
 type Message = { tone: "danger" | "ok" | "accent"; text: string };
 
+/** Règlement retenu par le circuit d'approbation : comptabilisé et lettré à la dernière approbation. */
+interface ReglementEnAttente {
+  id: number;
+  amount: number;
+  currency: string;
+  date: string | null;
+  journal: { id: number; name: string } | null;
+  request_id: number;
+  level: number | null;
+  pending_with: string | null;
+}
+
+/** Fiche de la pièce : règlements en attente d'approbation (null pour le profil Achats seul), état du dernier règlement. */
+type Fiche = MoveDetail & { payments_awaiting_approval?: ReglementEnAttente[] | null; payment_status?: "posted" | "submitted" };
+
 /**
  * Fiche d'une pièce : lignes, statut, règlement, impression, pièces jointes, avoir ; un brouillon d'achat se
  * modifie ou se supprime. Le profil Achats seul y joint ses justificatifs, imprime, modifie, supprime ou
  * soumet ses brouillons ; règlement, avoir, litige et annulation relèvent de la finance.
  */
 export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number | null; onClose: () => void; onChanged: () => void }) {
-  const { data: move, error, mutate } = useApi<MoveDetail>(moveId ? `/finance/moves/${moveId}` : null);
+  const { data: move, error, mutate } = useApi<Fiche>(moveId ? `/finance/moves/${moveId}` : null);
   const { achats } = useAchatsSeul(moveId !== null);
   const [paying, setPaying] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -81,14 +96,17 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
     const ok = await act(
       "pay",
       () =>
-        apiSend<MoveDetail>("POST", `/finance/moves/${m.id}/payments`, {
+        apiSend<Fiche>("POST", `/finance/moves/${m.id}/payments`, {
           journal_id: Number(journalId),
           // partial : le noyau refuse un règlement partiel dont le montant manquerait, au lieu de tout régler.
           ...(montantSaisi !== null ? { amount: montantSaisi, partial: true } : {}),
           date: payDate,
           payment_mode_id: modeId ? Number(modeId) : undefined,
         }),
-      () => ({ tone: "ok", text: "Règlement enregistré." }),
+      (r) =>
+        r.payment_status === "submitted"
+          ? { tone: "accent", text: "Règlement soumis au circuit d'approbation : il n'est ni comptabilisé ni lettré avant la dernière approbation." }
+          : { tone: "ok", text: "Règlement enregistré." },
     );
     if (ok) {
       setPaying(false);
@@ -142,6 +160,13 @@ export function MoveDetailModal({ moveId, onClose, onChanged }: { moveId: number
               En litige depuis le {fmtDate(move.dispute_date)} : {move.dispute_reason}. La facture n&apos;est pas relancée tant que le litige dure.
             </Notice>
           )}
+          {(move.payments_awaiting_approval ?? []).map((p) => (
+            <Notice key={p.id} tone="warn">
+              Règlement de {montantDevise(p.amount, p.currency)} du {fmtDate(p.date)}
+              {p.journal ? ` (${p.journal.name})` : ""} en attente d&apos;approbation{p.pending_with ? ` : ${p.pending_with}` : ""}. Il sera comptabilisé et lettré à la
+              dernière approbation ; tant que la demande est ouverte, la pièce ne se règle pas une seconde fois.
+            </Notice>
+          ))}
 
           <DataTable
             dense
