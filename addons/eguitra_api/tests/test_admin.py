@@ -1,3 +1,5 @@
+from datetime import date
+
 from odoo.tests import tagged
 
 from ..organisation import wrong_company_message
@@ -207,6 +209,48 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 404, "Société hors du périmètre de l'administrateur")
         status, _b = self.call("GET", "/admin/companies", token=self.open_session("fatou")["access_token"])
         self.assertEqual(status, 403)
+
+    def test_piste_d_audit_des_lignes_rattachees_a_leur_parent(self):
+        """Audit du noyau, I-A6 : éléments de salaire et tarifs relèvent de la société de leur parent.
+
+        Les modèles viennent d'eguitra_rh et d'eguitra_transport : infra/test.sh eguitra_api eguitra_rh
+        eguitra_transport."""
+        other = self.env["res.company"].create({"name": "Société hors périmètre"})
+        Log = self.env["auditlog.log"]
+
+        def log(record):
+            model = self.env["ir.model"]._get(record._name)
+            return Log.create({"name": record.display_name, "model_id": model.id, "res_id": record.id,
+                               "user_id": self.env.uid, "method": "write"})
+
+        cas = []
+        if "eguitra.rh.employee.line" in self.env:
+            rubric = self.env["eguitra.rh.rubric"].search([("system", "=", False)], limit=1)
+            for company in (self.env.company, other):
+                employee = self.env["eguitra.rh.employee"].create(
+                    {"name": f"Salarié {company.name}", "hire_date": date(2025, 1, 1), "company_id": company.id})
+                line = self.env["eguitra.rh.employee.line"].create(
+                    {"employee_id": employee.id, "rubric_id": rubric.id, "amount": 250_000})
+                cas.append(("eguitra.rh.employee.line", log(line), company == other))
+        if "eguitra.transport.tariff" in self.env:
+            client = self.env["res.partner"].create({"name": "Client du transport"})
+            for company in (self.env.company, other):
+                route = self.env["eguitra.transport.route"].create({"name": f"Route {company.name}", "company_id": company.id})
+                tariff = self.env["eguitra.transport.tariff"].create(
+                    {"route_id": route.id, "partner_id": client.id, "rate": 1_000_000})
+                cas.append(("eguitra.transport.tariff", log(tariff), company == other))
+        if not cas:
+            self.skipTest("eguitra_rh et eguitra_transport absents de la base de test")
+
+        token = self.open_session("aissatou")["access_token"]
+        for model, entry, hors_perimetre in cas:
+            status, audit = self.call("GET", f"/admin/audit?model={model}", token=token)
+            self.assertEqual(status, 200, audit)
+            ids = [e["id"] for e in audit]
+            if hors_perimetre:
+                self.assertNotIn(entry.id, ids, f"{model} d'une autre société : historique invisible")
+            else:
+                self.assertIn(entry.id, ids, f"{model} de la société de l'administrateur : historique visible")
 
     def test_message_de_module_d_une_autre_societe(self):
         """Audit du noyau, M2 : « qu'EGUITRA GROUP SARLU », « que MB AxisPro Consulting »."""
