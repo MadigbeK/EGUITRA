@@ -54,6 +54,7 @@ from .common import (
     ref,
     rotation_ref,
     scope_domain,
+    sheet_filters,
     site_ref,
     site_scope,
     text,
@@ -773,16 +774,18 @@ class EguitraHsseqEnvironment(http.Controller):
     def export(self, **kw):
         """Registres de l'environnement et de la qualité, aux mêmes domaines que les listes du même compte ;
         contaminations et réclamations pour les profils qui les lisent ; consommation et écarts de livraison
-        de la période, par véhicule."""
+        de la période, par véhicule. Filtres communs company_id, site_id, date_from et date_to ; filtres
+        propres à chaque feuille, préfixés : spills_, wastes_, dust_, contaminations_, complaints_, analysis_
+        (spills_status=closed, analysis_vehicle_kind=tipper…)."""
         env = request.env
         comps = companies(kw)
         meta = export_meta(comps)
-        spills = env["eguitra.hsseq.spill"].sudo().search(self._spill_domain(kw), order="occurred_at, id",
-                                                          limit=EXPORT_LIMIT)
-        wastes = env["eguitra.hsseq.waste"].sudo().search(self._waste_domain(kw), order="produced_on, id",
-                                                          limit=EXPORT_LIMIT)
-        dust = env["eguitra.hsseq.dust"].sudo().search(self._dust_domain(kw), order="measured_on, id",
-                                                       limit=EXPORT_LIMIT)
+        spills = env["eguitra.hsseq.spill"].sudo().search(self._spill_domain(sheet_filters(kw, "spills")),
+                                                          order="occurred_at, id", limit=EXPORT_LIMIT)
+        wastes = env["eguitra.hsseq.waste"].sudo().search(self._waste_domain(sheet_filters(kw, "wastes")),
+                                                          order="produced_on, id", limit=EXPORT_LIMIT)
+        dust = env["eguitra.hsseq.dust"].sudo().search(self._dust_domain(sheet_filters(kw, "dust")),
+                                                       order="measured_on, id", limit=EXPORT_LIMIT)
         kinds, units, wstat = dict(WASTE_KINDS), dict(WASTE_UNITS), dict(WASTE_STATUSES)
         sheets = [
             {"title": "Déversements", "meta": meta,
@@ -809,9 +812,11 @@ class EguitraHsseqEnvironment(http.Controller):
         ]
         if reads_quality():
             contaminations = env["eguitra.hsseq.contamination"].sudo().search(
-                self._contamination_domain(kw), order="detected_on, id", limit=EXPORT_LIMIT)
+                self._contamination_domain(sheet_filters(kw, "contaminations")), order="detected_on, id",
+                limit=EXPORT_LIMIT)
             complaints = env["eguitra.hsseq.complaint"].sudo().search(
-                self._complaint_domain(kw), order="received_on, id", limit=EXPORT_LIMIT)
+                self._complaint_domain(sheet_filters(kw, "complaints")), order="received_on, id",
+                limit=EXPORT_LIMIT)
             sheets += [
                 {"title": "Contaminations", "meta": meta,
                  "columns": [("Référence", "text"), ("Constatée le", "date"), ("Nature", "text"), ("Rotation", "text"),
@@ -833,7 +838,7 @@ class EguitraHsseqEnvironment(http.Controller):
                            ("Oui" if c.on_time else "Non") if c.responded_on else "",
                            dict(COMPLAINT_STATUSES).get(c.status)] for c in complaints], "totals": None},
             ]
-        start, end, _group_by, sites, kind = analysis_args(dict(kw, group_by="vehicle"))
+        start, end, _group_by, sites, kind = analysis_args(dict(sheet_filters(kw, "analysis"), group_by="vehicle"))
         Analysis = env["eguitra.hsseq.environment"]
         consumption = Analysis._consumption(comps, start, end, sites, kind, "vehicle")
         deliveries = Analysis._deliveries(comps, start, end, sites, kind, "vehicle")

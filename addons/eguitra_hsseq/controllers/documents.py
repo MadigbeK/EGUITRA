@@ -50,6 +50,7 @@ from .common import (
     profiles,
     reads_all,
     scope_domain,
+    sheet_filters,
     site_ref,
     terrain_source,
     text,
@@ -210,6 +211,19 @@ def version_values(data, partial=False):
     if "change_summary" in data:
         values["change_summary"] = text(data, "change_summary", 4000)
     return values
+
+
+def unique_code(company, code, procedure=None):
+    """Référence de procédure unique dans la société : 409 conflict sinon."""
+    domain = [("company_id", "=", company.id), ("code", "=", code)] + ([("id", "!=", procedure.id)] if procedure else [])
+    if code and request.env["eguitra.hsseq.procedure"].sudo().search_count(domain):
+        raise ApiError(409, "conflict", f"La référence {code} existe déjà dans la société.", fields=["code"])
+
+
+def unique_version(procedure, label, version=None):
+    """Numéro de version unique dans la procédure : 409 conflict sinon."""
+    if label and procedure.sudo().version_ids.filtered(lambda v: v.version == label and v != version):
+        raise ApiError(409, "conflict", f"La version {label} de cette procédure existe déjà.", fields=["version"])
 
 
 def get_version(procedure, version_id):
@@ -410,22 +424,25 @@ def contact_values(data, partial=False):
 class EguitraHsseqDocuments(http.Controller):
     # ─── Procédures ───────────────────────────────────────────────────────
 
-    def _procedures(self, kw):
+    def _procedures(self, kw, order="code, id", with_status=True):
         domain = [("company_id", "in", companies(kw).ids)]
-        if kw.get("status"):
+        if kw.get("status") and with_status:
             domain.append(("status", "in", kw["status"].split(",")))
         if kw.get("domain"):
             domain.append(("domain", "=", kw["domain"]))
         if kw.get("search"):
             domain += ["|", ("code", "ilike", kw["search"]), ("title", "ilike", kw["search"])]
-        rows = request.env["eguitra.hsseq.procedure"].sudo().search(domain, order="code, id")
+        rows = request.env["eguitra.hsseq.procedure"].sudo().search(domain, order=order)
         return rows.filtered(can_manage_read)
 
     @hsseq_route("/hsseq/procedures", profiles=DOC_READ)
     def procedures(self, **kw):
-        rows = self._procedures(kw)
-        offset, limit, _order = page_args(kw, "code", {"code": "code"})
-        counts = {"by_status": {code: len(rows.filtered(lambda p, c=code: p.status == c))
+        offset, limit, order = page_args(kw, "code", {"code": "code", "title": "title", "status": "status",
+                                                      "updated_at": "write_date"})
+        rows = self._procedures(kw, order)
+        # Compteurs par état aux autres filtres de la liste (pas à celui de l'état).
+        every = self._procedures(kw, with_status=False)
+        counts = {"by_status": {code: len(every.filtered(lambda p, c=code: p.status == c))
                                 for code, _l in PROCEDURE_STATUSES}}
         index = audience_index(companies(kw)) if rows else []
         return page([procedure_row(p, index=index) for p in rows[offset:offset + limit]], len(rows), offset, limit,
@@ -444,6 +461,7 @@ class EguitraHsseqDocuments(http.Controller):
         company = companies(data)[:1] if data.get("company_id") else request.env.company
         values = procedure_values(data)
         values.setdefault("audience_profiles", ["conducteur"])
+        unique_code(company, values["code"])
         procedure = request.env["eguitra.hsseq.procedure"].sudo().create(dict(values, company_id=company.id))
         request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(version_values(data),
                                                                           procedure_id=procedure.id))
@@ -454,7 +472,10 @@ class EguitraHsseqDocuments(http.Controller):
         procedure = get_procedure(procedure_id)
         if procedure.status == "archived":
             raise ApiError(422, "invalid_transition", "Procédure archivée : réactivez-la avant de la modifier.")
-        procedure.write(procedure_values(read_json(), partial=True))
+        values = procedure_values(read_json(), partial=True)
+        if "code" in values:
+            unique_code(procedure.company_id, values["code"], procedure)
+        procedure.write(values)
         return procedure_row(procedure, detail=True)
 
     @hsseq_route("/hsseq/procedures/<int:procedure_id>/versions", methods=("POST",), profiles=HSSEQ)
@@ -467,7 +488,9 @@ class EguitraHsseqDocuments(http.Controller):
                                                       "modifiez-la.")
         data = read_json()
         require(data, "version", "effective_date")
-        request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(version_values(data),
+        values = version_values(data)
+        unique_version(procedure, values["version"])
+        request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(values,
                                                                           procedure_id=procedure.id))
         return procedure_row(procedure, detail=True)
 
@@ -477,7 +500,10 @@ class EguitraHsseqDocuments(http.Controller):
         version = get_version(procedure, version_id)
         if version.status != "draft":
             raise ApiError(422, "invalid_transition", "Version publiée : elle ne se modifie plus (nouvelle version).")
-        version.write(version_values(read_json(), partial=True))
+        values = version_values(read_json(), partial=True)
+        if "version" in values:
+            unique_version(procedure, values["version"], version)
+        version.write(values)
         return procedure_row(procedure, detail=True)
 
     @hsseq_route("/hsseq/procedures/<int:procedure_id>/versions/<int:version_id>/publish", methods=("POST",),
@@ -786,21 +812,23 @@ class EguitraHsseqDocuments(http.Controller):
     @hsseq_route("/hsseq/documents/export.xlsx", profiles=PLAN_READ)
     def export(self, **kw):
         """Registres des documents et des urgences, bornés comme les listes du même compte : procédures et
-        alertes pour les profils qui les lisent ; plans, exercices et annuaire de crise de ses sites."""
+        alertes pour les profils qui les lisent ; plans, exercices et annuaire de crise de ses sites. Filtres
+        communs company_id et site_id ; filtres propres à chaque feuille, préfixés : procedures_, plans_,
+        drills_, contacts_ (drills_status=done…)."""
         env = request.env
         comps = companies(kw)
         meta = export_meta(comps)
-        Plan, plan_domain = self._plans(kw)
+        Plan, plan_domain = self._plans(sheet_filters(kw, "plans"))
         plans = Plan.search(plan_domain, order="site_id, scenario, id", limit=EXPORT_LIMIT)
-        drills = env["eguitra.hsseq.drill"].sudo().search(self._drill_domain(kw), order="planned_date, id",
-                                                          limit=EXPORT_LIMIT)
-        contacts = env["eguitra.hsseq.crisis.contact"].sudo().search(contact_domain(kw, account_sites()),
-                                                                     order="call_order, id", limit=EXPORT_LIMIT)
+        drills = env["eguitra.hsseq.drill"].sudo().search(self._drill_domain(sheet_filters(kw, "drills")),
+                                                          order="planned_date, id", limit=EXPORT_LIMIT)
+        contacts = env["eguitra.hsseq.crisis.contact"].sudo().search(
+            contact_domain(sheet_filters(kw, "contacts"), account_sites()), order="call_order, id", limit=EXPORT_LIMIT)
         scenarios, drill_states = dict(SCENARIOS), dict(DRILL_STATUSES)
         sheets = []
         if profiles() & set(DOC_READ):
             index = audience_index(comps)
-            procedures = self._procedures(kw)
+            procedures = self._procedures(sheet_filters(kw, "procedures", common=("company_id",)))
             rows = []
             for p in procedures:
                 current = p.current_version_id

@@ -564,6 +564,10 @@ class EguitraHsseqDrill(models.Model):
         debrief = (debrief or self.debrief or "").strip()
         if not debrief:
             raise HsseqError("debrief_required", "Le bilan de l'exercice est obligatoire.", fields=["debrief"])
+        count = participants_count if participants_count is not None else self.participants_count
+        if not count and not self.participant_ids:
+            raise HsseqError("participants_required", "Indiquez les participants de l'exercice (nombre ou comptes).",
+                             fields=["participants_count", "participant_ids"])
         values = {"status": "done", "performed_date": day, "debrief": debrief}
         if participants_count is not None:
             values["participants_count"] = max(int(participants_count), 0)

@@ -213,7 +213,10 @@ class EguitraHsseqReferentials(http.Controller):
         owners = env["res.users"]
         if not field_only:
             owners = env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", comps.ids)], limit=500)
-            owners = owners.filtered(lambda u: set(u._eguitra_profiles()) - {"conducteur"})
+            # Les conducteurs y figurent (participants d'un exercice), par leur nom seulement ; jamais pour
+            # l'auditeur.
+            owners = owners.filtered(lambda u: u._eguitra_profiles() and not (
+                personal_data_hidden() and "conducteur" in u._eguitra_profiles()))
         settings = env["eguitra.hsseq.settings"]._get(env.company)
         employee = env.user._hsseq_employee()
         people = bool(user_profiles & set(EVENT_PEOPLE))
@@ -224,7 +227,7 @@ class EguitraHsseqReferentials(http.Controller):
                               immobilized=v.hsseq_immobilized)
                          for v in vehicles],
             "drivers": [dict(driver_ref(d), site_id=on_site.get(d.id)) for d in drivers],
-            "owners": [user_ref(u) for u in owners],
+            "owners": [dict(user_ref(u), driver="conducteur" in u._eguitra_profiles()) for u in owners],
             # Salariés (personnes en cause d'un événement) : profils qui gèrent les événements seulement.
             "employees": employee_rows(comps, vehicles) if people else [],
             "clients": client_rows(comps) if user_profiles & set(CLIENTS) else [],

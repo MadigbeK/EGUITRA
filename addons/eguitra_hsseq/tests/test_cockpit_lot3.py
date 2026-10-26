@@ -46,7 +46,8 @@ class TestCockpitLot3(HsseqCase):
         plan = env["eguitra.hsseq.emergency.plan"].create(dict(base, site_id=self.site.id, scenario="fire",
                                                                title="Incendie au parc", response="Évacuer"))
         Drill = env["eguitra.hsseq.drill"]
-        Drill.create({"plan_id": plan.id, "planned_date": self.day}).action_perform(debrief="Évacuation en 4 minutes")
+        Drill.create({"plan_id": plan.id, "planned_date": self.day}).action_perform(
+            debrief="Évacuation en 4 minutes", participants_count=6)
         Drill.create({"plan_id": plan.id, "planned_date": self.day})
         status, cockpit = self.api("kadi.hsseq", "GET", "/hsseq/cockpit")
         self.assertEqual(status, 200, cockpit)

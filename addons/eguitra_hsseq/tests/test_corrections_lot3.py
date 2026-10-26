@@ -112,3 +112,65 @@ class TestCorrectionsLot3(HsseqCase):
         for text in ("Indicateurs de la période", "Taux de fréquence", "Sortie de route de démonstration",
                      "(revue préparée)"):
             self.assertIn(text, html, "Compte rendu d'une revue préparée : ses éléments d'entrée")
+
+    def test_documents_doublons_participants_tri_conducteurs_et_exports(self):
+        """Référence de procédure ou numéro de version en double : 409 ; participants exigés à la réalisation
+        d'un exercice ; tri des procédures ; conducteurs parmi les comptes servis ; filtres propres à chaque
+        feuille des exports."""
+        import zipfile
+
+        base = {"title": "Dépotage", "version": "1", "effective_date": str(self.day)}
+        status, first = self.api("kadi.hsseq", "POST", "/hsseq/procedures", dict(base, code="PR-B"))
+        self.assertEqual(status, 200, first)
+        status, body = self.api("kadi.hsseq", "POST", "/hsseq/procedures", dict(base, code="PR-B"))
+        self.assertEqual((status, body["error"], body["fields"]), (409, "conflict", ["code"]))
+        status, second = self.api("kadi.hsseq", "POST", "/hsseq/procedures", dict(base, code="PR-A"))
+        status, body = self.api("kadi.hsseq", "PATCH", f"/hsseq/procedures/{second['id']}", {"code": "PR-B"})
+        self.assertEqual((status, body["error"]), (409, "conflict"))
+        status, body = self.api("kadi.hsseq", "PATCH",
+                                f"/hsseq/procedures/{first['id']}/versions/{first['draft_version']['id']}", {"version": "1"})
+        self.assertEqual(status, 200, "Même numéro sur la même version : accepté")
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/procedures?sort=-code")
+        self.assertEqual([p["code"] for p in listing["items"]], ["PR-B", "PR-A"], "Tri respecté")
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/procedures?status=published")
+        self.assertEqual((listing["items"], listing["counts"]["by_status"]["draft"]), ([], 2),
+                         "Compteurs aux autres filtres que l'état")
+        status, plan = self.api("kadi.hsseq", "POST", "/hsseq/emergency-plans", {
+            "site_id": self.site.id, "scenario": "fire", "title": "Incendie au parc", "response": "Évacuer"})
+        status, drill = self.api("kadi.hsseq", "POST", f"/hsseq/emergency-plans/{plan['id']}/drills",
+                                 {"planned_date": str(self.day)})
+        status, body = self.api("kadi.hsseq", "POST", f"/hsseq/drills/{drill['id']}/perform", {"debrief": "Bilan"})
+        self.assertEqual((status, body["error"]), (422, "participants_required"))
+        status, refs = self.api("kadi.hsseq", "GET", "/hsseq/referentials")
+        owners = {o["id"]: o for o in refs["owners"]}
+        self.assertEqual(owners[self.conducteur.id], {"id": self.conducteur.id, "name": self.conducteur.name,
+                                                      "driver": True}, "Conducteur, par son nom seulement")
+        status, refs = self.api("awa.auditrice", "GET", "/hsseq/referentials")
+        self.assertNotIn(self.conducteur.id, [o["id"] for o in refs["owners"]], "Jamais pour l'auditeur")
+        # Exports : filtres propres à chaque feuille.
+        Spill = self.env["eguitra.hsseq.spill"]
+        for location, status_ in (("Quai ouvert", "open"), ("Quai clos", "closed")):
+            Spill.create({"company_id": self.company.id, "site_id": self.site.id, "occurred_at": fields.Datetime.now(),
+                          "volume_liters": 10, "location": location, "status": status_})
+        self.env["eguitra.hsseq.waste"].create({"company_id": self.company.id, "site_id": self.site.id,
+                                                "waste_kind": "other", "description": "Fûts du magasin", "quantity": 2})
+        token = self.token("kadi.hsseq")
+        self.env.flush_all()
+
+        def export(path):
+            response = self.url_open(f"/api/v1{path}", headers={"Authorization": f"Bearer {token}",
+                                                                 "X-Eguitra-App": "test"}, timeout=60)
+            self.assertEqual(response.status_code, 200)
+            return zipfile.ZipFile(io.BytesIO(response.content)).read("xl/sharedStrings.xml").decode()
+
+        content = export("/hsseq/environment/export.xlsx?spills_status=closed&status=collected")
+        self.assertIn("Quai clos", content)
+        self.assertNotIn("Quai ouvert", content, "Filtre de la feuille des déversements")
+        self.assertIn("Fûts du magasin", content, "Le filtre non préfixé ne borne plus les déchets")
+        self.env["eguitra.hsseq.drill"].browse(drill["id"]).write({"participants_count": 4})
+        self.api("kadi.hsseq", "POST", f"/hsseq/drills/{drill['id']}/perform", {"debrief": "Évacuation réussie"})
+        self.api("kadi.hsseq", "POST", f"/hsseq/emergency-plans/{plan['id']}/drills",
+                 {"planned_date": str(self.day + timedelta(days=30))})
+        content = export("/hsseq/documents/export.xlsx?drills_status=done")
+        self.assertIn("Évacuation réussie", content)
+        self.assertIn("Incendie au parc", content, "Plans sans le filtre des exercices")

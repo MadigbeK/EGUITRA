@@ -308,6 +308,14 @@ def page_args(kw, default_sort, sorts):
     return offset, limit, f"{sorts[key]} {'desc' if desc else 'asc'}, id desc"
 
 
+def sheet_filters(kw, prefix, common=("company_id", "site_id", "date_from", "date_to")):
+    """Filtres d'une feuille d'un export à plusieurs feuilles : les filtres communs (société, site, période),
+    puis ceux préfixés du nom de la feuille (spills_status=open, drills_status=done…)."""
+    result = {key: kw[key] for key in common if key in kw}
+    result.update({key[len(prefix) + 1:]: value for key, value in kw.items() if key.startswith(prefix + "_")})
+    return result
+
+
 def page(items, total, offset, limit, counts=None):
     return {"items": items, "total_count": total, "offset": offset, "limit": limit, "counts": counts or {}}
 
