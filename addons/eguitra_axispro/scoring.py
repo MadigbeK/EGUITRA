@@ -81,6 +81,15 @@ def fnum(value, digits=1):
     return text
 
 
+def fscore(value, digits=1):
+    """Score ou ratio comparé à un seuil, tronqué (jamais arrondi au-dessus) : 64,98 s'écrit 64,9 et
+    non 65,0, sous un seuil de 65 ; un DSCR de 1,296 s'écrit 1,29 sous un seuil de 1,30."""
+    if value is None:
+        return "–"
+    factor = 10 ** digits
+    return fnum(math.floor(value * factor + 1e-9) / factor, digits)
+
+
 def accord(n, un, plusieurs=None):
     """Forme accordée au nombre, sans le nombre : singulier jusqu'à 1 (« 0 critère », « 1,5 point »)."""
     return un if abs(n) < 2 else (plusieurs or un + "s")
@@ -314,7 +323,7 @@ def _gate(g, ctx):
         done = ctx["completeness_of"](lambda x: x["gate_index"] <= g["index"] if cumulative else True)
         if done < floor:
             scope = " des gates atteints" if cumulative else ""
-            motif = (f"Complétude documentaire{scope} {fnum(done)} %, minimum {fnum(floor, 0)} % pour examiner "
+            motif = (f"Complétude documentaire{scope} {fscore(done)} %, minimum {fnum(floor, 0)} % pour examiner "
                      "ce gate.")
             return "hold", [motif] + (motifs if decision == "hold" else [])
     return decision, motifs
@@ -356,9 +365,9 @@ def _gate_rule(g, ctx):
         r = scoped_readiness()
         label = "Score de maturité" + (" des gates atteints" if g.get("scope") == "cumulative" else "")
         if hold is not None and r < hold:
-            return "hold", [f"{label} {fnum(r)}/100, seuil de passage {fnum(hold, 0)}."]
+            return "hold", [f"{label} {fscore(r)}/100, seuil de passage {fnum(hold, 0)}."]
         decision = "go" if go is None or r >= go else "conditional"
-        return decision, [f"{label} {fnum(r)}/100 ; aucun knock-out sur les gates atteints."]
+        return decision, [f"{label} {fscore(r)}/100 ; aucun knock-out sur les gates atteints."]
     if rule == "feasibility":
         domains = set(g.get("domain_ids") or [])
         ko = [x for x in knockouts if x["domain_id"] in domains or x["gate_index"] <= g["index"]]
@@ -367,29 +376,29 @@ def _gate_rule(g, ctx):
         r = scoped_readiness()
         label = "Project Readiness" + (" des gates atteints" if g.get("scope") == "cumulative" else "")
         if hold is not None and r < hold:
-            return "hold", [f"{label} {fnum(r)}/100, seuil de passage {fnum(hold, 0)}."]
+            return "hold", [f"{label} {fscore(r)}/100, seuil de passage {fnum(hold, 0)}."]
         names = ", ".join(d["name"] for d in ctx["domains"] if d["id"] in domains) or "domaines clés"
-        return "go", [f"Aucun knock-out sur {names} ; {label} {fnum(r)}/100."]
+        return "go", [f"Aucun knock-out sur {names} ; {label} {fscore(r)}/100."]
     if rule == "apd":
         if knockouts:
             return "no_go", [f"Zéro knock-out exigé à ce gate : {pluriel(len(knockouts), 'actif')}."] + [f"· {x['name']}" for x in knockouts]
         if hold is not None and ctx["apd"] < hold:
-            return "hold", [f"APD Readiness Score {fnum(ctx['apd'])}/100, seuil de passage {fnum(hold, 0)}."]
-        return "go", [f"APD Readiness {fnum(ctx['apd'])}/100 et zéro knock-out actif : lancement APD possible."]
+            return "hold", [f"APD Readiness Score {fscore(ctx['apd'])}/100, seuil de passage {fnum(hold, 0)}."]
+        return "go", [f"APD Readiness {fscore(ctx['apd'])}/100 et zéro knock-out actif : lancement APD possible."]
     if rule == "bankability":
         if knockouts:
             return "no_go", [f"Knock-out actif restant : {len(knockouts)}."]
         motifs = []
         if hold is not None and ctx["bankability"] < hold:
-            motifs.append(f"Bankability Score {fnum(ctx['bankability'])}/100, seuil {fnum(hold, 0)}.")
+            motifs.append(f"Bankability Score {fscore(ctx['bankability'])}/100, seuil {fnum(hold, 0)}.")
         dscr = hyp.get("dscr")
         if dscr is None:
             motifs.append("DSCR non renseigné (modèle financier ou hypothèses).")
         elif dscr < p["dscr_target"]:
-            motifs.append(f"DSCR {fnum(dscr, 2)} inférieur au seuil bancaire de {fnum(p['dscr_target'], 2)}.")
+            motifs.append(f"DSCR {fscore(dscr, 2)} inférieur au seuil bancaire de {fnum(p['dscr_target'], 2)}.")
         if motifs:
             return "hold", motifs
-        return "go", [f"Bankability {fnum(ctx['bankability'])}/100 et DSCR {fnum(dscr, 2)} : GO pour due diligence."]
+        return "go", [f"Bankability {fscore(ctx['bankability'])}/100 et DSCR {fscore(dscr, 2)} : GO pour due diligence."]
     if rule == "due_diligence":
         if hyp.get("dd_red_flag") == "yes":
             return "no_go", ["Red flag bloquant identifié en due diligence."]
@@ -398,7 +407,7 @@ def _gate_rule(g, ctx):
             motifs.append("Data room non déclarée constituée.")
         target = hold if hold is not None else 80
         if ctx["dataroom_completeness"] < target:
-            motifs.append(f"Complétude data room {fnum(ctx['dataroom_completeness'])} %, cible {fnum(target, 0)} %.")
+            motifs.append(f"Complétude data room {fscore(ctx['dataroom_completeness'])} %, cible {fnum(target, 0)} %.")
         return ("hold", motifs) if motifs else ("go", ["Aucun red flag bloquant ; data room exploitable."])
     if rule == "structuring":
         motifs = []
@@ -409,7 +418,7 @@ def _gate_rule(g, ctx):
             if d["id"] in (g.get("domain_ids") or []):
                 s = ctx["domain_scores"].get(d["id"])
                 if s is None or s < target:
-                    motifs.append(f"Domaine {d['name']} à {fnum(s, 0)}/100, cible {fnum(target, 0)}.")
+                    motifs.append(f"Domaine {d['name']} à {fscore(s, 0)}/100, cible {fnum(target, 0)}.")
         return ("hold", motifs) if motifs else ("go", ["Structure arrêtée et actionnaires SPV alignés."])
     if rule == "closing":
         motifs = []
@@ -435,13 +444,13 @@ def _recommendation(p, readiness, apd, bankability, knockouts, gates):
     by_rule = {g["rule"]: g for g in gates}
     g4, g3 = by_rule.get("bankability"), by_rule.get("apd")
     if bankability >= p["threshold_bankable"] and g4 and g4["decision"] == "go":
-        return "bankable", f"Bankability {fnum(bankability)}/100 : dossier présentable à un pool de financeurs."
+        return "bankable", f"Bankability {fscore(bankability)}/100 : dossier présentable à un pool de financeurs."
     if apd >= p["threshold_apd"] and g3 and g3["decision"] == "go":
-        return "apd_ready", f"APD Readiness {fnum(apd)}/100 : lancement de l'avant-projet détaillé possible."
+        return "apd_ready", f"APD Readiness {fscore(apd)}/100 : lancement de l'avant-projet détaillé possible."
     if not g3 and not g4 and readiness >= p["threshold_apd"]:
-        return "go", f"Readiness {fnum(readiness)}/100, sans knock-out actif."
+        return "go", f"Readiness {fscore(readiness)}/100, sans knock-out actif."
     if readiness >= p["threshold_conditional"]:
-        return "conditional", f"Readiness {fnum(readiness)}/100 : poursuite sous conditions, gaps prioritaires à combler."
+        return "conditional", f"Readiness {fscore(readiness)}/100 : poursuite sous conditions, gaps prioritaires à combler."
     if readiness >= p["threshold_hold"]:
-        return "hold", f"Readiness {fnum(readiness)}/100 : gaps majeurs, instruction suspendue."
-    return "no_go", f"Readiness {fnum(readiness)}/100 : dossier non instruisable en l'état."
+        return "hold", f"Readiness {fscore(readiness)}/100 : gaps majeurs, instruction suspendue."
+    return "no_go", f"Readiness {fscore(readiness)}/100 : dossier non instruisable en l'état."

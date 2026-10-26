@@ -168,6 +168,14 @@ class TestFormules(TransactionCase):
         r = run([crit(1)], {1: "not_met"}, context={"investment": 1_000_000, "capex_criterion_id": 1})
         self.assertIn("investissement", r["anomalies"][0])
 
+    def test_motif_jamais_arrondi_au_dessus_du_seuil(self):
+        """Audit du noyau (M8) : un score de 64,98 s'écrit 64,9 dans le motif d'un HOLD sous le seuil de
+        65, jamais 65,0 ; un DSCR de 1,296 s'écrit 1,29."""
+        r = run([crit(1, 6498), crit(2, 3502)], {1: "met", 2: "not_met"}, gates=[gate(0, "prequalification", hold=65)])
+        self.assertEqual(r["gates"][0]["decision"], "hold")
+        self.assertIn("64,9/100, seuil de passage 65", r["gates"][0]["motifs"][0])
+        self.assertEqual((scoring.fscore(1.296, 2), scoring.fscore(25.0), scoring.fscore(None)), ("1,29", "25,0", "–"))
+
 
 def extended_grid():
     """Grille au format MB AxisPro Consulting (colonne « exigence ») : huit gates, deux domaines, cinq critères."""
