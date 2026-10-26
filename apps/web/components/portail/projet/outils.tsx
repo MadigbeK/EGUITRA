@@ -64,6 +64,28 @@ export function PasDeDossier() {
   );
 }
 
+/**
+ * Page ou contenu introuvable (adresse inconnue, identifiant invalide, contenu retiré ou réservé à un
+ * autre public) : « Réessayer » n'y changerait rien, le porteur repart d'une page qui existe.
+ */
+export function PageIntrouvable({ titre, texte, retour = { href: "/portail", label: "Revenir à l'accueil du portail" } }: { titre: string; texte: string; retour?: { href: string; label: string } }) {
+  return (
+    <Card>
+      <Empty title={titre} hint={texte} />
+      <div className="-mt-6 flex justify-center pb-6">
+        <LienBouton href={retour.href} variant="primary">
+          {retour.label}
+        </LienBouton>
+      </div>
+    </Card>
+  );
+}
+
+/** L'erreur d'un appel est-elle un « introuvable » du noyau (404) ? */
+export function estIntrouvable(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { status?: unknown }).status === 404;
+}
+
 /** Message d'une erreur d'appel, destiné au porteur. */
 export function messageErreur(e: unknown): string {
   if (e instanceof Error && e.message) return e.message;
