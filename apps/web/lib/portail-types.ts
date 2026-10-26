@@ -338,7 +338,8 @@ export interface AgendaItem {
 }
 
 export type NotificationKind =
-  | "message" | "document" | "action" | "gate" | "decision" | "meeting" | "announcement" | "event" | "funding" | "resource";
+  | "message" | "document" | "action" | "gate" | "decision" | "meeting" | "announcement" | "event" | "funding" | "resource"
+  | "feedback";
 
 export interface NotificationRow {
   id: number;
@@ -377,6 +378,8 @@ export interface FeedbackRow {
   recommend: number | null;
   comment: string | null;
   date: string;
+  /** Réponse à un avis donné : le consultant du dossier a-t-il été prévenu ? */
+  consultant_notified?: boolean;
 }
 
 /* ─── Cabinet ─────────────────────────────────────────────────────────── */

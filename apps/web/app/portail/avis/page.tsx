@@ -194,7 +194,14 @@ export default function VotreAvis() {
                 </span>
                 <h2 className="mt-4 font-display text-[24px] font-bold text-ink">Merci pour votre avis.</h2>
                 <p className="mt-2 max-w-md text-[14px] leading-relaxed text-ink-2">
-                  Il est transmis au cabinet. {merci.score <= 2 ? "Votre consultant reviendra vers vous pour comprendre ce qui n'a pas fonctionné." : "Il nous aide à mieux accompagner chaque porteur."}
+                  {/* Un rappel n'est promis que si le noyau a bien prévenu le consultant du dossier. */}
+                  {merci.consultant_notified
+                    ? merci.score <= 2
+                      ? "Votre consultant en est prévenu : il reviendra vers vous pour comprendre ce qui n'a pas fonctionné."
+                      : "Votre consultant en est informé. Votre avis nous aide à mieux accompagner chaque porteur."
+                    : merci.score <= 2
+                      ? "Il est enregistré par le cabinet. Pour en parler sans attendre, écrivez-nous depuis la messagerie."
+                      : "Il est enregistré par le cabinet et nous aide à mieux accompagner chaque porteur."}
                 </p>
                 <div className="mt-3">
                   <EtoilesLecture n={merci.score} />

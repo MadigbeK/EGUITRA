@@ -239,6 +239,7 @@ class TestPortail(ApiCase):
         status, avis = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 5, "recommend": 9,
                                                            "comment": "Très bon suivi."}, token=self.porteur)
         self.assertEqual(status, 200, avis)
+        self.assertTrue(avis["consultant_notified"], "Le consultant du dossier lit chaque avis")
         _s, again = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 4}, token=self.porteur)
         self.assertEqual((again["id"], again["score"], again["recommend"]), (avis["id"], 4, None),
                          "Un avis par sujet et par mois : mis à jour")
@@ -256,6 +257,25 @@ class TestPortail(ApiCase):
         self.assertIn("Ville : Kindia", demande.body)
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
+
+    def test_avis_bas_previent_le_consultant(self):
+        status, bas = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 2, "topic": "consultant",
+                                                          "comment": "Difficile à joindre."}, token=self.porteur)
+        self.assertEqual(status, 200, bas)
+        self.assertTrue(bas["consultant_notified"])
+        alerte = self.notifications(self.consultant).filtered(lambda n: n.kind == "feedback")
+        self.assertEqual(len(alerte), 1, "Une notification du consultant par avis")
+        self.assertTrue(alerte.title.startswith("Avis à reprendre"), alerte.title)
+        self.assertIn("Difficile à joindre.", alerte.body)
+        self.assertEqual((alerte.link, alerte.dossier_id), ("/axispro/portail/porteurs", self.dossier_a))
+        status, _b = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 5},
+                               token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
+        self.dossier_a.consultant_id = False
+        status, sans = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 1, "topic": "portail"},
+                                 token=self.porteur)
+        self.assertEqual(status, 200, sans)
+        self.assertFalse(sans["consultant_notified"], "Sans consultant prévenu, l'écran ne promet aucun rappel")
 
     def test_actions_sans_grille_ni_cle_interne(self):
         Action = self.env["axispro.action"]

@@ -35,6 +35,9 @@ ACTION_ORIGINS = {
     "committee": ("committee", "Condition posée par le comité"),
     "risk": ("risk", "Pour maîtriser un risque du projet"),
 }
+# Note d'un avis (1 à 5) à partir de laquelle le consultant est invité à rappeler le porteur.
+FEEDBACK_ALERT_SCORE = 2
+CABINET_FEEDBACK_PAGE = "/axispro/portail/porteurs"
 PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
                         "state", "version")
 PROFILE_FIELDS = ("phone", "email", "street", "city", "website")
@@ -706,4 +709,16 @@ class EguitraPortailPorteur(http.Controller):
         else:
             feedback = Feedback.create(dict(values, dossier_id=dossier.id, user_id=me.id, topic=topic,
                                             event_id=event.id or False))
-        return vues.feedback_row(feedback)
+        # Le consultant du dossier lit chaque avis ; une note basse lui demande de rappeler le porteur.
+        # L'écran ne promet un rappel que si ce consultant a bien été prévenu.
+        score = feedback.score
+        sujet = dict(FEEDBACK_TOPICS)[topic].lower()
+        if score <= FEEDBACK_ALERT_SCORE:
+            title = f"Avis à reprendre avec {me.name} : {score}/5 ({sujet})"
+        else:
+            title = f"Avis de {me.name} : {score}/5 ({sujet})"
+        comment = " ".join((feedback.comment or "").split())[:200]
+        body = f"{dossier.reference} : {comment}" if comment else dossier.reference
+        notified = request.env["portail.notification"].sudo().notify(
+            dossier.consultant_id, "feedback", title, body, CABINET_FEEDBACK_PAGE, dossier=dossier)
+        return dict(vues.feedback_row(feedback), consultant_notified=bool(notified))

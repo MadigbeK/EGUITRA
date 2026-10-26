@@ -16,6 +16,7 @@ NOTIFICATION_KINDS = [
     ("event", "Événement"),
     ("funding", "Financement"),
     ("resource", "Ressource"),
+    ("feedback", "Avis d'un porteur"),
 ]
 FEEDBACK_TOPICS = [
     ("global", "Accompagnement"),
