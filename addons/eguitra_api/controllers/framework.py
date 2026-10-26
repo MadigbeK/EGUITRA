@@ -204,11 +204,13 @@ def _error(status, code, message=None, **extra):
     return json_response(payload, status)
 
 
-def api_route(route, methods=("GET",), profiles=None, auth=True):
+def api_route(route, methods=("GET",), profiles=None, auth=True, journal=True):
     """Déclare une route de l'API.
 
     :param profiles: profils autorisés (codes de PROFILE_GROUPS) ; None = tout utilisateur connecté.
     :param auth: False pour les routes publiques (connexion, santé).
+    :param journal: False pour une relecture périodique de l'écran (discussion : toutes les 5 et 30
+        secondes) ; seuls ses refus et ses erreurs entrent alors au journal des accès, qu'elle noierait.
     Un module réservé à une société (organisation.MODULE_ENTITY) refuse de travailler dans l'autre.
     La fonction décorée reçoit les paramètres d'URL et renvoie un objet sérialisable en JSON,
     ou une réponse HTTP déjà construite (fichier).
@@ -257,7 +259,7 @@ def api_route(route, methods=("GET",), profiles=None, auth=True):
                 return _error(500, "server_error", "Erreur interne. L'incident est journalisé.")
             finally:
                 # Le contrôle de santé (conteneur, supervision : toutes les 30 s) n'est pas un accès.
-                if route != "/health":
+                if route != "/health" and (journal or status >= 400):
                     _log_access(user_id, status, started, app)
 
         return http.route(

@@ -81,11 +81,15 @@ class EguitraIfrsPolicy(models.Model):
                   AND aa.account_type = 'asset_receivable' AND aml.amount_residual > 0""",
             (company.id, day),
         )
+        # Lire le résultat tout de suite : company.currency_id, absent de la mémoire de l'ORM (début de
+        # requête, mémoire invalidée), lance sa propre requête sur le même curseur et vidait ce résultat ;
+        # la perte attendue valait alors 0.
+        rows = self.env.cr.fetchall()
         rounding = company.currency_id.round
         buckets = {key: {"bucket": key, "label": label, "rate": rates[key], "exposure": 0.0, "ecl": 0.0, "count": 0}
                    for key, label in BUCKETS}
         partners = {}
-        for partner_id, _move_id, maturity, residual in self.env.cr.fetchall():
+        for partner_id, _move_id, maturity, residual in rows:
             residual = float(residual)
             key = bucket_of((day - maturity).days if maturity else 0)
             loss = residual * rates[key] / 100

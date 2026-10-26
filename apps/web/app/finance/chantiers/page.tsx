@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HardHat, Pencil, Plus, Unlock } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, lireNombre, nombreIllisible } from "@/lib/format";
@@ -134,6 +135,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
           const derniereFacturee = situations.filter((s) => s.state === "invoiced").sort((a, b) => b.number - a.number)[0];
           return (
             <div className="space-y-5">
+              <div className="flex justify-end"><BoutonDiscussion model="eguitra.chantier" id={c.id} libelle={c.name} petit /></div>
               {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Kpi label="Marché HT" value={fmtShort(c.contract_amount)} />

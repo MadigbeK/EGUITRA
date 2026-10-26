@@ -16,6 +16,7 @@ import { PANNEAU, Squelette, cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
 import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
+import { Discussions } from "@/components/discussions/Discussions";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -255,6 +256,7 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
             <EquilibreExercice data={enTete} />
             {actions}
             <SocieteEnTete app={app} me={me} onCompany={switchCompany} />
+            <Discussions app={app} me={me} />
             <CompteMenu app={app} me={me} onLogout={logout} />
           </div>
         </div>
@@ -295,7 +297,8 @@ function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
   const marque = (
     <>
       <Monogramme tuile={false} className="h-9 w-9 flex-none" />
-      <span className="min-w-0 text-left leading-none">
+      {/* Téléphone étroit : le monogramme seul (le nom reste lu), la barre du haut garde ses commandes. */}
+      <span className="min-w-0 text-left leading-none max-[429px]:sr-only">
         <span className="block font-display text-[15px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
         <span className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-accent">
           <span className="truncate">{moduleOf(app)}</span>

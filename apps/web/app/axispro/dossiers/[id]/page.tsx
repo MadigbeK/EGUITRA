@@ -19,6 +19,7 @@ import { Gates } from "@/components/axispro/dossier/Gates";
 import { Journal, Rapport } from "@/components/axispro/dossier/Rapport";
 import { Synthese } from "@/components/axispro/dossier/Synthese";
 import { montant, note, useCabinet, useRetour } from "@/components/axispro/dossier/commun";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 
 type Tab = "synthese" | "evaluation" | "gates" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "comites" | "journal" | "echanges" | "rapport" | "temps";
 
@@ -104,6 +105,7 @@ function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
               <span>Révision {d.revision}</span>
               {d.date_evaluation && <span>Évalué le {fmtDate(d.date_evaluation)}</span>}
             </p>
+            <BoutonDiscussion model="axispro.dossier" id={d.id} libelle={`${d.reference} ${d.name}`} clair className="mt-3" />
           </div>
           <div className="flex flex-wrap items-center gap-5">
             <Anneau value={s.assessed ? note(s.readiness) : null} taille={104} epaisseur={9} couleur="#ffffff" clair sous="Readiness" />

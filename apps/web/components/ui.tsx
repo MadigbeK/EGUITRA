@@ -1044,7 +1044,9 @@ export function Modal({ open, title, onClose, children, footer, wide, alerte, de
   }, [open, titreId]);
   if (!open) return null;
   return (
-    <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
+    // Une fenêtre d'alerte (« Êtes-vous toujours là ? ») passe au-dessus de tout : recherche d'écran,
+    // panneau de discussion, autres fenêtres.
+    <div className={cx("n-apparaitre fixed inset-0 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10", alerte ? "z-[70]" : "z-50")}>
       <div ref={fenetre} tabIndex={-1} role={alerte ? "alertdialog" : "dialog"} aria-modal="true" aria-labelledby={titreId} aria-describedby={descriptionId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
           <h2 id={titreId} className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>

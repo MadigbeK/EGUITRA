@@ -5,6 +5,7 @@ import { useSWRConfig } from "swr";
 import { FileCheck2, Pencil, Plus, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation, type Tone } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import { PAYMENT_STATES, type MoveSummary } from "@/lib/finance-types";
@@ -182,6 +183,7 @@ function BienModal({ property, kinds, gestion, onClose }: { property: Property; 
   return (
     <Modal open wide title={property.name} onClose={onClose}>
       <div className="space-y-4 text-sm">
+        <div className="flex justify-end"><BoutonDiscussion model="eguitra.property" id={property.id} libelle={property.name} petit /></div>
         {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div><div className="text-xs text-muted">Nature</div>{kind}</div>

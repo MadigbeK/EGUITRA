@@ -19,6 +19,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
+import { enregistrerDiscussions } from "./discussions.mjs";
 import { enregistrerProprietaires, fuelPriceAt, marginShown, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
@@ -6465,6 +6466,10 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
 
 enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES });
 enregistrerProprietaires({ route, DB, ApiError, TR_READ, TODAY, COMPANIES, partnerRef, simpleRef, fileReply, xlsxBuffer });
+
+/* ─── Discussion interne (routes dans discussions.mjs) ───────────────────── */
+
+enregistrerDiscussions({ route, ApiError, USERS, userById, DB, nowStamp, detectType, checkedName, fileReply, ACCEPTED });
 
 /* ════════════════════════════════════════════════════════════════════════════
  * Serveur HTTP

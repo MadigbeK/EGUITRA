@@ -7,6 +7,7 @@ import { apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import type { Company, Me, Profile } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
+import { RetraitDiscussions } from "@/components/discussions/RetraitDiscussions";
 
 // Profils des routes /admin/users, /admin/profiles et /admin/rights (addons/eguitra_api/controllers/admin.py,
 // ADMIN) : l'administration seule crée, modifie, désactive un compte et remet ses accès.
@@ -235,6 +236,8 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
             <Button variant={user.active ? "danger" : "secondary"} loading={envoi.busy === "actif"} disabled={envoi.busy !== null} onClick={basculerActif}>
               {user.active ? "Désactiver" : "Réactiver"}
             </Button>
+            {/* Compte désactivé : le retirer de ses conversations de la discussion interne (sans les lire). */}
+            {!user.active && <RetraitDiscussions userId={user.id} nom={user.name} />}
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@ import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, nombreIllisible, pluriel } from "@/lib/format";
 import type { Profile } from "@/lib/types";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { ChampNombre, ETAT_ROTATION, INSECABLE, TauxMarge, fmtM3, fmtVolume } from "./commun";
 import { parseNumber, type DepartureIssue, type Ref, type Referentials } from "./types";
 
@@ -374,6 +375,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
             <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge>
             <span>{r.source === "mobile" ? "Saisie au téléphone" : "Saisie au bureau"}{r.created_by ? ` par ${r.created_by}` : ""}</span>
             {r.invoice && <span>· Facture {r.invoice.name ?? "en brouillon"}</span>}
+            <BoutonDiscussion model="eguitra.transport.rotation" id={r.id} libelle={titre} petit className="ml-auto" />
           </div>
           {r.state === "draft" && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : elle se valide par un autre compte.</Notice>}
           {r.state === "draft" && !r.can_depart && r.depart_refusal && <Notice tone="accent">{r.depart_refusal}</Notice>}
