@@ -696,3 +696,7 @@ export type PlanDossier = PlanPayload & {
   dossier: PlanPayload["dossier"] & { currency?: string | null; locked?: boolean };
   options: PlanPayload["options"] & { indicators: Record<string, IndicatorInfo & { money?: boolean }> };
 };
+
+/** Action du plan, telle que la liste du cabinet la reçoit : intitulé du critère d'une action tirée d'un
+ * écart (son titre, lui, est neutre pour le porteur). Absent des réponses antérieures. */
+export type ActionCabinet = Action & { criterion_name?: string | null };

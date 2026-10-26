@@ -242,6 +242,62 @@ export function CelluleChoix({ value, options, onSave, label, className, disable
   );
 }
 
+/**
+ * Date modifiable sur place, enregistrée en quittant le champ (vidée : null). Une date incomplète n'est
+ * pas envoyée (le champ la rendrait vide et effacerait la date) ; refus du noyau : la date enregistrée
+ * revient, le motif s'affiche dessous.
+ */
+export function CelluleDate({ value, onSave, label, className, disabled }: { value: string | null; onSave: (v: string | null) => Promise<Refus> | Refus; label: string; className?: string; disabled?: boolean }) {
+  const [texte, setTexte] = useState(value ?? "");
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+  useEffect(() => {
+    setTexte(value ?? "");
+    setErreur(null);
+  }, [value]);
+
+  async function valider(champ: HTMLInputElement) {
+    if (envoi) return;
+    if (champ.validity.badInput) return setErreur("Date incomplète : jour, mois et année.");
+    if (texte === (value ?? "")) return;
+    setEnvoi(true);
+    setErreur(null);
+    try {
+      const refus = await onSave(texte || null);
+      if (refus) {
+        setTexte(value ?? "");
+        setErreur(refus);
+      }
+    } catch (e) {
+      setTexte(value ?? "");
+      setErreur(messageErreur(e, "Enregistrement impossible."));
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  return (
+    <span className="block">
+      <Input
+        type="date"
+        aria-label={label}
+        aria-invalid={erreur ? true : undefined}
+        aria-busy={envoi || undefined}
+        disabled={disabled}
+        readOnly={envoi}
+        className={cx("min-h-8 py-1 text-[13px]", erreur && "border-danger", className ?? "w-40")}
+        value={texte}
+        onChange={(e) => {
+          setTexte(e.target.value);
+          if (erreur) setErreur(null);
+        }}
+        onBlur={(e) => void valider(e.currentTarget)}
+      />
+      <MessageCellule texte={erreur} />
+    </span>
+  );
+}
+
 /** Contrôle d'un nombre entier (année, durée, différé) ; null s'il convient. */
 export function entier(n: number): string | null {
   return Number.isInteger(n) ? null : "Nombre entier attendu.";
