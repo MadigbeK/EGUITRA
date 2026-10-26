@@ -454,7 +454,7 @@ class EguitraTransport(http.Controller):
              "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
              "monthly_charges": sum(c._monthly() for c in v.charge_ids),
              "vehicle_kind": v.vehicle_kind, "payload_tonnes": v.payload_tonnes or None,
-             "documents": [_document_row(d) for d in v.document_ids], "document_issues": v._document_issues()}
+             "documents": [_document_row(d) for d in v._active_documents()], "document_issues": v._document_issues()}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
 
@@ -534,7 +534,7 @@ class EguitraTransport(http.Controller):
                     wanted = int(d["id"])
                 except (TypeError, ValueError) as e:
                     raise ApiError(400, "invalid_parameter", "Identifiant de document invalide.") from e
-                doc = vehicle.document_ids.filtered(lambda x, i=wanted: x.id == i)
+                doc = vehicle._active_documents().filtered(lambda x, i=wanted: x.id == i)
                 if not doc:
                     raise ApiError(422, "business_rule", "Document inconnu pour cet ensemble.")
                 seen.add(doc.id)
@@ -542,7 +542,7 @@ class EguitraTransport(http.Controller):
             else:
                 commands.append((0, 0, line))
         # Document retiré de la liste : archivé, il reste à l'historique (audit du 25 octobre, M15).
-        return commands + [(1, doc.id, {"active": False}) for doc in vehicle.document_ids if doc.id not in seen]
+        return commands + [(1, doc.id, {"active": False}) for doc in vehicle._active_documents() if doc.id not in seen]
 
     @api_route("/transport/vehicles", methods=("POST",), profiles=WRITE)
     def create_vehicle(self, **_kw):

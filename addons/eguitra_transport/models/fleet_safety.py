@@ -90,11 +90,18 @@ class EguitraTransportVehicle(models.Model):
         if any(v.payload_tonnes < 0 for v in self):
             raise ValidationError("La charge utile ne peut pas être négative.")
 
+    def _active_documents(self):
+        """Documents de la fiche, hors archivés, quel que soit le contexte : la liste des ensembles (archivés
+        compris) et les contrôles lisent la flotte en active_test=False, qui ramènerait aussi les documents
+        retirés de la fiche (audit du 25 octobre, M15)."""
+        self.ensure_one()
+        return self.document_ids.filtered("active")
+
     def _latest_documents(self):
-        """Document le plus récent (dernière expiration) de chaque nature."""
+        """Document le plus récent (dernière expiration) de chaque nature, hors archivés."""
         self.ensure_one()
         latest = {}
-        for doc in self.document_ids.sorted("expiry_date", reverse=True):
+        for doc in self._active_documents().sorted("expiry_date", reverse=True):
             latest.setdefault(doc.kind, doc)
         return latest
 

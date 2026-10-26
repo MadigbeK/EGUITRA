@@ -117,6 +117,8 @@ class TestSaisiesAudit(TransportCase):
         status, vehicles = self.call("GET", "/transport/vehicles", token=token)
         row = next(v for v in vehicles if v["id"] == self.truck.id)
         self.assertEqual([d["id"] for d in row["documents"]], [insurance.id], "La fiche ne montre plus le document archivé")
+        self.assertNotIn("inspection", self.truck.with_context(active_test=False)._latest_documents(),
+                         "Les contrôles, qui lisent la flotte archivée comprise, ignorent le document archivé")
         agent = self.env["res.users"].search([("login", "=", "ibrahima")])
         with self.assertRaises(AccessError):
             insurance.with_user(agent).unlink()
