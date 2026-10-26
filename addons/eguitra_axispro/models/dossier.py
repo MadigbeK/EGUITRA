@@ -72,6 +72,11 @@ def _input_author(env):
     return not _system(env) and not env.user.share
 
 
+def _montant(value, devise):
+    """Montant entier, milliers groupés par une espace insécable, suivi de la devise du dossier."""
+    return f"{value:,.0f}".replace(",", " ") + (f" {devise}" if devise else "")
+
+
 def _lead_label(dossier):
     """« le responsable du dossier (Nom) » pour un message de refus ; sans nom si le dossier n'a pas
     de responsable désigné (dossier créé par le compte système)."""
@@ -332,15 +337,16 @@ class AxisproDossier(models.Model):
     def _extra_anomalies(self, result, financial):
         notes = []
         plan = self.plan_ids[:1]
+        devise = self.currency_id.name or ""
         if financial and plan:
             capex = financial.get("capex_total") or 0
             if self.investment and capex and abs(capex - self.investment) > 0.10 * self.investment:
-                notes.append(f"Investissement de la fiche ({self.investment:,.0f}) et investissements du modèle financier "
-                             f"({capex:,.0f}) diffèrent de plus de 10 %.".replace(",", " "))
+                notes.append(f"Investissement de la fiche ({_montant(self.investment, devise)}) et investissements du "
+                             f"modèle financier ({_montant(capex, devise)}) diffèrent de plus de 10 %.")
             external = (financial.get("funding") or {}).get("loan", 0) + (financial.get("funding") or {}).get("grant", 0)
             if self.financing_need and external and abs(external - self.financing_need) > 0.10 * self.financing_need:
-                notes.append(f"Besoin de financement de la fiche ({self.financing_need:,.0f}) et financements externes du "
-                             f"modèle ({external:,.0f}) diffèrent de plus de 10 %.".replace(",", " "))
+                notes.append(f"Besoin de financement de la fiche ({_montant(self.financing_need, devise)}) et financements "
+                             f"externes du modèle ({_montant(external, devise)}) diffèrent de plus de 10 %.")
             for e in self.evaluation_ids.filtered(lambda e: e.criterion_id.indicator and e.status != "not_assessed"):
                 suggestion = e.criterion_id.suggestion(financial)
                 if suggestion and suggestion.get("status") and suggestion["status"] != e.status:
