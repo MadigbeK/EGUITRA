@@ -89,6 +89,8 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
     leave_days_per_month: t(settings.leave_days_per_month),
     monthly_hours: t(settings.monthly_hours),
     rotation_bonus: t(settings.rotation_bonus),
+    // Exonération de VF des stagiaires (CGI, art. 203 ter), paramétrable depuis eguitra_rh 19.0.1.1.0.
+    intern_exemption: t((settings as Settings & { intern_exemption?: number }).intern_exemption ?? 1_200_000),
     trial_alert_days: t(settings.trial_alert_days),
     contract_alert_days: t(settings.contract_alert_days),
     document_alert_days: t(settings.document_alert_days),
@@ -108,6 +110,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
   const erreurs: Partial<Record<keyof typeof f, string>> = {};
   for (const k of requis) erreurs[k] = erreurNombre(f[k], true);
   if (onglet === "paie") erreurs.rotation_bonus = erreurNombre(f.rotation_bonus);
+  if (onglet === "paie") erreurs.intern_exemption = erreurNombre(f.intern_exemption, true);
   const baremeIllisible = onglet === "paie" && bareme.some((b) => Boolean(erreurNombre(b.from, true) || erreurNombre(b.rate, true)));
   const bloque = Object.values(erreurs).some(Boolean) || baremeIllisible;
 
@@ -130,6 +133,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
         leave_days_per_month: nombre(f.leave_days_per_month),
         monthly_hours: nombre(f.monthly_hours),
         rotation_bonus: nombre(f.rotation_bonus),
+        ...({ intern_exemption: nombre(f.intern_exemption) } as Partial<Settings>),
         cnss_employer_number: f.cnss_employer_number.trim() || null,
         rts_brackets: brackets,
       };
@@ -228,6 +232,9 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </Field>
           <Field label="Heures mensuelles (taux horaire)" error={erreurs.monthly_hours}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.monthly_hours} onChange={set("monthly_hours")} />
+          </Field>
+          <Field label="Rémunération des stagiaires exonérée de VF et de taxe de formation (GNF)" error={erreurs.intern_exemption} hint="CGI, art. 203 ter : 1 200 000 ; à faire valider par l'expert-comptable">
+            <ChampMontant disabled={!ecrit} value={f.intern_exemption} onChange={(v) => setF({ ...f, intern_exemption: v })} />
           </Field>
           <Field label="Prime par rotation validée (GNF)" error={erreurs.rotation_bonus} hint="Chauffeurs liés au transport ; 0 : pas de prime automatique">
             <ChampMontant disabled={!ecrit} value={f.rotation_bonus} onChange={(v) => setF({ ...f, rotation_bonus: v })} />
