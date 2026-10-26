@@ -6,6 +6,7 @@ import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Page
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { Company, Me } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
+import { RetraitDiscussions } from "@/components/discussions/RetraitDiscussions";
 
 interface UserRow extends Me {
   active: boolean;
@@ -211,6 +212,8 @@ function UserForm({ user, profiles, rights, companies, defaultCompany, onClose, 
             <Button variant="danger" onClick={() => run(() => apiSend("PATCH", `/admin/users/${user.id}`, { active: !user.active }), "", true)}>
               {user.active ? "Désactiver" : "Réactiver"}
             </Button>
+            {/* Compte désactivé : le retirer de ses conversations de la discussion interne (sans les lire). */}
+            {!user.active && <RetraitDiscussions userId={user.id} nom={user.name} />}
           </div>
         )}
       </div>

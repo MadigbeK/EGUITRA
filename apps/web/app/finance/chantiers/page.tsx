@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HardHat, Plus, Unlock } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Select, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { Profile } from "@/lib/types";
@@ -117,6 +118,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
     <Modal open wide title={c ? `${c.name}, ${c.client.name}` : "Chantier"} onClose={onClose}>
       {!c ? <Etat error={error} onRetry={() => mutate()} /> : (
         <div className="space-y-5">
+          <div className="flex justify-end"><BoutonDiscussion model="eguitra.chantier" id={c.id} libelle={c.name} petit /></div>
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Kpi label="Marché HT" value={fmtShort(c.contract_amount)} />

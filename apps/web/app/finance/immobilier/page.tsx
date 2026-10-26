@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileCheck2, Plus, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { PAYMENT_STATES, type MoveSummary } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -78,6 +79,7 @@ function Properties({ gestion, onChanged }: { gestion: boolean; onChanged: () =>
             { key: "occupied", label: "", render: (p) => p.occupied ? (
               <span className="flex items-center justify-end gap-2"><Badge tone="ok">Loué</Badge>{gestion && p.lease && <Button size="sm" onClick={() => setEnding(p)}>Fin de bail</Button>}</span>
             ) : gestion ? <Button size="sm" onClick={() => setLeasing(p)}>Louer</Button> : <Badge>Libre</Badge> },
+            { key: "discussion", label: "", align: "right", render: (p) => <BoutonDiscussion model="eguitra.property" id={p.id} libelle={p.name} petit /> },
           ]} />
         )}
       </Card>

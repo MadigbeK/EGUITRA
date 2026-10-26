@@ -27,7 +27,7 @@ export async function proxy(req: NextRequest) {
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
   const app =
     appFromPath(pathname) ??
-    (pathname.startsWith("/compte") || pathname === "/acces-refuse" ? (isAppCode(fromCookie) ? fromCookie : "finance") : null) ??
+    (pathname.startsWith("/compte") || pathname === "/discussions" || pathname === "/acces-refuse" ? (isAppCode(fromCookie) ? fromCookie : "finance") : null) ??
     (pathname === "/accueil" ? accueilApp(fromCookie, host) : null);
   if (!app) return NextResponse.next();
 
@@ -105,5 +105,5 @@ const PAGE_INDISPONIBLE = `<!doctype html>
 </html>`;
 
 export const config = {
-  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/compte/:path*", "/acces-refuse"],
+  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/compte/:path*", "/discussions", "/acces-refuse"],
 };
