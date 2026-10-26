@@ -49,6 +49,9 @@ FUNDING_STATES = [
 FUNDING_OPEN = ("identified", "submitted", "review", "agreed")
 FUNDING_WON = ("signed", "disbursed")
 ACTION_DELAY_DAYS = 30
+# Titre d'une action tirée d'un écart sans document à produire : le porteur ne lit jamais l'intitulé
+# d'un critère de la grille.
+NEUTRAL_ACTION = "Pièce ou information à fournir : votre consultant vous la précise"
 CONDITION_BULLET = re.compile(r"^\s*(?:[-•*·–]|\d{1,2}[.)])\s*")
 
 
@@ -149,16 +152,25 @@ class AxisproAction(models.Model):
 
     @api.model
     def from_gaps(self, dossier, limit=5):
-        """Actions du porteur tirées des écarts prioritaires, sans doublon d'une action encore ouverte."""
+        """Actions du porteur tirées des écarts prioritaires, sans doublon d'une action encore ouverte.
+        Le porteur lit le titre de l'action (portail, notification) : jamais l'intitulé du critère de la
+        grille ni son aide d'évaluation, seulement le document à produire (livrable saisi sur le critère,
+        livrable du critère ou de son domaine), à défaut un titre neutre. Le cabinet garde le lien au
+        critère (criterion_id)."""
         open_criteria = dossier.action_ids.filtered(lambda a: a.state in ACTION_OPEN).criterion_id
         due = fields.Date.context_today(self) + timedelta(days=ACTION_DELAY_DAYS)
+        evaluations = {e.criterion_id.id: e for e in dossier.evaluation_ids}
         values = []
         for gap in dossier.gaps(limit):
             if gap["criterion_id"] in open_criteria.ids:
                 continue
+            criterion = self.env["axispro.criterion"].browse(gap["criterion_id"])
+            evaluation = evaluations.get(criterion.id)
+            todo = ((evaluation and evaluation.deliverable) or criterion.deliverable or criterion.domain_id.deliverable
+                    or NEUTRAL_ACTION)
             values.append({
-                "dossier_id": dossier.id, "name": gap["name"], "description": gap["action"],
-                "source": "gap", "criterion_id": gap["criterion_id"], "assignee": "porteur", "due_date": due,
+                "dossier_id": dossier.id, "name": " ".join(todo.split())[:200], "description": False,
+                "source": "gap", "criterion_id": criterion.id, "assignee": "porteur", "due_date": due,
             })
         return self.create(values)
 

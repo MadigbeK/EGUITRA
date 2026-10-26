@@ -194,6 +194,22 @@ class TestAxisproExpert(ApiCase):
         self.assertEqual((status, body["created"]), (200, 3), body)
         status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/actions/from-gaps", {}, token=self.token)
         self.assertEqual(body["created"], 0, "Pas de doublon d'une action encore ouverte")
+        # Le porteur lit le titre et la description : jamais l'intitulé ni l'aide d'un critère de la grille.
+        gaps = self.dossier.action_ids.filtered(lambda a: a.source == "gap")
+        criteria = self.dossier.policy_id.criterion_ids
+        visible = " ".join(gaps.mapped("name") + [d for d in gaps.mapped("description") if d])
+        for text in criteria.mapped("name") + [g for g in criteria.mapped("guidance") if g]:
+            self.assertNotIn(text, visible)
+        self.assertTrue(gaps.criterion_id and set(gaps.criterion_id.ids) <= set(criteria.ids),
+                        "Le cabinet garde le lien au critère")
+        self.dossier.evaluation_ids.filtered(lambda e: e.criterion_id == gaps[:1].criterion_id).deliverable = (
+            "Bilans certifiés des trois derniers exercices")
+        gaps[:1].state = "cancelled"
+        self.env["axispro.action"].from_gaps(self.dossier)
+        relance = self.dossier.action_ids.filtered(lambda a: a.source == "gap" and a.state == "todo"
+                                                   and a.criterion_id == gaps[:1].criterion_id)
+        self.assertEqual(relance.name, "Bilans certifiés des trois derniers exercices",
+                         "Titre : le document à produire saisi sur le critère")
         status, risks = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/risks",
                                   {"name": "Prix du ciment", "category": "market", "probability": 4, "impact": 5,
                                    "mitigation": "Contrat d'approvisionnement à prix ferme"}, token=self.token)
