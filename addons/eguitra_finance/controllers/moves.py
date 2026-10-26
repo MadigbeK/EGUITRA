@@ -5,6 +5,7 @@ Les comptes de contrepartie, la TVA et l'échéance sont déduits par le noyau �
 """
 
 import base64
+import math
 
 from odoo import Command, fields, http
 from odoo.http import content_disposition, request
@@ -22,8 +23,10 @@ from .common import (
     achats_only,
     activity_income_account,
     as_float,
+    as_int,
     check_mandatory_analytic,
     distribution,
+    editable,
     free_accounts,
     move_detail,
     move_summary,
@@ -79,7 +82,7 @@ def _purchase_taxes(value, company):
 
 
 def _partner(value):
-    partner = request.env["res.partner"].browse(int(value)).exists() if value else request.env["res.partner"]
+    partner = request.env["res.partner"].browse(as_int(value, "partner_id")).exists() if value else request.env["res.partner"]
     if value and not partner:
         raise ApiError(404, "not_found", "Tiers introuvable.")
     return partner
@@ -90,7 +93,7 @@ def account_of_company(value, company, label="Compte"):
     if not value:
         return request.env["account.account"]
     # Contrôle en lecture seule : un compte de l'autre société se refuse par un message métier.
-    account = request.env["account.account"].sudo().browse(int(value)).exists()
+    account = request.env["account.account"].sudo().browse(as_int(value, "account_id")).exists()
     if not account or company not in account.company_ids:
         raise ApiError(422, "business_rule", f"{label} absent du plan de comptes de la société.")
     return account.sudo(False)
@@ -141,7 +144,7 @@ def store_attachment(move, upload):
 
 def _default_journal(data, sale, company):
     if data.get("journal_id"):
-        journal = request.env["account.journal"].browse(int(data["journal_id"])).exists()
+        journal = request.env["account.journal"].browse(as_int(data["journal_id"], "journal_id")).exists()
         if not journal or journal.company_id != company:
             raise ApiError(422, "business_rule", "Journal inconnu dans la société.")
         if not sale and journal.type != "purchase" and achats_only(FIN_WRITE):
@@ -189,7 +192,7 @@ def _invoice_lines(data, move_type, partner=None):
             if category.asset_profile_id:
                 values["asset_profile_id"] = category.asset_profile_id.id
         if line.get("product_id"):
-            values["product_id"] = int(line["product_id"])
+            values["product_id"] = as_int(line["product_id"], "product_id")
         elif not account:
             if sale:
                 account = activity_income_account(dist, company)
@@ -200,7 +203,7 @@ def _invoice_lines(data, move_type, partner=None):
             if purchases_only:
                 values["tax_ids"] = [Command.set(_purchase_taxes(line["tax_ids"], company).ids)]
             else:
-                values["tax_ids"] = [Command.set([int(t) for t in line["tax_ids"] or []])]
+                values["tax_ids"] = [Command.set([as_int(t, "tax_ids") for t in line["tax_ids"] or []])]
         elif category:
             values["tax_ids"] = [Command.set(category.taxes(default_tax).ids)]
         elif data.get("apply_default_tax", True) and default_tax:
@@ -213,11 +216,36 @@ def _invoice_lines(data, move_type, partner=None):
     return commands
 
 
+def _check_opening_journal(journal_id, day):
+    """Journal des à-nouveaux (AN) : il porte la situation d'ouverture du tableau des flux et des états ; une
+    opération diverse n'y entre qu'au premier jour d'un exercice (correction des soldes d'ouverture)."""
+    journal = request.env["account.journal"].browse(journal_id).exists()
+    if not journal or journal.code != "AN":
+        return
+    start = journal.company_id.compute_fiscalyear_dates(day)["date_from"]
+    if day != start:
+        raise ApiError(422, "business_rule", "Le journal des à-nouveaux (AN) ne reçoit que les soldes d'ouverture : "
+                                             f"datez l'opération du {start:%d/%m/%Y}, premier jour de l'exercice, ou "
+                                             "choisissez le journal des opérations diverses.")
+
+
+def _partial_amount(value):
+    """Montant d'un règlement partiel : nombre positif lisible, sinon refus (400). Un montant vide ou
+    illisible (saisie « 750 000,00 » mal lue, envoyée nulle) ne doit jamais régler tout le reste dû."""
+    if value in (None, "") or isinstance(value, bool):
+        raise ApiError(400, "invalid_parameter", "Règlement partiel : indiquez le montant réglé.", fields=["amount"])
+    amount = as_float(value, "amount")
+    if not math.isfinite(amount) or amount <= 0:
+        raise ApiError(400, "invalid_parameter", "Le montant du règlement doit être un nombre positif.",
+                       fields=["amount"])
+    return amount
+
+
 def _commitment(value, move_type, partner):
     """Engagement de dépense approuvé du fournisseur, que la pièce d'achat consomme (eguitra_approval)."""
     if move_type != "in_invoice":
         raise ApiError(422, "business_rule", "Seule une pièce d'achat consomme un engagement.")
-    commitment = request.env["eguitra.commitment"].browse(int(value)).exists()
+    commitment = request.env["eguitra.commitment"].browse(as_int(value, "commitment_id")).exists()
     if not commitment or commitment.state != "approved" or commitment.company_id != request.env.company             or commitment.partner_id.commercial_partner_id != partner.commercial_partner_id:
         raise ApiError(422, "business_rule", "Engagement inconnu, non approuvé ou d'un autre fournisseur.")
     return commitment.id
@@ -228,7 +256,7 @@ def category_of(value, company):
     Category = request.env["eguitra.expense.category"]
     if not value:
         return Category
-    category = Category.sudo().browse(int(value)).exists()
+    category = Category.sudo().browse(as_int(value, "category_id")).exists()
     if not category or category.company_id != company or not category.active:
         raise ApiError(422, "business_rule", "Catégorie de dépense inconnue dans la société.")
     return category.sudo(False)
@@ -289,6 +317,10 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
         values["narration"] = str(data["narration"])
     return request.env["account.move"].create(values)
 
+
+# Refus de modifier ou de supprimer une écriture produite par le noyau (common.editable).
+PRODUCED_BY_CORE = ("Cette écriture est produite par le noyau (opération de banque ou de caisse, règlement, virement, "
+                    "paie ou dotation) : elle se corrige depuis son propre écran.")
 
 # Refus d'une opération diverse sans le droit de saisie libre : où saisir à la place.
 ENTRY_DETAIL = ("Saisissez une dépense par sa catégorie (Achats et dépenses) et une opération de banque ou de "
@@ -396,7 +428,7 @@ class EguitraFinanceMoves(http.Controller):
             raise ApiError(403, "forbidden", "Profil Achats : le litige sur une pièce se déclare par la finance.")
         values = {"move_type": move_type, "company_id": request.env.company.id}
         if data.get("journal_id"):
-            values["journal_id"] = int(data["journal_id"])
+            values["journal_id"] = as_int(data["journal_id"], "journal_id")
         if data.get("ref"):
             values["ref"] = str(data["ref"])[:200]
         if data.get("narration"):
@@ -408,6 +440,7 @@ class EguitraFinanceMoves(http.Controller):
             if not data.get("journal_id"):
                 raise ApiError(400, "missing_fields", "Journal requis.", fields=["journal_id"])
             values["date"] = parse_date(data, "date", today())
+            _check_opening_journal(values["journal_id"], values["date"])
             values["line_ids"] = _entry_lines(data)
             values["eguitra_manual_entry"] = True
         else:
@@ -418,6 +451,14 @@ class EguitraFinanceMoves(http.Controller):
                 # L'opération diverse produite (salaires, cotisations, impôts) sortirait du périmètre du profil.
                 raise ApiError(403, "forbidden", "Profil Achats : les dépenses de personnel, de charges sociales et "
                                                  "d'impôts (opérations diverses) se saisissent par la finance.")
+            if partner_account and data.get("currency_id"):
+                currency = request.env["res.currency"].browse(as_int(data["currency_id"], "currency_id")).exists()
+                if currency and currency != request.env.company.currency_id:
+                    # L'opération diverse produite est passée en monnaie de la société : 1 000 USD de salaires
+                    # étaient comptabilisés 1 000 GNF.
+                    raise ApiError(422, "business_rule", "Les dépenses de personnel, de charges sociales et d'impôts "
+                                                         "se saisissent dans la monnaie de la société "
+                                                         f"({request.env.company.currency_id.name}).")
             if partner_account:
                 move = _purchase_as_entry(data, move_type, partner, partner_account, request.env.company)
                 if data.get("post"):
@@ -432,7 +473,7 @@ class EguitraFinanceMoves(http.Controller):
             if data.get("invoice_date_due"):
                 values["invoice_date_due"] = parse_date(data, "invoice_date_due")
             if data.get("currency_id"):
-                currency = request.env["res.currency"].browse(int(data["currency_id"])).exists()
+                currency = request.env["res.currency"].browse(as_int(data["currency_id"], "currency_id")).exists()
                 if not currency or not currency.active:
                     raise ApiError(422, "business_rule", "Devise inconnue ou inactive.")
                 values["currency_id"] = currency.id
@@ -451,6 +492,8 @@ class EguitraFinanceMoves(http.Controller):
         move = _move(move_id, FIN_WRITE)
         if move.state != "draft":
             raise ApiError(422, "business_rule", "Seule une pièce en brouillon peut être modifiée.")
+        if not editable(move):
+            raise ApiError(422, "business_rule", PRODUCED_BY_CORE)
         data = read_json()
         values = {}
         for key in ("ref", "narration"):
@@ -459,7 +502,7 @@ class EguitraFinanceMoves(http.Controller):
         if "contract_ref" in data:
             values["eguitra_contract_ref"] = str(data["contract_ref"] or "").strip()[:120] or False
         if "partner_id" in data:
-            values["partner_id"] = int(data["partner_id"])
+            values["partner_id"] = as_int(data["partner_id"], "partner_id")
         if "commitment_id" in data and move.move_type == "in_invoice":
             partner = _partner(values["partner_id"]) if values.get("partner_id") else move.partner_id
             values["eguitra_commitment_id"] = (_commitment(data["commitment_id"], move.move_type, partner)
@@ -467,6 +510,8 @@ class EguitraFinanceMoves(http.Controller):
         for key in ("invoice_date", "invoice_date_due", "date"):
             if key in data:
                 values[key] = parse_date(data, key)
+        if move.move_type == "entry" and values.get("date"):
+            _check_opening_journal(move.journal_id.id, values["date"])
         if "lines" in data:
             if move.move_type == "entry":
                 values["line_ids"] = [Command.clear()] + _entry_lines(data)
@@ -485,6 +530,8 @@ class EguitraFinanceMoves(http.Controller):
         move = _move(move_id, FIN_WRITE)
         if move.state != "draft" or move.posted_before:
             raise ApiError(422, "business_rule", "Seul un brouillon jamais validé peut être supprimé ; sinon, annulez-le.")
+        if not editable(move):
+            raise ApiError(422, "business_rule", PRODUCED_BY_CORE)
         move.unlink()
         return {"status": "ok"}
 
@@ -533,27 +580,42 @@ class EguitraFinanceMoves(http.Controller):
         data = read_json()
         if move.state != "posted":
             raise ApiError(422, "business_rule", "Seule une pièce validée peut être extournée.")
-        reversal = move._reverse_moves(
-            [{"date": parse_date(data, "date", today()), "ref": data.get("reason") or f"Extourne de {move.name}"}],
-            cancel=bool(data.get("cancel")),
-        )
+        day = parse_date(data, "date", today())
+        defaults = {"date": day, "ref": data.get("reason") or f"Extourne de {move.name}"}
+        if move.is_invoice(include_receipts=True):
+            # Un avoir sans date de facture ne se valide pas.
+            defaults["invoice_date"] = day
+        reversal = move._reverse_moves([defaults], cancel=bool(data.get("cancel")))
         return move_detail(reversal)
 
     @api_route("/finance/moves/<int:move_id>/payments", methods=("POST",), profiles=FIN_WRITE)
     def register_payment(self, move_id, **_kw):
+        """Règlement d'une pièce validée. Sans montant, tout le reste dû est réglé. Un règlement partiel
+        (montant transmis, ou partial=true) exige un montant positif lisible : un montant absent, nul,
+        négatif ou illisible est refusé (400), au lieu de régler tout le reste dû. Un règlement retenu par
+        le circuit d'approbation reste en attente (payment_status « submitted ») ; tant qu'il n'est pas
+        tranché, un second règlement de la pièce est refusé (422)."""
         move = _move(move_id)
         data = read_json()
         (journal_id,) = require(data, "journal_id")
         if move.state != "posted" or move.payment_state not in ("not_paid", "partial"):
             raise ApiError(422, "business_rule", "Cette pièce n'attend pas de règlement.")
-        values = {"journal_id": int(journal_id), "payment_date": parse_date(data, "date", today())}
-        if data.get("amount"):
-            values["amount"] = as_float(data["amount"], "amount")
+        awaiting = move._eguitra_payments_awaiting()
+        if awaiting:
+            who = awaiting[0].get("pending_with")
+            raise ApiError(422, "business_rule",
+                           "Un règlement de cette pièce attend déjà une approbation"
+                           + (f" ({who})" if who else "")
+                           + " : il sera comptabilisé à la dernière approbation. Attendez la décision avant d'en "
+                             "saisir un autre, sans quoi la pièce serait payée deux fois.")
+        values = {"journal_id": as_int(journal_id, "journal_id"), "payment_date": parse_date(data, "date", today())}
+        if "amount" in data or data.get("partial"):
+            values["amount"] = _partial_amount(data.get("amount"))
         if data.get("memo"):
             values["communication"] = str(data["memo"])[:200]
         mode = request.env["eguitra.payment.mode"]
         if data.get("payment_mode_id"):
-            mode = mode.sudo().browse(int(data["payment_mode_id"])).exists()
+            mode = mode.sudo().browse(as_int(data["payment_mode_id"], "payment_mode_id")).exists()
             if not mode or (mode.company_id and mode.company_id != move.company_id):
                 raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
             mode = mode.sudo(False)
@@ -563,14 +625,18 @@ class EguitraFinanceMoves(http.Controller):
         payments = wizard._create_payments()
         if mode:
             payments.write({"eguitra_payment_mode_id": mode.id})
-        return move_detail(move)
+        # « submitted » : règlement retenu par le circuit (brouillon), comptabilisé à la dernière approbation.
+        status = "submitted" if payments.filtered(lambda p: p.state == "draft") else "posted"
+        return dict(move_detail(move), payment_status=status)
 
     @api_route("/finance/moves/<int:move_id>/pdf", profiles=PURCHASE_READ)
     def move_pdf(self, move_id, **_kw):
         move = _move(move_id, FIN_READ)
         if not move.is_invoice(include_receipts=True):
             raise ApiError(422, "business_rule", "Pas d'impression pour ce type de pièce.")
-        pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf("account.account_invoices", move.ids)
+        # Profil Achats seul : la pièce sans ses règlements ni son reste dû, qui relèvent de la trésorerie.
+        report = "account.account_invoices_without_payment" if achats_only(FIN_READ) else "account.account_invoices"
+        pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf(report, move.ids)
         name = (move.name or "brouillon").replace("/", "-")
         return request.make_response(pdf, headers=[
             ("Content-Type", "application/pdf"),
@@ -603,12 +669,22 @@ class EguitraFinanceMoves(http.Controller):
         data = read_json()
         source_id, target_id, amount = require(data, "from_journal_id", "to_journal_id", "amount")
         Journal = request.env["account.journal"]
-        source, target = Journal.browse(int(source_id)).exists(), Journal.browse(int(target_id)).exists()
+        source, target = Journal.browse(as_int(source_id, "from_journal_id")).exists(), Journal.browse(as_int(target_id, "to_journal_id")).exists()
         if not source or not target or source == target or {source.type, target.type} - {"bank", "cash"}:
             raise ApiError(422, "business_rule", "Choisissez deux journaux de banque ou de caisse différents.")
         amount = as_float(amount, "amount")
         if amount <= 0:
             raise ApiError(422, "business_rule", "Le montant doit être positif.")
+        if source.company_id != target.company_id:
+            raise ApiError(422, "business_rule", "Un virement interne relie deux comptes de la même société.")
+        currency = source.company_id.currency_id
+        foreign = [j.name for j in (source, target) if j.currency_id and j.currency_id != currency]
+        if foreign:
+            # Les écritures du virement sont passées en monnaie de la société : un compte en devise y recevrait
+            # le montant en GNF comme s'il était en devise.
+            raise ApiError(422, "business_rule", f"Virement interne en {currency.name} seulement : {', '.join(foreign)} "
+                                                 "est tenu dans une autre devise. Saisissez la sortie et l'entrée par "
+                                                 "deux opérations de trésorerie.")
         transit = source.company_id.transfer_account_id
         if not (transit and transit.code.startswith("585")):
             transit = request.env["account.account"].search([
@@ -634,12 +710,13 @@ class EguitraFinanceMoves(http.Controller):
                 ],
             })
         out_move, in_move = moves
-        # La sortie passe par le circuit des décaissements au-delà du seuil ; l'entrée la suit.
+        # La sortie passe par le circuit des décaissements au-delà du seuil ; l'entrée la suit. L'entrée est
+        # liée à la sortie avant la soumission : elle entre dans l'empreinte que l'approbateur valide.
+        if "eguitra_paired_move_id" in out_move._fields:
+            out_move.sudo().eguitra_paired_move_id = in_move
         out_move.with_context(eguitra_cash_out_check=True).action_post()
         if out_move.state == "posted":
             in_move.action_post()
-        elif "eguitra_paired_move_id" in out_move._fields:
-            out_move.sudo().eguitra_paired_move_id = in_move
         return {"status": "ok" if out_move.state == "posted" else "submitted",
                 "moves": [move_summary(m) for m in moves]}
 
@@ -715,11 +792,11 @@ class EguitraFinanceMoves(http.Controller):
             raise ApiError(422, "business_rule", "Le taux doit être positif.")
         day = parse_date(data, "date", today())
         Rate = request.env["res.currency.rate"]
-        existing = Rate.search([("currency_id", "=", int(currency_id)), ("name", "=", day),
+        existing = Rate.search([("currency_id", "=", as_int(currency_id, "currency_id")), ("name", "=", day),
                                 ("company_id", "=", request.env.company.id)], limit=1)
         values = {"inverse_company_rate": value}
         if existing:
             existing.write(values)
         else:
-            Rate.create(dict(values, currency_id=int(currency_id), name=day, company_id=request.env.company.id))
+            Rate.create(dict(values, currency_id=as_int(currency_id, "currency_id"), name=day, company_id=request.env.company.id))
         return {"status": "ok", "date": fields.Date.to_string(day)}

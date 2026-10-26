@@ -15,8 +15,10 @@ class AccountPayment(models.Model):
     _inherit = "account.payment"
 
     def _eguitra_required_rules(self):
+        """Tout règlement sortant passe par le circuit « payment_out » au-delà du seuil : règlement d'un
+        fournisseur comme remboursement d'un client (avoir remboursé), décision du gérant du 26/10/2026."""
         self.ensure_one()
-        if self.payment_type != "outbound" or self.partner_type != "supplier":
+        if self.payment_type != "outbound":
             return self.env["eguitra.approval.rule"]
         return self.env["eguitra.approval.rule"]._applicable("payment_out", self.company_id, abs(self.amount_company_currency_signed or self.amount))
 
@@ -47,14 +49,31 @@ class AccountPayment(models.Model):
             bills = self.env["account.move"].sudo().search([("matched_payment_ids", "in", payment.id)])
             if not payment.move_id:
                 continue
+            # Compte du tiers : fournisseur réglé, ou client remboursé de son avoir.
             payable = payment.move_id.line_ids.filtered(
-                lambda l: l.account_id.account_type == "liability_payable" and not l.reconciled
+                lambda l: l.account_id.account_type in ("liability_payable", "asset_receivable") and not l.reconciled
             )
             open_lines = bills.line_ids.filtered(
                 lambda l: l.account_id in payable.account_id and not l.reconciled and l.parent_state == "posted"
             )
             if payable and open_lines:
                 (payable + open_lines).reconcile()
+
+    def _eguitra_cancel_requests(self):
+        """Demandes en cours d'un règlement supprimé ou annulé : annulées (voir account.move)."""
+        if self:
+            self.env["eguitra.approval.request"].sudo().search([
+                ("res_model", "=", self._name), ("res_id", "in", self.ids), ("state", "=", "pending"),
+            ]).write({"state": "cancelled"})
+
+    def unlink(self):
+        self._eguitra_cancel_requests()
+        return super().unlink()
+
+    def action_cancel(self):
+        result = super().action_cancel()
+        self.filtered(lambda p: p.state == "canceled")._eguitra_cancel_requests()
+        return result
 
 
 class AccountPaymentRegister(models.TransientModel):

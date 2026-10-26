@@ -2,12 +2,13 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
-import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/components/ui";
+import { Button, Field, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
+import { CHAMP_INVALIDE, aujourdhui, enSaisie, montantDevise, taux } from "./communPieces";
 import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
 interface LineDraft {
   name: string;
@@ -24,8 +25,12 @@ interface LineDraft {
   original?: Record<string, number>;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
+
+/** Champs d'une ligne dont la saisie n'est pas un nombre lisible (« 2.500.000 », « 2 x 3 »). */
+function nombresIllisibles(l: LineDraft): string[] {
+  return [nombreIllisible(l.quantity) && "quantité", nombreIllisible(l.price_unit) && "prix unitaire"].filter((c): c is string => Boolean(c));
+}
 
 /** Lignes d'un brouillon relu pour modification (TVA et retenue : taxes positive et négative de la ligne). */
 function linesOf(move: MoveDetail): LineDraft[] {
@@ -36,8 +41,8 @@ function linesOf(move: MoveDetail): LineDraft[] {
       const withholding = l.taxes.find((t) => t.amount < 0);
       return {
         name: l.name,
-        quantity: String(l.quantity),
-        price_unit: String(l.price_unit),
+        quantity: enSaisie(l.quantity),
+        price_unit: enSaisie(l.price_unit),
         account_id: l.account ? String(l.account.id) : "",
         tax_id: vat ? String(vat.id) : "none",
         category_id: l.category ? String(l.category.id) : "",
@@ -87,7 +92,7 @@ export function MoveForm({
   const partnerDefaults = withholdings.filter((t) => t.partner_default);
   const lineWithholdings = (l: LineDraft) =>
     l.withholding === "none" ? [] : l.withholding ? withholdings.filter((t) => String(t.id) === l.withholding) : partnerDefaults;
-  const [invoiceDate, setInvoiceDate] = useState(move?.invoice_date ?? today());
+  const [invoiceDate, setInvoiceDate] = useState(move?.invoice_date ?? aujourdhui());
   const [dueDate, setDueDate] = useState(move?.invoice_date_due ?? "");
   const [reference, setReference] = useState(move?.ref ?? "");
   const [narration, setNarration] = useState(move?.narration ?? "");
@@ -100,6 +105,8 @@ export function MoveForm({
   const [disputeReason, setDisputeReason] = useState("");
   const { data: currencies } = useApi<Array<{ id: number; name: string; inverse_rate: number; date: string | null }>>(open && !move ? "/finance/currencies" : null);
   const currency = currencies?.find((c) => String(c.id) === currencyId);
+  // Devise des totaux : celle du brouillon relu (fixée à sa création), sinon celle choisie, sinon le GNF.
+  const devise = move ? move.currency : (currency?.name ?? "GNF");
   const [lines, setLines] = useState<LineDraft[]>(() => (move ? linesOf(move) : [emptyLine()]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -127,18 +134,22 @@ export function MoveForm({
     return defaultTax ? String(defaultTax.id) : "none";
   }
 
+  // Quantités et prix lus à la française (« 2,5 », « 750 000 ») : une saisie illisible n'entre pas dans
+  // les totaux, elle est signalée sous la ligne et bloque l'enregistrement.
+  const montantLigne = (l: LineDraft) => (lireNombre(l.quantity) ?? 0) * (lireNombre(l.price_unit) ?? 0);
   const totals = { ht: 0, tva: 0, retenues: 0, ttc: 0 };
   for (const l of lines) {
-    const amount = (Number(l.quantity) || 0) * (Number(l.price_unit.replace(/\s/g, "")) || 0);
+    const amount = montantLigne(l);
     const tax = taxes?.find((t) => String(t.id) === effectiveTax(l));
     totals.ht += amount;
     totals.tva += tax ? (amount * tax.amount) / 100 : 0;
   }
   for (const l of lines) {
-    const amount = (Number(l.quantity) || 0) * (Number(l.price_unit.replace(/\s/g, "")) || 0);
+    const amount = montantLigne(l);
     totals.retenues += lineWithholdings(l).reduce((sum, t) => sum + (amount * t.amount) / 100, 0);
   }
   totals.ttc = totals.ht + totals.tva + totals.retenues;
+  const saisieIllisible = lines.some((l) => nombresIllisibles(l).length > 0);
 
   /** Catégories qui font de la dépense une opération diverse (salaires, cotisations, impôts). */
   const entryCategories = lines.map(categoryOf).filter((c): c is ExpenseCategory => Boolean(c?.entry));
@@ -167,8 +178,9 @@ export function MoveForm({
       const tax = effectiveTax(l);
       return {
         name: l.name,
-        quantity: Number(l.quantity) || 1,
-        price_unit: Number(l.price_unit.replace(/\s/g, "")),
+        // Contrôlés avant l'envoi (submit) : jamais une quantité illisible remplacée par 1.
+        quantity: lireNombre(l.quantity),
+        price_unit: lireNombre(l.price_unit),
         account_id: libre && l.account_id ? Number(l.account_id) : undefined,
         category_id: l.category_id ? Number(l.category_id) : undefined,
         tax_ids: tax === "none" ? [] : [Number(tax)],
@@ -197,9 +209,17 @@ export function MoveForm({
   async function submit(post: boolean) {
     setError(null);
     if (!partner) return setError(sale ? "Choisissez le client." : "Choisissez le fournisseur.");
-    if (lines.some((l) => !l.name.trim() || !Number(l.price_unit.replace(/\s/g, "")))) {
-      return setError("Chaque ligne doit avoir un libellé et un montant.");
-    }
+    // Vidée, la date partait vide et le noyau datait la pièce du jour, sans le dire.
+    if (!invoiceDate) return setError("Indiquez la date de la pièce.");
+    const illisibles = lines.flatMap((l, i) => nombresIllisibles(l).map((champ) => `${champ} de la ligne ${i + 1}`));
+    // « Nombre illisible (quantité de la ligne 2) : écrivez par exemple 750 000 ou 2,5. »
+    if (illisibles.length) return setError(AIDE_NOMBRE.replace(" :", ` (${illisibles.join(", ")}) :`));
+    const sansLibelle = lines.findIndex((l) => !l.name.trim());
+    if (sansLibelle >= 0) return setError(`Ligne ${sansLibelle + 1} : indiquez le libellé.`);
+    const sansQuantite = lines.findIndex((l) => !lireNombre(l.quantity));
+    if (sansQuantite >= 0) return setError(`Ligne ${sansQuantite + 1} : indiquez une quantité non nulle.`);
+    const sansPrix = lines.findIndex((l) => !lireNombre(l.price_unit));
+    if (sansPrix >= 0) return setError(`Ligne ${sansPrix + 1} : indiquez un prix unitaire non nul.`);
     if (mixed) return setError("Séparez la pièce : une dépense passée en opération diverse ne se mêle pas aux achats.");
     if (!sale && !libre && lines.some((l) => !l.category_id)) return setError("Choisissez la catégorie de dépense de chaque ligne : le compte en découle.");
     if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
@@ -240,9 +260,9 @@ export function MoveForm({
   }
 
   const title = move
-    ? `Modifier ${move.move_type === "in_refund" ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
+    ? `Modifier ${move.move_type.endsWith("_refund") ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
     : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
-  const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))];
+  const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || taux(t.amount) }))];
   const columns = (sale ? 6 : 7) + (withholdings.length > 0 ? 1 : 0);
 
   return (
@@ -256,10 +276,10 @@ export function MoveForm({
           <Button variant="ghost" onClick={onClose}>
             Annuler
           </Button>
-          <Button onClick={() => submit(false)} loading={busy}>
+          <Button onClick={() => submit(false)} loading={busy} disabled={saisieIllisible}>
             {move ? "Enregistrer" : "Enregistrer en brouillon"}
           </Button>
-          <Button variant="primary" onClick={() => submit(true)} loading={busy}>
+          <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={saisieIllisible}>
             {sale ? "Enregistrer et valider" : "Enregistrer et soumettre"}
           </Button>
         </>
@@ -269,10 +289,19 @@ export function MoveForm({
         {error && <Notice tone="danger">{error}</Notice>}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Field label={sale ? "Client" : "Fournisseur"} className="md:col-span-2">
-            <PartnerPicker value={partner} onChange={setPartner} kind={sale ? "customer" : "supplier"} />
+            <PartnerPicker
+              value={partner}
+              onChange={(p) => {
+                // Un engagement appartient à son fournisseur : gardé, il ferait refuser la pièce (« Engagement
+                // inconnu ») sans que l'utilisateur puisse le retirer.
+                if (p?.id !== partner?.id) setCommitmentId("");
+                setPartner(p);
+              }}
+              kind={sale ? "customer" : "supplier"}
+            />
           </Field>
-          <Field label="Date de la pièce">
-            <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+          <Field label="Date de la pièce" error={invoiceDate ? undefined : "Indiquez la date de la pièce."}>
+            <Input type="date" required aria-invalid={!invoiceDate} className={CHAMP_INVALIDE} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
           </Field>
           <Field label="Échéance" hint="Vide : selon les conditions du tiers">
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
@@ -287,7 +316,7 @@ export function MoveForm({
           </Field>
           {moveType === "in_invoice" && (commitments?.length ?? 0) > 0 && (
             <Field label="Engagement de dépense" hint="Dans la limite du reste à engager, la pièce ne repasse pas par le circuit d'approbation.">
-              <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtDec(c.remaining)})` }))} />
+              <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtGNF(c.remaining)})` }))} />
             </Field>
           )}
           {/* Devise : fixée à la création du brouillon. */}
@@ -342,10 +371,27 @@ export function MoveForm({
                       </td>
                     )}
                     <td className="px-2 pt-1.5">
-                      <Input className="text-right" inputMode="decimal" value={l.quantity} onChange={(e) => update(i, { quantity: e.target.value })} aria-label={`Quantité, ligne ${i + 1}`} />
+                      <Input
+                        className={cx("text-right", CHAMP_INVALIDE)}
+                        inputMode="decimal"
+                        value={l.quantity}
+                        onChange={(e) => update(i, { quantity: e.target.value })}
+                        aria-label={`Quantité, ligne ${i + 1}`}
+                        aria-invalid={nombreIllisible(l.quantity)}
+                        aria-describedby={nombresIllisibles(l).length ? `ligne-${i}-nombres` : undefined}
+                      />
                     </td>
                     <td className="px-2 pt-1.5">
-                      <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" aria-label={`Prix unitaire HT, ligne ${i + 1}`} />
+                      <Input
+                        className={cx("text-right font-mono", CHAMP_INVALIDE)}
+                        inputMode="decimal"
+                        value={l.price_unit}
+                        onChange={(e) => update(i, { price_unit: e.target.value })}
+                        placeholder="0"
+                        aria-label={`Prix unitaire HT, ligne ${i + 1}`}
+                        aria-invalid={nombreIllisible(l.price_unit)}
+                        aria-describedby={nombresIllisibles(l).length ? `ligne-${i}-nombres` : undefined}
+                      />
                     </td>
                     <td className="px-2 pt-1.5">
                       {libre ? (
@@ -366,9 +412,9 @@ export function MoveForm({
                           onChange={(e) => update(i, { withholding: e.target.value })}
                           aria-label={`Retenue, ligne ${i + 1}`}
                           options={[
-                            { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => `${Math.abs(t.amount)} %`).join(", ")})` : "Aucune (tiers)" },
+                            { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => taux(Math.abs(t.amount))).join(", ")})` : "Aucune (tiers)" },
                             { value: "none", label: "Aucune" },
-                            ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${Math.abs(t.amount)} %)` })),
+                            ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${taux(Math.abs(t.amount))})` })),
                           ]}
                         />
                       </td>
@@ -383,6 +429,11 @@ export function MoveForm({
                   </tr>
                   <tr>
                     <td colSpan={columns} className="px-2 pb-2 pt-1.5">
+                      {nombresIllisibles(l).length > 0 && (
+                        <p id={`ligne-${i}-nombres`} className="mb-1.5 text-[12px] font-medium leading-snug text-danger">
+                          {AIDE_NOMBRE.replace(" :", ` (${nombresIllisibles(l).join(" et ")}) :`)}
+                        </p>
+                      )}
                       <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next, original: undefined })} />
                     </td>
                   </tr>
@@ -397,17 +448,17 @@ export function MoveForm({
           </Button>
           <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <dt className="text-muted">Total HT</dt>
-            <dd className="text-right font-mono">{fmtGNF(totals.ht, currency?.name ?? "GNF")}</dd>
+            <dd className="text-right font-mono">{montantDevise(totals.ht, devise)}</dd>
             <dt className="text-muted">TVA</dt>
-            <dd className="text-right font-mono">{fmtGNF(totals.tva, currency?.name ?? "GNF")}</dd>
+            <dd className="text-right font-mono">{montantDevise(totals.tva, devise)}</dd>
             {totals.retenues !== 0 && (
               <>
                 <dt className="text-muted">Retenues à la source</dt>
-                <dd className="text-right font-mono">{fmtGNF(totals.retenues, currency?.name ?? "GNF")}</dd>
+                <dd className="text-right font-mono">{montantDevise(totals.retenues, devise)}</dd>
               </>
             )}
             <dt className="font-semibold">{totals.retenues !== 0 ? "Net à payer" : "Total TTC"}</dt>
-            <dd className="text-right font-mono font-semibold">{fmtGNF(totals.ttc, currency?.name ?? "GNF")}</dd>
+            <dd className="text-right font-mono font-semibold">{montantDevise(totals.ttc, devise)}</dd>
           </dl>
         </div>
         <p className="text-xs text-muted">Les axes laissés vides suivent les imputations automatiques de la société (préfixe de compte, tiers).</p>

@@ -15,7 +15,7 @@ from odoo.exceptions import AccessError, UserError
 DOCUMENTS = [
     ("commitment", "Engagements de dépense"),
     ("in_invoice", "Pièces d'achat et avoirs fournisseurs"),
-    ("payment_out", "Règlements fournisseurs"),
+    ("payment_out", "Règlements sortants (fournisseurs, remboursements de clients)"),
     ("cash_out", "Décaissements de trésorerie"),
     ("entry", "Opérations diverses"),
 ]
@@ -57,7 +57,9 @@ class EguitraApprovalRule(models.Model):
     company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
     document = fields.Selection(DOCUMENTS, required=True)
     sequence = fields.Integer("Niveau", default=1, required=True)
-    min_amount = fields.Monetary("À partir de", currency_field="currency_id")
+    min_amount = fields.Monetary("Au-delà de", currency_field="currency_id",
+                                 help="La règle s'applique strictement au-delà de ce montant (« de plus de 50 M ») ; 0 : "
+                                      "dès le premier franc.")
     max_amount = fields.Monetary("Jusqu'à", currency_field="currency_id", help="0 : sans plafond.")
     currency_id = fields.Many2one(related="company_id.currency_id")
     account_prefix = fields.Char("Comptes concernés", help="Préfixe de compte, par exemple 2 pour les investissements.")
@@ -69,7 +71,11 @@ class EguitraApprovalRule(models.Model):
         rules = self.sudo().search([("document", "=", document), ("company_id", "=", company.id)])
         result = self.browse()
         for rule in rules:
-            if amount < rule.min_amount or (rule.max_amount and amount > rule.max_amount):
+            # « De plus de 50 M » : strictement au-delà du seuil ; une pièce d'exactement 50 M n'y va pas.
+            # Un seuil nul couvre toute pièce, comme avant.
+            if amount < rule.min_amount or (rule.min_amount and rule.currency_id.compare_amounts(amount, rule.min_amount) <= 0):
+                continue
+            if rule.max_amount and amount > rule.max_amount:
                 continue
             if rule.account_prefix and not any(code.startswith(rule.account_prefix) for code in account_codes):
                 continue
@@ -153,13 +159,27 @@ class EguitraApprovalRequest(models.Model):
         self.ensure_one()
         return user in self.sudo().step_ids.decided_by
 
+    def _authors(self):
+        """Auteurs de la pièce soumise, écartés de la décision comme le demandeur : le compte qui a saisi la
+        pièce ou le règlement, et le demandeur d'un engagement. Sans cela, un brouillon préparé par F et
+        soumis par A pouvait être approuvé par F lui-même."""
+        self.ensure_one()
+        record = self._record()
+        authors = self.env["res.users"]
+        if not record:
+            return authors
+        authors |= record.sudo().create_uid
+        if self.res_model == "eguitra.commitment":
+            authors |= record.sudo().requested_by
+        return authors
+
     def _can_decide(self, user=None):
         self.ensure_one()
         user = user or self.env.user
         step = self.current_step_id
         if self.state != "pending" or not step:
             return False
-        if user == self.requested_by:
+        if user == self.requested_by or user in self._authors():
             return False
         # Quatre yeux : chaque étape d'une même demande est tranchée par une personne différente.
         if self._decided_by(user):
@@ -170,6 +190,9 @@ class EguitraApprovalRequest(models.Model):
         if not self._can_decide():
             if self.env.user == self.requested_by:
                 raise AccessError("Vous ne pouvez pas approuver votre propre demande.")
+            if self.env.user in self._authors():
+                raise AccessError("Vous ne pouvez pas trancher une pièce que vous avez saisie : elle revient à une "
+                                  "autre personne.")
             if self._decided_by(self.env.user):
                 raise AccessError("Vous avez déjà tranché une étape de cette demande : l'étape suivante doit être "
                                   "tranchée par une autre personne.")
