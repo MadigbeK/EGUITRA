@@ -3,6 +3,10 @@ communications, ressources et événements du cabinet, son agenda, ses notificat
 
 Le porteur ne lit que ses dossiers (utilisateur du portail du dossier) et les publications dont il fait
 partie du public ; jamais le détail du scoring, les notes internes ni les critères de la grille.
+
+Une lecture (GET) n'écrit rien : ce que l'écran a affiché (communication, conseil, messages) est
+enregistré par une route POST que l'écran appelle ensuite. Une navigation venue d'un autre site ne
+relaie que des GET : elle ne peut donc rien marquer à la place du porteur.
 """
 
 from datetime import timedelta
@@ -10,7 +14,7 @@ from datetime import timedelta
 from odoo import fields, http
 from odoo.http import content_disposition, request
 
-from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
+from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_axispro.controllers.common import store_upload
 
 from ..models.agenda import MEETING_MODES
@@ -18,8 +22,26 @@ from ..models.suivi import FEEDBACK_TOPICS
 from . import vues
 
 PORTEUR = ("porteur",)
+# Messages d'un porteur sur un dossier en 24 heures, par la messagerie comme par une demande de mise à
+# jour de sa fiche (qui écrit dans la messagerie du consultant).
 MAX_DAILY_MESSAGES = 50
 MAX_OPEN_MEETING_REQUESTS = 3
+MAX_DAILY_MEETING_REQUESTS = 10
+# Messages renvoyés par appel au fil : les plus récents d'abord, la page précédente sur demande.
+FIL_PAGE = 200
+NOTIFICATIONS_MAX = 200
+# Origine d'une action telle que le porteur la lit. Un écart de la grille du cabinet se présente comme une
+# demande du consultant, au même titre qu'une saisie libre : rien ne laisse deviner la grille ni ses
+# critères. La clé interne (gap, manual…) ne sort jamais.
+ACTION_ORIGINS = {
+    "manual": ("consultant", "Demandée par votre consultant"),
+    "gap": ("consultant", "Demandée par votre consultant"),
+    "committee": ("committee", "Condition posée par le comité"),
+    "risk": ("risk", "Pour maîtriser un risque du projet"),
+}
+# Note d'un avis (1 à 5) à partir de laquelle le consultant est invité à rappeler le porteur.
+FEEDBACK_ALERT_SCORE = 2
+CABINET_FEEDBACK_PAGE = "/axispro/portail/porteurs"
 PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
                         "state", "version")
 PROFILE_FIELDS = ("phone", "email", "street", "city", "website")
@@ -85,6 +107,15 @@ def _reads(announcements):
     return {r.announcement_id.id: r for r in reads}
 
 
+def _read(announcement, create=False):
+    """Lecture de la communication par le porteur ; créée sur demande (route POST seulement)."""
+    Read = request.env["portail.announcement.read"].sudo()
+    read = Read.search([("announcement_id", "=", announcement.id), ("user_id", "=", _me().id)], limit=1)
+    if not read and create:
+        read = Read.create({"announcement_id": announcement.id, "user_id": _me().id})
+    return read
+
+
 def _events(dossiers, since):
     Registration = request.env["portail.event.registration"].sudo()
     mine = Registration.search([("user_id", "=", _me().id)])
@@ -114,6 +145,24 @@ def _notifications_unread():
     return request.env["portail.notification"].sudo().search_count([("user_id", "=", _me().id), ("read_at", "=", False)])
 
 
+def _check_message_quota(dossier):
+    """Refus (429) au-delà de 50 messages du porteur sur ce dossier en 24 heures, quelle que soit la route."""
+    recent = request.env["axispro.message"].sudo().search_count(
+        [("dossier_id", "=", dossier.id), ("author_id", "=", _me().id),
+         ("date", ">=", fields.Datetime.now() - timedelta(days=1))])
+    if recent >= MAX_DAILY_MESSAGES:
+        raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
+
+
+def _visible_messages(dossier):
+    """Domaine des messages du dossier que le porteur lit : jamais les notes internes du cabinet."""
+    return [("dossier_id", "=", dossier.id), ("internal", "=", False)]
+
+
+def _meeting_link(meeting):
+    return f"/portail/rendez-vous?dossier={meeting.dossier_id.id}"
+
+
 class EguitraPortailPorteur(http.Controller):
     # ─── Espace et tableau de bord ───────────────────────────────────────
 
@@ -133,7 +182,7 @@ class EguitraPortailPorteur(http.Controller):
         promoter = dossiers[:1].promoter_id
         return {
             "user": {"id": me.id, "name": me.name, "login": me.login, "company": promoter.name or None},
-            "dossiers": [dict(vues.dossier_ref(d), unread_messages=unread.get(d.id, 0)) for d in dossiers],
+            "dossiers": [dict(vues.dossier_ref(d, porteur=True), unread_messages=unread.get(d.id, 0)) for d in dossiers],
             "counts": {
                 "notifications": _notifications_unread(),
                 "messages": sum(unread.values()),
@@ -191,10 +240,10 @@ class EguitraPortailPorteur(http.Controller):
         order = {"high": 0, "normal": 1, "low": 2}
         steps.sort(key=lambda s: order[s["urgency"]])
 
-        upcoming = [{"kind": "meeting", "title": m.subject, "date": m.start, "link": "/portail/rendez-vous"}
+        upcoming = [{"kind": "meeting", "title": m.subject, "date": m.start, "link": _meeting_link(m)}
                     for m in dossier.meeting_ids.filtered(lambda m: m.state == "confirmed" and m.start and m.start >= now)]
         events, registrations = _events(dossier, now)
-        upcoming += [{"kind": "event", "title": e.name, "date": e.start, "link": "/portail/evenements",
+        upcoming += [{"kind": "event", "title": e.name, "date": e.start, "link": f"/portail/evenements#evenement-{e.id}",
                       "registered": bool(registrations.get(e.id) and registrations[e.id].state == "registered")}
                      for e in events if e.state == "published" and e.start >= now]
         upcoming += [{"kind": "action", "title": t.name, "date": vues.at_noon(t.due_date),
@@ -208,18 +257,17 @@ class EguitraPortailPorteur(http.Controller):
         ranked = sorted(articles, key=lambda a: (not (set(vues.split_list(a.gate_codes)) & codes),
                                                  bool(reactions.get(a.id) and reactions[a.id].viewed_at),
                                                  not a.featured))
-        fundings = dossier.funding_ids
         return {
-            "dossier": dict(vues.dossier_ref(dossier), gates=vues.gates_of(dossier), location=dossier.location or None),
+            "dossier": dict(vues.dossier_ref(dossier, porteur=True), gates=vues.gates_of(dossier),
+                            location=dossier.location or None),
             "preparation": vues.preparation(dossier, docs, tasks),
             "next_steps": steps[:8],
             "upcoming": upcoming[:6],
             "timeline": vues.timeline(dossier, limit=6),
             "announcements": [vues.announcement_row(a, reads.get(a.id)) for a in announcements[:3]],
             "articles": [vues.article_row(a, reactions.get(a.id), codes) for a in ranked[:3]],
-            "fundings": {"count": len(fundings), "requested": sum(fundings.mapped("amount_requested")),
-                         "granted": sum(fundings.mapped("amount_granted")),
-                         "currency": dossier.currency_id.symbol or dossier.currency_id.name},
+            # Même résumé que « Mon projet » : pistes actives seulement, devise des financements.
+            "fundings": vues.fundings_summary(dossier),
         }
 
     @api_route("/portail/dossiers/<int:dossier_id>/projet", profiles=PORTEUR)
@@ -231,13 +279,14 @@ class EguitraPortailPorteur(http.Controller):
                 team.append(dict(vues.person(assignment.user_id), role=f"Référent {assignment.compartment_id.name}"))
         return {
             "dossier": dict(
-                vues.dossier_ref(dossier), gates=vues.gates_of(dossier), location=dossier.location or None,
+                vues.dossier_ref(dossier, porteur=True), gates=vues.gates_of(dossier), location=dossier.location or None,
                 capacity=dossier.capacity or None, investment=dossier.investment, financing_need=dossier.financing_need,
                 currency={"name": dossier.currency_id.name, "symbol": dossier.currency_id.symbol},
                 date_start=dossier.date_start, description=dossier.description or None,
                 promoter=dossier.promoter_id.name),
             "team": team,
             "fundings": [vues.funding_row(f) for f in dossier.funding_ids.sorted(lambda f: (f.state_date or fields.Date.today()), reverse=True)],
+            "fundings_summary": vues.fundings_summary(dossier),
             "timeline": vues.timeline(dossier),
         }
 
@@ -274,21 +323,56 @@ class EguitraPortailPorteur(http.Controller):
     def actions(self, dossier_id, **_kw):
         dossier = _own(dossier_id)
         today = fields.Date.context_today(_me())
-        return [{"id": a.id, "name": a.name, "description": a.description or None, "due_date": a.due_date,
-                 "state": a.state, "porteur_comment": a.porteur_comment or None, "overdue": a.is_overdue(today),
-                 "done_date": a.done_date, "source": a.source or None, "create_date": a.create_date}
-                for a in _tasks(dossier).sorted(lambda a: (a.state == "done", a.due_date or today + timedelta(days=3650), a.id))]
+        rows = []
+        for a in _tasks(dossier).sorted(lambda a: (a.state == "done", a.due_date or today + timedelta(days=3650), a.id)):
+            origin, origin_label = ACTION_ORIGINS.get(a.source, ACTION_ORIGINS["manual"])
+            rows.append({"id": a.id, "name": a.name, "description": a.description or None, "due_date": a.due_date,
+                         "state": a.state, "porteur_comment": a.porteur_comment or None,
+                         "overdue": a.is_overdue(today), "done_date": a.done_date, "origin": origin,
+                         "origin_label": origin_label, "create_date": a.create_date})
+        return rows
 
     # ─── Messagerie ──────────────────────────────────────────────────────
 
     @api_route("/portail/dossiers/<int:dossier_id>/fil", profiles=PORTEUR)
-    def fil(self, dossier_id, **_kw):
+    def fil(self, dossier_id, **kw):
+        """Messages du dossier, sans les notes internes, du plus ancien au plus récent. Sans paramètre : les
+        200 derniers (`more` : il en reste de plus anciens) ; `before` : la page précédant ce message ;
+        `after` : les messages postérieurs à ce message (relecture périodique de l'écran). La lecture ne
+        marque rien comme lu : l'écran le fait ensuite (POST …/fil/lu)."""
         me, dossier = _me(), _own(dossier_id)
-        messages = dossier.sudo().message_ids.filtered(lambda m: not m.internal)
-        if messages:
-            request.env["portail.read.marker"].mark(me, dossier, max(messages.ids))
+        after = int_arg(kw, "after", None, 0)
+        before = int_arg(kw, "before", None, 0)
+        Message = request.env["axispro.message"].sudo()
+        domain = _visible_messages(dossier)
+        if after is not None:
+            messages = Message.search(domain + [("id", ">", after)], order="id", limit=FIL_PAGE)
+            more = False
+        else:
+            if before is not None:
+                domain = domain + [("id", "<", before)]
+            messages = Message.search(domain, order="id desc", limit=FIL_PAGE)
+            more = bool(messages) and bool(Message.search_count(domain + [("id", "<", min(messages.ids))]))
+        messages = messages.sorted(lambda m: (m.date, m.id))
         return {"consultant": vues.person(dossier.consultant_id), "closed": dossier.state == "closed",
-                "messages": [vues.message_row(m, me) for m in messages]}
+                "messages": [vues.message_row(m, me, porteur=True) for m in messages], "more": more}
+
+    @api_route("/portail/dossiers/<int:dossier_id>/fil/lu", methods=("POST",), profiles=PORTEUR)
+    def fil_lu(self, dossier_id, **_kw):
+        """Messages lus jusqu'au message `message_id`, le dernier que l'écran a affiché (à défaut, le dernier
+        du dossier). Rend le nombre de messages du cabinet restant à lire sur ce dossier."""
+        me, dossier = _me(), _own(dossier_id)
+        wanted = read_json().get("message_id")
+        last = request.env["axispro.message"].sudo().search(_visible_messages(dossier), order="id desc", limit=1).id or 0
+        if wanted not in (None, ""):
+            try:
+                last = min(last, int(wanted))
+            except (TypeError, ValueError) as e:
+                raise ApiError(400, "invalid_parameter", "Message invalide.") from e
+        Marker = request.env["portail.read.marker"]
+        if last > 0:
+            Marker.mark(me, dossier, last)
+        return {"unread": Marker.unread(me, dossier).get(dossier.id, 0)}
 
     @api_route("/portail/dossiers/<int:dossier_id>/fil", methods=("POST",), profiles=PORTEUR)
     def ecrire(self, dossier_id, **_kw):
@@ -300,17 +384,15 @@ class EguitraPortailPorteur(http.Controller):
         if not body and not has_file:
             raise ApiError(400, "missing_fields", "Écrivez un message ou joignez un fichier.", fields=["body"])
         Message = request.env["axispro.message"].sudo()
-        recent = Message.search_count([("dossier_id", "=", dossier.id), ("author_id", "=", me.id),
-                                       ("date", ">=", fields.Datetime.now() - timedelta(days=1))])
-        if recent >= MAX_DAILY_MESSAGES:
-            raise ApiError(429, "too_many_requests", "Trop de messages en 24 heures : appelez votre consultant.")
+        _check_message_quota(dossier)
         documents = store_upload(dossier, quota=True) if has_file else request.env["axispro.document"]
+        # Aucun repère de lecture ici : ses propres messages ne comptent jamais comme non lus, et un message du
+        # cabinet arrivé juste avant l'envoi resterait sinon marqué lu sans avoir été affiché.
         message = Message.create({
             "dossier_id": dossier.id, "body": body[:5000] or f"Pièce jointe : {documents.name}", "author_id": me.id,
             "internal": False, "document_ids": [(6, 0, documents.ids)],
         })
-        request.env["portail.read.marker"].mark(me, dossier, message.id)
-        return vues.message_row(message, me)
+        return vues.message_row(message, me, porteur=True)
 
     # ─── Rendez-vous ─────────────────────────────────────────────────────
 
@@ -327,8 +409,10 @@ class EguitraPortailPorteur(http.Controller):
         data = read_json()
         (subject,) = require(data, "subject")
         mode = data.get("mode") or "office"
-        if mode not in dict(MEETING_MODES):
+        if not isinstance(mode, str) or mode not in dict(MEETING_MODES):
             raise ApiError(400, "invalid_parameter", "Forme de rendez-vous inconnue.")
+        if not isinstance(data.get("slots") or [], list):
+            raise ApiError(400, "invalid_parameter", "Créneaux invalides.")
         slots = [_datetime(s, "Créneau") for s in (data.get("slots") or [])[:3] if s]
         now = fields.Datetime.now()
         if not slots:
@@ -338,12 +422,23 @@ class EguitraPortailPorteur(http.Controller):
         pending = dossier.sudo().meeting_ids.filtered(lambda m: m.state == "requested")
         if len(pending) >= MAX_OPEN_MEETING_REQUESTS:
             raise ApiError(422, "business_rule", "Trois demandes attendent déjà une réponse du cabinet.")
+        # Demander puis retirer sans fin contournerait la limite des demandes en attente : chaque demande
+        # prévient le consultant.
+        recent = request.env["portail.meeting"].sudo().search_count(
+            [("requested_by", "=", me.id), ("create_date", ">=", now - timedelta(days=1))])
+        if recent >= MAX_DAILY_MEETING_REQUESTS:
+            raise ApiError(429, "too_many_requests",
+                           "Trop de demandes de rendez-vous en 24 heures : appelez votre consultant.")
+        try:
+            duration = int(data.get("duration") or 60)
+        except (TypeError, ValueError) as e:
+            raise ApiError(400, "invalid_parameter", "Durée du rendez-vous invalide.") from e
         meeting = request.env["portail.meeting"].sudo().create({
             "dossier_id": dossier.id, "requested_by": me.id, "consultant_id": dossier.consultant_id.id or False,
             "subject": str(subject)[:200], "agenda": str(data.get("agenda") or "")[:3000] or False, "mode": mode,
             "slot_1": slots[0], "slot_2": slots[1] if len(slots) > 1 else False,
             "slot_3": slots[2] if len(slots) > 2 else False,
-            "duration": int(data.get("duration") or 60),
+            "duration": duration,
         })
         request.env["portail.notification"].sudo().notify(
             dossier.consultant_id, "meeting", f"Demande de rendez-vous : {meeting.subject}", f"{me.name}, {dossier.reference}",
@@ -356,7 +451,11 @@ class EguitraPortailPorteur(http.Controller):
         if not meeting:
             raise ApiError(404, "not_found", "Rendez-vous introuvable.")
         _own(meeting.dossier_id.id)
-        meeting.cancel(str(read_json().get("reason") or "")[:1000] or None, by_porteur=True)
+        reason = str(read_json().get("reason") or "").strip()[:1000] or None
+        meeting.cancel(reason, by_porteur=True)
+        if not reason and meeting.cabinet_note:
+            # Sans motif, le message qui accompagnait la confirmation passerait pour celui du porteur.
+            meeting.cabinet_note = False
         return vues.meeting_row(meeting, _me())
 
     # ─── Communications du cabinet ───────────────────────────────────────
@@ -375,23 +474,22 @@ class EguitraPortailPorteur(http.Controller):
 
     @api_route("/portail/actualites/<int:announcement_id>", profiles=PORTEUR)
     def actualite(self, announcement_id, **_kw):
+        """Texte de la communication. La lecture n'est pas enregistrée ici : l'écran l'enregistre une fois
+        la communication affichée (POST …/lue)."""
         announcement = self._announcement(announcement_id)
-        Read = request.env["portail.announcement.read"].sudo()
-        read = Read.search([("announcement_id", "=", announcement.id), ("user_id", "=", _me().id)], limit=1)
-        if not read:
-            read = Read.create({"announcement_id": announcement.id, "user_id": _me().id})
-        return vues.announcement_row(announcement, read, full=True)
+        return vues.announcement_row(announcement, _read(announcement), full=True)
+
+    @api_route("/portail/actualites/<int:announcement_id>/lue", methods=("POST",), profiles=PORTEUR)
+    def lire_actualite(self, announcement_id, **_kw):
+        announcement = self._announcement(announcement_id)
+        return vues.announcement_row(announcement, _read(announcement, create=True), full=True)
 
     @api_route("/portail/actualites/<int:announcement_id>/accuse", methods=("POST",), profiles=PORTEUR)
     def accuser(self, announcement_id, **_kw):
         announcement = self._announcement(announcement_id)
-        Read = request.env["portail.announcement.read"].sudo()
-        read = Read.search([("announcement_id", "=", announcement.id), ("user_id", "=", _me().id)], limit=1)
-        now = fields.Datetime.now()
-        if not read:
-            read = Read.create({"announcement_id": announcement.id, "user_id": _me().id, "acknowledged_at": now})
-        elif not read.acknowledged_at:
-            read.acknowledged_at = now
+        read = _read(announcement, create=True)
+        if not read.acknowledged_at:
+            read.acknowledged_at = fields.Datetime.now()
         return vues.announcement_row(announcement, read, full=True)
 
     # ─── Centre de ressources ────────────────────────────────────────────
@@ -421,11 +519,10 @@ class EguitraPortailPorteur(http.Controller):
 
     @api_route("/portail/ressources/<int:article_id>", profiles=PORTEUR)
     def ressource(self, article_id, **_kw):
+        """Contenu à lire. Ni la lecture ni le compteur de lectures ne changent ici : l'écran les
+        enregistre une fois le contenu affiché (POST …/lu)."""
         article, dossiers = self._article(article_id)
-        reaction = self._reaction(article)
-        if not reaction.viewed_at:
-            reaction.viewed_at = fields.Datetime.now()
-        article.write({"view_count": article.view_count + 1})
+        reaction = _reactions(article).get(article.id)
         codes = _gate_codes(dossiers)
         others = _published_articles(dossiers) - article
         related = others.filtered(lambda a: a.category_id == article.category_id)[:3] or others[:3]
@@ -435,6 +532,16 @@ class EguitraPortailPorteur(http.Controller):
         row["helpful_count"] = len(article.reaction_ids.filtered(lambda r: r.helpful == "yes"))
         row["related"] = [vues.article_row(a, reactions.get(a.id), codes) for a in related]
         return row
+
+    @api_route("/portail/ressources/<int:article_id>/lu", methods=("POST",), profiles=PORTEUR)
+    def lire_ressource(self, article_id, **_kw):
+        """Lecture d'un contenu : « Lu » pour le porteur, une lecture de plus au compteur du cabinet."""
+        article, dossiers = self._article(article_id)
+        reaction = self._reaction(article)
+        if not reaction.viewed_at:
+            reaction.viewed_at = fields.Datetime.now()
+        article.write({"view_count": article.view_count + 1})
+        return vues.article_row(article, reaction, _gate_codes(dossiers))
 
     @api_route("/portail/ressources/<int:article_id>/reaction", methods=("POST",), profiles=PORTEUR)
     def reagir(self, article_id, **_kw):
@@ -506,7 +613,7 @@ class EguitraPortailPorteur(http.Controller):
         items = []
         for m in dossiers.meeting_ids.filtered(lambda m: m.state in ("confirmed", "done") and m.start and start <= m.start <= end):
             items.append({"key": f"meeting-{m.id}", "kind": "meeting", "title": m.subject, "start": m.start, "end": m.end(),
-                          "all_day": False, "link": "/portail/rendez-vous", "state": m.state,
+                          "all_day": False, "link": _meeting_link(m), "state": m.state,
                           "detail": dict(MEETING_MODES)[m.mode], "dossier": m.dossier_id.reference})
         events, registrations = _events(dossiers, start)
         for e in events.filtered(lambda e: e.state == "published" and e.start <= end):
@@ -535,14 +642,22 @@ class EguitraPortailPorteur(http.Controller):
     # ─── Notifications ───────────────────────────────────────────────────
 
     @api_route("/portail/notifications", profiles=PORTEUR)
-    def notifications(self, **_kw):
+    def notifications(self, **kw):
+        """Notifications du porteur, les plus récentes d'abord, par pages (`limit`, `offset`) ; `total` dit
+        combien en existent, pour que l'écran propose la suite au lieu de s'arrêter en silence."""
+        limit = int_arg(kw, "limit", 100, 1, NOTIFICATIONS_MAX)
+        offset = int_arg(kw, "offset", 0, 0)
         Notification = request.env["portail.notification"].sudo()
-        items = Notification.search([("user_id", "=", _me().id)], limit=100)
-        return {"unread": _notifications_unread(), "items": [vues.notification_row(n) for n in items]}
+        domain = [("user_id", "=", _me().id)]
+        items = Notification.search(domain, limit=limit, offset=offset)
+        return {"unread": _notifications_unread(), "total": Notification.search_count(domain),
+                "items": [vues.notification_row(n) for n in items]}
 
     @api_route("/portail/notifications/lues", methods=("POST",), profiles=PORTEUR)
     def lues(self, **_kw):
         ids = read_json().get("ids")
+        if ids is not None and not isinstance(ids, list):
+            raise ApiError(400, "invalid_parameter", "Liste de notifications invalide.")
         domain = [("user_id", "=", _me().id), ("read_at", "=", False)]
         if ids:
             domain.append(("id", "in", [int(i) for i in ids if str(i).isdigit()]))
@@ -573,8 +688,11 @@ class EguitraPortailPorteur(http.Controller):
         def clean(value, size=120):
             return " ".join(str(value or "").split())[:size] or False
 
-        contact = {f: clean(data["user"][f]) for f in ("phone", "email") if f in (data.get("user") or {})}
-        company = {f: clean(data["entreprise"][f]) for f in PROFILE_FIELDS if f in (data.get("entreprise") or {})}
+        user, entreprise = data.get("user") or {}, data.get("entreprise") or {}
+        if not isinstance(user, dict) or not isinstance(entreprise, dict):
+            raise ApiError(400, "invalid_parameter", "Coordonnées invalides.")
+        contact = {f: clean(user[f]) for f in ("phone", "email") if f in user}
+        company = {f: clean(entreprise[f]) for f in PROFILE_FIELDS if f in entreprise}
         for values, label in ((contact, ""), (company, " de l'entreprise")):
             if values.get("email") and "@" not in values["email"]:
                 raise ApiError(422, "business_rule", f"Adresse électronique{label} invalide.")
@@ -591,6 +709,8 @@ class EguitraPortailPorteur(http.Controller):
                    if f in company and (promoter[f] or False) != company[f]] if promoter else []
         if changes:
             dossier = dossiers.filtered(lambda d: d.promoter_id == promoter)[:1]
+            # La demande s'écrit dans la messagerie : même quota que les messages du porteur.
+            _check_message_quota(dossier)
             request.env["axispro.message"].sudo().create({
                 "dossier_id": dossier.id, "author_id": me.id, "internal": False,
                 "body": "\n".join([f"Demande de mise à jour de la fiche de {promoter.name} :", *changes]),
@@ -609,12 +729,16 @@ class EguitraPortailPorteur(http.Controller):
         dossier_id, score = require(data, "dossier_id", "score")
         dossier = _own(dossier_id)
         topic = data.get("topic") or "global"
-        if topic not in dict(FEEDBACK_TOPICS):
+        if not isinstance(topic, str) or topic not in dict(FEEDBACK_TOPICS):
             raise ApiError(400, "invalid_parameter", "Sujet inconnu.")
         event = request.env["portail.event"]
         if data.get("event_id"):
+            try:
+                event_id = int(data["event_id"])
+            except (TypeError, ValueError) as e:
+                raise ApiError(400, "invalid_parameter", "Événement invalide.") from e
             registration = request.env["portail.event.registration"].sudo().search(
-                [("event_id", "=", int(data["event_id"])), ("user_id", "=", me.id)], limit=1)
+                [("event_id", "=", event_id), ("user_id", "=", me.id)], limit=1)
             if not registration:
                 raise ApiError(422, "business_rule", "Vous n'étiez pas inscrit à cet événement.")
             event = registration.event_id
@@ -633,4 +757,16 @@ class EguitraPortailPorteur(http.Controller):
         else:
             feedback = Feedback.create(dict(values, dossier_id=dossier.id, user_id=me.id, topic=topic,
                                             event_id=event.id or False))
-        return vues.feedback_row(feedback)
+        # Le consultant du dossier lit chaque avis ; une note basse lui demande de rappeler le porteur.
+        # L'écran ne promet un rappel que si ce consultant a bien été prévenu.
+        score = feedback.score
+        sujet = dict(FEEDBACK_TOPICS)[topic].lower()
+        if score <= FEEDBACK_ALERT_SCORE:
+            title = f"Avis à reprendre avec {me.name} : {score}/5 ({sujet})"
+        else:
+            title = f"Avis de {me.name} : {score}/5 ({sujet})"
+        comment = " ".join((feedback.comment or "").split())[:200]
+        body = f"{dossier.reference} : {comment}" if comment else dossier.reference
+        notified = request.env["portail.notification"].sudo().notify(
+            dossier.consultant_id, "feedback", title, body, CABINET_FEEDBACK_PAGE, dossier=dossier)
+        return dict(vues.feedback_row(feedback), consultant_notified=bool(notified))

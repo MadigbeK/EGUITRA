@@ -59,6 +59,12 @@ class ResCompany(models.Model):
              "l'activité de l'ancien classeur). Vide : activité « Transport pétrolier », créée au besoin.",
     )
 
+    # Barème officiel du transport des hydrocarbures (models/official_rate.py).
+    transport_official_rate_tolerance = fields.Float(
+        "Écart toléré au barème officiel (%)", digits=(5, 2), default=1.0,
+        help="Au-delà, un tarif de route, de client ou de rotation éloigné du barème officiel est signalé.",
+    )
+
     # Camions gérés pour des propriétaires tiers (models/ownership.py).
     transport_owner_cost_basis = fields.Selection(
         OWNER_COST_BASES, "Charges des relevés de propriétaires", default="declared", required=True,

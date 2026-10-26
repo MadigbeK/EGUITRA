@@ -45,7 +45,8 @@ class EguitraAnalyseContexte(http.Controller):
         entity = "cabinet" if company.eguitra_entity == "cabinet" else "groupe"
         profiles = set(user._eguitra_profiles())
         sections = [
-            {"key": key, "label": label, "question": question, "icon": icon, "path": f"/analyse/{key}"}
+            {"key": key, "label": label, "question": question, "icon": icon,
+             "path": "/analyse" if key == "synthese" else f"/analyse/{key}"}
             for key, label, question, icon, allowed in (CABINET_SECTIONS if entity == "cabinet" else GROUPE_SECTIONS)
             if profiles & set(allowed)
         ]

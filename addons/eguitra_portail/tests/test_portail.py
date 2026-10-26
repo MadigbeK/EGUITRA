@@ -1,11 +1,17 @@
+import importlib.util
 import io
+import json
+import os
 from datetime import timedelta
+from unittest.mock import patch
 
 from odoo import fields
 from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_axispro.tests.test_axispro import GRID
+from odoo.addons.eguitra_portail.controllers import porteur as porteur_api
+from odoo.addons.eguitra_portail.ressources_initiales import ARTICLES
 
 PDF = b"%PDF-1.4\n% statuts\n%%EOF\n"
 FUTURE = (fields.Datetime.now() + timedelta(days=20)).replace(microsecond=0)
@@ -84,14 +90,30 @@ class TestPortail(ApiCase):
         self.assertEqual(espace["counts"]["messages"], 1, "La note interne n'est ni visible ni comptée")
         _s, fil = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil", token=self.porteur)
         self.assertEqual([m["body"] for m in fil["messages"]], ["Bonjour, merci d'envoyer vos statuts."])
+        self.assertFalse(fil["more"], "Aucun message plus ancien")
         _s, espace = self.call("GET", "/portail/espace", token=self.porteur)
-        self.assertEqual(espace["counts"]["messages"], 0, "Lus à l'ouverture du fil")
+        self.assertEqual(espace["counts"]["messages"], 1, "Une lecture (GET) ne marque rien comme lu")
+        dernier = fil["messages"][-1]["id"]
+        status, lu = self.call("POST", f"/portail/dossiers/{self.dossier_a.id}/fil/lu", {"message_id": dernier},
+                               token=self.porteur)
+        self.assertEqual((status, lu["unread"]), (200, 0), lu)
+        _s, espace = self.call("GET", "/portail/espace", token=self.porteur)
+        self.assertEqual(espace["counts"]["messages"], 0, "Lus une fois affichés par l'écran")
+        status, _b = self.call("POST", f"/portail/dossiers/{self.dossier_b.id}/fil/lu", {}, token=self.porteur)
+        self.assertEqual(status, 404, "Messages du dossier d'un autre porteur")
+        status, _b = self.call("POST", f"/portail/dossiers/{self.dossier_a.id}/fil/lu", {}, token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
 
         status, message = self.post_form(f"/portail/dossiers/{self.dossier_a.id}/fil", self.porteur,
                                          {"body": "Voici les statuts."}, ("statuts.pdf", PDF))
         self.assertEqual(status, 200, message)
         self.assertEqual(message["attachments"][0]["name"], "statuts.pdf")
         self.assertTrue(message["from_me"])
+        _s, suite = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil?after={dernier}", token=self.porteur)
+        self.assertEqual([m["id"] for m in suite["messages"]], [message["id"]], "Relecture : les seuls nouveaux messages")
+        self.env["axispro.document"].browse(message["attachments"][0]["id"]).portal_visible = False
+        _s, suite = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil?after={dernier}", token=self.porteur)
+        self.assertEqual(suite["messages"][0]["attachments"], [], "Une pièce masquée par le cabinet n'est plus listée")
         self.assertIn("statuts.pdf", self.dossier_a.document_ids.mapped("name"), "La pièce jointe rejoint la data room")
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
         _s, conversations = self.call("GET", "/axispro/portail/conversations", token=self.cabinet_token)
@@ -117,7 +139,13 @@ class TestPortail(ApiCase):
         self.assertEqual(status, 404)
         _s, detail = self.call("GET", f"/portail/actualites/{tous['id']}", token=self.porteur)
         self.assertEqual((detail["read"], detail["acknowledged"], detail["excerpt"]),
-                         (True, False, "Date limite le 30 novembre."))
+                         (False, False, "Date limite le 30 novembre."), "Une lecture (GET) n'enregistre rien")
+        status, lue = self.call("POST", f"/portail/actualites/{tous['id']}/lue", token=self.porteur)
+        self.assertEqual((status, lue["read"], lue["acknowledged"]), (200, True, False), lue)
+        status, _b = self.call("POST", f"/portail/actualites/{pour_b.id}/lue", token=self.porteur)
+        self.assertEqual(status, 404, "Communication hors de son public")
+        status, _b = self.call("POST", f"/portail/actualites/{tous['id']}/lue", token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
         _s, detail = self.call("POST", f"/portail/actualites/{tous['id']}/accuse", token=self.porteur)
         self.assertTrue(detail["acknowledged"])
         _s, admin = self.call("GET", "/axispro/portail/annonces", token=self.cabinet_token)
@@ -135,6 +163,8 @@ class TestPortail(ApiCase):
         self.assertNotIn(article["id"], [a["id"] for a in ressources["articles"]], "Un brouillon reste invisible")
         status, _b = self.call("GET", f"/portail/ressources/{article['id']}", token=self.porteur)
         self.assertEqual(status, 404)
+        status, _b = self.call("POST", f"/portail/ressources/{article['id']}/lu", token=self.porteur)
+        self.assertEqual(status, 404, "Un brouillon ne se lit pas, pas même par la route qui enregistre la lecture")
         _s, publie = self.call("POST", f"/axispro/portail/articles/{article['id']}/publier", token=self.cabinet_token)
         self.assertEqual(publie["state"], "published")
         _s, ressources = self.call("GET", "/portail/ressources", token=self.porteur)
@@ -142,7 +172,12 @@ class TestPortail(ApiCase):
         self.assertTrue(row["recommended"], "Recommandé à l'étape G0 du dossier")
         _s, detail = self.call("GET", f"/portail/ressources/{article['id']}", token=self.porteur)
         self.assertIn("Le calcul", detail["body"])
-        self.assertTrue(detail["viewed"])
+        self.assertFalse(detail["viewed"], "Une lecture (GET) n'enregistre rien")
+        self.assertEqual(self.env["portail.article"].browse(article["id"]).view_count, 0)
+        status, lu = self.call("POST", f"/portail/ressources/{article['id']}/lu", token=self.porteur)
+        self.assertEqual((status, lu["viewed"]), (200, True), lu)
+        status, _b = self.call("POST", f"/portail/ressources/{article['id']}/lu", token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
         _s, reaction = self.call("POST", f"/portail/ressources/{article['id']}/reaction",
                                  {"helpful": True, "bookmarked": True}, token=self.porteur)
         self.assertEqual((reaction["helpful"], reaction["bookmarked"]), ("yes", True))
@@ -189,10 +224,38 @@ class TestPortail(ApiCase):
         self.assertEqual(confirme["state"], "confirmed")
         self.assertTrue(self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rendez-vous confirmé")))
         _s, agenda = self.call("GET", "/portail/agenda", token=self.porteur)
-        self.assertIn(f"meeting-{demande['id']}", [i["key"] for i in agenda])
+        item = next(i for i in agenda if i["key"] == f"meeting-{demande['id']}")
+        self.assertEqual(item["link"], f"/portail/rendez-vous?dossier={self.dossier_a.id}", "Le lien ouvre le bon dossier")
+        porteur_b = self.open_session("porteur.b", app="portail")["access_token"]
+        status, _b = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {"reason": "Essai"}, token=porteur_b)
+        self.assertEqual(status, 404, "Rendez-vous du dossier d'un autre porteur")
+        status, _b = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {}, token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
         _s, annule = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {"reason": "Empêchement"},
                                token=self.porteur)
         self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "porteur", "Empêchement"))
+
+    def test_annulation_sans_motif(self):
+        meeting = self.env["portail.meeting"].sudo().create({
+            "dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": "Visite du site",
+            "slot_1": FUTURE})
+        meeting.confirm(FUTURE, cabinet_note="Apportez les relevés bancaires.")
+        status, annule = self.call("POST", f"/portail/rendez-vous/{meeting.id}/annuler", {}, token=self.porteur)
+        self.assertEqual(status, 200, annule)
+        self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "porteur", None),
+                         "Le message de la confirmation ne passe pas pour le motif de l'annulation")
+
+    def test_liens_vers_le_bon_dossier(self):
+        demain = (fields.Datetime.now() + timedelta(hours=24)).replace(microsecond=0)
+        meeting = self.env["portail.meeting"].sudo().create({
+            "dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": "Point mensuel", "slot_1": demain})
+        meeting.confirm(demain)
+        _s, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        lien = f"/portail/rendez-vous?dossier={self.dossier_a.id}"
+        self.assertIn(lien, [u["link"] for u in tableau["upcoming"] if u["kind"] == "meeting"])
+        self.env["portail.notification"]._cron_reminders()
+        rappel = self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rappel : rendez-vous"))
+        self.assertEqual(rappel.link, lien, "Le rappel ouvre les rendez-vous du dossier concerné")
 
     def test_notifications_du_dossier(self):
         self.env["axispro.action"].create({"dossier_id": self.dossier_a.id, "name": "Fournir le bilan d'ouverture",
@@ -206,12 +269,24 @@ class TestPortail(ApiCase):
         self.assertEqual(lues["unread"], 0)
         self.assertFalse(self.notifications(self.porteur_b), "Rien pour le porteur d'un autre dossier")
 
+    def test_notifications_par_pages(self):
+        self.env["portail.notification"].sudo().create([
+            {"user_id": self.porteur_a.id, "kind": "message", "title": f"Message {i}"} for i in range(5)])
+        total = len(self.notifications(self.porteur_a))
+        _s, page = self.call("GET", "/portail/notifications?limit=2", token=self.porteur)
+        self.assertEqual((len(page["items"]), page["total"]), (2, total), "Le total dit qu'il en reste")
+        _s, fin = self.call("GET", f"/portail/notifications?limit=2&offset={total - 1}", token=self.porteur)
+        self.assertEqual(len(fin["items"]), 1, "Dernière page")
+        status, _b = self.call("GET", "/portail/notifications?limit=abc", token=self.porteur)
+        self.assertEqual(status, 400, "Paramètre illisible : refus, pas d'erreur interne")
+
     def test_avis_et_profil(self):
         status, _b = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 6}, token=self.porteur)
         self.assertEqual(status, 422, "Note de 1 à 5")
         status, avis = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 5, "recommend": 9,
                                                            "comment": "Très bon suivi."}, token=self.porteur)
         self.assertEqual(status, 200, avis)
+        self.assertTrue(avis["consultant_notified"], "Le consultant du dossier lit chaque avis")
         _s, again = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 4}, token=self.porteur)
         self.assertEqual((again["id"], again["score"], again["recommend"]), (avis["id"], 4, None),
                          "Un avis par sujet et par mois : mis à jour")
@@ -229,3 +304,252 @@ class TestPortail(ApiCase):
         self.assertIn("Ville : Kindia", demande.body)
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
+
+    def test_saisies_mal_formees(self):
+        """Une saisie mal formée est refusée (400), jamais une erreur interne (500)."""
+        demande = f"/portail/dossiers/{self.dossier_a.id}/rendez-vous"
+        creneau = [FUTURE.isoformat()]
+        for corps in ({"subject": "Point", "slots": creneau, "duration": "une heure"},
+                      {"subject": "Point", "slots": creneau, "mode": ["office"]},
+                      {"subject": "Point", "slots": FUTURE.isoformat()}):
+            status, body = self.call("POST", demande, corps, token=self.porteur)
+            self.assertEqual(status, 400, body)
+        for corps in ({"dossier_id": self.dossier_a.id, "score": 4, "event_id": "atelier"},
+                      {"dossier_id": self.dossier_a.id, "score": 4, "topic": ["global"]}):
+            status, body = self.call("POST", "/portail/avis", corps, token=self.porteur)
+            self.assertEqual(status, 400, body)
+        status, body = self.call("PATCH", "/portail/profil", {"user": "+224 620 00 00 00"}, token=self.porteur)
+        self.assertEqual(status, 400, body)
+        status, body = self.call("POST", "/portail/notifications/lues", {"ids": 5}, token=self.porteur)
+        self.assertEqual(status, 400, body)
+
+    def test_faq_qui_voit_mes_documents(self):
+        faq = next(a for a in ARTICLES if a["name"] == "Qui voit mes documents ?")
+        self.assertNotIn("ne sont visibles que par vous et par les consultants", faq["body"])
+        self.assertIn("de l'équipe de MB AxisPro Consulting et de sa direction", faq["body"])
+        ancien = ("Vos documents ne sont visibles que par vous et par les consultants de MB AxisPro Consulting chargés "
+                  "de votre dossier. Les autres porteurs n'y ont jamais accès.")
+        Article = self.env["portail.article"]
+        installe = Article.create({"name": "Qui voit mes documents ?", "company_id": self.cabinet.id, "body": ancien,
+                                   "summary": "Vous et l'équipe du cabinet qui suit votre dossier, personne d'autre."})
+        reecrit = Article.create({"name": "Confidentialité", "company_id": self.cabinet.id,
+                                  "body": "Notre engagement : la confidentialité de vos pièces."})
+        chemin = os.path.join(os.path.dirname(os.path.dirname(__file__)), "migrations", "19.0.1.2.0", "post-migrate.py")
+        spec = importlib.util.spec_from_file_location("eguitra_portail_migration_19_0_1_2_0", chemin)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        migration.migrate(self.env.cr, "19.0.1.1.0")
+        self.env.invalidate_all()
+        self.assertEqual(installe.body, faq["body"].split("\n\n")[0], "Texte d'origine corrigé")
+        self.assertEqual(installe.summary, faq["summary"])
+        self.assertEqual(reecrit.body, "Notre engagement : la confidentialité de vos pièces.", "Un texte réécrit ne change pas")
+
+    def test_quota_quotidien_sans_contournement(self):
+        self.env["axispro.message"].sudo().create([
+            {"dossier_id": self.dossier_a.id, "author_id": self.porteur_a.id, "body": f"Message {i}"} for i in range(50)])
+        status, _b = self.post_form(f"/portail/dossiers/{self.dossier_a.id}/fil", self.porteur, {"body": "Encore un"})
+        self.assertEqual(status, 429, "Quota de la messagerie")
+        status, _b = self.call("PATCH", "/portail/profil", {"entreprise": {"city": "Mamou"}}, token=self.porteur)
+        self.assertEqual(status, 429, "La demande de mise à jour de la fiche écrit dans la messagerie : même quota")
+        self.assertFalse(self.dossier_a.message_ids.filtered(lambda m: "Mamou" in m.body))
+        Meeting = self.env["portail.meeting"].sudo()
+        Meeting.create([{"dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": f"Demande {i}",
+                         "slot_1": FUTURE, "state": "cancelled", "cancelled_by": "porteur"} for i in range(10)])
+        status, body = self.call("POST", f"/portail/dossiers/{self.dossier_a.id}/rendez-vous", {
+            "subject": "Encore une demande", "slots": [FUTURE.isoformat()]}, token=self.porteur)
+        self.assertEqual(status, 429, "Demander puis retirer sans fin ne contourne pas la limite")
+        self.assertIn("rendez-vous", body["message"])
+
+    def test_avis_bas_previent_le_consultant(self):
+        status, bas = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 2, "topic": "consultant",
+                                                          "comment": "Difficile à joindre."}, token=self.porteur)
+        self.assertEqual(status, 200, bas)
+        self.assertTrue(bas["consultant_notified"])
+        alerte = self.notifications(self.consultant).filtered(lambda n: n.kind == "feedback")
+        self.assertEqual(len(alerte), 1, "Une notification du consultant par avis")
+        self.assertTrue(alerte.title.startswith("Avis à reprendre"), alerte.title)
+        self.assertIn("Difficile à joindre.", alerte.body)
+        self.assertEqual((alerte.link, alerte.dossier_id), ("/axispro/portail/porteurs", self.dossier_a))
+        status, _b = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 5},
+                               token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
+        self.dossier_a.consultant_id = False
+        status, sans = self.call("POST", "/portail/avis", {"dossier_id": self.dossier_a.id, "score": 1, "topic": "portail"},
+                                 token=self.porteur)
+        self.assertEqual(status, 200, sans)
+        self.assertFalse(sans["consultant_notified"], "Sans consultant prévenu, l'écran ne promet aucun rappel")
+
+    def test_actions_sans_grille_ni_cle_interne(self):
+        Action = self.env["axispro.action"]
+        for source, name in (("gap", "Apport du promoteur"), ("manual", "Visite de la banque"),
+                             ("committee", "Lever la garantie"), ("risk", "Atténuer le risque : change")):
+            Action.create({"dossier_id": self.dossier_a.id, "name": name, "source": source, "assignee": "porteur"})
+        status, actions = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/actions", token=self.porteur)
+        self.assertEqual(status, 200, actions)
+        origines = {a["name"]: (a["origin"], a["origin_label"]) for a in actions}
+        self.assertEqual(origines["Apport du promoteur"], origines["Visite de la banque"],
+                         "Un écart de la grille se lit comme une demande du consultant")
+        self.assertEqual(origines["Lever la garantie"][0], "committee")
+        self.assertEqual(origines["Atténuer le risque : change"][0], "risk")
+        self.assertFalse([a for a in actions if "source" in a], "Jamais la clé interne de l'origine")
+        texte = json.dumps(actions, ensure_ascii=False).lower()
+        for mot in ("gap", "manual", "écart", "grille"):
+            self.assertNotIn(mot, texte)
+
+    def test_decision_dans_les_mots_du_porteur(self):
+        self.dossier_a.write({"decision": "no_go"})
+        _s, espace = self.call("GET", "/portail/espace", token=self.porteur)
+        _s, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        _s, projet = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/projet", token=self.porteur)
+        self.assertEqual((espace["dossiers"][0]["decision_label"], tableau["dossier"]["decision_label"],
+                          projet["dossier"]["decision_label"]), ("Avis défavorable",) * 3)
+        decision = self.notifications(self.porteur_a).filtered(lambda n: n.kind == "decision")
+        self.assertEqual(decision.title, "Décision du comité : Avis défavorable")
+        for vue in (espace, tableau, projet):
+            texte = json.dumps(vue, ensure_ascii=False)
+            for jargon in ("NO-GO", "HOLD", "CONDITIONAL GO"):
+                self.assertNotIn(jargon, texte, "Jamais le vocabulaire interne du comité")
+
+    def test_financements_identiques_accueil_et_projet(self):
+        Funding = self.env["axispro.funding"]
+        Funding.create({"dossier_id": self.dossier_a.id, "funder_id": self.env["res.partner"].create({"name": "Banque"}).id,
+                        "amount_requested": 300_000_000, "amount_granted": 200_000_000, "state": "agreed"})
+        Funding.create({"dossier_id": self.dossier_a.id, "funder_id": self.env["res.partner"].create({"name": "Fonds"}).id,
+                        "amount_requested": 100_000_000, "state": "rejected"})
+        _s, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        _s, projet = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/projet", token=self.porteur)
+        self.assertEqual(tableau["fundings"], projet["fundings_summary"], "Mêmes montants sur l'accueil et dans Mon projet")
+        resume = tableau["fundings"]
+        self.assertEqual((resume["count"], resume["closed"], resume["requested"], resume["granted"]),
+                         (1, 1, 300_000_000, 200_000_000), "La piste refusée n'est ni comptée ni additionnée")
+        self.assertEqual(resume["currency"], self.cabinet.currency_id.name)
+        self.assertEqual({f["currency"] for f in projet["fundings"]}, {self.cabinet.currency_id.name},
+                         "Chaque montant porte la devise de son financement")
+
+    # ─── Cloche du cabinet (AxisPro Suite) ───────────────────────────────
+
+    def test_notifications_du_cabinet(self):
+        """Cloche d'AxisPro Suite : le consultant lit ses notifications (message et pièce du porteur),
+        avec le lien de l'élément concerné, en marque une lue puis toutes ; jamais celles d'un autre
+        compte."""
+        status, body = self.post_form(f"/portail/dossiers/{self.dossier_a.id}/fil", self.porteur,
+                                      {"body": "Voici les statuts."}, ("statuts.pdf", PDF))
+        self.assertEqual(status, 200, body)
+        status, liste = self.call("GET", "/axispro/portail/notifications", token=self.cabinet_token)
+        self.assertEqual(status, 200, liste)
+        kinds = {n["kind"] for n in liste["items"] if not n["read"]}
+        self.assertTrue({"message", "document"} <= kinds, kinds)
+        message = next(n for n in liste["items"] if n["kind"] == "message")
+        self.assertEqual((message["link"], message["dossier"]["id"]),
+                         (f"/axispro/portail/messages?dossier={self.dossier_a.id}", self.dossier_a.id))
+        piece = next(n for n in liste["items"] if n["kind"] == "document")
+        self.assertEqual(piece["link"], f"/axispro/dossiers/{self.dossier_a.id}")
+        autre = self.env["portail.notification"].create({"user_id": self.porteur_a.id, "kind": "message",
+                                                         "title": "Pour le porteur"})
+        status, lues = self.call("POST", "/axispro/portail/notifications/lues", {"ids": [message["id"], autre.id]},
+                                 token=self.cabinet_token)
+        self.assertEqual((status, lues["unread"]), (200, liste["unread"] - 1), lues)
+        self.env.invalidate_all()
+        self.assertFalse(autre.read_at, "La notification d'un autre compte reste non lue")
+        _s, apres = self.call("GET", "/axispro/portail/notifications", token=self.cabinet_token)
+        self.assertTrue(next(n for n in apres["items"] if n["id"] == message["id"])["read"])
+        self.assertFalse(next(n for n in apres["items"] if n["id"] == piece["id"])["read"])
+        status, _b = self.call("POST", "/axispro/portail/notifications/lues", {"ids": "1"}, token=self.cabinet_token)
+        self.assertEqual(status, 400, "Liste d'identifiants attendue")
+        status, lues = self.call("POST", "/axispro/portail/notifications/lues", {}, token=self.cabinet_token)
+        self.assertEqual((status, lues["unread"]), (200, 0), "Sans liste : toutes lues")
+
+    def test_notifications_du_cabinet_reservees_a_ses_profils(self):
+        """Rôles par profil : la cloche d'AxisPro Suite sert l'administration, la direction et le cabinet
+        (profils des deux routes) ; la finance et le porteur sont refusés (403)."""
+        cabinet_only = {"company_id": self.cabinet.id, "company_ids": [(6, 0, self.cabinet.ids)]}
+        self._create_user("daf.cloche", "finance", **cabinet_only)
+        self._create_user("dg.cloche", "direction", **cabinet_only)
+        daf = self.open_session("daf.cloche")["access_token"]
+        for token, profile in ((daf, "finance"), (self.porteur, "porteur")):
+            for method, path in (("GET", "/axispro/portail/notifications"),
+                                 ("POST", "/axispro/portail/notifications/lues")):
+                with self.subTest(profile=profile, path=path):
+                    status, body = self.call(method, path, {} if method == "POST" else None, token=token)
+                    self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+        dg = self.open_session("dg.cloche", app="axispro")["access_token"]
+        status, body = self.call("GET", "/axispro/portail/notifications", token=dg)
+        self.assertEqual((status, body["unread"], body["items"]), (200, 0, []), body)
+        status, body = self.call("POST", "/axispro/portail/notifications/lues", {}, token=dg)
+        self.assertEqual((status, body["unread"]), (200, 0))
+
+    # ─── Repris de l'ancien portail (routes retirées d'eguitra_axispro) ───
+
+    def test_messagerie_du_porteur_bornee_et_fermee_sur_un_dossier_clos(self):
+        """Messages du porteur bornés par jour (429) ; un dossier clos ne reçoit plus de message (422)
+        mais son fil reste lisible."""
+        path = f"/portail/dossiers/{self.dossier_a.id}/fil"
+        with patch.object(porteur_api, "MAX_DAILY_MESSAGES", 1):
+            self.assertEqual(self.post_form(path, self.porteur, {"body": "Bonjour"})[0], 200)
+            self.assertEqual(self.post_form(path, self.porteur, {"body": "Encore"})[0], 429, "Messages bornés par jour")
+        self.dossier_a.state = "closed"
+        status, body = self.post_form(path, self.porteur, {"body": "Une question"})
+        self.assertEqual((status, body["message"]), (422, "Ce dossier est clos."))
+        status, fil = self.call("GET", path, token=self.porteur)
+        self.assertEqual((status, fil["closed"], [m["body"] for m in fil["messages"]]), (200, True, ["Bonjour"]),
+                         "Les échanges restent lisibles")
+
+    def test_pieces_du_porteur_sans_structure_de_la_grille(self):
+        """Les pièces attendues et déposées que lit le porteur ne disent jamais quels critères de la
+        grille elles justifient."""
+        evaluation = self.dossier_a.evaluation_ids[:1]
+        status, body = self.post_form(f"/axispro/evaluations/{evaluation.id}/evidence", self.cabinet_token,
+                                      {"portal_visible": "1"}, ("preuve.pdf", PDF))
+        self.assertEqual(status, 200, body)
+        status, pieces = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/pieces", token=self.porteur)
+        self.assertEqual(status, 200, pieces)
+        self.assertTrue(pieces["attendues"] and pieces["fichiers"], pieces)
+        for row in pieces["attendues"] + pieces["fichiers"]:
+            self.assertFalse({"criteria", "origin", "available"} & set(row), row)
+
+    def test_actions_du_porteur_sans_celles_du_cabinet(self):
+        Action = self.env["axispro.action"]
+        mine = Action.create({"dossier_id": self.dossier_a.id, "name": "Fournir le bilan", "assignee": "porteur"})
+        interne = Action.create({"dossier_id": self.dossier_a.id, "name": "Relire le bilan", "assignee": "cabinet"})
+        autre = Action.create({"dossier_id": self.dossier_b.id, "name": "Action d'un autre dossier",
+                               "assignee": "porteur"})
+        status, rows = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/actions", token=self.porteur)
+        self.assertEqual(status, 200, rows)
+        ids = [r["id"] for r in rows]
+        self.assertIn(mine.id, ids)
+        self.assertNotIn(interne.id, ids, "Les actions du cabinet restent internes")
+        self.assertNotIn(autre.id, ids, "Ni celles d'un autre dossier")
+
+    def test_decision_notifiee_a_chaque_verrou(self):
+        """Audit du noyau (I-P1) : la décision du comité est notifiée au porteur à chaque verrouillage,
+        même identique à la précédente, et un ajournement l'est aussi ; une seule notification par verrou."""
+        Review = self.env["axispro.review"]
+
+        def sceller(decision, **extra):
+            review = Review.create(dict({"dossier_id": self.dossier_a.id, "decision": decision}, **extra))
+            review.action_lock()
+            return self.notifications(self.porteur_a).filtered(lambda n: n.kind == "decision")
+
+        self.assertEqual(len(sceller("go")), 1)
+        self.dossier_a.action_new_revision()
+        decisions = sceller("go")
+        self.assertEqual(len(decisions), 2, "Même décision qu'à la révision précédente : notifiée")
+        self.dossier_a.action_new_revision()
+        decisions = sceller("postponed")
+        self.assertEqual(len(decisions), 3)
+        self.assertEqual(decisions.sorted("id")[-1].title, "Décision du comité : Examen reporté")
+        self.assertEqual(decisions.sorted("id")[-1].link, f"/portail/projet?dossier={self.dossier_a.id}")
+
+    def test_rendez_vous_annule_par_le_cabinet(self):
+        """Annulation par le cabinet sans motif : le message de la confirmation ne passe pas pour le
+        motif ; le porteur est prévenu par un lien qui ouvre les rendez-vous du bon dossier."""
+        meeting = self.env["portail.meeting"].sudo().create({
+            "dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": "Visite du site",
+            "slot_1": FUTURE})
+        meeting.confirm(FUTURE, cabinet_note="Apportez les relevés bancaires.")
+        status, annule = self.call("PATCH", f"/axispro/portail/rendez-vous/{meeting.id}", {"action": "cancel"},
+                                   token=self.cabinet_token)
+        self.assertEqual(status, 200, annule)
+        self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "cabinet", None))
+        avis = self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rendez-vous annulé"))
+        self.assertEqual(avis.link, f"/portail/rendez-vous?dossier={self.dossier_a.id}")

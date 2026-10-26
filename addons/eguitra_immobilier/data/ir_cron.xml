@@ -1,18 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Quittancement automatique : loyers échus facturés et validés chaque nuit, rattrapage compris. -->
-    <record id="cron_rents" model="ir.cron">
-        <field name="name">EGUITRA : quittancement des loyers</field>
-        <field name="model_id" ref="model_eguitra_lease"/>
-        <field name="state">code</field>
-        <field name="code">model._cron_generate_rents()</field>
-        <field name="user_id" ref="base.user_root"/>
-        <field name="interval_number">1</field>
-        <field name="interval_type">days</field>
-        <!-- Chaque nuit à 01 h 00 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
-        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:00:00')"/>
-        <field name="active" eval="True"/>
-    </record>
+    <!-- Quittancement automatique : loyers échus facturés et validés chaque nuit, rattrapage compris, et
+         baux arrivés à leur fin résiliés. En « noupdate » : une tâche suspendue (pendant une reprise, par
+         exemple) ou une heure réglée à la main ne sont pas réactivées ni recalées par une mise à jour du
+         module (pré-migration 19.0.1.2.0 pour une base existante). -->
+    <data noupdate="1">
+        <record id="cron_rents" model="ir.cron">
+            <field name="name">EGUITRA : quittancement des loyers</field>
+            <field name="model_id" ref="model_eguitra_lease"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_generate_rents()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <!-- Chaque nuit à 01 h 00 (heure de Conakry, UTC), fixé à l'installation. -->
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:00:00')"/>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
     <!-- La génération du module contract laisserait des brouillons datés du jour, sans rattrapage :
          le quittancement ci-dessus la remplace (les baux sont les seuls contrats récurrents). Sa fiche
          est en « noupdate » dans le module contract : seul un appel, rejoué à chaque mise à jour, la

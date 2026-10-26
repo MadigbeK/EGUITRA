@@ -25,3 +25,6 @@ __pycache__/
 *.mp4
 *.mov
 *.mkv
+
+# Exports de réversibilité (données du client, sur le serveur seulement)
+exports/

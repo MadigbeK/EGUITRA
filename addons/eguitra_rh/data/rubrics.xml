@@ -64,6 +64,7 @@
     </record>
     <record id="rubric_nature" model="eguitra.rh.rubric">
         <field name="code">NATURE</field><field name="name">Avantage en nature</field>
+        <field name="in_kind" eval="True"/><field name="in_kind_account_code">781</field>
         <field name="account_code">6617</field><field name="sequence">40</field>
     </record>
     <record id="rubric_frais" model="eguitra.rh.rubric">

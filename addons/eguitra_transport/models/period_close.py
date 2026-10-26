@@ -37,7 +37,8 @@ class EguitraPeriodClose(models.Model):
         for rot in rotations:
             vals = rot._invoice_line_vals(income)
             targets[f"rotation:{rot.id}"] = {
-                "amount": company.currency_id.round(rot.revenue),
+                # Montant facturable : prix du transport, taxes refacturées, déduction du manquant.
+                "amount": company.currency_id.round(rot.billed_amount),
                 "partner_id": rot.partner_id.id,
                 "account_id": income.id,
                 "analytic_distribution": vals.get("analytic_distribution"),

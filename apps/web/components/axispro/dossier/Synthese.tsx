@@ -3,13 +3,13 @@
 import { useId, useState, type CSSProperties } from "react";
 import { useSWRConfig } from "swr";
 import { AlertTriangle, Coins, FileCheck2, ListChecks, Pencil, Percent, Scale, ShieldAlert, Target, TrendingUp } from "@/components/icons";
-import { Anneau, Badge, Button, Card, Field, Input, Kpi, Notice, PasswordInput, Select, Tag, Textarea, cx } from "@/components/ui";
+import { Anneau, Badge, Button, Card, ErrorBox, Field, Input, Kpi, Notice, PasswordInput, Select, Tag, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { GATE_DECISION, HYPOTHESES, RECO, RISK_LEVEL, STATUS_LABELS, type CompartmentScore, type CriterionBrief, type Currency, type DomainScore, type DossierDetail, type RiskLevel, type UserRef } from "@/lib/axispro-types";
-import { fmtDate, fmtInt, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtInt, fmtPct, fmtRatio, fmtShort, lireNombre, nombreIllisible, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, montant, note, useCabinet, useRetour } from "./commun";
+import { PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, montant, note, scoreEcrit, useCabinet, useRetour } from "./commun";
 
 /** Priorité d'un domaine en toutes lettres, avec son mot ; rien pour une priorité faible. */
 const PRIORITE_MOT: Partial<Record<NonNullable<DomainScore["priority"]>, string>> = {
@@ -23,10 +23,6 @@ const PRIORITE_MOT: Partial<Record<NonNullable<DomainScore["priority"]>, string>
  * hypothèses de décision. */
 export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const s = d.scoring;
-  const { agir, bandeau } = useRetour();
-  const [portal, setPortal] = useState({ login: "", name: "", password: "" });
-  // Ouvrir l'accès du porteur : profil cabinet seul (POST /axispro/dossiers/<id>/portal-access).
-  const { cabinet } = useCabinet();
   const t = s.thresholds;
   const scores = [
     { titre: "Project Readiness", valeur: s.readiness, aide: "Toute la grille" },
@@ -42,7 +38,6 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
   const provisoire = s.assessed > 0 && s.recommendation === "pending" && s.method_recommendation !== "pending";
   return (
     <div className="space-y-6">
-      {bandeau}
       <Card title="Où en est le dossier">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
           <div>
@@ -134,7 +129,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
                     </span>
                     <span className="flex items-center gap-2">
                       {mot && dom.priority && <Badge tone={tonEtat(mot, PRIORITE_TON[dom.priority])}>Priorité {mot.toLocaleLowerCase("fr")}</Badge>}
-                      <span className="w-8 text-right font-display text-[16px] font-bold tabular text-ink">{score === null ? "–" : Math.round(score)}</span>
+                      <span className="w-8 text-right font-display text-[16px] font-bold tabular text-ink">{scoreEcrit(score)}</span>
                     </span>
                   </div>
                   <div className="relative h-2.5 rounded-full bg-panel-3">
@@ -185,18 +180,104 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         </div>
       </Card>
 
-      <Card title="Accès du porteur au portail">
-        <p className={cx("text-sm text-muted", cabinet && "mb-3")}>{d.portal_users.length ? `Accès ouvert : ${d.portal_users.map((u) => `${u.name} (${u.login})`).join(", ")}.` : "Aucun accès ouvert."}</p>
-        {cabinet && (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-            <Input placeholder="Identifiant" value={portal.login} onChange={(e) => setPortal({ ...portal, login: e.target.value })} />
-            <Input placeholder="Nom du porteur" value={portal.name} onChange={(e) => setPortal({ ...portal, name: e.target.value })} />
-            <PasswordInput autoComplete="new-password" placeholder="Mot de passe provisoire (10+)" value={portal.password} onChange={(e) => setPortal({ ...portal, password: e.target.value })} />
-            <Button variant="primary" disabled={!portal.login || !portal.name || portal.password.length < 10} onClick={() => agir(() => apiSend("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), "Accès au portail ouvert.").then((r) => { if (r !== undefined) { setPortal({ login: "", name: "", password: "" }); onChanged(); } })}>Ouvrir l&apos;accès</Button>
-          </div>
-        )}
-      </Card>
+      <EquipeEtPortail d={d} onChanged={onChanged} />
     </div>
+  );
+}
+
+/**
+ * Responsable du dossier et accès des porteurs au portail. Le responsable en place confie le dossier à
+ * un autre consultant (POST /axispro/dossiers/<id>/lead) ; le cabinet ouvre l'accès d'un porteur (un
+ * compte existant garde son mot de passe, l'écran le dit) et le retire (DELETE …/portal-access/<user>),
+ * chaque fois au journal du dossier. Profil cabinet seul ; la direction et l'administration lisent.
+ */
+function EquipeEtPortail({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
+  const { cabinet } = useCabinet();
+  const { envoyer, enCours, occupe, bandeau, setRetour } = useRetour();
+  const [portal, setPortal] = useState({ login: "", name: "", password: "" });
+  const [responsable, setResponsable] = useState("");
+  const confier = cabinet && d.can_assign;
+  const { data: consultants, error: erreurConsultants, mutate: majConsultants } = useApi<UserRef[]>(confier ? "/axispro/consultants" : null);
+  const motDePasseCourt = portal.password.length > 0 && portal.password.length < 10;
+
+  async function ouvrir() {
+    const r = await envoyer(() => apiSend<DossierDetail & { portal_access?: { login: string; created: boolean } }>("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), undefined, "ouvrir");
+    if (r === undefined) return;
+    setRetour({
+      tone: "ok",
+      text: r.portal_access?.created === false
+        ? `Compte porteur existant « ${r.portal_access.login} » rattaché au dossier : son mot de passe ne change pas.`
+        : "Accès au portail ouvert : le porteur remplacera ce mot de passe provisoire à sa première connexion.",
+    });
+    setPortal({ login: "", name: "", password: "" });
+    onChanged();
+  }
+  async function retirer(u: { id: number; name: string; login: string }) {
+    const oui = await demanderConfirmation(
+      `Retirer à ${u.name} l'accès au dossier ${d.reference} ? Il ne le verra plus sur le portail ; son compte est désactivé s'il ne suit plus aucun dossier.`,
+      { titre: "Retirer l'accès au portail", action: "Retirer l'accès", danger: true },
+    );
+    if (!oui) return;
+    const r = await envoyer(() => apiSend("DELETE", `/axispro/dossiers/${d.id}/portal-access/${u.id}`), `Accès de ${u.name} retiré.`, `retirer-${u.id}`);
+    if (r !== undefined) onChanged();
+  }
+  async function changerResponsable() {
+    const cible = consultants?.find((u) => String(u.id) === responsable);
+    if (!cible) return;
+    const oui = await demanderConfirmation(
+      `Confier le dossier ${d.reference} à ${cible.name} ? Il en devient le responsable : lui seul confiera ensuite les compartiments et le dossier.`,
+      { titre: "Changer de responsable", action: "Confier le dossier" },
+    );
+    if (!oui) return;
+    const r = await envoyer(() => apiSend("POST", `/axispro/dossiers/${d.id}/lead`, { user_id: cible.id }), `Dossier confié à ${cible.name}.`, "responsable");
+    if (r !== undefined) {
+      setResponsable("");
+      onChanged();
+    }
+  }
+
+  return (
+    <Card title="Équipe et accès du porteur au portail">
+      {bandeau && <div className="mb-3">{bandeau}</div>}
+      <div className="mb-4 flex flex-wrap items-end gap-2 text-sm">
+        <span className="text-muted">Responsable du dossier : <b className="text-ink">{d.consultant ?? "non désigné"}</b></span>
+        {confier && (
+          <>
+            {erreurConsultants ? (
+              <ErrorBox error={erreurConsultants} onRetry={() => void majConsultants()} titre="Consultants indisponibles" />
+            ) : (
+              <Select aria-label="Nouveau responsable du dossier" className="w-64" value={responsable} disabled={occupe || !consultants} onChange={(e) => setResponsable(e.target.value)} placeholder="Confier à un autre consultant" options={(consultants ?? []).filter((u) => u.id !== d.consultant_id).map((u) => ({ value: u.id, label: u.name }))} />
+            )}
+            <Button loading={enCours === "responsable"} disabled={occupe || !responsable || d.locked} onClick={() => void changerResponsable()}>Confier le dossier</Button>
+            {d.locked && <span className="text-[12px] text-muted">Figé par la décision verrouillée, comme la fiche.</span>}
+          </>
+        )}
+      </div>
+      {d.portal_users.length === 0 ? (
+        <p className={cx("text-sm text-muted", cabinet && "mb-3")}>Aucun accès ouvert.</p>
+      ) : (
+        <ul className="mb-3 space-y-1.5">
+          {d.portal_users.map((u) => (
+            <li key={u.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-ink">{u.name}</span>
+              <span className="text-muted">({u.login})</span>
+              {cabinet && <Button size="sm" variant="danger" className="ml-auto" loading={enCours === `retirer-${u.id}`} disabled={occupe} onClick={() => void retirer(u)}>Retirer l&apos;accès</Button>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {cabinet && (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+          <Input placeholder="Identifiant" aria-label="Identifiant du porteur" value={portal.login} disabled={occupe} onChange={(e) => setPortal({ ...portal, login: e.target.value })} />
+          <Input placeholder="Nom du porteur" aria-label="Nom du porteur" value={portal.name} disabled={occupe} onChange={(e) => setPortal({ ...portal, name: e.target.value })} />
+          <Field label="" error={motDePasseCourt ? "10 caractères au moins." : undefined}>
+            <PasswordInput autoComplete="new-password" aria-label="Mot de passe provisoire" placeholder="Mot de passe provisoire (nouveau compte)" value={portal.password} disabled={occupe} onChange={(e) => setPortal({ ...portal, password: e.target.value })} />
+          </Field>
+          <Button variant="primary" loading={enCours === "ouvrir"} disabled={occupe || !portal.login.trim() || !portal.name.trim() || motDePasseCourt} onClick={() => void ouvrir()}>Ouvrir l&apos;accès</Button>
+          <p className="text-[12px] text-muted md:col-span-4">Le mot de passe provisoire (10 caractères au moins) n&apos;est exigé que pour un nouveau compte ; un compte porteur existant du même promoteur est rattaché sans changer le sien.</p>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -331,7 +412,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
   const compartiments = d.scoring.compartments ?? [];
   const { cabinet, moi } = useCabinet();
   const affecte = cabinet && d.can_assign;
-  const { data: consultants } = useApi<UserRef[]>(affecte && compartiments.length ? "/axispro/consultants" : null);
+  const { data: consultants, error: erreurConsultants, mutate: majConsultants } = useApi<UserRef[]>(affecte && compartiments.length ? "/axispro/consultants" : null);
   const { mutate } = useSWRConfig();
   const { agir, bandeau } = useRetour();
   const [enCours, setEnCours] = useState<number | null>(null);
@@ -354,6 +435,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
   return (
     <Card title="Suivi par compartiment" actions={<span className="text-[12.5px] font-medium text-muted">{confies} sur {compartiments.length} confié{confies > 1 ? "s" : ""} à un consultant</span>}>
       {bandeau && <div className="mb-3">{bandeau}</div>}
+      {erreurConsultants && <div className="mb-3"><ErrorBox error={erreurConsultants} onRetry={() => void majConsultants()} titre="Liste des consultants indisponible" /></div>}
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {compartiments.map((c, i) => {
           const score = c.assessed ? c.score : null;
@@ -368,11 +450,11 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
                   <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-muted" title={c.domains.join(", ")}>{c.domains.join(" · ") || "Aucun domaine"}</div>
                 </div>
                 <div className="flex-none text-right">
-                  <span className="font-display text-[22px] font-bold leading-none tabular text-ink">{score === null ? "–" : Math.round(score)}</span>
+                  <span className="font-display text-[22px] font-bold leading-none tabular text-ink">{scoreEcrit(score)}</span>
                   <span className="block text-[10.5px] text-muted">/ 100</span>
                 </div>
               </div>
-              <div className="relative mt-2.5 h-2 rounded-full bg-panel-3" role="img" aria-label={score === null ? `${c.code} : aucun critère évalué` : `${c.code} : score ${Math.round(score)} sur 100`}>
+              <div className="relative mt-2.5 h-2 rounded-full bg-panel-3" role="img" aria-label={score === null ? `${c.code} : aucun critère évalué` : `${c.code} : score ${scoreEcrit(score)} sur 100`}>
                 <div className="n-pousser-x h-full rounded-full" style={{ width: `${Math.max(score ?? 0, 1)}%`, background: couleurScore(score), "--i": i } as CSSProperties} />
                 {[30, 50, 65].map((x) => <span key={x} aria-hidden className="absolute -top-0.5 h-3 w-px bg-line-strong" style={{ left: `${x}%` }} />)}
               </div>
@@ -452,7 +534,7 @@ function Fiche({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   // Modifier la fiche : profil cabinet seul (PATCH /axispro/dossiers/<id>).
   const { cabinet } = useCabinet();
   const { data: currencies } = useApi<Currency[]>(edit ? "/axispro/currencies" : null);
-  const { agir, bandeau } = useRetour();
+  const { envoyer, enCours, occupe, bandeau } = useRetour();
   const init = () => ({
     name: d.name, sector: d.sector ?? "", location: d.location ?? "", capacity: d.capacity ?? "",
     investment: String(d.investment || ""), financing_need: String(d.financing_need || ""), currency_id: String(d.currency.id),
@@ -462,19 +544,25 @@ function Fiche({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
     ...Object.fromEntries(HYPOTHESES.map((h) => [h.key, d.decision_inputs[h.key] ?? ""])),
   }) as Record<string, string>;
   const [f, setF] = useState<Record<string, string>>(init);
-  const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+  // Champ vide : 0 (non renseigné) ; saisie illisible (« 2.500.000 », « 1,3x ») : signalée sous le champ, enregistrement bloqué.
+  const num = (v: string) => (v.trim() ? lireNombre(v) : 0) ?? 0;
+  const NOMBRES = ["investment", "financing_need", "dscr_manual", "irr_manual"];
+  const illisible = NOMBRES.some((cle) => nombreIllisible(f[cle]));
   async function enregistrer() {
-    const r = await agir(() => apiSend("PATCH", `/axispro/dossiers/${d.id}`, {
+    if (illisible) return;
+    const r = await envoyer(() => apiSend("PATCH", `/axispro/dossiers/${d.id}`, {
       ...f, investment: num(f.investment ?? ""), financing_need: num(f.financing_need ?? ""), dscr_manual: num(f.dscr_manual ?? ""),
       irr_manual: num(f.irr_manual ?? ""), currency_id: Number(f.currency_id), date_start: f.date_start || null, date_evaluation: f.date_evaluation || null,
-    }), "Fiche projet enregistrée.");
+    }), "Fiche projet enregistrée.", "fiche");
     if (r !== undefined) {
       setEdit(false);
       onChanged();
     }
   }
   const champ = (cle: string, label: string, props: Record<string, unknown> = {}) => (
-    <Field label={label}><Input value={f[cle] ?? ""} onChange={(e) => setF({ ...f, [cle]: e.target.value })} {...props} /></Field>
+    <Field label={label} error={NOMBRES.includes(cle) && nombreIllisible(f[cle]) ? AIDE_NOMBRE : undefined}>
+      <Input value={f[cle] ?? ""} disabled={occupe} onChange={(e) => setF({ ...f, [cle]: e.target.value })} {...props} />
+    </Field>
   );
   return (
     <Card
@@ -488,8 +576,8 @@ function Fiche({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
             ["Secteur", d.sector ?? "–"], ["Localisation", d.location ?? "–"], ["Capacité", d.capacity ?? "–"],
             ["Investissement prévu", montant(d, d.investment)], ["Besoin de financement", montant(d, d.financing_need)],
             ["Date d'évaluation", fmtDate(d.date_evaluation)], ["Démarrage prévu", fmtDate(d.date_start)],
-            ["DSCR déclaré", d.decision_inputs.dscr_manual === null ? "–" : arrondi(d.decision_inputs.dscr_manual, 2)],
-            ["TRI déclaré", d.decision_inputs.irr_manual === null ? "–" : `${arrondi(d.decision_inputs.irr_manual, 1)} %`],
+            ["DSCR déclaré", d.decision_inputs.dscr_manual === null ? "–" : fmtRatio(d.decision_inputs.dscr_manual)],
+            ["TRI déclaré", d.decision_inputs.irr_manual === null ? "–" : fmtPct(d.decision_inputs.irr_manual)],
             ...HYPOTHESES.map((h) => [h.label, d.decision_inputs[h.key] === "yes" ? "Oui" : d.decision_inputs[h.key] === "no" ? "Non" : "Non renseigné"]),
           ].map(([k, v]) => (
             <div key={k} className="flex justify-between gap-3 border-b border-line/70 py-1">
@@ -520,8 +608,8 @@ function Fiche({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
           <Field label="Description" className="md:col-span-3"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
           <Field label="Commentaires et hypothèses de décision" className="md:col-span-3"><Textarea value={f.hypotheses} onChange={(e) => setF({ ...f, hypotheses: e.target.value })} /></Field>
           <div className="flex gap-2 md:col-span-3">
-            <Button variant="primary" onClick={enregistrer}>Enregistrer</Button>
-            <Button onClick={() => setEdit(false)}>Annuler</Button>
+            <Button variant="primary" loading={enCours === "fiche"} disabled={occupe || illisible} onClick={() => void enregistrer()}>Enregistrer</Button>
+            <Button disabled={occupe} onClick={() => setEdit(false)}>Annuler</Button>
           </div>
         </div>
       )}

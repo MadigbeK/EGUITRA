@@ -1,11 +1,14 @@
 // Conversion Markdown -> Word aux couleurs des documents du projet (dossier de conception, guides).
 // Markdown pris en charge : titre (#), sections (##, ###), paragraphes, listes à puces et numérotées
 // (sur deux niveaux), tableaux, gras (**…**), code (`…`) et liens ([texte](cible), rendus en texte).
+// Largeur d'une colonne : calculée sur la longueur des textes, ou imposée par « {n} » à la fin de son
+// en-tête (poids relatif, de 4 à 60 ; utile aux tableaux à remplir, dont les cellules sont vides).
+// Saut de page : une ligne « <!-- saut de page --> » (invisible à la lecture du Markdown).
 const fs = require('fs');
 const path = require('path');
 const {
-  AlignmentType, BorderStyle, Document, Footer, ImageRun, Packer, PageNumber, Paragraph, ShadingType, Table, TableCell,
-  TableRow, TextRun, VerticalAlign, WidthType,
+  AlignmentType, BorderStyle, Document, Footer, ImageRun, Packer, PageBreak, PageNumber, Paragraph, ShadingType, Table,
+  TableCell, TableRow, TextRun, VerticalAlign, WidthType,
 } = require('docx');
 
 const NAVY = '1C1E6B', TEAL = '1A9E9E', GREY = 'F2F4F7', FONT = 'Calibri', W = 9638;
@@ -41,10 +44,13 @@ const item = (text, marker, level) => new Paragraph({
 
 const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: 'C9CFD8' };
 const borders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
-function table(head, rows) {
-  const n = head.length;
-  // Largeurs proportionnelles à la longueur moyenne du texte de chaque colonne (bornées).
-  const weight = head.map((h, i) => Math.min(60, Math.max(8, [h, ...rows.map((r) => r[i] || '')].reduce((a, t) => a + t.length, 0) / (rows.length + 1))));
+function table(rawHead, rows) {
+  const n = rawHead.length;
+  const hints = rawHead.map((h) => h.match(/\s*\{(\d+)\}$/));
+  const head = rawHead.map((h, i) => (hints[i] ? h.slice(0, hints[i].index) : h));
+  // Largeurs proportionnelles à la longueur moyenne du texte de chaque colonne (bornées), sauf largeur imposée.
+  const weight = head.map((h, i) => (hints[i] ? Math.min(60, Math.max(4, Number(hints[i][1])))
+    : Math.min(60, Math.max(8, [h, ...rows.map((r) => r[i] || '')].reduce((a, t) => a + t.length, 0) / (rows.length + 1)))));
   const total = weight.reduce((a, b) => a + b, 0);
   const widths = weight.map((w) => Math.round((w / total) * W));
   const cell = (t, i, o = {}) => new TableCell({
@@ -72,7 +78,10 @@ function blocks(markdown) {
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { i += 1; continue; }
-    if (line.startsWith('# ')) {
+    if (line.trim() === '<!-- saut de page -->') {
+      out.push(new Paragraph({ children: [new PageBreak()] }));
+      i += 1;
+    } else if (line.startsWith('# ')) {
       out.push(new Paragraph({ children: runs(line.slice(2), { size: 36, bold: true, color: NAVY }), spacing: { after: 160 } }));
       i += 1;
     } else if (line.startsWith('### ')) {

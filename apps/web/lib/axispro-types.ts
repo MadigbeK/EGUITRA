@@ -318,7 +318,7 @@ export interface JournalEntry {
   id: number;
   date: string;
   user: string;
-  kind: "status" | "document" | "gate" | "decision" | "revision" | "import" | "assignment";
+  kind: "status" | "document" | "gate" | "decision" | "revision" | "import" | "assignment" | "portal" | "state";
   kind_label: string;
   criterion: string | null;
   before: string | null;
@@ -369,7 +369,37 @@ export interface DocFile {
   criteria: Array<{ id: number; code: string }>;
 }
 
-export interface Message { id: number; author: string; from_promoter: boolean; body: string; date: string; internal: boolean }
+export interface Message {
+  id: number;
+  author: string;
+  from_promoter: boolean;
+  body: string;
+  date: string;
+  internal: boolean;
+  /** Pièces jointes au message (elles rejoignent la data room du dossier). */
+  attachments: Array<{ id: number; name: string }>;
+}
+
+/** Saisie de temps (GET /axispro/timesheets, liste bornée : 300 par défaut). */
+export interface Timesheet {
+  id: number;
+  dossier: { id: number; reference: string; name: string };
+  user: string;
+  date: string;
+  hours: number;
+  description: string;
+  billable: boolean;
+  invoice: string | null;
+}
+
+/** Totaux de toutes les saisies du filtre (GET /axispro/timesheets/summary), à afficher au lieu d'additionner la liste bornée. */
+export interface TimesheetSummary {
+  count: number;
+  hours: number;
+  /** Heures facturables encore sans facture d'honoraires. */
+  unbilled: number;
+  dossiers: Array<{ id: number; reference: string; name: string; count: number; hours: number; unbilled: number }>;
+}
 
 export const DOC_STATE: Record<string, { label: string; tone: "ok" | "warn" | "danger" | "neutral" | "accent" }> = {
   missing: { label: "Manquante", tone: "danger" },
@@ -666,4 +696,63 @@ export interface Suggestion {
   higher: boolean;
   threshold: number;
   partial: number | null;
+}
+
+// ─── Modules du cabinet : devises, actions, pièces standard (lot 3 de l'audit) ───
+
+/** Modèle financier d'un dossier : devise de ses montants et verrou de la décision du comité. */
+export type PlanDossier = PlanPayload & {
+  dossier: PlanPayload["dossier"] & { currency?: string | null; locked?: boolean };
+  options: PlanPayload["options"] & { indicators: Record<string, IndicatorInfo & { money?: boolean }> };
+};
+
+/** Action du plan, telle que la liste du cabinet la reçoit : intitulé du critère d'une action tirée d'un
+ * écart (son titre, lui, est neutre pour le porteur). Absent des réponses antérieures. */
+export type ActionCabinet = Action & { criterion_name?: string | null };
+
+/** Totaux d'un montant par devise (code : « GNF », « USD ») : jamais une devise additionnée à une autre. */
+export type MontantsParDevise = Record<string, number>;
+
+/** Démarche de financement : ses montants sont dans la devise de son dossier (`currency`). */
+export type FinancementDevise = Funding & { currency?: string | null };
+
+/** Totaux d'une devise du portefeuille. */
+export interface TotauxDevise {
+  currency: string;
+  need: number;
+  investment: number;
+  requested: number;
+  granted: number;
+}
+
+/**
+ * Portefeuille du cabinet (GET /axispro/portfolio) : les montants simples ne portent que sur la devise de
+ * la société (`currency`) ; chaque devise a ses totaux (`by_currency`, `need_by_currency`…).
+ */
+export type PortefeuilleDevises = Omit<Portfolio, "funnel" | "sectors" | "projects" | "financing" | "follow_ups" | "fees"> & {
+  currency?: string;
+  funnel: Array<Portfolio["funnel"][number] & { need_by_currency?: MontantsParDevise }>;
+  sectors: Array<Portfolio["sectors"][number] & { investment_by_currency?: MontantsParDevise }>;
+  projects: Array<Portfolio["projects"][number] & { currency?: string | null }>;
+  financing: Omit<Portfolio["financing"], "pipeline"> & {
+    by_currency?: TotauxDevise[];
+    pipeline: Array<Portfolio["financing"]["pipeline"][number] & { by_currency?: Array<{ currency: string; count: number; requested: number; granted: number }> }>;
+  };
+  follow_ups: FinancementDevise[];
+  fees: Portfolio["fees"] & { currency?: string };
+};
+
+/** Pièce standard d'une version de la grille (GET /axispro/policies/<id>, `documents`). */
+export interface PieceStandard {
+  id: number;
+  code: string;
+  name: string;
+  category: string | null;
+  gate_id: number | null;
+  required: boolean;
+  guidance: string | null;
+  /** Codes des critères justifiés par la pièce. */
+  criteria: string[];
+  /** Identifiants de ces critères (absents des réponses antérieures). */
+  criterion_ids?: number[];
 }

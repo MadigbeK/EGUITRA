@@ -168,6 +168,14 @@ class TestFormules(TransactionCase):
         r = run([crit(1)], {1: "not_met"}, context={"investment": 1_000_000, "capex_criterion_id": 1})
         self.assertIn("investissement", r["anomalies"][0])
 
+    def test_motif_jamais_arrondi_au_dessus_du_seuil(self):
+        """Audit du noyau (M8) : un score de 64,98 s'écrit 64,9 dans le motif d'un HOLD sous le seuil de
+        65, jamais 65,0 ; un DSCR de 1,296 s'écrit 1,29."""
+        r = run([crit(1, 6498), crit(2, 3502)], {1: "met", 2: "not_met"}, gates=[gate(0, "prequalification", hold=65)])
+        self.assertEqual(r["gates"][0]["decision"], "hold")
+        self.assertIn("64,9/100, seuil de passage 65", r["gates"][0]["motifs"][0])
+        self.assertEqual((scoring.fscore(1.296, 2), scoring.fscore(25.0), scoring.fscore(None)), ("1,29", "25,0", "–"))
+
 
 def extended_grid():
     """Grille au format MB AxisPro Consulting (colonne « exigence ») : huit gates, deux domaines, cinq critères."""
@@ -365,7 +373,7 @@ class TestMethodeDansLaPlateforme(ApiCase):
             self.assertEqual(status, 200, body)
         status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
                                  {"decision": "hold", "lock": True}, token=self.token)
-        self.assertEqual(status, 400, "HOLD verrouillé sans motif refusé")
+        self.assertEqual((status, body["fields"]), (422, ["motive"]), "HOLD verrouillé sans motif refusé")
         status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews",
                                    {"decision": "hold", "instance": "Comité d'investissement", "lock": True,
                                     "motive": "Titre foncier à produire", "members": "DG, DGA"}, token=self.token)
@@ -463,7 +471,8 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertIn("SOMMAIRE.csv", archive.namelist())
         self.assertTrue(any(n.startswith("A. Foncier/D001_") for n in archive.namelist()), archive.namelist())
         # En test, le noyau rend les rapports en HTML (sans wkhtmltopdf) : le gabarit est exercé.
-        for path, text in (("report.pdf", "Recommandation"), ("pieces.pdf", "Pièces attendues")):
+        policy = f"{self.dossier.policy_id.name}, version {self.dossier.policy_id.version}"
+        for path, text in (("report.pdf", "Recommandation"), ("pieces.pdf", "Pièces attendues"), ("pieces.pdf", policy)):
             response = self.url_open(f"/api/v1/axispro/dossiers/{self.dossier.id}/{path}", headers=headers, timeout=60)
             self.assertEqual(response.status_code, 200, response.text[:500])
             self.assertIn(text, response.content.decode(errors="ignore"), path)
@@ -502,20 +511,8 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertEqual(len(rows), 2, "En-tête et une pièce, sans ligne ajoutée par le nom")
         self.assertTrue(rows[1][1].startswith("'="), "Formule neutralisée")
 
-    def test_portail_sans_structure_de_la_grille(self):
-        self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf")
-        porteur = self._create_user("porteur.grille", "porteur", company_id=self.cabinet.id,
-                                    company_ids=[(6, 0, self.cabinet.ids)])
-        self.dossier.portal_user_ids = [(4, porteur.id)]
-        ptoken = self.open_session("porteur.grille", app="portail")["access_token"]
-        status, view = self.call("GET", f"/portail/dossiers/{self.dossier.id}", token=ptoken)
-        self.assertEqual(status, 200, view)
-        self.assertTrue(view["documents"])
-        for doc in view["documents"]:
-            self.assertFalse({"criteria", "origin", "available"} & set(doc), doc)
-        status, files = self.call("GET", f"/portail/dossiers/{self.dossier.id}/documents", token=ptoken)
-        self.assertEqual(status, 200, files)
-        self.assertTrue(all("criteria" not in f for f in files), files)
+    # Portail sans la structure de la grille : routes du portail d'eguitra_portail (test_portail), les
+    # anciennes vues du dossier et de ses pièces étant retirées.
 
     def test_grille_aux_valeurs_illisibles_refusee(self):
         head = "type;code;libelle;domaine;gate;poids;critique;eliminatoire;preuve;aide\n"
@@ -700,3 +697,177 @@ class TestMethodeDansLaPlateforme(ApiCase):
         status, review = self.call("POST", path, {"decision": "go", "lock": True}, token=self.token)
         self.assertEqual((status, review["state"], review["revision"]), (200, "locked", 1),
                          "Le créateur verrouille la révision 1 à laquelle un autre consultant a contribué")
+
+    # ─── Contrat entre les écrans et le noyau (audit du 25 octobre) ───────
+
+    def test_revue_en_brouillon_motivee_et_modifiable(self):
+        """Un HOLD ou un NO-GO se motive dès le brouillon (422, rien n'est créé) : sans motif, il ne
+        pourrait jamais être verrouillé. Une revue en brouillon se corrige (décision, motif, membres,
+        compte rendu) puis se verrouille ; verrouillée, elle ne se modifie plus."""
+        path = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        for decision in ("hold", "no_go"):
+            status, body = self.call("POST", path, {"decision": decision, "motive": "   "}, token=self.token)
+            self.assertEqual((status, body.get("error"), body.get("fields")), (422, "business_rule", ["motive"]),
+                             f"{decision} sans motif refusé dès le brouillon")
+        self.env.invalidate_all()
+        self.assertFalse(self.dossier.review_ids, "Rien n'est créé")
+        status, review = self.call("POST", path, {"decision": "go", "members": "DG"}, token=self.token)
+        self.assertEqual((status, review["state"]), (200, "draft"), review)
+        patch = f"/axispro/reviews/{review['id']}"
+        status, body = self.call("PATCH", patch, {"decision": "hold"}, token=self.token)
+        self.assertEqual((status, body.get("fields")), (422, ["motive"]), "Passage à HOLD sans motif refusé")
+        status, body = self.call("PATCH", patch, {"decision": "hold", "motive": "Titre foncier à produire",
+                                                  "members": "DG, DGA, consultant", "minutes": "Séance du 26/10."},
+                                 token=self.token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["decision"], body["motive"], body["members"], body["minutes"], body["state"]),
+                         ("hold", "Titre foncier à produire", "DG, DGA, consultant", "Séance du 26/10.", "draft"))
+        status, body = self.call("PATCH", patch, {"motive": ""}, token=self.token)
+        self.assertEqual(status, 422, "Le motif d'un HOLD ne se retire pas")
+        # Quatre yeux inchangés : le relecteur contribue à la révision, l'analyste verrouille le brouillon corrigé.
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        status, locked = self.call("POST", f"{patch}/lock", token=self.token)
+        self.assertEqual((status, locked["state"], locked["motive"]), (200, "locked", "Titre foncier à produire"), locked)
+        status, body = self.call("PATCH", patch, {"minutes": "Ajout après coup"}, token=self.token)
+        self.assertEqual((status, body.get("error")), (422, "business_rule"), "Une décision verrouillée ne se modifie plus")
+        self.env.invalidate_all()
+        record = self.env["axispro.review"].browse(review["id"])
+        self.assertEqual(record.minutes, "Séance du 26/10.")
+        self.assertTrue(record.verify()["intact"])
+
+    def test_brouillon_sans_motif_complete_puis_verrouille(self):
+        """Un HOLD enregistré en brouillon sans motif avant la règle ne se verrouille pas tel quel (422) ;
+        complété par la correction du brouillon, il se verrouille."""
+        status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews", {"decision": "go"},
+                                   token=self.token)
+        self.assertEqual(status, 200, review)
+        self.env.cr.execute("UPDATE axispro_review SET decision = 'hold', motive = NULL WHERE id = %s", (review["id"],))
+        self.env.invalidate_all()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        lock = f"/axispro/reviews/{review['id']}/lock"
+        status, body = self.call("POST", lock, token=self.token)
+        self.assertEqual((status, body.get("fields")), (422, ["motive"]), body)
+        self.assertIn("complétez le brouillon", body["message"])
+        status, body = self.call("PATCH", f"/axispro/reviews/{review['id']}", {"motive": "Garanties à lever"},
+                                 token=self.token)
+        self.assertEqual((status, body["decision"]), (200, "hold"), body)
+        status, body = self.call("POST", lock, token=self.token)
+        self.assertEqual((status, body["state"]), (200, "locked"), body)
+
+    def test_revue_corrigee_et_verrouillee_par_le_seul_cabinet(self):
+        """Rôles par profil : la direction et l'administration consultent les comités ; seul le cabinet
+        corrige ou verrouille une revue et fait passer un gate (403 pour les autres profils, rien ne
+        change)."""
+        status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews", {"decision": "go"},
+                                   token=self.token)
+        self.assertEqual(status, 200, review)
+        cabinet = {"company_id": self.cabinet.id, "company_ids": [(6, 0, self.cabinet.ids)]}
+        for login, profile, app in (("dg.comite", "direction", "axispro"), ("admin.comite", "admin", "axispro"),
+                                    ("daf.comite", "finance", "finance"), ("porteur.comite", "porteur", "portail")):
+            self._create_user(login, profile, **cabinet)
+            token = self.open_session(login, app=app)["access_token"]
+            with self.subTest(profile=profile):
+                status, body = self.call("PATCH", f"/axispro/reviews/{review['id']}",
+                                         {"decision": "no_go", "motive": "Refus du comité"}, token=token)
+                self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+                status, body = self.call("POST", f"/axispro/reviews/{review['id']}/lock", token=token)
+                self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+                status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/advance-gate",
+                                         {"from_gate": "G0"}, token=token)
+                self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+        self.env.invalidate_all()
+        record = self.env["axispro.review"].browse(review["id"])
+        self.assertEqual((record.decision, record.state), ("go", "draft"))
+        self.assertEqual(self.dossier.current_gate_id.code, "G0")
+
+    def test_knock_out_d_un_gate_non_atteint_pas_encore_actif(self):
+        """Audit du noyau (I-X1) : un knock-out encore à évaluer d'un gate que le dossier n'a pas atteint
+        ne donne ni NO-GO ni classe CRITICAL ; il devient actif à l'arrivée à son gate."""
+        for code in ("C001", "C003", "C005"):
+            self.evals[code].status = "met"
+        self.assertEqual(self.dossier.current_gate_id.code, "G0")
+        score = self.dossier.scoring()
+        self.assertEqual((score["knockouts"], score["knockouts_pending"]), ([], 1), "Foncier (G1) encore à évaluer")
+        self.assertNotEqual(score["method_recommendation"], "no_go")
+        self.assertNotEqual(score["classification"], "CRITICAL / NO-GO")
+        self.assertEqual(score["recommendation"], score["method_recommendation"], "Aucun critère des gates atteints à évaluer")
+        self.dossier.action_advance_gate()
+        score = self.dossier.scoring()
+        self.assertEqual([k["code"] for k in score["knockouts"]], ["C002"], "Gate du foncier atteint : knock-out actif")
+        self.assertEqual((score["method_recommendation"], score["recommendation"]), ("no_go", "pending"))
+        self.evals["C002"].status = "met"
+        self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf")
+        self.env.invalidate_all()
+        self.assertEqual(self.dossier.scoring()["knockouts"], [], "Knock-out levé par sa preuve")
+
+    def test_prochain_gate_a_partir_du_gate_courant(self):
+        """Audit du noyau (I-X2) : un dossier passé en force au-delà d'un gate ne voit plus ce gate comme
+        son prochain gate."""
+        self.dossier.action_advance_gate()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}", {"status": "not_met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/advance-gate",
+                                 {"force_reason": "Titre foncier attendu du ministère, décision du comité du 12/10",
+                                  "from_gate": "G1"}, token=self.token)
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), body)
+        self.env.invalidate_all()
+        score = self.dossier.scoring()
+        self.assertEqual(next(g for g in score["gates"] if g["code"] == "G1")["decision"], "no_go",
+                         "Le gate franchi en force reste NO-GO")
+        self.assertGreaterEqual(score["next_gate"]["index"], 2, score["next_gate"])
+        self.assertEqual(body["next_gate"]["code"], score["next_gate"]["code"], "Même prochain gate dans la liste")
+
+    def test_piece_recue_apres_un_verrou_figee_par_la_decision_suivante(self):
+        """Audit du noyau (C13) : une pièce reçue après le verrou de la révision 1 entre dans la
+        révision 2 ; une fois la décision de la révision 2 scellée sur elle, ni son état ni sa
+        validité ne changent plus (422), et l'empreinte reste intacte."""
+        relecteur = self._relecteur()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
+                                 token=relecteur)
+        self.assertEqual(status, 200, body)
+        path = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        status, first = self.call("POST", path, {"decision": "hold", "motive": "Titre foncier à produire", "lock": True},
+                                  token=self.token)
+        self.assertEqual((status, first["state"]), (200, "locked"), first)
+        piece = self._upload(f"/axispro/dossiers/{self.dossier.id}/documents", "titre_foncier.pdf").json()
+        self.assertTrue(piece["after_lock"], "Reçue après la décision verrouillée de la révision 1")
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=relecteur)
+        self.assertEqual((status, body["revision"]), (200, 2), body)
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}",
+                                 {"status": "met", "document_ids": [piece["id"]]}, token=relecteur)
+        self.assertEqual(status, 200, body)
+        status, second = self.call("POST", path, {"decision": "go", "lock": True}, token=self.token)
+        self.assertEqual((status, second["state"], second["revision"]), (200, "locked", 2), second)
+        self.env.invalidate_all()
+        self.assertFalse(self.env["axispro.document"].browse(piece["id"]).after_lock,
+                         "La pièce fait partie de la révision 2")
+        for change in ({"state": "rejected"}, {"validity_date": "2025-01-31"}):
+            status, body = self.call("PATCH", f"/axispro/documents/{piece['id']}", change, token=self.token)
+            self.assertEqual(status, 422, f"{change} : pièce figée par la décision de la révision 2")
+        self.env.invalidate_all()
+        check = self.env["axispro.review"].browse(second["id"]).verify()
+        self.assertEqual((check["intact"], check["unchanged"]), (True, True), check)
+
+    def test_double_clic_ne_franchit_qu_un_gate(self):
+        """Audit de l'application web (C4) : l'écran envoie le gate de départ ; s'il n'est plus le gate
+        courant (second clic, autre onglet), le noyau refuse (409) sans rien franchir ni journaliser."""
+        self.dossier.action_advance_gate()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}", {"status": "not_met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        path = f"/axispro/dossiers/{self.dossier.id}/advance-gate"
+        payload = {"force_reason": "Titre foncier attendu du ministère, décision du comité du 12/10", "from_gate": "G1"}
+        status, body = self.call("POST", path, payload, token=self.token)
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), body)
+        status, body = self.call("POST", path, payload, token=self.token)
+        self.assertEqual((status, body.get("error")), (409, "conflict"), "Second clic : le dossier n'est plus au gate G1")
+        self.assertIn("gate G2", body["message"])
+        self.env.invalidate_all()
+        self.assertEqual(self.dossier.current_gate_id.code, "G2", "Un seul gate franchi")
+        forced = self.dossier.journal_ids.filtered(lambda j: j.kind == "gate" and "forcé" in (j.note or ""))
+        self.assertEqual(len(forced), 1, "Un seul passage forcé au journal")

@@ -4,13 +4,13 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, BadgeCheck, Calendar, CheckCheck, Download, Flag, HandCoins, Inbox, Info, Pencil, Plus, Send, Trash2, type Icon } from "@/components/icons";
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import {
-  ChoixPublic, Coche, EditeurTexte, LectureSeule, PUBLIC_VIDE, RESERVE_CABINET, Recherche, correspond, etatPublication, messageErreur, nomFichier, pluriel, publicIncomplet,
-  resumePublic, telechargerCsv, useEcriture, useRetour, type PublicSaisi,
+  ChoixPublic, Coche, EditeurTexte, LectureSeule, PUBLIC_VIDE, Recherche, correspond, etatPublication, nomFichier, pluriel, publicIncomplet, resumePublic, saisieModifiee,
+  telechargerCsv, useEcriture, useEnvoiFenetre, useRetour, type PublicSaisi,
 } from "@/components/portail/cabinet/outils";
 import { quand } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, IconTile, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Tag, cx, demanderConfirmation, type Teinte } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, IconTile, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Tag, cx, demanderConfirmation, type Teinte } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtInt, fmtPct } from "@/lib/format";
 import type { AnnouncementAdmin, AnnouncementKind, Cibles, PublicationState } from "@/lib/portail-types";
 
 const NATURE: Record<AnnouncementKind, { icon: Icon; teinte: Teinte }> = {
@@ -22,6 +22,7 @@ const NATURE: Record<AnnouncementKind, { icon: Icon; teinte: Teinte }> = {
 };
 
 type Onglet = "all" | PublicationState;
+type ActionCommunication = "publier" | "archiver" | "supprimer";
 
 function aujourdhui() {
   const d = new Date();
@@ -35,18 +36,19 @@ function expiree(a: AnnouncementAdmin) {
 export default function CommunicationsPage() {
   const ecriture = useEcriture();
   const { data, error, mutate } = useApi<AnnouncementAdmin[]>("/axispro/portail/annonces");
-  const { data: cibles, error: erreurCibles } = useApi<Cibles>("/axispro/portail/cibles");
+  const { data: cibles, error: erreurCibles, mutate: majCibles } = useApi<Cibles>("/axispro/portail/cibles");
   const [onglet, setOnglet] = useState<Onglet>("all");
   const [q, setQ] = useState("");
   const [edition, setEdition] = useState<AnnouncementAdmin | "nouvelle" | null>(null);
   const [lectures, setLectures] = useState<AnnouncementAdmin | null>(null);
-  const { agir, bandeau } = useRetour();
+  const { agir, envoyer, enCours, occupe, bandeau } = useRetour();
 
   const toutes = data ?? [];
   const compte = (s: PublicationState) => toutes.filter((a) => a.state === s).length;
   const rows = toutes.filter((a) => (onglet === "all" || a.state === onglet) && correspond(q, a.title, a.excerpt, a.kind_label, a.author));
 
-  async function etat(a: AnnouncementAdmin, action: "publier" | "archiver" | "supprimer") {
+  async function etat(a: AnnouncementAdmin, action: ActionCommunication) {
+    if (occupe) return;
     const questions = {
       publier: `Publier « ${a.title} » ? Les porteurs visés (${resumePublic(a).toLowerCase()}) seront prévenus sur leur portail.`,
       archiver: `Archiver « ${a.title} » ? Elle disparaîtra du portail des porteurs.`,
@@ -54,7 +56,7 @@ export default function CommunicationsPage() {
     };
     if (!(await demanderConfirmation(questions[action], { action: { publier: "Publier", archiver: "Archiver", supprimer: "Supprimer" }[action], danger: action === "supprimer" }))) return;
     const ok = { publier: "Communication publiée : les porteurs visés sont prévenus.", archiver: "Communication archivée.", supprimer: "Brouillon supprimé." };
-    const r = await agir(() => apiSend("POST", `/axispro/portail/annonces/${a.id}/${action}`), ok[action]);
+    const r = await envoyer(() => apiSend("POST", `/axispro/portail/annonces/${a.id}/${action}`), ok[action], `${a.id}:${action}`);
     if (r !== undefined) await mutate();
   }
 
@@ -64,17 +66,19 @@ export default function CommunicationsPage() {
         title="Communications aux porteurs"
         subtitle="Informations, opportunités de financement et alertes publiées sur le portail. Chaque communication vise tous les porteurs ou un public choisi ; l'accusé de lecture se demande au besoin."
         actions={
-          <Button variant="primary" disabled={!ecriture || !cibles} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setEdition("nouvelle")}>
-            <Plus className="h-4 w-4" /> Nouvelle communication
-          </Button>
+          ecriture ? (
+            <Button variant="primary" disabled={!cibles} onClick={() => setEdition("nouvelle")}>
+              <Plus className="h-4 w-4" /> Nouvelle communication
+            </Button>
+          ) : undefined
         }
       />
       <OngletsPortail />
       <div className="space-y-4">
         <LectureSeule ecriture={ecriture} />
         {bandeau}
-        {error && <ErrorBox error={error} onRetry={() => void mutate()} />}
-        {erreurCibles && <Notice tone="danger">{messageErreur(erreurCibles)}</Notice>}
+        {error && <ErrorBox titre={data ? "Rechargement impossible : les communications affichées peuvent dater." : undefined} error={error} onRetry={() => void mutate()} />}
+        {erreurCibles && <ErrorBox titre="Dossiers et étapes indisponibles : impossible d'ouvrir une communication." error={erreurCibles} onRetry={() => void majCibles()} />}
 
         <div className="flex flex-wrap items-end justify-between gap-x-4">
           <Tabs
@@ -94,11 +98,11 @@ export default function CommunicationsPage() {
           {!data ? (
             !error && <Loading label="Chargement des communications…" />
           ) : rows.length === 0 ? (
-            <Empty title={toutes.length ? "Aucune communication dans cette sélection." : "Aucune communication pour l'instant."} hint={toutes.length ? undefined : "Rédigez une première communication : elle reste en brouillon tant que vous ne la publiez pas."} />
+            <Empty title={toutes.length ? "Aucune communication dans cette sélection." : "Aucune communication pour l'instant."} hint={toutes.length || !ecriture ? undefined : "Rédigez une première communication : elle reste en brouillon tant que vous ne la publiez pas."} />
           ) : (
             <ul className="divide-y divide-line">
               {rows.map((a) => (
-                <LigneCommunication key={a.id} a={a} ecriture={ecriture} onEditer={() => setEdition(a)} onLectures={() => setLectures(a)} onEtat={(action) => void etat(a, action)} />
+                <LigneCommunication key={a.id} a={a} ecriture={ecriture} enCours={enCours} occupe={occupe} onEditer={() => cibles && setEdition(a)} onLectures={() => setLectures(a)} onEtat={(action) => void etat(a, action)} />
               ))}
             </ul>
           )}
@@ -122,12 +126,12 @@ export default function CommunicationsPage() {
   );
 }
 
-function LigneCommunication({ a, ecriture, onEditer, onLectures, onEtat }: { a: AnnouncementAdmin; ecriture: boolean; onEditer: () => void; onLectures: () => void; onEtat: (action: "publier" | "archiver" | "supprimer") => void }) {
+function LigneCommunication({ a, ecriture, enCours, occupe, onEditer, onLectures, onEtat }: { a: AnnouncementAdmin; ecriture: boolean; enCours: string | null; occupe: boolean; onEditer: () => void; onLectures: () => void; onEtat: (action: ActionCommunication) => void }) {
   const n = NATURE[a.kind];
   const e = etatPublication(a.state, true);
   const fin = expiree(a);
   const s = a.stats;
-  const blocage = !ecriture ? RESERVE_CABINET : undefined;
+  const charge = (action: ActionCommunication) => enCours === `${a.id}:${action}`;
   return (
     <li className={cx("px-5 py-4 sm:px-6", a.state === "archived" && "bg-panel-2/40")}>
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
@@ -168,18 +172,18 @@ function LigneCommunication({ a, ecriture, onEditer, onLectures, onEtat }: { a: 
           <Button variant="secondary" size="sm" onClick={onEditer}>
             <Pencil className="h-3.5 w-3.5" /> {ecriture ? "Modifier" : "Voir"}
           </Button>
-          {a.state !== "published" && (
-            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
+          {ecriture && a.state !== "published" && (
+            <Button variant="primary" size="sm" loading={charge("publier")} disabled={occupe} onClick={() => onEtat("publier")}>
               <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
-          {a.state === "published" && (
-            <Button variant="secondary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("archiver")}>
+          {ecriture && a.state === "published" && (
+            <Button variant="secondary" size="sm" loading={charge("archiver")} disabled={occupe} onClick={() => onEtat("archiver")}>
               <Inbox className="h-3.5 w-3.5" /> Archiver
             </Button>
           )}
-          {a.state === "draft" && (
-            <button type="button" aria-label={`Supprimer le brouillon ${a.title}`} title={blocage ?? "Supprimer le brouillon"} disabled={!ecriture} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40" onClick={() => onEtat("supprimer")}>
+          {ecriture && a.state === "draft" && (
+            <button type="button" aria-label={`Supprimer le brouillon ${a.title}`} title="Supprimer le brouillon" disabled={occupe} aria-busy={charge("supprimer") || undefined} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40" onClick={() => onEtat("supprimer")}>
               <Trash2 className="h-4 w-4" />
             </button>
           )}
@@ -196,9 +200,9 @@ function Jauge({ label, valeur, total, alerte }: { label: string; valeur: number
       <div className="mb-1 flex items-baseline justify-between gap-2 text-[12px]">
         <span className="text-muted">{label}</span>
         <span className="font-semibold tabular text-ink">
-          {valeur}
-          {total ? ` / ${total}` : ""}
-          {total ? <span className="ml-1 font-normal text-muted">{pct} %</span> : null}
+          {fmtInt(valeur)}
+          {total ? ` / ${fmtInt(total)}` : ""}
+          {total ? <span className="ml-1 font-normal text-muted">{fmtPct(pct, 0)}</span> : null}
         </span>
       </div>
       <ProgressBar value={pct} epaisseur={6} tone={alerte && total && valeur < total ? "warn" : "accent"} />
@@ -238,9 +242,9 @@ function saisieDe(a: AnnouncementAdmin | null): Saisie {
 }
 
 function Editeur({ annonce, cibles, ecriture, onClose, onSaved }: { annonce: AnnouncementAdmin | null; cibles: Cibles; ecriture: boolean; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
-  const [f, setF] = useState<Saisie>(() => saisieDe(annonce));
-  const [envoi, setEnvoi] = useState<"brouillon" | "publier" | null>(null);
-  const [erreur, setErreur] = useState<string | null>(null);
+  const [initial] = useState(() => saisieDe(annonce));
+  const [f, setF] = useState<Saisie>(initial);
+  const { envoi, occupe, erreur, setErreur, envoyer, fermer } = useEnvoiFenetre(ecriture && saisieModifiee(f, initial), onClose);
   const set = <K extends keyof Saisie>(k: K, v: Saisie[K]) => setF((x) => ({ ...x, [k]: v }));
   const etat = annonce?.state ?? "draft";
 
@@ -253,14 +257,13 @@ function Editeur({ annonce, cibles, ecriture, onClose, onSaved }: { annonce: Ann
   }
 
   async function enregistrer(publier: boolean) {
+    if (occupe) return;
     const probleme = controle();
     if (probleme) {
       setErreur(probleme);
       return;
     }
     if (publier && etat !== "published" && !(await demanderConfirmation("Publier cette communication ? Les porteurs visés seront prévenus sur leur portail.", { action: "Publier" }))) return;
-    setEnvoi(publier ? "publier" : "brouillon");
-    setErreur(null);
     const corps = {
       title: f.title.trim(),
       body: f.body,
@@ -275,19 +278,23 @@ function Editeur({ annonce, cibles, ecriture, onClose, onSaved }: { annonce: Ann
       gate_codes: f.audience === "gates" ? f.gate_codes : "",
       sector_keywords: f.audience === "sectors" ? f.sector_keywords : "",
     };
-    try {
+    await envoyer(publier ? "publier" : "brouillon", async () => {
       if (!annonce) {
         await apiSend<AnnouncementAdmin>("POST", "/axispro/portail/annonces", { ...corps, publish: publier });
       } else {
         await apiSend<AnnouncementAdmin>("PATCH", `/axispro/portail/annonces/${annonce.id}`, corps);
         if (publier && etat !== "published") await apiSend("POST", `/axispro/portail/annonces/${annonce.id}/publier`);
       }
-      await onSaved(publier && etat !== "published" ? "Communication publiée : les porteurs visés sont prévenus." : etat === "published" ? "Communication mise à jour." : "Brouillon enregistré.");
-    } catch (e) {
-      setErreur(messageErreur(e));
-    } finally {
-      setEnvoi(null);
-    }
+      await onSaved(
+        publier && etat !== "published"
+          ? "Communication publiée : les porteurs visés sont prévenus."
+          : etat === "published"
+            ? "Communication mise à jour."
+            : etat === "archived"
+              ? "Communication archivée enregistrée : elle reste hors du portail."
+              : "Brouillon enregistré.",
+      );
+    });
   }
 
   const titre = !annonce ? "Nouvelle communication" : ecriture ? "Modifier la communication" : "Communication";
@@ -296,27 +303,28 @@ function Editeur({ annonce, cibles, ecriture, onClose, onSaved }: { annonce: Ann
       open
       wide
       title={titre}
-      onClose={onClose}
+      onClose={() => void fermer()}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" disabled={occupe} onClick={() => void fermer()}>
             {ecriture ? "Annuler" : "Fermer"}
           </Button>
           {ecriture && etat !== "published" && (
-            <Button variant="secondary" loading={envoi === "brouillon"} disabled={envoi !== null} onClick={() => void enregistrer(false)}>
+            <Button variant="secondary" loading={envoi === "brouillon"} disabled={occupe} onClick={() => void enregistrer(false)}>
               {etat === "archived" ? "Enregistrer" : "Enregistrer le brouillon"}
             </Button>
           )}
           {ecriture && (
-            <Button variant="primary" loading={envoi === "publier"} disabled={envoi !== null} onClick={() => void enregistrer(true)}>
+            <Button variant="primary" loading={envoi === "publier"} disabled={occupe} onClick={() => void enregistrer(true)}>
               <Send className="h-4 w-4" /> {etat === "published" ? "Enregistrer" : etat === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
         </>
       }
     >
-      <fieldset disabled={!ecriture} className="min-w-0 space-y-4">
+      <fieldset disabled={!ecriture || occupe} className="min-w-0 space-y-4">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
+        {etat === "archived" && ecriture && <Notice tone="neutral">Cette communication est archivée : « Enregistrer » garde vos modifications sans la remettre sur le portail ; « Republier » la remet en ligne et prévient les porteurs visés.</Notice>}
         {etat === "published" && <Notice tone="accent">Cette communication est publiée : vos modifications sont visibles des porteurs dès l&apos;enregistrement, sans nouvelle notification.</Notice>}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Field label="Titre" className="md:col-span-2">
@@ -395,48 +403,46 @@ function Lectures({ annonce, onClose }: { annonce: AnnouncementAdmin; onClose: (
         </>
       }
     >
-      {error ? (
-        <ErrorBox error={error} onRetry={() => void mutate()} />
-      ) : !data ? (
-        <Loading label="Chargement des lectures…" />
-      ) : (
-        <div className="space-y-4">
-          <p className="text-[13.5px] text-ink-2">
-            {pluriel(data.length, "porteur visé ou lecteur", "porteurs visés ou lecteurs")} : <b>{lues}</b> {lues > 1 ? "l'ont lue" : "l'a lue"}
-            {annonce.require_ack ? (
-              <>
-                , <b>{accuses}</b> {accuses > 1 ? "ont accusé" : "a accusé"} lecture
-              </>
-            ) : null}
-            .
-          </p>
-          <Segmented
-            label="Lectures affichées"
-            value={filtre}
-            onChange={setFiltre}
-            options={[
-              { key: "tous", label: "Tous" },
-              { key: "non_lue", label: `Pas encore lue (${data.length - lues})` },
-              ...(annonce.require_ack ? [{ key: "sans_accuse" as const, label: `Sans accusé (${data.length - accuses})` }] : []),
-            ]}
-          />
-          <div className="-mx-5">
-            <DataTable
-              dense
-              rows={rows}
-              rowKey={(r, i) => `${r.user}-${i}`}
-              empty="Personne dans cette sélection."
-              columns={[
-                { key: "user", label: "Porteur", render: (r) => <span className="font-medium text-ink">{r.user}</span> },
-                { key: "read_at", label: "Lue", sortValue: (r) => r.read_at, render: (r) => (r.read_at ? fmtDateTime(r.read_at) : <Badge tone="warn">Pas encore lue</Badge>) },
-                ...(annonce.require_ack
-                  ? [{ key: "acknowledged_at", label: "Accusé de lecture", sortValue: (r: Lecture) => r.acknowledged_at, render: (r: Lecture) => (r.acknowledged_at ? <span className="inline-flex items-center gap-1.5"><BadgeCheck className="h-4 w-4 text-ok" />{fmtDateTime(r.acknowledged_at)}</span> : <span className="text-muted">En attente</span>) }]
-                  : []),
+      <Etat data={data} error={error} onRetry={() => void mutate()} label="Chargement des lectures…">
+        {(liste) => (
+          <div className="space-y-4">
+            <p className="text-[13.5px] text-ink-2">
+              {pluriel(liste.length, "porteur visé ou lecteur", "porteurs visés ou lecteurs")} : <b>{fmtInt(lues)}</b> {lues > 1 ? "l'ont lue" : "l'a lue"}
+              {annonce.require_ack ? (
+                <>
+                  , <b>{fmtInt(accuses)}</b> {accuses > 1 ? "ont accusé" : "a accusé"} lecture
+                </>
+              ) : null}
+              .
+            </p>
+            <Segmented
+              label="Lectures affichées"
+              value={filtre}
+              onChange={setFiltre}
+              options={[
+                { key: "tous", label: "Tous" },
+                { key: "non_lue", label: `Pas encore lue (${fmtInt(liste.length - lues)})` },
+                ...(annonce.require_ack ? [{ key: "sans_accuse" as const, label: `Sans accusé (${fmtInt(liste.length - accuses)})` }] : []),
               ]}
             />
+            <div className="-mx-5">
+              <DataTable
+                dense
+                rows={rows}
+                rowKey={(r, i) => `${r.user}-${i}`}
+                empty="Personne dans cette sélection."
+                columns={[
+                  { key: "user", label: "Porteur", render: (r) => <span className="font-medium text-ink">{r.user}</span> },
+                  { key: "read_at", label: "Lue", sortValue: (r) => r.read_at, render: (r) => (r.read_at ? fmtDateTime(r.read_at) : <Badge tone="warn">Pas encore lue</Badge>) },
+                  ...(annonce.require_ack
+                    ? [{ key: "acknowledged_at", label: "Accusé de lecture", sortValue: (r: Lecture) => r.acknowledged_at, render: (r: Lecture) => (r.acknowledged_at ? <span className="inline-flex items-center gap-1.5"><BadgeCheck className="h-4 w-4 text-ok" />{fmtDateTime(r.acknowledged_at)}</span> : <span className="text-muted">En attente</span>) }]
+                    : []),
+                ]}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Etat>
     </Modal>
   );
 }

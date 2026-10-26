@@ -1,10 +1,14 @@
+from datetime import date
+
 from odoo.tests import tagged
 
+from ..organisation import wrong_company_message
 from .common import ApiCase
+from .profils import RefusParProfil
 
 
 @tagged("post_install", "-at_install")
-class TestAdmin(ApiCase):
+class TestAdmin(RefusParProfil, ApiCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -150,6 +154,45 @@ class TestAdmin(ApiCase):
         self.assertIn(seen.id, ids)
         self.assertNotIn(hidden.id, ids, "Piste d'audit d'une société hors périmètre invisible")
 
+    def test_piste_d_audit_parcourue_en_entier(self):
+        """Pagination par curseur (paged=1, before_id) : chaque page reprend après la dernière entrée examinée par
+        la précédente, jusqu'au début de la piste (next_before_id nul), sans doublon ni manque ; filtres par
+        enregistrement et par auteur ; sans paged, la réponse reste une liste."""
+        partner = self.env["res.partner"].create({"name": "Client suivi", "company_id": self.env.company.id})
+        model = self.env["ir.model"]._get("res.partner")
+        fatou = self.env["res.users"].search([("login", "=", "fatou")])
+        Log = self.env["auditlog.log"]
+        for i in range(5):
+            Log.create({"name": partner.name, "model_id": model.id, "res_id": partner.id,
+                        "user_id": (fatou if i % 2 else self.env.user).id, "method": "write"})
+        # Toute la piste de l'enregistrement, création comprise si le module d'audit l'a déjà inscrite.
+        domain = [("model_id", "=", model.id), ("res_id", "=", partner.id)]
+        expected = Log.search(domain, order="id desc").ids
+        self.env.flush_all()  # visible des requêtes HTTP
+        token = self.open_session("aissatou")["access_token"]
+        seen, cursor = [], None
+        for _page in range(len(expected) + 1):
+            path = f"/admin/audit?model=res.partner&res_id={partner.id}&paged=1&limit=2"
+            status, page = self.call("GET", path + (f"&before_id={cursor}" if cursor else ""), token=token)
+            self.assertEqual(status, 200, page)
+            self.assertLessEqual(len(page["items"]), 2)
+            seen += [entry["id"] for entry in page["items"]]
+            cursor = page["next_before_id"]
+            if not cursor:
+                break
+        self.assertIsNone(cursor, "La pagination atteint le début de la piste")
+        self.assertEqual(seen, expected, "Toute la piste, de la plus récente à la plus ancienne, une seule fois")
+        status, page = self.call("GET", f"/admin/audit?model=res.partner&res_id={partner.id}&user_id={fatou.id}&paged=1",
+                                 token=token)
+        self.assertEqual([entry["id"] for entry in page["items"]], Log.search(domain + [("user_id", "=", fatou.id)], order="id desc").ids,
+                         "Filtre par auteur")
+        self.assertIsNone(page["next_before_id"])
+        status, rows = self.call("GET", f"/admin/audit?model=res.partner&res_id={partner.id}", token=token)
+        self.assertEqual((status, [entry["id"] for entry in rows]), (200, expected), "Sans paged : la liste, comme avant")
+        # Piste d'audit et journal des accès : administration seule.
+        self.assertRefuseHors(("admin",), "GET", "/admin/audit?paged=1")
+        self.assertRefuseHors(("admin",), "GET", "/admin/access-log")
+
     def test_perimetre_d_un_administrateur_partiel(self):
         """Comptes du plan, fiches société et comptes multi-sociétés hors du périmètre restent invisibles."""
         other = self.env["res.company"].create({"name": "Société hors périmètre"})
@@ -206,3 +249,50 @@ class TestAdmin(ApiCase):
         self.assertEqual(status, 404, "Société hors du périmètre de l'administrateur")
         status, _b = self.call("GET", "/admin/companies", token=self.open_session("fatou")["access_token"])
         self.assertEqual(status, 403)
+
+    def test_piste_d_audit_des_lignes_rattachees_a_leur_parent(self):
+        """Audit du noyau, I-A6 : éléments de salaire et tarifs relèvent de la société de leur parent.
+
+        Les modèles viennent d'eguitra_rh et d'eguitra_transport : infra/test.sh eguitra_api eguitra_rh
+        eguitra_transport."""
+        other = self.env["res.company"].create({"name": "Société hors périmètre"})
+        Log = self.env["auditlog.log"]
+
+        def log(record):
+            model = self.env["ir.model"]._get(record._name)
+            return Log.create({"name": record.display_name, "model_id": model.id, "res_id": record.id,
+                               "user_id": self.env.uid, "method": "write"})
+
+        cas = []
+        if "eguitra.rh.employee.line" in self.env:
+            rubric = self.env["eguitra.rh.rubric"].search([("system", "=", False)], limit=1)
+            for company in (self.env.company, other):
+                employee = self.env["eguitra.rh.employee"].create(
+                    {"name": f"Salarié {company.name}", "hire_date": date(2025, 1, 1), "company_id": company.id})
+                line = self.env["eguitra.rh.employee.line"].create(
+                    {"employee_id": employee.id, "rubric_id": rubric.id, "amount": 250_000})
+                cas.append(("eguitra.rh.employee.line", log(line), company == other))
+        if "eguitra.transport.tariff" in self.env:
+            client = self.env["res.partner"].create({"name": "Client du transport"})
+            for company in (self.env.company, other):
+                route = self.env["eguitra.transport.route"].create({"name": f"Route {company.name}", "company_id": company.id})
+                tariff = self.env["eguitra.transport.tariff"].create(
+                    {"route_id": route.id, "partner_id": client.id, "rate": 1_000_000})
+                cas.append(("eguitra.transport.tariff", log(tariff), company == other))
+        if not cas:
+            self.skipTest("eguitra_rh et eguitra_transport absents de la base de test")
+
+        token = self.open_session("aissatou")["access_token"]
+        for model, entry, hors_perimetre in cas:
+            status, audit = self.call("GET", f"/admin/audit?model={model}", token=token)
+            self.assertEqual(status, 200, audit)
+            ids = [e["id"] for e in audit]
+            if hors_perimetre:
+                self.assertNotIn(entry.id, ids, f"{model} d'une autre société : historique invisible")
+            else:
+                self.assertIn(entry.id, ids, f"{model} de la société de l'administrateur : historique visible")
+
+    def test_message_de_module_d_une_autre_societe(self):
+        """Audit du noyau, M2 : « qu'EGUITRA GROUP SARLU », « que MB AxisPro Consulting »."""
+        self.assertIn("ne concerne qu'EGUITRA GROUP SARLU :", wrong_company_message("groupe"))
+        self.assertIn("ne concerne que MB AxisPro Consulting :", wrong_company_message("cabinet"))

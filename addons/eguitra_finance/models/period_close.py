@@ -11,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from ..formats import pluriel
 from .analytic import ACTIVITY_PLAN, distribution_ids
 
 SECURED_JOURNAL_TYPES = ("sale", "purchase", "general", "bank", "cash")
@@ -61,6 +62,14 @@ class EguitraPeriodClose(models.Model):
         cr = self.env.cr
         checks = []
 
+        # Un mois ne se clôture qu'une fois terminé : verrouillé, scellé et sa TVA liquidée sur un mois partiel,
+        # il ne recevrait plus les pièces de ses derniers jours.
+        next_day = end + relativedelta(days=1)
+        checks.append(self._check(
+            "month_ended", "Mois terminé", fields.Date.context_today(self) >= next_day, True,
+            f"Le mois se termine le {end:%d/%m/%Y} : il se clôture à partir du {next_day:%d/%m/%Y}.",
+        ))
+
         # Les mois se clôturent dans l'ordre, depuis le premier mois comportant des écritures.
         first_move = self.env["account.move"].sudo().search(
             [("company_id", "=", company.id), ("state", "=", "posted")], order="date asc", limit=1
@@ -83,7 +92,7 @@ class EguitraPeriodClose(models.Model):
             ("company_id", "=", company.id), ("state", "=", "draft"), ("date", "<=", end),
         ])
         checks.append(self._check("draft_moves", "Aucune pièce en brouillon", not drafts, True,
-                                  f"{drafts} pièce(s) en brouillon jusqu'au {end:%d/%m/%Y}.", drafts))
+                                  f"{pluriel(drafts, 'pièce en brouillon', 'pièces en brouillon')} jusqu'au {end:%d/%m/%Y}.", drafts))
 
         cr.execute(
             """SELECT COUNT(*) FROM (
@@ -94,7 +103,7 @@ class EguitraPeriodClose(models.Model):
         )
         unbalanced = cr.fetchone()[0]
         checks.append(self._check("move_balance", "Équilibre débit et crédit de chaque pièce", not unbalanced, True,
-                                  f"{unbalanced} pièce(s) déséquilibrée(s).", unbalanced))
+                                  f"{pluriel(unbalanced, 'pièce déséquilibrée', 'pièces déséquilibrées')}.", unbalanced))
 
         cr.execute(
             """SELECT COALESCE(SUM(debit), 0), COALESCE(SUM(credit), 0) FROM account_move_line
@@ -118,17 +127,18 @@ class EguitraPeriodClose(models.Model):
             ("company_id", "=", company.id), ("is_reconciled", "=", False), ("date", "<=", end),
         ])
         checks.append(self._check("bank_reconciliation", "Relevés bancaires rapprochés", not unreconciled, True,
-                                  f"{unreconciled} ligne(s) de relevé à rapprocher.", unreconciled))
+                                  f"{pluriel(unreconciled, 'ligne de relevé', 'lignes de relevé')} à rapprocher.", unreconciled))
         checks += self._bank_statement_checks(start, end)
         checks.append(self._analytic_consistency_check(start, end))
+        checks.append(self._reference_consistency_check(start, end))
 
         unmapped = sheet["unmapped_accounts"]
         checks.append(self._check("statement_mapping", "Tous les comptes figurent dans les états", not unmapped, False,
                                   "Comptes hors états SYSCOHADA : " + ", ".join(sorted(unmapped)[:10]), len(unmapped)))
 
+        # Alertes évaluées à la fin du mois : une opération du lendemain ne bloque pas la clôture du mois.
         blocking_alerts = [
-            a for a in self.env["eguitra.alert.threshold"]._company_alerts(company, end + relativedelta(days=1))
-            if a["severity"] == "blocking"
+            a for a in self.env["eguitra.alert.threshold"]._company_alerts(company, end) if a["severity"] == "blocking"
         ]
         checks.append(self._check("blocking_alerts", "Aucune alerte bloquante active", not blocking_alerts, True,
                                   "; ".join(a["title"] for a in blocking_alerts), len(blocking_alerts)))
@@ -161,6 +171,51 @@ class EguitraPeriodClose(models.Model):
                         "Sans relevé pour le mois : " + ", ".join(missing) + ".", len(missing)),
         ]
 
+    def _reference_consistency_check(self, start, end):
+        """Cohérence des références (offre, chapitre 3.3), vigilance : une même référence de fournisseur
+        saisie deux fois chez un même fournisseur (facture en double probable ; une facture extournée puis
+        ressaisie n'en est pas une), et des numéros manquants dans la numérotation des factures et des
+        avoirs du mois. Les trous se cherchent sur tout le préfixe, jusqu'au dernier numéro du mois et
+        pièces annulées comprises (elles gardent leur numéro) : une facture datée du mois mais validée
+        le mois suivant n'en crée pas."""
+        cr = self.env.cr
+        company = self.company_id
+        cr.execute(
+            """SELECT p.name, MAX(am.ref), COUNT(*) FROM account_move am
+                 JOIN res_partner p ON p.id = am.commercial_partner_id
+                WHERE am.company_id = %s AND am.state = 'posted' AND am.move_type IN ('in_invoice', 'in_refund')
+                  AND COALESCE(TRIM(am.ref), '') <> '' AND am.payment_state IS DISTINCT FROM 'reversed'
+             GROUP BY p.name, am.commercial_partner_id, am.move_type, LOWER(TRIM(am.ref))
+               HAVING COUNT(*) > 1 AND MAX(am.date) BETWEEN %s AND %s
+             ORDER BY p.name""",
+            (company.id, start, end),
+        )
+        duplicates = cr.fetchall()
+        cr.execute(
+            """WITH month AS (
+                    SELECT am.journal_id, am.sequence_prefix, MAX(am.sequence_number) AS last
+                      FROM account_move am JOIN account_journal j ON j.id = am.journal_id
+                     WHERE am.company_id = %s AND am.state = 'posted' AND j.type IN ('sale', 'purchase')
+                       AND am.date BETWEEN %s AND %s AND am.sequence_prefix IS NOT NULL
+                  GROUP BY am.journal_id, am.sequence_prefix
+               )
+               SELECT m.sequence_prefix, m.last - MIN(am.sequence_number) + 1 - COUNT(DISTINCT am.sequence_number)
+                 FROM month m
+                 JOIN account_move am ON am.journal_id = m.journal_id AND am.sequence_prefix = m.sequence_prefix
+                                     AND am.sequence_number <= m.last AND am.name <> '/'
+             GROUP BY m.journal_id, m.sequence_prefix, m.last
+               HAVING m.last - MIN(am.sequence_number) + 1 > COUNT(DISTINCT am.sequence_number)
+             ORDER BY m.sequence_prefix""",
+            (company.id, start, end),
+        )
+        gaps = cr.fetchall()
+        details = [f"{name} : référence {ref} saisie {n} fois" for name, ref, n in duplicates[:5]]
+        details += [f"{prefix} : {pluriel(missing, 'numéro manquant', 'numéros manquants')}" for prefix, missing in gaps[:5]]
+        return self._check(
+            "reference_consistency", "Cohérence des références (doublons de fournisseurs, numérotation)",
+            not duplicates and not gaps, False, "; ".join(details), len(duplicates) + sum(m for _p, m in gaps),
+        )
+
     def _analytic_consistency_check(self, start, end):
         """Vigilance : une ligne imputée à un centre de coût et à une autre activité que la sienne."""
         company = self.company_id
@@ -187,7 +242,7 @@ class EguitraPeriodClose(models.Model):
                         break
         labels = ", ".join(sorted(Analytic.browse(list(names)).mapped("name"))[:5])
         return self._check("analytic_consistency", "Centres de coût imputés avec leur activité", not wrong, False,
-                           f"{wrong} ligne(s) avec une autre activité que celle du centre de coût ({labels}).", wrong)
+                           f"{pluriel(wrong, 'ligne')} avec une autre activité que celle du centre de coût ({labels}).", wrong)
 
     def action_check(self):
         self.ensure_one()

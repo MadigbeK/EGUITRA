@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { scaleBand, scaleLinear } from "d3-scale";
 import type { BenfordDigit } from "@/lib/analyse-types";
-import { fmtInt, fmtPct } from "@/lib/format";
+import { INSECABLE, fmtFixe, fmtInt, fmtPct, pluriel } from "@/lib/format";
 import { Bulle, COULEUR, Cadre, Legende, TableRepli, deplacer } from "./commun";
 
 const M = { haut: 16, droite: 10, bas: 30, gauche: 40 };
@@ -20,7 +20,7 @@ export function Benford({ digits, n, suspicious, conformity, hauteur = 240, labe
     <div>
       <Legende className="mb-3" items={[{ key: "obs", label: "Observé", couleur: COULEUR.accent, forme: "carre" }, { key: "att", label: "Attendu (Benford)", couleur: "var(--ink)", forme: "trait" }, ...(suspicious.length ? [{ key: "sus", label: "Chiffre en excès", couleur: COULEUR.mauvais, forme: "carre" as const }] : [])]} />
       <Cadre
-        label={`${label} : ${conformity}, ${fmtInt(n)} pièces`}
+        label={`${label} : ${conformity}, ${pluriel(n, "pièce")}`}
         hauteur={hauteur}
         tabIndex={0}
         onKeyDown={(e) => setFocus((f) => deplacer(e, f, digits.length, 0))}
@@ -39,7 +39,7 @@ export function Benford({ digits, n, suspicious, conformity, hauteur = 240, labe
                 {y.ticks(4).map((t) => (
                   <g key={t}>
                     <line x1={M.gauche} x2={W - M.droite} y1={y(t)} y2={y(t)} stroke={t === 0 ? COULEUR.traitFort : COULEUR.trait} strokeDasharray={t === 0 ? undefined : "3 5"} />
-                    <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{Math.round(t)} %</text>
+                    <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{fmtPct(t, 0)}</text>
                   </g>
                 ))}
                 {digits.map((d, i) => {
@@ -57,12 +57,12 @@ export function Benford({ digits, n, suspicious, conformity, hauteur = 240, labe
                 {digits.map((d, i) => <circle key={d.d} cx={(x(d.d) ?? 0) + bw / 2} cy={y(d.expected)} r={focus === i ? 5 : 3.5} fill="var(--panel)" stroke="var(--ink)" strokeWidth={2} className="an-eclore" style={{ "--i": i + 6 } as CSSProperties} />)}
               </svg>
               {choisi && focus !== null && (
-                <Bulle x={(x(choisi.d) ?? 0) + bw / 2} y={y(Math.max(choisi.observed, choisi.expected))} largeur={W} titre={`Premier chiffre ${choisi.d}`} lignes={[{ nom: "Observé", valeur: fmtPct(choisi.observed, 1), couleur: suspicious.includes(choisi.d) ? COULEUR.mauvais : COULEUR.accent }, { nom: "Attendu", valeur: fmtPct(choisi.expected, 1), couleur: "var(--ink)" }, { nom: "Écart", valeur: `${choisi.observed - choisi.expected >= 0 ? "+" : ""}${(choisi.observed - choisi.expected).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} pt` }, { nom: "Pièces", valeur: fmtInt(Math.round((choisi.observed / 100) * n)) }]} />
+                <Bulle x={(x(choisi.d) ?? 0) + bw / 2} y={y(Math.max(choisi.observed, choisi.expected))} largeur={W} titre={`Premier chiffre ${choisi.d}`} lignes={[{ nom: "Observé", valeur: fmtPct(choisi.observed, 1), couleur: suspicious.includes(choisi.d) ? COULEUR.mauvais : COULEUR.accent }, { nom: "Attendu", valeur: fmtPct(choisi.expected, 1), couleur: "var(--ink)" }, { nom: "Écart", valeur: `${choisi.observed - choisi.expected >= 0 ? "+" : ""}${fmtFixe(choisi.observed - choisi.expected, 1)}${INSECABLE}pt` }, { nom: "Pièces", valeur: fmtInt(Math.round((choisi.observed / 100) * n)) }]} />
               )}
             </>
           );
         }}
-        apres={<TableRepli caption={label} colonnes={["Premier chiffre", "Observé", "Attendu", "Écart"]} lignes={digits.map((d) => [String(d.d), fmtPct(d.observed, 1), fmtPct(d.expected, 1), `${(d.observed - d.expected).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} pt`])} />}
+        apres={<TableRepli caption={label} colonnes={["Premier chiffre", "Observé", "Attendu", "Écart"]} lignes={digits.map((d) => [String(d.d), fmtPct(d.observed, 1), fmtPct(d.expected, 1), `${fmtFixe(d.observed - d.expected, 1)}${INSECABLE}pt`])} />}
       />
     </div>
   );

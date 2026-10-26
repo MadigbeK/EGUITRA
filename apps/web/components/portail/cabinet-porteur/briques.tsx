@@ -10,6 +10,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { AlertTriangle, ArrowRight, ArrowUpRight, Calendar, ChevronLeft, HandCoins, Info, ShieldAlert, type Icon } from "@/components/icons";
 import { classesBouton, cx, type Tone } from "@/components/ui";
+import { formatConakry, instant, jourConakry } from "@/components/portail/commun";
 import type { AnnouncementKind } from "@/lib/portail-types";
 
 /* ─── Natures des communications ───────────────────────────────────────── */
@@ -38,31 +39,17 @@ export function sansAccents(s: string): string {
   return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 }
 
-/* ─── Dates ────────────────────────────────────────────────────────────── */
+/* ─── Dates (heure de Conakry, voir commun.tsx) ────────────────────────── */
 
-const p2 = (n: number) => String(n).padStart(2, "0");
+export { cleDate, depuisCle } from "@/components/portail/commun";
 
-/** Clé AAAA-MM-JJ d'une date, au jour local. */
-export function cleDate(d: Date): string {
-  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
-}
+/** Jour à Conakry (AAAA-MM-JJ) d'une valeur de l'API : une date seule reste telle quelle. */
+export const jourLocal = jourConakry;
 
-/** Jour local d'une valeur de l'API : une date seule reste telle quelle, une date et heure UTC passe à l'heure locale. */
-export function jourLocal(value: string): string {
-  return value.length === 10 ? value : cleDate(new Date(value));
-}
-
-/** Date locale à midi d'une clé AAAA-MM-JJ (aucun glissement de fuseau). */
-export function depuisCle(cle: string): Date {
-  const [a, m, j] = cle.split("-").map(Number);
-  return new Date(a ?? 1970, (m ?? 1) - 1, j ?? 1, 12);
-}
-
-/** « 4 novembre 2026 » pour une date seule ou une date et heure. */
+/** « 4 novembre 2026 » pour une date seule ou une date et heure, heure de Conakry. */
 export function dateSimple(value: string | null | undefined, annee = true): string {
   if (!value) return "";
-  const d = value.length === 10 ? depuisCle(value) : new Date(value);
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: annee ? "numeric" : undefined });
+  return formatConakry(value, { day: "numeric", month: "long", year: annee ? "numeric" : undefined });
 }
 
 /* ─── Liens ────────────────────────────────────────────────────────────── */
@@ -124,7 +111,7 @@ export function TitreSection({ id, children, compte, action, className }: { id?:
 
 /** Bloc date d'un événement : jour en grand, mois et jour de la semaine. */
 export function BlocDate({ date, passe, className }: { date: string; passe?: boolean; className?: string }) {
-  const d = new Date(date);
+  const d = instant(date);
   return (
     <span
       aria-hidden
@@ -134,9 +121,9 @@ export function BlocDate({ date, passe, className }: { date: string; passe?: boo
         className,
       )}
     >
-      <span className={cx("text-[11px] font-semibold uppercase tracking-[0.08em]", passe ? "text-muted" : "text-white/70")}>{d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span>
-      <span className="mt-1 font-display text-[26px] font-bold">{d.getDate()}</span>
-      <span className={cx("mt-1 text-[11.5px] font-semibold uppercase", passe ? "text-muted" : "text-[#7fd3ff]")}>{d.toLocaleDateString("fr-FR", { month: "short" }).replace(".", "")}</span>
+      <span className={cx("text-[11px] font-semibold uppercase tracking-[0.08em]", passe ? "text-muted" : "text-white/70")}>{formatConakry(d, { weekday: "short" }).replace(".", "")}</span>
+      <span className="mt-1 font-display text-[26px] font-bold">{formatConakry(d, { day: "numeric" })}</span>
+      <span className={cx("mt-1 text-[11.5px] font-semibold uppercase", passe ? "text-muted" : "text-[#7fd3ff]")}>{formatConakry(d, { month: "short" }).replace(".", "")}</span>
     </span>
   );
 }

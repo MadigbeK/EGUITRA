@@ -1,10 +1,12 @@
-"use client";
-
-import { use } from "react";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { BulletinPaie } from "@/components/rh/Bulletin";
 
-/** Bulletin de paie vu par la gestion RH (direction, administration, RH). */
-export default function Page({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export const metadata: Metadata = { title: "Bulletin de paie" };
+
+/** Bulletin de paie vu par la gestion RH (direction, administration, RH) ; identifiant entier exigé. */
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!/^\d+$/.test(id)) notFound();
   return <BulletinPaie source={`/rh/payslips/${id}`} retour={{ href: "/rh/paie", label: "Paie" }} />;
 }

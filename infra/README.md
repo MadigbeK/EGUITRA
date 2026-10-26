@@ -53,18 +53,21 @@ sociétés (sélecteur en haut de l'écran, vue « Groupe consolidé »).
 scripts/dev/sync.sh                  # 1. poste de développement : le code devient celui de la recette
 ssh eguitra-vps
 cd ~/eguitra/infra
-./test.sh eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro
+./test.sh eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_chat
 docker compose stop odoo-recette     # 2. recette : mise à jour des modules modifiés
 docker compose run --rm -T odoo-recette odoo -c /etc/odoo/odoo.conf -d eguitra_recette -u eguitra_finance --stop-after-init --workers 0
 docker compose up -d --build odoo-recette web-recette
 #                                      3. essais par les référents sur la recette, puis :
-./release.sh                         # 4. mise en production (annoncée 48 heures à l'avance)
+./release.sh --annoncee "2026-11-03 18:00"   # 4. mise en production, annoncée au client 48 heures à l'avance
 ```
 
 `release.sh` fige le code de la recette dans `releases/AAAAMMJJ-HHMM` (modules EGUITRA et OCA,
-images `eguitra/odoo:release-…` et `eguitra/web:release-…`), prend une sauvegarde de base, met à
-jour tous les modules EGUITRA de la base de production, redémarre et contrôle la production. En cas
-d'échec de la mise à jour, le code précédent est remis en service automatiquement.
+code source des applications web, images `eguitra/odoo:release-…` et `eguitra/web:release-…`),
+prend une sauvegarde de base, met à jour tous les modules EGUITRA de la base de production,
+redémarre et contrôle la production. En cas d'échec de la mise à jour, le code précédent est remis
+en service automatiquement. `--annoncee` donne la date et l'heure où l'intervention a été annoncée au
+client : 48 heures avant au moins, c'est une maintenance programmée, exclue du calcul de la
+disponibilité ; sans annonce, ou en cas d'échec, l'interruption y compte (`logs/interventions.txt`).
 `./release.sh --list` montre les versions conservées et l'historique ; `./release.sh --rollback ID`
 remet en service le code d'une version précédente (la base, elle, se restaure au point de
 sauvegarde noté dans l'historique si la version annulée l'avait modifiée : `backup/README.md`).
@@ -95,14 +98,19 @@ le script teste la connexion. Sans serveur, les relances s'impriment.
 ## Supervision
 
 `infra/monitor-install.sh` (une fois, à relancer après une mise à jour de ce script) planifie
-`monitor.sh` toutes les 5 minutes : conteneurs des deux environnements et leur santé, noyaux,
-applications web, disque (alerte à 85 %), sauvegardes (archivage et copie hors site des WAL de
-moins de 15 minutes), test de restauration réussi depuis moins de 40 jours, restauration à un
-instant donné réussie depuis moins de 100 jours, double authentification exigée en production
-(`eguitra_api.mfa_required` différent de 0). Il planifie aussi ces tests (le 1er de chaque mois ;
-chaque trimestre avec compte rendu, voir `backup/README.md`) et le rapport de disponibilité.
-Les alertes partent au changement d'état et toutes les 6 heures pendant une panne, vers
-`ALERT_WEBHOOK_URL` et/ou `ALERT_NTFY_URL` (`.env`) ; journal dans `logs/monitor.log`, gardé 13 mois.
+`monitor.sh` toutes les 5 minutes : conteneurs des deux environnements et du proxy, et leur santé,
+noyaux, applications web, accès publics en HTTPS (`*_DOMAIN`) et certificats (alerte à moins de
+14 jours de leur échéance : leur renouvellement automatique a échoué), disque (alerte à 85 %),
+sauvegardes (archivage et copie hors site des WAL de moins de 15 minutes), test de restauration
+réussi depuis moins de 40 jours, restauration à un instant donné réussie depuis moins de 100 jours.
+Il planifie aussi ces tests (le 1er de chaque mois ; chaque trimestre avec compte rendu, voir
+`backup/README.md`) et le rapport de disponibilité. Les alertes partent au changement d'état, à
+chaque nouveau problème et toutes les 6 heures pendant une panne, vers `ALERT_WEBHOOK_URL` et/ou
+`ALERT_NTFY_URL` (`.env`) ; journal dans `logs/monitor.log`, gardé 13 mois. Les écarts connus sont
+rappelés une fois par jour sans compter comme une panne : double authentification suspendue en
+production (`eguitra_api.mfa_required` = 0), copie hors site non configurée (`RCLONE_REMOTE` dans
+`backup.env`), pas de serveur d'envoi de courriel (`SMTP_HOST`), redémarrage du système en attente,
+mise à jour mensuelle des images en retard de plus de 35 jours.
 
 Sonde externe : `HEARTBEAT_URL` (`.env`, par exemple un contrôle healthchecks.io attendu toutes les
 5 minutes) est appelée à chaque contrôle réussi ; le service externe alerte quand le signal cesse
@@ -110,9 +118,36 @@ Sonde externe : `HEARTBEAT_URL` (`.env`, par exemple un contrôle healthchecks.i
 
 Disponibilité (engagement de 99,5 % par mois) : `infra/availability-report.py [AAAA-MM]`, lancé
 seul le 1er de chaque mois pour le mois précédent, calcule la disponibilité de la production sur le
-journal de supervision (un créneau de 5 minutes sans contrôle compte comme indisponible) hors
-maintenances déclarées dans `logs/maintenances.txt` ; `release.sh` y inscrit chaque mise en
-production. Compte rendu : `logs/availability/AAAA-MM.md`.
+journal de supervision (un créneau de 5 minutes sans contrôle compte comme indisponible ; une panne
+du proxy ou d'un accès public compte), hors maintenances programmées de `logs/maintenances.txt`, que
+`release.sh --annoncee` n'inscrit que pour une intervention annoncée 48 heures à l'avance. Compte
+rendu : `logs/availability/AAAA-MM.md`.
+
+## Mises à jour de sécurité (chaque mois)
+
+Le système du serveur se met à jour seul chaque nuit, sans redémarrage ; un redémarrage en attente
+est rappelé par la supervision, à programmer hors heures ouvrées et à annoncer 48 heures à l'avance.
+Les images (Odoo 19 officiel, Node, PostgreSQL 16, Caddy) se mettent à jour une fois par mois, en
+recette d'abord :
+
+```bash
+cd ~/eguitra/infra
+./maj-securite.sh recette            # images rafraîchies et recette relancée, audit des dépendances web
+./test.sh --rebuild eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_chat
+#                                      contrôle des écrans de la recette, annonce au client, puis :
+./maj-securite.sh production --annoncee "AAAA-MM-JJ HH:MM"
+```
+
+Compte rendu du mois, à joindre au rapport mensuel : `logs/maj-securite/AAAA-MM.md` (images avant
+et après, vulnérabilités connues des paquets web, état de la recette, mise en production).
+
+## Réversibilité
+
+`infra/export-reversibilite.sh [répertoire]` produit, sans arrêter la production, un dossier daté
+dans `~/eguitra/exports` : base de production en SQL (texte), pièces jointes, code de la version en
+service (modules et applications web), configuration de déploiement sans secret, et une notice
+(versions, réinstallation, empreintes SHA-256). Il contient les données de l'entreprise : le remettre
+au client par un moyen sûr, puis l'effacer du serveur.
 
 ## Accès techniques
 

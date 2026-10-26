@@ -21,7 +21,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route
 
-from ..models.finance_metrics import ACC_CODE
+from ..models.finance_metrics import ACC_CODE, CARRIED_LINES
 from ..models.report_registry import ACC_NAME
 from ..models.syscohada import OPENING_JOURNAL
 from .common import FIN_READ, parse_date, today
@@ -68,12 +68,16 @@ class EguitraFinanceSaft(http.Controller):
             raise ApiError(422, "business_rule", "Le fichier SAF-T porte sur une seule société.")
         company = request.env.company.sudo()
         end = parse_date(kw, "date_to", today())
-        start = parse_date(kw, "date_from", request.env["eguitra.finance.metrics"].fiscal_year_bounds(company, end)[0])
-        if start > end or (end - start).days > 400:
-            raise ApiError(400, "invalid_parameter", "Période limitée à un exercice.")
+        fy_start = request.env["eguitra.finance.metrics"].fiscal_year_bounds(company, end)[0]
+        start = parse_date(kw, "date_from", fy_start)
+        # Une période dans un seul exercice : les comptes de gestion repartent de zéro à son début, et chaque
+        # compte vérifie ouverture + écritures = clôture.
+        if start > end or start < fy_start:
+            raise ApiError(400, "invalid_parameter",
+                           f"Période limitée à un exercice : du {fy_start:%d/%m/%Y} au {end:%d/%m/%Y} au plus.")
         request.env.flush_all()
         cr = request.env.cr
-        params = {"company": company.id, "start": start, "end": end, "an": OPENING_JOURNAL}
+        params = {"company": company.id, "start": start, "end": end, "an": OPENING_JOURNAL, "fy_start": fy_start}
 
         cr.execute(
             """SELECT COUNT(DISTINCT aml.move_id), COALESCE(SUM(aml.debit), 0), COALESCE(SUM(aml.credit), 0)
@@ -156,6 +160,9 @@ class EguitraFinanceSaft(http.Controller):
         w.raw("</Header>")
 
     def _accounts(self, w, cr, params):
+        """Comptes, soldes d'ouverture et de clôture. Les comptes de gestion (classes 6 à 8) repartent de
+        zéro au début de l'exercice ; le résultat des exercices précédents est porté, comme dans le noyau,
+        au compte d'affectation du résultat (ouverture et clôture)."""
         cr.execute(
             f"""SELECT {ACC_CODE}, MAX({ACC_NAME}),
                        COALESCE(SUM(CASE WHEN aml.date < %(start)s OR aj.code = %(an)s THEN aml.balance END), 0),
@@ -164,13 +171,19 @@ class EguitraFinanceSaft(http.Controller):
                   JOIN account_account aa ON aa.id = aml.account_id
                   JOIN account_journal aj ON aj.id = aml.journal_id
                  WHERE aml.company_id = %(company)s AND aml.parent_state = 'posted' AND aml.date <= %(end)s
-              GROUP BY 1 ORDER BY 1""",
+                   AND (aml.date >= %(fy_start)s OR {CARRIED_LINES})
+              GROUP BY 1""",
             params,
         )
+        accounts = {code: [name, float(opening), float(closing)] for code, name, opening, closing in cr.fetchall() if code}
+        company = request.env["res.company"].sudo().browse(params["company"])
+        for code, name, balance in request.env["eguitra.finance.metrics"].sudo().previous_results(company, params["fy_start"]):
+            row = accounts.setdefault(code, [name, 0.0, 0.0])
+            row[1] += balance
+            row[2] += balance
         w.raw("<GeneralLedgerAccounts>")
-        for code, name, opening, closing in cr.fetchall():
-            if not code:
-                continue
+        for code in sorted(accounts):
+            name, opening, closing = accounts[code]
             w.raw("<Account>")
             w.el("AccountID", code)
             w.el("AccountDescription", name, 255)

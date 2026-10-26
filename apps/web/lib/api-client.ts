@@ -1,28 +1,12 @@
 "use client";
 
 import useSWR, { type SWRConfiguration } from "swr";
+import { ApiError, DelaiDepasse, ReseauIndisponible } from "./erreurs";
 import type { ApiErrorBody, Me, Profile } from "./types";
 
-/** Erreur d'appel à l'API, avec le message destiné à l'utilisateur. */
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: ApiErrorBody,
-  ) {
-    super(body.message ?? body.error ?? `Erreur ${status}`);
-  }
-}
-
-/**
- * Pas de réponse dans le délai demandé (réseau faible) : la requête est abandonnée. Ce n'est pas une
- * ApiError (aucune réponse du noyau) : l'appelant la traite comme une coupure du réseau.
- */
-export class DelaiDepasse extends Error {
-  constructor(public delai: number) {
-    super("Le réseau ne répond pas à temps.");
-    this.name = "DelaiDepasse";
-  }
-}
+// Erreurs des appels : définies dans lib/erreurs.ts (lisible aussi des composants communs et du
+// serveur), reprises ici pour les écrans qui les importent avec le client.
+export { ApiError, DelaiDepasse, ReseauIndisponible, messageErreur } from "./erreurs";
 
 /** Options d'un appel. timeout : délai de réponse en millisecondes ; sans lui, l'appel attend le navigateur. */
 export interface AppelOptions {
@@ -32,49 +16,100 @@ export interface AppelOptions {
 /** Page où l'utilisateur au mot de passe provisoire choisit le sien. */
 const PAGE_MOT_DE_PASSE = "/compte/mot-de-passe";
 
-function onUnauthenticated() {
-  const here = window.location.pathname + window.location.search;
-  const app = window.location.pathname.split("/")[1] || "finance";
-  window.location.href = `/login?app=${app}&next=${encodeURIComponent(here)}`;
+/**
+ * Session expirée pendant que la page est ouverte (401) : au lieu de partir vers la page de connexion,
+ * ce qui perdait la saisie en cours, une fenêtre propose de se reconnecter sur place (chargée à la
+ * demande). Vrai une fois reconnecté sous le même compte : l'appel repart alors une fois.
+ */
+async function reconnecter(): Promise<boolean> {
+  try {
+    const { demanderReconnexion } = await import("@/components/shell/Reconnexion");
+    return await demanderReconnexion();
+  } catch {
+    // Fenêtre impossible à charger (réseau coupé entre-temps) : l'appel échoue avec « Session expirée ».
+    return false;
+  }
 }
 
-/** Application de la page courante (premier segment du chemin), transmise à la passerelle. */
-function appHeader(): Record<string, string> {
+/** Appel qui, sur une session expirée, attend la reconnexion puis repart une fois. */
+async function avecSession<R>(appel: () => Promise<R>): Promise<R> {
+  try {
+    return await appel();
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 401 || !(await reconnecter())) throw e;
+    return appel();
+  }
+}
+
+/**
+ * En-têtes de chaque appel : l'application de la page courante (premier segment du chemin) et la
+ * société que la page affiche (me.company_id de la coque, `data-societe-id`, lu au moment de
+ * l'appel). Le cookie de société est commun à tous les onglets : sans cet en-tête, un onglet passé
+ * dans l'autre société détournait les lectures et les écritures de celui-ci (en-tête lu par la
+ * passerelle puis par le noyau, qui refuse une société qui n'est pas ouverte au compte).
+ */
+export function appHeader(): Record<string, string> {
+  const enTetes: Record<string, string> = {};
   const app = window.location.pathname.split("/")[1] ?? "";
-  return ["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app) ? { "X-Eguitra-App": app } : {};
+  if (["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app)) enTetes["X-Eguitra-App"] = app;
+  const societe = document.querySelector<HTMLElement>("[data-societe-id]")?.dataset.societeId;
+  if (societe && /^\d{1,9}$/.test(societe)) enTetes["X-Eguitra-Company"] = societe;
+  return enTetes;
 }
 
+/** Corps JSON d'un texte de réponse : null s'il est vide, undefined s'il n'est pas du JSON. */
+function lireJson(texte: string): unknown {
+  if (!texte) return null;
+  try {
+    return JSON.parse(texte) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Lecture d'une réponse JSON de la passerelle. Tolérante : un corps qui n'est pas du JSON (page
+ * d'erreur d'un serveur intermédiaire, réponse tronquée) donne une ApiError au message en français,
+ * jamais « Unexpected token… is not valid JSON ».
+ */
 async function parse(res: Response) {
   if (res.status === 401) {
-    onUnauthenticated();
-    throw new ApiError(401, { error: "unauthenticated", message: "Session expirée." });
+    await res.body?.cancel().catch(() => undefined);
+    throw new ApiError(401, { error: "unauthenticated", message: "Session expirée : reconnectez-vous." });
   }
-  const text = await res.text();
-  const body = text ? (JSON.parse(text) as unknown) : null;
-  if (res.status === 403 && (body as ApiErrorBody | null)?.error === "password_change_required") {
+  const body = lireJson(await res.text());
+  const corps = body && typeof body === "object" && !Array.isArray(body) ? (body as Partial<ApiErrorBody>) : null;
+  if (res.status === 403 && corps?.error === "password_change_required") {
     // Déjà sur la page de changement : la recharger relancerait les mêmes appels, sans fin.
     if (!window.location.pathname.startsWith(PAGE_MOT_DE_PASSE)) window.location.href = PAGE_MOT_DE_PASSE;
   }
-  if (!res.ok) throw new ApiError(res.status, (body as ApiErrorBody) ?? { error: "error" });
+  if (!res.ok) throw new ApiError(res.status, { ...corps, error: typeof corps?.error === "string" ? corps.error : "error" });
+  if (body === undefined) throw new ApiError(502, { error: "invalid_response", message: "Réponse inattendue du service. Réessayez dans un instant." });
   return body;
 }
 
 /**
- * Requête à la passerelle et lecture de la réponse. Avec un délai, la requête (corps de la réponse
- * compris) est abandonnée à son terme et l'appel lève DelaiDepasse ; sans délai, rien ne change.
+ * Requête à la passerelle, réponse lue par `lire`. Avec un délai, la requête (corps de la réponse
+ * compris) est abandonnée à son terme et l'appel lève DelaiDepasse ; sans délai, l'appel attend le
+ * navigateur. Une coupure du réseau lève ReseauIndisponible (une TypeError, comme celle de fetch).
  */
-async function appeler(path: string, init: RequestInit, timeout?: number): Promise<unknown> {
-  if (!timeout) return parse(await fetch(`/api/odoo${path}`, init));
-  const abandon = new AbortController();
-  const minute = setTimeout(() => abandon.abort(), timeout);
+async function envoyer<R>(path: string, init: RequestInit, lire: (res: Response) => Promise<R>, timeout?: number): Promise<R> {
+  const abandon = timeout ? new AbortController() : null;
+  const minute = abandon ? setTimeout(() => abandon.abort(), timeout) : undefined;
   try {
-    return await parse(await fetch(`/api/odoo${path}`, { ...init, signal: abandon.signal }));
+    return await lire(await fetch(`/api/odoo${path}`, abandon ? { ...init, signal: abandon.signal } : init));
   } catch (e) {
-    if (abandon.signal.aborted) throw new DelaiDepasse(timeout);
+    if (abandon?.signal.aborted) throw new DelaiDepasse(timeout!);
+    if (e instanceof TypeError && !(e instanceof ReseauIndisponible)) throw new ReseauIndisponible(e);
     throw e;
   } finally {
     clearTimeout(minute);
   }
+}
+
+/** Requête JSON à la passerelle (reconnexion sur place si la session a expiré). */
+function appeler(path: string, init: RequestInit, timeout?: number): Promise<unknown> {
+  return avecSession(() => envoyer(path, init, parse, timeout));
 }
 
 export async function apiGet<T>(path: string, options?: AppelOptions): Promise<T> {
@@ -92,29 +127,47 @@ export async function apiSend<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", pa
 
 /** Envoi d'un fichier (pièce jointe, relevé bancaire) en multipart. */
 export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`/api/odoo${path}`, { method: "POST", body: form, headers: appHeader() });
-  return (await parse(res)) as T;
+  return (await appeler(path, { method: "POST", body: form, headers: appHeader() })) as T;
 }
 
-/** Téléchargement d'un export (CSV, XLSX, PDF) renvoyé par l'API. */
-export async function apiDownload(path: string, fallbackName: string) {
-  const res = await fetch(`/api/odoo${path}`, { headers: appHeader() });
-  if (!res.ok) {
-    await parse(res);
-    return;
+/** Nom de fichier proposé par le noyau (encodé en UTF-8 dans l'en-tête), tel quel s'il est mal encodé. */
+function nomDeFichier(brut: string): string {
+  try {
+    return decodeURIComponent(brut);
+  } catch {
+    return brut;
   }
-  const blob = await res.blob();
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
-  const name = match?.[1] ? decodeURIComponent(match[1]) : fallbackName;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+}
+
+/**
+ * Téléchargement d'un export (CSV, XLSX, PDF) renvoyé par l'API. Avec `corps`, la demande part en
+ * POST avec ce corps JSON (export paramétré). Un refus ou une panne lève une ApiError (ou
+ * ReseauIndisponible) au message en français : l'écran l'affiche au lieu d'échouer en silence.
+ */
+export async function apiDownload(path: string, fallbackName: string, corps?: unknown): Promise<void> {
+  const init: RequestInit =
+    corps === undefined
+      ? { headers: appHeader() }
+      : { method: "POST", headers: { "Content-Type": "application/json", ...appHeader() }, body: JSON.stringify(corps) };
+  const enregistrer = async (res: Response) => {
+    if (!res.ok) {
+      await parse(res);
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+    const name = match?.[1] ? nomDeFichier(match[1]) : fallbackName;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+  await avecSession(() => envoyer(path, init, enregistrer));
 }
 
 export function useApi<T>(path: string | null, config?: SWRConfiguration<T, ApiError>) {

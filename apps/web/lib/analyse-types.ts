@@ -120,7 +120,8 @@ export interface WaterfallStep {
 }
 
 export interface HealthAxis {
-  score: number;
+  /** Score 0-100 ; null quand l'axe n'est pas calculable (écarté, poids rapportés aux autres axes). */
+  score: number | null;
   label: string;
   value: number | null;
   unit: Unit;
@@ -232,6 +233,8 @@ export interface Chantier {
   code: string | null;
   client: string | null;
   state: string;
+  /** Libellé de l'état (En préparation, En cours, Réceptionné, Clos). */
+  state_label?: string | null;
   contract_amount: number;
   progress_pct: number;
   invoiced: number;
@@ -250,6 +253,8 @@ export interface Bien {
   id: number;
   name: string;
   kind: string;
+  /** Libellé de la nature du bien (Appartement, Entrepôt…). */
+  kind_label?: string | null;
   occupied: boolean;
   occupancy_pct: number;
   annual_rent: number;
@@ -266,7 +271,10 @@ export interface Bien {
 export interface ImmobilierSummary {
   properties: number;
   occupied: number;
+  /** Biens loués / biens à la date d'arrêté (définition de la finance). */
   occupancy_pct: number;
+  /** Occupation moyenne de la période : jours couverts par un bail. */
+  period_occupancy_pct?: number;
   annual_rent: number;
   portfolio_value: number;
   gross_yield_pct: number | null;
@@ -370,11 +378,13 @@ export interface ClientRow {
   share_pct: number;
   revenue_previous: number | null;
   growth_pct: number | null;
-  margin: number;
+  /** Marge directe des rotations du client ; null sans rotation. */
+  margin: number | null;
   margin_rate: number | null;
   avg_days_late: number | null;
   avg_days_to_pay: number | null;
-  payment_score: number;
+  /** Note de paiement 0-100 ; null sans historique ni encours (réputé bon payeur). */
+  payment_score: number | null;
   open: number;
   overdue: number;
   ecl: number;
@@ -412,6 +422,8 @@ export interface GroupeClients extends Envelope {
     clients: ClientRow[];
     quadrants: Array<{ key: ClientSegment; label: string; count: number; revenue: number; open: number }>;
     good_payer_score: number;
+    /** Chiffre d'affaires du plus petit des clients qui font 80 % du total (frontière de valeur). */
+    value_threshold?: number | null;
     method?: string;
   };
   behaviour: ClientBehaviour[];
@@ -674,15 +686,20 @@ export interface GroupePrevisions extends Envelope {
     revenue: Landing;
     ebe: Landing;
   };
-  /** GNF d'EBE annuel pour une hausse de 1 % de chaque levier. */
-  sensitivities: { tariff: number; volume: number; fuel: number; payroll: number };
+  /**
+   * GNF d'EBE annuel pour une hausse de 1 % de chaque levier. Tarif et volume portent sur le seul
+   * chiffre d'affaires du transport (null sans rotation sur douze mois).
+   */
+  sensitivities: { tariff: number | null; volume: number | null; fuel: number; payroll: number };
   sensitivity_base: {
     revenue_12m: number;
+    /** Chiffre d'affaires des rotations sur douze mois, base des leviers du transport. */
+    transport_revenue_12m?: number;
     ebe_12m: number;
     fuel_12m: number;
     payroll_12m: number;
     variable_rate_pct: number | null;
-    variable_source: string;
+    variable_source: string | null;
     unit: string;
   };
   method: string;
@@ -939,6 +956,12 @@ export interface CabinetComites extends Envelope {
     recommendation_labels: string[];
     decision_labels: string[];
     matrix: number[][];
+    /**
+     * Lecture de chaque case, même forme que matrix : accord, comité plus favorable ou plus sévère que la
+     * méthode, null hors calcul (À compléter, Ajourné). Lignes et colonnes ne se correspondent pas une à
+     * une : la diagonale n'est pas l'accord.
+     */
+    matrix_kinds?: Array<Array<"agree" | "lenient" | "strict" | null>>;
     agreement_pct: number | null;
     kappa: number | null;
     n: number;

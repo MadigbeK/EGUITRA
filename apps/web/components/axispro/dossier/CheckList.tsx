@@ -2,12 +2,12 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, Users, X } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, FEUILLE, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDateTime, fmtDec, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { LectureSeuleCabinet, PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, useCabinet, useRetour } from "./commun";
+import { LectureSeuleCabinet, PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, messageErreur, scoreEcrit, useCabinet, useRetour } from "./commun";
 
 /** Couleur de la puce d'état choisie. */
 const ETAT: Record<Status, string> = {
@@ -54,7 +54,9 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const [fermes, setFermes] = useState<Set<number>>(new Set());
   const [ouvert, setOuvert] = useState<number | null>(null);
   const [apercu, setApercu] = useState<{ file: File; result: ImportResult } | null>(null);
-  const { agir, bandeau } = useRetour();
+  const { agir, envoyer, enCours, occupe, bandeau, setRetour } = useRetour();
+  // Refus d'un enregistrement, affiché sur la ligne du critère concerné (et non en haut de la page).
+  const [refus, setRefus] = useState<Record<number, string>>({});
   // Évaluation figée : décision verrouillée, ou profil sans écriture (PATCH /axispro/evaluations/<id>,
   // preuves, import de fiche et validité des pièces : profil cabinet seul ; la direction et
   // l'administration lisent). Ligne par ligne, s'y ajoute le compartiment confié à un autre consultant
@@ -88,18 +90,44 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [criteria, mode, q, compartiment, domain, gate, focus, d.current_gate?.code]);
 
-  async function save(c: CriterionEval, patch: Record<string, unknown>) {
-    const r = await agir(() => apiSend("PATCH", `/axispro/evaluations/${c.id}`, patch));
-    if (r !== undefined) {
+  function noterRefus(id: number, message: string | null) {
+    setRefus((r) => {
+      const n = { ...r };
+      if (message) n[id] = message;
+      else delete n[id];
+      return n;
+    });
+  }
+  /** Enregistre un champ du critère ; rend faux si le noyau refuse (le motif s'affiche sur la ligne). */
+  async function save(c: CriterionEval, patch: Record<string, unknown>): Promise<boolean> {
+    noterRefus(c.id, null);
+    try {
+      await apiSend("PATCH", `/axispro/evaluations/${c.id}`, patch);
       void mutate();
       onChanged();
+      return true;
+    } catch (e) {
+      noterRefus(c.id, messageErreur(e, "Enregistrement impossible."));
+      return false;
+    }
+  }
+  async function validite(c: CriterionEval, docId: number, value: string): Promise<boolean> {
+    noterRefus(c.id, null);
+    try {
+      await apiSend("PATCH", `/axispro/documents/${docId}`, { validity_date: value || null });
+      void mutate();
+      onChanged();
+      return true;
+    } catch (e) {
+      noterRefus(c.id, messageErreur(e, "Validité non enregistrée."));
+      return false;
     }
   }
   async function deposer(c: CriterionEval, file: File, validite: string) {
     const form = new FormData();
     form.append("file", file);
     if (validite) form.append("validity_date", validite);
-    const r = await agir(() => apiUpload(`/axispro/evaluations/${c.id}/evidence`, form), `Preuve « ${file.name} » rattachée à ${c.code}.`);
+    const r = await envoyer(() => apiUpload(`/axispro/evaluations/${c.id}/evidence`, form), `Preuve « ${file.name} » rattachée à ${c.code}.`, `preuve-${c.id}`);
     if (r !== undefined) {
       void mutate();
       void mutateRoom();
@@ -117,15 +145,20 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
     if (!apercu) return;
     const form = new FormData();
     form.append("file", apercu.file);
-    const result = await agir(() => apiUpload<ImportResult>(`/axispro/dossiers/${d.id}/evaluation/import`, form), "Fiche d'évaluation importée.");
-    if (result) {
-      setApercu(null);
-      void mutate();
-      onChanged();
+    const result = await envoyer(() => apiUpload<ImportResult>(`/axispro/dossiers/${d.id}/evaluation/import`, form), undefined, "import");
+    if (!result) return;
+    if (!result.applied) {
+      // Refus du noyau (statut illisible, critère inconnu…) : rien n'a changé, l'aperçu reste ouvert.
+      setApercu({ file: apercu.file, result });
+      return;
     }
+    setApercu(null);
+    setRetour({ tone: "ok", text: `Fiche d'évaluation importée : ${pluriel(result.changes.length, "critère mis à jour", "critères mis à jour")}.` });
+    void mutate();
+    onChanged();
   }
 
-  if (!criteria) return <Etat error={error} onRetry={() => mutate()} label="Chargement de la check-list…" />;
+  if (!criteria) return <Etat error={error} onRetry={() => void mutate()} label="Chargement de la check-list…" />;
   const files = room?.files ?? [];
   const parDomaine = d.scoring.domains
     .map((dom) => ({ dom, rows: lignes.filter((c) => c.domain_id === dom.domain_id) }))
@@ -136,6 +169,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
 
   return (
     <div className="space-y-4">
+      {error && <ErrorBox error={error} onRetry={() => void mutate()} titre="Check-list non mise à jour" />}
       {bandeau}
       <LectureSeuleCabinet>Lecture seule : votre profil consulte l&apos;évaluation. Seul le profil cabinet évalue les critères et joint les preuves.</LectureSeuleCabinet>
       {d.locked && <Notice tone="warn">Décision du comité verrouillée : l&apos;évaluation est figée. Ouvrez une nouvelle révision pour la reprendre.</Notice>}
@@ -154,7 +188,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
             <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <Input className="pl-9" placeholder="Rechercher un critère, une observation" aria-label="Rechercher un critère ou une observation" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/evaluation.xlsx`, `${d.reference}_fiche_evaluation.xlsx`)}>
+          <Button loading={enCours === "fiche"} disabled={occupe} onClick={() => void envoyer(() => apiDownload(`/axispro/dossiers/${d.id}/evaluation.xlsx`, `${d.reference}_fiche_evaluation.xlsx`), undefined, "fiche")}>
             <Download className="h-4 w-4" /> Fiche d&apos;évaluation
           </Button>
           {!verrou && <FileButton label="Importer une fiche" accept=".xlsx,.csv,.json" onFile={previsualiser} />}
@@ -209,20 +243,20 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
                   <span className="truncate">{tete.owner ?? "Non affecté"}</span>
                 </span>
               )}
-              <span className="text-[12px] text-muted">{dom.assessed}/{dom.criteria} évalués</span>
+              <span className="text-[12px] text-muted">{fmtInt(dom.assessed)}/{fmtInt(dom.criteria)} {dom.assessed > 1 ? "évalués" : "évalué"}</span>
               {dom.knockouts > 0 && <Badge tone="danger">{dom.knockouts} KO</Badge>}
               {dom.priority && <Badge tone={PRIORITE_TON[dom.priority]}>{dom.priority}</Badge>}
               <span className="flex w-28 items-center gap-2">
                 <span className="relative h-2 flex-1 rounded-full bg-panel-3">
                   <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max(dom.score ?? 0, 1)}%`, background: couleurScore(dom.score) } as CSSProperties} />
                 </span>
-                <span className="w-8 text-right font-display text-[15px] font-bold tabular">{dom.score === null ? "–" : Math.round(dom.score)}</span>
+                <span className="w-8 text-right font-display text-[15px] font-bold tabular">{scoreEcrit(dom.score)}</span>
               </span>
             </button>
             {!ferme && (
               <ul className="divide-y divide-line border-t border-line">
                 {rows.map((c) => (
-                  <Critere key={c.id} c={c} files={files} verrou={verrou || !c.editable_by_me} ouvert={ouvert === c.id} onToggle={() => setOuvert(ouvert === c.id ? null : c.id)} onSave={(p) => save(c, p)} onDeposer={(f, v) => deposer(c, f, v)} onValidite={async (docId, v) => { await agir(() => apiSend("PATCH", `/axispro/documents/${docId}`, { validity_date: v || null })); void mutate(); onChanged(); }} />
+                  <Critere key={c.id} c={c} files={files} verrou={verrou || !c.editable_by_me} erreur={refus[c.id] ?? null} depot={enCours === `preuve-${c.id}`} ouvert={ouvert === c.id} onToggle={() => setOuvert(ouvert === c.id ? null : c.id)} onSave={(p) => save(c, p)} onDeposer={(f, v) => deposer(c, f, v)} onValidite={(docId, v) => validite(c, docId, v)} onTelecharger={(doc) => void agir(() => apiDownload(`/axispro/documents/${doc.id}/download`, doc.name))} />
                 ))}
               </ul>
             )}
@@ -235,11 +269,14 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           open
           wide
           title={`Import de « ${apercu.file.name} »`}
-          onClose={() => setApercu(null)}
+          onClose={() => { if (enCours !== "import") setApercu(null); }}
           footer={
-            <Button variant="primary" disabled={apercu.result.errors.length > 0 || apercu.result.changes.length === 0} onClick={appliquer}>
-              <FileUp className="h-4 w-4" /> Appliquer {pluriel(apercu.result.changes.length, "modification")}
-            </Button>
+            <>
+              <Button disabled={enCours === "import"} onClick={() => setApercu(null)}>Annuler</Button>
+              <Button variant="primary" loading={enCours === "import"} disabled={occupe || apercu.result.errors.length > 0 || apercu.result.changes.length === 0} onClick={() => void appliquer()}>
+                <FileUp className="h-4 w-4" /> Appliquer {pluriel(apercu.result.changes.length, "modification")}
+              </Button>
+            </>
           }
         >
           <div className="space-y-3 text-sm">
@@ -264,16 +301,29 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
 
 const CHAMPS: Record<string, string> = { status: "statut", comment: "observation", deliverable: "livrable", responsible: "responsable", due_date: "échéance" };
 
-function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onValidite }: {
+function Critere({ c, files, verrou, erreur, depot, ouvert, onToggle, onSave, onDeposer, onValidite, onTelecharger }: {
   c: CriterionEval;
   files: DocFile[];
   verrou: boolean;
+  /** Refus du dernier enregistrement de ce critère, affiché sur sa ligne. */
+  erreur: string | null;
+  /** Dépôt d'une preuve en cours sur ce critère. */
+  depot: boolean;
   ouvert: boolean;
   onToggle: () => void;
-  onSave: (patch: Record<string, unknown>) => void;
+  onSave: (patch: Record<string, unknown>) => Promise<boolean>;
   onDeposer: (file: File, validite: string) => void;
-  onValidite: (docId: number, value: string) => void;
+  onValidite: (docId: number, value: string) => Promise<boolean>;
+  onTelecharger: (doc: { id: number; name: string }) => void;
 }) {
+  /** Champ enregistré en le quittant ; refusé, il reprend la valeur enregistrée (le motif s'affiche sur la ligne). */
+  function quitter(champ: string, enregistre: string | null, valeur: (v: string) => unknown = (v) => v) {
+    return async (e: { currentTarget: HTMLInputElement | HTMLTextAreaElement }) => {
+      const el = e.currentTarget;
+      if (el.value === (enregistre ?? "")) return;
+      if (!(await onSave({ [champ]: valeur(el.value) }))) el.value = enregistre ?? "";
+    };
+  }
   const [validite, setValidite] = useState("");
   const requalifie = c.status !== "not_assessed" && c.retained !== c.status;
   const autres = files.filter((f) => !c.documents.some((x) => x.id === f.id) && f.state !== "rejected");
@@ -290,7 +340,7 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
             {c.critical && <Badge tone="warn">Critique</Badge>}
             <Tag>{REQUIREMENT[c.requirement]}</Tag>
             <Tag>{c.gate}</Tag>
-            <Tag>Poids {c.weight}</Tag>
+            <Tag>Poids {fmtDec(c.weight)}</Tag>
             {c.bankability && <Tag>Bancabilité</Tag>}
             {c.evidence_required && <Tag>Preuve exigée</Tag>}
             {c.documents.length > 0 && <Badge tone="ok">{c.documents.length} preuve{c.documents.length > 1 ? "s" : ""}</Badge>}
@@ -313,7 +363,7 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
                 aria-pressed={actif}
                 title={STATUS_LABELS[value]}
                 disabled={verrou}
-                onClick={() => !actif && onSave({ status: value })}
+                onClick={() => !actif && void onSave({ status: value })}
                 className={cx("rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70", actif ? ETAT[value] : "border-line bg-panel text-muted hover:border-line-strong hover:text-ink")}
               >
                 {STATUS_SHORT[value]}
@@ -322,13 +372,14 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
           })}
         </div>
       </div>
+      {erreur && <div className="mt-2"><Notice tone="danger">{erreur}</Notice></div>}
       {requalifie && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-ambre/30 bg-warn-doux/50 px-3 py-1.5 text-[12.5px]">
           <ShieldAlert className="h-3.5 w-3.5 text-warn" />
           <span>Retenu <b>{STATUS_LABELS[c.retained].toLowerCase()}</b> par la politique : {c.alerts.join(" ; ")}.</span>
         </div>
       )}
-      {c.suggestion && <Suggestion c={c} verrou={verrou} onApply={(status) => onSave({ status, comment: c.comment || `Statut suggéré par le modèle financier : ${c.suggestion?.label} ${valeurIndicateur(c.suggestion?.value ?? null, c.suggestion?.unit ?? "")}.` })} />}
+      {c.suggestion && <Suggestion c={c} verrou={verrou} onApply={(status) => void onSave({ status, comment: c.comment || `Statut suggéré par le modèle financier : ${c.suggestion?.label} ${valeurIndicateur(c.suggestion?.value ?? null, c.suggestion?.unit ?? "")}.` })} />}
       <button type="button" onClick={onToggle} aria-expanded={ouvert} className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
         {ouvert ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         Détails, preuves et suivi{c.responsible ? ` · ${c.responsible}` : ""}{c.due_date ? ` · échéance ${fmtDate(c.due_date)}` : ""}
@@ -338,19 +389,19 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
           {c.guidance && <p className="text-[12.5px] text-muted md:col-span-2">{c.guidance}</p>}
           <label className="block md:col-span-2">
             <span className="mb-1 block text-[12px] font-medium text-ink-2">Étude, analyse ou document à produire</span>
-            <Input disabled={verrou} defaultValue={c.deliverable ?? ""} placeholder={c.default_deliverable} onBlur={(e) => e.target.value !== (c.deliverable ?? "") && onSave({ deliverable: e.target.value })} />
+            <Input disabled={verrou} defaultValue={c.deliverable ?? ""} placeholder={c.default_deliverable} onBlur={quitter("deliverable", c.deliverable)} />
           </label>
           <label className="block">
             <span className="mb-1 block text-[12px] font-medium text-ink-2">Responsable</span>
-            <Input disabled={verrou} defaultValue={c.responsible ?? ""} placeholder="Promoteur, consultant, conseil…" onBlur={(e) => e.target.value !== (c.responsible ?? "") && onSave({ responsible: e.target.value })} />
+            <Input disabled={verrou} defaultValue={c.responsible ?? ""} placeholder="Promoteur, consultant, conseil…" onBlur={quitter("responsible", c.responsible)} />
           </label>
           <label className="block">
             <span className="mb-1 block text-[12px] font-medium text-ink-2">Échéance</span>
-            <Input disabled={verrou} type="date" defaultValue={c.due_date ?? ""} onBlur={(e) => e.target.value !== (c.due_date ?? "") && onSave({ due_date: e.target.value || null })} />
+            <Input disabled={verrou} type="date" defaultValue={c.due_date ?? ""} onBlur={quitter("due_date", c.due_date, (v) => v || null)} />
           </label>
           <label className="block md:col-span-2">
             <span className="mb-1 block text-[12px] font-medium text-ink-2">Observation</span>
-            <Textarea disabled={verrou} className="min-h-[56px]" defaultValue={c.comment ?? ""} onBlur={(e) => e.target.value !== (c.comment ?? "") && onSave({ comment: e.target.value })} />
+            <Textarea disabled={verrou} className="min-h-[56px]" defaultValue={c.comment ?? ""} onBlur={quitter("comment", c.comment)} />
           </label>
           <div className="md:col-span-2">
             <div className="mb-1.5 text-[12px] font-medium text-ink-2">Preuves{c.pieces.length ? ` · pièces de la data room rattachées : ${c.pieces.map((p) => p.code).join(", ")}` : ""}</div>
@@ -362,13 +413,13 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
                   {doc.validity_date && doc.validity_date < new Date().toISOString().slice(0, 10) && <Badge tone="danger">Périmée</Badge>}
                   <span className="ml-auto inline-flex items-center gap-1.5 text-muted">
                     valable jusqu&apos;au
-                    <Input type="date" disabled={verrou} className="w-[150px] py-0.5 text-[12px]" defaultValue={doc.validity_date ?? ""} onBlur={(e) => e.target.value !== (doc.validity_date ?? "") && onValidite(doc.id, e.target.value)} />
+                    <Input type="date" disabled={verrou} aria-label={`Validité de ${doc.name}`} className="w-[150px] py-0.5 text-[12px]" defaultValue={doc.validity_date ?? ""} onBlur={async (e) => { const el = e.currentTarget; if (el.value !== (doc.validity_date ?? "") && !(await onValidite(doc.id, el.value))) el.value = doc.validity_date ?? ""; }} />
                   </span>
-                  <button type="button" aria-label="Télécharger la preuve" className="text-muted hover:text-accent" onClick={() => apiDownload(`/axispro/documents/${doc.id}/download`, doc.name)}>
+                  <button type="button" aria-label={`Télécharger ${doc.name}`} className="text-muted hover:text-accent" onClick={() => onTelecharger(doc)}>
                     <Download className="h-3.5 w-3.5" />
                   </button>
                   {!verrou && (
-                    <button type="button" aria-label="Retirer la preuve du critère" className="text-muted hover:text-danger" onClick={() => onSave({ document_ids: c.documents.filter((x) => x.id !== doc.id).map((x) => x.id) })}>
+                    <button type="button" aria-label="Retirer la preuve du critère" className="text-muted hover:text-danger" onClick={() => void onSave({ document_ids: c.documents.filter((x) => x.id !== doc.id).map((x) => x.id) })}>
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -382,9 +433,9 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
                   Validité
                   <Input type="date" className="w-[150px] py-1 text-[12px]" value={validite} onChange={(e) => setValidite(e.target.value)} />
                 </span>
-                <FileButton small label="Joindre une preuve" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(f) => onDeposer(f, validite)} />
+                <FileButton small label={depot ? "Envoi de la preuve…" : "Joindre une preuve"} accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(f) => !depot && onDeposer(f, validite)} />
                 {autres.length > 0 && (
-                  <Select className="w-64 py-1 text-xs" value="" placeholder="Rattacher une pièce de la data room" onChange={(e) => e.target.value && onSave({ document_ids: [...c.documents.map((x) => x.id), Number(e.target.value)] })} options={autres.map((f) => ({ value: f.id, label: `${f.name} v${f.version}` }))} />
+                  <Select className="w-64 py-1 text-xs" value="" placeholder="Rattacher une pièce de la data room" onChange={(e) => e.target.value && void onSave({ document_ids: [...c.documents.map((x) => x.id), Number(e.target.value)] })} options={autres.map((f) => ({ value: f.id, label: `${f.name} v${f.version}` }))} />
                 )}
               </div>
             )}
@@ -396,12 +447,16 @@ function Critere({ c, files, verrou, ouvert, onToggle, onSave, onDeposer, onVali
   );
 }
 
+/**
+ * Valeur d'un indicateur du modèle financier : pourcentage, années, ratio (« x » ou sans unité), sinon
+ * un montant dans la devise donnée (code de la devise du dossier : « GNF », « USD »…).
+ */
 export function valeurIndicateur(v: number | null, unite: string) {
   if (v === null) return "non calculable";
-  if (unite === "GNF") return `${fmtShort(v)} GNF`;
   if (unite === "%") return fmtPct(v);
   if (unite === "ans") return annees(v);
-  return ratio(v);
+  if (unite === "x" || !unite) return ratio(v);
+  return `${fmtShort(v)}${INSECABLE}${unite}`;
 }
 
 /** Statut suggéré pour un critère adossé à un indicateur du modèle financier. */

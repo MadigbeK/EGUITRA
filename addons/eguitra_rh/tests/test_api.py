@@ -278,6 +278,13 @@ class TestApiRh(ApiCase):
         status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=admin)
         self.assertEqual(status, 403, body)
         self.assertIn("autre personne", body["message"])
+        # Salaire changé après le calcul : la paie est à recalculer avant toute validation (audit du noyau, C6).
+        self.assertTrue(detail["needs_compute"], detail)
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual(status, 422, body)
+        self.assertIn("recalcule", body["message"])
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/compute", {}, token=rh)
+        self.assertEqual((status, body.get("needs_compute")), (200, False), body)
         status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
         self.assertEqual((status, done.get("state"), done.get("validated_by")), (200, "validated", "Dg.Rh"), done)
 
@@ -302,6 +309,11 @@ class TestApiRh(ApiCase):
         status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=admin)
         self.assertEqual(status, 403, body)
         self.assertIn("autre personne", body["message"])
+        # Les deux jours sans solde annulés ne sont plus retenus qu'après un recalcul (audit du noyau, C6).
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
+        self.assertEqual(status, 422, body)
+        status, body = self.call("POST", f"/rh/payrolls/{payroll['id']}/compute", {}, token=rh)
+        self.assertEqual(status, 200, body)
         status, done = self.call("POST", f"/rh/payrolls/{payroll['id']}/validate", {}, token=dg)
         self.assertEqual((status, done.get("state")), (200, "validated"), done)
 

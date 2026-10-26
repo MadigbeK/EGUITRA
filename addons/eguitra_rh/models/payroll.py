@@ -16,7 +16,7 @@ from collections import defaultdict
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
-from ..engine import Item, amount_in_words, compute, fmt_pct
+from ..engine import IN_KIND_SUFFIX, Item, amount_in_words, compute, fmt_pct, pluriel
 from .employee import CATEGORIES, CONTRACTS, month_bounds
 
 MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
@@ -27,9 +27,9 @@ VARIATION_ALERT = 20.0
 VALIDATORS = ("admin", "direction")
 # Statut, validation et préparateurs : écrits par les seules actions de la paie (calcul, validation,
 # réouverture, comptabilisation), jamais directement, même en sudo.
-WORKFLOW_FIELDS = frozenset({"state", "validated_by", "validated_at", "prepared_by_ids"})
-WORKFLOW_MESSAGE = ("Le statut, la validation et les préparateurs d'une paie ne changent que par ses actions : "
-                    "calcul, validation, réouverture, comptabilisation.")
+WORKFLOW_FIELDS = frozenset({"state", "validated_by", "validated_at", "prepared_by_ids", "needs_compute"})
+WORKFLOW_MESSAGE = ("Le statut, la validation, les préparateurs et l'indicateur « à recalculer » d'une paie ne "
+                    "changent que par ses actions : calcul, validation, réouverture, comptabilisation.")
 WORKFLOW_KEY = "eguitra_rh_payroll_workflow"
 # Drapeau de contexte de confiance : un objet Python, qu'aucun appel distant (contexte en JSON) ne peut
 # reproduire. Posé par trusted() dans les seules actions de la paie, le suivi du solde des avances et la
@@ -73,6 +73,10 @@ class EguitraRhPayroll(models.Model):
         "res.users", "eguitra_rh_payroll_preparer_rel", "payroll_id", "user_id", "Préparée par", readonly=True,
         copy=False, help="Comptes qui ont créé ou recalculé la paie, saisi ses éléments variables, ou modifié "
                          "pendant sa préparation des données qui y entrent : aucun d'eux ne la valide.")
+    needs_compute = fields.Boolean(
+        "À recalculer", readonly=True, copy=False,
+        help="Une donnée qui entre dans la paie a changé depuis son calcul (dossier, éléments fixes, absence, "
+             "avance, paramètres, jours fériés) : la paie se recalcule avant d'être validée.")
 
     _month_unique = models.Constraint("unique(company_id, month)", "La paie de ce mois existe déjà.")
 
@@ -114,6 +118,18 @@ class EguitraRhPayroll(models.Model):
         user = self.env.user
         self.sudo().filtered(lambda p: user not in p._preparers())._add_preparers(user)
 
+    def _flag_stale(self):
+        """Paies en préparation dont les bulletins ne sont plus à jour : la validation exige un recalcul."""
+        drafts = self.sudo().filtered(lambda p: p.state == "draft" and not p.needs_compute)
+        if drafts:
+            trusted(drafts).write({"needs_compute": True})
+
+    def _mark_stale(self):
+        """Une donnée qui entre dans la paie a changé (dossier, élément fixe, absence, avance, paramètres) :
+        son auteur rejoint les préparateurs (quatre yeux), et la paie est à recalculer."""
+        self._mark_prepared()
+        self._flag_stale()
+
     def _add_preparers(self, users):
         """Seule écriture de « Préparée par » : ajoute des comptes (commande de liaison), sans jamais réécrire
         la liste. Écrite sans le filtre des comptes actifs : sinon l'ORM part de la liste lue avec ce filtre,
@@ -151,9 +167,11 @@ class EguitraRhPayroll(models.Model):
             present = payroll.payslip_ids.employee_id
             for emp in employees - present:
                 Payslip.create({"payroll_id": payroll.id, "employee_id": emp.id})
+            # Mois dans l'ordre : la retenue d'une avance tient compte des paies antérieures en préparation.
             payroll.payslip_ids._compute_slip()
             # Salarié sans aucun jour ouvrable dans le mois (entrée le dernier dimanche, par exemple).
             payroll.payslip_ids.filtered(lambda s: not s.presence_days).unlink()
+        trusted(self.sudo()).write({"needs_compute": False})
 
     def _can_validate(self, user):
         self.ensure_one()
@@ -173,13 +191,34 @@ class EguitraRhPayroll(models.Model):
                                   "(création, calcul ou éléments variables).")
             if not payroll.payslip_ids:
                 raise UserError("Aucun bulletin : aucun salarié n'est sous contrat ce mois-là.")
+            if payroll.needs_compute:
+                raise UserError(f"{payroll.name} : des données de la paie ont changé depuis son calcul (dossier, "
+                                "absence, avance, paramètres) ; elle se recalcule avant d'être validée.")
+            excess = payroll._advance_excess()
+            if excess:
+                raise UserError(f"{payroll.name} : retenue d'avance au-delà du reste dû ({', '.join(excess)}) ; "
+                                "recalculez la paie.")
             blocking = [f"{s.employee_id.name} : {a['message']}" for s in payroll.payslip_ids
                         for a in s._anomalies() if a["severity"] == "danger"]
             if blocking:
                 raise UserError("Paie non validée : " + " ; ".join(blocking))
             trusted(payroll.sudo()).write({"state": "validated", "validated_by": user.id,
                                            "validated_at": fields.Datetime.now()})
-            payroll.sudo()._advances()._update_state()
+            advances = payroll.sudo()._advances()
+            advances._update_state()
+            # Les paies suivantes en préparation qui retiennent ces avances sont à recalculer (reste dû
+            # changé), sans inscrire la direction parmi leurs préparateurs.
+            (advances._draft_payrolls() - payroll)._flag_stale()
+
+    def _advance_excess(self):
+        """Avances que cette paie retiendrait au-delà de leur reste dû (retenues des paies validées comprises)."""
+        self.ensure_one()
+        found = []
+        for adv in self.sudo()._advances():
+            here = sum(self.sudo().payslip_ids.input_ids.filtered(lambda i, a=adv: i.advance_id == a).mapped("amount"))
+            if here > adv._remaining() + 0.5:
+                found.append(adv.employee_id.name)
+        return found
 
     def action_reopen(self):
         for payroll in self:
@@ -189,8 +228,10 @@ class EguitraRhPayroll(models.Model):
             if move.exists() and move.state == "posted":
                 raise UserError("L'écriture de paie est comptabilisée : la finance doit d'abord la remettre en "
                                 "brouillon ou l'annuler.")
-            if move.exists():
-                move.unlink()
+            # Pièce numérotée : annulée et gardée (pas de trou dans le journal des salaires) ; la prochaine
+            # comptabilisation en produit une nouvelle.
+            if move.exists() and move.state == "draft":
+                move.button_cancel()
             trusted(payroll).write({"state": "draft", "move_id": False, "validated_by": False, "validated_at": False})
             payroll._advances()._update_state()
 
@@ -258,6 +299,10 @@ class EguitraRhPayroll(models.Model):
                     amounts[(acc["cnss"].id, 0, 0, f"{label} : CNSS")] -= line.amount
                 elif line.kind == "deduction" and line.code == "RTS":
                     amounts[(acc["rts"].id, 0, 0, f"{label} : RTS")] -= line.amount
+                elif line.kind == "deduction" and (line.code or "").endswith(IN_KIND_SUFFIX):
+                    # Avantage en nature fourni : contrepartie de la charge (781 par défaut), sans tiers.
+                    target = account(line.account_code, "account_salary")
+                    amounts[(target.id, 0, 0, f"{label} : {line.name}")] -= line.amount
                 elif line.kind == "deduction":
                     target = account(line.account_code, "account_advances")
                     amounts[(target.id, 0, partner, f"{line.name}, {slip.employee_id.name}")] -= line.amount
@@ -379,7 +424,9 @@ class EguitraRhPayslip(models.Model):
 
             slip._auto_inputs(settings, start, end)
 
-            base = emp.base_salary
+            # Salaire en vigueur à la fin du mois (historique du salaire) : un mois rouvert se recalcule avec
+            # son salaire, pas avec celui d'aujourd'hui.
+            base = emp._base_salary_at(end)
             hourly = base / params.monthly_hours if params.monthly_hours else 0.0
             gains, deductions = [], []
             base_rubric = self._rubric("rubric_base")
@@ -390,26 +437,42 @@ class EguitraRhPayslip(models.Model):
             for line in emp.line_ids:
                 rubric = line.rubric_id
                 if rubric.input == "hours":
-                    amount = line.quantity * hourly * (1 + (rubric.overtime_rate or 0.0) / 100.0)
-                    item = _item(rubric, amount, base=round(hourly), rate=rubric.overtime_rate, quantity=line.quantity)
+                    # Heures fixes du mois au prorata des jours payés, comme le salaire de base.
+                    hours = line.quantity * ratio_paid if rubric.kind == "gain" else line.quantity
+                    amount = hours * hourly * (1 + (rubric.overtime_rate or 0.0) / 100.0)
+                    item = _item(rubric, amount, base=round(hourly), rate=rubric.overtime_rate, quantity=round(hours, 2))
                 elif rubric.kind == "gain":
                     item = _item(rubric, line.amount * ratio_paid, base=line.amount)
                 else:
                     item = _item(rubric, line.amount)
                 (gains if rubric.kind == "gain" else deductions).append(item)
-            for inp in slip.input_ids:
-                rubric = inp.rubric_id
-                if rubric.input == "hours":
-                    amount = inp.quantity * hourly * (1 + (rubric.overtime_rate or 0.0) / 100.0)
-                    inp.amount = amount
-                    item = _item(rubric, amount, base=round(hourly), rate=rubric.overtime_rate, quantity=inp.quantity,
-                                 name=inp.note and f"{rubric.name} ({inp.note})")
-                else:
-                    item = _item(rubric, inp.amount, quantity=inp.quantity or None,
-                                 name=inp.note and f"{rubric.name} ({inp.note})")
-                (gains if rubric.kind == "gain" else deductions).append(item)
+            fixed_gains, fixed_deductions = gains, deductions
 
-            result = compute(params, gains, deductions, emp.contract_type, ratio_presence)
+            def elements(slip=slip, hourly=hourly, fixed_gains=fixed_gains, fixed_deductions=fixed_deductions):
+                """Gains et retenues du bulletin : éléments fixes, puis éléments variables (relus)."""
+                g, d = list(fixed_gains), list(fixed_deductions)
+                for inp in slip.input_ids:
+                    rubric = inp.rubric_id
+                    if rubric.input == "hours":
+                        amount = inp.quantity * hourly * (1 + (rubric.overtime_rate or 0.0) / 100.0)
+                        if inp.amount != amount:
+                            inp.amount = amount
+                        item = _item(rubric, amount, base=round(hourly), rate=rubric.overtime_rate,
+                                     quantity=inp.quantity, name=inp.note and f"{rubric.name} ({inp.note})")
+                    else:
+                        item = _item(rubric, inp.amount, quantity=inp.quantity or None,
+                                     name=inp.note and f"{rubric.name} ({inp.note})")
+                    (g if rubric.kind == "gain" else d).append(item)
+                return g, d
+
+            # Plancher CNSS au prorata des jours payés (et non de la seule présence) : une absence non
+            # rémunérée ne porte plus l'assiette au SMIG entier.
+            gains, deductions = elements()
+            result = compute(params, gains, deductions, emp.contract_type, ratio_paid)
+            if result["net"] < 0 and slip._limit_advances(-result["net"]):
+                # Retenue d'avance bornée au net : le reliquat reste dû et sera retenu les mois suivants.
+                gains, deductions = elements()
+                result = compute(params, gains, deductions, emp.contract_type, ratio_paid)
             slip.line_ids.unlink()
             slip.write({
                 "job_title": emp.job_title, "department_id": emp.department_id.id,
@@ -424,7 +487,8 @@ class EguitraRhPayslip(models.Model):
                 "employer_cost": result["employer_cost"],
                 "leave_balance": emp._leave_balance(end)["balance"],
                 "line_ids": [fields.Command.create(dict({k: (0 if v is None else v) for k, v in line.items()},
-                                                        sequence=index, account_code=_account_of(line, gains + deductions)))
+                                                        sequence=index,
+                                                        account_code=line.get("account_code") or _account_of(line, gains + deductions)))
                              for index, line in enumerate(result["lines"])],
             })
 
@@ -442,7 +506,7 @@ class EguitraRhPayslip(models.Model):
             if count:
                 Input.create({"payslip_id": self.id, "rubric_id": self._rubric("rubric_rotation").id, "source": "rotation",
                               "quantity": count, "amount": count * settings.rotation_bonus,
-                              "note": f"{count} rotation(s) validée(s)"})
+                              "note": pluriel(count, "rotation validée", "rotations validées")})
         advances = self.env["eguitra.rh.advance"].sudo().search([("employee_id", "=", emp.id), ("state", "=", "open")])
         for adv in advances:
             due = adv._due_for(self)
@@ -450,6 +514,24 @@ class EguitraRhPayslip(models.Model):
                 rubric = self._rubric("rubric_pret" if adv.kind == "pret" else "rubric_avance")
                 Input.create({"payslip_id": self.id, "rubric_id": rubric.id, "source": "advance", "advance_id": adv.id,
                               "amount": due, "note": adv.note or False})
+
+    def _limit_advances(self, shortfall):
+        """Net négatif : réduit les retenues d'avance et de prêt du bulletin (les plus fortes d'abord) du
+        manque, pour un net nul au plus bas. Le reliquat reste dû : il est retenu les mois suivants. Rend
+        vrai si une retenue a été réduite."""
+        self.ensure_one()
+        reduced = False
+        for inp in self.input_ids.filtered(lambda i: i.source == "advance").sorted("amount", reverse=True):
+            if shortfall <= 0:
+                break
+            cut = min(inp.amount, shortfall)
+            shortfall -= cut
+            reduced = True
+            if cut >= inp.amount:
+                inp.unlink()
+            else:
+                inp.write({"amount": inp.amount - cut, "note": inp.note or "Retenue réduite au net du mois"})
+        return reduced
 
     def _previous(self):
         self.ensure_one()
@@ -503,9 +585,11 @@ class EguitraRhPayslip(models.Model):
 
 
 def _item(rubric, amount, base=None, rate=None, quantity=None, name=None):
+    in_kind = rubric.kind == "gain" and rubric.in_kind
     return Item(code=rubric.code, name=name or rubric.name, kind=rubric.kind, amount=amount, cnss=rubric.cnss,
                 taxable=rubric.taxable, exempt=rubric.exempt_allowance, account_code=rubric.account_code or "",
-                base=base, rate=rate, quantity=quantity)
+                base=base, rate=rate, quantity=quantity, in_kind=in_kind,
+                in_kind_account=(rubric.in_kind_account_code or "781") if in_kind else "")
 
 
 def _account_of(line, items):

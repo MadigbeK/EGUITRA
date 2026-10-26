@@ -23,6 +23,10 @@ FINANCE_AUDITED_MODELS = [
     "account.bank.statement.line",
     "account.payment.term",
     "account.analytic.plan",
+    # Lettrage (rapprochement d'une facture et de son règlement) et relances des clients.
+    "account.partial.reconcile",
+    "account.full.reconcile",
+    "eguitra.reminder",
 ]
 AUDITED_MODELS = FINANCE_AUDITED_MODELS
 

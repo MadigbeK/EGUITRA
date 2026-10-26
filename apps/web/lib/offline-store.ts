@@ -14,9 +14,21 @@ export interface QueuedRotation {
   /** Auteur de la saisie : seul lui l'envoie, sous sa propre session. */
   user_id: number;
   created_at: string;
-  status: "pending" | "error";
+  /**
+   * pending : à envoyer ; error : refusée par le bureau, à corriger ; recue : déjà reçue au bureau, qui
+   * l'a traitée ou retouchée, si bien que sa correction faite ici n'a pas pu y être portée (le bureau la
+   * corrige depuis la fiche de la rotation).
+   */
+  status: "pending" | "error" | "recue";
   message?: string;
   payload: Record<string, unknown>;
+  /** Version de la saisie : 1 à l'enregistrement, plus un à chaque correction (absente : 1). */
+  revision?: number;
+  /**
+   * Version partie au premier envoi tenté. Sa réponse a pu se perdre : le bureau a peut-être cette
+   * version. Une correction faite ensuite repart marquée « correction » (le noyau met à jour le brouillon).
+   */
+  envoyee?: number;
 }
 
 function open(): Promise<IDBDatabase> {
@@ -47,15 +59,54 @@ async function run<T>(store: "queue" | "cache", mode: IDBTransactionMode, fn: (s
   }
 }
 
+/**
+ * Lit une saisie et la remplace dans une même transaction : aucune autre écriture (correction
+ * enregistrée, réponse d'un envoi) ne s'intercale entre la lecture et l'écriture. `fn` reçoit la saisie
+ * relue (absente : supprimée entre-temps) et rend la nouvelle, « supprimer », ou undefined pour la
+ * laisser telle quelle. Rend la saisie gardée (undefined si elle n'existe plus).
+ */
+async function transformer(uuid: string, fn: (item: QueuedRotation | undefined) => QueuedRotation | "supprimer" | undefined): Promise<QueuedRotation | undefined> {
+  const db = await open();
+  try {
+    return await new Promise<QueuedRotation | undefined>((resolve, reject) => {
+      const tx = db.transaction("queue", "readwrite");
+      const store = tx.objectStore("queue");
+      let garde: QueuedRotation | undefined;
+      const req = store.get(uuid);
+      req.onsuccess = () => {
+        const actuelle = req.result as QueuedRotation | undefined;
+        const suite = fn(actuelle);
+        if (suite === "supprimer") {
+          store.delete(uuid);
+          garde = undefined;
+        } else if (suite) {
+          store.put(suite);
+          garde = suite;
+        } else {
+          garde = actuelle;
+        }
+      };
+      tx.oncomplete = () => resolve(garde);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
 export const queue = {
   all: () => run<QueuedRotation[]>("queue", "readonly", (s) => s.getAll() as IDBRequest<QueuedRotation[]>),
+  get: (uuid: string) => run<QueuedRotation | undefined>("queue", "readonly", (s) => s.get(uuid) as IDBRequest<QueuedRotation | undefined>),
   put: (item: QueuedRotation) => run("queue", "readwrite", (s) => s.put(item)),
   remove: (uuid: string) => run("queue", "readwrite", (s) => s.delete(uuid)),
+  transformer,
 };
 
 export const cache = {
   get: <T>(key: string) => run<T | undefined>("cache", "readonly", (s) => s.get(key) as IDBRequest<T | undefined>),
   set: (key: string, value: unknown) => run("cache", "readwrite", (s) => s.put(value, key)),
+  remove: (key: string) => run("cache", "readwrite", (s) => s.delete(key)),
   clear: () => run("cache", "readwrite", (s) => s.clear()),
 };
 
@@ -73,7 +124,7 @@ export const dernierEnvoi = {
 };
 
 /** Nom du cache du service worker (public/mobile-sw.js, constante VERSION). */
-const SHELL_CACHE = "rotations-v7";
+const SHELL_CACHE = "rotations-v8";
 
 /**
  * Les listes gardées sur le téléphone n'appartiennent qu'à un utilisateur : à l'ouverture par un autre

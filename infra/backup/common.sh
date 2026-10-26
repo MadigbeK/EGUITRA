@@ -4,7 +4,9 @@ BACKUP_DIR=${BACKUP_DIR:-/backup}
 BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}
 OFFSITE_RETENTION_DAYS=${OFFSITE_RETENTION_DAYS:-30}
 MONTHLY_RETENTION_DAYS=${MONTHLY_RETENTION_DAYS:-366}
-WAL_RETENTION_DAYS=${WAL_RETENTION_DAYS:-14}
+# Journaux hors site : 15 jours, pour garantir 14 jours complets de restauration à un instant donné
+# (la sauvegarde de base qui précède l'instant visé peut dater de la veille).
+WAL_RETENTION_DAYS=${WAL_RETENTION_DAYS:-15}
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*"

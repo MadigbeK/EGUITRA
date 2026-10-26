@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { forbiddenOrigin, readJson, sameOrigin } from "@/lib/route-helpers";
+import { forbiddenOrigin, lireReponse, readJson, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import {
   COOKIES,
   accessExpiring,
   clearSessionCookies,
   clientIpFrom,
   odooFetch,
-  refreshSession,
+  renouvelerSession,
   setSessionCookies,
   type SessionTokens,
 } from "@/lib/session";
@@ -21,13 +21,24 @@ export async function POST(req: NextRequest) {
   if (!token || accessExpiring(req.cookies.get(COOKIES.expires)?.value)) {
     // Jeton d'accès expiré pendant la saisie du formulaire : la session est d'abord renouvelée.
     const refresh = req.cookies.get(COOKIES.refresh)?.value;
-    renewed = refresh ? await refreshSession(refresh, clientIp) : null;
-    token = renewed?.access_token ?? token;
+    const r = refresh ? await renouvelerSession(refresh, clientIp) : null;
+    if (r?.etat === "indisponible" && !token) return serviceIndisponible();
+    if (r?.etat === "ok") {
+      renewed = r.jetons;
+      token = renewed.access_token;
+    }
   }
-  if (!token) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  if (!token) return NextResponse.json({ error: "unauthenticated", message: "Session expirée : reconnectez-vous." }, { status: 401 });
   const { old_password, new_password } = await readJson(req);
-  const res = await odooFetch("/auth/password", { body: { old_password, new_password }, token, clientIp });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  let res: Response;
+  try {
+    res = await odooFetch("/auth/password", { body: { old_password, new_password }, token, clientIp });
+  } catch {
+    const out = serviceIndisponible();
+    if (renewed) setSessionCookies(out.cookies, renewed);
+    return out;
+  }
+  const data = await lireReponse(res);
   if (!res.ok) {
     const out = NextResponse.json(data, { status: res.status });
     if (renewed) setSessionCookies(out.cookies, renewed);

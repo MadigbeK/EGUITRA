@@ -9,11 +9,14 @@ d'envoi est paramétré ; la mise en demeure attend toujours la décision de la 
 """
 
 import base64
+import logging
 
 from markupsafe import Markup, escape
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+
+_logger = logging.getLogger(__name__)
 
 LEVELS = [
     ("1", "Rappel"),
@@ -81,12 +84,14 @@ class EguitraReminder(models.Model):
                 ("payment_state", "in", ("not_paid", "partial")), ("invoice_date_due", "<", today),
                 ("eguitra_dispute", "=", False),
             ])
-            # Créances reprises : lignes client ouvertes et échues des écritures (pas des factures).
+            # Créances reprises de l'ancien système : lignes client ouvertes et échues des à-nouveaux (AN) et des
+            # écritures de la reprise ; une autre OD débitrice (régularisation, reclassement) n'est pas relancée.
             lines = self.env["account.move.line"].search([
                 ("company_id", "=", company.id), ("account_id.account_type", "=", "asset_receivable"),
                 ("parent_state", "=", "posted"), ("move_id.move_type", "=", "entry"), ("reconciled", "=", False),
                 ("amount_residual", ">", 0), ("date_maturity", "<", today), ("partner_id", "!=", False),
                 ("move_id.eguitra_dispute", "=", False),
+                "|", ("move_id.journal_id.code", "=", "AN"), ("move_id.ref", "=like", "Reprise %"),
             ])
             partners = invoices.partner_id.commercial_partner_id | lines.partner_id.commercial_partner_id
             for partner in partners:
@@ -97,17 +102,28 @@ class EguitraReminder(models.Model):
                 level = max((lvl for lvl, days in thresholds.items() if overdue >= days), default=None)
                 if not level:
                     continue
+                # Solde net du client, en monnaie de la société : avoirs et règlements non lettrés en déduction.
+                # Un client dont les avoirs couvrent les retards n'est pas relancé.
+                net = sum(self.env["account.move.line"].search([
+                    ("company_id", "=", company.id), ("account_id.account_type", "=", "asset_receivable"),
+                    ("parent_state", "=", "posted"), ("reconciled", "=", False),
+                    ("partner_id", "child_of", partner.id),
+                ]).mapped("amount_residual"))
+                # Restes dus en monnaie de la société (une facture de 10 000 USD n'est pas « 10 000 GNF »).
+                due_amount = min(sum(mine.mapped("amount_residual_signed")) + sum(taken.mapped("amount_residual")), net)
+                if due_amount <= 0.5:
+                    continue
                 oldest_due = min(dues)
+                # Une relance annulée compte : elle n'est pas recréée la nuit suivante au même niveau.
                 already = self.search_count([
-                    ("company_id", "=", company.id), ("partner_id", "=", partner.id), ("state", "!=", "cancelled"),
+                    ("company_id", "=", company.id), ("partner_id", "=", partner.id),
                     ("level", ">=", level), ("date", ">=", oldest_due),
                 ])
                 if already:
                     continue
                 reminder = self.create({
                     "company_id": company.id, "partner_id": partner.id, "date": today, "level": level,
-                    "days_overdue": overdue,
-                    "amount_due": sum(mine.mapped("amount_residual")) + sum(taken.mapped("amount_residual")),
+                    "days_overdue": overdue, "amount_due": due_amount,
                     "invoice_ids": [(6, 0, mine.ids)], "line_ids": [(6, 0, taken.ids)],
                 })
                 created |= reminder
@@ -118,7 +134,12 @@ class EguitraReminder(models.Model):
         reminders = self.generate()
         if self.env["ir.mail_server"].sudo().search_count([]):
             for reminder in reminders.filtered(lambda r: r.level in AUTO_SEND_LEVELS and r.partner_id.email):
-                reminder.action_send("email")
+                # Un courriel en échec laisse sa relance « À envoyer » sans arrêter les suivantes.
+                try:
+                    with self.env.cr.savepoint():
+                        reminder.action_send("email")
+                except UserError as e:
+                    _logger.warning("Relance %s non envoyée : %s", reminder.id, e)
 
     def _montant(self, amount):
         """Montant en GNF, pour la lettre en PDF."""
@@ -147,8 +168,12 @@ class EguitraReminder(models.Model):
         # Seules les factures encore dues à la date d'impression : un règlement reçu depuis la création
         # de la relance la retire de la lettre et du total.
         invoices = [i for i in [
-            {"name": m.name, "date": m.invoice_date, "due": m.invoice_date_due, "total": m.amount_total,
-             "residual": m.amount_residual}
+            # Montants en monnaie de la société, comme le total ; une facture en devise rappelle son reste dû
+            # dans sa devise.
+            {"name": m.name if m.currency_id == company.currency_id
+             else f"{m.name} ({m.amount_residual:,.2f} {m.currency_id.name} restant dus)".replace(",", " ").replace(".", ","),
+             "date": m.invoice_date, "due": m.invoice_date_due, "total": m.amount_total_signed,
+             "residual": m.amount_residual_signed}
             for m in self.invoice_ids
         ] + [
             # Facture de l'ancien système : libellé de l'à-nouveau, sinon numéro de la pièce reprise.
@@ -181,6 +206,12 @@ class EguitraReminder(models.Model):
         for reminder in self:
             if reminder.state == "cancelled":
                 raise UserError("Cette relance est annulée.")
+            if reminder.state == "sent":
+                # Un second clic (ou un second onglet) enverrait deux fois la mise en demeure au client.
+                when = fields.Datetime.context_timestamp(reminder, reminder.sent_at) if reminder.sent_at else None
+                how = dict(reminder._fields["channel"].selection).get(reminder.channel, "envoi")
+                raise UserError("Cette relance est déjà envoyée" + (f" ({how.lower()}, le {when:%d/%m/%Y à %H h %M})" if when else "")
+                                + " : elle ne part pas une seconde fois.")
             if channel == "email":
                 if not reminder.partner_id.email:
                     raise UserError(f"{reminder.partner_id.name} n'a pas d'adresse électronique.")
@@ -214,11 +245,16 @@ class EguitraReminder(models.Model):
                     "datas": base64.b64encode(reminder.pdf()), "mimetype": "application/pdf",
                     "res_model": reminder._name, "res_id": reminder.id,
                 })
-                self.env["mail.mail"].sudo().create({
+                mail = self.env["mail.mail"].sudo().create({
                     "subject": data["subject"], "body_html": body, "email_to": reminder.partner_id.email,
                     "email_from": reminder.company_id.email or False, "auto_delete": False,
                     "attachment_ids": [(6, 0, piece.ids)],
-                }).send()
+                })
+                mail.send(raise_exception=False)
+                if mail.state == "exception":
+                    # Le courriel n'est pas parti : la relance reste « À envoyer », marquée envoyée elle mentirait.
+                    raise UserError(f"Le courriel à {reminder.partner_id.email} n'est pas parti : "
+                                    f"{mail.failure_reason or 'serveur d’envoi en échec'}. Réessayez ou imprimez la lettre.")
             reminder.write({"state": "sent", "channel": channel, "sent_at": fields.Datetime.now(),
                             "sent_by": self.env.user.id})
         return True

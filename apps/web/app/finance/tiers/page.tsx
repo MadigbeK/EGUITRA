@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Tag } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Tag, cx } from "@/components/ui";
 import { BalanceAgee } from "@/components/finance/BalanceAgee";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { CHAMP_INVALIDE, CREATION_TIERS, MODIFICATION_TIERS, PagesListe } from "@/components/finance/communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
-import { fmtDate, fmtGNF, fmtPct } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtGNF, fmtJours, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
 
 interface PaymentTerm { id: number; name: string; days: number | null; end_of_month: boolean | null }
 interface PartnerDetail extends Partner {
@@ -24,16 +25,23 @@ interface PartnerDetail extends Partner {
 
 type Kind = "all" | "customer" | "supplier";
 
+/** Tiers par page ; le noyau découpe la liste (offset) et en donne le total. */
+const PAGE = 100;
+
 export default function PartnersPage() {
   const [kind, setKind] = useState<Kind>("all");
   const [search, setSearch] = useState("");
+  // Rang du premier tiers affiché ; revient à 0 quand le filtre ou la recherche change.
+  const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partner | "new" | null>(null);
   const [vue, setVue] = useState<"fiches" | "agee">("fiches");
-  const params = new URLSearchParams({ limit: "300" });
+  const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
   if (kind !== "all") params.set("kind", kind);
   if (search) params.set("search", search);
   const { data, error, isLoading, mutate } = useApi<Paged<Partner>>(`/finance/partners?${params.toString()}`);
+  // La direction consulte les fiches et les soldes ; la création et la modification relèvent de la finance.
+  const creation = useAutorise(CREATION_TIERS);
 
   return (
     <div>
@@ -43,9 +51,11 @@ export default function PartnersPage() {
         actions={
           <>
             <Segmented label="Vue" options={[{ key: "fiches", label: "Fiches" }, { key: "agee", label: "Balance âgée" }]} value={vue} onChange={setVue} />
-            <Button variant="primary" onClick={() => setEditing("new")}>
-              <Plus className="h-4 w-4" /> Nouveau tiers
-            </Button>
+            {creation && (
+              <Button variant="primary" onClick={() => setEditing("new")}>
+                <Plus className="h-4 w-4" /> Nouveau tiers
+              </Button>
+            )}
           </>
         }
       />
@@ -59,13 +69,17 @@ export default function PartnersPage() {
               { key: "supplier", label: "Fournisseurs" },
             ]}
             value={kind}
-            onChange={setKind}
+            onChange={(k) => { setKind(k); setOffset(0); }}
           />
-          <Input className="max-w-xs" placeholder="Nom, NIF ou téléphone…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="max-w-xs" placeholder="Nom, NIF ou téléphone…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
         </div>
-        {error && <ErrorBox error={error} />}
-        {isLoading && !data ? (
-          <Loading />
+        {error && (
+          <div className="px-4 pt-3">
+            <ErrorBox error={error} onRetry={() => mutate()} />
+          </div>
+        )}
+        {!data ? (
+          !error && isLoading && <Loading />
         ) : (
           <DataTable
             rows={data?.items ?? []}
@@ -82,6 +96,7 @@ export default function PartnersPage() {
             ]}
           />
         )}
+        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Tiers" onPage={setOffset} />}
       </Card>
       {selected !== null && <PartnerModal id={selected} onClose={() => setSelected(null)} onEdit={(p) => { setSelected(null); setEditing(p); }} />}
       {editing && <PartnerForm partner={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
@@ -90,10 +105,11 @@ export default function PartnersPage() {
 }
 
 function PartnerModal({ id, onClose, onEdit }: { id: number; onClose: () => void; onEdit: (p: Partner) => void }) {
-  const { data: p, error } = useApi<PartnerDetail>(`/finance/partners/${id}`);
+  const { data: p, error, mutate } = useApi<PartnerDetail>(`/finance/partners/${id}`);
+  const modification = useAutorise(MODIFICATION_TIERS);
   return (
-    <Modal open wide title={p?.name ?? "Tiers"} onClose={onClose} footer={p && <Button onClick={() => onEdit(p)}>Modifier</Button>}>
-      {error && <ErrorBox error={error} />}
+    <Modal open wide title={p?.name ?? "Tiers"} onClose={onClose} footer={p && modification && <Button onClick={() => onEdit(p)}>Modifier</Button>}>
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!p && !error && <Loading />}
       {p && (
         <div className="space-y-5">
@@ -127,8 +143,10 @@ function PartnerModal({ id, onClose, onEdit }: { id: number; onClose: () => void
                 { key: "kind", label: "Nature" },
                 { key: "date", label: "Date", render: (i) => fmtDate(i.date) },
                 { key: "due", label: "Échéance", render: (i) => fmtDate(i.due) },
-                { key: "late_days", label: "Retard", align: "right", render: (i) => (i.late_days ? <span className="text-warn">{i.late_days} j</span> : "–") },
-                { key: "residual", label: "Reste", align: "right", render: (i) => fmtGNF(Math.abs(i.residual)) },
+                { key: "late_days", label: "Retard", align: "right", render: (i) => (i.late_days ? <span className="text-warn">{fmtJours(i.late_days)}</span> : "–") },
+                // Dans le sens de la nature : ce que le client nous doit, ce que nous devons au fournisseur ; un reste
+                // négatif (avoir, trop-perçu, avance) reste négatif au lieu de passer pour une dette.
+                { key: "residual", label: "Reste", align: "right", render: (i) => { const v = i.kind === "client" ? i.residual : -i.residual; return <span className={v < 0 ? "text-muted" : undefined} title={v < 0 ? "Avoir, trop-perçu ou avance non imputés" : undefined}>{fmtGNF(v)}</span>; } },
               ]}
             />
           </Card>
@@ -166,7 +184,19 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: (Partner & Partia
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const term = (days: string, eom: boolean) => (days.trim() === "" ? null : { days: Number(days), end_of_month: eom });
+  const term = (days: string, eom: boolean) => (days.trim() === "" ? null : { days: lireNombre(days), end_of_month: eom });
+  // Délais et limite lus à la française et contrôlés : « 30 j » devenait « Comptant », « 1.500.000 »
+  // supprimait la limite. Une saisie illisible est signalée sous le champ et bloque l'enregistrement.
+  const erreurDelai = (v: string) => {
+    if (!v.trim()) return undefined;
+    const n = lireNombre(v);
+    if (n === null) return AIDE_NOMBRE;
+    return Number.isInteger(n) && n >= 0 && n <= 365 ? undefined : "Un nombre entier de jours, de 0 à 365.";
+  };
+  const limite = lireNombre(form.credit_limit);
+  const erreurLimite = nombreIllisible(form.credit_limit) ? AIDE_NOMBRE : limite !== null && limite < 0 ? "La limite de crédit est positive." : undefined;
+  const erreurs = { client: erreurDelai(form.customer_days), fournisseur: erreurDelai(form.supplier_days), limite: erreurLimite };
+  const invalide = Boolean(erreurs.client || erreurs.fournisseur || erreurs.limite);
   async function submit() {
     setBusy(true);
     setError(null);
@@ -183,7 +213,7 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: (Partner & Partia
       customer: form.customer,
       supplier: form.supplier,
       vat_exempt: form.vat_exempt,
-      credit_limit: form.credit_limit ? Number(form.credit_limit.replace(/\s/g, "")) : 0,
+      credit_limit: limite ?? 0,
       // Une condition n'est envoyée que modifiée (une condition à plusieurs échéances reste intacte).
       ...(form.customer_days !== termDays(partner?.payment_term) || form.customer_eom !== (partner?.payment_term?.end_of_month ?? false)
         ? { payment_term: term(form.customer_days, form.customer_eom) }
@@ -208,7 +238,7 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: (Partner & Partia
     </Field>
   );
   return (
-    <Modal open wide title={partner ? `Modifier ${partner.name}` : "Nouveau tiers"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.name}>Enregistrer</Button>}>
+    <Modal open wide title={partner ? `Modifier ${partner.name}` : "Nouveau tiers"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.name || invalide}>Enregistrer</Button>}>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {error && (
           <div className="col-span-2 md:col-span-4">
@@ -226,26 +256,26 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: (Partner & Partia
         {text("city", "Ville")}
         <div className="flex flex-col justify-end gap-1.5 pb-1 text-sm">
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.customer} onChange={(e) => setForm({ ...form, customer: e.target.checked })} /> Client
+            <input type="checkbox" checked={form.customer} disabled={Boolean(partner?.customer)} title={partner?.customer ? "Un tiers déjà client le reste" : undefined} onChange={(e) => setForm({ ...form, customer: e.target.checked })} /> Client
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.checked })} /> Fournisseur
+            <input type="checkbox" checked={form.supplier} disabled={Boolean(partner?.supplier)} title={partner?.supplier ? "Un tiers déjà fournisseur le reste" : undefined} onChange={(e) => setForm({ ...form, supplier: e.target.checked })} /> Fournisseur
           </label>
         </div>
-        <Field label="Délai de paiement client (jours)" hint="Vide : selon la société">
-          <Input inputMode="numeric" className="font-mono" value={form.customer_days} onChange={(e) => setForm({ ...form, customer_days: e.target.value })} />
+        <Field label="Délai de paiement client (jours)" hint="Vide : selon la société" error={erreurs.client}>
+          <Input inputMode="numeric" aria-invalid={Boolean(erreurs.client)} className={cx("font-mono", CHAMP_INVALIDE)} value={form.customer_days} onChange={(e) => setForm({ ...form, customer_days: e.target.value })} />
         </Field>
         <label className="flex items-end gap-2 pb-2 text-sm">
           <input type="checkbox" checked={form.customer_eom} onChange={(e) => setForm({ ...form, customer_eom: e.target.checked })} /> à compter de la fin du mois
         </label>
-        <Field label="Délai de paiement fournisseur (jours)" hint="Vide : selon la société">
-          <Input inputMode="numeric" className="font-mono" value={form.supplier_days} onChange={(e) => setForm({ ...form, supplier_days: e.target.value })} />
+        <Field label="Délai de paiement fournisseur (jours)" hint="Vide : selon la société" error={erreurs.fournisseur}>
+          <Input inputMode="numeric" aria-invalid={Boolean(erreurs.fournisseur)} className={cx("font-mono", CHAMP_INVALIDE)} value={form.supplier_days} onChange={(e) => setForm({ ...form, supplier_days: e.target.value })} />
         </Field>
         <label className="flex items-end gap-2 pb-2 text-sm">
           <input type="checkbox" checked={form.supplier_eom} onChange={(e) => setForm({ ...form, supplier_eom: e.target.checked })} /> à compter de la fin du mois
         </label>
-        <Field label="Limite de crédit (GNF)" hint="Vide : pas de limite" className="col-span-2">
-          <Input inputMode="numeric" className="font-mono" value={form.credit_limit} onChange={(e) => setForm({ ...form, credit_limit: e.target.value })} />
+        <Field label="Limite de crédit (GNF)" hint="Vide : pas de limite" error={erreurs.limite} className="col-span-2">
+          <Input inputMode="numeric" aria-invalid={Boolean(erreurs.limite)} className={cx("font-mono", CHAMP_INVALIDE)} value={form.credit_limit} onChange={(e) => setForm({ ...form, credit_limit: e.target.value })} />
         </Field>
         <label className="col-span-2 flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.vat_exempt} onChange={(e) => setForm({ ...form, vat_exempt: e.target.checked })} /> Non assujetti à la TVA : ses factures de vente sont émises en exonération

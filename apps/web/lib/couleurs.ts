@@ -105,6 +105,8 @@ export const ETAT_TON: Readonly<Record<string, TonEtat>> = {
   // Transport : rotation validée qui attend sa facture. Distincte de « Facturée » dans la vue
   // « Toutes » ; c'est un état de travail pour la facturation, sans urgence.
   "À facturer": "neutral",
+  // Transport : rotation partie, livraison en cours.
+  "En route": "neutral",
   Validée: "ok",
   Approuvée: "ok",
   Comptabilisée: "ok",
@@ -123,6 +125,15 @@ export const ETAT_TON: Readonly<Record<string, TonEtat>> = {
   Refusé: "danger",
   Rejetée: "danger",
   Bloquée: "danger",
+
+  // Suivi des demandes au support (Mes demandes) : état, gravité et délai engagé.
+  Déposée: "warn",
+  "Prise en charge": "neutral",
+  Résolue: "ok",
+  Close: "neutral",
+  Majeure: "warn",
+  Mineure: "neutral",
+  "Hors délai": "danger",
 
   // Règlement.
   "Non payée": "warn",

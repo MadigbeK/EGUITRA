@@ -27,7 +27,7 @@ if [[ "${1:-quick}" == "full" ]]; then
   if [[ -n "$first" ]]; then
     rclone copy "$BACKUP_DIR/base/$first" "$remote/monthly/$first" "${opts[@]}"
   fi
-  # Rétentions de l'offre : 30 sauvegardes quotidiennes, 12 mensuelles, journaux sur 14 jours.
+  # Rétentions de l'offre : 30 sauvegardes quotidiennes, 12 mensuelles, journaux sur 14 jours (15 gardés).
   rclone delete "$remote/base" --min-age "${OFFSITE_RETENTION_DAYS}d"
   rclone delete "$remote/monthly" --min-age "${MONTHLY_RETENTION_DAYS}d"
   rclone delete "$remote/wal" --min-age "${WAL_RETENTION_DAYS}d"

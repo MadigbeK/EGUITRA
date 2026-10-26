@@ -84,7 +84,10 @@ class EguitraCommitment(models.Model):
 
     def _eguitra_required_rules(self):
         self.ensure_one()
-        codes = [self.account_id.code] if self.account_id.code else []
+        # Compte à préciser par la finance : les règles réservées à certains comptes (investissements,
+        # préfixe 2…) s'appliquent aussi tant qu'il manque, faute de pouvoir les écarter. La finance
+        # précise le compte en brouillon ou après un refus (« Modifier »), puis l'engagement est resoumis.
+        codes = [self.account_id.code] if self.account_id.code else None
         return self.env["eguitra.approval.rule"]._applicable("commitment", self.company_id, self.amount, codes)
 
     def _eguitra_last_request(self):

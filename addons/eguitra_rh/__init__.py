@@ -7,6 +7,7 @@ AUDITED_MODELS = [
     "eguitra.rh.employee", "eguitra.rh.employee.line", "eguitra.rh.document", "eguitra.rh.department",
     "eguitra.rh.leave", "eguitra.rh.advance", "eguitra.rh.payroll", "eguitra.rh.payslip",
     "eguitra.rh.payslip.input", "eguitra.rh.settings", "eguitra.rh.tax.bracket", "eguitra.rh.rubric",
+    "eguitra.rh.salary.change", "eguitra.rh.leave.type", "eguitra.rh.holiday",
 ]
 
 

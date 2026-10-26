@@ -21,8 +21,9 @@ après suppression de la base abîmée.
 Perte de données maximale : 15 minutes, y compris en cas de perte du serveur (un segment WAL au
 plus toutes les 5 minutes, copié hors site dans les 5 minutes suivantes). Rétention locale : 14 jours (`BACKUP_RETENTION_DAYS`).
 Hors site, conformément à l'offre : 30 sauvegardes quotidiennes, 12 sauvegardes mensuelles (la
-première de chaque mois, dossier `monthly/`) et 14 jours de journaux de transactions, soit une
-restauration possible à n'importe quel instant des 14 derniers jours.
+première de chaque mois, dossier `monthly/`) et 14 jours de journaux de transactions (15 gardés,
+la sauvegarde de base qui précède l'instant visé pouvant dater de la veille), soit une restauration
+possible à n'importe quel instant des 14 derniers jours.
 
 Le conteneur `backup` fait le travail (`scheduler.sh`) ; son état de santé (`check.sh`) passe à
 `unhealthy` si l'archivage des WAL échoue ou n'a rien produit depuis 15 minutes, si la dernière
@@ -61,7 +62,13 @@ cd ~/eguitra/infra
 backup/restore-test.sh                                            # état le plus récent
 backup/restore-test.sh --target "2026-10-14 10:00:00"             # état à un instant donné
 backup/restore-test.sh --target "2026-10-14 10:00:00" --report    # avec compte rendu
+backup/restore-test.sh --offsite --report                         # depuis la copie hors site
 ```
+
+`--offsite` télécharge la sauvegarde de base et les journaux depuis la copie hors site (déchiffrés
+dans le conteneur des sauvegardes), dans un dossier jetable, puis restaure comme d'habitude : c'est
+la reprise après perte du serveur, et la durée mesurée, téléchargement compris, est le vrai délai de
+reprise. À jouer une fois dès la copie hors site en service, puis chaque trimestre.
 
 Le script restaure dans un PostgreSQL jetable (port local 5433, archives en lecture seule),
 rejoue les WAL, affiche des contrôles (sociétés, utilisateurs, pièces comptables, dernière
@@ -83,6 +90,6 @@ rejoue les WAL, affiche des contrôles (sociétés, utilisateurs, pièces compta
    visé) dans le volume `eguitra_odoo-prod-data`, sous `filestore/<base>/`, propriétaire 100:101.
 6. `docker rm -f eguitra-restore-test && docker compose up -d`, puis contrôler les écrans
    (tableau de bord, dernières pièces saisies) avant de rouvrir l'accès.
-7. Sans serveur (perte totale) : nouveau serveur avec `setup-vps.sh` et `up.sh`, récupérer les
-   copies hors site avec `rclone copy secure:base` et `secure:wal` vers `/srv/eguitra/backup/`,
-   puis reprendre à l'étape 2.
+7. Sans serveur (perte totale) : nouveau serveur avec `setup-vps.sh` et `up.sh`, `infra/backup.env`
+   recopié depuis le coffre du gérant (mêmes mots de passe de chiffrement), puis
+   `backup/restore-test.sh --offsite --keep [--target "AAAA-MM-JJ HH:MM:SS"]` à l'étape 2.

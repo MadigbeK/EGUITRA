@@ -1,29 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Dotations aux amortissements échues, chaque nuit, pour toutes les sociétés. -->
-    <record id="cron_asset_depreciation" model="ir.cron">
-        <field name="name">EGUITRA : dotations aux amortissements</field>
-        <field name="model_id" ref="account_asset_management.model_account_asset"/>
-        <field name="state">code</field>
-        <field name="code">model._eguitra_cron_depreciate()</field>
-        <field name="user_id" ref="base.user_root"/>
-        <field name="interval_number">1</field>
-        <field name="interval_type">days</field>
-        <!-- Chaque nuit à 01 h 20 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
-        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:20:00')"/>
-        <field name="active" eval="True"/>
-    </record>
-    <!-- Relances des clients : créées chaque nuit, envoyées seules si un serveur de courriel existe. -->
-    <record id="cron_reminders" model="ir.cron">
-        <field name="name">EGUITRA : relances des clients</field>
-        <field name="model_id" ref="model_eguitra_reminder"/>
-        <field name="state">code</field>
-        <field name="code">model._cron_generate()</field>
-        <field name="user_id" ref="base.user_root"/>
-        <field name="interval_number">1</field>
-        <field name="interval_type">days</field>
-        <!-- Chaque nuit à 01 h 40 (heure de Conakry, UTC), recalé à chaque mise à jour. -->
-        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:40:00')"/>
-        <field name="active" eval="True"/>
-    </record>
+    <!-- Créées à l'installation, jamais rechargées ensuite : une tâche suspendue (pendant la reprise, par
+         exemple) reste suspendue et garde son heure après une mise à jour du module (pré-migration
+         19.0.1.9.0 pour les bases existantes). -->
+    <data noupdate="1">
+        <!-- Dotations aux amortissements échues, chaque nuit, pour toutes les sociétés. -->
+        <record id="cron_asset_depreciation" model="ir.cron">
+            <field name="name">EGUITRA : dotations aux amortissements</field>
+            <field name="model_id" ref="account_asset_management.model_account_asset"/>
+            <field name="state">code</field>
+            <field name="code">model._eguitra_cron_depreciate()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <!-- Chaque nuit à 01 h 20 (heure de Conakry, UTC). -->
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:20:00')"/>
+            <field name="active" eval="True"/>
+        </record>
+        <!-- Relances des clients : créées chaque nuit, envoyées seules si un serveur de courriel existe. -->
+        <record id="cron_reminders" model="ir.cron">
+            <field name="name">EGUITRA : relances des clients</field>
+            <field name="model_id" ref="model_eguitra_reminder"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_generate()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <!-- Chaque nuit à 01 h 40 (heure de Conakry, UTC). -->
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:40:00')"/>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
 </odoo>

@@ -4,8 +4,22 @@
  * routes de controllers/owners.py. Données fictives.
  */
 
+import { readFileSync } from "node:fs";
+
 let R = null; // références du serveur, posées par enregistrerProprietaires
 const SEQ = { fuel: 0, rule: 0, statement: 0, line: 0, move: 9000 };
+
+const DEPOTS = { conakry_sgp: "Conakry (dépôt SGP)", kankan_sgp: "Kankan (dépôt SGP)", nzerekore_sgp: "N'Zérékoré (dépôt SGP)", kamsar_cbg: "Kamsar (dépôt CBG)" };
+const SCALE = { id: 1, name: "Arrêté A/2019/816/MH", authority: "Ministère des Hydrocarbures", date_signed: "2019-03-19", date_from: "2019-04-01", note: "Nouveaux tarifs de transport du carburant en République de Guinée, en GNF par litre. Les distances sont des estimations dérivées du tarif." };
+const BAREME = readFileSync(new URL("../../../addons/eguitra_transport/data/eguitra.transport.official.rate.csv", import.meta.url), "utf8")
+  .trim().split("\n").slice(1).map((line, i) => {
+    const [, , depot, sequence, destination, prefecture, rate, distance] = line.split(",");
+    return {
+      id: i + 1, depot, depot_label: DEPOTS[depot], sequence: Number(sequence), destination, prefecture: prefecture || null,
+      rate: Number(rate), rate_per_m3: Math.round(Number(rate) * 1000), distance_km: distance ? Number(distance) : null,
+      scale: { id: 1, name: SCALE.name, date_from: SCALE.date_from },
+    };
+  });
 
 export const OWNERSHIP_LABELS = { own: "Propre", managed: "Géré pour un propriétaire" };
 const BASES = [
@@ -180,6 +194,17 @@ export function enregistrerProprietaires(refs) {
   const notFound = (m) => new ApiError(404, "not_found", m);
   const rule = (m) => new ApiError(422, "business_rule", m);
 
+  // Barème officiel : les données du module (arrêté A/2019/816/MH), lues telles quelles.
+  route("GET", "/transport/official-rates", TR_READ, (ctx) => {
+    const depot = ctx.query.depot;
+    const q = (ctx.query.q || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const items = BAREME.filter((r) => (!depot || r.depot === depot) && (!q || `${r.destination} ${r.prefecture ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(q)));
+    return {
+      scale: { ...SCALE, rate_count: BAREME.length }, scales: [{ id: 1, name: SCALE.name, date_from: SCALE.date_from }],
+      depots: Object.entries(DEPOTS).map(([code, label]) => ({ code, label, count: BAREME.filter((r) => r.depot === code).length })),
+      items, tolerance: 1,
+    };
+  });
   route("GET", "/transport/fuel-prices", TR_READ, (ctx) => ({
     current: fuelPriceAt(ctx.company, R.TODAY),
     items: DB.fuelPrices.filter((p) => p.company_id === ctx.company).sort((a, b) => b.date_from.localeCompare(a.date_from)).map(({ id, date_from, price, note }) => ({ id, date_from, price, note })),

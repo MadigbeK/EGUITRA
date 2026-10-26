@@ -34,6 +34,20 @@ class AccountBankStatementLine(models.Model):
             return self
         return super()._eguitra_reconcile(data)
 
+    def action_undo_reconciliation(self):
+        """Rapprochement défait d'une sortie qui réglait une échéance d'emprunt : l'écriture d'échéance
+        passée au compte du prêteur est annulée (la dette et les intérêts reviennent), l'échéance redevient
+        due et le financement soldé repasse en cours (AccountMove.button_draft, models/loan.py)."""
+        loan_lines = self.env["eguitra.loan.line"].sudo().search([("statement_line_id", "in", self.ids)])
+        result = super().action_undo_reconciliation()
+        for loan_line in loan_lines:
+            move = loan_line.move_id
+            if move.state == "posted":
+                move.button_draft()
+                move.button_cancel()
+            loan_line._reopen()
+        return result
+
     def _eguitra_impute_extra_values(self):
         values = super()._eguitra_impute_extra_values()
         values["eguitra_loan_id"] = self.eguitra_loan_id.id or False

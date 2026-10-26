@@ -47,6 +47,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/transport/taxes": "Barème et état mensuel des taxes spécifiques",
   "/transport/flotte": "Ensembles, propriété, charges, chauffeurs",
   "/transport/routes": "Distances, coûts standard, carburant, tarifs",
+  "/transport/bareme": "Tarifs officiels du transport des hydrocarbures",
   "/transport/parametres": "Manquants, relevés, clients, produits",
   "/finance/chantiers": "Coûts, avancement et marge des chantiers",
   "/finance/immobilier": "Biens, baux et loyers",
