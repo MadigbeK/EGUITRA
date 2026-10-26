@@ -210,9 +210,14 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   29 tests, `tsc`, `expo-doctor` et paquet Android au vert ; parcours vérifiés dans l'aperçu web.
 - Bloquant pour brancher la recette : une entrée de la passerelle pour les applications natives
   (`Authorization: Bearer`, routes de session rendant les jetons), à demander à l'intégrateur.
-- Ensuite : compte Expo de l'entreprise (EAS, mises à jour à distance), icônes et système de
-  conception « terrain » (session DESIGN), envoi en arrière-plan, puis formulaires HSSEQ avec le
-  module serveur (session OTHER). Hors offre initiale : avenant à chiffrer avec HSSEQ.
+- 26 octobre : relecture indépendante du socle, défauts corrigés (renouvellement de session,
+  réseau Android, envois concurrents, bord à bord) ; système de conception « terrain » de DESIGN ;
+  « Ma journée » par profil, file d'envoi commune, contrôle avant départ, alcootest masqué et
+  déclaration en un geste, sur le contrat HSSEQ et le noyau de la session OTHER (branche `hsseq`).
+  53 tests au vert, parcours vérifiés dans l'aperçu web avec le bureau simulé.
+- Ensuite : écran du départ (verrou des rotations du jour), envoi en arrière-plan, compte Expo de
+  l'entreprise (EAS, mises à jour à distance), icônes de DESIGN. Hors offre initiale : avenant à
+  chiffrer avec HSSEQ.
 
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
