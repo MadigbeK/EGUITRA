@@ -671,12 +671,13 @@ class EguitraFinanceMoves(http.Controller):
                 ],
             })
         out_move, in_move = moves
-        # La sortie passe par le circuit des décaissements au-delà du seuil ; l'entrée la suit.
+        # La sortie passe par le circuit des décaissements au-delà du seuil ; l'entrée la suit. L'entrée est
+        # liée à la sortie avant la soumission : elle entre dans l'empreinte que l'approbateur valide.
+        if "eguitra_paired_move_id" in out_move._fields:
+            out_move.sudo().eguitra_paired_move_id = in_move
         out_move.with_context(eguitra_cash_out_check=True).action_post()
         if out_move.state == "posted":
             in_move.action_post()
-        elif "eguitra_paired_move_id" in out_move._fields:
-            out_move.sudo().eguitra_paired_move_id = in_move
         return {"status": "ok" if out_move.state == "posted" else "submitted",
                 "moves": [move_summary(m) for m in moves]}
 
