@@ -49,7 +49,7 @@ TREE_FACT_KINDS = ("unusual_fact", "permanent_fact")
 ACTION_STATUSES = [("todo", "À faire"), ("in_progress", "En cours"), ("to_verify", "À vérifier"),
                    ("closed", "Close"), ("cancelled", "Annulée")]
 ACTION_ORIGINS = [("event", "Événement"), ("audit", "Audit"), ("check", "Contrôle"), ("risk", "Risque"),
-                  ("review", "Revue de direction")]
+                  ("review", "Revue de direction"), ("complaint", "Réclamation client")]
 CONTROL_LEVELS = [("elimination", "Élimination"), ("substitution", "Substitution"), ("engineering", "Ingénierie"),
                   ("administrative", "Mesure administrative"), ("ppe", "Équipement de protection")]
 REMINDER_KINDS = [("d_minus_7", "Échéance dans 7 jours"), ("d0", "Échéance du jour"), ("weekly", "Retard"),
@@ -89,8 +89,15 @@ OBJECT_MODELS = {
     "immobilization": "eguitra.hsseq.immobilization",
     "rotation": "eguitra.transport.rotation",
     "report": "eguitra.hsseq.report.month",
+    # Lot 3.
+    "spill": "eguitra.hsseq.spill",
+    "waste": "eguitra.hsseq.waste",
+    "dust": "eguitra.hsseq.dust",
+    "contamination": "eguitra.hsseq.contamination",
+    "complaint": "eguitra.hsseq.complaint",
 }
-ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver", "risk", "audit", "finding", "requirement")
+ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver", "risk", "audit", "finding", "requirement",
+                      "spill", "waste", "contamination", "complaint")
 
 # ─── Lot 2 ────────────────────────────────────────────────────────────────
 
@@ -131,6 +138,27 @@ INDICATOR_STATUSES = [("met", "Conforme"), ("watch", "Sous surveillance"), ("mis
 INDICATOR_FAMILIES = [("proactive", "Proactif"), ("reactive", "Réactif")]
 NOTIFICATION_CHANNELS = [("app", "Dans l'application"), ("email", "Courriel")]
 
+# ─── Lot 3 ────────────────────────────────────────────────────────────────
+
+# Environnement et qualité (§3).
+SPILL_STATUSES = [("open", "En cours de traitement"), ("closed", "Clos")]
+WASTE_KINDS = [("used_oil", "Huiles usagées"), ("tyres", "Pneus"), ("filters", "Filtres"), ("other", "Autres déchets")]
+WASTE_UNITS = [("l", "Litres"), ("kg", "Kilogrammes"), ("t", "Tonnes"), ("unit", "Pièces")]
+# Unité proposée pour chaque nature de déchet.
+WASTE_DEFAULT_UNIT = {"used_oil": "l", "tyres": "unit", "filters": "unit", "other": "kg"}
+WASTE_STATUSES = [("stored", "Entreposé"), ("collected", "Enlevé")]
+DUST_UNITS = [("mg_m3", "mg/m³"), ("ug_m3", "µg/m³")]
+CONTAMINATION_KINDS = [("water", "Présence d'eau"), ("mixing", "Mélange de produits"),
+                       ("impurities", "Impuretés ou sédiments"), ("off_spec", "Produit hors spécification"),
+                       ("other", "Autre contamination")]
+CONTAMINATION_STATUSES = [("open", "Ouverte"), ("closed", "Close")]
+COMPLAINT_NATURES = [("shortage", "Manquant à la livraison"), ("quality", "Qualité du produit"),
+                     ("delay", "Retard de livraison"), ("damage", "Dommage"),
+                     ("behaviour", "Comportement du conducteur"), ("documents", "Documents de livraison"),
+                     ("other", "Autre motif")]
+COMPLAINT_SEVERITIES = [("minor", "Mineure"), ("major", "Majeure"), ("critical", "Critique")]
+COMPLAINT_STATUSES = [("received", "Reçue"), ("answered", "Répondue"), ("closed", "Close")]
+
 # Profils (codes de PROFILE_GROUPS) qui lisent toute fiche HSSEQ de leurs sociétés.
 READ_ALL = frozenset({"admin", "direction", "hsseq"})
 HSSEQ_GROUP = "eguitra_base.group_profile_hsseq"
@@ -155,6 +183,25 @@ class HsseqError(UserError):
 def vehicle_kind(vehicle):
     """Profil de l'ensemble (citerne par défaut, comme dans Transport)."""
     return (vehicle.sudo().vehicle_kind if vehicle and "vehicle_kind" in vehicle._fields else False) or "tanker"
+
+
+def departed_states(env):
+    """États d'une rotation partie (en route, validée, facturée) que connaît Transport."""
+    selection = dict(env["eguitra.transport.rotation"]._fields["state"].selection)
+    return [s for s in ("en_route", "done", "invoiced") if s in selection]
+
+
+def tipper_tonnages(rotation):
+    """(tonnage chargé, tonnage livré) d'une rotation de benne, lus dans Transport, qui facture la benne à la
+    tonne : poids net du ticket de pesée (à défaut, la quantité chargée de la rotation) et quantité livrée ;
+    (0, 0) tant que la livraison n'est pas saisie."""
+    rotation = rotation.sudo()
+    weighed = rotation.weight_net if "weight_net" in rotation._fields else 0.0
+    loaded = weighed or rotation.volume_loaded or 0.0
+    delivered = rotation.volume_delivered or 0.0
+    if not loaded or not delivered:
+        return 0.0, 0.0
+    return loaded, delivered
 
 
 def day_start(day):

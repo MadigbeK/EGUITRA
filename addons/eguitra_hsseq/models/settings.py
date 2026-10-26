@@ -1,7 +1,8 @@
 """Paramètres d'HSSEQ par société, modifiables sans développement (spécification §11) : mise en service du
 verrou de départ, dates à partir desquelles une habilitation, un dossier salarié ou un document du
 véhicule absent bloque le départ, seuils de criticité, délais d'enquête, vérification d'efficacité,
-seuil d'une action coûteuse, destinataire des notifications de la direction, cibles du cockpit."""
+seuil d'une action coûteuse, destinataire des notifications de la direction, cibles du cockpit ; au lot 3,
+facteur d'émission du carburant et délai de réponse aux réclamations clients."""
 
 from datetime import timedelta
 
@@ -18,6 +19,7 @@ DEFAULT_TARGETS = {
     "qualifications_valid": 100.0, "fuel_consumption": 44.0, "co2_emissions": 1.18, "tanker_shortage": 1.5,
     "tipper_variance": 5.0, "audits_completion": 100.0, "immobilizations": 0.0,
 }
+CO2_PER_LITER = 2.68  # kg de CO₂ par litre de gazole, facteur proposé
 
 
 class EguitraHsseqSettings(models.Model):
@@ -89,6 +91,12 @@ class EguitraHsseqSettings(models.Model):
     risk_review_months = fields.Integer("Revue d'un risque tous les (mois)", default=12,
                                         help="Prochaine revue proposée à la création et après chaque revue.")
 
+    # ─── Environnement et qualité (lot 3) ─────────────────────────────────
+    co2_factor = fields.Float("Facteur d'émission (kg de CO₂ par litre)", default=CO2_PER_LITER, digits=(6, 3),
+                              help="Émissions calculées depuis le carburant des rotations ; 2,68 kg par litre de "
+                                   "gazole par défaut.")
+    complaint_response_days = fields.Integer("Réponse à une réclamation client sous (jours)", default=15)
+
     # ─── Cockpit (§10) ────────────────────────────────────────────────────
     targets = fields.Json("Cibles des indicateurs", help="Code de l'indicateur -> cible ; à défaut, la cible proposée.")
 
@@ -99,6 +107,12 @@ class EguitraHsseqSettings(models.Model):
         for s in self:
             if not (0 <= s.night_start_hour < 24 and 0 <= s.night_end_hour < 24) or s.max_driving_hours < 0:
                 raise ValidationError("Heures de nuit entre 0 et 24, durée de conduite positive.")
+
+    @api.constrains("co2_factor", "complaint_response_days")
+    def _check_lot3(self):
+        for s in self:
+            if s.co2_factor <= 0 or s.complaint_response_days < 1:
+                raise ValidationError("Facteur d'émission positif ; délai de réponse d'au moins un jour.")
 
     @api.constrains("level_moderate_min", "level_significant_min", "level_high_min")
     def _check_levels(self):

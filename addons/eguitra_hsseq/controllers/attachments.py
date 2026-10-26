@@ -12,8 +12,8 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
-from ..models.common import ATTACHMENT_OBJECTS
-from . import actions, audits, checks, events, risks, waivers
+from ..models.common import ATTACHMENT_OBJECTS, OBJECT_MODELS
+from . import actions, audits, checks, environment, events, risks, waivers
 from .common import (
     client_uuid,
     existing_by_uuid,
@@ -32,10 +32,10 @@ MAX_PER_RECORD = 30
 FORMATS = {"image/jpeg", "image/png", "application/pdf"}
 # Dépôt sans fiche (avant le formulaire) : comptes des profils de l'application.
 UPLOADERS = {"admin", "direction", "hsseq", "exploitation", "conducteur"}
-MODELS = {"event": "eguitra.hsseq.event", "action": "eguitra.hsseq.action", "check": "eguitra.hsseq.check",
-          "nonconformity": "eguitra.hsseq.nonconformity", "waiver": "eguitra.hsseq.waiver",
-          "risk": "eguitra.hsseq.risk", "audit": "eguitra.hsseq.audit", "finding": "eguitra.hsseq.finding",
-          "requirement": "eguitra.hsseq.requirement"}
+MODELS = {key: OBJECT_MODELS[key] for key in ATTACHMENT_OBJECTS}
+# Rôle d'une pièce déposée sur une fiche : preuve, document (bordereau) ou photo.
+EVIDENCE_OBJECTS = ("action", "audit", "finding", "requirement", "risk")
+DOCUMENT_OBJECTS = ("waste", "complaint")
 
 
 def closed(object_key, record):
@@ -46,6 +46,11 @@ def closed(object_key, record):
             "risk": record.status == "archived" if object_key == "risk" else False,
             "audit": record.status in ("closed", "cancelled") if object_key == "audit" else False,
             "finding": record.audit_id.status in ("closed", "cancelled") if object_key == "finding" else False,
+            # Lot 3.
+            "spill": record.status == "closed" if object_key == "spill" else False,
+            "waste": record.status == "collected" if object_key == "waste" else False,
+            "contamination": record.status == "closed" if object_key == "contamination" else False,
+            "complaint": record.status == "closed" if object_key == "complaint" else False,
             }.get(object_key, False)
 
 
@@ -54,8 +59,17 @@ def can_read(object_key, record):
                "nonconformity": lambda nc: checks.can_read(nc.check_id), "waiver": waivers.can_read,
                "risk": risks.can_read, "audit": lambda audit: audits.in_scope(audit.site_id),
                "finding": lambda finding: audits.in_scope(finding.site_id),
-               "requirement": lambda _r: bool(profiles() & set(audits.REQUIREMENT_READ))}
+               "requirement": lambda _r: bool(profiles() & set(audits.REQUIREMENT_READ)),
+               # Lot 3.
+               "spill": lambda r: reads(environment.ENV_READ) and audits.in_scope(r.site_id),
+               "waste": lambda r: reads(environment.ENV_READ) and audits.in_scope(r.site_id),
+               "contamination": lambda r: reads(environment.QUALITY_READ) and audits.in_scope(r.site_id),
+               "complaint": lambda r: reads(environment.QUALITY_READ) and audits.in_scope(r.site_id)}
     return object_key in readers and readers[object_key](record)
+
+
+def reads(allowed):
+    return bool(profiles() & set(allowed))
 
 
 def can_attach(object_key, record):
@@ -78,6 +92,8 @@ def can_attach(object_key, record):
         return record.requested_by == user
     if object_key == "risk":
         return record.owner_id == user
+    if object_key in ("spill", "waste"):
+        return environment.is_yard_writer(record.site_id)
     return False
 
 
@@ -118,7 +134,7 @@ class EguitraHsseqAttachments(http.Controller):
         elif not profiles() & UPLOADERS:
             raise forbidden("Dépôt sans fiche réservé aux profils de NIMOVA · HSSEQ.")
         content, mimetype, name = read_upload()
-        role = "evidence" if object_key in ("action", "audit", "finding", "requirement", "risk") else "photo"
+        role = "evidence" if object_key in EVIDENCE_OBJECTS else "document" if object_key in DOCUMENT_OBJECTS else "photo"
         if object_key == "nonconformity" and record.status == "open" and form.get("role") == "lift":
             role = "lift"
         file = request.env["ir.attachment"].sudo().create({

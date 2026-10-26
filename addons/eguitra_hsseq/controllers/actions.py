@@ -41,8 +41,8 @@ SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "
 # Origine d'une action -> (fiche de l'API, champ de l'action) ; une revue de direction n'a pas de fiche.
 # Origine « audit » : l'action répond à un constat de l'audit (origin_id : le constat).
 ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id"),
-                  "audit": ("finding", "finding_id")}
-CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",)}
+                  "audit": ("finding", "finding_id"), "complaint": ("complaint", "complaint_id")}
+CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",), "complaint": ("closed",)}
 TRANSITIONS = ("start", "close", "verify", "approve", "cancel", "reopen")
 
 
@@ -109,10 +109,12 @@ def action_line(action):
         origin_label = f"{action.risk_id.reference} {action.risk_id.feared_event[:120]}"
     elif action.finding_id:
         origin_label = f"{action.finding_id.reference} {action.finding_id.description[:120]}"
+    elif action.complaint_id:
+        origin_label = f"{action.complaint_id.reference} {action.complaint_id.partner_id.name or ''}".strip()
     return {
         "id": action.id, "reference": action.reference, "description": action.description, "origin": action.origin,
         "origin_id": action.origin_id or action.event_id.id or action.check_id.id or action.risk_id.id
-        or action.finding_id.id or None,
+        or action.finding_id.id or action.complaint_id.id or None,
         "origin_label": origin_label,
         "event": {"id": action.event_id.id, "reference": action.event_id.reference} if action.event_id else None,
         "control_level": action.control_level or None, "owner": user_ref(action.owner_id), "due_date": action.due_date,
@@ -329,7 +331,9 @@ class EguitraHsseqActions(http.Controller):
                         ("Niveau de maîtrise", "text"), ("Responsable", "text"), ("Échéance", "date"),
                         ("Statut", "text"), ("Jours de retard", "int"), ("Vérification d'efficacité", "date"),
                         ("Efficace", "text"), ("Coût estimé", "money"), ("Site", "text")],
-            "rows": [[a.reference, origins.get(a.origin), (a.event_id.reference or a.check_id.reference or ""),
+            "rows": [[a.reference, origins.get(a.origin), (a.event_id.reference or a.check_id.reference
+                                                           or a.risk_id.reference or a.finding_id.reference
+                                                           or a.complaint_id.reference or ""),
                       a.description, levels.get(a.control_level, ""), a.owner_id.name, a.due_date,
                       statuses.get(a.status), a._days_overdue(day), a.verification_date or None,
                       ("Oui" if a.effective else "Non") if a.verified_at else "", a.estimated_cost, a.site_id.name or ""]

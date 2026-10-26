@@ -17,6 +17,9 @@ AUDITED_MODELS = [
     "eguitra.hsseq.journey.stop", "eguitra.hsseq.immobilization", "eguitra.hsseq.audit", "eguitra.hsseq.finding",
     "eguitra.hsseq.requirement", "eguitra.hsseq.report.template", "eguitra.hsseq.report.indicator",
     "eguitra.hsseq.report.month", "eguitra.hsseq.report.value",
+    # Lot 3.
+    "eguitra.hsseq.spill", "eguitra.hsseq.waste", "eguitra.hsseq.dust", "eguitra.hsseq.contamination",
+    "eguitra.hsseq.complaint",
 ]
 
 

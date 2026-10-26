@@ -49,4 +49,33 @@
         <field name="padding">4</field>
         <field name="company_id" eval="False"/>
     </record>
+    <!-- Lot 3. -->
+    <record id="seq_spill" model="ir.sequence">
+        <field name="name">Déversements HSSEQ</field>
+        <field name="code">eguitra.hsseq.spill</field>
+        <field name="prefix">DEV/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_waste" model="ir.sequence">
+        <field name="name">Registre des déchets HSSEQ</field>
+        <field name="code">eguitra.hsseq.waste</field>
+        <field name="prefix">DEC/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_contamination" model="ir.sequence">
+        <field name="name">Contaminations de produit HSSEQ</field>
+        <field name="code">eguitra.hsseq.contamination</field>
+        <field name="prefix">CTM/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_complaint" model="ir.sequence">
+        <field name="name">Réclamations clients HSSEQ</field>
+        <field name="code">eguitra.hsseq.complaint</field>
+        <field name="prefix">REC/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
 </odoo>

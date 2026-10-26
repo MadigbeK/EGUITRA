@@ -148,4 +148,30 @@
         <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <!-- Lot 3 : environnement et qualité, documents et urgences, revue de direction, télématique. -->
+    <record id="rule_hsseq_spill_company" model="ir.rule">
+        <field name="name">Déversements : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_spill"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_waste_company" model="ir.rule">
+        <field name="name">Registre des déchets : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_waste"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_dust_company" model="ir.rule">
+        <field name="name">Mesures de poussières : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_dust"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_contamination_company" model="ir.rule">
+        <field name="name">Contaminations de produit : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_contamination"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_complaint_company" model="ir.rule">
+        <field name="name">Réclamations clients : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_complaint"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>
