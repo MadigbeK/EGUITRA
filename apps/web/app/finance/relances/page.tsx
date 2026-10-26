@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Mail, Printer, RefreshCw } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Kpi, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
-import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
+import { ECRITURE_FINANCE } from "@/components/finance/communPieces";
+import { ApiError, apiDownload, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF, fmtShort, pluriel } from "@/lib/format";
 
 interface Reminder {
@@ -43,6 +44,8 @@ export default function RemindersPage() {
   const [selected, setSelected] = useState<number | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const rows = data?.items ?? [];
+  // Calcul, envoi et annulation : routes de la finance et de l'administration ; la direction consulte.
+  const ecriture = useAutorise(ECRITURE_FINANCE);
 
   async function generate() {
     setMessage(null);
@@ -60,7 +63,7 @@ export default function RemindersPage() {
       <PageHeader
         title="Relances clients"
         subtitle="Calculées chaque nuit selon le retard : rappel, relance ferme, mise en demeure. Les deux premiers niveaux partent seuls par courriel quand un serveur d'envoi est paramétré ; la mise en demeure attend votre décision."
-        actions={<Button onClick={generate}><RefreshCw className="h-4 w-4" /> Calculer maintenant</Button>}
+        actions={ecriture && <Button onClick={generate}><RefreshCw className="h-4 w-4" /> Calculer maintenant</Button>}
       />
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       {data && !data.mail_server && <div className="mb-4"><Notice tone="warn">Aucun serveur d&apos;envoi de courriel n&apos;est paramétré : les relances s&apos;impriment et se remettent ou s&apos;envoient par courrier.</Notice></div>}
@@ -91,6 +94,7 @@ export default function RemindersPage() {
 function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailServer: boolean; onClose: () => void; onChanged: () => void }) {
   const { data, error: erreurChargement, mutate } = useApi<Reminder & { letter: Letter }>(`/finance/reminders/${id}`);
   const [error, setError] = useState<string | null>(null);
+  const ecriture = useAutorise(ECRITURE_FINANCE);
   async function act(path: string, body?: unknown) {
     setError(null);
     try {
@@ -110,10 +114,10 @@ function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailS
       onClose={onClose}
       footer={data?.state === "to_send" && (
         <>
-          <Button variant="ghost" onClick={() => act(`/finance/reminders/${id}/cancel`)}>Annuler la relance</Button>
+          {ecriture && <Button variant="ghost" onClick={() => act(`/finance/reminders/${id}/cancel`)}>Annuler la relance</Button>}
           <Button onClick={() => void apiDownload(`/finance/reminders/${id}/pdf`, `Relance-${data.partner.name}.pdf`)}><Printer className="h-4 w-4" /> Lettre en PDF</Button>
-          <Button onClick={() => act(`/finance/reminders/${id}/send`, { channel: "letter" })}>Marquer remise par courrier</Button>
-          {mailServer && data.email && <Button variant="primary" onClick={() => act(`/finance/reminders/${id}/send`, { channel: "email" })}><Mail className="h-4 w-4" /> Envoyer à {data.email}</Button>}
+          {ecriture && <Button onClick={() => act(`/finance/reminders/${id}/send`, { channel: "letter" })}>Marquer remise par courrier</Button>}
+          {ecriture && mailServer && data.email && <Button variant="primary" onClick={() => act(`/finance/reminders/${id}/send`, { channel: "email" })}><Mail className="h-4 w-4" /> Envoyer à {data.email}</Button>}
         </>
       )}
     >

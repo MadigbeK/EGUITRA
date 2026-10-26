@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Pencil, Plus } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader } from "@/components/ui";
 import { MoveStatus } from "@/components/finance/MovesPage";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { CREATION_TIERS, MODIFICATION_TIERS } from "@/components/finance/communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
 
@@ -26,6 +27,7 @@ export default function SuppliersPage() {
   const params = new URLSearchParams({ kind: "supplier", limit: "300" });
   if (search) params.set("search", search);
   const { data, error, isLoading, mutate } = useApi<Paged<Partner>>(`/finance/partners?${params.toString()}`);
+  const creation = useAutorise(CREATION_TIERS);
 
   return (
     <div>
@@ -33,9 +35,11 @@ export default function SuppliersPage() {
         title="Fournisseurs"
         subtitle="Fiches des fournisseurs : raison sociale, NIF, RCCM, contact, coordonnées. Les soldes, les conditions de paiement et les limites restent tenus par la finance."
         actions={
-          <Button variant="primary" onClick={() => setEditing("new")}>
-            <Plus className="h-4 w-4" /> Nouveau fournisseur
-          </Button>
+          creation && (
+            <Button variant="primary" onClick={() => setEditing("new")}>
+              <Plus className="h-4 w-4" /> Nouveau fournisseur
+            </Button>
+          )
         }
       />
       <Card padded={false}>
@@ -92,6 +96,7 @@ export default function SuppliersPage() {
 
 function SupplierModal({ id, onClose, onEdit }: { id: number; onClose: () => void; onEdit: (p: SupplierDetail) => void }) {
   const { data: p, error } = useApi<SupplierDetail>(`/finance/partners/${id}`);
+  const modification = useAutorise(MODIFICATION_TIERS);
   return (
     <Modal
       open
@@ -99,7 +104,7 @@ function SupplierModal({ id, onClose, onEdit }: { id: number; onClose: () => voi
       title={p?.name ?? "Fournisseur"}
       onClose={onClose}
       footer={
-        p?.supplier && (
+        p?.supplier && modification && (
           <Button onClick={() => onEdit(p)}>
             <Pencil className="h-4 w-4" /> Modifier
           </Button>

@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Undo2, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
-import { CHAMP_INVALIDE, montantDevise, nombreDevise } from "./communPieces";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, montantDevise, nombreDevise } from "./communPieces";
 import { MoveForm } from "./MoveForm";
-import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi } from "@/lib/api-client";
+import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
@@ -37,6 +37,9 @@ type Fiche = MoveDetail & { payments_awaiting_approval?: ReglementEnAttente[] | 
 export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId: number | null; onClose: () => void; onChanged: () => void; onOpen?: (id: number) => void }) {
   const { data: move, error, mutate } = useApi<Fiche>(moveId ? `/finance/moves/${moveId}` : null);
   const { achats } = useAchatsSeul(moveId !== null);
+  // Commandes montrées aux seuls profils que la route du noyau accepte : la direction consulte la pièce.
+  const saisie = useAutorise(SAISIE_PIECES);
+  const finance = useAutorise(ECRITURE_FINANCE);
   const [paying, setPaying] = useState(false);
   const [editing, setEditing] = useState(false);
   const { data: journals } = useApi<Journal[]>(paying ? "/finance/journals?type=bank,cash" : null);
@@ -253,16 +256,18 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
                   </li>
                 ))}
               </ul>
-              <FileButton
-                small
-                label="Joindre un justificatif"
-                accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
-                onFile={(file) => {
-                  const form = new FormData();
-                  form.append("file", file);
-                  void act("upload", () => apiUpload(`/finance/moves/${move.id}/attachments`, form));
-                }}
-              />
+              {saisie && (
+                <FileButton
+                  small
+                  label="Joindre un justificatif"
+                  accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
+                  onFile={(file) => {
+                    const form = new FormData();
+                    form.append("file", file);
+                    void act("upload", () => apiUpload(`/finance/moves/${move.id}/attachments`, form), () => ({ tone: "ok", text: "Justificatif joint." }));
+                  }}
+                />
+              )}
             </div>
             <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
               <dt className="text-muted">Total HT</dt>
@@ -307,17 +312,17 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
           )}
 
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-            {move.can_post && (
+            {saisie && move.can_post && (
               <Button variant="primary" loading={busy === "post"} onClick={() => act("post", () => apiSend("POST", `/finance/moves/${move.id}/post`))}>
                 <Send className="h-4 w-4" /> {achats ? "Soumettre au circuit" : move.move_type.startsWith("in_") ? "Soumettre / valider" : "Valider"}
               </Button>
             )}
-            {achat && move.state === "draft" && (
+            {saisie && achat && move.state === "draft" && (
               <Button onClick={() => setEditing(true)}>
                 <Pencil className="h-4 w-4" /> Modifier
               </Button>
             )}
-            {achat && move.state === "draft" && (
+            {saisie && achat && move.state === "draft" && (
               <Button
                 variant="danger"
                 loading={busy === "delete"}
@@ -330,7 +335,7 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
                 <Trash2 className="h-4 w-4" /> Supprimer le brouillon
               </Button>
             )}
-            {!achats && move.can_pay && !paying && (
+            {finance && move.can_pay && !paying && (
               <Button onClick={() => setPaying(true)}>
                 <Wallet className="h-4 w-4" /> {move.move_type.startsWith("out_") ? "Encaisser" : "Régler"}
               </Button>
@@ -340,12 +345,12 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
                 <Download className="h-4 w-4" /> PDF
               </Button>
             )}
-            {!achats && move.state === "posted" && (
+            {finance && move.state === "posted" && (
               <Button loading={busy === "reverse"} onClick={() => void avoir(move)}>
                 <RotateCcw className="h-4 w-4" /> {move.move_type === "entry" ? "Extourner" : "Établir un avoir"}
               </Button>
             )}
-            {!achats && move.move_type !== "entry" && move.state !== "cancel" && (
+            {finance && move.move_type !== "entry" && move.state !== "cancel" && (
               move.dispute ? (
                 <Button loading={busy === "dispute"} onClick={() => act("dispute", () => apiSend("POST", `/finance/moves/${move.id}/dispute`, { dispute: false }))}>
                   Lever le litige
@@ -371,12 +376,12 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
                 <Button onClick={() => setDisputing(true)}>Déclarer un litige</Button>
               )
             )}
-            {!achats && move.state === "cancel" && (
+            {finance && move.state === "cancel" && (
               <Button loading={busy === "reset"} onClick={() => void remettreEnBrouillon(move)}>
                 <Undo2 className="h-4 w-4" /> Remettre en brouillon
               </Button>
             )}
-            {!achats && move.state !== "cancel" && (
+            {finance && move.state !== "cancel" && (
               <Button variant="danger" loading={busy === "cancel"} onClick={() => void annuler(move)}>
                 <XCircle className="h-4 w-4" /> Annuler la pièce
               </Button>

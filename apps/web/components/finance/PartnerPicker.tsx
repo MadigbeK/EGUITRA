@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Plus, Search } from "@/components/icons";
-import { apiGet, apiSend } from "@/lib/api-client";
+import { apiGet, apiSend, useAutorise } from "@/lib/api-client";
 import type { Paged, Partner } from "@/lib/finance-types";
 import { cx } from "@/components/ui";
+import { CREATION_TIERS } from "./communPieces";
 
 /** Recherche d'un tiers avec création rapide. */
 export function PartnerPicker({
@@ -22,6 +23,8 @@ export function PartnerPicker({
   const [items, setItems] = useState<Partner[]>([]);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // « Créer » : POST /finance/partners (finance, métiers, cabinet, achats) ; la direction choisit seulement.
+  const creation = useAutorise(CREATION_TIERS);
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +84,7 @@ export function PartnerPicker({
               <span className="text-[11px] text-muted">{p.city ?? ""}</span>
             </button>
           ))}
-          {query.trim() && (
+          {creation && query.trim() && (
             <button type="button" onClick={create} className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm text-accent hover:bg-panel-2">
               <Plus className="h-4 w-4" /> Créer « {query.trim()} »
             </button>

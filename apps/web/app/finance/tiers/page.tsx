@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Tag } from "@/components/ui";
 import { BalanceAgee } from "@/components/finance/BalanceAgee";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { CREATION_TIERS, MODIFICATION_TIERS } from "@/components/finance/communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { MoveSummary, Paged, Partner } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtPct } from "@/lib/format";
 
@@ -34,6 +35,8 @@ export default function PartnersPage() {
   if (kind !== "all") params.set("kind", kind);
   if (search) params.set("search", search);
   const { data, error, isLoading, mutate } = useApi<Paged<Partner>>(`/finance/partners?${params.toString()}`);
+  // La direction consulte les fiches et les soldes ; la création et la modification relèvent de la finance.
+  const creation = useAutorise(CREATION_TIERS);
 
   return (
     <div>
@@ -43,9 +46,11 @@ export default function PartnersPage() {
         actions={
           <>
             <Segmented label="Vue" options={[{ key: "fiches", label: "Fiches" }, { key: "agee", label: "Balance âgée" }]} value={vue} onChange={setVue} />
-            <Button variant="primary" onClick={() => setEditing("new")}>
-              <Plus className="h-4 w-4" /> Nouveau tiers
-            </Button>
+            {creation && (
+              <Button variant="primary" onClick={() => setEditing("new")}>
+                <Plus className="h-4 w-4" /> Nouveau tiers
+              </Button>
+            )}
           </>
         }
       />
@@ -91,8 +96,9 @@ export default function PartnersPage() {
 
 function PartnerModal({ id, onClose, onEdit }: { id: number; onClose: () => void; onEdit: (p: Partner) => void }) {
   const { data: p, error } = useApi<PartnerDetail>(`/finance/partners/${id}`);
+  const modification = useAutorise(MODIFICATION_TIERS);
   return (
-    <Modal open wide title={p?.name ?? "Tiers"} onClose={onClose} footer={p && <Button onClick={() => onEdit(p)}>Modifier</Button>}>
+    <Modal open wide title={p?.name ?? "Tiers"} onClose={onClose} footer={p && modification && <Button onClick={() => onEdit(p)}>Modifier</Button>}>
       {error && <ErrorBox error={error} />}
       {!p && !error && <Loading />}
       {p && (

@@ -6,7 +6,8 @@ import { ArrowLeftRight, Check, FileUp, Landmark, Link2, Paperclip, Plus, Scale,
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, Field, FileButton, Input, Kpi, Loading, Modal, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { AnalyticFields, AnalyticTags, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, apiUpload, useApi, useSaisieLibre } from "@/lib/api-client";
+import { ECRITURE_FINANCE } from "@/components/finance/communPieces";
+import { ApiError, apiSend, apiUpload, useApi, useAutorise, useSaisieLibre } from "@/lib/api-client";
 import { autresTresorerie, type Account, type AnalyticShare, type CashAccount, type Ref, type TreasuryPosition } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, pluriel } from "@/lib/format";
 
@@ -147,6 +148,9 @@ export default function TreasuryPage() {
   const [matching, setMatching] = useState<StLine | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
+  // Opérations, import, rapprochement, virement et justificatifs : routes de la finance et de
+  // l'administration ; la direction consulte la position et l'état de rapprochement.
+  const ecriture = useAutorise(ECRITURE_FINANCE);
 
   function refresh() {
     void mutate();
@@ -160,18 +164,24 @@ export default function TreasuryPage() {
         subtitle="Position par compte et par devise, opérations de banque et de caisse, import des relevés, rapprochement."
         actions={
           <>
-            <Button onClick={() => setModal("transfer")}>
-              <ArrowLeftRight className="h-4 w-4" /> Virement interne
-            </Button>
-            <Button onClick={() => setModal("import")} disabled={!current || current.type !== "bank"}>
-              <FileUp className="h-4 w-4" /> Importer un relevé
-            </Button>
+            {ecriture && (
+              <Button onClick={() => setModal("transfer")}>
+                <ArrowLeftRight className="h-4 w-4" /> Virement interne
+              </Button>
+            )}
+            {ecriture && (
+              <Button onClick={() => setModal("import")} disabled={!current || current.type !== "bank"}>
+                <FileUp className="h-4 w-4" /> Importer un relevé
+              </Button>
+            )}
             <Button onClick={() => current && router.push(`/finance/tresorerie/rapprochement?journal=${current.journal_id}`)} disabled={!current}>
               <Scale className="h-4 w-4" /> État de rapprochement
             </Button>
-            <Button variant="primary" onClick={() => setModal("operation")} disabled={!current}>
-              <Plus className="h-4 w-4" /> Nouvelle opération
-            </Button>
+            {ecriture && (
+              <Button variant="primary" onClick={() => setModal("operation")} disabled={!current}>
+                <Plus className="h-4 w-4" /> Nouvelle opération
+              </Button>
+            )}
           </>
         }
       />
@@ -281,19 +291,21 @@ export default function TreasuryPage() {
                               {l.attachments}
                             </span>
                           )}
-                          <FileButton
-                            small
-                            label="Justificatif"
-                            accept={JUSTIFICATIFS}
-                            onFile={(file) => {
-                              const form = new FormData();
-                              form.append("file", file);
-                              setNotice(null);
-                              apiUpload(`/finance/treasury/lines/${l.id}/attachments`, form)
-                                .then(refresh)
-                                .catch((e) => setNotice(e instanceof ApiError ? e.message : "Envoi du justificatif impossible."));
-                            }}
-                          />
+                          {ecriture && (
+                            <FileButton
+                              small
+                              label="Justificatif"
+                              accept={JUSTIFICATIFS}
+                              onFile={(file) => {
+                                const form = new FormData();
+                                form.append("file", file);
+                                setNotice(null);
+                                apiUpload(`/finance/treasury/lines/${l.id}/attachments`, form)
+                                  .then(refresh)
+                                  .catch((e) => setNotice(e instanceof ApiError ? e.message : "Envoi du justificatif impossible."));
+                              }}
+                            />
+                          )}
                         </span>
                       ),
                     },
@@ -306,6 +318,14 @@ export default function TreasuryPage() {
                           <Badge tone={l.approval?.state === "rejected" ? "danger" : "warn"}>
                             {l.approval?.state === "rejected" ? "Décaissement refusé" : `En approbation${l.approval?.pending_with ? ` : ${l.approval.pending_with}` : ""}`}
                           </Badge>
+                        ) : !ecriture ? (
+                          l.reconciled ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted">
+                              <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted">À rapprocher</span>
+                          )
                         ) : l.reconciled ? (
                           <button type="button" className="inline-flex items-center gap-1 text-xs text-muted hover:text-warn" onClick={() => apiSend("POST", `/finance/treasury/lines/${l.id}/unreconcile`).then(refresh)}>
                             <Check className="h-3.5 w-3.5 text-ok" /> Rapprochée <Undo2 className="h-3.5 w-3.5" />

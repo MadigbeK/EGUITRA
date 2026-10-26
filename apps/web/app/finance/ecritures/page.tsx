@@ -5,7 +5,8 @@ import { Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { AnalyticFields, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { ECRITURE_FINANCE } from "@/components/finance/communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, type Account, type Journal, type MoveSummary, type Paged } from "@/lib/finance-types";
 import type { Me } from "@/lib/types";
 import { fmtDate, fmtGNF } from "@/lib/format";
@@ -28,8 +29,10 @@ const TEMPLATES: Record<string, { label: string; lines: Array<{ prefix: string; 
 export default function EntriesPage() {
   const { data, error, mutate } = useApi<Paged<MoveSummary>>("/finance/moves?type=entry&limit=100");
   const { data: me } = useApi<Me>("/auth/me");
-  // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes ».
+  // Une OD porte des comptes choisis : réservée au droit « Saisie libre des comptes », et la route
+  // (POST /finance/moves, opération diverse) à la finance et à l'administration.
   const libre = me?.rights?.free_accounts === true;
+  const saisie = useAutorise(ECRITURE_FINANCE);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   return (
@@ -38,12 +41,14 @@ export default function EntriesPage() {
         title="Journaux et opérations diverses"
         subtitle="Écritures d'OD guidées, toujours équilibrées. Les virements internes se saisissent dans Trésorerie."
         actions={
-          <Button variant="primary" onClick={() => setCreating(true)} disabled={!libre}>
-            <Plus className="h-4 w-4" /> Nouvelle OD
-          </Button>
+          saisie && (
+            <Button variant="primary" onClick={() => setCreating(true)} disabled={!libre}>
+              <Plus className="h-4 w-4" /> Nouvelle OD
+            </Button>
+          )
         }
       />
-      {me && !libre && (
+      {me && saisie && !libre && (
         <div className="mb-4">
           <Notice tone="accent">
             La saisie des opérations diverses demande le droit « Saisie libre des comptes » (Administration &gt; Utilisateurs) : vos pièces prennent le compte de leur catégorie de dépense, du type d&apos;opération ou de l&apos;activité.

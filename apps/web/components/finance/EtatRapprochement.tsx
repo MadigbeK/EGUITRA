@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, Pencil, Printer } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, cx } from "@/components/ui";
-import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
+import { ECRITURE_FINANCE } from "./communPieces";
+import { ApiError, apiDownload, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { CashAccount } from "@/lib/finance-types";
 import { fmtDate, fmtGNF } from "@/lib/format";
 
@@ -51,6 +52,8 @@ export function EtatRapprochement() {
   const { data, error, mutate } = useApi<Reconciliation>(current ? `/finance/treasury/${current}/reconciliation-statement?date=${day}` : null);
   const { data: statements, error: erreurReleves, mutate: refreshStatements } = useApi<BankStatement[]>(current ? `/finance/treasury/${current}/statements` : null);
   const [editing, setEditing] = useState<BankStatement | null>(null);
+  // Correction des soldes d'un relevé : PATCH réservé à la finance et à l'administration.
+  const ecriture = useAutorise(ECRITURE_FINANCE);
   const money = (v: number | null | undefined) => (v === null || v === undefined ? "–" : fmtGNF(v, data?.currency ?? "GNF"));
 
   return (
@@ -206,16 +209,20 @@ export function EtatRapprochement() {
                       </div>
                     ),
                   },
-                  {
-                    key: "edit",
-                    label: "",
-                    align: "right",
-                    render: (s) => (
-                      <button type="button" className="no-print text-muted hover:text-ink" aria-label="Corriger les soldes" onClick={() => setEditing(s)}>
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    ),
-                  },
+                  ...(ecriture
+                    ? [
+                        {
+                          key: "edit",
+                          label: "",
+                          align: "right" as const,
+                          render: (s: BankStatement) => (
+                            <button type="button" className="no-print text-muted hover:text-ink" aria-label={`Corriger les soldes du relevé ${s.name}`} onClick={() => setEditing(s)}>
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          ),
+                        },
+                      ]
+                    : []),
                 ]}
               />
             )}

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Input, Kpi, Loading, PageHeader, Tabs, tonEtat } from "@/components/ui";
 import { MoveDetailModal } from "./MoveDetailModal";
+import { ECRITURE_FINANCE, SAISIE_PIECES } from "./communPieces";
 import { MoveForm } from "./MoveForm";
-import { useAchatsSeul, useApi } from "@/lib/api-client";
+import { useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type MoveSummary, type Paged } from "@/lib/finance-types";
 import { fmtDate, fmtDec, fmtGNF, fmtInt, fmtShort, pluriel } from "@/lib/format";
 
@@ -134,6 +135,8 @@ function montant(m: MoveSummary, v: number | null) {
 export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
   const sale = kind === "sales";
   const { achats, pret } = useAchatsSeul(!sale);
+  // POST /finance/moves : les ventes par la finance et l'administration, les achats aussi par le profil Achats.
+  const saisie = useAutorise(sale ? ECRITURE_FINANCE : SAISIE_PIECES);
   const [view, setView] = useState<View>("all");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState<null | "out_invoice" | "out_refund" | "in_invoice" | "in_refund">(null);
@@ -159,12 +162,14 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
               : "Pièces d'achat et avoirs fournisseurs, soumis au circuit d'approbation selon les seuils."
         }
         actions={
-          <>
-            <Button onClick={() => setCreating(sale ? "out_refund" : "in_refund")}>Avoir</Button>
-            <Button variant="primary" onClick={() => setCreating(sale ? "out_invoice" : "in_invoice")}>
-              <Plus className="h-4 w-4" /> {sale ? "Nouvelle facture" : "Nouvelle pièce d'achat"}
-            </Button>
-          </>
+          saisie && (
+            <>
+              <Button onClick={() => setCreating(sale ? "out_refund" : "in_refund")}>Avoir</Button>
+              <Button variant="primary" onClick={() => setCreating(sale ? "out_invoice" : "in_invoice")}>
+                <Plus className="h-4 w-4" /> {sale ? "Nouvelle facture" : "Nouvelle pièce d'achat"}
+              </Button>
+            </>
+          )
         }
       />
       {achats ? (
