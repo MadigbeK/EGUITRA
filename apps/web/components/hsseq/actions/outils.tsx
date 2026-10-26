@@ -15,6 +15,7 @@ import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-cli
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import type { Attachment, AttachmentModel, HsseqProfile, Referentials } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
+import { texteErreur } from "@/components/hsseq/commun";
 
 /* ─── Adresse et référentiels ─────────────────────────────────────────── */
 
@@ -107,7 +108,7 @@ export function codeErreur(e: unknown): string | null {
 
 /** Message en français d'un refus : celui du noyau, sinon `defaut`. */
 export function messageErreur(e: unknown, defaut = "Enregistrement impossible."): string {
-  return e instanceof ApiError ? e.message : defaut;
+  return texteErreur(e, {}, defaut);
 }
 
 /* ─── Pièces jointes ───────────────────────────────────────────────────── */
@@ -228,7 +229,7 @@ export function Pieces({ pieces, vide, retirable, onRetiree, onErreur }: { piece
           <figure className="m-0 space-y-3">
             <Image piece={ouverte} className="max-h-[70vh] w-full rounded-xl object-contain" />
             <figcaption className="text-[12.5px] text-muted">
-              {ouverte.name}, déposée le {fmtDateTime(ouverte.created_at)} par {ouverte.created_by.name}
+              {ouverte.name}, déposée le {fmtDateTime(ouverte.created_at)}{ouverte.created_by ? ` par ${ouverte.created_by.name}` : ""}
             </figcaption>
           </figure>
         )}

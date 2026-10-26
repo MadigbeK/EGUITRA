@@ -10,27 +10,38 @@ import type { ActionLine } from "@/lib/hsseq-types";
 export const JOURS_ESCALADE = 30;
 
 /** Adresse de l'objet d'origine d'une action : l'événement, ou le contrôle avant départ ouvert dans sa fiche. */
-export function lienOrigine(a: Pick<ActionLine, "origin" | "origin_ref">): string | null {
-  if (!a.origin_ref) return null;
-  if (a.origin === "event") return `/hsseq/evenements/${a.origin_ref.id}`;
-  if (a.origin === "check") return `/hsseq/controles?vue=controles&controle=${a.origin_ref.id}`;
+export function lienOrigine(a: Pick<ActionLine, "origin" | "origin_id">): string | null {
+  if (!a.origin_id) return null;
+  if (a.origin === "event") return `/hsseq/evenements/${a.origin_id}`;
+  if (a.origin === "check") return `/hsseq/controles?vue=controles&controle=${a.origin_id}`;
   return null;
 }
 
+/**
+ * Référence et intitulé de l'origine, lus dans `origin_label` (« EVT/2026/0012 Titre » pour un
+ * événement, la référence pour un contrôle) ; la référence d'un événement vient aussi de `event`.
+ */
+export function origineLue(a: Pick<ActionLine, "origin" | "origin_label" | "event">): { reference: string | null; titre: string | null } {
+  const reference = a.event?.reference ?? (a.origin_label ? (a.origin_label.split(" ")[0] ?? null) : null);
+  const titre = a.origin_label && reference && a.origin_label.startsWith(`${reference} `) ? a.origin_label.slice(reference.length + 1) : null;
+  return { reference, titre };
+}
+
 /** Origine lisible : « Événement EVT/2026/0012 », lien vers l'objet quand il a son écran ; `titre` ajoute son intitulé. */
-export function Origine({ a, titre }: { a: Pick<ActionLine, "origin" | "origin_ref">; titre?: boolean }) {
+export function Origine({ a, titre }: { a: Pick<ActionLine, "origin" | "origin_id" | "origin_label" | "event">; titre?: boolean }) {
   const href = lienOrigine(a);
-  const nom = a.origin_ref ? `${ORIGINE_ACTION[a.origin]} ${a.origin_ref.reference}` : ORIGINE_ACTION[a.origin];
+  const lue = origineLue(a);
+  const nom = lue.reference ? `${ORIGINE_ACTION[a.origin]} ${lue.reference}` : ORIGINE_ACTION[a.origin];
   return (
     <span>
       {href ? (
-        <Link href={href} onClick={(e) => e.stopPropagation()} className="font-semibold text-accent underline-offset-2 hover:underline" title={a.origin_ref?.title}>
+        <Link href={href} onClick={(e) => e.stopPropagation()} className="font-semibold text-accent underline-offset-2 hover:underline" title={lue.titre ?? undefined}>
           {nom}
         </Link>
       ) : (
         nom
       )}
-      {titre && a.origin_ref?.title && <span className="block text-[12.5px] text-muted">{a.origin_ref.title}</span>}
+      {titre && lue.titre && <span className="block text-[12.5px] text-muted">{lue.titre}</span>}
     </span>
   );
 }

@@ -46,7 +46,6 @@ export function Motifs() {
     await enregistrer(r, { active }, `Motif ${r.code} ${active ? "activé" : "désactivé"}.`);
   }
 
-  const nomSite = (id: number) => sites?.find((s) => s.id === id)?.name ?? `Site ${id}`;
 
   return (
     <Card padded={false} title="Motifs du verrou de départ">
@@ -93,7 +92,7 @@ export function Motifs() {
                 render: (r) => (
                   <span className="flex flex-col items-start gap-1">
                     <span className={cx("text-[13px]", r.disabled_sites.length ? "font-medium text-ink" : "text-ink-2")}>
-                      {r.disabled_sites.length ? `Hors ${r.disabled_sites.map(nomSite).join(", ")}` : "Tous les sites"}
+                      {r.disabled_sites.length ? `Hors ${r.disabled_sites.map((x) => x.name).join(", ")}` : "Tous les sites"}
                     </span>
                     {r.lot === 1 && (
                       <Button variant="ghost" size="sm" className="-ml-2.5" onClick={() => setParSite(r)} disabled={!sites} aria-label={`Sites du motif ${r.code}`}>
@@ -163,9 +162,9 @@ function Interrupteur({ actif, occupe, nom, onBasculer }: { actif: boolean; occu
 
 /** Sites où le motif s'applique : décocher un site l'en retire (disabled_sites). */
 function SitesDuMotif({ motif, sites, onClose, onEnregistrer }: { motif: ReasonSetting; sites: HsseqSite[]; onClose: () => void; onEnregistrer: (desactives: number[]) => Promise<void> }) {
-  const [desactives, setDesactives] = useState<number[]>(motif.disabled_sites);
+  const [desactives, setDesactives] = useState<number[]>(motif.disabled_sites.map((x) => x.id));
   const [busy, setBusy] = useState(false);
-  const proposes = sites.filter((s) => s.active || motif.disabled_sites.includes(s.id)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  const proposes = sites.filter((s) => s.active || motif.disabled_sites.some((x) => x.id === s.id)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
   return (
     <Modal
       open

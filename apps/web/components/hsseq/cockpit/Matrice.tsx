@@ -6,7 +6,7 @@ import { Card, Etat, RankBars } from "@/components/ui";
 import { MOTIFS, MatriceCriticite, NIVEAUX, ORDRE_NIVEAUX, fmtCible, fmtIndicateur, type CelluleMatrice } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { fmtInt, pluriel } from "@/lib/format";
-import type { Cockpit, EventCounts, EventLine, Page, ReasonCode, Score } from "@/lib/hsseq-types";
+import type { Cockpit, EventCounts, EventLine, Page, ReasonCode, Score, WaiverBreakdown } from "@/lib/hsseq-types";
 import { LIEN } from "./ATraiter";
 import { chaine, liens } from "./outils";
 
@@ -100,8 +100,14 @@ function compter(items: EventLine[]): CelluleMatrice[] {
  */
 export function Derogations({ c }: { c: Cockpit }) {
   const i = c.indicators.find((x) => x.code === "waivers");
-  const sites = i?.breakdown?.filter((b) => b.axis === "site") ?? [];
-  const motifs = i?.breakdown?.filter((b) => b.axis === "reason") ?? [];
+  // Le noyau sert des couples site et motif : les deux classements en sont des sommes.
+  const somme = (cle: (b: WaiverBreakdown) => string) => {
+    const totaux = new Map<string, number>();
+    for (const b of i?.breakdown ?? []) totaux.set(cle(b), (totaux.get(cle(b)) ?? 0) + b.count);
+    return [...totaux].map(([key, value]) => ({ key, value }));
+  };
+  const sites = somme((b) => b.site);
+  const motifs = somme((b) => b.reason_code);
   const format = (v: number) => fmtInt(v);
   return (
     <Card
@@ -125,12 +131,12 @@ export function Derogations({ c }: { c: Cockpit }) {
             <div className="mt-5 grid gap-6 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <div>
                 <h3 className="mb-3 text-[13px] font-semibold text-ink-2">Par site</h3>
-                <RankBars items={[...sites].sort((a, b) => b.value - a.value).map((b) => ({ key: b.key, label: b.label, value: b.value }))} format={format} />
+                <RankBars items={[...sites].sort((a, b) => b.value - a.value).map((b) => ({ key: b.key, label: b.key, value: b.value }))} format={format} />
               </div>
               <div>
                 <h3 className="mb-3 text-[13px] font-semibold text-ink-2">Par motif</h3>
                 <RankBars
-                  items={[...motifs].sort((a, b) => b.value - a.value).map((b) => ({ key: b.key, label: b.key in MOTIFS ? `${b.key} · ${MOTIFS[b.key as ReasonCode].court}` : b.label, value: b.value, detail: b.label }))}
+                  items={[...motifs].sort((a, b) => b.value - a.value).map((b) => ({ key: b.key, label: b.key in MOTIFS ? `${b.key} · ${MOTIFS[b.key as ReasonCode].court}` : b.key, value: b.value, detail: b.key in MOTIFS ? MOTIFS[b.key as ReasonCode].libelle : undefined }))}
                   format={format}
                 />
               </div>

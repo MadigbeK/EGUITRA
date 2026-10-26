@@ -6,7 +6,7 @@ import { Button, Etat, Loading, Notice, Tag, cx } from "@/components/ui";
 import { MotifCode, NATURE_CONTROLE, REPONSE_POINT, RESULTAT_CONTROLE, STATUT_NON_CONFORMITE, Tampon, TYPE_VEHICULE, nomRotation } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { fmtDateTime, pluriel } from "@/lib/format";
-import type { Check, CheckAnswer, CheckLine, Nonconformity } from "@/lib/hsseq-types";
+import type { Check, CheckAnswer, Nonconformity } from "@/lib/hsseq-types";
 import { Definitions, Panneau, Pieces, Rubrique } from "@/components/hsseq/actions/outils";
 import { DUREE_CIBLE_S, PhotoManquante, fmtDuree } from "./elements";
 import { LeverNonConformite } from "./Levee";
@@ -16,11 +16,6 @@ function position(c: Check): string | null {
   if (c.latitude === null || c.longitude === null) return null;
   const f = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
   return `${f(c.latitude)}, ${f(c.longitude)}${c.gps_accuracy !== null ? ` (à ${Math.round(c.gps_accuracy)} m près)` : ""}`;
-}
-
-/** Photos manquantes d'une ligne de liste : le champ n'est servi que sur la fiche au contrat actuel. */
-export function photosManquantes(c: CheckLine | Check): boolean {
-  return (c as CheckLine & { photos_missing?: boolean }).photos_missing === true;
 }
 
 /**
@@ -44,6 +39,7 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
   const lieu = position(c);
   const ncOuvertes = c.nonconformities.filter((n) => n.status === "open");
   const bloquantesOuvertes = ncOuvertes.filter((n) => n.item.blocking);
+  const signature = c.signature;
   const points = [...c.answers];
   const nonConformes = points.filter((p) => p.answer === "not_ok").length;
 
@@ -52,11 +48,11 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
       etiquette={NATURE_CONTROLE[c.kind]}
       titre={c.reference}
       onFermer={onFermer}
-      sousTitre={`${c.template.name}, ${TYPE_VEHICULE[c.vehicle_kind].toLocaleLowerCase("fr")}`}
+      sousTitre={`${c.template.name}, version ${c.template.version}, ${TYPE_VEHICULE[c.vehicle_kind].toLocaleLowerCase("fr")}`}
       tampons={
         <>
           <Tampon mot={RESULTAT_CONTROLE[c.result]} />
-          {c.open_blocking > 0 && <MotifCode code="V02" />}
+          {bloquantesOuvertes.length > 0 && <MotifCode code="V02" />}
           {c.photos_missing && <PhotoManquante pluriel />}
           {c.offline && <Tag>Saisi hors ligne</Tag>}
         </>
@@ -75,7 +71,8 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
           ["Véhicule", `${c.vehicle.name}${c.vehicle.plate ? ` (${c.vehicle.plate})` : ""}, ${TYPE_VEHICULE[c.vehicle.vehicle_kind].toLocaleLowerCase("fr")}`],
           ["Rotation", c.rotation ? `${nomRotation(c.rotation)}${c.rotation.route_name ? `, ${c.rotation.route_name}` : ""}` : "Sans rotation"],
           ["Conducteur", c.driver?.name ?? "Non renseigné"],
-          ["Réalisé par", c.performed_by.name],
+          ["Grille", `${c.template.name}, version ${c.template.version}`],
+          ["Saisi par", c.author?.name ?? "Non renseigné"],
           c.site && ["Site", c.site.name],
           ["Saisi sur l'appareil", fmtDateTime(c.reported_at)],
           ["Reçu par le serveur", `${fmtDateTime(c.synced_at)}${c.offline ? ", après une saisie hors ligne" : ""}`],
@@ -87,7 +84,14 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
             </span>,
           ],
           lieu && ["Position", lieu],
-          ["Signature", c.signature ? `${c.signature.name}, le ${fmtDateTime(c.signature.signed_at)}` : "Sans signature"],
+          [
+            "Signature",
+            signature ? (
+              <Pieces key="s" pieces={[signature]} />
+            ) : (
+              "Sans signature"
+            ),
+          ],
         ]}
       />
 
@@ -119,7 +123,7 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
           onLevee={(maj) => {
             setLevee(null);
             void mutate(maj, { revalidate: false });
-            setMessage(maj.open_blocking === 0 && levee.item.blocking ? `Non-conformité levée : plus aucune non-conformité bloquante ouverte sur ${maj.vehicle.name} dans ce contrôle.` : "Non-conformité levée.");
+            setMessage(!maj.nonconformities.some((x) => x.status === "open" && x.item.blocking) && levee.item.blocking ? `Non-conformité levée : plus aucune non-conformité bloquante ouverte sur ${maj.vehicle.name} dans ce contrôle.` : "Non-conformité levée.");
           }}
         />
       )}
@@ -187,7 +191,7 @@ function LigneNc({ n, onLever }: { n: Nonconformity; onLever: () => void }) {
           )}
           {n.action && (
             <Link href={`/hsseq/actions?action=${n.action.id}`} className="text-[12.5px] font-semibold text-accent underline-offset-2 hover:underline">
-              Action {n.action.reference}
+              Action {n.action.name}
             </Link>
           )}
         </div>

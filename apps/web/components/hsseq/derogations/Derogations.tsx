@@ -13,7 +13,7 @@ import { STATUT_DEROGATION, Tampon, nomRotation, nomVehicule } from "@/component
 import { CodeMotif } from "@/components/transport/departs/motifs";
 import { useApi, useAutorise } from "@/lib/api-client";
 import { fmtDateTime, fmtInt } from "@/lib/format";
-import type { HsseqSite, Page, Waiver, WaiverStatus } from "@/lib/hsseq-types";
+import type { HsseqSite, Page, Waiver, WaiverCounts, WaiverStatus } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
 import { FicheDerogation } from "./FicheDerogation";
 
@@ -29,7 +29,7 @@ const ONGLETS: Array<{ key: Onglet; label: string; vide: string }> = [
 /** Dérogations lues par onglet : quelques-unes par mois au plus (cible du cockpit). */
 const LIMITE = 200;
 
-type PageDerogations = Page<Waiver, Partial<Record<WaiverStatus, number>>>;
+type PageDerogations = Page<Waiver, WaiverCounts>;
 
 export function Derogations() {
   const [onglet, setOnglet] = useState<Onglet>("pending_hsseq");
@@ -74,7 +74,7 @@ export function Derogations() {
         <Tabs<Onglet>
           value={onglet}
           onChange={setOnglet}
-          tabs={ONGLETS.map((o) => ({ key: o.key, label: o.label, count: comptes.data?.counts[o.key] }))}
+          tabs={ONGLETS.map((o) => ({ key: o.key, label: o.label, count: comptes.data?.counts.by_status[o.key] }))}
         />
         <Card padded={false}>
           {!liste.data ? (
@@ -98,7 +98,7 @@ export function Derogations() {
                       </div>
                     ),
                   },
-                  { key: "vehicle", label: "Véhicule", sortValue: (w) => w.vehicle.name, render: (w) => <span className="whitespace-nowrap">{nomVehicule(w.vehicle)}</span> },
+                  { key: "vehicle", label: "Véhicule", sortValue: (w) => w.vehicle?.name ?? "", render: (w) => <span className="whitespace-nowrap">{nomVehicule(w.vehicle)}</span> },
                   {
                     key: "rotation",
                     label: "Rotation",

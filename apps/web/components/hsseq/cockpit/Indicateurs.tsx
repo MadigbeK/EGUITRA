@@ -5,7 +5,7 @@ import { ArrowUpRight } from "@/components/icons";
 import { Kpi } from "@/components/ui";
 import { INDICATEUR, TYPE_VEHICULE, fmtCible, fmtIndicateur, tonIndicateur } from "@/components/hsseq/commun";
 import type { Cockpit, Indicator } from "@/lib/hsseq-types";
-import { GLISSANTS, indicateursMontres, lienIndicateur } from "./outils";
+import { GLISSANTS, SANS_OBJET_LOT1, indicateursMontres, lienIndicateur } from "./outils";
 import { LIEN } from "./ATraiter";
 
 /**
@@ -60,7 +60,7 @@ function Indicateur({ i, c }: { i: Indicator; c: Cockpit }) {
           </span>
           <span className="block">Source : {i.source}</span>
           {horsSite && <span className="block font-medium text-ink-2">Par société, sans filtre de site</span>}
-          {i.value === null && <span className="block">Sans donnée sur la période</span>}
+          {i.value === null && (SANS_OBJET_LOT1.has(i.code) ? <span className="block">{i.note ?? "Sans objet au lot 1."}</span> : <span className="block">Sans donnée sur la période</span>)}
           {lienListe && (
             <Link href={lienListe.href} className={`${LIEN} mt-1`}>
               {lienListe.label} <ArrowUpRight className="h-3.5 w-3.5" />

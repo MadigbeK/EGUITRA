@@ -102,7 +102,7 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
   const hsseq = aProfil(ref, "hsseq");
   const t = new Set(a.transitions);
   const attenteDirection = a.management_approval.required && !a.management_approval.approved_at && (a.status === "todo" || a.status === "in_progress");
-  const retirable = (p: { created_by: { id: number } }) => a.rights.can_edit && (hsseq || (moi !== undefined && p.created_by.id === moi.id));
+  const retirable = (p: { created_by: { id: number } | null }) => a.rights.can_edit && (hsseq || (moi !== undefined && p.created_by?.id === moi.id));
   const verificationEchue = a.status === "to_verify" && a.verification_date !== null && a.verification_date <= aujourdhui();
 
   return (
@@ -112,7 +112,7 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
       onFermer={onFermer}
       sousTitre={
         <>
-          Créée le {fmtDate(a.created_at)} par {a.created_by.name}
+          Créée le {fmtDate(a.created_at)}{a.created_by ? ` par ${a.created_by.name}` : ""}
         </>
       }
       tampons={
@@ -199,7 +199,7 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
       <Definitions
         lignes={[
           ["Origine", <Origine key="o" a={a} titre />],
-          ["Niveau de maîtrise", <Maitrise key="m" niveau={a.control_level} />],
+          ["Niveau de maîtrise", a.control_level ? <Maitrise key="m" niveau={a.control_level} /> : "Non précisé"],
           ["Responsable", a.owner.name],
           [
             "Échéance",
@@ -209,7 +209,7 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
             </span>,
           ],
           a.site && ["Site", a.site.name],
-          ["Coût estimé", a.estimated_cost === null ? "Non chiffré" : fmtGNF(a.estimated_cost)],
+          ["Coût estimé", a.estimated_cost ? fmtGNF(a.estimated_cost) : "Non chiffré"],
           a.management_approval.approved_at && ["Validée par la direction", `${fmtDate(a.management_approval.approved_at)}${a.management_approval.approved_by ? `, ${a.management_approval.approved_by.name}` : ""}`],
           a.done_at && ["Réalisée le", fmtDate(a.done_at)],
           a.closed_at && ["Close le", fmtDate(a.closed_at)],
@@ -256,7 +256,7 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
             </div>
           ) : (
             <p className="text-[13px] leading-snug text-ink-2">
-              Origine de criticité {a.origin_criticality ?? "8 ou plus"} : une fois l&apos;action réalisée, le Responsable HSSEQ vérifie son efficacité 90 jours plus tard
+              Origine de criticité au seuil des paramètres (8 par défaut) : une fois l&apos;action réalisée, le Responsable HSSEQ vérifie son efficacité 90 jours plus tard
               {a.verification_date ? `, le ${fmtDate(a.verification_date)}.` : "."}
             </p>
           )}
@@ -271,7 +271,8 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
           <ol className="mt-2 space-y-1.5 text-[12.5px] leading-snug text-ink-2">
             {[...a.history].reverse().map((h, i) => (
               <li key={`${h.at}-${i}`}>
-                <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by.name} : {h.action}
+                <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"} : {h.action}
+                {h.note ? ` (${h.note})` : ""}
                 {h.field === "status" && h.old_value && h.new_value ? ` (de « ${libelleStatut(h.old_value)} » à « ${libelleStatut(h.new_value)} »)` : h.field === "due_date" && h.new_value ? ` (échéance au ${fmtDate(h.new_value)})` : ""}
               </li>
             ))}
@@ -351,9 +352,10 @@ function Relances({ a }: { a: HsseqAction }) {
       {a.reminders.length > 0 && (
         <ol className="space-y-1.5 text-[13px]">
           {a.reminders.map((r, i) => (
-            <li key={`${r.at}-${i}`} className="flex flex-wrap items-baseline gap-x-2">
+            <li key={`${r.date}-${i}`} className="flex flex-wrap items-baseline gap-x-2">
               <span className={cx("font-medium", r.kind === "escalation" ? "text-danger" : "text-ink")}>{RELANCE[r.kind]}</span>
-              <span className="text-[12.5px] text-muted">{fmtDateTime(r.at)}</span>
+              <span className="text-[12.5px] text-muted">{fmtDate(r.date)}</span>
+              {r.recipients.length > 0 && <span className="text-[12.5px] text-muted">{r.recipients.map((x) => x.name).join(", ")}</span>}
             </li>
           ))}
         </ol>
@@ -385,7 +387,7 @@ function FenetreCloture({
 }: {
   a: HsseqAction;
   televerser: (f: File) => Promise<void>;
-  retirable: (p: { created_by: { id: number } }) => boolean;
+  retirable: (p: { created_by: { id: number } | null }) => boolean;
   onRetiree: () => void;
   onClose: () => void;
   envoyer: () => Promise<unknown>;
@@ -585,9 +587,9 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
   const { data: ref } = useReferentiels();
   const [f, setF] = useState({
     description: a.description,
-    control_level: a.control_level,
-    expected_evidence: a.expected_evidence,
-    estimated_cost: a.estimated_cost === null ? "" : String(a.estimated_cost),
+    control_level: a.control_level ?? "administrative",
+    expected_evidence: a.expected_evidence ?? "",
+    estimated_cost: a.estimated_cost ? String(a.estimated_cost) : "",
     owner_id: String(a.owner.id),
     due_date: a.due_date,
   });
@@ -604,7 +606,7 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
     const c: Record<string, unknown> = {};
     if (f.description.trim() !== a.description) c.description = f.description.trim();
     if (f.control_level !== a.control_level) c.control_level = f.control_level;
-    if (f.expected_evidence.trim() !== a.expected_evidence) c.expected_evidence = f.expected_evidence.trim();
+    if (f.expected_evidence.trim() !== (a.expected_evidence ?? "")) c.expected_evidence = f.expected_evidence.trim();
     if (cout !== a.estimated_cost) c.estimated_cost = cout;
     if (hsseq && Number(f.owner_id) !== a.owner.id) c.owner_id = Number(f.owner_id);
     if (hsseq && f.due_date !== a.due_date) c.due_date = f.due_date;

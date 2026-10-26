@@ -15,7 +15,7 @@ type Vue = "controles" | "non-conformites" | "alcootests";
 const VUES: readonly Vue[] = ["controles", "non-conformites", "alcootests"];
 
 /** Paramètres propres à une vue, retirés de l'adresse quand on change de vue. */
-const PARAMETRES_VUE = ["resultat", "statut", "bloquantes", "test", "vehicule", "controle"];
+const PARAMETRES_VUE = ["resultat", "statut", "bloquantes", "test", "annules", "vehicule", "controle"];
 
 /**
  * Contrôles (§3, §5) : contrôles avant départ réalisés, non-conformités et leur levée, alcootests.

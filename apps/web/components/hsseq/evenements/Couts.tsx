@@ -59,10 +59,10 @@ export function Couts({ e, referentiels, onMaj }: { e: Evenement; referentiels?:
           rowKey={(c) => c.id}
           empty="Aucun coût enregistré."
           columns={[
-            { key: "date", label: "Date", render: (c) => fmtDate(c.date) },
+            { key: "date", label: "Date", render: (c) => (c.date ? fmtDate(c.date) : <span className="text-muted">–</span>) },
             { key: "kind", label: "Nature", render: (c) => NATURE_COUT[c.kind] ?? c.kind },
-            { key: "label", label: "Libellé" },
-            { key: "finance_move", label: "Pièce comptable", render: (c) => c.finance_move?.name ?? <span className="text-muted">–</span>, sortValue: (c) => c.finance_move?.name ?? "" },
+            { key: "label", label: "Libellé", render: (c) => c.label ?? <span className="text-muted">–</span> },
+            { key: "finance_move_id", label: "Pièce comptable", render: (c) => (c.finance_move_id ? `Pièce n° ${c.finance_move_id}` : <span className="text-muted">–</span>), sortValue: (c) => c.finance_move_id ?? 0 },
             { key: "amount", label: "Montant (GNF)", align: "right", render: (c) => fmtInt(c.amount) },
             ...(editable
               ? [
@@ -71,7 +71,7 @@ export function Couts({ e, referentiels, onMaj }: { e: Evenement; referentiels?:
                     label: "",
                     align: "right" as const,
                     render: (c: Cost) => (
-                      <Button variant="ghost" size="sm" aria-label={`Retirer le coût ${c.label}`} title="Retirer" onClick={() => retirer(c)}>
+                      <Button variant="ghost" size="sm" aria-label={`Retirer le coût ${c.label ?? NATURE_COUT[c.kind]}`} title="Retirer" onClick={() => retirer(c)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     ),

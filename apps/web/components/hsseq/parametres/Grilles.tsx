@@ -12,7 +12,8 @@ import { champsEnErreur, messageErreur } from "./outils";
 const NATURES = Object.entries(NATURE_CONTROLE).map(([value, label]) => ({ value: value as CheckKind, label }));
 
 /** Points dans l'ordre de la grille. */
-const ordonnes = (items: CheckItem[]) => [...items].sort((a, b) => a.sequence - b.sequence);
+/** Points en service, dans l'ordre ; les points retirés restent archivés dans le noyau (version d'un appareil hors ligne). */
+const ordonnes = (items: CheckItem[]) => items.filter((p) => p.active !== false).sort((a, b) => a.sequence - b.sequence);
 
 /**
  * Grilles de contrôle par profil (citerne, benne) et par nature : points, ordre, caractère bloquant
@@ -20,7 +21,8 @@ const ordonnes = (items: CheckItem[]) => [...items].sort((a, b) => a.sequence - 
  * libellés de la sienne (contrat, §7).
  */
 export function Grilles() {
-  const { data, error, mutate } = useApi<CheckTemplate[]>("/hsseq/checks/templates");
+  // active=all : les grilles archivées se lisent et se remettent en service.
+  const { data, error, mutate } = useApi<CheckTemplate[]>("/hsseq/checks/templates?active=all");
   const [profil, setProfil] = useState<VehicleKind>("tanker");
   const [edition, setEdition] = useState<CheckTemplate | "nouvelle" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export function Grilles() {
 function CarteGrille({ g, onModifier }: { g: CheckTemplate; onModifier: () => void }) {
   const points = ordonnes(g.items);
   const bloquants = points.filter((p) => p.blocking).length;
+  const retires = g.items.length - points.length;
   return (
     <section aria-labelledby={`grille-${g.id}`} className={cx(FEUILLE, "min-w-0 p-6", !g.active && "opacity-80")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -103,6 +106,7 @@ function CarteGrille({ g, onModifier }: { g: CheckTemplate; onModifier: () => vo
       </div>
       <p className="mt-3 text-[13px] text-ink-2">
         {pluriel(points.length, "point")}, dont {pluriel(bloquants, "bloquant")}.
+        {retires > 0 && <span className="text-muted">{` ${pluriel(retires, "point retiré", "points retirés")}, archivés pour les versions précédentes.`}</span>}
       </p>
       {points.length > 0 && (
         <ol className="mt-3 divide-y divide-line/70 border-t border-line/70">

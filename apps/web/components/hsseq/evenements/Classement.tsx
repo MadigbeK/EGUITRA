@@ -96,7 +96,6 @@ function Formulaire({ e, referentiels, premier, onMaj }: { e: Evenement; referen
   const [probabilite, setProbabilite] = useState<Score | null>(e.probability);
   const [arret, setArret] = useState(e.lost_time);
   const [jours, setJours] = useState(e.days_lost ? String(e.days_lost) : "");
-  const [immobilise, setImmobilise] = useState(e.vehicle_immobilized);
   const [envoi, setEnvoi] = useState(false);
   const [refus, setRefus] = useState<string | null>(null);
   const [champs, setChamps] = useState<string[]>([]);
@@ -124,7 +123,6 @@ function Formulaire({ e, referentiels, premier, onMaj }: { e: Evenement; referen
       probability: probabilite,
       lost_time: arret,
       days_lost: joursPerdus,
-      vehicle_immobilized: immobilise,
     };
     setEnvoi(true);
     try {
@@ -188,11 +186,7 @@ function Formulaire({ e, referentiels, premier, onMaj }: { e: Evenement; referen
               <Input inputMode="numeric" value={jours} onChange={(ev) => setJours(ev.target.value.replace(/\D/g, ""))} />
             </Field>
           )}
-          <label className="flex items-center gap-2 text-[13.5px] text-ink">
-            <input type="checkbox" checked={immobilise} onChange={(ev) => setImmobilise(ev.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-            Véhicule immobilisé pour l'enquête
-          </label>
-          <p className="text-[12px] text-muted">L'immobilisation bloquera le départ par le motif V09 au lot 2.</p>
+          <p className="text-[12px] text-muted">Immobilisation du véhicule pour l&apos;enquête : au lot 2, avec le motif V09 du verrou ; elle ne se saisit pas encore.</p>
         </fieldset>
 
         {refus && <Notice tone="danger">{refus}</Notice>}

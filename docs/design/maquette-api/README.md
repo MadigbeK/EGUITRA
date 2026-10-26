@@ -99,15 +99,26 @@ le noyau.
 ## NIMOVA · HSSEQ
 
 Les routes `/hsseq/*` (lot 1) suivent le contrat `docs/design/hsseq-contrat.md` et les types
-`apps/web/lib/hsseq-types.ts` : cockpit, référentiels et sites, échéances, événements (cycle, enquête,
+`apps/web/lib/hsseq-types.ts`, alignés le 26/10 sur le code du noyau (§13 du contrat) : cockpit,
+référentiels et sites, paramètres de la société (`settings`), échéances, événements (cycle, enquête,
 coûts, rapport PDF, registre Excel), actions (preuve, J+90, validation de la direction), grilles et
-contrôles avant départ, non-conformités et levée, alcootests, verrou (`lock/evaluate`,
-`lock/departures`, `lock/reasons`), rotations du jour du compte (`me/rotations`), dérogations, pièces
-jointes et journal. Un contrôle ou un alcootest saisi sans `rotation_id` se rattache à la rotation à
-l'évaluation du verrou (fenêtres de 12 h et de 4 h), une seule fois. Chaque fiche renvoie
-`rights` et `transitions` selon le profil du compte connecté ; l'alcootest se lit en « fait » pour
-le conducteur, en statut pour exploitation, direction et administration, en détail chiffré pour le
-seul profil `hsseq`. Le profil complet (`demo`) porte aussi `hsseq`.
+contrôles avant départ, non-conformités et levée, alcootests (annulation par `hsseq`), verrou
+(`lock/evaluate`, `lock/departures`, `lock/reasons`), espace du compte (`me`, `me/rotations`),
+notifications, dérogations, pièces jointes et journal. Un contrôle ou un alcootest saisi sans
+`rotation_id` se rattache à la rotation à l'évaluation du verrou (fenêtres de 12 h et de 4 h), une seule
+fois. Chaque fiche renvoie `rights` et `transitions` selon le profil du compte connecté ; l'alcootest se
+lit en « fait » pour le conducteur, en statut pour exploitation, direction et administration, en détail
+chiffré pour le seul profil `hsseq`. Le profil complet (`demo`) porte aussi `hsseq`.
+
+Codes d'erreur du noyau : `missing_fields` et `invalid_parameter` en 400 (avec `fields`), `forbidden`
+en 403, `not_found` en 404, `conflict` en 409 (identifiant de saisie d'un autre compte, dérogation déjà
+demandée, pièce déjà rattachée), `business_rule` et les codes métier précis en 422.
+
+Verrou : il est en service pour les rotations chargées à partir du 15/10/2026 (`lock_start_date` des
+paramètres). `PATCH /hsseq/settings` avec une date plus tardive le met hors service : `lock_active`
+vaut alors faux, `allowed` vrai, et le départ s'ouvre aux profils qui écrivent les rotations (admin,
+finance, exploitation) ; en service, au seul chef de parc du site. Les avertissements arrivent dans
+`warnings`, à part des `reasons` ; une dérogation couvre un seul motif, `active_waivers` les liste.
 
 Données, toutes fictives, au 15/10/2026 :
 
@@ -122,9 +133,10 @@ Données, toutes fictives, au 15/10/2026 :
 - deux grilles de contrôle avant départ (citerne, benne) au paramétrage initial de la spécification, un
   contrôle et un alcootest par départ depuis le 1er octobre, quelques non-conformités, dont une sans
   photo ;
-- départs du 15/10 : dix, dont cinq bloqués (V01 et V03 à faire et V04 pour ER-09, V02 pour ER-06 avec
-  une dérogation en attente du Responsable HSSEQ, V03 positif pour EB-02, V04 pour ER-04, V05 pour
-  ER-08) ;
+- départs du 15/10 : dix, dont cinq bloqués (V01 et V03 à faire pour ER-09, avec un avertissement V04
+  pour son permis non renseigné, V02 pour ER-06 avec une dérogation en attente du Responsable HSSEQ, V03
+  positif pour EB-02, dont le conducteur est retiré de la rotation, V04 pour ER-04, V05 pour ER-08) ;
+  la visite technique de ER-12 n'est pas renseignée (avertissement V05) ;
 - huit dérogations sur l'année, des échéances à 30 jours (permis, assurance, visite technique,
   barémage) et un cockpit de seize indicateurs avec leurs séries sur douze mois (consommation, écarts
   de livraison et kilomètres tirés des rotations de Transport, heures travaillées modélisées par

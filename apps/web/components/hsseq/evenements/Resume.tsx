@@ -104,7 +104,7 @@ export function Resume({ e, onRecharger }: { e: Evenement; onRecharger: () => vo
         ) : (
           <ul className="divide-y divide-line/70">
             {e.people.map((p, i) => (
-              <li key={`${p.kind}-${p.id ?? p.name}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-[13.5px]">
+              <li key={`${p.id}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-[13.5px]">
                 <span className="font-semibold text-ink">{p.name}</span>
                 <Tag>{NATURE_PERSONNE[p.kind]}</Tag>
                 <span className="text-ink-2">{ROLE_PERSONNE[p.role] ?? p.role}</span>
@@ -133,7 +133,7 @@ function Pieces({ e, onRecharger }: { e: Evenement; onRecharger: () => void }) {
   // Dépôt : déclarant tant que la fiche est déclarée, Responsable HSSEQ avant clôture (droits de la fiche).
   const deposer = ouverte && (e.rights.can_edit || e.rights.can_approve);
   // Retrait : auteur de la pièce ou Responsable HSSEQ, tant que la fiche n'est pas close (§11).
-  const retirable = (a: Attachment) => ouverte && (hsseq || (me !== undefined && a.created_by.id === me.id));
+  const retirable = (a: Attachment) => ouverte && (hsseq || (me !== undefined && a.created_by?.id === me.id));
 
   async function deposerFichier(f: File) {
     setRefus(null);
@@ -198,7 +198,7 @@ function Pieces({ e, onRecharger }: { e: Evenement; onRecharger: () => void }) {
                 <p className="truncate text-[12.5px] font-medium text-ink" title={a.name}>
                   {a.caption ?? a.name}
                 </p>
-                <p className="truncate text-[11.5px] text-muted">{`${a.created_by.name}, ${fmtJourHeure(a.created_at)}`}</p>
+                <p className="truncate text-[11.5px] text-muted">{`${a.created_by ? `${a.created_by.name}, ` : ""}${fmtJourHeure(a.created_at)}`}</p>
                 <div className="flex gap-1 pt-1">
                   <Button variant="ghost" size="sm" aria-label={`Télécharger ${a.name}`} title="Télécharger" onClick={() => telecharger(a)}>
                     <Download className="h-4 w-4" />

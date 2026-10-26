@@ -14,6 +14,7 @@
 
 import type { CSSProperties } from "react";
 import { Badge } from "@/components/ui";
+import { ApiError } from "@/lib/api-client";
 import { cx } from "@/lib/cx";
 import { ETATS, ETAT_TON, tonEtat, type TonEtat } from "@/lib/couleurs";
 import { INSECABLE, fmtDate, fmtFixe, fmtInt, fmtPct, fmtRatio } from "@/lib/format";
@@ -128,6 +129,8 @@ const TON_HSSEQ: Readonly<Record<string, TonEtat>> = {
   Négatif: "ok",
   Positif: "danger",
   // Verrou et dérogations.
+  "Verrou pas encore en service": "neutral",
+  Avertissement: "warn",
   Autorisé: "ok",
   Bloqué: "danger",
   "À contrôler": "warn",
@@ -142,8 +145,15 @@ export function tonHsseq(mot: string, defaut: TonEtat = "neutral"): TonEtat {
   return TON_CRITICITE[mot] ?? ETAT_TON[mot] ?? TON_HSSEQ[mot] ?? tonEtat(mot, defaut);
 }
 
-/** Mot d'un départ du jour : autorisé, à contrôler (seules des saisies de terrain manquent) ou bloqué. */
-export function etatDepart(depart: { evaluation: { allowed: boolean }; pending_checks_only: boolean }): "Autorisé" | "À contrôler" | "Bloqué" {
+/** Mot d'un départ dont la rotation est chargée avant la mise en service du verrou (lock_active faux). */
+export const HORS_VERROU = "Verrou pas encore en service" as const;
+
+/**
+ * Mot d'un départ du jour : verrou pas encore en service (le départ est toujours permis, les motifs
+ * s'affichent pour information), autorisé, à contrôler (seules des saisies de terrain manquent) ou bloqué.
+ */
+export function etatDepart(depart: { evaluation: { allowed: boolean; lock_active?: boolean }; pending_checks_only: boolean }): "Autorisé" | "À contrôler" | "Bloqué" | typeof HORS_VERROU {
+  if (depart.evaluation.lock_active === false) return HORS_VERROU;
   return depart.evaluation.allowed ? "Autorisé" : depart.pending_checks_only ? "À contrôler" : "Bloqué";
 }
 
@@ -154,6 +164,122 @@ export function Tampon({ mot, vivant }: { mot: string; vivant?: boolean }) {
       {mot}
     </Badge>
   );
+}
+
+/* ─── Refus du noyau ──────────────────────────────────────────────────── */
+
+/** Champs cités par un refus (`fields` d'une erreur 400 ou 409), en clair. */
+const CHAMP: Readonly<Record<string, string>> = {
+  reason: "motif",
+  justification: "justification",
+  comment: "commentaire",
+  attachment_ids: "pièces jointes",
+  client_uuid: "identifiant de saisie",
+  actual_severity: "gravité réelle",
+  potential_severity: "gravité potentielle",
+  probability: "probabilité",
+  occurred_at: "date et heure de l'événement",
+  reported_at: "heure de saisie",
+  type: "type",
+  domain: "domaine",
+  title: "titre",
+  description: "description",
+  location: "lieu",
+  people: "personnes en cause",
+  days_lost: "jours perdus",
+  leave_id: "arrêt RH",
+  owner_id: "responsable",
+  due_date: "échéance",
+  new_due_date: "nouvelle échéance",
+  effective: "efficacité",
+  origin: "origine",
+  origin_id: "fiche d'origine",
+  control_level: "niveau de maîtrise",
+  estimated_cost: "coût estimé",
+  rotation_id: "rotation",
+  vehicle_id: "véhicule",
+  driver_id: "conducteur",
+  site_id: "site",
+  company_id: "société",
+  template_id: "grille",
+  answers: "réponses",
+  result: "résultat",
+  not_done_reason: "motif du test non réalisé",
+  signature: "signature",
+  nonconformity_id: "non-conformité",
+  reason_code: "motif du verrou",
+  latitude: "position",
+  longitude: "position",
+  sort: "tri",
+  items: "points de la grille",
+  name: "nom",
+  code: "code",
+  vehicle_kind: "type de véhicule",
+  vehicle_kinds: "types de véhicule",
+  default_vehicle_kind: "type de véhicule par défaut",
+  yard_manager_ids: "chefs de parc",
+  vehicle_ids: "ensembles",
+  waivable: "caractère dérogeable",
+  active: "activation",
+  targets: "cibles",
+  month: "mois",
+  period: "période",
+  file: "fichier",
+  model: "fiche",
+  kind: "nature",
+  amount: "montant",
+  team_ids: "équipe d'enquête",
+  whys: "5 Pourquoi",
+  tree: "arbre des causes",
+  factors_5m: "facteurs 5M",
+  method: "méthode d'enquête",
+  horizon: "horizon",
+  lock_start_date: "mise en service du verrou",
+  qualifications_required_from: "habilitations exigées à partir du",
+  employee_file_required_from: "dossier salarié exigé à partir du",
+  documents_required_from: "documents du véhicule exigés à partir du",
+  director_id: "Directeur général",
+};
+
+/** Refus écrits en clair quand le noyau n'envoie pas son propre message. */
+const REFUS_PAR_DEFAUT: Readonly<Record<string, string>> = {
+  forbidden: "Cette opération n'est pas ouverte à votre profil ou à votre site.",
+  not_found: "Fiche introuvable ou hors de votre périmètre.",
+  missing_fields: "Des champs obligatoires manquent.",
+  invalid_parameter: "Une valeur saisie n'est pas acceptée.",
+  invalid_json: "La demande n'a pas pu être lue par le serveur.",
+  conflict: "Cette opération entre en conflit avec une fiche existante.",
+  business_rule: "Le serveur refuse l'opération : règle de gestion non respectée.",
+  invalid_transition: "Cette étape n'est pas permise depuis le statut actuel.",
+  reason_required: "Un motif écrit est obligatoire.",
+  unsupported_type: "Formats acceptés : JPEG, PNG ou PDF.",
+  too_large: "Fichier trop lourd : 8 Mo au plus.",
+};
+
+/** Champs en cause, en clair et sans doublon (latitude et longitude font une seule position). */
+function champsEnClair(fields: readonly string[] | undefined): string {
+  return [...new Set((fields ?? []).map((f) => CHAMP[f] ?? f))].join(", ");
+}
+
+/**
+ * Message d'un refus du noyau, en français : le texte de l'écran pour un code qu'il précise
+ * (`textes`), sinon celui du noyau ; les champs en cause pour missing_fields et invalid_parameter ;
+ * une phrase propre à chaque conflit 409 (saisie d'un autre compte, pièce déjà rattachée).
+ */
+export function texteErreur(e: unknown, textes: Partial<Record<string, string>> = {}, defaut = "L'opération n'a pas abouti."): string {
+  if (!(e instanceof ApiError)) return e instanceof Error && e.message ? e.message : defaut;
+  const { error: code, message, fields } = e.body;
+  const propre = textes[code];
+  if (propre) return propre;
+  if (code === "conflict") {
+    if (fields?.includes("client_uuid")) return "Cette saisie porte l'identifiant d'une saisie d'un autre compte : elle n'a pas été enregistrée. Reprenez-la.";
+    if (fields?.includes("attachment_ids")) return message || "Une pièce citée est déjà rattachée à une autre fiche : déposez-la de nouveau.";
+  }
+  const base = message || REFUS_PAR_DEFAUT[code] || defaut;
+  if ((code === "missing_fields" || code === "invalid_parameter") && fields?.length) {
+    return `${base.replace(/[.\s]+$/, "")}, champs en cause : ${champsEnClair(fields)}.`;
+  }
+  return base;
 }
 
 /* ─── Libellés ────────────────────────────────────────────────────────── */
@@ -273,6 +399,7 @@ export const REPONSE_POINT: Record<CheckAnswerValue, string> = {
   ok: "Conforme",
   not_ok: "Non conforme",
   na: "Sans objet",
+  not_evaluated: "Non évalué, point ajouté après la saisie",
 };
 
 export const STATUT_NON_CONFORMITE: Record<NonconformityStatus, string> = { open: "Ouverte", lifted: "Levée" };

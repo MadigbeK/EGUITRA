@@ -19,7 +19,7 @@ import { SOURCE, fmtJourHeure, messageRefus, useReferentiels } from "./commun";
 import { Declaration } from "./Declaration";
 import { Classement } from "./Classement";
 import { Couts } from "./Couts";
-import { Enquete, OuvrirEnquete } from "./Enquete";
+import { Enquete, OuvrirEnquete, enqueteOuverte } from "./Enquete";
 import { Resume } from "./Resume";
 import { ActionsLiees, Journal, Notifications } from "./Suivi";
 
@@ -100,7 +100,7 @@ export function FicheEvenement({ id }: { id: string }) {
   }
 
   const peut = (t: EventTransition) => ev.transitions.includes(t);
-  const commandes = ev.rights.can_edit || ev.transitions.length > 0 || ev.investigation !== null;
+  const commandes = ev.rights.can_edit || ev.transitions.length > 0 || enqueteOuverte(ev);
 
   return (
     <div>
@@ -113,9 +113,10 @@ export function FicheEvenement({ id }: { id: string }) {
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-2">
               <span className="rounded-[6px] bg-accent-doux px-2 py-0.5 font-mono text-[12.5px] font-semibold text-accent">{ev.reference}</span>
-              <span className="font-semibold text-ink">{TYPE_EVENEMENT[ev.type]?.label ?? ev.type}</span>
-              <span aria-hidden className="text-muted">,</span>
-              <span>{DOMAINE[ev.domain] ?? ev.domain}</span>
+              {/* Type et domaine sur une même ligne : la virgule suit le type, sans l'écart du flex. */}
+              <span>
+                <span className="font-semibold text-ink">{TYPE_EVENEMENT[ev.type]?.label ?? ev.type}</span>, {DOMAINE[ev.domain] ?? ev.domain}
+              </span>
               {ev.source === "terrain" && <Tag>{`${SOURCE.terrain}${ev.offline ? ", saisi hors ligne" : ""}`}</Tag>}
             </p>
             <h1 id="titre-evenement" className="mt-2 font-display text-[26px] font-[650] leading-[1.1] tracking-[-0.02em] text-ink sm:text-[32px]">
@@ -175,7 +176,7 @@ export function FicheEvenement({ id }: { id: string }) {
                 <Pencil className="h-4 w-4" /> Corriger la déclaration
               </Button>
             )}
-            {ev.investigation && (
+            {enqueteOuverte(ev) && (
               <Button variant="ghost" loading={rapport} onClick={pdf}>
                 <FileText className="h-4 w-4" /> Rapport d'enquête (PDF)
               </Button>
@@ -251,9 +252,9 @@ function dateEtape(e: Evenement, s: EventStatus): string | null {
     case "classified":
       return e.classified_at;
     case "investigation":
-      return e.investigation?.opened_at ?? null;
+      return e.investigation.started_at;
     case "actions":
-      return e.investigation?.concluded_at ?? null;
+      return e.investigation.closed_at;
     case "closed":
       return e.closed_at;
   }
@@ -268,7 +269,7 @@ function Frise({ e }: { e: Evenement }) {
   const rang = CYCLE_EVENEMENT.indexOf(e.status);
   const etats: EtatEtape[] = CYCLE_EVENEMENT.map((s, i) => {
     if (e.status === "closed") {
-      if ((s === "investigation" || s === "actions") && !e.investigation) return "sans_objet";
+      if ((s === "investigation" || s === "actions") && !e.investigation.started_at) return "sans_objet";
       return "fait";
     }
     return i < rang ? "fait" : i === rang ? "courant" : "a_venir";

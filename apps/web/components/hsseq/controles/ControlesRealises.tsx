@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Card, DataTable, ErrorBox, Etat, Field, Kpi, Segmented, Select } from "@/components/ui";
-import { MotifCode, RESULTAT_CONTROLE, Tampon, TYPE_VEHICULE, nomRotation } from "@/components/hsseq/commun";
+import { Card, DataTable, ErrorBox, Etat, Field, Kpi, Segmented, Select, Tag, type Tri } from "@/components/ui";
+import { RESULTAT_CONTROLE, Tampon, TYPE_VEHICULE, nomRotation } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
-import { INSECABLE, fmtInt, fmtPct, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDateTime, fmtInt, fmtPct, pluriel } from "@/lib/format";
 import type { CheckCounts, CheckLine, CheckResult, Page, Referentials, VehicleKind } from "@/lib/hsseq-types";
 import { Pages, requete } from "@/components/hsseq/actions/outils";
-import { ChampSite, ChampVehicule, ChampsPeriode, PhotoManquante, Saisie, TYPE_ADRESSE, Vehicule, periode } from "./elements";
-import { photosManquantes } from "./FicheControle";
+import { ChampSite, ChampVehicule, ChampsPeriode, PhotoManquante, TYPE_ADRESSE, Vehicule, periode } from "./elements";
 
 const PAR_PAGE = 50;
+
+/** Tris servis par le noyau (sort de GET /hsseq/checks) ; les autres colonnes ne se trient pas. */
+const TRIS = ["reported_at", "result", "reference"] as const;
 
 /** Résultat dans l'adresse et sa clé dans l'API. */
 const RESULTAT_ADRESSE: Record<string, CheckResult> = { conforme: "compliant", reserves: "non_compliant", bloquant: "blocking" };
@@ -30,17 +32,18 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
 
   const filtres = { date_from: du, date_to: au, site_id: site || null, vehicle_kind: type, vehicle_id: vehicule || null };
   const cle = `${requete(filtres)}|${resultat}`;
+  const [tri, setTri] = useState<Tri>({ key: "reported_at", dir: -1 });
   const [position, setPosition] = useState({ cle, offset: 0 });
   const offset = position.cle === cle ? position.offset : 0;
 
   // Nombres de la période sans le filtre de résultat (chiffres clés, bascule) ; liste filtrée.
   const { data: compte } = useApi<Page<CheckLine, CheckCounts>>(`/hsseq/checks?${requete({ ...filtres, limit: 1 })}`, { keepPreviousData: true });
-  const { data, error, mutate } = useApi<Page<CheckLine, CheckCounts>>(`/hsseq/checks?${requete({ ...filtres, result: resultat === "tous" ? null : RESULTAT_ADRESSE[resultat], offset, limit: PAR_PAGE })}`, { keepPreviousData: true });
+  const { data, error, mutate } = useApi<Page<CheckLine, CheckCounts>>(`/hsseq/checks?${requete({ ...filtres, result: resultat === "tous" ? null : RESULTAT_ADRESSE[resultat], sort: `${tri.dir === -1 ? "-" : ""}${tri.key}`, offset, limit: PAR_PAGE })}`, { keepPreviousData: true });
 
   const n = compte?.counts;
   const total = compte?.total_count ?? 0;
   const departs = n?.departures ?? 0;
-  const tauxDeparts = n && departs ? (n.departures_checked / departs) * 100 : null;
+  const tauxDeparts = n && departs ? ((n.departures_checked ?? 0) / departs) * 100 : null;
   const tauxConformite = n && total ? ((n.by_result.compliant + n.by_result.non_compliant) / total) * 100 : null;
   const bloquants = n?.by_result.blocking ?? 0;
 
@@ -65,7 +68,7 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
           label="Départs contrôlés"
           value={tauxDeparts === null ? "–" : fmtPct(tauxDeparts, 1)}
           tone={tauxDeparts === null ? "neutral" : tauxDeparts >= 100 ? "ok" : "danger"}
-          hint={n ? `${fmtInt(n.departures_checked)} sur ${pluriel(departs, "départ")} ; objectif 100${INSECABLE}%` : undefined}
+          hint={n ? `${fmtInt(n.departures_checked ?? 0)} sur ${pluriel(departs, "départ")} ; objectif 100${INSECABLE}%` : undefined}
         />
         <Kpi
           label="Conformité des contrôles"
@@ -108,6 +111,12 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
             <DataTable
               rows={data.items}
               rowKey={(c) => c.id}
+              sort={tri}
+              onSort={(t) => {
+                if (!(TRIS as readonly string[]).includes(t.key)) return;
+                setTri(t);
+                setPosition({ cle, offset: 0 });
+              }}
               onRowClick={(c) => ecrire({ controle: c.id })}
               empty="Aucun contrôle avant départ pour ces filtres."
               columns={[
@@ -117,24 +126,23 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
                   render: (c) => (
                     <span className="inline-flex flex-col">
                       <span className="whitespace-nowrap font-mono text-[12px] text-ink">{c.reference}</span>
-                      <span className="text-[12px] text-muted">{c.template.name}</span>
+                      <span className="text-[12px] text-muted">{`${c.template.name}, version ${c.template.version}`}</span>
                       {choisi === c.id && <span className="sr-only">(fiche ouverte)</span>}
                     </span>
                   ),
                 },
-                { key: "reported_at", label: "Saisi le", sortValue: (c) => c.reported_at, render: (c) => <Saisie s={c} /> },
+                { key: "reported_at", label: "Saisi le", render: (c) => <span className="whitespace-nowrap">{fmtDateTime(c.reported_at)}</span> },
                 { key: "vehicle", label: "Véhicule", sortValue: (c) => c.vehicle.name, render: (c) => <Vehicule v={c.vehicle} /> },
                 { key: "rotation", label: "Rotation", sortValue: (c) => c.rotation?.name ?? c.rotation?.date_loading ?? null, render: (c) => <span className="whitespace-nowrap">{nomRotation(c.rotation)}</span> },
                 { key: "driver", label: "Conducteur", sortValue: (c) => c.driver?.name ?? null, render: (c) => c.driver?.name ?? <span className="text-muted">–</span> },
                 {
                   key: "result",
                   label: "Résultat",
-                  sortValue: (c) => ["compliant", "non_compliant", "blocking"].indexOf(c.result),
                   render: (c) => (
                     <span className="inline-flex flex-wrap items-center gap-1.5">
                       <Tampon mot={RESULTAT_CONTROLE[c.result]} />
-                      {c.open_blocking > 0 && <MotifCode code="V02" />}
-                      {photosManquantes(c) && <PhotoManquante pluriel />}
+                      {c.open_nonconformities > 0 && <Tag>{pluriel(c.open_nonconformities, "non-conformité ouverte", "non-conformités ouvertes")}</Tag>}
+                      {c.photos_missing && <PhotoManquante pluriel />}
                     </span>
                   ),
                 },

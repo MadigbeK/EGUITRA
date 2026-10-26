@@ -4,19 +4,21 @@
  * Transport, « Départs du jour » : rotations à charger ce jour-là, pas encore en route
  * (GET /hsseq/lock/departures), chacune avec l'état de son départ (Autorisé, À contrôler ou Bloqué)
  * et ses motifs ouverts. Un clic ouvre le panneau du verrou (VerrouDepart) : vérification, motifs,
- * dérogation, départ.
+ * dérogation, départ (profils admin, finance et exploitation ; chef de parc seul quand le verrou est
+ * en service pour la rotation). Avant la mise en service du verrou (lock_active faux), le départ est
+ * permis et les motifs s'affichent pour information ; les avertissements ne bloquent jamais.
  */
 
 import { useMemo, useState } from "react";
 import { FenetreVerrou } from "@/components/transport/VerrouDepart";
-import { Card, DataTable, ErrorBox, Etat, Field, Kpi, Segmented, Select } from "@/components/ui";
-import { TYPE_VEHICULE, Tampon, etatDepart, nomRotation } from "@/components/hsseq/commun";
+import { Card, DataTable, ErrorBox, Etat, Field, Kpi, Notice, Segmented, Select } from "@/components/ui";
+import { HORS_VERROU, TYPE_VEHICULE, Tampon, etatDepart, nomRotation } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { fmtInt, pluriel } from "@/lib/format";
 import type { Departure, Departures, HsseqSite, LockEvaluation } from "@/lib/hsseq-types";
-import { LigneMotif, RANG_ETAT, heure, jourLong, motifsBloquants, saisiesSeules } from "./motifs";
+import { LigneMotif, RANG_ETAT, avertissements, heure, jourLong, motifsBloquants, saisiesSeules } from "./motifs";
 
-type EtatDepart = "Autorisé" | "À contrôler" | "Bloqué" | "En route";
+type EtatDepart = "Autorisé" | "À contrôler" | "Bloqué" | "En route" | typeof HORS_VERROU;
 type Filtre = "tous" | EtatDepart;
 
 /** Départ lu par l'écran : celui de la liste, mis à jour par le panneau (évaluation, départ). */
@@ -49,6 +51,7 @@ export function DepartsDuJour() {
   const aControler = compte("À contrôler");
   const autorises = compte("Autorisé");
   const enRoute = compte("En route");
+  const horsVerrou = compte(HORS_VERROU);
   const visibles = filtre === "tous" ? lignes : lignes.filter((l) => l.etat === filtre);
   const courant = ouvert ? (lignes.find((l) => l.rotation.id === ouvert.rotation.id) ?? ouvert) : null;
 
@@ -56,10 +59,16 @@ export function DepartsDuJour() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi label="Départs prévus" value={data ? fmtInt(lignes.length) : "–"} hint={data ? `${jourLong(data.date)}${enRoute ? `, ${pluriel(enRoute, "parti", "partis")}` : ""}` : undefined} />
-        <Kpi label="Autorisés" value={data ? fmtInt(autorises) : "–"} tone={autorises ? "ok" : "neutral"} hint="Aucun motif bloquant, ou couvert par une dérogation" />
+        <Kpi label="Autorisés" value={data ? fmtInt(autorises) : "–"} tone={autorises ? "ok" : "neutral"} hint={horsVerrou ? `Aucun motif bloquant, ou couvert ; plus ${pluriel(horsVerrou, "départ")} hors verrou` : "Aucun motif bloquant, ou couvert par une dérogation"} />
         <Kpi label="À contrôler" value={data ? fmtInt(aControler) : "–"} tone={aControler ? "warn" : "neutral"} hint="Contrôle avant départ ou alcootest à faire sur NIMOVA Terrain" />
         <Kpi label="Bloqués" value={data ? fmtInt(bloques) : "–"} tone={bloques ? "danger" : "neutral"} hint="Motif à lever, ou à déroger quand il le permet" />
       </div>
+
+      {horsVerrou > 0 && (
+        <Notice tone="neutral">
+          {`Verrou pas encore en service pour ${pluriel(horsVerrou, "départ")} : rotations chargées avant sa date de mise en service (paramètres HSSEQ). Elles partent comme avant ; leurs motifs s'affichent pour information.`}
+        </Notice>
+      )}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Segmented<Filtre>
@@ -72,6 +81,7 @@ export function DepartsDuJour() {
             { key: "Bloqué", label: `Bloqués, ${bloques}` },
             { key: "À contrôler", label: `À contrôler, ${aControler}` },
             { key: "Autorisé", label: `Autorisés, ${autorises}` },
+            ...(horsVerrou ? [{ key: HORS_VERROU as Filtre, label: `Hors verrou, ${horsVerrou}` }] : []),
             ...(enRoute ? [{ key: "En route" as const, label: `En route, ${enRoute}` }] : []),
           ]}
         />
@@ -131,10 +141,10 @@ export function DepartsDuJour() {
                   render: (l) =>
                     l.parti ? (
                       <span className="text-[13px] text-ink-2">Parti à {heure(l.parti)}</span>
-                    ) : l.evaluation.reasons.length ? (
+                    ) : l.evaluation.reasons.length || avertissements(l.evaluation).length ? (
                       <ul className="min-w-[280px] space-y-2">
-                        {l.evaluation.reasons.map((r) => (
-                          <li key={r.code}>
+                        {[...l.evaluation.reasons, ...avertissements(l.evaluation)].map((r, i) => (
+                          <li key={`${r.code}-${i}`}>
                             <LigneMotif motif={r} jour={data.date} dense />
                           </li>
                         ))}

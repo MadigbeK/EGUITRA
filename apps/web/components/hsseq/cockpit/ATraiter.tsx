@@ -7,7 +7,7 @@ import { Badge, Card, FEUILLE, cx } from "@/components/ui";
 import { DOCUMENT_VEHICULE, MOTIFS, Tampon, TYPE_VEHICULE, etatDepart, nomRotation, tonHsseq } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt, pluriel } from "@/lib/format";
-import type { Cockpit, Deadline, Departure, LockReason } from "@/lib/hsseq-types";
+import type { Cockpit, Deadline, Departure, LockReason, VehicleDocumentKind } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
 import { liens, type Perimetre } from "./outils";
 
@@ -222,7 +222,7 @@ function EtatEcheance({ e }: { e: Deadline }) {
 function Echeances({ c }: { c: Cockpit }) {
   const items = c.deadlines.items;
   const echues = items.filter((e) => e.expired || e.days_left < 0).length;
-  const personnes = items.filter((e) => e.subject.type === "person").length;
+  const personnes = items.filter((e) => e.subject.type !== "vehicle").length;
   const vehicules = items.length - personnes;
   const [tout, setTout] = useState(false);
   const montres = tout ? items : items.slice(0, 6);
@@ -243,10 +243,10 @@ function Echeances({ c }: { c: Cockpit }) {
               <div className="min-w-0">
                 <p className="truncate text-[13.5px] font-medium text-ink">
                   {e.subject.name}
-                  <span className="font-normal text-muted"> · {e.subject.type === "person" ? "conducteur" : "véhicule"}</span>
+                  <span className="font-normal text-muted"> · {e.subject.type === "vehicle" ? "véhicule" : e.subject.type === "driver" ? "conducteur" : "salarié"}</span>
                 </p>
                 <p className="mt-0.5 text-[12.5px] text-muted">
-                  {e.document_kind ? DOCUMENT_VEHICULE[e.document_kind] : e.label}
+                  {e.kind === "vehicle_document" && e.document_kind in DOCUMENT_VEHICULE ? DOCUMENT_VEHICULE[e.document_kind as VehicleDocumentKind] : e.label}
                   {e.site ? ` · ${e.site.name}` : ""}
                 </p>
               </div>
@@ -254,10 +254,12 @@ function Echeances({ c }: { c: Cockpit }) {
                 <EtatEcheance e={e} />
                 <span className="text-[12px] tabular text-ink-2">
                   {fmtDate(e.expires_on)}
-                  <span className="text-muted" title={MOTIFS[e.reason_code].libelle}>
-                    {" "}
-                    · {e.expired ? `${e.reason_code} ouvert` : `ouvre ${e.reason_code}`}
-                  </span>
+                  {e.reason_code && (
+                    <span className="text-muted" title={MOTIFS[e.reason_code].libelle}>
+                      {" "}
+                      · {e.expired ? `${e.reason_code} ouvert` : `ouvre ${e.reason_code}`}
+                    </span>
+                  )}
                 </span>
               </div>
             </li>

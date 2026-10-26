@@ -4,7 +4,11 @@
  * Déclaration web d'un événement (POST /hsseq/events, §5), et correction de la déclaration
  * (PATCH /hsseq/events/{id}) avec le même formulaire. Les photos suivent la création, rattachées à
  * la fiche (POST /hsseq/attachments, model « event »). La criticité potentielle se calcule à l'écran
- * à titre indicatif et son effet (§9.1) s'annonce : le Responsable HSSEQ la fixe au classement.
+ * à titre indicatif et son effet (§9.1) s'annonce : le noyau n'enregistre pas les notes du déclarant
+ * (proposition, §14 du contrat), le Responsable HSSEQ les fixe au classement.
+ *
+ * Personnes en cause : `person_id` désigne le chauffeur (référentiels) ou le salarié RH ; la liste des
+ * salariés n'étant pas servie (proposition, §14), un salarié se nomme librement.
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
@@ -13,7 +17,7 @@ import { Button, Field, Input, Modal, Notice, Select, Textarea, classesBouton, c
 import { DOMAINE, ROLE_PERSONNE, TYPE_EVENEMENT, TYPE_VEHICULE, Criticite, criticite, nomRotation } from "@/components/hsseq/commun";
 import { apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtInt } from "@/lib/format";
-import type { Attachment, Departures, Domain, Event as Evenement, EventReport, EventType, PersonRole, RotationRef, Score } from "@/lib/hsseq-types";
+import type { Attachment, Departures, Domain, Event as Evenement, EventReport, EventType, MyRotations, PersonInput, PersonRole, RotationRef, Score } from "@/lib/hsseq-types";
 import { ChoixNote, NATURE_PERSONNE, champsRefus, effetCriticite, isoDepuisLocal, localDepuisIso, messageRefus, newUuid, niveauSelon, sitesDuCompte, useReferentiels } from "./commun";
 
 type NaturePersonne = "driver" | "employee" | "third_party";
@@ -21,9 +25,11 @@ type NaturePersonne = "driver" | "employee" | "third_party";
 interface LignePersonne {
   cle: string;
   kind: NaturePersonne;
-  id: number | null;
+  /** Chauffeur ou salarié RH désigné ; nul pour un tiers ou un salarié nommé librement. */
+  person_id: number | null;
   name: string;
   role: PersonRole;
+  days_off: number;
 }
 
 interface Photo {
@@ -41,8 +47,6 @@ const OPTIONS_DOMAINES = (Object.keys(DOMAINE) as Domain[]).map((d) => ({ value:
 const OPTIONS_ROLES = (Object.keys(ROLE_PERSONNE) as PersonRole[]).map((r) => ({ value: r, label: ROLE_PERSONNE[r] }));
 const OPTIONS_NATURES = (Object.keys(NATURE_PERSONNE) as NaturePersonne[]).map((k) => ({ value: k, label: NATURE_PERSONNE[k] }));
 
-/** Corps envoyé à la déclaration : les notes du déclarant s'y ajoutent à titre de proposition (hors contrat, voir le rapport). */
-type CorpsDeclaration = EventReport & { actual_severity?: Score; potential_severity?: Score; probability?: Score };
 
 function taille(octets: number): string {
   return octets >= 1024 * 1024 ? `${(octets / 1024 / 1024).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}${INSECABLE}Mo` : `${fmtInt(Math.ceil(octets / 1024))}${INSECABLE}ko`;
@@ -78,7 +82,7 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
   const [description, setDescription] = useState(evenement?.description ?? "");
   const [vehicule, setVehicule] = useState<string>(evenement?.vehicle ? String(evenement.vehicle.id) : "");
   const [rotation, setRotation] = useState<string>(evenement?.rotation ? String(evenement.rotation.id) : "");
-  const [personnes, setPersonnes] = useState<LignePersonne[]>(() => (evenement?.people ?? []).map((p) => ({ cle: cle(), kind: p.kind, id: p.id, name: p.name, role: p.role })));
+  const [personnes, setPersonnes] = useState<LignePersonne[]>(() => (evenement?.people ?? []).map((p) => ({ cle: cle(), kind: p.kind, person_id: p.person_id, name: p.name, role: p.role, days_off: p.days_off })));
   const [reelle, setReelle] = useState<Score | null>(null);
   const [potentielle, setPotentielle] = useState<Score | null>(null);
   const [probabilite, setProbabilite] = useState<Score | null>(null);
@@ -105,14 +109,20 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
     return site ? tous.filter((v) => v.site_id === Number(site) || String(v.id) === vehicule) : tous;
   }, [ref, site, vehicule]);
 
-  // Rotations rattachables : départs du jour de l'événement (seule route de HSSEQ qui liste des rotations).
+  // Rotations rattachables : celles chargées le jour de l'événement, saisies ou en route
+  // (GET /hsseq/me/rotations, bornée au compte) ; la direction, qui n'y a pas accès, lit les départs
+  // du jour pas encore partis. Une route des rotations d'un véhicule à une date est proposée (§14).
   const jour = survenu.slice(0, 10);
-  const { data: departs } = useApi<Departures>(jour ? `/hsseq/lock/departures?date=${jour}` : null);
+  const parCompte = Boolean(ref?.me.profiles.some((p) => p === "admin" || p === "hsseq" || p === "exploitation" || p === "conducteur"));
+  const { data: duJour } = useApi<MyRotations>(ref && jour && parCompte ? `/hsseq/me/rotations?date=${jour}` : null);
+  const { data: departs } = useApi<Departures>(ref && jour && !parCompte ? `/hsseq/lock/departures?date=${jour}` : null);
   const rotations = useMemo(() => {
-    const liste: Array<{ rotation: RotationRef; vehicleId: number }> = (departs?.items ?? []).map((d) => ({ rotation: d.rotation, vehicleId: d.vehicle.id }));
+    const liste: Array<{ rotation: RotationRef; vehicleId: number }> = duJour
+      ? duJour.items.map((r) => ({ rotation: { id: r.id, name: r.name, date_loading: r.date_loading, route_name: r.route_name, state: r.state }, vehicleId: r.vehicle.id }))
+      : (departs?.items ?? []).map((d) => ({ rotation: d.rotation, vehicleId: d.vehicle.id }));
     if (evenement?.rotation && !liste.some((r) => r.rotation.id === evenement.rotation!.id)) liste.unshift({ rotation: evenement.rotation, vehicleId: evenement.vehicle?.id ?? 0 });
     return vehicule ? liste.filter((r) => String(r.vehicleId) === vehicule || String(r.rotation.id) === rotation) : liste;
-  }, [departs, evenement, vehicule, rotation]);
+  }, [duJour, departs, evenement, vehicule, rotation]);
 
   const note = criticite(potentielle, probabilite);
   const niveau = niveauSelon(note, ref?.criticality_thresholds);
@@ -143,7 +153,7 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
 
   function ajouterPersonne(kind: NaturePersonne = "third_party", id: number | null = null, role: PersonRole = kind === "driver" ? "driver" : "witness") {
     const nom = kind === "driver" ? (ref?.drivers.find((d) => d.id === id)?.name ?? "") : "";
-    setPersonnes((l) => [...l, { cle: cle(), kind, id, name: nom, role }]);
+    setPersonnes((l) => [...l, { cle: cle(), kind, person_id: id, name: nom, role, days_off: 0 }]);
   }
 
   function changerPersonne(k: string, valeurs: Partial<LignePersonne>) {
@@ -172,7 +182,7 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
   }
 
   const conducteurDuVehicule = ref?.vehicles.find((v) => String(v.id) === vehicule)?.driver_id ?? null;
-  const conducteurDejaCite = personnes.some((p) => p.kind === "driver" && p.id === conducteurDuVehicule);
+  const conducteurDejaCite = personnes.some((p) => p.kind === "driver" && p.person_id === conducteurDuVehicule);
 
   const occurredAt = isoDepuisLocal(survenu);
   const futur = occurredAt !== null && Date.parse(occurredAt) > Date.now() + 5 * 60_000;
@@ -181,7 +191,7 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
     title: !titre.trim(),
     description: !description.trim(),
     occurred_at: !occurredAt || futur,
-    people: personnes.some((p) => (p.kind === "third_party" ? !p.name.trim() : !p.id)),
+    people: personnes.some((p) => (p.kind === "driver" ? !p.person_id : !p.person_id && !p.name.trim())),
   };
   const invalide = (champ: keyof typeof manque) => (tente && manque[champ]) || champs.includes(champ);
 
@@ -194,7 +204,8 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
       setErreur(futur ? "La date de l'événement ne peut pas être dans le futur." : "Complétez les champs signalés.");
       return;
     }
-    const people = personnes.map((p) => (p.kind === "third_party" ? { kind: p.kind, id: null, role: p.role, name: p.name.trim() } : { kind: p.kind, id: p.id, role: p.role }));
+    // person_id seul, jamais id : le noyau lit id en premier comme identifiant de la personne.
+    const people: PersonInput[] = personnes.map((p) => ({ kind: p.kind, person_id: p.kind === "third_party" ? null : p.person_id, name: p.name.trim() || null, role: p.role, days_off: p.days_off }));
     const commun = {
       type,
       domain: domaine || undefined,
@@ -214,14 +225,12 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
         onEnregistre(maj);
         return;
       }
-      const corps: CorpsDeclaration = {
+      // Les notes du déclarant restent à l'écran : le noyau ne les reçoit pas à la déclaration.
+      const corps: EventReport = {
         ...commun,
         client_uuid: uuid.current,
         reported_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
         offline: false,
-        ...(reelle ? { actual_severity: reelle } : {}),
-        ...(potentielle ? { potential_severity: potentielle } : {}),
-        ...(probabilite ? { probability: probabilite } : {}),
       };
       const nouveau = await apiSend<Evenement>("POST", "/hsseq/events", corps);
       const echecs: Array<{ nom: string; motif: string }> = [];
@@ -363,24 +372,37 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
             <ul className="space-y-2">
               {personnes.map((p, i) => {
                 const n = i + 1;
-                const sansNom = tente && (p.kind === "third_party" ? !p.name.trim() : !p.id);
+                const sansNom = tente && (p.kind === "driver" ? !p.person_id : !p.person_id && !p.name.trim());
                 return (
                   <li key={p.cle} className="grid items-end gap-2 rounded-xl bg-panel-2 p-3 sm:grid-cols-[9rem_minmax(0,1fr)_10rem_auto]">
                     <Field label={`Nature, personne ${n}`}>
-                      <Select value={p.kind} onChange={(e) => changerPersonne(p.cle, { kind: e.target.value as NaturePersonne, id: null, name: "" })} options={OPTIONS_NATURES} />
+                      <Select value={p.kind} onChange={(e) => changerPersonne(p.cle, { kind: e.target.value as NaturePersonne, person_id: null, name: "" })} options={OPTIONS_NATURES} />
                     </Field>
-                    {p.kind === "third_party" ? (
-                      <Field label={`Nom, personne ${n}`} error={sansNom ? "Nommez le tiers." : undefined}>
-                        <Input maxLength={120} aria-invalid={sansNom || undefined} value={p.name} onChange={(e) => changerPersonne(p.cle, { name: e.target.value })} placeholder="Nom et qualité du tiers" />
-                      </Field>
-                    ) : (
-                      <Field label={`${p.kind === "driver" ? "Conducteur" : "Salarié"}, personne ${n}`} error={sansNom ? "Choisissez la personne." : undefined}>
+                    {p.kind === "driver" ? (
+                      <Field label={`Conducteur, personne ${n}`} error={sansNom ? "Choisissez le conducteur." : undefined}>
                         <Select
                           aria-invalid={sansNom || undefined}
-                          value={p.id ?? ""}
-                          onChange={(e) => changerPersonne(p.cle, { id: e.target.value ? Number(e.target.value) : null })}
-                          options={(p.kind === "driver" ? (ref?.drivers ?? []) : (ref?.owners ?? [])).map((x) => ({ value: x.id, label: x.name }))}
+                          value={p.person_id ?? ""}
+                          onChange={(e) => {
+                            const id = e.target.value ? Number(e.target.value) : null;
+                            changerPersonne(p.cle, { person_id: id, name: ref?.drivers.find((d) => d.id === id)?.name ?? "" });
+                          }}
+                          options={(ref?.drivers ?? []).map((x) => ({ value: x.id, label: x.name }))}
                           placeholder="Choisir…"
+                        />
+                      </Field>
+                    ) : (
+                      <Field
+                        label={`Nom, personne ${n}`}
+                        hint={p.kind === "employee" && !p.person_id ? "La liste des salariés n'est pas encore servie : nommez le salarié." : undefined}
+                        error={sansNom ? (p.kind === "employee" ? "Nommez le salarié." : "Nommez le tiers.") : undefined}
+                      >
+                        <Input
+                          maxLength={120}
+                          aria-invalid={sansNom || undefined}
+                          value={p.name}
+                          onChange={(e) => changerPersonne(p.cle, { name: e.target.value, person_id: null })}
+                          placeholder={p.kind === "employee" ? "Nom du salarié" : "Nom et qualité du tiers"}
                         />
                       </Field>
                     )}
@@ -403,7 +425,7 @@ function Formulaire({ onClose, evenement, onEnregistre }: { onClose: () => void;
               <h3 id={`${formId}-gravite`} className="font-display text-[15px] font-[620] text-ink">
                 Gravité et probabilité
               </h3>
-              <p className="mt-1 text-[12.5px] leading-snug text-muted">Notes de 1 à 5, proposées par le déclarant. Le Responsable HSSEQ fixe la criticité au classement.</p>
+              <p className="mt-1 text-[12.5px] leading-snug text-muted">Estimation indicative de 1 à 5 : elle annonce l&apos;effet de la criticité mais n&apos;est pas enregistrée. Le Responsable HSSEQ note la gravité et la probabilité au classement.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <ChoixNote legende="Gravité réelle" aide="Ce qui est arrivé." valeur={reelle} onChange={setReelle} facultative />

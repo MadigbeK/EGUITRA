@@ -11,7 +11,7 @@ import { cx } from "@/components/ui";
 import { ApiError, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtInt } from "@/lib/format";
 import type { CriticalityLevel, CriticalityThreshold, InvestigationMethod, Referentials, Score } from "@/lib/hsseq-types";
-import { METHODE_ENQUETE, NIVEAUX, NOTES, ORDRE_NIVEAUX, niveauCriticite } from "@/components/hsseq/commun";
+import { METHODE_ENQUETE, NIVEAUX, NOTES, ORDRE_NIVEAUX, niveauCriticite, texteErreur } from "@/components/hsseq/commun";
 
 export { newUuid } from "@/lib/offline-store";
 
@@ -36,23 +36,20 @@ export function sitesDuCompte(ref: Referentials | undefined) {
 
 /* ─── Refus du noyau ──────────────────────────────────────────────────── */
 
-/** Refus du contrat (§1), écrits en clair quand le noyau n'envoie pas son propre message. */
+/** Refus propres aux événements, écrits en clair quand le noyau n'envoie pas son propre message. */
 const REFUS: Record<string, string> = {
-  forbidden: "Cette opération n'est pas ouverte à votre profil ou à votre site.",
   actions_open: "Toutes les actions de l'événement doivent être closes ou annulées avant sa clôture.",
   root_cause_missing: "Renseignez et enregistrez la cause racine avant de passer aux actions.",
   invalid_transition: "Cette étape n'est pas permise depuis le statut actuel de l'événement.",
-  reason_required: "Un motif écrit est obligatoire.",
-  unsupported_type: "Formats acceptés : JPEG, PNG ou PDF, 8 Mo au plus.",
-  missing_fields: "Des champs obligatoires manquent.",
-  invalid_parameter: "Une valeur saisie n'est pas acceptée.",
 };
 
-/** Message d'un refus ou d'une erreur, en français : celui du noyau, sinon celui du code, sinon un message général. */
+/**
+ * Message d'un refus ou d'une erreur, en français : celui du noyau (champs en cause compris pour
+ * missing_fields et invalid_parameter), sinon celui du code, sinon un message général.
+ */
 export function messageRefus(e: unknown, defaut = "L'opération n'a pas abouti."): string {
-  if (e instanceof ApiError) return e.body.message || REFUS[e.body.error] || defaut;
-  if (e instanceof Error && e.message) return e.message;
-  return defaut;
+  const propre = e instanceof ApiError && !e.body.message ? REFUS[e.body.error] : undefined;
+  return propre ?? texteErreur(e, {}, defaut);
 }
 
 /** Champs nommés par un refus (`fields`), pour les signaler dans le formulaire. */
@@ -74,11 +71,11 @@ export function seuilDe(niveau: CriticalityLevel, seuils?: CriticalityThreshold[
   const s = seuils?.find((t) => t.level === niveau);
   if (s) return s;
   const n = NIVEAUX[niveau];
-  const parDefaut: Record<CriticalityLevel, Pick<CriticalityThreshold, "investigation_days" | "method">> = {
-    low: { investigation_days: null, method: null },
-    moderate: { investigation_days: 15, method: "simple_analysis" },
-    significant: { investigation_days: 7, method: "five_whys" },
-    high: { investigation_days: 3, method: "cause_tree" },
+  const parDefaut: Record<CriticalityLevel, Pick<CriticalityThreshold, "investigation_days" | "investigation_hours" | "method">> = {
+    low: { investigation_days: null, investigation_hours: null, method: null },
+    moderate: { investigation_days: 15, investigation_hours: null, method: "simple_analysis" },
+    significant: { investigation_days: 7, investigation_hours: null, method: "five_whys" },
+    high: { investigation_days: 3, investigation_hours: 72, method: "cause_tree" },
   };
   return { level: niveau, min: n.min, max: n.max, ...parDefaut[niveau] };
 }

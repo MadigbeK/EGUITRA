@@ -118,11 +118,27 @@ function sansObjet(i: Indicator): boolean {
 }
 
 /**
+ * Indicateurs servis à vide par le noyau au lot 1, quel que soit le filtre : l'écart de tonnage des
+ * bennes (une seule pesée par rotation, pas de tonnage livré). L'écran le dit par la note du noyau.
+ */
+export const SANS_OBJET_LOT1: ReadonlySet<IndicatorCode> = new Set<IndicatorCode>(["tipper_variance"]);
+
+/** Profil de véhicule d'un indicateur propre à un type (écarts de livraison ou de tonnage). */
+const PROFIL_INDICATEUR: Partial<Record<IndicatorCode, VehicleKind>> = { tanker_shortage: "tanker", tipper_variance: "tipper" };
+
+/**
  * Indicateurs montrés : tous, sauf ceux qui sont sans objet pour le profil choisi. Sans filtre de
- * profil, un indicateur vide reste à l'écran avec « Sans donnée ».
+ * profil, un indicateur vide reste à l'écran avec « Sans donnée » ; un indicateur sans objet au lot 1
+ * reste montré avec sa note, sauf pour l'autre profil.
  */
 export function indicateursMontres(c: Cockpit): Indicator[] {
-  return c.filters.vehicle_kind ? c.indicators.filter((i) => !sansObjet(i)) : c.indicators;
+  const profil = c.filters.vehicle_kind;
+  if (!profil) return c.indicators;
+  return c.indicators.filter((i) => {
+    const propre = PROFIL_INDICATEUR[i.code];
+    if (propre && propre !== profil) return false;
+    return SANS_OBJET_LOT1.has(i.code) || !sansObjet(i);
+  });
 }
 
 /* ─── Prévu et réalisé ────────────────────────────────────────────────── */

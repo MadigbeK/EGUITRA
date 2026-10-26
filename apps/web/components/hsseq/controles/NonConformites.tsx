@@ -174,7 +174,7 @@ export function NonConformites({ ref_, lire, ecrire }: { ref_: Referentials | un
                     <span className="inline-flex flex-wrap items-center justify-end gap-2">
                       {n.action && (
                         <Link href={`/hsseq/actions?action=${n.action.id}`} onClick={(e) => e.stopPropagation()} className="whitespace-nowrap text-[12.5px] font-semibold text-accent underline-offset-2 hover:underline">
-                          Action {n.action.reference}
+                          Action {n.action.name}
                         </Link>
                       )}
                       {n.status === "open" && n.rights.can_close && (

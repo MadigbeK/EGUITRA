@@ -188,8 +188,14 @@ export function FicheDerogation({
                 : "Non donnée"}
           </Case>
           <Case titre="Portée">
-            Cette seule rotation
-            <span className="block text-[12px] text-muted">{w.expires ? `Expire le ${fmtDateTime(w.expires)}, à la fin de la rotation` : "Expire à la fin de la rotation"}</span>
+            Ce seul motif, pour cette seule rotation
+            <span className="block text-[12px] text-muted">
+              {w.expired_at
+                ? `Expirée le ${fmtDateTime(w.expired_at)}`
+                : w.expires
+                  ? `Expire le ${fmtDateTime(w.expires)}, fin prévue de la rotation`
+                  : "Expire à la fin prévue de la rotation, ou à sa fin si elle survient avant"}
+            </span>
           </Case>
           <Case titre="Directeur général">
             {w.management_notified_at ? `Informé le ${fmtDateTime(w.management_notified_at)}` : w.status === "pending_hsseq" ? "Informé à l'activation" : "Non informé : la dérogation n'a pas été activée"}
@@ -198,7 +204,7 @@ export function FicheDerogation({
 
         {w.status === "refused" && w.refusal_reason && (
           <Notice tone="danger">
-            <span className="font-semibold">Motif du refus : </span>
+            <span className="font-semibold">{w.decided_by ? `Refusée par ${w.decided_by.name} : ` : "Motif du refus : "}</span>
             {w.refusal_reason}
           </Notice>
         )}

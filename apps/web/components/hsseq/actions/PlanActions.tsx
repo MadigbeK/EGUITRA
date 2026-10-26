@@ -126,7 +126,7 @@ export function PlanActions() {
           <span>
             Actions de l&apos;événement{" "}
             <Link href={`/hsseq/evenements/${evenement}`} className="font-semibold text-accent underline-offset-2 hover:underline">
-              {data?.items.find((a) => a.origin === "event")?.origin_ref?.reference ?? "d'origine"}
+              {data?.items.find((a) => a.event)?.event?.reference ?? "d'origine"}
             </Link>
           </span>
           <button type="button" onClick={() => ecrire({ evenement: null, event_id: null, origine: null, statut: null })} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-ink-2 transition-colors hover:bg-panel hover:text-ink">
@@ -187,7 +187,7 @@ export function PlanActions() {
                     <span className="inline-flex flex-col items-start gap-1">
                       <Tampon mot={STATUT_ACTION[a.status]} />
                       {a.status === "to_verify" && a.verification_date && <span className="whitespace-nowrap text-[12px] text-muted">Vérification le {fmtDate(a.verification_date)}</span>}
-                      {a.effective === false && a.status === "in_progress" && <Tampon mot="Non efficace" />}
+                      {a.approval_required && <Tampon mot="À valider" />}
                     </span>
                   ),
                 },

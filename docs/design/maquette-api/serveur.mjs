@@ -5612,28 +5612,33 @@ route("POST", "/transport/rotations/validate", TR_WRITE, (ctx) => {
   return rots.map(rotationRow);
 });
 /**
- * Départ d'une rotation (contrat HSSEQ, §9 et décision 1) : état « en_route », réservé au chef de parc
- * (exploitation, sites de la rotation). Le verrou s'évalue comme POST /hsseq/lock/evaluate (hsEvaluate) :
- * un motif « block » ouvert sans dérogation active refuse le départ en 422 departure_blocked, avec les
- * blockers (avertissements compris). Déclarée avant /:action, qui prendrait sinon « depart ».
+ * Départ d'une rotation (contrat HSSEQ, §9, §13) : état « en_route », ouvert aux profils qui écrivent
+ * les rotations (WRITE de Transport : admin, finance, exploitation). Verrou en service pour la rotation
+ * (lock_active), le noyau HSSEQ le réserve au chef de parc (exploitation, sites de la rotation) et refuse
+ * en 422 departure_blocked tant qu'un motif « block » reste ouvert sans dérogation active ; les
+ * avertissements (« warn ») sont transmis sans bloquer. Trace : departed_at, departed_by.
+ * Déclarée avant /:action, qui prendrait sinon « depart ».
  */
-route("POST", "/transport/rotations/:id/depart", ["exploitation"], (ctx) => {
+route("POST", "/transport/rotations/:id/depart", TR_WRITE, (ctx) => {
   const rot = hsRotation(ctx.params[0]);
   if (!rot) throw notFound("Rotation introuvable.");
   const v = hsVehicle(rot.vehicle_id);
-  if (!v || !hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Seul un chef de parc du site de la rotation la fait partir.");
-  if (rot.state === "en_route") throw hsRule("invalid_transition", "La rotation est déjà en route.");
-  if (rot.state !== "draft") throw hsRule("invalid_transition", "Seule une rotation prévue, pas encore partie ni validée, peut partir.");
-  const evaluation = hsEvaluate(ctx, rot);
-  if (!evaluation.allowed) {
-    const blockers = evaluation.reasons.filter((r) => !r.waiver_id).map(({ code, label, source, since, waivable, severity }) => ({ code, label, source, since, waivable, severity }));
-    const codes = blockers.filter((b) => b.severity === "block").map((b) => b.code).join(", ");
-    throw hsRule("departure_blocked", `Départ refusé par le verrou : ${codes}.`, { blockers });
+  if (rot.state !== "draft") throw businessRule(`Rotation ${rot.name ?? rot.id} : seule une rotation saisie part en route.`);
+  const blockers = [];
+  if (v && ["maintenance", "off", "sold"].includes(v.state)) blockers.push({ code: "T01", label: `${v.name} n'est pas disponible : il ne part pas en rotation.`, source: "transport", since: null, waivable: false, severity: "block" });
+  if (hsLockActive(rot)) {
+    if (!hsIs(ctx, "exploitation")) throw hsForbidden("Le départ en route est donné par un chef de parc (profil Exploitation transport).");
+    if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden(`Rotation ${rot.name ?? rot.id} : ensemble d'un autre site que les vôtres.`);
+    const { reasons, warnings } = hsReasons(ctx, rot);
+    const keys = ({ code, label, source, since, waivable, severity }) => ({ code, label, source, since, waivable, severity });
+    blockers.push(...reasons.filter((r) => !r.waiver_id).map(keys), ...warnings.map(keys));
   }
-  rot.state = "en_route";
-  rot.departed_at = hsNow();
-  if (DB.rotations.includes(rot)) return rotationRow(rot);
-  return { id: rot.id, name: rot.name, state: rot.state, date_loading: rot.date_loading, vehicle: hsVehicleRef(v.id), driver: hsDriverRef(rot.driver_id), route_name: hsRouteName(rot), departed_at: rot.departed_at };
+  if (blockers.some((b) => b.severity === "block")) {
+    throw hsRule("departure_blocked", `Départ refusé pour la rotation ${rot.name ?? rot.id} : ${blockers.filter((b) => b.severity === "block").map((b) => b.label).join("; ")}`, { blockers });
+  }
+  Object.assign(rot, { state: "en_route", departed_at: hsNow(), departed_by: ctx.user.id });
+  if (DB.rotations.includes(rot)) return { ...rotationRow(rot), departure_blockers: [], departed_at: rot.departed_at, departed_by: hsUser(rot.departed_by) };
+  return { id: rot.id, name: rot.name, state: rot.state, date_loading: rot.date_loading, vehicle: hsVehicleRef(v.id), driver: hsDriverRef(rot.driver_id), route_name: hsRouteName(rot), departure_blockers: [], departed_at: rot.departed_at, departed_by: hsUser(rot.departed_by) };
 });
 route("POST", "/transport/rotations/:id/:action", TR_WRITE, (ctx) => {
   const rot = rotationOf(ctx, ctx.params[0]);
@@ -6556,6 +6561,11 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
  * pas encore les bennes (vehicle_kind, décision 3 du noyau) : les six bennes de la base de Boffa, leurs
  * conducteurs et leurs postes n'existent que dans cette partie. Les dates suivent la date de référence
  * de la maquette ; une saisie de la séance prend l'heure réelle sur ce jour-là (hsNow).
+ *
+ * Alignée le 26/10 sur le code du noyau (addons/eguitra_hsseq) : formes des réponses, codes d'erreur
+ * (missing_fields et invalid_parameter en 400, conflict en 409, business_rule en 422), verrou avec
+ * lock_active, warnings à part et active_waivers, paramètres de la société (GET et PATCH
+ * /hsseq/settings), espace du compte (/hsseq/me), notifications, annulation d'un alcootest.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 const HS_READ = ["admin", "direction", "hsseq", "exploitation"];
@@ -6563,22 +6573,29 @@ const HS_APP = [...HS_READ, "conducteur", "rh"];
 const HS_EVENT_READ = [...HS_READ, "conducteur"];
 const HS_FIELD = ["hsseq", "exploitation", "conducteur"];
 const HS_SETUP = ["admin", "hsseq"];
-/** Seuil d'une action coûteuse, validée par la direction avant démarrage (décision 8). */
-const HS_COSTLY = 50_000_000;
-/** Fenêtres du rattachement automatique d'une saisie à la rotation (heures), paramétrables. */
-const HS_WINDOWS = { check_window_hours: 12, breath_test_window_hours: 4 };
+/** Profils qui lisent toute fiche HSSEQ de leurs sociétés (READ_ALL du noyau). */
+const HS_ALL = ["admin", "direction", "hsseq"];
+/**
+ * Paramètres par défaut d'une société (eguitra.hsseq.settings). Le verrou est en service pour les
+ * rotations chargées à partir de la date de référence de la maquette : celles d'avant partent comme
+ * avant (lock_active faux). PATCH /hsseq/settings le déplace pour essayer les deux cas.
+ */
+const HS_SETTINGS_DEFAUT = {
+  lock_start_date: TODAY, qualifications_required_from: null, employee_file_required_from: null, documents_required_from: null,
+  level_moderate_min: 4, level_significant_min: 8, level_high_min: 15, investigation_hours_high: 72, investigation_days_significant: 7,
+  investigation_days_moderate: 15, client_notice_hours: 24, verification_min_criticality: 8, verification_days: 90, escalation_days: 30,
+  costly_action_threshold: 50_000_000, check_window_hours: 12, breath_test_window_hours: 4, director_id: null, targets: {},
+};
+const HS_SETTINGS_DATES = ["lock_start_date", "qualifications_required_from", "employee_file_required_from", "documents_required_from"];
+const HS_SETTINGS_NOMBRES = ["level_moderate_min", "level_significant_min", "level_high_min", "investigation_hours_high", "investigation_days_significant", "investigation_days_moderate", "client_notice_hours", "verification_min_criticality", "verification_days", "escalation_days", "costly_action_threshold", "check_window_hours", "breath_test_window_hours"];
+/** Cibles proposées par le contrat (§4), remplacées indicateur par indicateur par `targets`. */
+const HS_TARGETS = { frequency_rate: 5, severity_rate: 0.2, road_accidents_per_mkm: 1.5, reporting_ratio: 10, check_completion: 100, check_compliance: 95, breath_test_completion: 100, breath_test_positives: 0, waivers: 2, actions_on_time: 90, actions_effectiveness: 80, qualifications_valid: 100, fuel_consumption: 44, co2_emissions: 1.18, tanker_shortage: 1.5, tipper_variance: 5 };
 /** Sites de rattachement des comptes d'exploitation (absent : tous les sites). */
 const HS_USER_SITES = { 12: [1], 18: [2] };
 /** Salariés RH liés à un compte conducteur (employee.user_id, employee.driver_id). */
-const HS_EMPLOYEES = [{ id: 501, user_id: 17, driver_id: 1 }];
+const HS_EMPLOYEES = [{ id: 501, user_id: 17, driver_id: 1, matricule: "EG-0417" }];
 /** Photo de maquette : image PNG d'un pixel. */
 const HS_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
-const HS_LEVELS = [
-  { level: "low", min: 1, max: 3, investigation_days: null, method: null },
-  { level: "moderate", min: 4, max: 7, investigation_days: 15, method: "simple_analysis" },
-  { level: "significant", min: 8, max: 14, investigation_days: 7, method: "five_whys" },
-  { level: "high", min: 15, max: 25, investigation_days: 3, method: "cause_tree" },
-];
 /** Motifs du verrou (§4) : libellé, source, levée, types de véhicule, dérogeable, lot. */
 const HS_REASONS = {
   V01: ["Contrôle avant départ non réalisé pour la rotation", "NIMOVA Terrain", "Réaliser le contrôle", ["tanker", "tipper"], false, 1],
@@ -6588,12 +6605,14 @@ const HS_REASONS = {
   V05: ["Document du véhicule expiré (assurance, visite technique)", "Transport, fiche véhicule", "Responsable maintenance", ["tanker", "tipper"], true, 1],
   V06: ["Barémage ou certificat d'étanchéité de la citerne expiré", "Transport, fiche véhicule", "Responsable maintenance", ["tanker"], true, 2],
   V07: ["Charge déclarée supérieure à la charge utile autorisée", "Transport, ticket de pesée", "Chef de parc après délestage", ["tipper"], true, 2],
-  V08: ["Plan de trajet absent, circulation de nuit interdite ou temps de conduite dépassé", "Transport, rotation", "Responsable exploitation", ["tanker", "tipper"], true, 2],
+  V08: ["Plan de trajet absent, circulation de nuit sur un axe interdit ou temps de conduite dépassé", "Transport, rotation", "Responsable exploitation", ["tanker", "tipper"], true, 2],
   V09: ["Véhicule immobilisé par un événement en cours d'enquête", "Événements", "Responsable HSSEQ", ["tanker", "tipper"], true, 2],
 };
+/** Jamais dérogeables (§4.1). */
+const HS_NOT_WAIVABLE = ["V01", "V03"];
 const HS_TYPES = { work_accident: "safety", road_accident: "safety", near_miss: "safety", hazard: "safety", spill: "environment", fire: "safety", security_breach: "security", product_quality: "quality", property_damage: "safety" };
-const HS_TYPE_LABELS = { work_accident: "Accident du travail", road_accident: "Accident de la route", near_miss: "Presque-accident", hazard: "Situation dangereuse", spill: "Déversement", fire: "Incendie, départ de feu", security_breach: "Atteinte à la sûreté", product_quality: "Manquant ou contamination", property_damage: "Dommage matériel" };
-const HS_STATUS_LABELS = { reported: "Déclaré", classified: "Classé", investigation: "En enquête", actions: "Actions en cours", closed: "Clôturé" };
+const HS_TYPE_LABELS = { work_accident: "Accident du travail", road_accident: "Accident de la route", near_miss: "Presque-accident", hazard: "Situation dangereuse", spill: "Déversement", fire: "Incendie", security_breach: "Atteinte à la sûreté", product_quality: "Incident de qualité du produit", property_damage: "Dégât matériel" };
+const HS_STATUS_LABELS = { reported: "Déclaré", classified: "Classé", investigation: "Enquête", actions: "Actions", closed: "Clôturé" };
 const HS_ACTION_LABELS = { todo: "À faire", in_progress: "En cours", to_verify: "À vérifier", closed: "Close", cancelled: "Annulée" };
 const HS_LEVEL_LABELS = { low: "Faible", moderate: "Modérée", significant: "Significative", high: "Élevée" };
 const HS_DOMAINS = ["safety", "health", "security", "environment", "quality"];
@@ -6601,6 +6620,8 @@ const HS_DOC_LABELS = { insurance: "Assurance", inspection: "Visite technique", 
 const HS_COST_KINDS = ["claim", "deductible", "downtime", "product_loss", "repair", "other"];
 const HS_CONTROL_LEVELS = ["elimination", "substitution", "engineering", "administrative", "ppe"];
 const HS_ORIGINS = ["event", "audit", "check", "risk", "review"];
+const HS_FACTORS = ["environment", "equipment", "method", "manpower", "material"];
+const HS_METHODS = ["simple_analysis", "five_whys", "cause_tree"];
 const HS_PROOFS = {
   elimination: "Constat de suppression du danger, photos à l'appui",
   substitution: "Bon de livraison du matériel de remplacement",
@@ -6612,15 +6633,37 @@ const HS_PROOFS = {
 let HS = null;
 const hsNow = () => `${TODAY}T${new Date().toISOString().slice(11, 19)}Z`;
 const hsAddMinutes = (iso, minutes) => `${new Date(Date.parse(iso) + minutes * 60000).toISOString().slice(0, 19)}Z`;
-const hsLevel = (c) => (c ? HS_LEVELS.find((l) => c >= l.min && c <= l.max)?.level ?? null : null);
+
+/* ─── Paramètres de la société ──────────────────────────────────────────── */
+
+function hsSettings(company = 1) {
+  if (!HS.settings.has(company)) HS.settings.set(company, structuredClone(HS_SETTINGS_DEFAUT));
+  return HS.settings.get(company);
+}
+/** Seuils de criticité servis aux écrans (criticality_thresholds), d'après les paramètres. */
+function hsThresholds(s = hsSettings()) {
+  return [
+    { level: "low", min: 1, max: s.level_moderate_min - 1, investigation_days: null, investigation_hours: null, method: null },
+    { level: "moderate", min: s.level_moderate_min, max: s.level_significant_min - 1, investigation_days: s.investigation_days_moderate, investigation_hours: null, method: "simple_analysis" },
+    { level: "significant", min: s.level_significant_min, max: s.level_high_min - 1, investigation_days: s.investigation_days_significant, investigation_hours: null, method: "five_whys" },
+    { level: "high", min: s.level_high_min, max: 25, investigation_days: Math.round((s.investigation_hours_high / 24) * 10) / 10, investigation_hours: s.investigation_hours_high, method: "cause_tree" },
+  ];
+}
+/** Délai d'enquête d'un niveau, en minutes ; nul pour une criticité faible. */
+function hsInvestigationMinutes(level, s = hsSettings()) {
+  return { high: s.investigation_hours_high * 60, significant: s.investigation_days_significant * 1440, moderate: s.investigation_days_moderate * 1440 }[level] ?? null;
+}
+const hsLevel = (c) => (c ? hsThresholds().find((l) => c >= l.min && c <= l.max)?.level ?? null : null);
+const hsLevelMethod = (level) => ({ significant: "five_whys", high: "cause_tree" })[level] ?? "simple_analysis";
 const hsUser = (id) => (id ? { id, name: userName(id) } : null);
 const hsVehicle = (id) => DB.vehicles.find((v) => v.id === id) ?? HS.tippers.find((v) => v.id === id) ?? null;
 const hsVehicleByName = (name) => DB.vehicles.find((v) => v.name === name) ?? HS.tippers.find((v) => v.name === name) ?? null;
 const hsKind = (v) => HS.kinds.get(v.id) ?? "tanker";
-const hsVehicleSite = (v) => (hsKind(v) === "tipper" ? 2 : 1);
+/** Site de l'ensemble : rattachement fait par les sites (vehicle_ids), à défaut celui de son profil. */
+const hsVehicleSite = (v) => (HS.vehicleSites.has(v.id) ? HS.vehicleSites.get(v.id) : hsKind(v) === "tipper" ? 2 : 1);
 function hsVehicleRef(id) {
   const v = hsVehicle(id);
-  return v ? { id: v.id, name: v.name, vehicle_kind: hsKind(v), plate: v.tractor_plate } : null;
+  return v ? { id: v.id, name: v.name, vehicle_kind: hsKind(v), plate: v.tractor_plate ?? null } : null;
 }
 const hsDriver = (id) => DB.drivers.find((d) => d.id === id) ?? HS.drivers.find((d) => d.id === id) ?? null;
 function hsDriverRef(id) {
@@ -6629,43 +6672,57 @@ function hsDriverRef(id) {
 }
 const hsRotation = (id) => (id ? DB.rotations.find((r) => r.id === id && r.company_id === 1) ?? HS.rotations.find((r) => r.id === id) ?? null : null);
 const hsRouteName = (r) => r.route_name ?? DB.routes.find((x) => x.id === r.route_id)?.name ?? null;
-const hsRotationRef = (r) => (r ? { id: r.id, name: r.name, date_loading: r.date_loading, route_name: hsRouteName(r) } : null);
+const hsRotationRef = (r) => (r ? { id: r.id, name: r.name, date_loading: r.date_loading, route_name: hsRouteName(r), state: r.state } : null);
 const hsSite = (id) => HS.sites.find((s) => s.id === id) ?? null;
 function hsSiteRef(id) {
   const s = hsSite(id);
   return s ? { id: s.id, name: s.name } : null;
 }
-/** Fin prévue d'une rotation : livraison, sinon chargement plus le temps de route (380 km par jour). */
+/** Fin prévue d'une rotation (expiration d'une dérogation) : son retour, sinon son chargement plus la durée de la route, en fin de journée. */
 function hsRotationEnd(r) {
-  if (r.date_delivery) return r.date_delivery;
+  if (r.date_delivery) return `${r.date_delivery}T23:59:59Z`;
   const km = DB.routes.find((x) => x.id === r.route_id)?.distance_km ?? 45;
-  return addDays(r.date_loading, Math.max(1, Math.ceil(km / 380)));
+  return `${addDays(r.date_loading, Math.max(1, Math.ceil(km / 380)))}T23:59:59Z`;
 }
 function hsRotationAt(vehicleId, date) {
   const list = [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations].filter((r) => r.vehicle_id === vehicleId && r.date_loading <= date && r.state !== "cancelled");
   return list.sort((a, b) => b.date_loading.localeCompare(a.date_loading) || b.id - a.id)[0] ?? null;
 }
 const hsDepartureRotations = (day) => [...DB.rotations.filter((r) => r.company_id === 1 && r.date_loading === day && r.state !== "cancelled"), ...HS.rotations.filter((r) => r.date_loading === day)];
+/** Le verrou vaut pour une rotation chargée à partir de sa mise en service (paramètres de la société). */
+const hsLockActive = (r) => Boolean(hsSettings(r.company_id ?? 1).lock_start_date && r.date_loading >= hsSettings(r.company_id ?? 1).lock_start_date);
 
 /* ─── Droits et périmètre ───────────────────────────────────────────────── */
 
 const hsIs = (ctx, profile) => ctx.user.profiles.includes(profile);
-const hsFull = (ctx) => hasProfile(ctx, ["admin", "direction", "hsseq"]);
+const hsFull = (ctx) => hasProfile(ctx, HS_ALL);
+/** Portée du compte, comme le noyau : « all », « site » (chef de parc), « self » (conducteur et autres). */
+const hsScope = (ctx) => (hsFull(ctx) ? "all" : hsIs(ctx, "exploitation") ? "site" : "self");
 const hsSites = (ctx) => (hsFull(ctx) ? [] : HS_USER_SITES[ctx.user.id] ?? []);
 function hsSiteOk(ctx, siteId) {
   const sites = hsSites(ctx);
-  return !sites.length || sites.includes(siteId);
+  return !sites.length || !siteId || sites.includes(siteId);
 }
 const hsEmployee = (ctx) => HS_EMPLOYEES.find((e) => e.user_id === ctx.user.id) ?? null;
 const hsMyDriver = (ctx) => hsEmployee(ctx)?.driver_id ?? null;
-const hsCanSeeEvent = (ctx, e) => hsFull(ctx) || e.reported_by === ctx.user.id || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, e.site_id));
-const hsCanSeeAction = (ctx, a) => hsFull(ctx) || a.owner_id === ctx.user.id || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, a.site_id));
-const hsCanSeeCheck = (ctx, c) => hsFull(ctx) || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, c.site_id)) || (hsIs(ctx, "conducteur") && c.driver_id === hsMyDriver(ctx));
-const hsCanLift = (ctx, n) => hsIs(ctx, "hsseq") || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, n.site_id));
-const hsForbidden = (message = "Accès non autorisé pour votre profil.") => new ApiError(403, "forbidden", message);
-const hsRule = (code, message, extra = {}) => new ApiError(422, code, message, extra);
+const hsCanSeeEvent = (ctx, e) => hsFull(ctx) || e.reported_by === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, e.site_id));
+const hsCanSeeAction = (ctx, a) => hsFull(ctx) || a.owner_id === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, a.site_id));
+const hsCanSeeCheck = (ctx, c) => hsFull(ctx) || (hsScope(ctx) === "site" ? hsSiteOk(ctx, c.site_id) : c.performed_by === ctx.user.id || (hsMyDriver(ctx) !== null && c.driver_id === hsMyDriver(ctx)));
+const hsCanLift = (ctx, n) => n.status === "open" && (hsIs(ctx, "hsseq") || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, n.site_id)));
+const hsForbidden = (message = "Opération non autorisée pour votre profil.") => new ApiError(403, "forbidden", message);
+/** Règle métier refusée : code précis, 422 par défaut (HsseqError du noyau). */
+const hsRule = (code, message, extra = {}, status = 422) => new ApiError(status, code, message, extra);
+const hsMissing = (message, fields) => new ApiError(400, "missing_fields", message, { fields });
+const hsBad = (message, fields) => new ApiError(400, "invalid_parameter", message, fields ? { fields } : {});
 /** Nombre facultatif d'un corps (position GPS) : nul s'il manque. */
 const hsNum = (v, name) => (v === undefined || v === null || v === "" ? null : numArg(v, name));
+/** Identifiant facultatif d'un corps : nul s'il manque, 400 invalid_parameter s'il n'est pas entier. */
+function hsId(data, key) {
+  const v = data[key];
+  if (v === undefined || v === null || v === "" || v === 0 || v === "0" || v === false) return null;
+  if (!/^\d+$/.test(String(v))) throw hsBad(`Identifiant invalide : ${key}.`, [key]);
+  return Number(v);
+}
 
 /** Filtre commun des listes : société (seul EGUITRA GROUP a du transport), site, type de véhicule. */
 function hsFilter(ctx, q, siteId, kind) {
@@ -6681,28 +6738,81 @@ function hsPage(ctx, list, counts, row) {
   return { items: list.slice(offset, offset + limit).map(row), total_count: list.length, offset, limit, counts };
 }
 
-/* ─── Journal et pièces jointes ─────────────────────────────────────────── */
+/* ─── Journal, pièces jointes, notifications ────────────────────────────── */
 
-function hsLog(model, id, by, action, field = null, oldValue = null, newValue = null, at = hsNow()) {
-  HS.log.push({ model, id, at, by, action, field, old_value: oldValue === null ? null : String(oldValue), new_value: newValue === null ? null : String(newValue) });
+function hsLog(model, resId, by, action, field = null, oldValue = null, newValue = null, at = hsNow(), note = null) {
+  HS.log.push({ id: ++HS.seq.log, model, res_id: resId, at, by, action, field, old_value: oldValue === null ? null : String(oldValue), new_value: newValue === null ? null : String(newValue), note });
 }
-const hsHistoryRow = (l) => ({ at: l.at, by: hsUser(l.by), action: l.action, field: l.field, old_value: l.old_value, new_value: l.new_value });
-const hsHistory = (model, id) => HS.log.filter((l) => l.model === model && l.id === id).sort((a, b) => a.at.localeCompare(b.at)).map(hsHistoryRow);
+const hsHistoryRow = (l) => ({ id: l.id, model: l.model, res_id: l.res_id, at: l.at, by: hsUser(l.by), action: l.action, field: l.field, old_value: l.old_value, new_value: l.new_value, note: l.note ?? null });
+const hsHistory = (model, id) => HS.log.filter((l) => l.model === model && l.res_id === id).sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id).map(hsHistoryRow);
 
+/** Pièce jointe ; `model` nul : déposée avant sa fiche, citée ensuite par attachment_ids. */
 function hsAttach(model, objectId, by, name, mimetype, data, extra = {}) {
-  const a = { id: ++HS.seq.attachment, model, object_id: objectId, name, mimetype, size: data.length, is_photo: mimetype.startsWith("image/"), caption: null, created_at: hsNow(), created_by: by, client_uuid: null, ...extra };
+  const role = extra.role ?? (model === "action" ? "evidence" : "photo");
+  const a = { id: ++HS.seq.attachment, model, object_id: objectId, name, mimetype, size: data.length, is_photo: mimetype.startsWith("image/"), caption: null, created_at: hsNow(), created_by: by, client_uuid: null, ...extra, role };
   HS.attachments.push(a);
   HS.files.set(a.id, data);
   return a;
 }
 const hsPhoto = (model, id, by, at, caption) => hsAttach(model, id, by, `photo-${model}-${id}-${HS.seq.attachment + 1}.png`, "image/png", HS_PNG, { created_at: at, caption });
-const hsAttachmentRow = (a) => ({ id: a.id, name: a.name, mimetype: a.mimetype, size: a.size, is_photo: a.is_photo, caption: a.caption, created_at: a.created_at, created_by: hsUser(a.created_by), url: `/hsseq/attachments/${a.id}/download` });
+const hsAttachmentRow = (a) => ({
+  id: a.id, name: a.name, mimetype: a.mimetype, size: a.size, is_photo: a.is_photo, caption: a.caption, role: a.role, model: a.model, res_id: a.object_id,
+  created_at: a.created_at, created_by: hsUser(a.created_by), url: `/hsseq/attachments/${a.id}/download`,
+});
 const hsAttachments = (model, id, keep = () => true) => HS.attachments.filter((a) => a.model === model && a.object_id === id && keep(a)).map(hsAttachmentRow);
+/**
+ * Pièces citées par une fiche (attachment_ids) : déposées par le compte et pas encore rattachées, ou
+ * déjà rattachées à cette fiche. Pièce d'un autre déposant : 403 ; rattachée ailleurs : 409 conflict.
+ */
+function hsClaim(ctx, ids, model, objectId, role = null) {
+  const list = [];
+  for (const id of ids) {
+    const a = HS.attachments.find((x) => x.id === Number(id));
+    if (!a) throw new ApiError(404, "not_found", "Pièce jointe introuvable.", { fields: ["attachment_ids"] });
+    if (!(a.model === model && a.object_id === objectId)) {
+      if (a.model) throw new ApiError(409, "conflict", `La pièce « ${a.name} » est déjà rattachée à une autre fiche.`, { fields: ["attachment_ids"] });
+      if (a.created_by !== ctx.user.id) throw hsForbidden("Une pièce déposée par un autre compte ne se cite pas.");
+    }
+    list.push(a);
+  }
+  for (const a of list) Object.assign(a, { model, object_id: objectId, ...(role ? { role } : {}) });
+  return list;
+}
+/** Liste d'identifiants d'un corps (« 1,2 » ou [1, 2]) ; 400 invalid_parameter sinon. */
+function hsIds(data, key) {
+  const v = data[key] ?? [];
+  const list = typeof v === "string" ? v.split(",").filter((x) => x.trim()) : v;
+  if (!Array.isArray(list) || list.some((x) => !/^\d+$/.test(String(x).trim()))) throw hsBad(`Liste d'identifiants invalide : ${key}.`, [key]);
+  return list.map((x) => Number(x));
+}
+/** Saisie déjà reçue (idempotence) : rendue à son auteur ; à un autre compte, 409 conflict. */
+function hsExisting(ctx, list, uuid, author = (x) => x.performed_by ?? x.reported_by ?? x.created_by) {
+  if (!uuid) return null;
+  const found = list.find((x) => x.client_uuid === String(uuid));
+  if (found && author(found) !== ctx.user.id) throw new ApiError(409, "conflict", "Identifiant de saisie déjà utilisé par un autre compte.", { fields: ["client_uuid"] });
+  return found ?? null;
+}
+
+/** Notifie chaque destinataire dans l'application, et par courriel s'il a une adresse (pas de SMS au lot 1). */
+function hsNotify(userIds, kind, subject, body, model, resId, at = hsNow()) {
+  for (const id of [...new Set(userIds)]) {
+    const u = userById(id);
+    if (!u || !u.active) continue;
+    HS.notifications.push({ id: ++HS.seq.notification, user_id: id, channel: "app", kind, subject, body, model, res_id: resId, sent_at: at, read_at: null });
+    if (u.email) HS.notifications.push({ id: ++HS.seq.notification, user_id: id, channel: "email", kind, subject, body, model, res_id: resId, sent_at: at, read_at: null });
+  }
+}
+const hsNotificationRow = (n) => ({ id: n.id, kind: n.kind, channel: n.channel, subject: n.subject, body: n.body ?? null, model: n.model, res_id: n.res_id, to: hsUser(n.user_id), sent_at: n.sent_at, read_at: n.read_at });
+/** Directeur général paramétré, sinon les comptes Direction générale. */
+const hsDirectors = () => (hsSettings().director_id ? [hsSettings().director_id] : USERS.filter((u) => u.active && u.profiles.includes("direction") && !u.profiles.includes("admin")).map((u) => u.id));
+const hsHsseqManagers = () => USERS.filter((u) => u.active && u.profiles.includes("hsseq")).map((u) => u.id);
 
 /* ─── Contrôles et non-conformités ──────────────────────────────────────── */
 
-function hsTemplateRow(t) {
-  return { id: t.id, name: t.name, kind: t.kind, vehicle_kind: t.vehicle_kind, version: t.version, active: t.active, items: [...t.items].sort((a, b) => a.sequence - b.sequence), updated_at: t.updated_at, updated_by: hsUser(t.updated_by) };
+/** Grille au format de l'API ; `all` : points retirés compris (admin et hsseq). */
+function hsTemplateRow(t, all = false) {
+  const items = [...t.items].filter((it) => all || it.active !== false).sort((a, b) => a.sequence - b.sequence).map((it) => ({ id: it.id, label: it.label, blocking: it.blocking, sequence: it.sequence, linked_to: it.linked_to ?? null, active: it.active !== false }));
+  return { id: t.id, name: t.name, kind: t.kind, vehicle_kind: t.vehicle_kind, version: t.version, active: t.active, items, updated_at: t.updated_at, updated_by: hsUser(t.updated_by) };
 }
 
 /** Contrôle et ses non-conformités (une par réponse « not_ok »). */
@@ -6710,83 +6820,109 @@ function hsCreateCheck(spec) {
   const t = spec.template;
   const v = hsVehicle(spec.vehicle_id);
   const c = {
-    id: ++HS.seq.check, reference: `CTL/2026/${pad(HS.seq.check + 1200, 5)}`, template_id: t.id, kind: t.kind, vehicle_kind: t.vehicle_kind,
+    id: ++HS.seq.check, reference: `CTL/2026/${pad(HS.seq.check + 1200, 5)}`, template_id: t.id, template_version: spec.template_version ?? t.version, kind: t.kind, vehicle_kind: t.vehicle_kind,
     vehicle_id: v.id, rotation_id: spec.rotation_id ?? null, driver_id: spec.driver_id ?? null, performed_by: spec.performed_by, site_id: hsVehicleSite(v),
     client_uuid: spec.client_uuid ?? null, reported_at: spec.reported_at, synced_at: spec.synced_at ?? spec.reported_at, offline: Boolean(spec.offline),
-    duration_s: spec.duration_s ?? null, latitude: spec.latitude ?? null, longitude: spec.longitude ?? null, gps_accuracy: spec.gps_accuracy ?? null, signature: spec.signature ?? null,
-    answers: t.items.map((it) => {
+    duration_s: spec.duration_s ?? null, latitude: spec.latitude ?? null, longitude: spec.longitude ?? null, gps_accuracy: spec.gps_accuracy ?? null,
+    answers: t.items.filter((it) => it.active !== false).map((it, i) => {
       const a = spec.answers.find((x) => Number(x.item_id) === it.id);
-      return { item_id: it.id, label: it.label, blocking: it.blocking, answer: it.linked_to ? "na" : a?.answer ?? "na", comment: it.linked_to ? "Renseigné par l'alcootest" : a?.comment ?? null };
+      return { item_id: it.id, label: it.label, blocking: it.blocking, sequence: it.sequence ?? (i + 1) * 10, answer: it.linked_to ? "na" : a?.answer ?? "na", comment: it.linked_to ? "Renseigné par l'alcootest" : a?.comment ?? null };
     }),
   };
   c.result = c.answers.some((a) => a.answer === "not_ok" && a.blocking) ? "blocking" : c.answers.some((a) => a.answer === "not_ok") ? "non_compliant" : "compliant";
   HS.checks.push(c);
   for (const a of c.answers.filter((x) => x.answer === "not_ok")) {
-    HS.ncs.push({ id: ++HS.seq.nc, check_id: c.id, item_id: a.item_id, label: a.label, blocking: a.blocking, vehicle_id: c.vehicle_id, rotation_id: c.rotation_id, site_id: c.site_id, found_at: c.reported_at, comment: a.comment, status: "open", lifted_at: null, lifted_by: null, lift_comment: null, lift_photo_ids: [], action_id: null });
+    HS.ncs.push({ id: ++HS.seq.nc, check_id: c.id, item_id: a.item_id, label: a.label, blocking: a.blocking, vehicle_id: c.vehicle_id, rotation_id: c.rotation_id, site_id: c.site_id, found_at: c.reported_at, comment: a.comment, status: "open", lifted_at: null, lifted_by: null, lift_comment: null, action_id: null });
   }
   return c;
 }
+const hsNcPhotosMissing = (n) => n.status === "open" && !HS.attachments.some((a) => a.model === "nonconformity" && a.object_id === n.id);
 function hsNcRow(ctx, n) {
   const c = HS.checks.find((x) => x.id === n.check_id);
   const action = n.action_id ? HS.actions.find((a) => a.id === n.action_id) : null;
-  const photos = hsAttachments("nonconformity", n.id, (a) => !n.lift_photo_ids.includes(a.id));
   return {
     id: n.id, check: { id: c.id, reference: c.reference }, item: { id: n.item_id, label: n.label, blocking: n.blocking }, vehicle: hsVehicleRef(n.vehicle_id),
-    rotation: hsRotationRef(hsRotation(n.rotation_id)), site: hsSiteRef(n.site_id), found_at: n.found_at, comment: n.comment, photos, photos_missing: photos.length === 0,
+    rotation: hsRotationRef(hsRotation(n.rotation_id)), site: hsSiteRef(n.site_id), found_at: n.found_at, comment: n.comment,
+    photos: hsAttachments("nonconformity", n.id, (a) => a.role === "photo"), photos_missing: hsNcPhotosMissing(n),
     status: n.status, lifted_at: n.lifted_at, lifted_by: hsUser(n.lifted_by), lift_comment: n.lift_comment,
-    lift_photos: HS.attachments.filter((a) => n.lift_photo_ids.includes(a.id)).map(hsAttachmentRow), action: action ? { id: action.id, reference: action.reference } : null,
-    rights: { can_edit: false, can_close: n.status === "open" && hsCanLift(ctx, n), can_approve: false },
+    lift_photos: hsAttachments("nonconformity", n.id, (a) => a.role === "lift"), action: action ? { id: action.id, name: action.reference } : null,
+    rights: { can_edit: false, can_close: hsCanLift(ctx, n), can_approve: false },
   };
 }
 function hsCheckLine(c) {
   const ncs = HS.ncs.filter((n) => n.check_id === c.id);
   const t = HS.templates.find((x) => x.id === c.template_id);
   return {
-    id: c.id, reference: c.reference, template: { id: t.id, name: t.name }, kind: c.kind, vehicle_kind: c.vehicle_kind, vehicle: hsVehicleRef(c.vehicle_id),
-    rotation: hsRotationRef(hsRotation(c.rotation_id)), driver: hsDriverRef(c.driver_id), performed_by: hsUser(c.performed_by), site: hsSiteRef(c.site_id), result: c.result,
-    nonconformities_count: ncs.length, open_blocking: ncs.filter((n) => n.status === "open" && n.blocking).length, duration_s: c.duration_s,
-    client_uuid: c.client_uuid, reported_at: c.reported_at, synced_at: c.synced_at, offline: c.offline,
+    id: c.id, reference: c.reference, template: { id: t.id, name: t.name, version: c.template_version ?? t.version }, kind: c.kind, vehicle_kind: c.vehicle_kind,
+    vehicle: hsVehicleRef(c.vehicle_id), rotation: hsRotationRef(hsRotation(c.rotation_id)), driver: hsDriverRef(c.driver_id), site: hsSiteRef(c.site_id),
+    author: hsUser(c.performed_by), reported_at: c.reported_at, result: c.result, open_nonconformities: ncs.filter((n) => n.status === "open").length,
+    photos_missing: ncs.some(hsNcPhotosMissing),
   };
 }
 function hsCheckDetail(ctx, c) {
-  const ncs = HS.ncs.filter((n) => n.check_id === c.id).map((n) => hsNcRow(ctx, n));
-  const answers = c.answers.map((a) => ({ ...a, photos: ncs.find((n) => n.item.id === a.item_id)?.photos ?? [] }));
+  const ncs = HS.ncs.filter((n) => n.check_id === c.id);
+  const liftable = ncs.some((n) => hsCanLift(ctx, n));
+  const signature = HS.attachments.find((a) => a.model === "check" && a.object_id === c.id && a.role === "signature");
   return {
-    ...hsCheckLine(c), latitude: c.latitude, longitude: c.longitude, gps_accuracy: c.gps_accuracy, answers, signature: c.signature, nonconformities: ncs, photos_missing: ncs.some((n) => n.photos_missing),
-    rights: { can_edit: hsIs(ctx, "hsseq"), can_close: ncs.some((n) => n.rights.can_close), can_approve: false },
+    ...hsCheckLine(c), client_uuid: c.client_uuid, synced_at: c.synced_at, offline: c.offline, duration_s: c.duration_s,
+    latitude: c.latitude, longitude: c.longitude, gps_accuracy: c.gps_accuracy,
+    answers: c.answers.map((a) => {
+      const n = ncs.find((x) => x.item_id === a.item_id);
+      return { item_id: a.item_id, label: a.label, blocking: a.blocking, sequence: a.sequence, answer: a.answer, comment: a.comment, nonconformity_id: n?.id ?? null, photos: n ? hsAttachments("nonconformity", n.id) : [] };
+    }),
+    signature: signature ? hsAttachmentRow(signature) : null,
+    nonconformities: ncs.map((n) => hsNcRow(ctx, n)),
+    attachments: hsAttachments("check", c.id, (a) => a.role !== "signature"),
+    history: hsScope(ctx) === "self" ? [] : hsHistory("check", c.id),
+    transitions: liftable ? ["lift"] : [],
+    rights: { can_edit: hsIs(ctx, "hsseq"), can_close: liftable, can_approve: false },
   };
 }
 
 /* ─── Alcootests ────────────────────────────────────────────────────────── */
 
 const hsTestStatus = (t) => (!t.performed ? "not_done" : t.result === "positive" ? "non_compliant" : "compliant");
-/** Trois niveaux (§9.4) : « fait » pour le conducteur, statut pour exploitation, direction et admin, détail pour hsseq. */
+/** Niveau de lecture (§9.4) : détail pour hsseq, statut pour l'administration, la direction et le chef de parc, « fait » sinon. */
+const hsTestAccess = (ctx) => (hsIs(ctx, "hsseq") ? "detail" : hsScope(ctx) === "self" ? "done" : "status");
 function hsTestRow(ctx, t) {
-  if (!hasProfile(ctx, HS_READ)) return { access: "done", id: t.id, rotation: hsRotationRef(hsRotation(t.rotation_id)), driver: hsDriverRef(t.driver_id), done: t.performed, done_at: t.performed ? t.reported_at : null };
-  const base = { id: t.id, rotation: hsRotationRef(hsRotation(t.rotation_id)), driver: hsDriverRef(t.driver_id), date: t.reported_at.slice(0, 10), status: hsTestStatus(t) };
-  if (!hsIs(ctx, "hsseq")) return { access: "status", ...base };
+  const access = hsTestAccess(ctx);
+  const base = { id: t.id, rotation: hsRotationRef(hsRotation(t.rotation_id)), driver: hsDriverRef(t.driver_id), access };
+  if (access === "done") return { ...base, done: t.performed, done_at: t.reported_at };
+  Object.assign(base, { date: t.reported_at.slice(0, 10), status: hsTestStatus(t) });
+  if (access === "status") return base;
   return {
-    access: "detail", ...base, performed: t.performed, result: t.result, reading_mg_l: t.reading_mg_l, device: t.device, not_done_reason: t.not_done_reason,
+    ...base, performed: t.performed, result: t.result, reading_mg_l: t.reading_mg_l || null, device: t.device, not_done_reason: t.not_done_reason,
     performed_by: hsUser(t.performed_by), driver_removed: t.driver_removed, client_uuid: t.client_uuid, reported_at: t.reported_at, synced_at: t.synced_at, offline: t.offline,
+    cancelled: t.active === false, cancel_reason: t.cancel_reason ?? null, cancelled_by: hsUser(t.cancelled_by ?? null), cancelled_at: t.cancelled_at ?? null,
   };
 }
-const hsCanSeeTest = (ctx, t) => {
+const hsTestSite = (t) => {
   const r = hsRotation(t.rotation_id);
   const v = r ? hsVehicle(r.vehicle_id) : null;
-  return hsFull(ctx) || (hsIs(ctx, "exploitation") && (!v || hsSiteOk(ctx, hsVehicleSite(v)))) || (hsIs(ctx, "conducteur") && t.driver_id === hsMyDriver(ctx));
+  return v ? hsVehicleSite(v) : HS.driverSites.get(t.driver_id) ?? null;
 };
+const hsCanSeeTest = (ctx, t) => {
+  if (t.active === false && !hsIs(ctx, "hsseq")) return false;
+  const scope = hsScope(ctx);
+  if (scope === "all") return true;
+  if (scope === "site") return hsSiteOk(ctx, hsTestSite(t));
+  return hsMyDriver(ctx) !== null && t.driver_id === hsMyDriver(ctx);
+};
+const hsLiveTests = () => HS.tests.filter((t) => t.active !== false);
 
 /* ─── Verrou de départ ──────────────────────────────────────────────────── */
 
 const hsReasonSetting = (code) => HS.reasons.find((r) => r.code === code);
+/** Expire les dérogations dont la rotation est terminée ou dont la fin prévue est passée. */
 function hsExpireWaivers() {
   const now = hsNow();
-  for (const w of HS.waivers) if (w.status === "active" && w.expires && w.expires < now) w.status = "expired";
-}
-/** pending : motif levé par une saisie de terrain encore à faire (V01, V03 non faits). */
-function hsReason(code, since, detail, pending = false) {
-  const s = hsReasonSetting(code);
-  return { code, label: s.label, source: s.source, since, waivable: s.waivable, detail, resolution: s.resolution, severity: "block", pending, waiver_id: null };
+  for (const w of HS.waivers) {
+    const r = hsRotation(w.rotation_id);
+    if (["active", "pending_hsseq"].includes(w.status) && ((r && ["done", "invoiced", "cancelled"].includes(r.state)) || (w.expires && w.expires < now))) {
+      Object.assign(w, { status: "expired", expired_at: now });
+      hsLog("waiver", w.id, null, "expire", "status", "active", "expired", now);
+    }
+  }
 }
 /**
  * Rattachement automatique (§9 du contrat) : à l'évaluation d'une rotation pas encore partie, le
@@ -6794,95 +6930,138 @@ function hsReason(code, since, detail, pending = false) {
  * dans leur fenêtre (12 h, 4 h) lui sont rattachés. Une saisie rattachée ne compte jamais pour une autre.
  */
 function hsAutoAttach(ctx, rot) {
-  if (!["draft", "en_route"].includes(rot.state)) return;
+  if (rot.state !== "draft") return;
+  const s = hsSettings();
   const ref = rot.date_loading === TODAY ? hsNow() : `${rot.date_loading}T23:59:59Z`;
   const within = (at, hours) => at <= ref && Date.parse(ref) - Date.parse(at) <= hours * 3600000;
   const latest = (list) => list.sort((a, b) => b.reported_at.localeCompare(a.reported_at))[0];
   if (!HS.checks.some((c) => c.rotation_id === rot.id && c.kind === "pre_departure")) {
-    const c = latest(HS.checks.filter((x) => x.rotation_id === null && x.kind === "pre_departure" && x.vehicle_id === rot.vehicle_id && within(x.reported_at, HS_WINDOWS.check_window_hours)));
+    const c = latest(HS.checks.filter((x) => x.rotation_id === null && x.kind === "pre_departure" && x.vehicle_id === rot.vehicle_id && within(x.reported_at, s.check_window_hours)));
     if (c) {
       c.rotation_id = rot.id;
+      if (!c.driver_id) c.driver_id = rot.driver_id;
       for (const n of HS.ncs.filter((x) => x.check_id === c.id)) n.rotation_id = rot.id;
-      hsLog("check", c.id, ctx.user.id, "Rattachement automatique à la rotation", "rotation_id", null, rot.id);
+      hsLog("check", c.id, ctx.user.id, "attach", "rotation_id", null, rot.id, hsNow(), `Rattaché à la rotation ${rot.name ?? rot.id}`);
     }
   }
-  if (!HS.tests.some((t) => t.rotation_id === rot.id && t.driver_id === rot.driver_id)) {
-    const t = latest(HS.tests.filter((x) => x.rotation_id === null && x.driver_id === rot.driver_id && within(x.reported_at, HS_WINDOWS.breath_test_window_hours)));
+  if (rot.driver_id && !hsLiveTests().some((t) => t.rotation_id === rot.id && t.driver_id === rot.driver_id)) {
+    const recent = hsLiveTests().filter((x) => x.rotation_id === null && x.driver_id === rot.driver_id && within(x.reported_at, s.breath_test_window_hours));
+    const t = recent.find((x) => hsTestStatus(x) === "non_compliant") ?? latest(recent);
     if (t) {
       t.rotation_id = rot.id;
-      hsLog("breath_test", t.id, ctx.user.id, "Rattachement automatique à la rotation", "rotation_id", null, rot.id);
+      hsLog("breath_test", t.id, ctx.user.id, "attach", "rotation_id", null, rot.id, hsNow(), `Rattaché à la rotation ${rot.name ?? rot.id}`);
+      hsRemoveDriver(t, rot);
     }
   }
 }
-/** Toutes les reasons ouvertes (bloquantes, sans dérogation) sont des saisies de terrain à faire. */
-function hsPendingOnly(evaluation) {
-  const open = evaluation.reasons.filter((x) => x.severity === "block" && !x.waiver_id);
-  return open.length > 0 && open.every((x) => x.pending);
+/** Positif : le conducteur est retiré de la rotation encore saisie (Transport en affecte un autre). */
+function hsRemoveDriver(t, rot) {
+  if (hsTestStatus(t) !== "non_compliant") return;
+  t.driver_removed = true;
+  if (rot && rot.state === "draft" && rot.driver_id === t.driver_id) {
+    rot.driver_id = null;
+    hsLog("breath_test", t.id, t.performed_by, "driver_removed", null, null, null, hsNow(), `Conducteur retiré de la rotation ${rot.name ?? rot.id}`);
+  }
 }
-/** Évaluation du §4.2 : motifs V01 à V05 actifs pour le type du véhicule et le site. */
-function hsEvaluate(ctx, rot) {
+/** Motif d'une évaluation ; `severity` « warn » : avertissement, jamais bloquant. */
+function hsReason(code, since, detail, pending = false, severity = "block") {
+  const s = hsReasonSetting(code);
+  return { code, label: s.label, source: s.source, since: since ?? null, waivable: s.waivable && !HS_NOT_WAIVABLE.includes(code), detail, resolution: s.resolution, severity, pending, waiver_id: null };
+}
+/** Motifs de la rotation : { reasons (block), warnings (warn), waived } ; detail de V03 nul hors hsseq. */
+function hsReasons(ctx, rot, applyWaivers = true) {
   hsAutoAttach(ctx, rot);
   const v = hsVehicle(rot.vehicle_id);
   const kind = hsKind(v);
   const site = hsVehicleSite(v);
+  const s = hsSettings();
   const on = (code) => {
-    const s = hsReasonSetting(code);
-    return s.active && s.vehicle_kinds.includes(kind) && !s.disabled_sites.includes(site);
+    const r = hsReasonSetting(code);
+    return r.active && r.lot === 1 && r.vehicle_kinds.includes(kind) && !r.disabled_sites.includes(site);
   };
-  const dayStart = stamp(rot.date_loading, 5, 0);
+  const created = stamp(rot.date_loading, 5, 0);
   const hs = hsIs(ctx, "hsseq");
+  const day = rot.date_loading > TODAY ? rot.date_loading : TODAY;
   const reasons = [];
-  if (on("V01") && !HS.checks.some((c) => c.rotation_id === rot.id && c.kind === "pre_departure")) reasons.push(hsReason("V01", dayStart, null, true));
-  if (on("V02")) {
-    const open = HS.ncs.filter((n) => n.vehicle_id === v.id && n.blocking && n.status === "open").sort((a, b) => a.found_at.localeCompare(b.found_at));
-    if (open.length) reasons.push(hsReason("V02", open[0].found_at, open.map((n) => n.label).join(" ; ")));
+  const warnings = [];
+  const add = (code, since, detail, pending = false, severity = "block") => {
+    if (on(code)) (severity === "block" ? reasons : warnings).push(hsReason(code, since, detail, pending, severity));
+  };
+  if (!HS.checks.some((c) => c.rotation_id === rot.id && c.kind === "pre_departure")) add("V01", created, null, true);
+  const open = HS.ncs.filter((n) => n.vehicle_id === v.id && n.blocking && n.status === "open").sort((a, b) => a.found_at.localeCompare(b.found_at));
+  if (open.length) add("V02", open[0].found_at, [...new Set(open.map((n) => n.label))].join(", "));
+  // V03 : alcootest du conducteur de la rotation (un positif l'en retire).
+  if (!rot.driver_id) {
+    const removed = hsLiveTests().filter((t) => t.rotation_id === rot.id && hsTestStatus(t) === "non_compliant").sort((a, b) => b.reported_at.localeCompare(a.reported_at))[0];
+    if (removed) add("V03", removed.reported_at, hs ? "Alcootest positif : conducteur retiré, à remplacer." : null);
+    else add("V03", created, hs ? "Aucun conducteur affecté à la rotation." : null, true);
+  } else {
+    const tests = hsLiveTests().filter((x) => x.rotation_id === rot.id && x.driver_id === rot.driver_id).sort((a, b) => b.reported_at.localeCompare(a.reported_at));
+    const positive = tests.find((t) => hsTestStatus(t) === "non_compliant");
+    if (positive) add("V03", positive.reported_at, hs ? "Alcootest positif : conducteur retiré de la rotation." : null);
+    else if (!tests.length) add("V03", created, hs ? "Alcootest non réalisé." : null, true);
+    else if (!tests[0].performed) add("V03", tests[0].reported_at, hs ? "Alcootest non réalisé." : null, true);
   }
-  if (on("V03")) {
-    const t = HS.tests.filter((x) => x.rotation_id === rot.id && x.driver_id === rot.driver_id).sort((a, b) => b.reported_at.localeCompare(a.reported_at))[0];
-    if (!t) reasons.push(hsReason("V03", dayStart, hs ? "Aucun alcootest pour le conducteur de la rotation" : null, true));
-    else if (!t.performed) reasons.push(hsReason("V03", t.reported_at, hs ? `Non réalisé : ${t.not_done_reason}` : null, true));
-    else if (t.result === "positive") reasons.push(hsReason("V03", t.reported_at, hs ? `Positif (${fnum(t.reading_mg_l, 2)} mg/L) à ${t.reported_at.slice(11, 16)} ; conducteur retiré de la rotation` : null));
-  }
-  if (on("V04")) {
-    const d = hsDriver(rot.driver_id);
-    if (d && (!d.license_expiry || d.license_expiry < rot.date_loading)) {
-      reasons.push(hsReason("V04", d.license_expiry ? `${addDays(d.license_expiry, 1)}T00:00:00Z` : dayStart, d.license_expiry ? `Permis de conduire de ${d.name} expiré le ${frDate(d.license_expiry)}` : `Aucun permis de conduire enregistré pour ${d.name}`));
+  // V04 : habilitation du conducteur (permis poids lourd dans la maquette).
+  const d = hsDriver(rot.driver_id);
+  if (d && d.license_expiry && d.license_expiry < day) add("V04", `${addDays(d.license_expiry, 1)}T00:00:00Z`, `Permis de conduire poids lourd : expirée.`);
+  else if (d && !d.license_expiry) add("V04", null, `Permis de conduire poids lourd : absente.`, false, s.qualifications_required_from && day >= s.qualifications_required_from ? "block" : "warn");
+  // V05 : assurance et visite technique (Transport), expirées ou non renseignées.
+  const docs = HS.docs.filter((x) => x.vehicle_id === v.id && ["insurance", "inspection"].includes(x.kind));
+  const expired = docs.filter((x) => x.expiry_date < day);
+  if (expired.length) add("V05", `${addDays(expired.map((x) => x.expiry_date).sort()[0], 1)}T00:00:00Z`, expired.map((x) => `${HS_DOC_LABELS[x.kind].toLowerCase()} expirée le ${frDate(x.expiry_date)}`).join(", "));
+  const missing = ["insurance", "inspection"].filter((k) => !docs.some((x) => x.kind === k));
+  if (missing.length) add("V05", null, missing.map((k) => `${HS_DOC_LABELS[k].toLowerCase()} non renseignée`).join(", "), false, s.documents_required_from && day >= s.documents_required_from ? "block" : "warn");
+  const waived = [];
+  if (applyWaivers) {
+    hsExpireWaivers();
+    const actives = HS.waivers.filter((w) => w.rotation_id === rot.id && w.status === "active");
+    for (const r of reasons) {
+      const w = actives.find((x) => x.reason_code === r.code);
+      if (w && r.waivable) {
+        r.waiver_id = w.id;
+        waived.push(r);
+      }
     }
   }
-  if (on("V05")) {
-    const docs = HS.docs.filter((x) => x.vehicle_id === v.id && ["insurance", "inspection"].includes(x.kind) && x.expiry_date < rot.date_loading);
-    if (docs.length) reasons.push(hsReason("V05", `${addDays(docs[0].expiry_date, 1)}T00:00:00Z`, docs.map((x) => `${HS_DOC_LABELS[x.kind]} expirée le ${frDate(x.expiry_date)}`).join(" ; ")));
-  }
-  hsExpireWaivers();
-  const waivers = HS.waivers.filter((w) => w.rotation_id === rot.id && w.status === "active");
-  for (const r of reasons) r.waiver_id = waivers.find((w) => w.reason_code === r.code)?.id ?? null;
-  const w = waivers[0];
+  return { reasons, warnings, waived };
+}
+/** Évaluation au format de POST /hsseq/lock/evaluate (§4.2). */
+function hsEvaluate(ctx, rot) {
+  const { reasons, warnings } = hsReasons(ctx, rot);
+  const active = hsLockActive(rot);
+  const open = reasons.filter((r) => !r.waiver_id);
+  const actives = HS.waivers.filter((w) => w.rotation_id === rot.id && w.status === "active");
+  const first = actives[0];
   return {
-    rotation_id: rot.id, allowed: reasons.every((r) => r.severity !== "block" || r.waiver_id), reasons,
-    active_waiver: w ? { id: w.id, approved_by: w.approvals.map((a) => hsUser(a.by)), expires: w.expires } : null, checked_at: hsNow(),
+    rotation_id: rot.id, allowed: !active || !open.length, lock_active: active, reasons, warnings,
+    active_waiver: first ? { id: first.id, reason_code: first.reason_code, approved_by: first.approvals.map((a) => hsUser(a.by)), expires: first.expires } : null,
+    active_waivers: actives.map((w) => ({ id: w.id, reason_code: w.reason_code, expires: w.expires })),
+    pending_checks_only: open.length > 0 && open.every((r) => r.pending),
+    checked_at: hsNow(),
   };
 }
-function hsDepartures(ctx, day, q) {
-  // Une rotation partie (en_route) ne figure plus parmi les départs à autoriser.
+function hsDepartures(ctx, day, q, blockedOnly = q.blocked === "1" || q.blocked === "true") {
+  // Départs du jour : rotations à charger ce jour-là, pas encore parties (draft).
   const items = hsDepartureRotations(day)
-    .filter((r) => r.state !== "en_route")
+    .filter((r) => r.state === "draft")
     .map((r) => ({ r, v: hsVehicle(r.vehicle_id) }))
     .filter(({ v }) => v && hsFilter(ctx, q, hsVehicleSite(v), hsKind(v)) && hsSiteOk(ctx, hsVehicleSite(v)))
-    .sort((a, b) => a.v.name.localeCompare(b.v.name))
+    .sort((a, b) => a.r.date_loading.localeCompare(b.r.date_loading) || a.r.id - b.r.id)
     .map(({ r, v }) => {
       const evaluation = hsEvaluate(ctx, r);
-      return { rotation: hsRotationRef(r), vehicle: hsVehicleRef(v.id), driver: hsDriverRef(r.driver_id), site: hsSiteRef(hsVehicleSite(v)), evaluation, pending_checks_only: hsPendingOnly(evaluation) };
+      return { rotation: hsRotationRef(r), vehicle: hsVehicleRef(v.id), driver: hsDriverRef(r.driver_id), site: hsSiteRef(hsVehicleSite(v)), evaluation, pending_checks_only: evaluation.pending_checks_only };
     });
-  const blocked = items.filter((i) => !i.evaluation.allowed);
-  return { date: day, total: items.length, allowed: items.length - blocked.length, blocked: blocked.length, items: q.blocked === "1" ? blocked : items };
+  const allowed = items.filter((i) => i.evaluation.allowed).length;
+  return { date: day, total: items.length, allowed, blocked: items.length - allowed, items: blockedOnly ? items.filter((i) => !i.evaluation.allowed) : items };
 }
 
 /* ─── Événements ────────────────────────────────────────────────────────── */
 
 const hsCriticality = (e) => (e.potential_severity && e.probability ? e.potential_severity * e.probability : null);
-const hsEventActions = (e) => HS.actions.filter((a) => a.origin === "event" && a.origin_id === e.id);
+const hsEventActions = (e) => HS.actions.filter((a) => a.event_id === e.id);
 const hsActionOpen = (a) => !["closed", "cancelled"].includes(a.status);
-const hsEventOverdue = (e) => Boolean(e.deadlines.investigation_due) && ["classified", "investigation"].includes(e.status) && e.deadlines.investigation_due < TODAY;
+const hsEventOverdue = (e) => Boolean(e.deadlines.investigation_due) && ["classified", "investigation"].includes(e.status) && e.deadlines.investigation_due < hsNow();
 function hsEventLine(e) {
   const c = hsCriticality(e);
   return {
@@ -6893,134 +7072,143 @@ function hsEventLine(e) {
     investigation_overdue: hsEventOverdue(e), total_cost: sum(e.costs, (x) => x.amount),
   };
 }
+/** Transitions du compte (hsseq seul) ; « close » retirée tant qu'une action reste ouverte. */
 function hsEventTransitions(ctx, e) {
   if (!hsIs(ctx, "hsseq")) return [];
   const actions = hsEventActions(e);
-  switch (e.status) {
-    case "reported":
-      return ["classify"];
-    case "classified":
-      return hsLevel(hsCriticality(e)) === "low" && !actions.length ? ["investigate", "close"] : ["investigate"];
-    case "investigation":
-      return e.investigation?.root_cause ? ["plan"] : [];
-    case "actions":
-      return actions.some(hsActionOpen) ? [] : ["close"];
-    default:
-      return ["reopen"];
+  const t = {
+    reported: ["classify"],
+    classified: ["investigate", ...(hsLevel(hsCriticality(e)) === "low" && !actions.length ? ["close"] : [])],
+    investigation: ["plan"],
+    actions: ["close"],
+    closed: ["reopen"],
+  }[e.status];
+  return t.filter((x) => x !== "close" || !actions.some(hsActionOpen));
+}
+/** Personne en cause : `id` est la ligne, `person_id` le chauffeur ou le salarié. */
+const hsPersonRow = (p) => ({ id: p.line_id, kind: p.kind, person_id: p.kind === "third_party" ? null : p.id ?? null, name: p.name, role: p.role, days_off: p.days_off ?? 0 });
+/** Enquête au format de l'API, toujours servie ; vide tant qu'elle n'est pas ouverte. */
+function hsInvestigationRow(e) {
+  const inv = e.investigation;
+  const texte = (l) => (Array.isArray(l) ? l.filter(Boolean).join("\n") || null : l || null);
+  if (!inv) {
+    return { method: null, team: [], immediate_causes: null, whys: [], tree: [], factors_5m: Object.fromEntries(HS_FACTORS.map((k) => [k, null])), root_cause: null, conclusion: null, started_at: null, closed_at: null, due: e.deadlines.investigation_due };
   }
+  return {
+    method: inv.method, team: inv.team_ids.map(hsUser), immediate_causes: texte(inv.immediate_causes), whys: inv.whys,
+    tree: inv.tree.map((n) => ({ id: String(n.id), label: n.label, parent_id: n.parent_id === null || n.parent_id === undefined ? null : String(n.parent_id), kind: n.kind })),
+    factors_5m: Object.fromEntries(HS_FACTORS.map((k) => [k, texte(inv.factors_5m[k])])), root_cause: inv.root_cause, conclusion: inv.conclusion,
+    started_at: inv.opened_at, closed_at: inv.concluded_at, due: e.deadlines.investigation_due,
+  };
 }
 function hsEventDetail(ctx, e) {
   const transitions = hsEventTransitions(ctx, e);
   const hs = hsIs(ctx, "hsseq");
-  const inv = e.investigation;
+  // Un conducteur lit sa déclaration, sans la suite donnée (actions, coûts, notifications, journal).
+  const self = hsScope(ctx) === "self";
+  const declarant = e.reported_by === ctx.user.id && e.status === "reported" && hasProfile(ctx, ["exploitation", "conducteur", "hsseq"]);
   return {
     ...hsEventLine(e), description: e.description, location: e.location, latitude: e.latitude, longitude: e.longitude, gps_accuracy: e.gps_accuracy, source: e.source, client_uuid: e.client_uuid, reported_at: e.reported_at,
-    synced_at: e.synced_at, offline: e.offline, people: e.people, lost_time: e.lost_time, days_lost: e.days_lost, vehicle_immobilized: e.vehicle_immobilized,
-    classified_at: e.classified_at, classified_by: hsUser(e.classified_by), closed_at: e.closed_at, closed_by: hsUser(e.closed_by),
-    investigation: inv
-      ? {
-          method: inv.method, team: inv.team_ids.map(hsUser), opened_at: inv.opened_at, due_date: inv.due_date, overdue: !inv.concluded_at && inv.due_date < TODAY,
-          concluded_at: inv.concluded_at, immediate_causes: inv.immediate_causes, whys: inv.whys, tree: inv.tree, factors_5m: inv.factors_5m,
-          root_cause: inv.root_cause, conclusion: inv.conclusion,
-        }
-      : null,
-    actions: hsEventActions(e).map(hsActionLine), costs: e.costs.map((c) => ({ ...c })), attachments: hsAttachments("event", e.id), notifications: e.notifications,
-    deadlines: e.deadlines, history: hsHistory("event", e.id), transitions,
-    rights: { can_edit: e.status !== "closed" && (hs || (e.reported_by === ctx.user.id && e.status === "reported")), can_close: transitions.includes("close"), can_approve: hs && ["reported", "classified", "investigation"].includes(e.status) },
+    synced_at: e.synced_at, offline: e.offline, people: e.people.map(hsPersonRow), lost_time: e.lost_time, days_lost: e.days_lost, leave_id: e.leave_id ?? null, vehicle_immobilized: e.vehicle_immobilized,
+    classified_at: e.classified_at, classified_by: hsUser(e.classified_by), closed_at: e.closed_at, closed_by: hsUser(e.closed_by), reopen_reason: e.reopen_reason ?? null,
+    investigation: hsInvestigationRow(e),
+    actions: self ? [] : hsEventActions(e).map(hsActionLine),
+    costs: self ? [] : e.costs.map((c) => ({ id: c.id, kind: c.kind, label: c.label, amount: c.amount, date: c.date, finance_move_id: c.finance_move_id ?? null })),
+    attachments: hsAttachments("event", e.id),
+    notifications: self ? [] : HS.notifications.filter((n) => n.model === "event" && n.res_id === e.id).sort((a, b) => b.id - a.id).map(hsNotificationRow),
+    deadlines: e.deadlines, history: self ? [] : hsHistory("event", e.id), transitions,
+    rights: { can_edit: (hs && e.status !== "closed") || declarant, can_close: transitions.includes("close"), can_approve: hs && e.status !== "closed" },
   };
 }
-const hsEmptyFactors = () => ({ environment: [], equipment: [], method: [], manpower: [], material: [] });
-function hsNotify(e, at) {
+/** Notifications du niveau au classement : Directeur général pour « élevée », Responsable HSSEQ et responsable métier pour « significative » et plus. */
+function hsNotifyLevel(e, at) {
   const level = hsLevel(hsCriticality(e));
-  if (level === "high") {
-    e.notifications.push({ recipient: "Saïdou Barry, Directeur général", channel: "email", sent_at: at, reason: "Criticité élevée : notification immédiate" });
-    e.notifications.push({ recipient: "Saïdou Barry, Directeur général", channel: "app", sent_at: at, reason: "Criticité élevée : notification immédiate" });
-  }
-  if (level === "high" || level === "significant") {
-    e.notifications.push({ recipient: "Fanta Kourouma, Responsable HSSEQ", channel: "email", sent_at: at, reason: `Criticité ${HS_LEVEL_LABELS[level].toLowerCase()} : enquête à ouvrir` });
-    e.notifications.push({ recipient: e.site_id === 2 ? "Sékou Condé, chef de parc de Boffa" : "Djénabou Touré, responsable exploitation", channel: "app", sent_at: at, reason: "Responsable métier de l'événement" });
-  }
+  const titre = `${e.reference} ${e.title}`;
+  if (level === "high") hsNotify(hsDirectors(), "high", `Criticité élevée : ${titre}`, `Criticité ${hsCriticality(e)}, enquête sous ${hsSettings().investigation_hours_high} h, donneur d'ordre à informer sous ${hsSettings().client_notice_hours} h.`, "event", e.id, at);
+  if (level === "high" || level === "significant") hsNotify([...hsHsseqManagers(), e.site_id === 2 ? 18 : 11], level, `Criticité ${HS_LEVEL_LABELS[level].toLowerCase()} : ${titre}`, "Enquête à ouvrir dans le délai du niveau.", "event", e.id, at);
 }
 /** Classement (§9.1) : criticité, niveau, échéance d'enquête, information du donneur d'ordre, notifications. */
 function hsClassify(e, by, at, values) {
   Object.assign(e, values);
   const level = hsLevel(hsCriticality(e));
-  const days = HS_LEVELS.find((l) => l.level === level)?.investigation_days ?? null;
+  const minutes = hsInvestigationMinutes(level);
+  const base = e.reported_at ?? at;
   e.status = "classified";
   e.classified_at = at;
   e.classified_by = by;
-  e.deadlines.investigation_due = days ? addDays(at.slice(0, 10), days) : null;
-  e.deadlines.client_notice_due = level === "high" ? addDays(at.slice(0, 10), 1) : null;
-  hsNotify(e, at);
-  hsLog("event", e.id, by, "Classement", "criticality", null, hsCriticality(e), at);
+  e.deadlines.investigation_due = minutes ? hsAddMinutes(base, minutes) : null;
+  e.deadlines.client_notice_due = level === "high" ? hsAddMinutes(base, hsSettings().client_notice_hours * 60) : null;
+  hsLog("event", e.id, by, "classify", "criticality", null, hsCriticality(e), at, `Criticité ${hsCriticality(e)}, niveau ${HS_LEVEL_LABELS[level] ?? "-"}`);
+  hsNotifyLevel(e, at);
 }
 
 /* ─── Actions ───────────────────────────────────────────────────────────── */
 
-function hsActionOrigin(a) {
-  if (a.origin === "event") {
-    const e = HS.events.find((x) => x.id === a.origin_id);
-    return e ? { id: e.id, reference: e.reference, title: e.title } : null;
+function hsActionOriginLabel(a) {
+  if (a.event_id) {
+    const e = HS.events.find((x) => x.id === a.event_id);
+    return e ? `${e.reference} ${e.title}` : null;
   }
-  if (a.origin === "check") {
-    const c = HS.checks.find((x) => x.id === a.origin_id);
-    return c ? { id: c.id, reference: c.reference, title: `Contrôle avant départ de ${hsVehicle(c.vehicle_id)?.name ?? "?"}` } : null;
-  }
+  if (a.check_id) return HS.checks.find((x) => x.id === a.check_id)?.reference ?? null;
   return null;
 }
-function hsActionCriticality(a) {
-  if (a.origin !== "event") return null;
-  const e = HS.events.find((x) => x.id === a.origin_id);
-  return e ? hsCriticality(e) : null;
-}
+const hsActionCriticality = (a) => (a.event_id ? hsCriticality(HS.events.find((x) => x.id === a.event_id) ?? {}) ?? 0 : 0);
+const hsIsCostly = (a) => (a.estimated_cost ?? 0) >= hsSettings().costly_action_threshold;
+const hsNeedsApproval = (a) => hsIsCostly(a) && !a.approved_at;
+const hsDaysOverdue = (a) => (["todo", "in_progress"].includes(a.status) && a.due_date < TODAY ? daysBetween(a.due_date, TODAY) : 0);
 function hsActionLine(a) {
-  const crit = hsActionCriticality(a);
-  const late = ["todo", "in_progress"].includes(a.status) && a.due_date < TODAY;
+  const e = a.event_id ? HS.events.find((x) => x.id === a.event_id) : null;
   return {
-    id: a.id, reference: a.reference, description: a.description, origin: a.origin, origin_ref: hsActionOrigin(a), control_level: a.control_level, owner: hsUser(a.owner_id),
-    due_date: a.due_date, status: a.status, overdue: late, days_overdue: late ? daysBetween(a.due_date, TODAY) : 0, origin_criticality: crit,
-    verification_required: (crit ?? 0) >= 8, verification_date: a.verification_date, effective: a.effective, site: hsSiteRef(a.site_id),
+    id: a.id, reference: a.reference, description: a.description, origin: a.origin, origin_id: a.origin_id ?? a.event_id ?? a.check_id ?? null, origin_label: hsActionOriginLabel(a),
+    event: e ? { id: e.id, reference: e.reference } : null, control_level: a.control_level ?? null, owner: hsUser(a.owner_id), due_date: a.due_date,
+    status: a.status, overdue: hsDaysOverdue(a) > 0, days_overdue: hsDaysOverdue(a),
+    verification_required: hsActionCriticality(a) >= hsSettings().verification_min_criticality, verification_date: a.verification_date,
+    site: hsSiteRef(a.site_id), estimated_cost: a.estimated_cost ?? 0, approval_required: hsNeedsApproval(a),
   };
 }
+/** Relances déjà envoyées au responsable : J-7, J0, chaque semaine de retard, escalade après le délai des paramètres. */
 function hsReminders(a) {
   if (!["todo", "in_progress"].includes(a.status)) return [];
   const list = [];
+  const pour = (kind, date) => list.push({ kind, date, recipients: kind === "escalation" ? [hsUser(a.owner_id), ...hsDirectors().map(hsUser)] : [hsUser(a.owner_id)] });
   const before = addDays(a.due_date, -7);
-  if (before <= TODAY) list.push({ at: stamp(before, 7), kind: "d_minus_7" });
-  if (a.due_date <= TODAY) list.push({ at: stamp(a.due_date, 7), kind: "d0" });
-  for (let d = addDays(a.due_date, 7); d <= TODAY; d = addDays(d, 7)) list.push({ at: stamp(d, 7), kind: "weekly" });
-  if (daysBetween(a.due_date, TODAY) > 30) list.push({ at: stamp(addDays(a.due_date, 31), 7, 5), kind: "escalation" });
-  return list.sort((x, y) => x.at.localeCompare(y.at));
+  if (before <= TODAY) pour("d_minus_7", before);
+  if (a.due_date <= TODAY) pour("d0", a.due_date);
+  for (let d = addDays(a.due_date, 7); d <= TODAY; d = addDays(d, 7)) pour("weekly", d);
+  if (daysBetween(a.due_date, TODAY) > hsSettings().escalation_days) pour("escalation", addDays(a.due_date, hsSettings().escalation_days + 1));
+  return list.sort((x, y) => x.date.localeCompare(y.date));
 }
-const hsNeedsApproval = (a) => (a.estimated_cost ?? 0) >= HS_COSTLY && !a.approved_at;
+/** Transitions permises depuis le statut, puis bornées au compte (responsable, hsseq, direction). */
 function hsActionTransitions(ctx, a) {
+  const permises = { todo: ["start", "cancel", ...(hsNeedsApproval(a) ? ["approve"] : [])], in_progress: ["close", "cancel"], to_verify: ["verify", "cancel"], closed: ["reopen"], cancelled: ["reopen"] }[a.status];
+  const owner = a.owner_id === ctx.user.id;
   const hs = hsIs(ctx, "hsseq");
-  const mine = hs || a.owner_id === ctx.user.id;
-  const t = [];
-  if (mine && a.status === "todo" && !hsNeedsApproval(a)) t.push("start");
-  if (mine && ["todo", "in_progress"].includes(a.status)) t.push("close");
-  if (hs && a.status === "to_verify" && a.verification_date && a.verification_date <= TODAY) t.push("verify");
-  if (hsIs(ctx, "direction") && hsNeedsApproval(a) && ["todo", "in_progress"].includes(a.status)) t.push("approve");
-  if (hs && hsActionOpen(a)) t.push("cancel");
-  if (hs && !hsActionOpen(a)) t.push("reopen");
-  return t;
+  return permises.filter((t) => {
+    if (t === "start" || t === "close") return owner || hs;
+    if (t === "cancel" || t === "reopen") return hs;
+    if (t === "verify") return hs && (!a.verification_date || a.verification_date <= TODAY);
+    return hsIs(ctx, "direction");
+  });
 }
 function hsActionDetail(ctx, a) {
   const transitions = hsActionTransitions(ctx, a);
   return {
-    ...hsActionLine(a), expected_evidence: a.expected_evidence, evidence: hsAttachments("action", a.id), estimated_cost: a.estimated_cost,
-    management_approval: { required: (a.estimated_cost ?? 0) >= HS_COSTLY, approved_at: a.approved_at, approved_by: hsUser(a.approved_by) },
-    created_at: a.created_at, created_by: hsUser(a.created_by), done_at: a.done_at, verified_at: a.verified_at, verified_by: hsUser(a.verified_by),
-    verification_comment: a.verification_comment, closed_at: a.closed_at, reminders: hsReminders(a), history: hsHistory("action", a.id), transitions,
-    rights: { can_edit: (hsIs(ctx, "hsseq") || a.owner_id === ctx.user.id) && hsActionOpen(a), can_close: transitions.includes("close"), can_approve: transitions.includes("verify") || transitions.includes("approve") },
+    ...hsActionLine(a), expected_evidence: a.expected_evidence ?? null, evidence: hsAttachments("action", a.id),
+    management_approval: { required: hsIsCostly(a), approved_at: a.approved_at, approved_by: hsUser(a.approved_by), approved_cost: a.approved_cost ?? null },
+    created_at: a.created_at, created_by: hsUser(a.created_by), started_at: a.started_at ?? null, done_at: a.done_at, verified_at: a.verified_at, verified_by: hsUser(a.verified_by),
+    effective: a.verified_at ? a.effective : null, verification_comment: a.verification_comment, closed_at: a.closed_at, cancel_reason: a.cancel_reason ?? null, reopen_reason: a.reopen_reason ?? null,
+    reminders: hsReminders(a), history: hsHistory("action", a.id), transitions,
+    rights: { can_edit: (a.owner_id === ctx.user.id || hsIs(ctx, "hsseq")) && hsActionOpen(a), can_close: transitions.includes("close"), can_approve: transitions.includes("verify") || transitions.includes("approve") },
   };
 }
 function hsNewAction(values) {
   const a = {
-    id: ++HS.seq.action, reference: "", description: values.description, origin: values.origin, origin_id: values.origin_id ?? null, control_level: values.control_level,
-    owner_id: values.owner_id, due_date: values.due_date, status: values.status ?? "todo", expected_evidence: values.expected_evidence ?? HS_PROOFS[values.control_level],
-    estimated_cost: values.estimated_cost ?? null, approved_at: null, approved_by: null, created_at: values.created_at ?? hsNow(), created_by: values.created_by ?? 16,
-    done_at: null, verified_at: null, verified_by: null, verification_comment: null, effective: null, verification_date: null, closed_at: null, site_id: values.site_id ?? 1,
+    id: ++HS.seq.action, reference: "", description: values.description, origin: values.origin, origin_id: values.origin_id ?? null,
+    event_id: values.origin === "event" ? values.origin_id : null, check_id: values.origin === "check" ? values.origin_id : null, control_level: values.control_level ?? null,
+    owner_id: values.owner_id, due_date: values.due_date, status: values.status ?? "todo", expected_evidence: values.expected_evidence ?? HS_PROOFS[values.control_level] ?? null,
+    estimated_cost: values.estimated_cost ?? 0, approved_at: null, approved_by: null, approved_cost: null, created_at: values.created_at ?? hsNow(), created_by: values.created_by ?? 16,
+    started_at: null, done_at: null, verified_at: null, verified_by: null, verification_comment: null, effective: false, verification_date: null, closed_at: null,
+    cancel_reason: null, reopen_reason: null, site_id: values.site_id ?? 1,
   };
   a.reference = `ACT/2026/${pad(a.id, 4)}`;
   HS.actions.push(a);
@@ -7034,35 +7222,43 @@ function hsWaiverRow(ctx, w) {
   const hs = hsIs(ctx, "hsseq");
   const mine = w.requested_by === ctx.user.id;
   const t = [];
-  if (hs && w.status === "pending_hsseq" && !mine) t.push("approve");
-  if (hs && w.status === "pending_hsseq") t.push("refuse");
-  if ((hs || mine) && ["pending_hsseq", "active"].includes(w.status)) t.push("cancel");
+  if (w.status === "pending_hsseq" && hs && !mine) t.push("approve", "refuse");
+  if (["pending_hsseq", "active"].includes(w.status) && (hs || mine)) t.push("cancel");
   return {
     id: w.id, reference: w.reference, rotation: hsRotationRef(hsRotation(w.rotation_id)), vehicle: hsVehicleRef(w.vehicle_id), site: hsSiteRef(w.site_id),
-    reason_code: w.reason_code, reason_label: hsReasonSetting(w.reason_code).label, justification: w.justification, requested_by: hsUser(w.requested_by),
+    reason_code: w.reason_code, reason_label: hsReasonSetting(w.reason_code)?.label ?? w.reason_code, justification: w.justification, requested_by: hsUser(w.requested_by),
     requested_at: w.requested_at, approvals: w.approvals.map((a) => ({ level: a.level, role: a.role, by: hsUser(a.by), at: a.at })), status: w.status,
-    expires: w.expires, refusal_reason: w.refusal_reason, management_notified_at: w.management_notified_at, transitions: t,
+    expires: w.expires, expired_at: w.expired_at ?? null, refusal_reason: w.refusal_reason, decided_by: hsUser(w.decided_by ?? null), management_notified_at: w.management_notified_at,
+    attachments: hsAttachments("waiver", w.id), history: hsHistory("waiver", w.id), transitions: t,
     rights: { can_edit: mine && w.status === "pending_hsseq", can_close: t.includes("cancel"), can_approve: t.includes("approve") },
   };
 }
-const hsCanSeeWaiver = (ctx, w) => hsFull(ctx) || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, w.site_id));
+const hsCanSeeWaiver = (ctx, w) => hsFull(ctx) || (hsScope(ctx) === "site" && (w.requested_by === ctx.user.id || hsSiteOk(ctx, w.site_id)));
 
 /* ─── Échéances ─────────────────────────────────────────────────────────── */
 
 function hsDeadlines(ctx, q) {
-  const horizon = intArg(q, "horizon", 30, 1, 365);
+  const horizonTexte = q.horizon ?? "";
+  if (horizonTexte !== "" && !/^\d+$/.test(String(horizonTexte))) throw hsBad("Horizon invalide.", ["horizon"]);
+  const horizon = Math.min(Math.max(Number(horizonTexte || 30), 0), 366);
+  let kind = q.kind || null;
+  if (kind && !["qualification", "vehicle_document"].includes(kind)) throw hsBad("Nature d'échéance inconnue.", ["kind"]);
+  // Profil RH seul : les personnes, pas les véhicules.
+  if (!hasProfile(ctx, HS_READ)) {
+    if (kind === "vehicle_document") throw hsForbidden("Les échéances des véhicules ne relèvent pas du profil RH.");
+    kind = "qualification";
+  }
   const limit = addDays(TODAY, horizon);
   const items = [];
-  const personsOnly = !hasProfile(ctx, HS_READ) && hsIs(ctx, "rh");
-  if (q.kind !== "vehicle_document") {
+  if (kind !== "vehicle_document") {
     for (const d of [...DB.drivers.filter((x) => x.company_id === 1 && x.active), ...HS.drivers]) {
       if (!d.license_expiry || d.license_expiry > limit) continue;
       const site = HS.driverSites.get(d.id) ?? 1;
-      if (!hsFilter(ctx, q, site, site === 2 ? "tipper" : "tanker") || !hsSiteOk(ctx, site)) continue;
-      items.push({ kind: "qualification", document_kind: null, subject: { type: "person", id: d.id, name: d.name }, label: "Permis de conduire poids lourd", expires_on: d.license_expiry, days_left: daysBetween(TODAY, d.license_expiry), expired: d.license_expiry < TODAY, reason_code: "V04", site: hsSiteRef(site) });
+      if (!hsFilter(ctx, q, site, null) || !hsSiteOk(ctx, site)) continue;
+      items.push({ kind: "qualification", document_kind: "permis_pl", subject: { type: "driver", id: d.id, name: d.name }, label: "Permis de conduire poids lourd", expires_on: d.license_expiry, days_left: daysBetween(TODAY, d.license_expiry), expired: d.license_expiry < TODAY, reason_code: "V04", site: hsSiteRef(site) });
     }
   }
-  if (q.kind !== "qualification" && !personsOnly) {
+  if (kind !== "qualification") {
     for (const doc of HS.docs) {
       const v = hsVehicle(doc.vehicle_id);
       if (!v || v.state === "off" || doc.expiry_date > limit) continue;
@@ -7149,13 +7345,18 @@ function hsIndicators(ctx, q, month, period) {
       if (v && kinds.includes(hsKind(v))) departures.push(r);
     }
   }
-  const checked = departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id));
+  // Départs du mois : rotations parties, validées ou facturées.
+  const parties = departures.filter((r) => ["en_route", "done", "invoiced"].includes(r.state));
+  departures.length = 0;
+  departures.push(...parties);
+  const checked = departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id && c.kind === "pre_departure"));
   const monthChecks = HS.checks.filter((c) => c.reported_at.slice(0, 7) === current && kinds.includes(c.vehicle_kind));
-  const monthTests = HS.tests.filter((t) => t.reported_at.slice(0, 7) === current && departures.some((r) => r.id === t.rotation_id));
+  const monthTests = hsLiveTests().filter((t) => t.reported_at.slice(0, 7) === current && departures.some((r) => r.id === t.rotation_id));
   const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
   const actionsDue = (m) => HS.actions.filter((a) => a.due_date.slice(0, 7) === m && a.due_date < TODAY && a.status !== "cancelled" && kinds.includes(hsSite(a.site_id)?.default_vehicle_kind ?? "tanker"));
   const actionsVerified = (m) => HS.actions.filter((a) => a.verified_at && a.verified_at.slice(0, 7) === m && kinds.includes(hsSite(a.site_id)?.default_vehicle_kind ?? "tanker"));
-  const waiverList = (m) => HS.waivers.filter((w) => !["cancelled", "refused"].includes(w.status) && w.requested_at.slice(0, 7) === m && kinds.includes(hsKind(hsVehicle(w.vehicle_id))));
+  // Dérogations activées (actives ou expirées depuis), au mois de leur seconde validation.
+  const waiverList = (m) => HS.waivers.filter((w) => ["active", "expired"].includes(w.status) && w.approvals[1]?.at.slice(0, 7) === m && kinds.includes(hsKind(hsVehicle(w.vehicle_id))));
   const driversValid = () => {
     const list = [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].filter((d) => kinds.includes((HS.driverSites.get(d.id) ?? 1) === 2 ? "tipper" : "tanker"));
     return pct(list.filter((d) => d.license_expiry && d.license_expiry >= TODAY).length, list.length);
@@ -7175,48 +7376,50 @@ function hsIndicators(ctx, q, month, period) {
     return Math.round((sum(rots, (r) => r.tonnage_loaded - r.tonnage_delivered) / sum(rots, (r) => r.tonnage_loaded)) * 100000) / 100;
   };
   const defs = [
-    ["frequency_rate", "Taux de fréquence", "rate", "down", 5, "Événements, RH", "Accidents du travail avec arrêt × 1 000 000 ÷ heures travaillées, 12 mois glissants", false,
+    ["frequency_rate", "Taux de fréquence", "rate", "down", "Événements, RH", "Accidents du travail avec arrêt × 1 000 000 ÷ heures travaillées, 12 mois glissants", false,
       (m) => Math.round(((rolling(m, (x) => (company === 2 ? 0 : companyCounts(x).lt)) * 1e6) / hours12(m)) * 100) / 100, "12 mois glissants ; heures de RH par société, sans filtre de site.", true],
-    ["severity_rate", "Taux de gravité", "rate", "down", 0.2, "Événements, RH", "Jours perdus × 1 000 ÷ heures travaillées, 12 mois glissants", false,
+    ["severity_rate", "Taux de gravité", "rate", "down", "Événements, RH", "Jours perdus × 1 000 ÷ heures travaillées, 12 mois glissants", false,
       (m) => Math.round(((rolling(m, (x) => (company === 2 ? 0 : companyCounts(x).days)) * 1000) / hours12(m)) * 100) / 100, "12 mois glissants ; heures de RH par société, sans filtre de site.", true],
-    ["road_accidents_per_mkm", "Accidents de la route par million de km", "rate", "down", 1.5, "Événements, Transport", "Accidents de la route × 1 000 000 ÷ km parcourus, 12 mois glissants", true,
-      (m) => Math.round(((rolling(m, (x) => counts(x).road) * 1e6) / rolling(m, (x) => sum(kinds, (k) => hsKm(x, k)))) * 100) / 100, "12 mois glissants."],
-    ["reporting_ratio", "Taux de déclaration", "ratio", "up", 10, "Événements", "(Presque-accidents + situations dangereuses) ÷ accidents, 12 mois glissants", true,
+    ["road_accidents_per_mkm", "Accidents de la route par million de km", "rate", "down", "Événements, Transport", "Accidents de la route × 1 000 000 ÷ km parcourus, 12 mois glissants", true,
+      (m) => Math.round(((rolling(m, (x) => counts(x).road) * 1e6) / rolling(m, (x) => sum(kinds, (k) => hsKm(x, k)))) * 100) / 100],
+    ["reporting_ratio", "Taux de déclaration", "ratio", "up", "Événements", "(Presque-accidents + situations dangereuses) ÷ accidents, 12 mois glissants", true,
       (m) => {
         const acc = rolling(m, (x) => counts(x).work + counts(x).road);
         return acc ? Math.round((rolling(m, (x) => counts(x).nm) / acc) * 100) / 100 : null;
-      }, "12 mois glissants."],
-    ["check_completion", "Contrôles avant départ réalisés", "pct", "up", 100, "NIMOVA Terrain, Transport", "Contrôles réalisés ÷ départs", true,
+      }],
+    ["check_completion", "Réalisation des contrôles avant départ", "pct", "up", "NIMOVA Terrain, Transport", "Départs contrôlés ÷ départs", true,
       (m) => (m === current ? pct(checked.length, departures.length) : hsSynth("ctl", m, key, 96, 3, 88, 100))],
-    ["check_compliance", "Conformité des contrôles", "pct", "up", 95, "NIMOVA Terrain", "Contrôles sans point critique non conforme ÷ contrôles réalisés", true,
+    ["check_compliance", "Conformité des contrôles", "pct", "up", "NIMOVA Terrain", "Contrôles sans point critique non conforme ÷ contrôles réalisés", true,
       (m) => (m === current ? pct(monthChecks.filter((c) => c.result !== "blocking").length, monthChecks.length) : hsSynth("conf", m, key, 94, 3.5, 85, 100))],
-    ["breath_test_completion", "Alcootests réalisés", "pct", "up", 100, "NIMOVA Terrain", "Alcootests réalisés ÷ départs", true,
+    ["breath_test_completion", "Alcootests réalisés", "pct", "up", "NIMOVA Terrain", "Départs avec un alcootest réalisé ÷ départs", true,
       (m) => (m === current ? pct(new Set(monthTests.filter((t) => t.performed).map((t) => t.rotation_id)).size, departures.length) : hsSynth("alc", m, key, 97, 3, 89, 100))],
-    ["breath_test_positives", "Alcootests positifs", "count", "down", 0, "NIMOVA Terrain", "Nombre de tests positifs, sans nom", true,
-      (m) => (m === current ? monthTests.filter((t) => t.result === "positive").length : makeRng(`hsseq-pos-${m}-${key}`).weighted([[0, 78], [1, 18], [2, 4]])), "Sans nom ni rotation."],
-    ["waivers", "Dérogations au verrou", "count", "down", period === "12m" ? 24 : 2, "Verrou", "Nombre de dérogations, par site et par motif", true, (m) => waiverList(m).length],
-    ["actions_on_time", "Actions dans les délais", "pct", "up", 90, "Actions", "Actions closes à l'échéance ÷ actions échues", true,
+    ["breath_test_positives", "Alcootests positifs", "count", "down", "NIMOVA Terrain", "Nombre d'alcootests positifs, sans nom", true,
+      (m) => (m === current ? monthTests.filter((t) => t.result === "positive").length : makeRng(`hsseq-pos-${m}-${key}`).weighted([[0, 78], [1, 18], [2, 4]]))],
+    ["waivers", "Dérogations au verrou", "count", "down", "Verrou de départ", "Dérogations activées, par site et par motif", true, (m) => waiverList(m).length],
+    ["actions_on_time", "Actions dans les délais", "pct", "up", "Actions", "Actions réalisées à l'échéance ÷ actions échues", true,
       (m) => {
         const due = actionsDue(m);
         return due.length ? pct(due.filter((a) => a.done_at && a.done_at <= a.due_date).length, due.length) : hsSynth("delais", m, key, 86, 8, 60, 100);
       }],
-    ["actions_effectiveness", "Efficacité des actions", "pct", "up", 80, "Actions", "Actions efficaces à J+90 ÷ actions vérifiées", true,
+    ["actions_effectiveness", "Efficacité des actions", "pct", "up", "Actions", "Actions efficaces à J+90 ÷ actions vérifiées", true,
       (m) => {
         const done = actionsVerified(m);
         return done.length ? pct(done.filter((a) => a.effective).length, done.length) : hsSynth("eff", m, key, 82, 10, 50, 100);
       }],
-    ["qualifications_valid", "Habilitations à jour", "pct", "up", 100, "Habilitations RH", "Conducteurs actifs sans habilitation expirée ÷ conducteurs actifs", true,
-      (m) => (m === current ? driversValid() : hsSynth("hab", m, key, 96, 3, 88, 100)), "Permis de conduire au lot 1 ; autres habilitations avec RH."],
-    ["fuel_consumption", "Consommation", "l_100km", "down", 44, "Transport", "Litres consommés × 100 ÷ km parcourus", true, (m) => fuel(m)],
-    ["co2_emissions", "Émissions de CO₂", "kg_co2_km", "down", 1.18, "Transport", "Litres consommés × 2,68 kg ÷ km parcourus", true,
+    ["qualifications_valid", "Habilitations à jour", "pct", "up", "Habilitations RH", "Conducteurs actifs sans habilitation expirée ni absente ÷ conducteurs actifs", true,
+      (m) => (m === current ? driversValid() : hsSynth("hab", m, key, 96, 3, 88, 100)), "Situation du jour ; les mois passés figés gardent la leur."],
+    ["fuel_consumption", "Consommation", "l_100km", "down", "Transport", "Litres aux 100 km (rotations dont le carburant est saisi)", true, (m) => fuel(m)],
+    ["co2_emissions", "Émissions de CO₂", "kg_co2_km", "down", "Transport", "kg de CO₂ par km (2,68 kg par litre de gazole)", true,
       (m) => {
         const f = fuel(m);
         return f === null ? null : Math.round(((f * 2.68) / 100) * 100) / 100;
       }],
-    ["tanker_shortage", "Écarts de livraison, citernes", "per_mille", "down", 1.5, "Transport", "Volume manquant ÷ volume livré, en ‰", true, (m) => (kinds.includes("tanker") ? tankerShortage(m) : null)],
-    ["tipper_variance", "Écarts de tonnage, bennes", "per_mille", "down", 5, "Transport", "Écart de tonnage ÷ tonnage chargé, en ‰", true, (m) => (kinds.includes("tipper") ? tipperVariance(m) : null)],
+    ["tanker_shortage", "Écarts de livraison des citernes", "per_mille", "down", "Transport", "Volume manquant ÷ volume livré", true, (m) => (kinds.includes("tanker") && kindFilter !== "tipper" ? tankerShortage(m) : null)],
+    // Sans objet au lot 1 : le noyau le sert nul, sans série.
+    ["tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport", "Écart de tonnage ÷ tonnage chargé", true, () => null, "Sans objet au lot 1 : une seule pesée par rotation, pas de tonnage livré."],
   ];
-  return defs.map(([code, label, unit, direction, target, source, formula, siteScoped, fn, note = null, companyLevel = false]) => {
+  const s = hsSettings();
+  return defs.map(([code, label, unit, direction, source, formula, siteScoped, fn, note = null, companyLevel = false]) => {
     const series = months.map((m) => ({ month: m, value: transport || companyLevel ? fn(m) : null }));
     const values = series.map((p) => p.value).filter((v) => v !== null);
     let value = series[series.length - 1].value;
@@ -7224,17 +7427,15 @@ function hsIndicators(ctx, q, month, period) {
       value = !values.length ? null : unit === "count" ? sum(values) : Math.round((sum(values) / values.length) * 100) / 100;
     }
     let breakdown = null;
-    if (code === "waivers" && transport) {
-      const list = (period === "12m" ? months : [month]).flatMap(waiverList);
-      const bySite = groupBy(list, (w) => w.site_id);
-      const byReason = groupBy(list, (w) => w.reason_code);
-      breakdown = [
-        ...[...bySite].map(([id, ws]) => ({ axis: "site", key: String(id), label: hsSite(id)?.name ?? "?", value: ws.length })),
-        ...[...byReason].sort((a, b) => a[0].localeCompare(b[0])).map(([code2, ws]) => ({ axis: "reason", key: code2, label: hsReasonSetting(code2).label, value: ws.length })),
-      ];
+    if (code === "waivers") {
+      // Couples site et motif des dérogations activées de la période (composantes du noyau).
+      const list = transport ? (period === "12m" ? months : [month]).flatMap(waiverList) : [];
+      const couples = groupBy(list, (w) => `${hsSite(w.site_id)?.name ?? "Sans site"}|${w.reason_code}`);
+      breakdown = [...couples].sort((a, b) => a[0].localeCompare(b[0])).map(([cle, ws]) => ({ site: cle.split("|")[0], reason_code: cle.split("|")[1], count: ws.length }));
     }
-    const met = value === null || target === null ? null : direction === "down" ? value <= target : value >= target;
-    return { code, label, value, target, unit, direction, met, source, formula, series, breakdown, site_scoped: siteScoped, note: !siteScoped && site ? `${note} Filtre de site non appliqué.` : note };
+    const target = code in (s.targets ?? {}) ? s.targets[code] : HS_TARGETS[code];
+    const met = value === null || target === null || target === undefined ? null : direction === "down" ? value <= target : value >= target;
+    return { code, label, value, target: target ?? null, unit, direction, met, source, formula, series, breakdown, site_scoped: siteScoped, note };
   });
 }
 
@@ -7247,10 +7448,12 @@ function seedHsseq() {
       { id: 1, name: "Parc de Matoto", code: "MAT", company_id: 1, default_vehicle_kind: "tanker", yard_manager_ids: [12], active: true },
       { id: 2, name: "Base minière de Boffa", code: "BOF", company_id: 1, default_vehicle_kind: "tipper", yard_manager_ids: [18], active: true },
     ],
-    kinds: new Map(), tippers: [], drivers: [], driverSites: new Map(), rotations: [], docs: [], templates: [], checks: [], ncs: [], tests: [],
-    events: [], actions: [], waivers: [], attachments: [], files: new Map(), log: [], reasons: [], history: new Map(), avgTankerKm: 0,
-    seq: { check: 0, nc: 0, test: 0, event: 0, action: 0, waiver: 0, attachment: 0, cost: 0, site: 2, template: 2, item: 40 },
+    kinds: new Map(), tippers: [], drivers: [], driverSites: new Map(), vehicleSites: new Map(), rotations: [], docs: [], templates: [], checks: [], ncs: [], tests: [],
+    events: [], actions: [], waivers: [], attachments: [], files: new Map(), log: [], notifications: [], settings: new Map(), reasons: [], history: new Map(), avgTankerKm: 0,
+    seq: { check: 0, nc: 0, test: 0, event: 0, action: 0, waiver: 0, attachment: 0, cost: 0, site: 2, template: 2, item: 40, log: 0, notification: 0, person: 0 },
   };
+  hsSettings(1);
+  hsSettings(2);
   for (const v of DB.vehicles) HS.kinds.set(v.id, "tanker");
   for (const d of DB.drivers) HS.driverSites.set(d.id, 1);
 
@@ -7310,11 +7513,13 @@ function seedHsseq() {
   setDoc("ER-11", "inspection", "2026-11-08");
   setDoc("ER-14", "calibration", "2026-10-28");
   setDoc("EB-03", "insurance", "2026-11-10");
+  // Visite technique de ER-12 non renseignée : avertissement V05 tant que les documents ne sont pas exigés.
+  HS.docs = HS.docs.filter((x) => !(x.vehicle_id === hsVehicleByName("ER-12").id && x.kind === "inspection"));
 
   // Paramétrage : motifs du verrou et grilles de contrôle avant départ (§5, paramétrage initial).
   HS.reasons = Object.entries(HS_REASONS).map(([code, [label, source, resolution, kinds, waivable, lot]]) => ({ code, label, source, resolution, vehicle_kinds: kinds, waivable, lot, active: lot === 1, disabled_sites: [] }));
   const common = ["Éclairage et feux de détresse", "Rétroviseurs et pare-brise", "Trousse de premiers secours", "Cales et triangles", "EPI du conducteur"];
-  const items = (start, blocking) => [...blocking, ...common.map((l) => [l, false])].map(([label, b, linked], i) => ({ id: start + i, label, blocking: b, sequence: (i + 1) * 10, linked_to: linked ?? null }));
+  const items = (start, blocking) => [...blocking, ...common.map((l) => [l, false])].map(([label, b, linked], i) => ({ id: start + i, label, blocking: b, sequence: (i + 1) * 10, linked_to: linked ?? null, active: true }));
   HS.templates = [
     { id: 1, name: "Contrôle avant départ, citerne", kind: "pre_departure", vehicle_kind: "tanker", version: 1, active: true, updated_at: "2026-09-29T10:00:00Z", updated_by: 16,
       items: items(1, [["Freins et ralentisseur, essai statique", true], ["Pneumatiques : usure, pression, coupures", true], ["Vannes de fond fermées et plombées", true], ["Dômes et trous d'homme fermés, joints en état", true], ["Deux extincteurs plombés et à date", true], ["Kit antidéversement complet", true], ["Plaques et étiquettes de danger en place", true], ["Alcootest du conducteur négatif", true, "breath_test"]]) },
@@ -7328,7 +7533,7 @@ function seedHsseq() {
   const performer = (v) => (v.id === 1 ? 17 : hsVehicleSite(v) === 2 ? 18 : 12);
   const device = (v) => (hsVehicleSite(v) === 2 ? "Dräger Alcotest 6820, n° ARHK-0587" : "Dräger Alcotest 6820, n° ARHK-0412");
   const addTest = (rot, v, at, result, reading, extra = {}) => {
-    HS.tests.push({ id: ++HS.seq.test, rotation_id: rot.id, driver_id: rot.driver_id, performed: result !== null, result, reading_mg_l: reading, device: result !== null ? device(v) : null, not_done_reason: null, performed_by: performer(v), driver_removed: result === "positive", client_uuid: rc.uuid(), reported_at: at, synced_at: at, offline: false, ...extra });
+    HS.tests.push({ id: ++HS.seq.test, rotation_id: rot.id, driver_id: rot.driver_id, performed: result !== null, result, reading_mg_l: reading, device: result !== null ? device(v) : null, not_done_reason: null, performed_by: performer(v), driver_removed: result === "positive", client_uuid: rc.uuid(), reported_at: at, synced_at: at, offline: false, active: true, ...extra });
   };
   const addCheck = (rot, v, at, notOk = [], offline = false) => {
     const t = template(v);
@@ -7337,9 +7542,10 @@ function seedHsseq() {
       template: t, vehicle_id: v.id, rotation_id: rot.id, driver_id: rot.driver_id, performed_by: performer(v), reported_at: at, synced_at: synced, offline,
       client_uuid: rc.uuid(), duration_s: rc.int(150, 255), ...(hsVehicleSite(v) === 2 ? { latitude: 10.1781, longitude: -14.0402, gps_accuracy: 9 } : { latitude: 9.5807, longitude: -13.6197, gps_accuracy: 6 }),
       answers: t.items.map((it) => ({ item_id: it.id, answer: notOk.includes(it.label) ? "not_ok" : "ok", comment: notOk.includes(it.label) ? "Défaut constaté au contrôle." : null })),
-      signature: { name: hsDriver(rot.driver_id)?.name ?? "Conducteur", signed_at: at },
     });
     for (const n of HS.ncs.filter((x) => x.check_id === c.id)) hsPhoto("nonconformity", n.id, c.performed_by, hsAddMinutes(at, 1), `Constat : ${n.label}`);
+    // Signature du conducteur (image PNG), pour les contrôles du jour.
+    if (at.slice(0, 10) === TODAY) hsAttach("check", c.id, c.performed_by, `signature-${c.reference.replaceAll("/", "-")}.png`, "image/png", HS_PNG, { created_at: at, role: "signature" });
     return c;
   };
   let pastBlocking = null;
@@ -7357,11 +7563,12 @@ function seedHsseq() {
         if (!n.blocking && rc.chance(0.3)) continue;
         const liftAt = hsAddMinutes(at, rc.int(40, 120));
         const photo = hsPhoto("nonconformity", n.id, c.performed_by, liftAt, "Après correction");
-        Object.assign(n, { status: "lifted", lifted_at: liftAt, lifted_by: c.performed_by, lift_comment: n.blocking ? "Pièce remplacée au parc avant le départ." : "Corrigé au parc.", lift_photo_ids: [photo.id] });
+        photo.role = "lift";
+        Object.assign(n, { status: "lifted", lifted_at: liftAt, lifted_by: c.performed_by, lift_comment: n.blocking ? "Pièce remplacée au parc avant le départ." : "Corrigé au parc." });
         if (n.blocking && !pastBlocking) pastBlocking = { n, c, v };
       }
       if (!rc.chance(0.01)) addTest(rot, v, hsAddMinutes(at, -4), d === "2026-10-07" && !HS.tests.some((x) => x.result === "positive") && hsKind(v) === "tanker" && rot.driver_id !== 1 ? "positive" : "negative", 0);
-      else HS.tests.push({ id: ++HS.seq.test, rotation_id: rot.id, driver_id: rot.driver_id, performed: false, result: null, reading_mg_l: null, device: null, not_done_reason: "Appareil en panne, test refait au départ suivant", performed_by: performer(v), driver_removed: false, client_uuid: rc.uuid(), reported_at: hsAddMinutes(at, -4), synced_at: hsAddMinutes(at, -4), offline: false });
+      else HS.tests.push({ id: ++HS.seq.test, rotation_id: rot.id, driver_id: rot.driver_id, performed: false, result: null, reading_mg_l: null, device: null, not_done_reason: "Appareil en panne, test refait au départ suivant", performed_by: performer(v), driver_removed: false, client_uuid: rc.uuid(), reported_at: hsAddMinutes(at, -4), synced_at: hsAddMinutes(at, -4), offline: false, active: true });
     }
   }
   const positive = HS.tests.find((x) => x.result === "positive");
@@ -7375,14 +7582,19 @@ function seedHsseq() {
     const c = addCheck(rot, v, at, notOk, v.name === "EB-03");
     if (v.name === "EB-03") Object.assign(c, { reported_at: stamp(TODAY, 5, 48), synced_at: stamp(TODAY, 7, 12) });
     addTest(rot, v, hsAddMinutes(at, -3), "negative", 0);
-    if (v.name === "EB-02") Object.assign(HS.tests[HS.tests.length - 1], { result: "positive", reading_mg_l: 0.32, driver_removed: true, reported_at: stamp(TODAY, 5, 41), synced_at: stamp(TODAY, 5, 43) });
+    if (v.name === "EB-02") {
+      // Positif du jour : le conducteur est retiré de la rotation, Transport doit en affecter un autre.
+      const t = HS.tests[HS.tests.length - 1];
+      Object.assign(t, { result: "positive", reading_mg_l: 0.32, reported_at: stamp(TODAY, 5, 41), synced_at: stamp(TODAY, 5, 43) });
+      hsRemoveDriver(t, rot);
+    }
   }
   // Photo de la non-conformité ouverte de EB-03 pas encore reçue (photos_missing).
   const ebNc = HS.ncs.find((n) => n.status === "open" && hsVehicle(n.vehicle_id).name === "EB-03");
   if (ebNc) HS.attachments = HS.attachments.filter((a) => !(a.model === "nonconformity" && a.object_id === ebNc.id));
 
   // Événements (§7) : une vingtaine, de tous niveaux et de tous statuts.
-  const drv = (id, role, days = null) => ({ kind: "driver", id, name: hsDriver(id).name, role, days_off: days });
+  const drv = (id, role, days = null) => ({ line_id: ++HS.seq.person, kind: "driver", id, name: hsDriver(id).name, role, days_off: days ?? 0 });
   const defs = [
     { type: "near_miss", at: "2026-01-28T06:10", veh: "ER-11", title: "Vanne de fond mal plombée découverte au contrôle de départ", desc: "Au contrôle de départ, la vanne de fond n° 2 de la citerne ER-11 n'était pas plombée et présentait du jeu. Fermeture et plombage refaits avant le départ ; aucun écoulement.", loc: "Parc de Matoto", sev: [1, 4, 2], status: "closed", closed: "2026-05-25T15:00",
       inv: { whys: ["La vanne n'était pas plombée.", "Le plomb n'a pas été reposé après le dépotage de la veille.", "Le dépotage s'est terminé de nuit, sans le chef de quai.", "La fiche de dépotage ne prévoit pas de vérification des plombs.", "Le mode opératoire de dépotage n'a pas été revu depuis 2019."], root: "Mode opératoire de dépotage sans étape de vérification des plombs.", team: [16, 12] },
@@ -7465,13 +7677,13 @@ function seedHsseq() {
       reported_by: by, description: d.desc, location: d.loc ?? null, latitude: d.pos?.[0] ?? null, longitude: d.pos?.[1] ?? null, gps_accuracy: d.pos?.[2] ?? null, source: d.terrain ? "terrain" : "web", client_uuid: d.terrain ? r.uuid() : null,
       reported_at: d.terrain ? d.terrain[0] : hsAddMinutes(occurred, 50), synced_at: d.terrain ? d.terrain[1] : hsAddMinutes(occurred, 50), offline: Boolean(d.terrain),
       people: (d.people ?? []).map(([id, role, days]) => drv(id, role, days ?? null)), lost_time: (d.lost ?? 0) > 0, days_lost: d.lost ?? 0, vehicle_immobilized: Boolean(d.immobilized),
-      classified_at: null, classified_by: null, closed_at: null, closed_by: null, investigation: null,
-      costs: (d.costs ?? []).map(([kind, label, amount, date]) => ({ id: ++HS.seq.cost, kind, label, amount, date, finance_move: null })), notifications: [],
+      classified_at: null, classified_by: null, closed_at: null, closed_by: null, reopen_reason: null, leave_id: null, investigation: null,
+      costs: (d.costs ?? []).map(([kind, label, amount, date]) => ({ id: ++HS.seq.cost, kind, label, amount, date, finance_move_id: null })),
       deadlines: { investigation_due: null, client_notice_due: null, client_notified_at: null },
     };
     HS.events.push(e);
-    hsLog("event", e.id, by, "Déclaration", null, null, null, e.reported_at);
-    e.notifications.push({ recipient: "Fanta Kourouma, Responsable HSSEQ", channel: "app", sent_at: e.synced_at, reason: "Nouvelle déclaration" });
+    hsLog("event", e.id, by, "create", null, null, null, e.reported_at);
+    hsNotify(hsHsseqManagers(), "reported", `Événement déclaré : ${e.reference} ${e.title}`, e.description, "event", e.id, e.synced_at);
     for (let i = 0; i < (d.photos ?? 0); i++) hsPhoto("event", e.id, by, e.synced_at, i === 0 ? "Vue d'ensemble" : `Détail ${i}`);
     const step = order.indexOf(d.status);
     if (step >= 1) {
@@ -7484,9 +7696,9 @@ function seedHsseq() {
       const level = hsLevel(hsCriticality(e));
       const inv = d.inv ?? {};
       e.investigation = {
-        method: HS_LEVELS.find((l) => l.level === level)?.method ?? "simple_analysis", team_ids: inv.team ?? [16, e.site_id === 2 ? 18 : 12], opened_at: e.classified_at,
-        due_date: e.deadlines.investigation_due ?? addDays(e.classified_at.slice(0, 10), 15), concluded_at: null, immediate_causes: inv.causes ?? [], whys: inv.whys ?? [],
-        tree: (inv.tree ?? []).map(([label, parent, kind], i) => ({ id: i + 1, label, parent_id: parent, kind })), factors_5m: { ...hsEmptyFactors(), ...(inv.f5m ?? {}) },
+        method: hsLevelMethod(level), team_ids: inv.team ?? [16, e.site_id === 2 ? 18 : 12], opened_at: e.classified_at,
+        due_date: (e.deadlines.investigation_due ?? addDays(e.classified_at.slice(0, 10), 15)).slice(0, 10), concluded_at: null, immediate_causes: inv.causes ?? [], whys: inv.whys ?? [],
+        tree: (inv.tree ?? []).map(([label, parent, kind], i) => ({ id: String(i + 1), label, parent_id: parent === null ? null : String(parent), kind })), factors_5m: { ...Object.fromEntries(HS_FACTORS.map((k) => [k, []])), ...(inv.f5m ?? {}) },
         root_cause: step >= 3 ? inv.root ?? null : null, conclusion: step >= 3 ? inv.conclusion ?? null : null,
       };
       e.status = "investigation";
@@ -7500,7 +7712,8 @@ function seedHsseq() {
     for (const x of d.actions ?? []) {
       const a = hsNewAction({ description: x.desc, origin: "event", origin_id: e.id, control_level: x.lvl, owner_id: x.owner, due_date: x.due, status: x.status, estimated_cost: x.cost ?? null, created_at: e.investigation?.concluded_at ?? e.classified_at, site_id: e.site_id });
       hsLog("action", a.id, 16, "Création", null, null, null, a.created_at);
-      if (x.approved) Object.assign(a, { approved_at: stamp(x.approved, 10), approved_by: 8 });
+      if (x.approved) Object.assign(a, { approved_at: stamp(x.approved, 10), approved_by: 8, approved_cost: a.estimated_cost });
+      if (x.status !== "todo") a.started_at = a.created_at;
       if (x.done) {
         a.done_at = x.done;
         hsAttach("action", a.id, a.owner_id, `preuve-${a.reference.replaceAll("/", "-")}.pdf`, "application/pdf", pdfBuffer(`Preuve de réalisation ${a.reference}`, [a.description, `Réalisée le ${frDate(x.done)}`, "", "Fichier de maquette : données fictives."]), { created_at: stamp(x.done, 16) });
@@ -7553,9 +7766,11 @@ function seedHsseq() {
     if (["active", "expired"].includes(status)) {
       const approved = hsAddMinutes(at, 25);
       w.approvals.push({ level: 2, role: "hsseq_manager", by: 16, at: approved });
-      Object.assign(w, { expires: `${hsRotationEnd(rot)}T23:59:00Z`, management_notified_at: approved });
+      Object.assign(w, { expires: hsRotationEnd(rot), management_notified_at: approved });
+      if (status === "expired") w.expired_at = w.expires;
     }
-    if (status === "refused") w.refusal_reason = extra.refusal;
+    if (status === "refused") Object.assign(w, { refusal_reason: extra.refusal, decided_by: 16 });
+    if (status === "cancelled") w.decided_by = yard;
     HS.waivers.push(w);
     hsLog("waiver", w.id, yard, "Demande et première validation", null, null, null, at);
     if (w.approvals[1]) hsLog("waiver", w.id, 16, "Seconde validation", "status", "pending_hsseq", "active", w.approvals[1].at);
@@ -7577,92 +7792,227 @@ function seedHsseq() {
       requested_by: 12, requested_at: at, approvals: [{ level: 1, role: "yard_manager", by: 12, at }], status: "pending_hsseq", expires: null, refusal_reason: null, management_notified_at: null };
     HS.waivers.push(w);
     hsLog("waiver", w.id, 12, "Demande et première validation", null, null, null, at);
+    hsNotify(hsHsseqManagers(), "waiver_requested", `Dérogation à valider : V02, rotation ${er06rot.name ?? er06rot.id}`, w.justification, "waiver", w.id, at);
   }
 }
 
 /* ─── Routes ────────────────────────────────────────────────────────────── */
 
+/** Comptes internes seulement (porteurs refusés), comme internal_only() du noyau. */
+function hsInternal(ctx) {
+  if (ctx.user.profiles.every((p) => p === "porteur")) throw hsForbidden("Accès réservé aux comptes internes.");
+}
+/** Horodatage ISO 8601 d'un corps ; 400 invalid_parameter sinon. */
+function hsDateTime(data, key) {
+  const v = data[key];
+  if (v === undefined || v === null || v === "") return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(v)) || !Number.isFinite(Date.parse(String(v)))) throw hsBad(`Horodatage invalide : ${key}.`, [key]);
+  return `${new Date(Date.parse(String(v))).toISOString().slice(0, 19)}Z`;
+}
+/** Heure de saisie sur l'appareil : jamais dans le futur, au-delà de cinq minutes de décalage d'horloge. */
+function hsReportedAt(data) {
+  const v = hsDateTime(data, "reported_at") ?? hsNow();
+  if (Date.parse(v) - Date.parse(hsNow()) > 300000) throw hsBad("Heure de saisie dans le futur.", ["reported_at"]);
+  return v;
+}
+const hsText = (data, key, max = 2000) => (data[key] === undefined || data[key] === null || String(data[key]).trim() === "" ? null : String(data[key]).trim().slice(0, max));
+
+/* Sites */
 function hsSiteRow(s) {
-  return { id: s.id, name: s.name, code: s.code, company: companyRef(s.company_id), default_vehicle_kind: s.default_vehicle_kind, yard_managers: s.yard_manager_ids.map(hsUser), active: s.active };
+  const vehicles = [...DB.vehicles.filter((v) => v.company_id === s.company_id), ...HS.tippers].filter((v) => hsVehicleSite(v) === s.id);
+  return { id: s.id, name: s.name, code: s.code, company: companyRef(s.company_id), default_vehicle_kind: s.default_vehicle_kind, yard_managers: s.yard_manager_ids.map(hsUser), active: s.active, vehicle_ids: vehicles.map((v) => v.id) };
 }
 function hsSiteValues(s, data) {
-  for (const key of ["name", "code"]) if (key in data) s[key] = String(data[key] || "").trim();
+  for (const key of ["name", "code"]) if (key in data) s[key] = hsText(data, key, 120) ?? "";
   if ("company_id" in data) {
-    if (!COMPANY_IDS.includes(Number(data.company_id))) throw badParam("Société inconnue.");
-    s.company_id = Number(data.company_id);
+    const id = hsId(data, "company_id");
+    if (!COMPANY_IDS.includes(id)) throw hsForbidden("Société non autorisée.");
+    s.company_id = id;
   }
   if ("default_vehicle_kind" in data) {
-    if (!["tanker", "tipper"].includes(data.default_vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+    if (!["tanker", "tipper"].includes(data.default_vehicle_kind)) throw hsBad("Type de véhicule inconnu.", ["default_vehicle_kind"]);
     s.default_vehicle_kind = data.default_vehicle_kind;
   }
-  if ("yard_manager_ids" in data) {
-    const ids = (data.yard_manager_ids || []).map(Number);
-    if (ids.some((id) => !userById(id)?.profiles.includes("exploitation"))) throw hsRule("invalid_parameter", "Un chef de parc est un compte du profil Exploitation.", { fields: ["yard_manager_ids"] });
-    s.yard_manager_ids = ids;
-  }
   if ("active" in data) s.active = Boolean(data.active);
-  if (!s.name || !s.code) throw new ApiError(400, "missing_fields", "Champs obligatoires manquants.", { fields: ["name", "code"].filter((k) => !s[k]) });
+  if ("yard_manager_ids" in data) {
+    const ids = hsIds(data, "yard_manager_ids");
+    const faux = ids.map(userById).filter((u) => u && (!u.profiles.includes("exploitation") || !u.companies.includes(s.company_id)));
+    if (faux.length) throw hsRule("business_rule", `Un chef de parc est un compte Exploitation transport de la société : ${faux.map((u) => u.name).join(", ")}.`, { fields: ["yard_manager_ids"] });
+    s.yard_manager_ids = ids.filter((id) => userById(id));
+  }
 }
-route("GET", "/hsseq/sites", HS_APP, () => HS.sites.map(hsSiteRow));
+/** Rattachement des ensembles au site (vehicle_ids) : la liste remplace la précédente. */
+function hsAssignVehicles(s, data) {
+  if (!("vehicle_ids" in data)) return;
+  const wanted = hsIds(data, "vehicle_ids").map(hsVehicle).filter(Boolean);
+  if (wanted.some((v) => v.company_id !== s.company_id)) throw hsRule("business_rule", "Un ensemble d'une autre société ne se rattache pas à ce site.", { fields: ["vehicle_ids"] });
+  for (const v of [...DB.vehicles, ...HS.tippers]) if (hsVehicleSite(v) === s.id && !wanted.includes(v)) HS.vehicleSites.set(v.id, null);
+  for (const v of wanted) HS.vehicleSites.set(v.id, s.id);
+}
+route("GET", "/hsseq/sites", HS_APP, (ctx) => HS.sites.filter((s) => !ctx.query.company_id || s.company_id === Number(ctx.query.company_id)).map(hsSiteRow));
 route("POST", "/hsseq/sites", HS_SETUP, (ctx) => {
-  const s = { id: ++HS.seq.site, name: "", code: "", company_id: 1, default_vehicle_kind: "tanker", yard_manager_ids: [], active: true };
+  requireFields(ctx.body, "name", "code");
+  const s = { id: ++HS.seq.site, name: "", code: "", company_id: ctx.company ?? 1, default_vehicle_kind: "tanker", yard_manager_ids: [], active: true };
   hsSiteValues(s, ctx.body);
-  if (HS.sites.some((x) => x.code === s.code)) throw new ApiError(409, "conflict", "Ce code de site existe déjà.");
+  if (HS.sites.some((x) => x.code === s.code && x.company_id === s.company_id)) throw businessRule("Ce code de site existe déjà dans la société.");
   HS.sites.push(s);
+  hsAssignVehicles(s, ctx.body);
   return hsSiteRow(s);
 });
 route("PATCH", "/hsseq/sites/:id", HS_SETUP, (ctx) => {
   const s = hsSite(ctx.params[0]);
   if (!s) throw notFound("Site introuvable.");
   hsSiteValues(s, ctx.body);
+  hsAssignVehicles(s, ctx.body);
   return hsSiteRow(s);
 });
 
+/* Référentiels */
 route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
   const vehicles = [...DB.vehicles.filter((v) => v.company_id === 1 && v.state !== "off"), ...HS.tippers];
-  const owners = USERS.filter((u) => u.active && u.companies.includes(1) && u.profiles.some((p) => ["admin", "direction", "hsseq", "exploitation"].includes(p))).sort((a, b) => byFr(a.name, b.name));
+  const self = hsScope(ctx) === "self";
+  const mine = hsMyDriver(ctx);
+  const drivers = [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].filter((d) => !self || d.id === mine);
+  // Responsables possibles d'une action : comptes internes hors conducteurs ; aucun pour le conducteur.
+  const owners = self ? [] : USERS.filter((u) => u.active && u.companies.includes(1) && u.profiles.some((p) => !["conducteur", "porteur"].includes(p))).sort((a, b) => byFr(a.name, b.name));
+  const s = hsSettings();
   return {
-    sites: HS.sites.filter((s) => s.active).map(hsSiteRow),
-    vehicles: vehicles.map((v) => ({ ...hsVehicleRef(v.id), site_id: hsVehicleSite(v), driver_id: v.driver_id, payload_tonnes: v.payload_tonnes ?? null })),
-    drivers: [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].map((d) => ({ id: d.id, name: d.name, site_id: HS.driverSites.get(d.id) ?? 1 })).sort((a, b) => byFr(a.name, b.name)),
+    sites: HS.sites.map(hsSiteRow),
+    vehicles: vehicles.map((v) => ({ ...hsVehicleRef(v.id), site_id: hsVehicleSite(v), driver_id: v.driver_id ?? null, payload_tonnes: v.payload_tonnes ?? null })),
+    drivers: drivers.map((d) => ({ id: d.id, name: d.name, site_id: HS.driverSites.get(d.id) ?? null })).sort((a, b) => byFr(a.name, b.name)),
     owners: owners.map((u) => ({ id: u.id, name: u.name })),
-    criticality_thresholds: HS_LEVELS,
-    costly_action_threshold: HS_COSTLY,
-    ...HS_WINDOWS,
-    me: { profiles: ctx.user.profiles.filter((p) => HS_APP.includes(p)), site_ids: hsSites(ctx), employee_id: hsEmployee(ctx)?.id ?? null, driver_id: hsMyDriver(ctx) },
+    criticality_thresholds: hsThresholds(s),
+    costly_action_threshold: s.costly_action_threshold,
+    check_window_hours: s.check_window_hours,
+    breath_test_window_hours: s.breath_test_window_hours,
+    vehicle_kinds: [{ code: "tanker", label: "Citerne" }, { code: "tipper", label: "Benne" }],
+    me: { profiles: [...ctx.user.profiles].sort(), site_ids: hsSites(ctx), employee_id: hsEmployee(ctx)?.id ?? null, driver_id: mine },
   };
 });
 
+/* Paramètres de la société (admin, hsseq) */
+function hsSettingsCompany(ctx, src) {
+  if (src.company_id === undefined || src.company_id === null || src.company_id === "") return ctx.company ?? 1;
+  if (!/^\d+$/.test(String(src.company_id))) throw hsBad("Société invalide.");
+  const id = Number(src.company_id);
+  if (!ctx.user.companies.includes(id)) throw hsForbidden("Société non autorisée.");
+  return id;
+}
+function hsSettingsRow(company) {
+  const s = hsSettings(company);
+  const row = Object.fromEntries([...HS_SETTINGS_DATES, ...HS_SETTINGS_NOMBRES].map((k) => [k, s[k] ?? null]));
+  return { ...row, company: companyRef(company), director: hsUser(s.director_id), criticality_thresholds: hsThresholds(s), targets: { ...s.targets } };
+}
+route("GET", "/hsseq/settings", HS_SETUP, (ctx) => hsSettingsRow(hsSettingsCompany(ctx, ctx.query)));
+route("PATCH", "/hsseq/settings", HS_SETUP, (ctx) => {
+  const b = ctx.body;
+  const company = hsSettingsCompany(ctx, b);
+  const s = hsSettings(company);
+  const values = {};
+  for (const key of HS_SETTINGS_DATES) {
+    if (!(key in b)) continue;
+    if (b[key] !== null && b[key] !== "" && !isDate(String(b[key]).slice(0, 10))) throw hsBad(`Date invalide : ${key}.`, [key]);
+    values[key] = b[key] ? String(b[key]).slice(0, 10) : null;
+  }
+  for (const key of HS_SETTINGS_NOMBRES) {
+    if (!(key in b)) continue;
+    const n = Number(b[key] || 0);
+    if (!Number.isFinite(n)) throw hsBad(`Valeur invalide : ${key}.`, [key]);
+    values[key] = key === "costly_action_threshold" ? n : Math.trunc(n);
+  }
+  if ("director_id" in b) values.director_id = userById(hsId(b, "director_id"))?.id ?? null;
+  if ("targets" in b) {
+    if (!b.targets || typeof b.targets !== "object" || Array.isArray(b.targets)) throw hsBad("Cibles attendues par code d'indicateur.", ["targets"]);
+    const t = {};
+    for (const [k, v] of Object.entries(b.targets)) {
+      if (v === null || v === "") continue;
+      if (!Number.isFinite(Number(v))) throw hsBad("Cible invalide.", ["targets"]);
+      t[k] = Number(v);
+    }
+    values.targets = t;
+  }
+  const next = { ...s, ...values };
+  if (!(1 < next.level_moderate_min && next.level_moderate_min < next.level_significant_min && next.level_significant_min < next.level_high_min && next.level_high_min <= 25)) {
+    throw businessRule("Seuils de criticité attendus croissants, entre 2 et 25.");
+  }
+  Object.assign(s, values);
+  return hsSettingsRow(company);
+});
+
+/* Cockpit et échéances */
 route("GET", "/hsseq/cockpit", HS_READ, (ctx) => {
   const q = ctx.query;
-  const period = q.period === "12m" ? "12m" : "month";
-  if (q.month && !/^\d{4}-\d{2}$/.test(q.month)) throw badParam("Mois invalide : month.");
+  const period = q.period || "month";
+  if (!["month", "12m"].includes(period)) throw hsBad("Période : month ou 12m.", ["period"]);
+  if (q.month && !/^\d{4}-\d{2}$/.test(q.month)) throw hsBad("Mois attendu au format AAAA-MM.", ["month"]);
   const month = q.month && q.month <= TODAY.slice(0, 7) ? q.month : TODAY.slice(0, 7);
-  if (q.vehicle_kind && !["tanker", "tipper"].includes(q.vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+  if (q.vehicle_kind && !["tanker", "tipper"].includes(q.vehicle_kind)) throw hsBad("Type de véhicule : tanker ou tipper.", ["vehicle_kind"]);
+  if (q.site_id && !hsSiteOk(ctx, Number(q.site_id))) throw hsForbidden("Site non autorisé.");
   const next5 = `${addMonths(`${month}-01`, 1).slice(0, 7)}-05`;
   const frozen = month < TODAY.slice(0, 7) && next5 <= TODAY;
-  const first = period === "12m" ? addMonths(`${month}-01`, -11) : `${month}-01`;
-  const overdue = HS.actions.filter((a) => hsCanSeeAction(ctx, a) && ["todo", "in_progress"].includes(a.status) && a.due_date < TODAY && hsFilter(ctx, q, a.site_id, hsSite(a.site_id)?.default_vehicle_kind));
-  const events = HS.events.filter((e) => hsCanSeeEvent(ctx, e) && hsFilter(ctx, q, e.site_id, hsEventKind(e)));
+  const overdue = HS.actions.filter((a) => ["todo", "in_progress"].includes(a.status) && a.due_date < TODAY && hsFilter(ctx, q, a.site_id, null) && hsSiteOk(ctx, a.site_id));
+  const events = HS.events.filter((e) => hsFilter(ctx, q, e.site_id, null) && hsSiteOk(ctx, e.site_id));
   return {
-    period: { type: period, month, date_from: first, date_to: minDate(monthEnd(`${month}-01`), TODAY), label: period === "12m" ? `${monthLabel(first)} à ${monthLabel(`${month}-01`)}` : monthLabel(`${month}-01`), frozen, frozen_on: frozen ? next5 : null },
+    period: { type: period, month, date_from: `${month}-01`, date_to: minDate(monthEnd(`${month}-01`), TODAY), label: monthLabel(`${month}-01`), frozen, frozen_on: frozen ? next5 : null },
     filters: { company_id: q.company_id ? Number(q.company_id) : null, site_id: q.site_id ? Number(q.site_id) : null, vehicle_kind: q.vehicle_kind || null },
     referentials: { companies: ctx.user.companies.map(companyRef), sites: HS.sites.map((s) => ({ id: s.id, name: s.name })) },
     hours_basis: "presence",
     indicators: hsIndicators(ctx, q, month, period),
-    blocked_departures: hsDepartures(ctx, TODAY, { ...q, blocked: "1" }),
-    overdue_actions: { total: overdue.length, items: overdue.map(hsActionLine).sort((a, b) => b.days_overdue - a.days_overdue).slice(0, 8) },
-    deadlines: hsDeadlines(ctx, { ...q, horizon: "30" }),
+    blocked_departures: hsDepartures(ctx, TODAY, q, true),
+    overdue_actions: { total: overdue.length, items: overdue.sort((a, b) => a.due_date.localeCompare(b.due_date) || a.id - b.id).slice(0, 8).map(hsActionLine) },
+    deadlines: hsDeadlines(ctx, { ...q, kind: "", horizon: "30" }),
     events: {
       to_classify: events.filter((e) => e.status === "reported").length,
       overdue_investigations: events.filter(hsEventOverdue).length,
       high_open: events.filter((e) => e.status !== "closed" && hsLevel(hsCriticality(e)) === "high").length,
     },
     iso_maturity: null,
-    computed_at: `${TODAY}T06:00:00Z`,
+    computed_at: hsNow(),
   };
 });
 route("GET", "/hsseq/deadlines", ["admin", "direction", "hsseq", "exploitation", "rh"], (ctx) => hsDeadlines(ctx, ctx.query));
+
+/* Espace du compte, notifications, journal */
+route("GET", "/hsseq/me", null, (ctx) => {
+  hsInternal(ctx);
+  const emp = hsEmployee(ctx);
+  const driver = emp ? hsDriver(emp.driver_id) : null;
+  const rotations = driver ? [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations].filter((r) => r.driver_id === driver.id && (r.state === "en_route" || (r.state === "draft" && r.date_loading === TODAY))) : [];
+  return {
+    employee: emp ? { id: emp.id, name: ctx.user.name, matricule: emp.matricule ?? null } : null,
+    driver: driver ? { id: driver.id, name: driver.name } : null,
+    fitness: emp ? "fit" : null,
+    qualifications: driver ? [{ code: "permis_pl", name: "Permis de conduire poids lourd", mandatory: true, state: !driver.license_expiry ? "absente" : driver.license_expiry < TODAY ? "expiree" : "valide", expiry: driver.license_expiry ?? null }] : [],
+    rotations: rotations.map((r) => ({ ...hsRotationRef(r), vehicle: hsVehicleRef(r.vehicle_id), lock: r.state === "draft" ? hsEvaluate(ctx, r) : null })),
+  };
+});
+route("GET", "/hsseq/notifications", null, (ctx) => {
+  hsInternal(ctx);
+  if (ctx.query.sort && !["id", "-id"].includes(ctx.query.sort)) throw hsBad("Tri inconnu.", ["sort"]);
+  const unreadOnly = ["1", "true"].includes(String(ctx.query.unread ?? "").toLowerCase());
+  const mine = HS.notifications.filter((n) => n.user_id === ctx.user.id && n.channel === "app");
+  const list = mine.filter((n) => !unreadOnly || !n.read_at).sort((a, b) => (ctx.query.sort === "id" ? a.id - b.id : b.id - a.id));
+  return hsPage(ctx, list, { unread: mine.filter((n) => !n.read_at).length }, hsNotificationRow);
+});
+route("POST", "/hsseq/notifications/:id/read", null, (ctx) => {
+  hsInternal(ctx);
+  const n = HS.notifications.find((x) => x.id === ctx.params[0] && x.user_id === ctx.user.id);
+  if (!n) throw notFound("Notification introuvable.");
+  if (!n.read_at) n.read_at = hsNow();
+  return hsNotificationRow(n);
+});
+route("GET", "/hsseq/log", ["direction", "hsseq"], (ctx) => {
+  const q = ctx.query;
+  const model = q.model || q.object || null;
+  const id = q.id || q.object_id || null;
+  if (model && !["event", "action", "check", "nonconformity", "waiver", "breath_test"].includes(model)) throw hsBad("Fiche inconnue.", ["model"]);
+  if (q.sort && !["at", "-at"].includes(q.sort)) throw hsBad("Tri inconnu.", ["sort"]);
+  const from = dateArg(q, "date_from");
+  const to = dateArg(q, "date_to");
+  const list = HS.log.filter((l) => (!model || l.model === model) && (!model || !id || l.res_id === Number(id)) && (!from || l.at.slice(0, 10) >= from) && (!to || l.at.slice(0, 10) <= to))
+    .sort((a, b) => (q.sort === "at" ? a.at.localeCompare(b.at) : b.at.localeCompare(a.at)) || b.id - a.id);
+  return hsPage(ctx, list, {}, hsHistoryRow);
+});
 
 /* Événements */
 function hsEventOf(ctx, id) {
@@ -7670,28 +8020,33 @@ function hsEventOf(ctx, id) {
   if (!e || !hsCanSeeEvent(ctx, e)) throw notFound("Événement introuvable.");
   return e;
 }
-const HS_EVENT_SORTS = { occurred_at: (e) => e.occurred_at, criticality: (e) => hsCriticality(e) ?? 0, reference: (e) => e.reference, status: (e) => ["reported", "classified", "investigation", "actions", "closed"].indexOf(e.status) };
+const HS_EVENT_SORTS = { occurred_at: (e) => e.occurred_at, criticality: (e) => hsCriticality(e) ?? 0, reference: (e) => e.reference, status: (e) => e.status };
 function hsSort(list, sort, sorts, def) {
   const s = sort || def;
   const desc = s.startsWith("-");
   const value = sorts[desc ? s.slice(1) : s];
-  if (!value) throw badParam("Tri inconnu.");
+  if (!value) throw hsBad("Tri inconnu.", ["sort"]);
   return list.sort((a, b) => {
     const va = value(a);
     const vb = value(b);
     return (va === vb ? b.id - a.id : va > vb ? 1 : -1) * (va === vb ? 1 : desc ? -1 : 1);
   });
 }
+const hsList = (v) => (v ? String(v).split(",").filter(Boolean) : null);
 function hsEventList(ctx) {
   const q = ctx.query;
-  const statuses = q.status ? q.status.split(",") : null;
+  const statuses = hsList(q.status);
+  const types = hsList(q.type);
+  const domains = hsList(q.domain);
+  const levels = hsList(q.level);
   const from = dateArg(q, "date_from");
   const to = dateArg(q, "date_to");
   const s = (q.search || "").toLowerCase();
+  const kind = (e) => (e.vehicle_id ? hsKind(hsVehicle(e.vehicle_id)) : null);
   return HS.events.filter((e) =>
-    hsCanSeeEvent(ctx, e) && hsFilter(ctx, q, e.site_id, hsEventKind(e)) && (!statuses || statuses.includes(e.status)) && (!q.type || e.type === q.type) && (!q.domain || e.domain === q.domain)
-    && (!q.level || hsLevel(hsCriticality(e)) === q.level) && (!q.vehicle_id || e.vehicle_id === intArg(q, "vehicle_id")) && (!q.rotation_id || e.rotation_id === intArg(q, "rotation_id"))
-    && (!from || e.occurred_at.slice(0, 10) >= from) && (!to || e.occurred_at.slice(0, 10) <= to) && (q.overdue_investigation !== "1" || hsEventOverdue(e))
+    hsCanSeeEvent(ctx, e) && hsFilter(ctx, q, e.site_id, null) && (!q.vehicle_kind || kind(e) === q.vehicle_kind) && (!statuses || statuses.includes(e.status)) && (!types || types.includes(e.type)) && (!domains || domains.includes(e.domain))
+    && (!levels || levels.includes(hsLevel(hsCriticality(e)) ?? "unclassified")) && (!q.vehicle_id || e.vehicle_id === hsId(q, "vehicle_id")) && (!q.rotation_id || e.rotation_id === hsId(q, "rotation_id"))
+    && (!from || e.occurred_at.slice(0, 10) >= from) && (!to || e.occurred_at.slice(0, 10) <= to) && (!["1", "true"].includes(q.overdue_investigation) || hsEventOverdue(e))
     && (!s || [e.reference, e.title, e.location ?? ""].some((x) => x.toLowerCase().includes(s))));
 }
 route("GET", "/hsseq/events", HS_EVENT_READ, (ctx) => {
@@ -7705,357 +8060,481 @@ route("GET", "/hsseq/events", HS_EVENT_READ, (ctx) => {
   return hsPage(ctx, list, { by_status: byStatus, by_level: byLevel, overdue_investigations: list.filter(hsEventOverdue).length }, hsEventLine);
 });
 route("GET", "/hsseq/events/export.xlsx", HS_READ, (ctx) => {
-  const list = hsSort(hsEventList(ctx), ctx.query.sort, HS_EVENT_SORTS, "-occurred_at");
-  const rows = list.map((e) => [e.reference, e.occurred_at.slice(0, 16).replace("T", " "), HS_TYPE_LABELS[e.type], e.title, hsSite(e.site_id)?.name ?? "", e.vehicle_id ? hsVehicle(e.vehicle_id).name : "", hsCriticality(e) ?? "", HS_LEVEL_LABELS[hsLevel(hsCriticality(e))] ?? "Non classé", HS_STATUS_LABELS[e.status], sum(e.costs, (c) => c.amount)]);
-  return fileReply(xlsxBuffer([{ name: "Événements", rows: [["Référence", "Survenu le (UTC)", "Type", "Titre", "Site", "Véhicule", "Criticité", "Niveau", "Statut", "Coût (GNF)"], ...rows] }]), XLSX, `evenements_hsseq_${TODAY}.xlsx`);
+  const list = hsSort(hsEventList(ctx), null, HS_EVENT_SORTS, "-occurred_at");
+  const rows = list.map((e) => [e.reference, e.occurred_at.slice(0, 10), e.title, HS_TYPE_LABELS[e.type], e.domain, HS_STATUS_LABELS[e.status], hsSite(e.site_id)?.name ?? "", e.vehicle_id ? hsVehicle(e.vehicle_id).name : "", e.actual_severity ?? "", e.potential_severity ?? "", e.probability ?? "", hsCriticality(e) ?? "", HS_LEVEL_LABELS[hsLevel(hsCriticality(e))] ?? "Non classé", hsEventActions(e).filter(hsActionOpen).length, sum(e.costs, (c) => c.amount), userName(e.reported_by)]);
+  return fileReply(xlsxBuffer([{ name: "Registre des événements HSSEQ", rows: [["Référence", "Survenu le", "Titre", "Type", "Domaine", "Statut", "Site", "Ensemble", "Gravité réelle", "Gravité potentielle", "Probabilité", "Criticité", "Niveau", "Actions ouvertes", "Coût total", "Déclaré par"], ...rows] }]), XLSX, `registre_evenements_hsseq_${TODAY.replaceAll("-", "")}.xlsx`);
 });
 route("GET", "/hsseq/events/:id", HS_EVENT_READ, (ctx) => hsEventDetail(ctx, hsEventOf(ctx, ctx.params[0])));
 route("GET", "/hsseq/events/:id/report.pdf", HS_READ, (ctx) => {
   const e = hsEventOf(ctx, ctx.params[0]);
-  const inv = e.investigation;
+  const inv = hsInvestigationRow(e);
   const lines = [
     `${HS_TYPE_LABELS[e.type]}, survenu le ${frDate(e.occurred_at.slice(0, 10))} à ${e.occurred_at.slice(11, 16)} (UTC)`,
-    `Lieu : ${e.location ?? "-"}   Site : ${hsSite(e.site_id)?.name ?? "-"}   Véhicule : ${e.vehicle_id ? hsVehicle(e.vehicle_id).name : "-"}`,
+    `Lieu : ${e.location ?? "-"}   Site : ${hsSite(e.site_id)?.name ?? "-"}   Ensemble : ${e.vehicle_id ? hsVehicle(e.vehicle_id).name : "-"}`,
     `Criticité : ${hsCriticality(e) ?? "non classé"} (${HS_LEVEL_LABELS[hsLevel(hsCriticality(e))] ?? "-"})   Statut : ${HS_STATUS_LABELS[e.status]}`,
     "", "Description", e.description, "",
-    "Enquête", inv ? `Méthode : ${{ simple_analysis: "analyse simple", five_whys: "5 Pourquoi", cause_tree: "arbre des causes" }[inv.method]}, échéance le ${frDate(inv.due_date)}` : "Pas d'enquête.",
-    ...(inv?.whys ?? []).map((w, i) => `Pourquoi ${i + 1} : ${w}`),
-    ...(inv?.tree ?? []).map((n) => `Fait ${n.id}${n.parent_id ? ` (cause de ${n.parent_id})` : ""} : ${n.label}`),
-    inv?.root_cause ? `Cause racine : ${inv.root_cause}` : "",
+    "Enquête", inv.method ? `Méthode : ${{ simple_analysis: "analyse simple", five_whys: "5 Pourquoi", cause_tree: "arbre des causes" }[inv.method]}` : "Pas d'enquête.",
+    ...inv.whys.map((w, i) => `Pourquoi ${i + 1} : ${w}`),
+    ...inv.tree.map((n) => `Fait ${n.id}${n.parent_id ? ` (cause de ${n.parent_id})` : ""} : ${n.label}`),
+    inv.root_cause ? `Cause racine : ${inv.root_cause}` : "",
     "", "Actions", ...hsEventActions(e).map((a) => `${a.reference} : ${a.description} (${HS_ACTION_LABELS[a.status]}, échéance ${frDate(a.due_date)})`),
     "", `Coûts : ${fmtInt(sum(e.costs, (c) => c.amount))} GNF`, "", "Fichier de maquette : données fictives.",
   ];
-  return fileReply(pdfBuffer(`Rapport d'enquête ${e.reference}`, lines.filter((l) => l !== null)), "application/pdf", `rapport_${e.reference.replaceAll("/", "-")}.pdf`);
+  return fileReply(pdfBuffer(`Rapport d'enquête ${e.reference}`, lines.filter((l) => l !== null)), "application/pdf", `rapport_enquete_${e.reference.replaceAll("/", "-")}.pdf`);
 });
-function hsEventValues(ctx, e, data, creating = false) {
-  for (const key of ["title", "description", "location"]) if (key in data) e[key] = data[key] ? String(data[key]).slice(0, key === "description" ? 4000 : 200) : null;
-  if ("occurred_at" in data) {
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(data.occurred_at))) throw badParam("Horodatage invalide : occurred_at.");
-    e.occurred_at = String(data.occurred_at);
-  }
-  if ("type" in data && (creating || hsIs(ctx, "hsseq") || e.status === "reported")) {
-    if (!(data.type in HS_TYPES)) throw badParam("Type d'événement inconnu.");
+/** Personnes en cause : la liste remplace la précédente ; le noyau lit `id` puis `person_id` comme identifiant de la personne. */
+function hsPeople(data) {
+  if (data.people === undefined || data.people === null) return null;
+  if (!Array.isArray(data.people)) throw hsBad("Liste des personnes invalide.", ["people"]);
+  return data.people.map((p) => {
+    if (!p || typeof p !== "object" || !["driver", "employee", "third_party"].includes(p.kind)) throw hsBad("Personne : kind driver, employee ou third_party.", ["people"]);
+    const role = p.role || "victim";
+    if (!["victim", "driver", "witness", "perpetrator", "third_party"].includes(role)) throw hsBad("Rôle d'une personne inconnu.", ["people"]);
+    const target = hsId(p, "id") ?? hsId(p, "person_id");
+    let name = hsText(p, "name", 200);
+    let id = null;
+    if (p.kind === "driver" && target) {
+      const d = hsDriver(target);
+      if (!d) throw notFound("Chauffeur introuvable.");
+      [id, name] = [d.id, d.name];
+    } else if (p.kind === "employee" && target) {
+      const emp = HS_EMPLOYEES.find((x) => x.id === target);
+      if (!emp) throw notFound("Salarié introuvable.");
+      [id, name] = [emp.id, userName(emp.user_id)];
+    }
+    if (!id && !name) throw hsMissing("Personne sans identifiant ni nom.", ["people"]);
+    return { line_id: ++HS.seq.person, kind: p.kind, id, name, role, days_off: Math.max(0, Math.trunc(Number(p.days_off) || 0)) };
+  });
+}
+/** Champs de la déclaration (création, correction par le déclarant ou hsseq). */
+function hsEventValues(ctx, e, data) {
+  for (const key of ["title", "description", "location"]) if (key in data) e[key] = hsText(data, key, key === "description" ? 4000 : 300);
+  if ("type" in data) {
+    if (!(data.type in HS_TYPES)) throw hsBad("Type d'événement inconnu.", ["type"]);
     e.type = data.type;
   }
   if ("domain" in data && data.domain) {
-    if (!HS_DOMAINS.includes(data.domain)) throw badParam("Domaine inconnu.");
+    if (!HS_DOMAINS.includes(data.domain)) throw hsBad("Domaine inconnu.", ["domain"]);
     e.domain = data.domain;
   }
-  for (const key of ["latitude", "longitude", "gps_accuracy"]) if (key in data) e[key] = hsNum(data[key], key);
-  if (data.vehicle_id) {
-    const v = hsVehicle(Number(data.vehicle_id));
-    if (!v) throw hsRule("invalid_parameter", "Véhicule inconnu.", { fields: ["vehicle_id"] });
-    e.vehicle_id = v.id;
-    e.site_id = hsVehicleSite(v);
+  if ("occurred_at" in data) {
+    const v = hsDateTime(data, "occurred_at");
+    if (!v) throw hsMissing("Date et heure de l'événement manquantes.", ["occurred_at"]);
+    e.occurred_at = v;
   }
-  if (data.rotation_id) {
-    if (!hsRotation(Number(data.rotation_id))) throw hsRule("invalid_parameter", "Rotation inconnue.", { fields: ["rotation_id"] });
-    e.rotation_id = Number(data.rotation_id);
+  if ("latitude" in data || "longitude" in data) {
+    const lat = hsNum(data.latitude, "latitude");
+    const lon = hsNum(data.longitude, "longitude");
+    if ((lat !== null || lon !== null) && (lat === null || lon === null || Math.abs(lat) > 90 || Math.abs(lon) > 180)) throw hsBad("Position invalide.", ["latitude", "longitude"]);
+    Object.assign(e, { latitude: lat, longitude: lon, gps_accuracy: lat === null ? null : Math.max(0, hsNum(data.gps_accuracy, "gps_accuracy") ?? 0) || null });
   }
-  if (data.site_id) {
-    if (!hsSite(Number(data.site_id))) throw hsRule("invalid_parameter", "Site inconnu.", { fields: ["site_id"] });
-    e.site_id = Number(data.site_id);
+  if ("rotation_id" in data) {
+    const id = hsId(data, "rotation_id");
+    const rot = id ? hsRotation(id) : null;
+    if (id && !rot) throw notFound("Rotation introuvable.");
+    if (rot && hsScope(ctx) === "self" && rot.driver_id !== hsMyDriver(ctx)) throw hsForbidden("Un conducteur ne déclare que sur ses propres rotations.");
+    e.rotation_id = rot?.id ?? null;
+    if (rot && !("vehicle_id" in data)) e.vehicle_id = rot.vehicle_id;
   }
-  if (Array.isArray(data.people)) {
-    e.people = data.people.map((p) => {
-      const kind = ["driver", "employee", "third_party"].includes(p.kind) ? p.kind : "third_party";
-      const name = kind === "driver" ? hsDriver(Number(p.id))?.name : kind === "employee" ? userName(Number(p.id)) : p.name;
-      return { kind, id: kind === "third_party" ? null : Number(p.id), name: name || "Personne non nommée", role: ["victim", "driver", "witness", "perpetrator", "third_party"].includes(p.role) ? p.role : "witness", days_off: p.days_off ?? null };
-    });
+  if ("vehicle_id" in data) {
+    const id = hsId(data, "vehicle_id");
+    if (id && !hsVehicle(id)) throw notFound("Ensemble introuvable.");
+    e.vehicle_id = id;
   }
-  if (hsIs(ctx, "hsseq") && !creating) {
-    for (const key of ["actual_severity", "potential_severity", "probability"]) if (key in data && e.status !== "reported") e[key] = hsScore(data[key], key);
-    if ("lost_time" in data) e.lost_time = Boolean(data.lost_time);
-    if ("days_lost" in data) e.days_lost = Math.max(0, Number.parseInt(data.days_lost, 10) || 0);
-    if ("vehicle_immobilized" in data) e.vehicle_immobilized = Boolean(data.vehicle_immobilized);
-  }
-}
-function hsScore(v, name) {
-  const n = Number(v);
-  if (!Number.isInteger(n) || n < 1 || n > 5) throw hsRule("invalid_parameter", `Note de 1 à 5 attendue : ${name}.`, { fields: [name] });
-  return n;
+  if ("site_id" in data) {
+    const id = hsId(data, "site_id");
+    if (id && !hsSite(id)) throw notFound("Site introuvable.");
+    e.site_id = id;
+  } else if (e.vehicle_id && ("vehicle_id" in data || "rotation_id" in data)) e.site_id = hsVehicleSite(hsVehicle(e.vehicle_id));
+  const people = hsPeople(data);
+  if (people) e.people = people;
 }
 route("POST", "/hsseq/events", ["admin", "direction", "hsseq", "exploitation", "conducteur"], (ctx) => {
   const b = ctx.body;
-  requireFields(b, "client_uuid", "type", "title", "description", "occurred_at", "reported_at", "offline");
-  const existing = HS.events.find((e) => e.client_uuid && e.client_uuid === String(b.client_uuid));
+  requireFields(b, "client_uuid", "type", "title", "description", "occurred_at");
+  const existing = hsExisting(ctx, HS.events, b.client_uuid, (x) => x.reported_by);
   if (existing) return hsEventDetail(ctx, existing);
   const now = hsNow();
   const e = {
-    id: ++HS.seq.event, reference: "", title: "", type: "hazard", domain: null, status: "reported", occurred_at: now, site_id: (hsSites(ctx)[0] ?? 1), vehicle_id: null, rotation_id: null,
-    actual_severity: null, potential_severity: null, probability: null, reported_by: ctx.user.id, description: "", location: null, latitude: null, longitude: null, gps_accuracy: null, source: ctx.app === "terrain" || !hasProfile(ctx, HS_READ) ? "terrain" : "web",
-    client_uuid: String(b.client_uuid).slice(0, 64), reported_at: String(b.reported_at), synced_at: now, offline: Boolean(b.offline), people: [], lost_time: false, days_lost: 0,
-    vehicle_immobilized: false, classified_at: null, classified_by: null, closed_at: null, closed_by: null, investigation: null, costs: [], notifications: [],
-    deadlines: { investigation_due: null, client_notice_due: null, client_notified_at: null },
+    id: 0, reference: "", title: "", type: "hazard", domain: null, status: "reported", occurred_at: now, site_id: null, vehicle_id: null, rotation_id: null,
+    actual_severity: null, potential_severity: null, probability: null, reported_by: ctx.user.id, description: "", location: null, latitude: null, longitude: null, gps_accuracy: null,
+    source: ctx.app === "terrain" ? "terrain" : "web", client_uuid: String(b.client_uuid).trim().slice(0, 64), reported_at: hsReportedAt(b), synced_at: now, offline: Boolean(b.offline),
+    people: [], lost_time: false, days_lost: 0, leave_id: null, vehicle_immobilized: false, classified_at: null, classified_by: null, closed_at: null, closed_by: null, reopen_reason: null,
+    investigation: null, costs: [], deadlines: { investigation_due: null, client_notice_due: null, client_notified_at: null },
   };
-  hsEventValues(ctx, e, b, true);
+  hsEventValues(ctx, e, b);
   e.domain = e.domain ?? HS_TYPES[e.type];
+  e.id = ++HS.seq.event;
   e.reference = `EVT/2026/${pad(e.id, 4)}`;
-  e.notifications.push({ recipient: "Fanta Kourouma, Responsable HSSEQ", channel: "app", sent_at: now, reason: "Nouvelle déclaration" });
   HS.events.push(e);
-  hsLog("event", e.id, ctx.user.id, "Déclaration");
+  hsClaim(ctx, hsIds(b, "attachment_ids"), "event", e.id);
+  hsLog("event", e.id, ctx.user.id, "create");
+  hsNotify(hsHsseqManagers(), "reported", `Événement déclaré : ${e.reference} ${e.title}`, e.description, "event", e.id, now);
   return hsEventDetail(ctx, e);
 });
-route("PATCH", "/hsseq/events/:id", HS_EVENT_READ, (ctx) => {
+route("PATCH", "/hsseq/events/:id", HS_FIELD, (ctx) => {
   const e = hsEventOf(ctx, ctx.params[0]);
-  if (!hsEventDetail(ctx, e).rights.can_edit) throw hsForbidden("Cette fiche ne se modifie plus avec votre profil.");
+  const b = ctx.body;
+  if (!hsEventDetail(ctx, e).rights.can_edit) throw hsForbidden("Correction réservée au Responsable HSSEQ avant la clôture, ou au déclarant tant que l'événement n'est pas classé.");
+  const reserves = ["actual_severity", "potential_severity", "probability", "lost_time", "days_lost", "leave_id", "client_notified_at"];
+  if (!hsIs(ctx, "hsseq") && reserves.some((k) => k in b)) throw hsForbidden("Notes, arrêt de travail et information du donneur d'ordre : Responsable HSSEQ.");
   const before = hsCriticality(e);
-  hsEventValues(ctx, e, ctx.body);
-  hsLog("event", e.id, ctx.user.id, "Modification", before !== hsCriticality(e) ? "criticality" : null, before !== hsCriticality(e) ? before : null, before !== hsCriticality(e) ? hsCriticality(e) : null);
+  hsEventValues(ctx, e, b);
+  for (const key of ["actual_severity", "potential_severity", "probability"]) {
+    if (!(key in b)) continue;
+    const n = b[key] === null || b[key] === "" ? null : Number(b[key]);
+    if (n !== null && !(Number.isInteger(n) && n >= 1 && n <= 5)) throw businessRule("Gravités et probabilité se notent de 1 à 5.");
+    e[key] = n;
+  }
+  if ("lost_time" in b) e.lost_time = Boolean(b.lost_time);
+  if ("days_lost" in b) e.days_lost = Math.max(0, Math.trunc(Number(b.days_lost) || 0));
+  if ("leave_id" in b) e.leave_id = hsId(b, "leave_id");
+  if ("client_notified_at" in b) e.deadlines.client_notified_at = hsDateTime(b, "client_notified_at");
+  hsLog("event", e.id, ctx.user.id, "write", before !== hsCriticality(e) ? "criticality" : null, before !== hsCriticality(e) ? before : null, before !== hsCriticality(e) ? hsCriticality(e) : null);
   return hsEventDetail(ctx, e);
 });
 route("PUT", "/hsseq/events/:id/investigation", ["hsseq"], (ctx) => {
   const e = hsEventOf(ctx, ctx.params[0]);
-  if (e.status !== "investigation" || !e.investigation) throw hsRule("invalid_transition", "L'enquête ne se modifie qu'au statut « enquête ».");
+  if (e.status !== "investigation" || !e.investigation) throw hsRule("invalid_transition", "L'enquête se conduit au statut « Enquête ».");
   const b = ctx.body;
   const inv = e.investigation;
-  const strings = (v, max = 20) => (Array.isArray(v) ? v.map((x) => String(x).slice(0, 500)).filter(Boolean).slice(0, max) : []);
+  const lignes = (v) => (v ? String(v).split("\n").map((x) => x.trim()).filter(Boolean) : []);
   if ("method" in b) {
-    if (!["simple_analysis", "five_whys", "cause_tree"].includes(b.method)) throw badParam("Méthode inconnue.");
-    inv.method = b.method;
+    if (b.method && !HS_METHODS.includes(b.method)) throw hsBad("Méthode d'enquête inconnue.", ["method"]);
+    inv.method = b.method || null;
   }
-  if ("team_ids" in b) inv.team_ids = (b.team_ids || []).map(Number).filter((id) => userById(id));
-  if ("immediate_causes" in b) inv.immediate_causes = strings(b.immediate_causes);
-  if ("whys" in b) inv.whys = strings(b.whys, 5);
-  if ("tree" in b) inv.tree = (b.tree || []).slice(0, 60).map((n, i) => ({ id: Number(n.id) || i + 1, label: String(n.label || "").slice(0, 300), parent_id: n.parent_id ? Number(n.parent_id) : null, kind: n.kind === "permanent_fact" ? "permanent_fact" : "unusual_fact" }));
-  if ("factors_5m" in b) for (const k of Object.keys(hsEmptyFactors())) if (k in (b.factors_5m || {})) inv.factors_5m[k] = strings(b.factors_5m[k]);
-  for (const key of ["root_cause", "conclusion"]) if (key in b) inv[key] = b[key] ? String(b[key]).slice(0, 2000) : null;
-  hsLog("event", e.id, ctx.user.id, "Enquête mise à jour");
+  if ("team_ids" in b) inv.team_ids = hsIds(b, "team_ids").filter((id) => userById(id));
+  if ("immediate_causes" in b) inv.immediate_causes = Array.isArray(b.immediate_causes) ? b.immediate_causes.map(String) : lignes(b.immediate_causes);
+  for (const key of ["root_cause", "conclusion"]) if (key in b) inv[key] = hsText(b, key, 8000);
+  if ("whys" in b) {
+    if (!Array.isArray(b.whys ?? []) || (b.whys ?? []).length > 5) throw hsBad("Cinq pourquoi au plus.", ["whys"]);
+    inv.whys = (b.whys ?? []).map((w) => String(w).trim().slice(0, 1000)).filter(Boolean);
+  }
+  if ("tree" in b) {
+    if (!Array.isArray(b.tree) || b.tree.length > 200) throw hsBad("Arbre des causes invalide.", ["tree"]);
+    const faits = b.tree.map((f, i) => {
+      if (!f || !String(f.label ?? "").trim()) throw hsBad("Chaque fait de l'arbre a un libellé.", ["tree"]);
+      const kind = f.kind || "unusual_fact";
+      if (!["unusual_fact", "permanent_fact"].includes(kind)) throw hsBad("Fait : unusual_fact ou permanent_fact.", ["tree"]);
+      return { id: String(f.id ?? i + 1).slice(0, 40), label: String(f.label).trim().slice(0, 500), kind, parent_id: f.parent_id === null || f.parent_id === undefined || f.parent_id === "" ? null : String(f.parent_id).slice(0, 40) };
+    });
+    const ids = new Set(faits.map((f) => f.id));
+    if (faits.some((f) => f.parent_id && !ids.has(f.parent_id))) throw hsBad("Fait rattaché à un parent inconnu.", ["tree"]);
+    inv.tree = faits;
+  }
+  if ("factors_5m" in b) {
+    const f = b.factors_5m ?? {};
+    if (typeof f !== "object" || Array.isArray(f) || Object.keys(f).some((k) => !HS_FACTORS.includes(k))) throw hsBad("Facteurs 5M : environment, equipment, method, manpower, material.", ["factors_5m"]);
+    for (const k of HS_FACTORS) if (k in f) inv.factors_5m[k] = Array.isArray(f[k]) ? f[k].map(String) : lignes(f[k]);
+  }
+  hsLog("event", e.id, ctx.user.id, "write", null, null, null, hsNow(), "Enquête mise à jour");
   return hsEventDetail(ctx, e);
 });
 route("POST", "/hsseq/events/:id/costs", ["hsseq"], (ctx) => {
   const e = hsEventOf(ctx, ctx.params[0]);
-  const [kind, label, amount, date] = requireFields(ctx.body, "kind", "label", "amount", "date");
-  if (!HS_COST_KINDS.includes(kind)) throw badParam("Nature de coût inconnue.");
-  if (!isDate(String(date))) throw badParam("Date invalide : date.");
-  const c = { id: ++HS.seq.cost, kind, label: String(label).slice(0, 200), amount: Math.round(numArg(amount, "amount")), date: String(date), finance_move: ctx.body.finance_move_id ? { id: Number(ctx.body.finance_move_id), name: moveById(Number(ctx.body.finance_move_id))?.name ?? "Pièce comptable" } : null };
-  e.costs.push(c);
-  hsLog("event", e.id, ctx.user.id, "Ajout d'un coût", "total_cost", null, sum(e.costs, (x) => x.amount));
+  if (e.status === "closed") throw hsRule("invalid_transition", "Événement clôturé : rouvrez-le avant d'ajouter un coût.");
+  const [kind, amount] = requireFields(ctx.body, "kind", "amount");
+  if (!HS_COST_KINDS.includes(kind)) throw hsBad("Nature de coût inconnue.", ["kind"]);
+  const montant = cleanNumber(amount);
+  if (!Number.isFinite(montant)) throw hsBad("Nombre invalide : amount.", ["amount"]);
+  const date = ctx.body.date ? String(ctx.body.date).slice(0, 10) : TODAY;
+  if (!isDate(date)) throw hsBad("Date invalide : date.", ["date"]);
+  e.costs.push({ id: ++HS.seq.cost, kind, label: hsText(ctx.body, "label", 300), amount: montant, date, finance_move_id: hsId(ctx.body, "finance_move_id") });
+  hsLog("event", e.id, ctx.user.id, "cost", null, null, null, hsNow(), `${kind} : ${fmtInt(montant)} GNF`);
   return hsEventDetail(ctx, e);
 });
 route("DELETE", "/hsseq/events/:id/costs/:id", ["hsseq"], (ctx) => {
   const e = hsEventOf(ctx, ctx.params[0]);
-  if (!e.costs.some((c) => c.id === ctx.params[1])) throw notFound("Coût introuvable.");
-  e.costs = e.costs.filter((c) => c.id !== ctx.params[1]);
-  hsLog("event", e.id, ctx.user.id, "Retrait d'un coût", "total_cost", null, sum(e.costs, (x) => x.amount));
+  if (e.status === "closed") throw hsRule("invalid_transition", "Événement clôturé : rouvrez-le avant de retirer un coût.");
+  const c = e.costs.find((x) => x.id === ctx.params[1]);
+  if (!c) throw notFound("Coût introuvable.");
+  e.costs = e.costs.filter((x) => x !== c);
+  hsLog("event", e.id, ctx.user.id, "cost_removed", null, null, null, hsNow(), `${c.kind} : ${fmtInt(c.amount)} GNF`);
   return hsEventDetail(ctx, e);
 });
 route("POST", "/hsseq/events/:id/:action", ["hsseq"], (ctx) => {
-  const e = hsEventOf(ctx, ctx.params[0]);
   const action = ctx.params[1];
+  if (!["classify", "investigate", "plan", "close", "reopen"].includes(action)) throw notFound("Transition inconnue.");
+  const e = hsEventOf(ctx, ctx.params[0]);
   const b = ctx.body;
   const now = hsNow();
-  if (!["classify", "investigate", "plan", "close", "reopen"].includes(action)) throw notFound("Transition inconnue.");
-  if (!hsEventTransitions(ctx, e).includes(action)) {
-    if (action === "close" && e.status === "actions") throw hsRule("actions_open", "Toutes les actions de l'événement doivent être closes ou annulées avant sa clôture.");
-    if (action === "plan" && e.status === "investigation") throw hsRule("root_cause_missing", "Renseignez la cause racine avant de passer aux actions.");
-    throw hsRule("invalid_transition", `Transition impossible depuis le statut « ${HS_STATUS_LABELS[e.status]} ».`);
-  }
+  const permises = { reported: ["classify"], classified: ["investigate", ...(hsLevel(hsCriticality(e)) === "low" && !hsEventActions(e).length ? ["close"] : [])], investigation: ["plan"], actions: ["close"], closed: ["reopen"] }[e.status];
+  if (!permises.includes(action)) throw hsRule("invalid_transition", `Transition « ${action} » impossible depuis le statut « ${HS_STATUS_LABELS[e.status]} ».`);
   if (action === "classify") {
-    requireFields(b, "type", "domain", "actual_severity", "potential_severity", "probability");
-    if (!(b.type in HS_TYPES)) throw badParam("Type d'événement inconnu.");
-    if (!HS_DOMAINS.includes(b.domain)) throw badParam("Domaine inconnu.");
-    hsClassify(e, ctx.user.id, now, {
-      type: b.type, domain: b.domain, actual_severity: hsScore(b.actual_severity, "actual_severity"), potential_severity: hsScore(b.potential_severity, "potential_severity"),
-      probability: hsScore(b.probability, "probability"), lost_time: "lost_time" in b ? Boolean(b.lost_time) : e.lost_time, days_lost: "days_lost" in b ? Math.max(0, Number(b.days_lost) || 0) : e.days_lost,
-      vehicle_immobilized: Boolean(b.vehicle_immobilized),
-    });
+    const values = {};
+    for (const key of ["actual_severity", "potential_severity", "probability"]) {
+      if (b[key] === undefined || b[key] === null || b[key] === "") continue;
+      const n = Number(b[key]);
+      if (!Number.isInteger(n) || n < 1 || n > 5) throw hsBad("Gravités et probabilité se notent de 1 à 5.", [key]);
+      values[key] = n;
+    }
+    if (b.type) {
+      if (!(b.type in HS_TYPES)) throw hsBad("Type d'événement inconnu.", ["type"]);
+      values.type = b.type;
+    }
+    if (b.domain) {
+      if (!HS_DOMAINS.includes(b.domain)) throw hsBad("Domaine inconnu.", ["domain"]);
+      values.domain = b.domain;
+    }
+    if ("lost_time" in b) values.lost_time = Boolean(b.lost_time);
+    if ("days_lost" in b) values.days_lost = Math.max(0, Math.trunc(Number(b.days_lost) || 0));
+    const manque = ["potential_severity", "probability"].filter((k) => !(values[k] ?? e[k]));
+    if (manque.length) throw hsMissing("Gravité potentielle et probabilité sont à noter pour classer.", manque);
+    hsClassify(e, ctx.user.id, now, values);
   } else if (action === "investigate") {
-    const level = hsLevel(hsCriticality(e));
-    const method = b.method ?? HS_LEVELS.find((l) => l.level === level)?.method ?? "simple_analysis";
-    if (!["simple_analysis", "five_whys", "cause_tree"].includes(method)) throw badParam("Méthode inconnue.");
-    e.investigation = { method, team_ids: (b.team_ids || [ctx.user.id]).map(Number), opened_at: now, due_date: e.deadlines.investigation_due ?? addDays(TODAY, 15), concluded_at: null, immediate_causes: [], whys: [], tree: [], factors_5m: hsEmptyFactors(), root_cause: null, conclusion: null };
+    if (b.method && !HS_METHODS.includes(b.method)) throw hsBad("Méthode d'enquête inconnue.", ["method"]);
+    const team = "team_ids" in b ? hsIds(b, "team_ids").filter((id) => userById(id)) : null;
+    e.investigation = e.investigation ?? { method: null, team_ids: [], opened_at: now, due_date: null, concluded_at: null, immediate_causes: [], whys: [], tree: [], factors_5m: Object.fromEntries(HS_FACTORS.map((k) => [k, []])), root_cause: null, conclusion: null };
+    Object.assign(e.investigation, { method: b.method || e.investigation.method || hsLevelMethod(hsLevel(hsCriticality(e))), opened_at: now, ...(team ? { team_ids: team } : {}) });
     e.status = "investigation";
-    hsLog("event", e.id, ctx.user.id, "Ouverture de l'enquête", "status", "classified", "investigation");
+    hsLog("event", e.id, ctx.user.id, "investigate", "status", "classified", "investigation");
   } else if (action === "plan") {
+    if (!e.investigation?.root_cause?.trim()) throw hsRule("root_cause_missing", "Renseignez la cause racine avant de passer aux actions.", { fields: ["root_cause"] });
     e.investigation.concluded_at = now;
     e.status = "actions";
-    hsLog("event", e.id, ctx.user.id, "Passage aux actions", "status", "investigation", "actions");
+    hsLog("event", e.id, ctx.user.id, "plan", "status", "investigation", "actions");
   } else if (action === "close") {
+    const ouvertes = hsEventActions(e).filter(hsActionOpen);
+    if (ouvertes.length) throw hsRule("actions_open", `Actions ni closes ni annulées : ${ouvertes.map((a) => a.reference).join(", ")}.`);
     const before = e.status;
     Object.assign(e, { status: "closed", closed_at: now, closed_by: ctx.user.id });
-    hsLog("event", e.id, ctx.user.id, "Clôture", "status", before, "closed");
+    hsLog("event", e.id, ctx.user.id, "close", "status", before, "closed");
   } else {
-    if (!b.reason || String(b.reason).trim().length < 5) throw hsRule("reason_required", "Indiquez le motif de la réouverture.", { fields: ["reason"] });
-    e.status = hsEventActions(e).length ? "actions" : e.investigation ? "investigation" : "classified";
-    Object.assign(e, { closed_at: null, closed_by: null });
-    hsLog("event", e.id, ctx.user.id, `Réouverture : ${String(b.reason).slice(0, 300)}`, "status", "closed", e.status);
+    if (!String(b.reason ?? "").trim()) throw hsRule("reason_required", "Le motif de la réouverture est obligatoire.", { fields: ["reason"] });
+    e.status = hsEventActions(e).length ? "actions" : e.investigation?.opened_at ? "investigation" : "classified";
+    Object.assign(e, { closed_at: null, closed_by: null, reopen_reason: String(b.reason).trim() });
+    hsLog("event", e.id, ctx.user.id, "reopen", "status", "closed", e.status, now, String(b.reason).trim());
   }
   return hsEventDetail(ctx, e);
 });
 
-/* Actions */
+/* Actions (tout compte interne : ses actions ; lecture intégrale pour admin, direction, hsseq) */
 function hsActionOf(ctx, id) {
   const a = HS.actions.find((x) => x.id === id);
   if (!a || !hsCanSeeAction(ctx, a)) throw notFound("Action introuvable.");
   return a;
 }
-const HS_ACTION_SORTS = { due_date: (a) => a.due_date, reference: (a) => a.reference, status: (a) => ["todo", "in_progress", "to_verify", "closed", "cancelled"].indexOf(a.status), days_overdue: (a) => hsActionLine(a).days_overdue };
+const HS_ACTION_SORTS = { due_date: (a) => a.due_date, reference: (a) => a.reference, status: (a) => a.status, created_at: (a) => a.created_at };
 function hsActionList(ctx) {
   const q = ctx.query;
-  const statuses = q.status ? q.status.split(",") : null;
+  const statuses = hsList(q.status);
   const s = (q.search || "").toLowerCase();
-  return HS.actions.filter((a) => {
-    const line = hsActionLine(a);
-    return hsCanSeeAction(ctx, a) && hsFilter(ctx, q, a.site_id, hsSite(a.site_id)?.default_vehicle_kind) && (!statuses || statuses.includes(a.status)) && (!q.origin || a.origin === q.origin)
-      && (!q.owner_id || a.owner_id === intArg(q, "owner_id")) && (q.mine !== "1" || a.owner_id === ctx.user.id) && (q.overdue !== "1" || line.overdue)
-      && (!q.due_before || a.due_date <= q.due_before) && (!q.event_id || (a.origin === "event" && a.origin_id === intArg(q, "event_id")))
-      && (!s || [a.reference, a.description].some((x) => x.toLowerCase().includes(s)));
-  });
+  return HS.actions.filter((a) =>
+    hsCanSeeAction(ctx, a) && (!q.company_id || Number(q.company_id) === 1) && (!statuses || statuses.includes(a.status)) && (!q.origin || a.origin === q.origin)
+    && (!q.owner_id || a.owner_id === hsId(q, "owner_id")) && (!["1", "true"].includes(q.mine) || a.owner_id === ctx.user.id)
+    && (!["1", "true"].includes(q.overdue) || hsDaysOverdue(a) > 0) && (!q.site_id || a.site_id === hsId(q, "site_id"))
+    && (!q.due_before || a.due_date <= dateArg(q, "due_before")) && (!q.event_id || a.event_id === hsId(q, "event_id"))
+    && (!s || [a.reference, a.description].some((x) => x.toLowerCase().includes(s))));
 }
-route("GET", "/hsseq/actions", HS_READ, (ctx) => {
+route("GET", "/hsseq/actions", null, (ctx) => {
+  hsInternal(ctx);
   const list = hsSort(hsActionList(ctx), ctx.query.sort, HS_ACTION_SORTS, "due_date");
   const byStatus = { todo: 0, in_progress: 0, to_verify: 0, closed: 0, cancelled: 0 };
   for (const a of list) byStatus[a.status]++;
-  return hsPage(ctx, list, { by_status: byStatus, overdue: list.filter((a) => hsActionLine(a).overdue).length, verifications_due: list.filter((a) => a.status === "to_verify" && a.verification_date <= TODAY).length }, hsActionLine);
+  return hsPage(ctx, list, { by_status: byStatus, overdue: list.filter((a) => hsDaysOverdue(a) > 0).length, verifications_due: list.filter((a) => a.status === "to_verify" && a.verification_date && a.verification_date <= TODAY).length }, hsActionLine);
 });
 route("GET", "/hsseq/actions/export.xlsx", HS_READ, (ctx) => {
-  const list = hsSort(hsActionList(ctx), ctx.query.sort, HS_ACTION_SORTS, "due_date");
-  const rows = list.map((a) => { const l = hsActionLine(a); return [a.reference, a.description, l.origin_ref?.reference ?? "", userName(a.owner_id), a.due_date, HS_ACTION_LABELS[a.status], l.overdue ? l.days_overdue : 0, a.verification_date ?? "", a.effective === null ? "" : a.effective ? "Oui" : "Non"]; });
-  return fileReply(xlsxBuffer([{ name: "Actions", rows: [["Référence", "Action", "Origine", "Responsable", "Échéance", "Statut", "Jours de retard", "Vérification à J+90", "Efficace"], ...rows] }]), XLSX, `actions_hsseq_${TODAY}.xlsx`);
+  const list = hsSort(hsActionList(ctx), null, HS_ACTION_SORTS, "due_date");
+  const rows = list.map((a) => [a.reference, a.origin, hsActionOriginLabel(a)?.split(" ")[0] ?? "", a.description, a.control_level ?? "", userName(a.owner_id), a.due_date, HS_ACTION_LABELS[a.status], hsDaysOverdue(a), a.verification_date ?? "", a.verified_at ? (a.effective ? "Oui" : "Non") : "", a.estimated_cost ?? 0, hsSite(a.site_id)?.name ?? ""]);
+  return fileReply(xlsxBuffer([{ name: "Plan d'actions HSSEQ", rows: [["Référence", "Origine", "Fiche d'origine", "Action", "Niveau de maîtrise", "Responsable", "Échéance", "Statut", "Jours de retard", "Vérification d'efficacité", "Efficace", "Coût estimé", "Site"], ...rows] }]), XLSX, `plan_actions_hsseq_${TODAY.replaceAll("-", "")}.xlsx`);
 });
-route("GET", "/hsseq/actions/:id", HS_READ, (ctx) => hsActionDetail(ctx, hsActionOf(ctx, ctx.params[0])));
-function hsActionValues(ctx, a, data, creating = false) {
-  const hs = hsIs(ctx, "hsseq");
-  if ("description" in data) a.description = String(data.description || "").slice(0, 1000);
-  if ("expected_evidence" in data) a.expected_evidence = String(data.expected_evidence || "").slice(0, 500);
+route("GET", "/hsseq/actions/:id", null, (ctx) => {
+  hsInternal(ctx);
+  return hsActionDetail(ctx, hsActionOf(ctx, ctx.params[0]));
+});
+function hsActionValues(a, data) {
+  if ("description" in data) {
+    a.description = hsText(data, "description", 4000);
+    if (!a.description) throw hsMissing("Description de l'action manquante.", ["description"]);
+  }
   if ("control_level" in data) {
-    if (!HS_CONTROL_LEVELS.includes(data.control_level)) throw badParam("Niveau de maîtrise inconnu.");
-    a.control_level = data.control_level;
+    if (data.control_level && !HS_CONTROL_LEVELS.includes(data.control_level)) throw hsBad("Niveau de maîtrise inconnu.", ["control_level"]);
+    a.control_level = data.control_level || null;
   }
-  if ("estimated_cost" in data) a.estimated_cost = data.estimated_cost === null || data.estimated_cost === "" ? null : Math.round(numArg(data.estimated_cost, "estimated_cost"));
-  if ((creating || hs) && "owner_id" in data) {
-    if (!userById(Number(data.owner_id))) throw hsRule("invalid_parameter", "Responsable inconnu.", { fields: ["owner_id"] });
-    a.owner_id = Number(data.owner_id);
+  if ("expected_evidence" in data) a.expected_evidence = hsText(data, "expected_evidence", 2000);
+  if ("estimated_cost" in data) {
+    const n = data.estimated_cost === null || data.estimated_cost === "" ? 0 : cleanNumber(data.estimated_cost);
+    if (!Number.isFinite(n)) throw hsBad("Nombre invalide : estimated_cost.", ["estimated_cost"]);
+    if (Math.max(n, 0) !== (a.estimated_cost ?? 0)) {
+      // Un nouveau coût estimé annule la validation de la direction ; une action coûteuse démarrée revient « à faire ».
+      Object.assign(a, { estimated_cost: Math.max(n, 0), approved_at: null, approved_by: null, approved_cost: null });
+      if (a.status === "in_progress" && hsIsCostly(a)) Object.assign(a, { status: "todo", started_at: null });
+    }
   }
-  if ((creating || hs) && "due_date" in data) {
-    if (!isDate(String(data.due_date))) throw badParam("Date invalide : due_date.");
-    a.due_date = String(data.due_date);
+  if ("owner_id" in data) {
+    const u = userById(hsId(data, "owner_id"));
+    if (!u || !u.active || u.profiles.every((p) => p === "porteur") || !u.companies.includes(1)) throw hsRule("business_rule", "Responsable : un compte interne de la société.", { fields: ["owner_id"] });
+    a.owner_id = u.id;
+  }
+  if ("due_date" in data) {
+    const d = dateArg(data, "due_date");
+    if (!d) throw hsMissing("Échéance manquante.", ["due_date"]);
+    a.due_date = d;
   }
 }
 route("POST", "/hsseq/actions", ["hsseq"], (ctx) => {
   const b = ctx.body;
-  requireFields(b, "origin", "description", "control_level", "owner_id", "due_date", "expected_evidence");
-  if (!HS_ORIGINS.includes(b.origin)) throw badParam("Origine inconnue.");
+  requireFields(b, "description", "owner_id", "due_date");
+  const origin = b.origin || "event";
+  if (!HS_ORIGINS.includes(origin)) throw hsBad("Origine inconnue.", ["origin"]);
+  const originId = hsId(b, "origin_id");
   let site = 1;
-  if (b.origin === "event") {
-    const e = HS.events.find((x) => x.id === Number(b.origin_id));
-    if (!e) throw hsRule("invalid_parameter", "Événement d'origine introuvable.", { fields: ["origin_id"] });
-    site = e.site_id;
-  } else if (b.origin === "check") {
-    const c = HS.checks.find((x) => x.id === Number(b.origin_id));
-    if (!c) throw hsRule("invalid_parameter", "Contrôle d'origine introuvable.", { fields: ["origin_id"] });
-    site = c.site_id;
+  if (origin === "event" || origin === "check") {
+    if (!originId) throw hsMissing("Fiche d'origine manquante.", ["origin_id"]);
+    const source = origin === "event" ? HS.events.find((x) => x.id === originId) : HS.checks.find((x) => x.id === originId);
+    if (!source) throw notFound("Fiche d'origine introuvable.");
+    if (origin === "event" && source.status === "closed") throw hsRule("invalid_transition", "Événement clôturé : rouvrez-le avant d'y ajouter une action.");
+    site = source.site_id ?? 1;
   }
-  const a = hsNewAction({ description: "", origin: b.origin, origin_id: b.origin_id ? Number(b.origin_id) : null, control_level: b.control_level, owner_id: Number(b.owner_id), due_date: TODAY, created_by: ctx.user.id, site_id: site });
-  hsActionValues(ctx, a, b, true);
-  hsLog("action", a.id, ctx.user.id, "Création");
+  const a = hsNewAction({ description: "", origin, origin_id: originId, owner_id: ctx.user.id, due_date: TODAY, created_by: ctx.user.id, site_id: site });
+  a.expected_evidence = null;
+  hsActionValues(a, b);
+  hsLog("action", a.id, ctx.user.id, "create");
   return hsActionDetail(ctx, a);
 });
-route("PATCH", "/hsseq/actions/:id", HS_READ, (ctx) => {
+route("PATCH", "/hsseq/actions/:id", null, (ctx) => {
+  hsInternal(ctx);
   const a = hsActionOf(ctx, ctx.params[0]);
-  if (!hsActionDetail(ctx, a).rights.can_edit) throw hsForbidden("Seuls le responsable de l'action et le Responsable HSSEQ la mettent à jour.");
+  if (!hsActionDetail(ctx, a).rights.can_edit) throw hsForbidden("Seuls le responsable de l'action et le Responsable HSSEQ la mettent à jour, tant qu'elle n'est ni close ni annulée.");
+  if (["owner_id", "due_date", "estimated_cost"].some((k) => k in ctx.body) && !hsIs(ctx, "hsseq")) throw hsForbidden("Responsable, échéance et coût estimé d'une action : réservés au Responsable HSSEQ.");
   const before = a.due_date;
-  hsActionValues(ctx, a, ctx.body);
-  hsLog("action", a.id, ctx.user.id, "Mise à jour", before !== a.due_date ? "due_date" : null, before !== a.due_date ? before : null, before !== a.due_date ? a.due_date : null);
+  hsActionValues(a, ctx.body);
+  hsLog("action", a.id, ctx.user.id, "write", before !== a.due_date ? "due_date" : null, before !== a.due_date ? before : null, before !== a.due_date ? a.due_date : null);
   return hsActionDetail(ctx, a);
 });
-route("POST", "/hsseq/actions/:id/:action", HS_READ, (ctx) => {
-  const a = hsActionOf(ctx, ctx.params[0]);
+route("POST", "/hsseq/actions/:id/:action", null, (ctx) => {
+  hsInternal(ctx);
   const action = ctx.params[1];
+  if (!["start", "close", "verify", "approve", "cancel", "reopen"].includes(action)) throw notFound("Transition inconnue.");
+  const a = hsActionOf(ctx, ctx.params[0]);
   const b = ctx.body;
   const now = hsNow();
-  if (!["start", "close", "verify", "approve", "cancel", "reopen"].includes(action)) throw notFound("Transition inconnue.");
-  const allowed = hsActionTransitions(ctx, a);
-  if (!allowed.includes(action)) {
-    if (action === "start" && a.status === "todo" && hsNeedsApproval(a) && (hsIs(ctx, "hsseq") || a.owner_id === ctx.user.id)) throw hsRule("approval_required", "Action coûteuse : la validation de la direction précède le démarrage.");
-    if (action === "verify" && a.status === "to_verify" && hsIs(ctx, "hsseq")) throw hsRule("verification_too_early", `La vérification d'efficacité se fait à partir du ${frDate(a.verification_date)} (J+90).`);
-    if (["start", "close", "verify", "approve", "cancel", "reopen"].includes(action) && !hsIs(ctx, "hsseq") && a.owner_id !== ctx.user.id && !(action === "approve" && hsIs(ctx, "direction"))) throw hsForbidden();
-    throw hsRule("invalid_transition", `Transition impossible depuis le statut « ${HS_ACTION_LABELS[a.status]} ».`);
-  }
+  const owner = a.owner_id === ctx.user.id;
+  const hs = hsIs(ctx, "hsseq");
+  if (["start", "close"].includes(action) && !(owner || hs)) throw hsForbidden("Le responsable de l'action ou le Responsable HSSEQ la démarre et la clôt.");
+  if (["verify", "cancel", "reopen"].includes(action) && !hs) throw hsForbidden("Réservé au Responsable HSSEQ.");
+  if (action === "approve" && !hsIs(ctx, "direction")) throw hsForbidden("La validation d'une action coûteuse revient à la direction.");
+  if (action === "verify" && !("effective" in b)) throw hsMissing("Efficace ou non ?", ["effective"]);
+  const permises = { todo: ["start", "cancel", ...(hsNeedsApproval(a) ? ["approve"] : [])], in_progress: ["close", "cancel"], to_verify: ["verify", "cancel"], closed: ["reopen"], cancelled: ["reopen"] }[a.status];
+  if (!permises.includes(action)) throw hsRule("invalid_transition", `Transition « ${action} » impossible depuis le statut « ${HS_ACTION_LABELS[a.status]} ».`);
   const before = a.status;
-  if (action === "start") a.status = "in_progress";
-  else if (action === "close") {
-    if (!HS.attachments.some((x) => x.model === "action" && x.object_id === a.id)) throw hsRule("proof_required", "Joignez une preuve de réalisation avant de clore l'action.");
-    a.done_at = TODAY;
-    if (hsActionLine(a).verification_required) Object.assign(a, { status: "to_verify", verification_date: addDays(TODAY, 90) });
+  if (action === "start") {
+    if (hsNeedsApproval(a)) throw hsRule("approval_required", "Action coûteuse : la direction la valide avant son démarrage.");
+    Object.assign(a, { status: "in_progress", started_at: now });
+  } else if (action === "close") {
+    if (!HS.attachments.some((x) => x.model === "action" && x.object_id === a.id)) throw hsRule("proof_required", "Joignez au moins une preuve de réalisation avant de clore l'action.");
+    a.done_at = now;
+    if (hsActionLine(a).verification_required) Object.assign(a, { status: "to_verify", verification_date: addDays(TODAY, hsSettings().verification_days) });
     else Object.assign(a, { status: "closed", closed_at: now });
   } else if (action === "verify") {
-    if (typeof b.effective !== "boolean") throw new ApiError(400, "missing_fields", "Champs obligatoires manquants.", { fields: ["effective"] });
-    Object.assign(a, { verified_at: now, verified_by: ctx.user.id, effective: b.effective, verification_comment: b.comment ? String(b.comment).slice(0, 1000) : null });
-    if (b.effective) Object.assign(a, { status: "closed", closed_at: now });
+    if (a.verification_date && TODAY < a.verification_date) throw hsRule("verification_too_early", `Vérification d'efficacité à partir du ${frDate(a.verification_date)}.`);
+    const values = { verified_at: now, verified_by: ctx.user.id, effective: Boolean(b.effective), verification_comment: hsText(b, "comment") };
+    if (b.effective) Object.assign(a, values, { status: "closed", closed_at: now });
     else {
-      if (!isDate(String(b.new_due_date || ""))) throw new ApiError(400, "missing_fields", "Nouvelle échéance obligatoire pour une action inefficace.", { fields: ["new_due_date"] });
-      Object.assign(a, { status: "in_progress", due_date: String(b.new_due_date), done_at: null, verification_date: null });
+      const d = dateArg(b, "new_due_date");
+      if (!d) throw hsMissing("Action inefficace : fixez une nouvelle échéance.", ["new_due_date"]);
+      Object.assign(a, values, { status: "in_progress", due_date: d, done_at: null, verification_date: null });
     }
-  } else if (action === "approve") Object.assign(a, { approved_at: now, approved_by: ctx.user.id });
+  } else if (action === "approve") Object.assign(a, { approved_at: now, approved_by: ctx.user.id, approved_cost: a.estimated_cost });
   else {
-    if (!b.reason || String(b.reason).trim().length < 5) throw hsRule("reason_required", "Indiquez le motif.", { fields: ["reason"] });
-    a.status = action === "cancel" ? "cancelled" : "in_progress";
-    if (action === "reopen") Object.assign(a, { closed_at: null, done_at: null });
+    if (!String(b.reason ?? "").trim()) throw hsRule("reason_required", action === "cancel" ? "Le motif de l'annulation est obligatoire." : "Le motif de la réouverture est obligatoire.", { fields: ["reason"] });
+    if (action === "cancel") Object.assign(a, { status: "cancelled", cancel_reason: String(b.reason).trim() });
+    else Object.assign(a, { status: "in_progress", closed_at: null, reopen_reason: String(b.reason).trim() });
   }
-  hsLog("action", a.id, ctx.user.id, { start: "Démarrage", close: "Clôture avec preuve", verify: "Vérification d'efficacité", approve: "Validation de la direction", cancel: "Annulation", reopen: "Réouverture" }[action], "status", before, a.status);
+  hsLog("action", a.id, ctx.user.id, action, "status", before, a.status, now, ["cancel", "reopen"].includes(action) ? String(b.reason).trim() : null);
   return hsActionDetail(ctx, a);
 });
 
-/* Contrôles */
+/* Contrôles : grilles */
 route("GET", "/hsseq/checks/templates", [...HS_READ, "conducteur"], (ctx) => {
   const q = ctx.query;
-  return HS.templates.filter((t) => (!q.vehicle_kind || t.vehicle_kind === q.vehicle_kind) && (!q.kind || t.kind === q.kind) && (q.active === undefined || String(t.active) === q.active)).map(hsTemplateRow);
+  const active = String(q.active ?? "1").toLowerCase();
+  const config = hasProfile(ctx, HS_SETUP);
+  return HS.templates.filter((t) => (!q.vehicle_kind || t.vehicle_kind === q.vehicle_kind) && (!q.kind || t.kind === q.kind)
+    && (["all", ""].includes(active) || (["0", "false"].includes(active) ? !t.active : t.active))).map((t) => hsTemplateRow(t, config));
 });
 function hsTemplateValues(t, data) {
-  if ("name" in data) t.name = String(data.name || "").slice(0, 120);
+  if ("name" in data) t.name = hsText(data, "name", 200) ?? "";
   if ("kind" in data) {
-    if (!["pre_departure", "unloading", "mine_site"].includes(data.kind)) throw badParam("Nature de contrôle inconnue.");
+    if (!["pre_departure", "unloading", "mine_site"].includes(data.kind)) throw hsBad("Nature de grille inconnue.", ["kind"]);
     t.kind = data.kind;
   }
   if ("vehicle_kind" in data) {
-    if (!["tanker", "tipper"].includes(data.vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+    if (!["tanker", "tipper"].includes(data.vehicle_kind)) throw hsBad("Type de véhicule inconnu.", ["vehicle_kind"]);
     t.vehicle_kind = data.vehicle_kind;
   }
   if ("active" in data) t.active = Boolean(data.active);
-  if (Array.isArray(data.items)) {
-    t.items = data.items.map((it, i) => ({ id: it.id && t.items.some((x) => x.id === Number(it.id)) ? Number(it.id) : ++HS.seq.item, label: String(it.label || "").slice(0, 200), blocking: Boolean(it.blocking), sequence: Number(it.sequence) || (i + 1) * 10, linked_to: it.linked_to === "breath_test" ? "breath_test" : null }));
-    if (t.items.some((it) => !it.label)) throw new ApiError(400, "missing_fields", "Chaque point porte un libellé.", { fields: ["items"] });
-  }
-  if (!t.name) throw new ApiError(400, "missing_fields", "Champs obligatoires manquants.", { fields: ["name"] });
+}
+function hsItemValues(it) {
+  if (!it || typeof it !== "object" || !String(it.label ?? "").trim()) throw hsBad("Chaque point de la grille a un libellé.", ["items"]);
+  if (it.linked_to && it.linked_to !== "breath_test") throw hsBad("Seul le formulaire d'alcootest se relie à un point.", ["items"]);
+  return { label: String(it.label).trim().slice(0, 300), blocking: Boolean(it.blocking), sequence: Number(it.sequence) || 10, linked_to: it.linked_to || null, active: it.active === undefined ? true : Boolean(it.active) };
 }
 route("POST", "/hsseq/checks/templates", HS_SETUP, (ctx) => {
+  requireFields(ctx.body, "name", "vehicle_kind");
   const t = { id: ++HS.seq.template, name: "", kind: "pre_departure", vehicle_kind: "tanker", version: 1, active: true, items: [], updated_at: hsNow(), updated_by: ctx.user.id };
   hsTemplateValues(t, ctx.body);
+  t.items = (ctx.body.items ?? []).map((it) => ({ id: ++HS.seq.item, ...hsItemValues(it) }));
   HS.templates.push(t);
-  return hsTemplateRow(t);
+  return hsTemplateRow(t, true);
 });
+/** Grille et points en une seule version : cités par id mis à jour, nouveaux créés, absents archivés. */
 route("PATCH", "/hsseq/checks/templates/:id", HS_SETUP, (ctx) => {
   const t = HS.templates.find((x) => x.id === ctx.params[0]);
   if (!t) throw notFound("Grille introuvable.");
   hsTemplateValues(t, ctx.body);
+  if ("items" in ctx.body) {
+    const existants = t.items.map((x) => x.id);
+    const gardes = new Set();
+    for (const it of ctx.body.items ?? []) {
+      const values = hsItemValues(it);
+      const id = it && typeof it === "object" ? hsId(it, "id") : null;
+      if (id) {
+        const courant = t.items.find((x) => x.id === id);
+        if (!courant) throw businessRule("Point d'une autre grille.");
+        Object.assign(courant, values);
+        gardes.add(id);
+      } else t.items.push({ id: ++HS.seq.item, ...values });
+    }
+    // Un point retiré s'archive, jamais supprimé : un appareil hors ligne peut encore le répondre sur sa version.
+    for (const it of t.items) if (existants.includes(it.id) && !gardes.has(it.id)) it.active = false;
+  }
   Object.assign(t, { version: t.version + 1, updated_at: hsNow(), updated_by: ctx.user.id });
-  return hsTemplateRow(t);
+  return hsTemplateRow(t, true);
 });
+
+/* Contrôles et non-conformités */
 route("GET", "/hsseq/checks/nonconformities", HS_READ, (ctx) => {
   const q = ctx.query;
-  const list = HS.ncs.filter((n) => hsSiteOk(ctx, n.site_id) && hsFilter(ctx, q, n.site_id, hsKind(hsVehicle(n.vehicle_id))) && (!q.status || n.status === q.status) && (q.blocking !== "1" || n.blocking) && (!q.vehicle_id || n.vehicle_id === intArg(q, "vehicle_id")))
-    .sort((a, b) => b.found_at.localeCompare(a.found_at));
+  const statuses = hsList(q.status);
+  if (q.sort && !["found_at", "-found_at"].includes(q.sort)) throw hsBad("Tri inconnu.", ["sort"]);
+  const list = HS.ncs.filter((n) => hsSiteOk(ctx, n.site_id) && hsFilter(ctx, q, n.site_id, null) && (!statuses || statuses.includes(n.status)) && (!["1", "true"].includes(q.blocking) || n.blocking) && (!q.vehicle_id || n.vehicle_id === hsId(q, "vehicle_id")))
+    .sort((a, b) => (q.sort === "found_at" ? a.found_at.localeCompare(b.found_at) : b.found_at.localeCompare(a.found_at)) || b.id - a.id);
   return hsPage(ctx, list, { open: list.filter((n) => n.status === "open").length, blocking_open: list.filter((n) => n.status === "open" && n.blocking).length }, (n) => hsNcRow(ctx, n));
 });
+const HS_CHECK_SORTS = { reported_at: (c) => c.reported_at, result: (c) => c.result, reference: (c) => c.reference };
 route("GET", "/hsseq/checks", [...HS_READ, "conducteur"], (ctx) => {
   const q = ctx.query;
   const from = dateArg(q, "date_from");
   const to = dateArg(q, "date_to");
-  const list = HS.checks.filter((c) => hsCanSeeCheck(ctx, c) && hsFilter(ctx, q, c.site_id, c.vehicle_kind) && (!from || c.reported_at.slice(0, 10) >= from) && (!to || c.reported_at.slice(0, 10) <= to)
-    && ["vehicle_id", "rotation_id", "driver_id"].every((k) => !q[k] || c[k] === intArg(q, k)) && (!q.result || c.result === q.result))
-    .sort((a, b) => b.reported_at.localeCompare(a.reported_at) || b.id - a.id);
-  const departures = [];
-  for (let d = from ?? `${TODAY.slice(0, 7)}-01`; d <= (to ?? TODAY) && d <= TODAY; d = addDays(d, 1)) {
-    for (const r of hsDepartureRotations(d)) {
-      const v = hsVehicle(r.vehicle_id);
-      if (v && hsFilter(ctx, q, hsVehicleSite(v), hsKind(v)) && hsSiteOk(ctx, hsVehicleSite(v))) departures.push(r);
-    }
-  }
+  const results = hsList(q.result);
+  const list = hsSort(HS.checks.filter((c) => hsCanSeeCheck(ctx, c) && hsFilter(ctx, q, c.site_id, c.vehicle_kind) && (!from || c.reported_at.slice(0, 10) >= from) && (!to || c.reported_at.slice(0, 10) <= to)
+    && ["vehicle_id", "rotation_id", "driver_id"].every((k) => !q[k] || c[k] === hsId(q, k)) && (!results || results.includes(c.result))), q.sort, HS_CHECK_SORTS, "-reported_at");
   const byResult = { compliant: 0, non_compliant: 0, blocking: 0 };
   for (const c of list) byResult[c.result]++;
-  return hsPage(ctx, list, { by_result: byResult, departures: departures.length, departures_checked: departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id)).length }, hsCheckLine);
+  const counts = { by_result: byResult };
+  if (hsScope(ctx) !== "self") {
+    // Départs de la période (rotations parties, validées ou facturées), mois courant par défaut.
+    const departures = [];
+    for (let d = from ?? `${TODAY.slice(0, 7)}-01`; d <= (to ?? TODAY) && d <= TODAY; d = addDays(d, 1)) {
+      for (const r of hsDepartureRotations(d)) {
+        const v = hsVehicle(r.vehicle_id);
+        if (v && ["en_route", "done", "invoiced"].includes(r.state) && (!q.site_id || hsVehicleSite(v) === Number(q.site_id)) && hsSiteOk(ctx, hsVehicleSite(v))) departures.push(r);
+      }
+    }
+    Object.assign(counts, { departures: departures.length, departures_checked: departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id && c.kind === "pre_departure")).length });
+  }
+  return hsPage(ctx, list, counts, hsCheckLine);
 });
 function hsCheckOf(ctx, id) {
   const c = HS.checks.find((x) => x.id === id);
@@ -8065,46 +8544,80 @@ function hsCheckOf(ctx, id) {
 route("GET", "/hsseq/checks/:id", [...HS_READ, "conducteur"], (ctx) => hsCheckDetail(ctx, hsCheckOf(ctx, ctx.params[0])));
 route("POST", "/hsseq/checks", HS_FIELD, (ctx) => {
   const b = ctx.body;
-  requireFields(b, "client_uuid", "template_id", "vehicle_id", "reported_at", "offline", "answers");
-  const existing = HS.checks.find((c) => c.client_uuid === String(b.client_uuid));
+  requireFields(b, "template_id", "answers");
+  const existing = hsExisting(ctx, HS.checks, b.client_uuid, (x) => x.performed_by);
   if (existing) return hsCheckDetail(ctx, existing);
-  const t = HS.templates.find((x) => x.id === Number(b.template_id) && x.active);
-  if (!t) throw hsRule("invalid_parameter", "Grille inconnue ou inactive.", { fields: ["template_id"] });
-  const v = hsVehicle(Number(b.vehicle_id));
-  if (!v) throw hsRule("invalid_parameter", "Véhicule inconnu.", { fields: ["vehicle_id"] });
-  if (hsKind(v) !== t.vehicle_kind) throw hsRule("vehicle_kind_mismatch", `La grille « ${t.name} » ne s'applique pas à ${v.name}.`);
-  if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Ce véhicule n'est pas rattaché à votre site.");
-  const rot = b.rotation_id ? hsRotation(Number(b.rotation_id)) : null;
-  if (b.rotation_id && !rot) throw hsRule("invalid_parameter", "Rotation inconnue.", { fields: ["rotation_id"] });
-  if (!Array.isArray(b.answers)) throw badParam("Réponses invalides.");
-  const values = new Map(b.answers.map((a) => [Number(a.item_id), a]));
-  const missing = t.items.filter((it) => !it.linked_to && !["ok", "not_ok", "na"].includes(values.get(it.id)?.answer)).map((it) => String(it.id));
-  if (missing.length) throw hsRule("incomplete_answers", "Chaque point de la grille attend une réponse.", { fields: missing });
-  const driverId = hsIs(ctx, "conducteur") && !hsIs(ctx, "hsseq") && !hsIs(ctx, "exploitation") ? hsMyDriver(ctx) : b.driver_id ? Number(b.driver_id) : rot?.driver_id ?? v.driver_id;
+  const t = HS.templates.find((x) => x.id === hsId(b, "template_id"));
+  if (!t || !t.active) throw hsRule("business_rule", "Grille inconnue ou retirée.", { fields: ["template_id"] });
+  const rotId = hsId(b, "rotation_id");
+  const rot = rotId ? hsRotation(rotId) : null;
+  if (rotId && !rot) throw notFound("Rotation introuvable.");
+  const vehicleId = hsId(b, "vehicle_id");
+  const v = rot ? hsVehicle(rot.vehicle_id) : vehicleId ? hsVehicle(vehicleId) : null;
+  if (vehicleId && !rot && !v) throw notFound("Ensemble introuvable.");
+  if (!v) throw hsMissing("Rotation ou ensemble à contrôler manquant.", ["vehicle_id"]);
+  if (rot && vehicleId && vehicleId !== rot.vehicle_id) throw hsRule("business_rule", "L'ensemble n'est pas celui de la rotation.", { fields: ["vehicle_id"] });
+  let driverId = hsId(b, "driver_id") ?? rot?.driver_id ?? v.driver_id ?? null;
+  const scope = hsScope(ctx);
+  if (scope === "self") {
+    const mine = hsMyDriver(ctx);
+    const conduit = rot ? rot.driver_id === mine : v.driver_id === mine || [...DB.rotations, ...HS.rotations].some((r) => r.vehicle_id === v.id && r.driver_id === mine && ["draft", "en_route"].includes(r.state));
+    if (!mine || !conduit) throw hsForbidden("Un conducteur ne contrôle que l'ensemble de ses propres rotations.");
+    driverId = mine;
+  } else if (scope === "site" && !hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Ensemble d'un autre site.");
+  if (!Array.isArray(b.answers)) throw hsBad("Réponse sans point.", ["answers"]);
+  for (const a of b.answers) {
+    if (!a || !a.item_id) throw hsBad("Réponse sans point.", ["answers"]);
+    if (!["ok", "not_ok", "na"].includes(a.answer)) throw hsBad("Réponse : ok, not_ok ou na.", ["answers"]);
+    if (!t.items.some((it) => it.id === Number(a.item_id))) throw hsBad(`Point ${a.item_id} absent de la grille.`, ["answers"]);
+  }
+  if (hsKind(v) !== t.vehicle_kind) throw hsRule("vehicle_kind_mismatch", `La grille « ${t.name} » vaut pour un autre type de véhicule que ${v.name}.`, { fields: ["template_id"] });
+  const version = hsId(b, "template_version") ?? t.version;
+  if (version < 1 || version > t.version) throw hsBad(`Version ${version} inconnue pour la grille « ${t.name} ».`, ["template_version"]);
+  const given = new Map(b.answers.map((a) => [Number(a.item_id), a]));
+  const missing = t.items.filter((it) => it.active !== false && !it.linked_to && !given.has(it.id)).map((it) => it.id);
+  if (missing.length) throw hsRule("incomplete_answers", "Chaque point de la grille attend sa réponse.", { fields: missing });
+  const lat = hsNum(b.latitude, "latitude");
+  const lon = hsNum(b.longitude, "longitude");
   const c = hsCreateCheck({
-    template: t, vehicle_id: v.id, rotation_id: rot?.id ?? null, driver_id: driverId, performed_by: ctx.user.id, reported_at: String(b.reported_at), synced_at: hsNow(), offline: Boolean(b.offline),
-    client_uuid: String(b.client_uuid).slice(0, 64), duration_s: b.duration_s ? Number(b.duration_s) : null, latitude: hsNum(b.latitude, "latitude"), longitude: hsNum(b.longitude, "longitude"), gps_accuracy: hsNum(b.gps_accuracy, "gps_accuracy"),
-    answers: b.answers.map((a) => ({ item_id: Number(a.item_id), answer: a.answer, comment: a.comment ? String(a.comment).slice(0, 500) : null })),
-    signature: b.signature?.name ? { name: String(b.signature.name).slice(0, 120), signed_at: String(b.reported_at) } : null,
+    template: t, template_version: version, vehicle_id: v.id, rotation_id: rot?.id ?? null, driver_id: driverId, performed_by: ctx.user.id, reported_at: hsReportedAt(b), synced_at: hsNow(), offline: Boolean(b.offline),
+    client_uuid: b.client_uuid ? String(b.client_uuid).slice(0, 64) : null, duration_s: b.duration_s ? Math.trunc(Number(b.duration_s)) : null, latitude: lat, longitude: lon, gps_accuracy: lat === null ? null : hsNum(b.gps_accuracy, "gps_accuracy"),
+    answers: b.answers.map((a) => ({ item_id: Number(a.item_id), answer: a.answer, comment: hsText(a, "comment", 1000) })),
   });
-  hsLog("check", c.id, ctx.user.id, "Contrôle saisi", "result", null, c.result);
+  // Photos déposées avant la fiche : rattachées à la non-conformité de leur point (au contrôle sinon).
+  for (const a of b.answers) {
+    const ids = hsIds(a, "attachment_ids");
+    const n = HS.ncs.find((x) => x.check_id === c.id && x.item_id === Number(a.item_id));
+    if (ids.length) hsClaim(ctx, ids, n ? "nonconformity" : "check", n ? n.id : c.id, "photo");
+  }
+  hsClaim(ctx, hsIds(b, "attachment_ids"), "check", c.id);
+  if (b.signature) {
+    const brut = String(b.signature).startsWith("data:") ? String(b.signature).split(",", 2)[1] ?? "" : String(b.signature);
+    if (!/^[A-Za-z0-9+/=\s]+$/.test(brut)) throw hsBad("Signature illisible.", ["signature"]);
+    const data = Buffer.from(brut, "base64");
+    const type = detectType(data);
+    if (data.length > 512 * 1024 || !["image/png", "image/jpeg"].includes(type)) throw new ApiError(415, "unsupported_type", "Signature : image PNG ou JPEG de 512 Ko au plus.", { fields: ["signature"] });
+    hsAttach("check", c.id, ctx.user.id, checkedName("signature", type), type, data, { role: "signature" });
+  }
+  hsLog("check", c.id, ctx.user.id, "create", "result", null, c.result);
   return hsCheckDetail(ctx, c);
 });
 route("POST", "/hsseq/checks/:id/lift", ["hsseq", "exploitation"], (ctx) => {
   const c = hsCheckOf(ctx, ctx.params[0]);
-  const [ncId, comment] = requireFields(ctx.body, "nonconformity_id", "comment");
-  const n = HS.ncs.find((x) => x.id === Number(ncId) && x.check_id === c.id);
-  if (!n) throw notFound("Non-conformité introuvable dans ce contrôle.");
+  requireFields(ctx.body, "nonconformity_id");
+  const n = HS.ncs.find((x) => x.id === hsId(ctx.body, "nonconformity_id") && x.check_id === c.id);
+  if (!n) throw notFound("Non-conformité introuvable sur ce contrôle.");
+  if (n.status === "open" && !hsCanLift(ctx, n)) throw hsForbidden("Levée réservée au chef de parc du site et au Responsable HSSEQ.");
   if (n.status !== "open") throw hsRule("invalid_transition", "Cette non-conformité est déjà levée.");
-  if (!hsCanLift(ctx, n)) throw hsForbidden("Seuls le chef de parc du site et le Responsable HSSEQ lèvent une non-conformité.");
-  const ids = (ctx.body.attachment_ids || []).map(Number).filter((id) => HS.attachments.some((a) => a.id === id && a.model === "nonconformity" && a.object_id === n.id));
-  if (!ids.length) throw hsRule("photo_missing", "Joignez une photo de la correction à la non-conformité avant de la lever.", { fields: ["attachment_ids"] });
-  Object.assign(n, { status: "lifted", lifted_at: hsNow(), lifted_by: ctx.user.id, lift_comment: String(comment).slice(0, 1000), lift_photo_ids: ids });
-  hsLog("check", c.id, ctx.user.id, `Levée de la non-conformité « ${n.label} »`, "status", "open", "lifted");
+  const pieces = hsClaim(ctx, hsIds(ctx.body, "attachment_ids"), "nonconformity", n.id);
+  if (!pieces.some((a) => a.is_photo)) throw hsRule("photo_missing", "La levée exige au moins une photo de la correction, déposée sur la non-conformité.", { fields: ["attachment_ids"] });
+  for (const a of pieces) a.role = "lift";
+  Object.assign(n, { status: "lifted", lifted_at: hsNow(), lifted_by: ctx.user.id, lift_comment: hsText(ctx.body, "comment", 2000) });
+  hsLog("nonconformity", n.id, ctx.user.id, "lift", "status", "open", "lifted");
   return hsCheckDetail(ctx, c);
 });
 
-/* Alcootests */
+/* Alcootests (§9.4) */
 function hsTestOf(ctx, id) {
   const t = HS.tests.find((x) => x.id === id);
   if (!t || !hsCanSeeTest(ctx, t)) throw notFound("Alcootest introuvable.");
@@ -8115,208 +8628,290 @@ route("GET", "/hsseq/breath-tests", [...HS_READ, "conducteur"], (ctx) => {
   const date = dateArg(q, "date");
   const from = dateArg(q, "date_from");
   const to = dateArg(q, "date_to");
+  const access = hsTestAccess(ctx);
+  if (q.status && access === "done") throw hsForbidden("Le statut d'un alcootest n'est pas lisible par le conducteur.");
+  const statuses = hsList(q.status);
+  const annules = hsIs(ctx, "hsseq") && ["1", "true"].includes(String(q.cancelled ?? "").toLowerCase());
+  if (q.sort && !["reported_at", "-reported_at", "date", "-date"].includes(q.sort)) throw hsBad("Tri inconnu.", ["sort"]);
   const list = HS.tests.filter((t) => {
-    const r = hsRotation(t.rotation_id);
-    const v = r ? hsVehicle(r.vehicle_id) : null;
     const day = t.reported_at.slice(0, 10);
-    return hsCanSeeTest(ctx, t) && (!v || hsFilter(ctx, q, hsVehicleSite(v), hsKind(v))) && (!date || day === date) && (!from || day >= from) && (!to || day <= to)
-      && (!q.rotation_id || t.rotation_id === intArg(q, "rotation_id")) && (!q.driver_id || t.driver_id === intArg(q, "driver_id")) && (!q.status || !hasProfile(ctx, HS_READ) || hsTestStatus(t) === q.status);
-  }).sort((a, b) => b.reported_at.localeCompare(a.reported_at));
-  const counts = hasProfile(ctx, HS_READ) ? { compliant: 0, non_compliant: 0, not_done: 0 } : { done: 0, not_done: 0 };
-  for (const t of list) {
-    if (hasProfile(ctx, HS_READ)) counts[hsTestStatus(t)]++;
-    else counts[t.performed ? "done" : "not_done"]++;
-  }
-  if (hsIs(ctx, "hsseq")) hsLog("breath_test", 0, ctx.user.id, "Lecture du détail de la liste", null, null, `${list.length} tests`);
+    return (annules ? t.active === false : t.active !== false) && hsCanSeeTest(ctx, t) && (!q.company_id || Number(q.company_id) === 1) && (!q.site_id || hsTestSite(t) === Number(q.site_id))
+      && (!date || day === date) && (!from || day >= from) && (!to || day <= to) && (!q.rotation_id || t.rotation_id === hsId(q, "rotation_id")) && (!q.driver_id || t.driver_id === hsId(q, "driver_id"))
+      && (!statuses || statuses.includes(hsTestStatus(t)));
+  }).sort((a, b) => (["reported_at", "date"].includes(q.sort) ? a.reported_at.localeCompare(b.reported_at) : b.reported_at.localeCompare(a.reported_at)) || b.id - a.id);
+  const counts = access === "done" ? {} : { by_status: { compliant: 0, non_compliant: 0, not_done: 0 } };
+  if (counts.by_status) for (const t of list) counts.by_status[hsTestStatus(t)]++;
+  if (access === "detail") for (const t of list.slice(offsetOf(q), offsetOf(q) + limitOf(q, 50, 500))) hsLog("breath_test", t.id, ctx.user.id, "read_detail");
   return hsPage(ctx, list, counts, (t) => hsTestRow(ctx, t));
 });
 route("GET", "/hsseq/breath-tests/:id", [...HS_READ, "conducteur"], (ctx) => {
   const t = hsTestOf(ctx, ctx.params[0]);
-  if (hsIs(ctx, "hsseq")) hsLog("breath_test", t.id, ctx.user.id, "Lecture du détail");
+  if (hsIs(ctx, "hsseq")) hsLog("breath_test", t.id, ctx.user.id, "read_detail");
   return hsTestRow(ctx, t);
 });
 route("POST", "/hsseq/breath-tests", HS_FIELD, (ctx) => {
   const b = ctx.body;
-  requireFields(b, "client_uuid", "driver_id", "performed", "reported_at", "offline");
-  const existing = HS.tests.find((t) => t.client_uuid === String(b.client_uuid));
+  const existing = hsExisting(ctx, HS.tests, b.client_uuid, (x) => x.performed_by);
   if (existing) return hsTestRow(ctx, existing);
-  const driverId = Number(b.driver_id);
-  if (!hsDriver(driverId)) throw hsRule("invalid_parameter", "Conducteur inconnu.", { fields: ["driver_id"] });
-  if (hsIs(ctx, "conducteur") && !hsIs(ctx, "hsseq") && !hsIs(ctx, "exploitation") && driverId !== hsMyDriver(ctx)) throw hsForbidden("Un conducteur ne saisit l'alcootest que pour lui-même.");
-  const rot = b.rotation_id ? hsRotation(Number(b.rotation_id)) : null;
-  if (b.rotation_id && !rot) throw hsRule("invalid_parameter", "Rotation inconnue.", { fields: ["rotation_id"] });
+  const rotId = hsId(b, "rotation_id");
+  const rot = rotId ? hsRotation(rotId) : null;
+  if (rotId && !rot) throw notFound("Rotation introuvable.");
+  let driverId = hsId(b, "driver_id");
+  if (hsScope(ctx) === "self") {
+    const mine = hsMyDriver(ctx);
+    if (!mine || (driverId && driverId !== mine) || (rot && rot.driver_id !== mine)) throw hsForbidden("Un conducteur ne saisit un alcootest que pour lui-même, sur sa rotation.");
+    driverId = mine;
+  } else {
+    if (driverId && !hsDriver(driverId)) throw notFound("Conducteur introuvable.");
+    driverId = driverId ?? rot?.driver_id ?? null;
+    if (hsScope(ctx) === "site" && rot && !hsSiteOk(ctx, hsVehicleSite(hsVehicle(rot.vehicle_id)))) throw hsForbidden("Rotation d'un autre site.");
+  }
+  if (!driverId) throw hsMissing("Conducteur du test manquant.", ["driver_id"]);
+  if (rot && rot.state !== "draft") throw hsRule("invalid_transition", "L'alcootest se fait avant le départ de la rotation.");
   const performed = Boolean(b.performed);
-  if (performed && !["negative", "positive"].includes(b.result)) throw new ApiError(400, "missing_fields", "Résultat obligatoire pour un test réalisé.", { fields: ["result"] });
-  if (!performed && !b.not_done_reason) throw new ApiError(400, "missing_fields", "Motif obligatoire pour un test non réalisé.", { fields: ["not_done_reason"] });
+  if (performed && !["negative", "positive"].includes(b.result)) throw hsMissing("Résultat de l'alcootest réalisé manquant (negative ou positive).", ["result"]);
+  if (!performed && !hsText(b, "not_done_reason", 300)) throw hsMissing("Motif de l'alcootest non réalisé manquant.", ["not_done_reason"]);
   const t = {
-    id: ++HS.seq.test, rotation_id: rot?.id ?? null, driver_id: driverId, performed, result: performed ? b.result : null, reading_mg_l: performed && b.reading_mg_l !== undefined && b.reading_mg_l !== null ? Number(b.reading_mg_l) : performed ? 0 : null,
-    device: b.device ? String(b.device).slice(0, 120) : null, not_done_reason: performed ? null : String(b.not_done_reason).slice(0, 300), performed_by: ctx.user.id,
-    driver_removed: performed && b.result === "positive", client_uuid: String(b.client_uuid).slice(0, 64), reported_at: String(b.reported_at), synced_at: hsNow(), offline: Boolean(b.offline),
+    id: ++HS.seq.test, rotation_id: rot?.id ?? null, driver_id: driverId, performed, result: performed ? b.result : null, reading_mg_l: performed ? hsNum(b.reading_mg_l, "reading_mg_l") ?? 0 : 0,
+    device: hsText(b, "device", 120), not_done_reason: performed ? null : hsText(b, "not_done_reason", 300), performed_by: ctx.user.id, driver_removed: false,
+    client_uuid: b.client_uuid ? String(b.client_uuid).slice(0, 64) : null, reported_at: hsReportedAt(b), synced_at: hsNow(), offline: Boolean(b.offline), active: true,
   };
   HS.tests.push(t);
-  hsLog("breath_test", t.id, ctx.user.id, "Saisie d'un alcootest");
+  hsLog("breath_test", t.id, ctx.user.id, "create");
+  if (rot) hsRemoveDriver(t, rot);
+  // La réponse à une saisie suit la règle de lecture, y compris pour qui a saisi.
+  return hsTestRow(ctx, t);
+});
+route("POST", "/hsseq/breath-tests/:id/cancel", ["hsseq"], (ctx) => {
+  const t = HS.tests.find((x) => x.id === ctx.params[0]);
+  if (!t) throw notFound("Alcootest introuvable.");
+  if (t.active === false) throw hsRule("invalid_transition", "Cet alcootest est déjà annulé.");
+  const reason = hsText(ctx.body, "reason", 2000);
+  if (!reason) throw hsRule("reason_required", "Le motif de l'annulation est obligatoire.", { fields: ["reason"] });
+  const before = hsTestStatus(t);
+  Object.assign(t, { active: false, cancel_reason: reason, cancelled_by: ctx.user.id, cancelled_at: hsNow() });
+  hsLog("breath_test", t.id, ctx.user.id, "cancel", "status", before, "cancelled", hsNow(), reason);
+  // Conducteur retiré par un positif : rétabli sur la rotation encore saisie, si elle n'en a pas reçu un autre.
+  const rot = hsRotation(t.rotation_id);
+  if (t.driver_removed && rot && rot.state === "draft" && !rot.driver_id) {
+    rot.driver_id = t.driver_id;
+    hsLog("breath_test", t.id, ctx.user.id, "driver_restored", null, null, null, hsNow(), `Conducteur rétabli sur la rotation ${rot.name ?? rot.id}`);
+  }
   return hsTestRow(ctx, t);
 });
 
 /* Verrou */
+/** Le conducteur n'évalue que ses rotations, le chef de parc celles de ses sites. */
+function hsRotationAllowed(ctx, rot) {
+  const scope = hsScope(ctx);
+  if (scope === "all") return true;
+  if (scope === "site") return hsSiteOk(ctx, hsVehicleSite(hsVehicle(rot.vehicle_id)));
+  return hsMyDriver(ctx) !== null && rot.driver_id === hsMyDriver(ctx);
+}
 route("POST", "/hsseq/lock/evaluate", ["admin", "direction", "hsseq", "exploitation", "conducteur"], (ctx) => {
-  const [id] = requireFields(ctx.body, "rotation_id");
-  const rot = hsRotation(Number(id));
-  if (!rot) throw notFound("Rotation introuvable.");
-  if (!hasProfile(ctx, HS_READ) && rot.driver_id !== hsMyDriver(ctx)) throw hsForbidden("Un conducteur n'évalue que ses propres rotations.");
+  requireFields(ctx.body, "rotation_id");
+  const rot = hsRotation(hsId(ctx.body, "rotation_id"));
+  if (!rot || !hsRotationAllowed(ctx, rot)) throw notFound("Rotation introuvable.");
   return hsEvaluate(ctx, rot);
 });
-/** Rotations du jour (draft, en_route) du compte : le conducteur les siennes, le chef de parc celles de ses sites. */
+/** Rotations du jour (saisies ou en route) : le conducteur les siennes, le chef de parc celles de ses sites, hsseq et l'administration toutes. */
 route("GET", "/hsseq/me/rotations", ["admin", "hsseq", "exploitation", "conducteur"], (ctx) => {
   const day = dateArg(ctx.query, "date", TODAY);
-  const all = hasProfile(ctx, ["admin", "hsseq"]);
-  const driver = hsMyDriver(ctx);
-  return hsDepartureRotations(day)
-    .filter((r) => ["draft", "en_route"].includes(r.state))
-    .map((r) => ({ r, v: hsVehicle(r.vehicle_id) }))
-    .filter(({ r, v }) => v && (all || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, hsVehicleSite(v))) || (driver !== null && r.driver_id === driver)))
-    .sort((a, b) => a.v.name.localeCompare(b.v.name))
-    .map(({ r, v }) => {
-      const evaluation = hsEvaluate(ctx, r);
+  const items = hsDepartureRotations(day)
+    .filter((r) => ["draft", "en_route"].includes(r.state) && hsRotationAllowed(ctx, r))
+    .sort((a, b) => a.date_loading.localeCompare(b.date_loading) || a.id - b.id)
+    .map((r) => {
+      const e = r.state === "draft" ? hsEvaluate(ctx, r) : null;
       return {
-        id: r.id, name: r.name, date_loading: r.date_loading, state: r.state, vehicle: { id: v.id, name: v.name, vehicle_kind: hsKind(v) }, site: hsSiteRef(hsVehicleSite(v)),
-        lock: { allowed: evaluation.allowed, pending_checks_only: hsPendingOnly(evaluation), reasons: evaluation.reasons },
+        id: r.id, name: r.name, date_loading: r.date_loading, state: r.state, vehicle: hsVehicleRef(r.vehicle_id), site: hsSiteRef(hsVehicleSite(hsVehicle(r.vehicle_id))),
+        driver: hsDriverRef(r.driver_id), route_name: hsRouteName(r),
+        lock: e ? { allowed: e.allowed, pending_checks_only: e.pending_checks_only, reasons: e.reasons, warnings: e.warnings, lock_active: e.lock_active } : null,
       };
     });
+  return { date: day, items };
 });
 route("GET", "/hsseq/lock/departures", HS_READ, (ctx) => {
   const day = dateArg(ctx.query, "date", TODAY);
-  if (ctx.query.vehicle_kind && !["tanker", "tipper"].includes(ctx.query.vehicle_kind)) throw badParam("Type de véhicule inconnu.");
+  if (ctx.query.site_id && !hsSiteOk(ctx, Number(ctx.query.site_id))) throw hsForbidden("Site non autorisé.");
   return hsDepartures(ctx, day, ctx.query);
 });
-route("GET", "/hsseq/lock/reasons", HS_READ, () => HS.reasons.map((r) => ({ ...r })));
+const hsReasonRow = (r) => ({ ...r, disabled_sites: r.disabled_sites.map(hsSiteRef).filter(Boolean) });
+route("GET", "/hsseq/lock/reasons", HS_READ, () => HS.reasons.map(hsReasonRow));
 route("PATCH", "/hsseq/lock/reasons", HS_SETUP, (ctx) => {
   const [code] = requireFields(ctx.body, "code");
   const s = hsReasonSetting(code);
   if (!s) throw notFound("Motif inconnu.");
-  if (ctx.body.active === true && s.lot === 2) throw hsRule("not_in_lot_1", `${code} relève du lot 2 : le noyau ne l'évalue pas encore.`);
-  if ("active" in ctx.body) s.active = Boolean(ctx.body.active);
-  if (Array.isArray(ctx.body.disabled_sites)) s.disabled_sites = ctx.body.disabled_sites.map(Number).filter((id) => hsSite(id));
-  return { ...s };
+  const b = ctx.body;
+  if ("active" in b && b.active && s.lot > 1) throw hsRule("not_in_lot_1", `Le motif ${code} relève du lot ${s.lot} : il n'est pas encore évalué.`, { fields: ["active"] });
+  if ("vehicle_kinds" in b && (!Array.isArray(b.vehicle_kinds ?? []) || (b.vehicle_kinds ?? []).some((k) => !["tanker", "tipper"].includes(k)))) throw hsBad("Types de véhicule : tanker, tipper.", ["vehicle_kinds"]);
+  if ("waivable" in b && Boolean(b.waivable) !== s.waivable) throw hsRule("business_rule", "Le caractère dérogeable d'un motif ne se modifie pas.", { fields: ["waivable"] });
+  if ("active" in b) s.active = Boolean(b.active);
+  if ("vehicle_kinds" in b) s.vehicle_kinds = [...new Set(b.vehicle_kinds ?? [])];
+  if ("disabled_sites" in b) s.disabled_sites = hsIds({ ids: (b.disabled_sites ?? []).map((x) => (x && typeof x === "object" ? x.id : x)) }, "ids").filter((id) => hsSite(id));
+  hsLog("lock_reason", HS.reasons.indexOf(s) + 1, ctx.user.id, "write", null, null, null, hsNow(), code);
+  return hsReasonRow(s);
 });
 
-/* Dérogations */
+/* Dérogations (§4.1) : une rotation, un seul motif */
 function hsWaiverOf(ctx, id) {
   const w = HS.waivers.find((x) => x.id === id);
   if (!w || !hsCanSeeWaiver(ctx, w)) throw notFound("Dérogation introuvable.");
   return w;
 }
+const HS_WAIVER_SORTS = { requested_at: (w) => w.requested_at, status: (w) => w.status, reference: (w) => w.reference };
 route("GET", "/hsseq/waivers", HS_READ, (ctx) => {
   const q = ctx.query;
   hsExpireWaivers();
-  const statuses = q.status ? q.status.split(",") : null;
+  const statuses = hsList(q.status);
   const from = dateArg(q, "date_from");
   const to = dateArg(q, "date_to");
-  const list = HS.waivers.filter((w) => hsCanSeeWaiver(ctx, w) && hsFilter(ctx, q, w.site_id, hsKind(hsVehicle(w.vehicle_id))) && (!statuses || statuses.includes(w.status)) && (!q.reason_code || w.reason_code === q.reason_code)
-    && (!q.rotation_id || w.rotation_id === intArg(q, "rotation_id")) && (!from || w.requested_at.slice(0, 10) >= from) && (!to || w.requested_at.slice(0, 10) <= to))
-    .sort((a, b) => b.requested_at.localeCompare(a.requested_at));
-  const counts = { pending_hsseq: 0, active: 0, expired: 0, refused: 0, cancelled: 0 };
-  for (const w of list) counts[w.status]++;
-  return hsPage(ctx, list, counts, (w) => hsWaiverRow(ctx, w));
+  const base = HS.waivers.filter((w) => hsCanSeeWaiver(ctx, w) && (!q.company_id || Number(q.company_id) === 1) && (!q.site_id || w.site_id === hsId(q, "site_id")) && (!q.reason_code || w.reason_code === q.reason_code)
+    && (!q.rotation_id || w.rotation_id === hsId(q, "rotation_id")) && (!from || w.requested_at.slice(0, 10) >= from) && (!to || w.requested_at.slice(0, 10) <= to));
+  const list = hsSort(base.filter((w) => !statuses || statuses.includes(w.status)), q.sort, HS_WAIVER_SORTS, "-requested_at");
+  const byStatus = { pending_hsseq: 0, active: 0, expired: 0, refused: 0, cancelled: 0 };
+  for (const w of list) byStatus[w.status]++;
+  return hsPage(ctx, list, { by_status: byStatus }, (w) => hsWaiverRow(ctx, w));
 });
 route("GET", "/hsseq/waivers/:id", HS_READ, (ctx) => hsWaiverRow(ctx, hsWaiverOf(ctx, ctx.params[0])));
 route("POST", "/hsseq/waivers", ["exploitation"], (ctx) => {
-  const [rotationId, code, justification] = requireFields(ctx.body, "rotation_id", "reason_code", "justification");
+  const [rotationId, code] = requireFields(ctx.body, "rotation_id", "reason_code");
   const rot = hsRotation(Number(rotationId));
   if (!rot) throw notFound("Rotation introuvable.");
   const v = hsVehicle(rot.vehicle_id);
-  if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Seul un chef de parc du site de la rotation demande une dérogation.");
-  const s = hsReasonSetting(code);
-  if (!s) throw badParam("Motif inconnu.");
-  if (!s.waivable) throw hsRule("not_waivable", `${code} n'est jamais dérogeable.`);
-  if (!hsEvaluate(ctx, rot).reasons.some((r) => r.code === code)) throw hsRule("reason_not_open", `${code} n'est pas ouvert pour cette rotation.`);
-  if (HS.waivers.some((w) => w.rotation_id === rot.id && w.reason_code === code && ["pending_hsseq", "active"].includes(w.status))) throw new ApiError(409, "conflict", "Une dérogation est déjà demandée ou active pour cette rotation et ce motif.");
-  if (String(justification).trim().length < 10) throw hsRule("reason_required", "La justification écrite est obligatoire.", { fields: ["justification"] });
+  if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden("Rotation d'un autre site.");
+  const reason = String(code).toUpperCase();
+  if (HS_NOT_WAIVABLE.includes(reason)) throw hsRule("not_waivable", `Le motif ${reason} n'est jamais dérogeable.`, { fields: ["reason_code"] });
+  const justification = hsText(ctx.body, "justification", 4000);
+  if (!justification) throw hsRule("reason_required", "La justification écrite est obligatoire.", { fields: ["justification"] });
+  if (rot.state !== "draft") throw hsRule("invalid_transition", "Seule une rotation pas encore partie reçoit une dérogation.");
+  if (!hsReasons(ctx, rot, false).reasons.some((r) => r.code === reason)) throw hsRule("reason_not_open", `Le motif ${reason} n'est pas ouvert pour cette rotation.`, { fields: ["reason_code"] });
+  const deja = HS.waivers.find((w) => w.rotation_id === rot.id && w.reason_code === reason && ["pending_hsseq", "active"].includes(w.status));
+  if (deja) throw new ApiError(409, "conflict", `Dérogation ${deja.reference} déjà en cours pour ce motif.`);
   const at = hsNow();
-  const w = { id: ++HS.seq.waiver, reference: "", rotation_id: rot.id, vehicle_id: v.id, site_id: hsVehicleSite(v), reason_code: code, justification: String(justification).slice(0, 2000), requested_by: ctx.user.id, requested_at: at, approvals: [{ level: 1, role: "yard_manager", by: ctx.user.id, at }], status: "pending_hsseq", expires: null, refusal_reason: null, management_notified_at: null };
+  const w = { id: ++HS.seq.waiver, reference: "", rotation_id: rot.id, vehicle_id: v.id, site_id: hsVehicleSite(v), reason_code: reason, justification, requested_by: ctx.user.id, requested_at: at, approvals: [{ level: 1, role: "yard_manager", by: ctx.user.id, at }], status: "pending_hsseq", expires: null, expired_at: null, refusal_reason: null, decided_by: null, management_notified_at: null };
   w.reference = `DER/2026/${pad(w.id, 4)}`;
   HS.waivers.push(w);
-  hsLog("waiver", w.id, ctx.user.id, "Demande et première validation");
+  hsLog("waiver", w.id, ctx.user.id, "create");
+  hsNotify(hsHsseqManagers().filter((id) => id !== ctx.user.id), "waiver_requested", `Dérogation à valider : ${reason}, rotation ${rot.name ?? rot.id}`, `${w.reference} demandée par ${ctx.user.name} :\n${justification}`, "waiver", w.id, at);
   return hsWaiverRow(ctx, w);
 });
+/** Quatre yeux : ni le demandeur ni un compte qui a déjà validé ne tranche la seconde validation. */
+function hsFourEyes(ctx, w) {
+  if (w.approvals.some((a) => a.by === ctx.user.id)) throw hsRule("four_eyes", "La seconde validation revient à une autre personne que le demandeur.");
+}
+function hsWaiverRequire(w, transition) {
+  const permises = { pending_hsseq: ["approve", "refuse", "cancel"], active: ["cancel"] }[w.status] ?? [];
+  if (!permises.includes(transition)) throw hsRule("invalid_transition", `Transition « ${transition} » impossible depuis le statut de la dérogation.`);
+}
 route("POST", "/hsseq/waivers/:id/approve", ["hsseq"], (ctx) => {
   const w = hsWaiverOf(ctx, ctx.params[0]);
-  if (w.status !== "pending_hsseq") throw hsRule("invalid_transition", "Cette dérogation n'attend plus de validation.");
-  if (w.requested_by === ctx.user.id) throw hsRule("four_eyes", "La seconde validation revient à une autre personne que le demandeur.");
+  hsExpireWaivers();
+  hsWaiverRequire(w, "approve");
+  hsFourEyes(ctx, w);
+  const rot = hsRotation(w.rotation_id);
+  if (["done", "invoiced", "cancelled"].includes(rot.state)) throw hsRule("invalid_transition", "La rotation est terminée : la dérogation n'a plus d'objet.");
   const at = hsNow();
   w.approvals.push({ level: 2, role: "hsseq_manager", by: ctx.user.id, at });
-  Object.assign(w, { status: "active", expires: `${hsRotationEnd(hsRotation(w.rotation_id))}T23:59:00Z`, management_notified_at: at });
-  hsLog("waiver", w.id, ctx.user.id, "Seconde validation", "status", "pending_hsseq", "active");
+  Object.assign(w, { status: "active", expires: hsRotationEnd(rot), management_notified_at: at });
+  hsLog("waiver", w.id, ctx.user.id, "approve", "status", "pending_hsseq", "active");
+  hsNotify(hsDirectors(), "waiver_active", `Dérogation au verrou : ${w.reason_code}, rotation ${rot.name ?? rot.id}`, `${w.reference}, demandée par ${userName(w.requested_by)}, validée par ${ctx.user.name}.\nJustification : ${w.justification}`, "waiver", w.id, at);
   return hsWaiverRow(ctx, w);
 });
 route("POST", "/hsseq/waivers/:id/refuse", ["hsseq"], (ctx) => {
   const w = hsWaiverOf(ctx, ctx.params[0]);
-  if (w.status !== "pending_hsseq") throw hsRule("invalid_transition", "Cette dérogation n'attend plus de validation.");
-  if (!ctx.body.reason || String(ctx.body.reason).trim().length < 5) throw hsRule("reason_required", "Indiquez le motif du refus.", { fields: ["reason"] });
-  Object.assign(w, { status: "refused", refusal_reason: String(ctx.body.reason).slice(0, 1000) });
-  hsLog("waiver", w.id, ctx.user.id, "Refus", "status", "pending_hsseq", "refused");
+  hsWaiverRequire(w, "refuse");
+  hsFourEyes(ctx, w);
+  const reason = hsText(ctx.body, "reason", 2000);
+  if (!reason) throw hsRule("reason_required", "Le motif du refus est obligatoire.", { fields: ["reason"] });
+  Object.assign(w, { status: "refused", refusal_reason: reason, decided_by: ctx.user.id });
+  hsLog("waiver", w.id, ctx.user.id, "refuse", "status", "pending_hsseq", "refused", hsNow(), reason);
   return hsWaiverRow(ctx, w);
 });
 route("POST", "/hsseq/waivers/:id/cancel", ["hsseq", "exploitation"], (ctx) => {
   const w = hsWaiverOf(ctx, ctx.params[0]);
-  if (!hsWaiverRow(ctx, w).transitions.includes("cancel")) throw w.requested_by !== ctx.user.id && !hsIs(ctx, "hsseq") ? hsForbidden("Seuls le demandeur et le Responsable HSSEQ annulent une dérogation.") : hsRule("invalid_transition", "Cette dérogation ne s'annule plus.");
+  if (!(hsIs(ctx, "hsseq") || w.requested_by === ctx.user.id)) throw hsForbidden("Seuls le demandeur et le Responsable HSSEQ annulent une dérogation.");
+  hsExpireWaivers();
+  hsWaiverRequire(w, "cancel");
   const before = w.status;
-  w.status = "cancelled";
-  hsLog("waiver", w.id, ctx.user.id, "Annulation", "status", before, "cancelled");
+  Object.assign(w, { status: "cancelled", decided_by: ctx.user.id });
+  hsLog("waiver", w.id, ctx.user.id, "cancel", "status", before, "cancelled");
   return hsWaiverRow(ctx, w);
 });
 
-/* Pièces jointes et journal */
-const HS_ATTACH_MODELS = { event: (ctx, id) => hsEventOf(ctx, id), action: (ctx, id) => hsActionOf(ctx, id), check: (ctx, id) => hsCheckOf(ctx, id), waiver: (ctx, id) => hsWaiverOf(ctx, id),
+/* Pièces jointes */
+const HS_ATTACH_MODELS = {
+  event: (ctx, id) => hsEventOf(ctx, id), action: (ctx, id) => hsActionOf(ctx, id), check: (ctx, id) => hsCheckOf(ctx, id), waiver: (ctx, id) => hsWaiverOf(ctx, id),
   nonconformity: (ctx, id) => {
     const n = HS.ncs.find((x) => x.id === id);
-    if (!n) throw notFound("Non-conformité introuvable.");
+    if (!n) throw notFound("Fiche introuvable.");
     hsCheckOf(ctx, n.check_id);
     return n;
-  } };
-route("POST", "/hsseq/attachments", [...HS_READ, "conducteur"], (ctx) => {
+  },
+};
+/** Fiche close : plus de pièce ajoutée ni retirée. */
+const hsClosed = (model, r) => ({ event: r.status === "closed", action: ["closed", "cancelled"].includes(r.status), nonconformity: r.status !== "open", waiver: !["pending_hsseq", "active"].includes(r.status) })[model] ?? false;
+/** Ajouter une pièce : son auteur ou responsable, le chef de parc du site, ou hsseq. */
+function hsCanAttach(ctx, model, r) {
+  if (hsClosed(model, r)) return false;
+  if (hsIs(ctx, "hsseq")) return true;
+  const yard = hsScope(ctx) === "site";
+  if (model === "event") return r.reported_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
+  if (model === "action") return r.owner_id === ctx.user.id;
+  if (model === "check") return r.performed_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
+  if (model === "nonconformity") return HS.checks.find((c) => c.id === r.check_id)?.performed_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
+  return model === "waiver" && r.requested_by === ctx.user.id;
+}
+route("POST", "/hsseq/attachments", null, (ctx) => {
+  hsInternal(ctx);
   const fields = ctx.multipart().fields;
-  const model = fields.model;
-  const id = Number.parseInt(fields.id || "", 10);
-  if (!(model in HS_ATTACH_MODELS) || !Number.isFinite(id)) throw new ApiError(400, "missing_fields", "La pièce se rattache à une fiche : model et id obligatoires.", { fields: ["model", "id"] });
-  HS_ATTACH_MODELS[model](ctx, id);
-  if (fields.client_uuid) {
-    const existing = HS.attachments.find((a) => a.client_uuid === fields.client_uuid);
-    if (existing) return hsAttachmentRow(existing);
-  }
-  const file = uploadedFile(ctx, 8 * 1048576, "Pièce jointe");
+  const existing = hsExisting(ctx, HS.attachments, fields.client_uuid, (x) => x.created_by);
+  if (existing) return hsAttachmentRow(existing);
+  const model = fields.model || fields.object || null;
+  let record = null;
+  let id = null;
+  if (model) {
+    if (!(model in HS_ATTACH_MODELS)) throw hsBad("Fiche inconnue.", ["model"]);
+    id = Number.parseInt(fields.id || fields.object_id || "", 10);
+    if (!Number.isFinite(id)) throw hsBad("Identifiant invalide.");
+    record = HS_ATTACH_MODELS[model](ctx, id);
+    if (!hsCanAttach(ctx, model, record)) throw hsForbidden("Pièce jointe non autorisée sur cette fiche.");
+    if (HS.attachments.filter((a) => a.model === model && a.object_id === id).length >= 30) throw businessRule("30 pièces au plus par fiche.");
+  } else if (!hasProfile(ctx, ["admin", "direction", "hsseq", "exploitation", "conducteur"])) throw hsForbidden("Dépôt sans fiche réservé aux profils de NIMOVA · HSSEQ.");
+  const file = uploadedFile(ctx, 8 * 1048576, "Fichier");
   const mimetype = detectType(file.data);
   if (!["image/jpeg", "image/png", "application/pdf"].includes(mimetype)) throw new ApiError(415, "unsupported_type", "Formats acceptés : JPEG, PNG ou PDF.");
-  const a = hsAttach(model, id, ctx.user.id, checkedName(file.filename, mimetype, "piece"), mimetype, file.data, { caption: fields.caption ? String(fields.caption).slice(0, 200) : null, client_uuid: fields.client_uuid || null });
-  hsLog(model === "nonconformity" ? "check" : model, model === "nonconformity" ? HS.ncs.find((n) => n.id === id).check_id : id, ctx.user.id, `Pièce jointe : ${a.name}`);
+  const role = model === "action" ? "evidence" : model === "nonconformity" && record.status === "open" && fields.role === "lift" ? "lift" : "photo";
+  const a = hsAttach(model, id, ctx.user.id, checkedName(file.filename, mimetype, "photo"), mimetype, file.data, { caption: fields.caption ? String(fields.caption).slice(0, 300) : null, client_uuid: fields.client_uuid || null, role });
   return hsAttachmentRow(a);
 });
 function hsAttachmentOf(ctx, id) {
   const a = HS.attachments.find((x) => x.id === id);
-  if (!a) throw notFound("Pièce introuvable.");
-  HS_ATTACH_MODELS[a.model](ctx, a.object_id);
-  return a;
+  if (!a) throw notFound("Pièce jointe introuvable.");
+  if (!a.model) {
+    if (a.created_by !== ctx.user.id) throw notFound("Pièce jointe introuvable.");
+    return { a, record: null };
+  }
+  try {
+    return { a, record: HS_ATTACH_MODELS[a.model](ctx, a.object_id) };
+  } catch {
+    throw notFound("Pièce jointe introuvable.");
+  }
 }
-route("GET", "/hsseq/attachments/:id/download", [...HS_READ, "conducteur"], (ctx) => {
-  const a = hsAttachmentOf(ctx, ctx.params[0]);
+route("GET", "/hsseq/attachments/:id/download", null, (ctx) => {
+  hsInternal(ctx);
+  const { a } = hsAttachmentOf(ctx, ctx.params[0]);
   return fileReply(HS.files.get(a.id), a.mimetype, a.name);
 });
-route("DELETE", "/hsseq/attachments/:id", [...HS_READ, "conducteur"], (ctx) => {
-  const a = hsAttachmentOf(ctx, ctx.params[0]);
-  if (a.created_by !== ctx.user.id && !hsIs(ctx, "hsseq")) throw hsForbidden("Seuls l'auteur et le Responsable HSSEQ retirent une pièce.");
-  const parent = HS_ATTACH_MODELS[a.model](ctx, a.object_id);
-  if (["closed", "cancelled", "lifted", "expired", "refused"].includes(parent.status) || (a.model === "nonconformity" && parent.lift_photo_ids.includes(a.id))) throw hsRule("invalid_transition", "La fiche est close : la pièce ne se retire plus.");
+route("DELETE", "/hsseq/attachments/:id", null, (ctx) => {
+  hsInternal(ctx);
+  const { a, record } = hsAttachmentOf(ctx, ctx.params[0]);
+  if (a.created_by !== ctx.user.id && !hsIs(ctx, "hsseq")) throw hsForbidden("Seuls son auteur et le Responsable HSSEQ retirent une pièce.");
+  if (record && hsClosed(a.model, record)) throw hsRule("invalid_transition", "Fiche close : la pièce ne se retire plus.");
+  if (a.role === "lift" || (a.model === "action" && record?.status === "to_verify")) throw hsRule("invalid_transition", "Pièce probante d'une levée ou d'une réalisation : conservée.");
+  if (record) hsLog(a.model, a.object_id, ctx.user.id, "attachment_removed", null, null, null, hsNow(), a.name);
   HS.attachments = HS.attachments.filter((x) => x.id !== a.id);
   HS.files.delete(a.id);
   return { status: "ok" };
-});
-route("GET", "/hsseq/log", ["direction", "hsseq"], (ctx) => {
-  const q = ctx.query;
-  const from = dateArg(q, "date_from");
-  const to = dateArg(q, "date_to");
-  const list = HS.log.filter((l) => (!q.model || l.model === q.model) && (!q.id || l.id === intArg(q, "id")) && (!from || l.at.slice(0, 10) >= from) && (!to || l.at.slice(0, 10) <= to))
-    .sort((a, b) => b.at.localeCompare(a.at));
-  return hsPage(ctx, list, {}, (l) => ({ model: l.model, id: l.id, ...hsHistoryRow(l) }));
 });
 
 /* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */

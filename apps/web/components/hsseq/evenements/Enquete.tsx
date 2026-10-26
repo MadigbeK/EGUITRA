@@ -29,13 +29,23 @@ interface Brouillon {
   conclusion: string;
 }
 
-function depuis(inv: Investigation): Brouillon {
+/** Texte libre du noyau (causes immédiates, facteurs 5M) en lignes : une cause par ligne. */
+function lignes(texte: string | null | undefined): string[] {
+  return (texte ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
+/** Enquête ouverte : date d'ouverture posée par la transition « investigate », ou statut qui la suppose. */
+export function enqueteOuverte(e: Evenement): boolean {
+  return Boolean(e.investigation.started_at) || e.status === "investigation" || e.status === "actions";
+}
+
+function depuis(inv: Investigation, attendue: InvestigationMethod): Brouillon {
   const f = {} as Record<Factor5M, string[]>;
-  for (const k of FACTEURS) f[k] = [...(inv.factors_5m?.[k] ?? [])];
+  for (const k of FACTEURS) f[k] = lignes(inv.factors_5m?.[k]);
   return {
-    method: inv.method,
+    method: inv.method ?? attendue,
     team_ids: inv.team.map((t) => t.id),
-    immediate_causes: [...inv.immediate_causes],
+    immediate_causes: lignes(inv.immediate_causes),
     whys: [...inv.whys],
     tree: inv.tree.map((n) => ({ ...n })),
     factors_5m: f,
@@ -44,15 +54,16 @@ function depuis(inv: Investigation): Brouillon {
   };
 }
 
-/** Corps du PUT : lignes vides retirées, textes vides envoyés nuls. */
+/** Corps du PUT : lignes vides retirées ; causes immédiates et 5M en texte, une cause par ligne, nul si vide. */
 function versCorps(b: Brouillon): InvestigationInput {
   const net = (l: string[]) => l.map((x) => x.trim()).filter(Boolean);
-  const f = {} as Record<Factor5M, string[]>;
-  for (const k of FACTEURS) f[k] = net(b.factors_5m[k]);
+  const texte = (l: string[]) => net(l).join("\n") || null;
+  const f = {} as Record<Factor5M, string | null>;
+  for (const k of FACTEURS) f[k] = texte(b.factors_5m[k]);
   return {
     method: b.method,
     team_ids: b.team_ids,
-    immediate_causes: net(b.immediate_causes),
+    immediate_causes: texte(b.immediate_causes),
     whys: net(b.whys).slice(0, 5),
     tree: b.tree.filter((n) => n.label.trim()).map((n) => ({ ...n, label: n.label.trim() })),
     factors_5m: f,
@@ -83,7 +94,7 @@ export function Enquete({
   // Enquête que le noyau vient d'enregistrer : l'éditeur, reparti de sa réponse, le confirme.
   const [enregistree, setEnregistree] = useState<string | null>(null);
   const inv = e.investigation;
-  if (!inv) return <SansEnquete e={e} referentiels={referentiels} onOuvrir={onOuvrir} />;
+  if (!enqueteOuverte(e)) return <SansEnquete e={e} referentiels={referentiels} onOuvrir={onOuvrir} />;
   const editable = e.status === "investigation" && e.rights.can_approve;
   const cle = JSON.stringify(inv);
   return (
@@ -167,11 +178,11 @@ function Editeur({
   onRapport: () => void;
   rapport: boolean;
 }) {
-  const [b, setB] = useState<Brouillon>(() => depuis(inv));
+  const attendue = methodeAttendue(e.level, referentiels?.criticality_thresholds);
+  const [b, setB] = useState<Brouillon>(() => depuis(inv, attendue));
   const [envoi, setEnvoi] = useState(false);
   const [refus, setRefus] = useState<string | null>(null);
-  const modifie = JSON.stringify(versCorps(b)) !== JSON.stringify(versCorps(depuis(inv)));
-  const attendue = methodeAttendue(e.level, referentiels?.criticality_thresholds);
+  const modifie = JSON.stringify(versCorps(b)) !== JSON.stringify(versCorps(depuis(inv, attendue)));
   const changer = (maj: Partial<Brouillon>) => setB((x) => ({ ...x, ...maj }));
   const equipe = referentiels?.owners ?? inv.team;
 
@@ -207,20 +218,18 @@ function Editeur({
               </Field>
             ) : (
               <p className="text-[13.5px] text-ink-2">
-                Méthode : <b className="text-ink">{METHODE_ENQUETE[inv.method]}</b>
+                Méthode : <b className="text-ink">{inv.method ? METHODE_ENQUETE[inv.method] : "Non précisée"}</b>
               </p>
             )}
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13.5px]">
               <dt className="text-muted">Ouverte le</dt>
-              <dd className="text-ink">{fmtJourHeure(inv.opened_at)}</dd>
+              <dd className="text-ink">{inv.started_at ? fmtJourHeure(inv.started_at) : "–"}</dd>
               <dt className="text-muted">Échéance</dt>
-              <dd>
-                <EcheanceEnquete date={inv.due_date} enRetard={inv.overdue} />
-              </dd>
-              {inv.concluded_at && (
+              <dd>{inv.due ? <EcheanceEnquete date={inv.due} enRetard={e.investigation_overdue} /> : <span className="text-muted">Sans échéance</span>}</dd>
+              {inv.closed_at && (
                 <>
                   <dt className="text-muted">Conclue le</dt>
-                  <dd className="text-ink">{fmtJourHeure(inv.concluded_at)}</dd>
+                  <dd className="text-ink">{fmtJourHeure(inv.closed_at)}</dd>
                 </>
               )}
             </dl>
@@ -373,13 +382,14 @@ function ListeTextes({ libelle, valeurs, onChange, editable, max = 20, numerote,
 function ArbreCauses({ noeuds, titre, editable, onChange }: { noeuds: CauseNode[]; titre: string; editable: boolean; onChange: (n: CauseNode[]) => void }) {
   const ids = new Set(noeuds.map((n) => n.id));
   const racines = noeuds.filter((n) => n.parent_id === null || !ids.has(n.parent_id));
-  const prochain = () => Math.max(0, ...noeuds.map((n) => n.id)) + 1;
+  // Identifiants textuels du noyau : un nouveau fait prend le plus grand numéro plus un.
+  const prochain = () => String(Math.max(0, ...noeuds.map((n) => Number.parseInt(n.id, 10) || 0)) + 1);
 
   if (!noeuds.length) {
     return editable ? (
       <div className="space-y-2">
         <p className="text-[13px] text-muted">L'arbre part de l'événement et remonte, fait par fait, vers ses causes.</p>
-        <Button size="sm" onClick={() => onChange([{ id: 1, label: titre, parent_id: null, kind: "unusual_fact" }])}>
+        <Button size="sm" onClick={() => onChange([{ id: "1", label: titre, parent_id: null, kind: "unusual_fact" }])}>
           <Plus className="h-3.5 w-3.5" /> Commencer l'arbre
         </Button>
       </div>
@@ -388,7 +398,7 @@ function ArbreCauses({ noeuds, titre, editable, onChange }: { noeuds: CauseNode[
     );
   }
 
-  function retirer(id: number) {
+  function retirer(id: string) {
     const aRetirer = new Set([id]);
     let ajoute = true;
     while (ajoute) {

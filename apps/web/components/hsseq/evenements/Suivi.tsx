@@ -11,7 +11,7 @@ import { ArrowUpRight } from "@/components/icons";
 import { Card, DataTable, Notice, classesBouton } from "@/components/ui";
 import { NIVEAU_MAITRISE, STATUT_ACTION, STATUT_EVENEMENT, Tampon } from "@/components/hsseq/commun";
 import { INSECABLE, fmtDate, fmtGNF, fmtInt, pluriel } from "@/lib/format";
-import type { ActionLine, Event as Evenement, EventStatus, HistoryEntry, SentNotification } from "@/lib/hsseq-types";
+import type { ActionLine, Event as Evenement, EventStatus, HistoryEntry, HsseqNotification } from "@/lib/hsseq-types";
 import { CANAL, fmtJourHeure } from "./commun";
 
 /* ─── Actions liées ───────────────────────────────────────────────────── */
@@ -53,7 +53,7 @@ export function ActionsLiees({ e }: { e: Evenement }) {
                 </span>
               ),
             },
-            { key: "control_level", label: "Maîtrise", render: (a) => NIVEAU_MAITRISE[a.control_level] ?? a.control_level },
+            { key: "control_level", label: "Maîtrise", render: (a) => (a.control_level ? NIVEAU_MAITRISE[a.control_level] : <span className="text-muted">–</span>) },
             { key: "owner", label: "Responsable", render: (a) => a.owner.name, sortValue: (a) => a.owner.name },
             { key: "due_date", label: "Échéance", render: (a) => <EcheanceAction a={a} /> },
             { key: "status", label: "Statut", render: (a) => <Tampon mot={STATUT_ACTION[a.status]} /> },
@@ -74,10 +74,10 @@ function EcheanceAction({ a }: { a: ActionLine }) {
   );
 }
 
+/** Vérification d'efficacité : la ligne d'action ne porte pas son résultat (dans la fiche de l'action). */
 function Verification({ a }: { a: ActionLine }) {
   if (!a.verification_required) return <span className="text-muted">Non requise</span>;
-  if (a.effective === true) return <Tampon mot="Efficace" />;
-  if (a.effective === false) return <Tampon mot="Non efficace" />;
+  if (a.status === "closed") return <span className="whitespace-nowrap">Vérifiée, action close</span>;
   return <span className="whitespace-nowrap">{a.verification_date ? `Le ${fmtDate(a.verification_date)}` : "À programmer"}</span>;
 }
 
@@ -87,15 +87,16 @@ export function Notifications({ e }: { e: Evenement }) {
   const lignes = [...e.notifications].sort((a, b) => b.sent_at.localeCompare(a.sent_at));
   return (
     <Card title="Notifications envoyées" padded={false}>
-      <DataTable<SentNotification>
+      <DataTable<HsseqNotification>
         rows={lignes}
-        rowKey={(n, i) => `${n.sent_at}-${n.channel}-${i}`}
+        rowKey={(n) => n.id}
         empty="Aucune notification envoyée."
         columns={[
           { key: "sent_at", label: "Envoyée le", render: (n) => <span className="whitespace-nowrap">{fmtJourHeure(n.sent_at)}</span> },
-          { key: "recipient", label: "Destinataire" },
+          { key: "to", label: "Destinataire", render: (n) => n.to.name, sortValue: (n) => n.to.name },
           { key: "channel", label: "Canal", render: (n) => CANAL[n.channel] ?? n.channel },
-          { key: "reason", label: "Motif" },
+          { key: "subject", label: "Objet", render: (n) => <span className="block min-w-[14rem] max-w-[32rem]">{n.subject}</span> },
+          { key: "read_at", label: "Lue", render: (n) => (n.channel === "email" ? <span className="text-muted">–</span> : n.read_at ? fmtJourHeure(n.read_at) : <span className="text-muted">Non lue</span>) },
         ]}
       />
     </Card>
@@ -133,12 +134,12 @@ export function Journal({ e }: { e: Evenement }) {
     <Card title="Journal" padded={false}>
       <DataTable<HistoryEntry>
         rows={lignes}
-        rowKey={(h, i) => `${h.at}-${i}`}
+        rowKey={(h) => h.id}
         empty="Aucune entrée au journal."
         columns={[
           { key: "at", label: "Date", render: (h) => <span className="whitespace-nowrap">{fmtJourHeure(h.at)}</span> },
-          { key: "by", label: "Par", render: (h) => h.by.name, sortValue: (h) => h.by.name },
-          { key: "action", label: "Opération" },
+          { key: "by", label: "Par", render: (h) => h.by?.name ?? "Système", sortValue: (h) => h.by?.name ?? "" },
+          { key: "action", label: "Opération", render: (h) => (h.note ? `${h.action} : ${h.note}` : h.action) },
           { key: "field", label: "Détail", render: (h) => <Detail h={h} /> },
         ]}
       />

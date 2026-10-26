@@ -430,6 +430,26 @@ AxisPro, texte du noyau tel quel, critères à évaluer par gate, knock-outs blo
 provisoire décidé par la méthode. La liste des rotations et Rotations avaient été branchées par la
 session Transport. La maquette d'API sert ces champs. Vérifié en version construite (Next 16.4.2).
 
+## NIMOVA · HSSEQ, lot 1 (25 et 26 octobre 2026)
+
+Huitième application, demandée par la Direction générale d'EGUITRA (spécification v1.0 du
+24/10/2026, diffusion restreinte, gardée hors du dépôt). Le noyau est écrit par la session OTHER,
+l'application native NIMOVA Terrain par la session Mobile App ; le design livre :
+- l'identité : couleur « pétrole » #0a6e86 (teinte libre, hors des couleurs d'état), casque de
+  sécurité pour la tuile, icônes des rubriques, menus du lot 1 ;
+- le contrat d'API (`docs/design/hsseq-contrat.md`), devenu la base du noyau, puis aligné sur son
+  code réel le 26/10 (§13), avec les propositions encore ouvertes (§14) ;
+- la maquette d'API HSSEQ et les comptes de démonstration (`hsseq`, `dg`, `boffa`, `conducteur`) ;
+- le système de conception « terrain » et les maquettes Android de NIMOVA Terrain
+  (`docs/design/mobile/`) : plein soleil, gants, une main, tablette partagée ;
+- les écrans web : cockpit (à traiter, indicateurs gravés, comité mensuel au format des donneurs
+  d'ordre, matrice 5 × 5), événements (liste, déclaration, fiche avec classement et enquête), plan
+  d'actions (preuve, efficacité à J+90, validation des actions coûteuses), contrôles,
+  non-conformités et alcootests en statut, paramètres (sites, grilles, motifs, réglages),
+  dérogations (quatre yeux), Départs du jour dans Transport avec le panneau du verrou.
+Écart de police signalé : la spécification ne cite que Funnel Sans ; la charte (Funnel Display pour
+les titres) est gardée.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,

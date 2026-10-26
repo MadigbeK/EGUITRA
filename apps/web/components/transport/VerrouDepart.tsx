@@ -8,15 +8,19 @@
  * (POST /transport/rotations/{id}/depart), dont le refus 422 departure_blocked s'affiche ici.
  *
  * Le verrou se décide toujours côté serveur (§4) : l'écran demande, le serveur autorise ou refuse.
- * Au lot 1, le départ et la demande de dérogation sont réservés au chef de parc (exploitation) ;
- * les autres profils lisent l'état du départ.
+ * Le départ est ouvert aux profils qui écrivent les rotations (admin, finance, exploitation : WRITE de
+ * Transport) ; verrou en service pour la rotation (lock_active), le noyau HSSEQ le réserve au chef de
+ * parc (profil exploitation, sites de la rotation). La demande de dérogation reste au seul chef de parc.
+ * Verrou pas encore en service : le départ est permis, motifs et avertissements s'affichent pour
+ * information. Les avertissements (warnings) ne bloquent jamais ; une dérogation couvre un seul motif,
+ * plusieurs peuvent être actives sur la rotation (active_waivers).
  */
 
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import useSWR from "swr";
 import { BadgeCheck, Bell, CheckCircle2, Clock, Lock, RefreshCw, Truck } from "@/components/icons";
 import { Button, ErrorBox, Field, Loading, Modal, Notice, Textarea, cx, demanderConfirmation } from "@/components/ui";
-import { STATUT_DEROGATION, TYPE_VEHICULE, Tampon, nomRotation } from "@/components/hsseq/commun";
+import { HORS_VERROU, STATUT_DEROGATION, TYPE_VEHICULE, Tampon, nomRotation } from "@/components/hsseq/commun";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDateTime, pluriel } from "@/lib/format";
 import type { Departure, DepartureBlocked, LockEvaluation, LockReason, NewWaiver, Page, ReasonCode, TransportBlocker, Waiver } from "@/lib/hsseq-types";
@@ -27,6 +31,7 @@ import {
   JUSTIFICATION_MIN,
   JamaisDerogeables,
   LigneMotif,
+  avertissements,
   codeErreur,
   etatEvaluation,
   heure,
@@ -37,20 +42,24 @@ import {
   tonMotif,
 } from "./departs/motifs";
 
-/** Profil du chef de parc : seul à faire partir une rotation et à demander une dérogation (§12, lot 1). */
+/** Profils qui écrivent les rotations de Transport (WRITE) : ils font partir une rotation hors verrou. */
+const PROFILS_DEPART: Profile[] = ["admin", "finance", "exploitation"];
+
+/** Chef de parc : seul à faire partir une rotation soumise au verrou et à demander une dérogation. */
 const CHEF_DE_PARC: Profile[] = ["exploitation"];
 
 /** Fenêtres du rattachement automatique (référentiels HSSEQ), à défaut celles du paramétrage initial. */
 const FENETRES = { check_window_hours: 12, breath_test_window_hours: 4 };
 
 const ERREURS_DEPART: Partial<Record<string, string>> = {
-  forbidden: "Seul un chef de parc du site de la rotation la fait partir.",
+  forbidden: "Départ refusé à votre profil : verrou en service, il revient au chef de parc du site de la rotation (profil Exploitation transport).",
+  business_rule: "Seule une rotation saisie, pas encore partie, part en route.",
 };
 
 const ERREURS_DEMANDE: Partial<Record<string, string>> = {
   not_waivable: "V01 et V03 ne sont jamais dérogeables : le contrôle avant départ et l'alcootest se font sur NIMOVA Terrain.",
   reason_not_open: "Ce motif n'est plus ouvert pour la rotation. Vérifiez à nouveau le verrou.",
-  conflict: "Une dérogation est déjà demandée ou active pour cette rotation et ce motif.",
+  conflict: "Une dérogation est déjà demandée ou active pour cette rotation et ce motif : une dérogation couvre un seul motif.",
   reason_required: "Le motif écrit est obligatoire.",
   forbidden: "Seul un chef de parc du site de la rotation demande une dérogation.",
 };
@@ -76,6 +85,7 @@ function plusRecente(a: LockEvaluation | undefined, b: LockEvaluation | undefine
 
 export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onParti }: VerrouDepartProps) {
   const chefDeParc = useAutorise(CHEF_DE_PARC);
+  const ecritRotations = useAutorise(PROFILS_DEPART);
   // Sans départ déjà lu (panneau ouvert depuis la liste des rotations), le verrou s'évalue à l'ouverture.
   const lu = useSWR<LockEvaluation, ApiError>(
     `verrou:${rotationId}`,
@@ -113,6 +123,10 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
   }
 
   const lignes = derogations.data?.items ?? [];
+  const enService = evaluation.lock_active !== false;
+  const avis = avertissements(evaluation);
+  // Verrou en service, le noyau HSSEQ réserve le départ au chef de parc ; hors verrou, à tout profil qui écrit les rotations.
+  const peutPartir = enService ? chefDeParc : ecritRotations;
   const attente = (code: string) => lignes.find((w) => w.reason_code === code && w.status === "pending_hsseq");
   const bloquants = motifsBloquants(evaluation);
   // Une demande porte sur un seul motif ouvert, dérogeable, sans demande déjà en cours.
@@ -132,7 +146,9 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
     setErreur(null);
     setInfo(null);
     const ok = await demanderConfirmation(
-      "Le serveur vérifie le verrou une dernière fois : il refuse le départ si un motif bloquant reste ouvert sans dérogation active.",
+      enService
+        ? "Le serveur vérifie le verrou une dernière fois : il refuse le départ si un motif bloquant reste ouvert sans dérogation active."
+        : "Verrou pas encore en service pour cette rotation : elle part sans contrôle du verrou ; les avertissements sont notés au départ.",
       { titre: `Faire partir ${vehicule} ?`, action: "Faire partir" },
     );
     if (!ok) return;
@@ -220,13 +236,29 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
       {evaluation.reasons.length > 0 && (
         <section aria-labelledby={`motifs-${rotationId}`}>
           <h3 id={`motifs-${rotationId}`} className="mb-2.5 font-display text-[16px] font-[650] text-ink">
-            {bloquants.length ? `Motifs ouverts, ${bloquants.length}` : "Motifs"}
-            {evaluation.reasons.length > bloquants.length && <span className="font-sans text-[13px] font-medium text-muted">{`, ${pluriel(evaluation.reasons.length - bloquants.length, "couvert ou sans effet", "couverts ou sans effet")}`}</span>}
+            {!enService ? `Motifs relevés pour information, ${evaluation.reasons.length}` : bloquants.length ? `Motifs ouverts, ${bloquants.length}` : "Motifs"}
+            {enService && evaluation.reasons.length > bloquants.length && <span className="font-sans text-[13px] font-medium text-muted">{`, ${pluriel(evaluation.reasons.length - bloquants.length, "couvert par une dérogation", "couverts par une dérogation")}`}</span>}
           </h3>
           <ul className="space-y-2.5">
-            {evaluation.reasons.map((r) => (
-              <li key={r.code}>
-                <CarteMotif motif={r} attente={Boolean(attente(r.code))} />
+            {evaluation.reasons.map((r, i) => (
+              <li key={`${r.code}-${i}`}>
+                <CarteMotif motif={r} attente={Boolean(attente(r.code))} enService={enService} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {avis.length > 0 && (
+        <section aria-labelledby={`avertissements-${rotationId}`}>
+          <h3 id={`avertissements-${rotationId}`} className="mb-2.5 font-display text-[16px] font-[650] text-ink">
+            {`Avertissements, ${avis.length}`}
+            <span className="font-sans text-[13px] font-medium text-muted">, sans effet sur le départ</span>
+          </h3>
+          <ul className="space-y-2.5">
+            {avis.map((r, i) => (
+              <li key={`${r.code}-avis-${i}`}>
+                <CarteMotif motif={r} attente={false} enService={enService} />
               </li>
             ))}
           </ul>
@@ -245,11 +277,11 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
         id={`derogations-${rotationId}`}
         lignes={lignes}
         erreur={derogations.error}
-        active={evaluation.active_waiver}
+        actives={evaluation.active_waivers ?? []}
         onAnnuler={(w) => void annuler(w)}
       />
 
-      {chefDeParc && !parti && demande && (
+      {chefDeParc && enService && !parti && demande && (
         <DemandeDerogation
           rotationId={rotationId}
           contexte={depart ? `${nomRotation(depart.rotation)}, ${depart.vehicle.name}${depart.driver ? `, ${depart.driver.name}` : ""}` : null}
@@ -272,22 +304,30 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
       {!parti && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p className="max-w-[52ch] text-[12.5px] leading-snug text-muted">
-            {chefDeParc
-              ? candidats.length === 0 && bloquants.length > 0 && !demande
-                ? "Aucun motif ouvert ne peut faire l'objet d'une nouvelle demande de dérogation."
-                : "Une dérogation vaut pour cette seule rotation, avec votre validation puis celle du Responsable HSSEQ."
-              : "Seul le chef de parc du site fait partir la rotation ou demande une dérogation ; vous lisez l'état du départ."}
+            {!enService
+              ? ecritRotations
+                ? "Verrou pas encore en service pour cette rotation : elle part comme avant, sans dérogation à demander."
+                : "Verrou pas encore en service pour cette rotation ; le départ revient aux profils qui écrivent les rotations."
+              : chefDeParc
+                ? candidats.length === 0 && bloquants.length > 0 && !demande
+                  ? "Aucun motif ouvert ne peut faire l'objet d'une nouvelle demande de dérogation."
+                  : "Une dérogation couvre un seul motif, pour cette seule rotation, avec votre validation puis celle du Responsable HSSEQ."
+                : ecritRotations
+                  ? "Verrou en service : seul le chef de parc du site fait partir la rotation ou demande une dérogation."
+                  : "Seul le chef de parc du site fait partir la rotation ou demande une dérogation ; vous lisez l'état du départ."}
           </p>
-          {chefDeParc && (
+          {(peutPartir || (chefDeParc && enService)) && (
             <div ref={commandes} className="flex flex-wrap gap-2">
-              {candidats.length > 0 && !demande && (
+              {chefDeParc && enService && candidats.length > 0 && !demande && (
                 <Button onClick={() => setDemande(true)}>
                   <BadgeCheck className="h-4 w-4" /> Demander une dérogation
                 </Button>
               )}
-              <Button variant={evaluation.allowed ? "primary" : "secondary"} loading={envoi} onClick={() => void fairePartir()}>
-                {!envoi && <Truck className="h-4 w-4" />} Faire partir
-              </Button>
+              {peutPartir && (
+                <Button variant={evaluation.allowed ? "primary" : "secondary"} loading={envoi} onClick={() => void fairePartir()}>
+                  {!envoi && <Truck className="h-4 w-4" />} Faire partir
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -318,6 +358,7 @@ function EnteteDepart({ depart }: { depart: Departure }) {
 }
 
 const ALLURE: Record<string, { cadre: string; titre: string; icone: typeof Lock; mot: string }> = {
+  [HORS_VERROU]: { cadre: "border-line bg-panel-2", titre: "text-ink", icone: Clock, mot: HORS_VERROU },
   Bloqué: { cadre: "border-danger/25 bg-danger-doux", titre: "text-danger", icone: Lock, mot: "Départ bloqué" },
   "À contrôler": { cadre: "border-warn/25 bg-warn-doux", titre: "text-warn", icone: Clock, mot: "À contrôler" },
   Autorisé: { cadre: "border-ok/25 bg-ok-doux", titre: "text-ok-texte", icone: CheckCircle2, mot: "Départ autorisé" },
@@ -330,9 +371,11 @@ function TeteVerrou({ etat, evaluation, parti }: { etat: string; evaluation: Loc
   const a = ALLURE[etat] ?? ALLURE.Bloqué!;
   const Icone = a.icone;
   const bloquants = motifsBloquants(evaluation);
-  const avertissements = evaluation.reasons.filter((r) => r.severity === "warn").length;
+  const nbAvis = avertissements(evaluation).length;
   let texte: string;
-  if (parti) texte = `Rotation en route depuis ${heure(parti)}. Le serveur a vérifié le verrou au départ.`;
+  if (parti) texte = evaluation.lock_active !== false ? `Rotation en route depuis ${heure(parti)}. Le serveur a vérifié le verrou au départ.` : `Rotation en route depuis ${heure(parti)}.`;
+  else if (etat === HORS_VERROU)
+    texte = `Rotation chargée avant la mise en service du verrou : son départ n'est pas bloqué.${evaluation.reasons.length ? ` ${pluriel(evaluation.reasons.length, "motif relevé", "motifs relevés")} pour information.` : ""}`;
   else if (etat === "Autorisé")
     texte = evaluation.reasons.some((r) => r.waiver_id)
       ? "Tous les motifs bloquants sont levés ou couverts par une dérogation active."
@@ -340,7 +383,7 @@ function TeteVerrou({ etat, evaluation, parti }: { etat: string; evaluation: Loc
   else if (etat === "À contrôler")
     texte = `${bloquants.map((r) => r.code).join(" et ")} : saisie de terrain encore à faire par le conducteur, contrôle avant départ ou alcootest.`;
   else texte = `${pluriel(bloquants.length, "motif")} à lever, ou à couvrir par une dérogation quand il est dérogeable, avant de partir.`;
-  if (!parti && avertissements) texte += ` ${pluriel(avertissements, "avertissement")} sans effet sur le départ.`;
+  if (!parti && nbAvis) texte += ` ${pluriel(nbAvis, "avertissement")} sans effet sur le départ.`;
   return (
     <section aria-labelledby={id} className={cx("flex items-start gap-3 rounded-2xl border px-4 py-3.5", a.cadre)}>
       <Icone className={cx("mt-0.5 h-5 w-5 flex-none", a.titre)} />
@@ -356,9 +399,9 @@ function TeteVerrou({ etat, evaluation, parti }: { etat: string; evaluation: Loc
 }
 
 /** Motif détaillé : code, libellé, précision, source, date, qui le lève, et sa dérogation éventuelle. */
-function CarteMotif({ motif, attente }: { motif: LockReason; attente: boolean }) {
+function CarteMotif({ motif, attente, enService }: { motif: LockReason; attente: boolean; enService: boolean }) {
   const qui = levee(motif);
-  const mot = motif.waiver_id ? "Sous dérogation" : attente ? "Attente Responsable HSSEQ" : motif.severity === "warn" ? "Avertissement" : motif.pending ? "Non fait" : "Bloquant";
+  const mot = motif.severity === "warn" ? "Avertissement" : motif.waiver_id ? "Sous dérogation" : attente ? "Attente Responsable HSSEQ" : motif.pending ? "Non fait" : enService ? "Bloquant" : "Pour information";
   return (
     <article className="rounded-xl border border-line bg-panel px-4 py-3">
       <div className="flex flex-wrap items-start gap-2.5">
@@ -370,8 +413,12 @@ function CarteMotif({ motif, attente }: { motif: LockReason; attente: boolean })
       <dl className="mt-2 grid grid-cols-1 gap-x-5 gap-y-1 text-[12.5px] sm:grid-cols-[auto_1fr]">
         <dt className="text-muted">Source</dt>
         <dd className="text-ink-2">{motif.source}</dd>
-        <dt className="text-muted">Depuis</dt>
-        <dd className="text-ink-2">{fmtDateTime(motif.since)}</dd>
+        {motif.since && (
+          <>
+            <dt className="text-muted">Depuis</dt>
+            <dd className="text-ink-2">{fmtDateTime(motif.since)}</dd>
+          </>
+        )}
         {qui && (
           <>
             <dt className="text-muted">Lève ce motif</dt>
@@ -380,7 +427,9 @@ function CarteMotif({ motif, attente }: { motif: LockReason; attente: boolean })
         )}
         <dt className="text-muted">Dérogation</dt>
         <dd className="inline-flex items-center gap-1.5 text-ink-2">
-          {motif.waivable ? (
+          {motif.severity === "warn" ? (
+            "Sans objet : un avertissement ne bloque pas le départ"
+          ) : motif.waivable ? (
             motif.waiver_id ? "Active pour cette rotation" : attente ? "Demandée, en attente du Responsable HSSEQ" : "Possible, sur demande du chef de parc"
           ) : (
             <>
@@ -399,14 +448,14 @@ function texteDerogation(w: Waiver): string {
   if (w.status === "active") {
     const qui = w.approvals.map((a) => a.by.name).join(" puis ");
     const dg = w.management_notified_at ? ` Directeur général informé le ${fmtDateTime(w.management_notified_at)}.` : " Le Directeur général en est informé.";
-    return `Validée par ${qui} ; pour cette seule rotation, jusqu'au ${fmtDateTime(w.expires)}.${dg}`;
+    return `Validée par ${qui} ; pour ce seul motif et cette seule rotation, jusqu'à sa fin prévue, le ${fmtDateTime(w.expires)}.${dg}`;
   }
   if (w.status === "refused") return `Refusée${w.refusal_reason ? ` : ${w.refusal_reason}` : "."}`;
   return STATUT_DEROGATION[w.status];
 }
 
-/** Dérogations de la rotation : en attente, actives, puis refusées. */
-function DerogationsRotation({ id, lignes, erreur, active, onAnnuler }: { id: string; lignes: Waiver[]; erreur: unknown; active: LockEvaluation["active_waiver"]; onAnnuler: (w: Waiver) => void }) {
+/** Dérogations de la rotation : en attente, actives (une par motif), puis refusées. */
+function DerogationsRotation({ id, lignes, erreur, actives, onAnnuler }: { id: string; lignes: Waiver[]; erreur: unknown; actives: LockEvaluation["active_waivers"]; onAnnuler: (w: Waiver) => void }) {
   const ordre: Record<string, number> = { pending_hsseq: 0, active: 1, refused: 2 };
   const triees = [...lignes].sort((a, b) => (ordre[a.status] ?? 3) - (ordre[b.status] ?? 3) || b.requested_at.localeCompare(a.requested_at));
   if (!triees.length && !erreur) return null;
@@ -416,10 +465,15 @@ function DerogationsRotation({ id, lignes, erreur, active, onAnnuler }: { id: st
         Dérogations de la rotation
       </h3>
       {erreur ? (
-        active ? (
-          <p className="text-[13px] text-ink-2">
-            Dérogation active, validée par {active.approved_by.map((a) => a.name).join(" puis ")}, jusqu&apos;au {fmtDateTime(active.expires)}.
-          </p>
+        actives.length ? (
+          <ul className="space-y-1.5 text-[13px] text-ink-2">
+            {actives.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-2">
+                <CodeMotif code={a.reason_code} ton="warn" />
+                Dérogation active{a.expires ? `, jusqu'à la fin prévue de la rotation, le ${fmtDateTime(a.expires)}` : ""}.
+              </li>
+            ))}
+          </ul>
         ) : (
           <ErrorBox error={erreur} titre="Les dérogations de la rotation n'ont pas pu être lues." />
         )
@@ -551,7 +605,7 @@ function DemandeDerogation({
         <ul className="grid gap-1.5 text-[13px] leading-snug text-ink-2">
           <li className="flex items-start gap-2">
             <Clock className="mt-0.5 h-4 w-4 flex-none text-muted" />
-            Pour cette seule rotation : la dérogation expire à la fin de la rotation.
+            Un seul motif, pour cette seule rotation : la dérogation expire à la fin prévue de la rotation.
           </li>
           <li className="flex items-start gap-2">
             <BadgeCheck className="mt-0.5 h-4 w-4 flex-none text-muted" />

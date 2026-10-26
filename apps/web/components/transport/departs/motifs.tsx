@@ -10,7 +10,7 @@
 import type { ReactNode } from "react";
 import { Lock } from "@/components/icons";
 import { Badge, cx } from "@/components/ui";
-import { MOTIFS, etatDepart } from "@/components/hsseq/commun";
+import { MOTIFS, etatDepart, texteErreur } from "@/components/hsseq/commun";
 import { ApiError } from "@/lib/api-client";
 import type { TonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -25,7 +25,7 @@ export const JUSTIFICATION_MIN = 30;
 /** Motif du verrou ou motif cité par Transport dans un refus (422 departure_blocked). */
 type MotifLu = Pick<TransportBlocker, "code" | "label" | "source" | "since" | "waivable" | "severity"> & {
   detail?: string | null;
-  resolution?: string;
+  resolution?: string | null;
   pending?: boolean;
   waiver_id?: number | null;
 };
@@ -51,9 +51,17 @@ export function CodeMotif({ code, ton, titre, masque }: { code: string; ton: Ton
   );
 }
 
-/** Reasons qui bloquent encore : « block » et sans dérogation active. */
+/**
+ * Reasons qui bloquent encore : « block » et sans dérogation active. Verrou pas encore en service,
+ * elles ne bloquent rien mais restent listées pour information.
+ */
 export function motifsBloquants(evaluation: LockEvaluation): LockReason[] {
   return evaluation.reasons.filter((r) => r.severity === "block" && !r.waiver_id);
+}
+
+/** Avertissements (severity « warn ») : servis à part, jamais bloquants ; ceux d'une évaluation ancienne restent lus dans reasons. */
+export function avertissements(evaluation: LockEvaluation): LockReason[] {
+  return [...(evaluation.warnings ?? []), ...evaluation.reasons.filter((r) => r.severity === "warn")];
 }
 
 /** « À contrôler » : toutes les reasons qui bloquent encore (au moins une) sont des saisies de terrain à faire. */
@@ -68,7 +76,7 @@ export function etatEvaluation(evaluation: LockEvaluation) {
 }
 
 /** Rang d'un état pour le tri : ce qui demande une action d'abord. */
-export const RANG_ETAT: Record<string, number> = { Bloqué: 0, "À contrôler": 1, Autorisé: 2, "En route": 3 };
+export const RANG_ETAT: Record<string, number> = { Bloqué: 0, "À contrôler": 1, Autorisé: 2, "Verrou pas encore en service": 3, "En route": 4 };
 
 /** Heure courte « 06:05 ». */
 export function heure(iso: string | null | undefined): string {
@@ -94,7 +102,7 @@ export function jourLong(jour: string): string {
 export const horodatage = fmtDateTime;
 
 /** Qui lève le motif : la levée servie par le noyau, à défaut celle du paramétrage initial (§4). */
-export function levee(m: { code: string; resolution?: string }): string | null {
+export function levee(m: { code: string; resolution?: string | null }): string | null {
   return m.resolution || (estMotifHsseq(m.code) ? MOTIFS[m.code].levee : null);
 }
 
@@ -114,7 +122,8 @@ export function LigneMotif({ motif, jour, fin, dense }: { motif: MotifLu; jour?:
           {motif.waiver_id ? <span className="font-normal text-muted">, sous dérogation</span> : null}
         </p>
         <p className="mt-0.5 text-[12px] leading-snug text-muted">
-          {motif.source}, depuis {quand(motif.since, jour)}
+          {motif.source}
+          {motif.since ? `, depuis ${quand(motif.since, jour)}` : ""}
           {qui && (
             <>
               <span aria-hidden> · </span>
@@ -154,6 +163,5 @@ export function codeErreur(e: unknown): string | null {
  * faire), sinon le message français du noyau.
  */
 export function messageErreur(e: unknown, textes: Partial<Record<string, string>> = {}, defaut = "Action impossible."): string {
-  if (e instanceof ApiError) return textes[e.body.error] ?? e.message;
-  return defaut;
+  return texteErreur(e, textes, defaut);
 }
