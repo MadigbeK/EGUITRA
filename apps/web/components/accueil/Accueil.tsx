@@ -6,23 +6,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
-import { rayonsDe, sansAccents, voisine, type Rayon, type Tuile } from "@/components/accueil/tuiles";
+import { alignerSociete, rayonsDe, sansAccents, voisine, type Rayon, type Tuile } from "@/components/accueil/tuiles";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
-import { APPS, appFromPath, type AppCode } from "@/lib/config";
+import { APPS, type AppCode } from "@/lib/config";
+import { MESSAGE_RESEAU } from "@/lib/erreurs";
 import type { Me } from "@/lib/types";
 
-/**
- * Chaque application mémorise sa société de travail : le module ouvert depuis l'accueil reçoit
- * d'abord la société affichée sur l'accueil, quand il l'accepte (AxisPro ne sert que le cabinet).
- */
-async function alignerSociete(me: Me, app: AppCode, href: string) {
-  const cible = appFromPath(href);
-  const company = me.companies.find((c) => c.id === me.company_id);
-  if (!cible || cible === app || !company) return;
-  const servie = APPS[cible].entity;
-  if (servie && servie !== company.entity) return;
-  await fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: company.id, app: cible }) }).catch(() => null);
-}
+// Chaque application mémorise sa société de travail : le module ouvert depuis l'accueil reçoit d'abord
+// la société affichée sur l'accueil, quand elle s'y choisit et qu'il l'accepte ; un module réservé à
+// une société s'ouvre dans ses livres (tuiles.ts, societePour).
 
 /** Durée pendant laquelle les icônes jouent leur entrée (la vague des tuiles comprise). */
 const INTRO_MS = 3200;
@@ -131,7 +123,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
     void fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: null, app }) }).catch(() => undefined);
   }, [me.societe_retiree, app]);
 
-  const rayons = useMemo(() => familles(rayonsDe(me, app), principale(me, app)), [me, app]);
+  const rayons = useMemo(() => familles(rayonsDe(me, app, true), principale(me, app)), [me, app]);
   const total = useMemo(() => rayons.reduce((n, r) => n + r.tuiles.length, 0), [rayons]);
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
@@ -240,7 +232,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
       voile.current = null;
       setLente(t);
     }, OUVERTURE_LENTE_MS);
-    const aligne = alignerSociete(me, app, t.href);
+    const aligne = alignerSociete(me, app, t, true);
     const boite = e.currentTarget.querySelector<HTMLElement>(".tuile-boite");
     if (reduit || !boite) {
       void aligne.then(() => router.push(t.href));
@@ -334,7 +326,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
             onSubmit={(e) => {
               e.preventDefault();
               const premiere = visibles[0];
-              if (premiere) void alignerSociete(me, app, premiere.href).then(() => router.push(premiere.href));
+              if (premiere) void alignerSociete(me, app, premiere, true).then(() => router.push(premiere.href));
             }}
             className="flex h-11 items-center gap-2.5 rounded-xl border border-line bg-white/95 px-3.5 shadow-[0_2px_10px_-4px_rgb(16_36_31/0.18)]"
           >
@@ -486,7 +478,14 @@ function useFermeture(open: boolean, setOpen: (v: boolean) => void) {
 
 /** Société de travail, en toutes lettres comme sur Odoo ; on en change ici si le compte est ouvert aux deux. */
 function Societe({ me, app }: { me: Me; app: AppCode }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenBrut] = useState(false);
+  // Changement en cours (société demandée) ou en échec (message) : la liste reste ouverte et le dit.
+  const [enCours, setEnCours] = useState<number | null>(null);
+  const [echec, setEchec] = useState<string | null>(null);
+  const setOpen = (v: boolean) => {
+    setOpenBrut(v);
+    if (!v) setEchec(null);
+  };
   const box = useFermeture(open, setOpen);
   const company = me.companies.find((c) => c.id === me.company_id);
   const servie = APPS[app].entity;
@@ -494,10 +493,14 @@ function Societe({ me, app }: { me: Me; app: AppCode }) {
   if (!company) return null;
 
   async function changer(id: number) {
-    setOpen(false);
-    if (id === me.company_id) return;
+    if (id === me.company_id) return setOpen(false);
+    setEnCours(id);
+    setEchec(null);
     const res = await fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: id, app }) }).catch(() => null);
-    if (res?.ok) window.location.reload();
+    // Rechargement complet : aucune donnée de l'autre société ne reste affichée.
+    if (res?.ok) return window.location.reload();
+    setEnCours(null);
+    setEchec(res ? "Changement de société refusé : rechargez la page puis réessayez." : MESSAGE_RESEAU);
   }
 
   const libelle = (
@@ -517,14 +520,21 @@ function Societe({ me, app }: { me: Me; app: AppCode }) {
       {open && (
         <div role="group" aria-label="Société" className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-1.5 w-[260px] p-1.5")}>
           {ouvertes.map((c) => (
-            <button key={c.id} type="button" aria-pressed={c.id === me.company_id} onClick={() => changer(c.id)} className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left", c.id === me.company_id ? "bg-accent-doux" : "hover:bg-panel-2")}>
+            <button key={c.id} type="button" aria-pressed={c.id === me.company_id} disabled={enCours !== null} onClick={() => void changer(c.id)} className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left disabled:cursor-wait", c.id === me.company_id ? "bg-accent-doux" : "hover:bg-panel-2")}>
               <span className="grid h-8 w-8 flex-none place-items-center rounded-md border border-line bg-white">
                 <LogoSociete entite={c.entity ?? "groupe"} decoratif className="h-4" />
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{c.name}</span>
+              {c.id === enCours && <span aria-hidden className="n-tourne h-4 w-4 flex-none rounded-full border-2 border-accent-vif/25 border-t-accent-vif" />}
               {c.id === me.company_id && <Check className="h-4 w-4 text-accent" strokeWidth={2.2} />}
             </button>
           ))}
+          {enCours !== null && <p role="status" className="sr-only">Changement de société en cours</p>}
+          {echec && (
+            <p role="alert" className="mx-1 mb-1 mt-1.5 rounded-lg bg-danger-doux px-2.5 py-2 text-[12.5px] leading-snug text-danger">
+              {echec}
+            </p>
+          )}
         </div>
       )}
     </div>

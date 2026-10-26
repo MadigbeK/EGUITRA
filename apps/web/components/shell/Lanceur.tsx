@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact } from "react";
 import { IconeModule } from "@/components/accueil/icones-modules";
-import { rayonsDe, voisine } from "@/components/accueil/tuiles";
+import { alignerSociete, rayonsDe, societePour, voisine, type Tuile } from "@/components/accueil/tuiles";
 import { ChevronRight } from "@/components/icons";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import type { AppCode } from "@/lib/config";
@@ -120,6 +120,15 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
     [],
   );
 
+  // Module réservé à une société (BTP, Immobilier) d'une autre application : sa société lui est
+  // donnée avant de l'ouvrir, sans quoi il s'ouvrirait dans les livres du cabinet et répondrait 422.
+  function ouvrir(e: SourisReact<HTMLAnchorElement>, t: Tuile) {
+    fermer(false);
+    if (!societePour(me, app, t, false) || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    void alignerSociete(me, app, t, false).then(() => router.push(t.href));
+  }
+
   function naviguer(e: ClavierReact<HTMLDivElement>) {
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     const liens = [...(panneau.current?.querySelectorAll<HTMLAnchorElement>("a[data-module]") ?? [])];
@@ -212,7 +221,7 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
                           data-module
                           href={t.href}
                           aria-current={actif ? "page" : undefined}
-                          onClick={() => fermer(false)}
+                          onClick={(e) => ouvrir(e, t)}
                           className={cx(
                             "tuile group relative flex flex-col items-center gap-1.5 rounded-xl px-1 pb-2.5 pt-3 text-center outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent",
                             actif ? "bg-accent-doux" : "hover:bg-panel-2 focus-visible:bg-panel-2",
