@@ -442,6 +442,9 @@ l'application native NIMOVA Terrain par la session Mobile App ; le design livre 
 - la maquette d'API HSSEQ et les comptes de démonstration (`hsseq`, `dg`, `boffa`, `conducteur`) ;
 - le système de conception « terrain » et les maquettes Android de NIMOVA Terrain
   (`docs/design/mobile/`) : plein soleil, gants, une main, tablette partagée ;
+- les icônes de NIMOVA Terrain (`docs/design/mobile/icones/`, 26/10) : icône d'application, icône
+  adaptative Android en trois couches, image de démarrage et favicon, tirées du pli sur fond forêt,
+  aux noms de `apps/terrain/app.json` ;
 - les écrans web : cockpit (à traiter, indicateurs gravés, comité mensuel au format des donneurs
   d'ordre, matrice 5 × 5), événements (liste, déclaration, fiche avec classement et enquête), plan
   d'actions (preuve, efficacité à J+90, validation des actions coûteuses), contrôles,
