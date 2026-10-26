@@ -674,7 +674,7 @@ def _evaluation_rows(filename, content):
             raise UserError("Fichier JSON illisible.") from e
         if not isinstance(data, dict) or data.get("format") != EXPORT_FORMAT \
                 or not isinstance(data.get("evaluations") or [], list):
-            raise UserError("Ce fichier JSON n'est pas un export d'évaluation AxisPro.")
+            raise UserError("Ce fichier JSON n'est pas un export d'évaluation de MB AxisPro Consulting.")
         return [(n, item) for n, item in enumerate(data.get("evaluations") or [], start=1) if isinstance(item, dict)]
     if filename.lower().endswith((".xlsx", ".xlsm")):
         raw = workbook_rows(content, sheets=("Scoring", "Évaluation"))

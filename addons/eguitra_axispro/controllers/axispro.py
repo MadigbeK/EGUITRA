@@ -163,7 +163,7 @@ class EguitraAxispro(http.Controller):
         form = request.httprequest.form
         go = form.get("go_threshold")
         policy = request.env["axispro.policy"].import_grid(
-            request.env.company, form.get("name") or "Politique d'évaluation AxisPro", upload.filename or "grille.xlsx",
+            request.env.company, form.get("name") or "Politique d'évaluation MB AxisPro Consulting", upload.filename or "grille.xlsx",
             upload.read(), go=as_float(go, "go_threshold") if go else None,
             conditional=as_float(form.get("conditional_threshold") or 50, "conditional_threshold"),
             notes=form.get("notes") or None,
