@@ -73,6 +73,10 @@ def audit_list_domain(kw):
         domain.append(("standard", "in", kw["standard"].split(",")))
     if kw.get("site_id"):
         domain.append(("site_id", "=", int_or_none(kw, "site_id")))
+    q = kw.get("q") or kw.get("search")
+    if q:
+        domain += ["|", "|", "|", "|", ("reference", "ilike", q), ("title", "ilike", q), ("scope", "ilike", q),
+                   ("auditor_name", "ilike", q), ("partner_id.name", "ilike", q)]
     year = int_or_none(kw, "year") or today().year
     start, end = date_value(kw, "date_from"), date_value(kw, "date_to")
     domain.append(("planned_date", ">=", start or today().replace(year=year, month=1, day=1)))
@@ -331,6 +335,10 @@ class EguitraHsseqAudits(http.Controller):
         for key in ("audit_id", "requirement_id", "site_id"):
             if kw.get(key):
                 domain.append((key, "=", int_or_none(kw, key)))
+        q = kw.get("q") or kw.get("search")
+        if q:
+            domain += ["|", "|", "|", ("reference", "ilike", q), ("description", "ilike", q),
+                       ("audit_id.title", "ilike", q), ("requirement_id.title", "ilike", q)]
         offset, limit, order = page_args(kw, "-id", {"id": "id"})
         Finding = request.env["eguitra.hsseq.finding"].sudo()
         rows = Finding.search(domain, offset=offset, limit=limit, order=order)

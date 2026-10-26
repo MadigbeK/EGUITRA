@@ -209,9 +209,11 @@ def list_domain(kw, with_status=True):
     for key in NOTE_FIELDS:
         if kw.get(key):
             domain.append((key, "=", note(kw, key)))
-    for key in ("nature", "vehicle_kind"):
-        if kw.get(key):
-            domain.append((key, "in", kw[key].split(",")))
+    if kw.get("nature"):
+        domain.append(("nature", "in", kw["nature"].split(",")))
+    if kw.get("vehicle_kind"):
+        # Un risque « tous profils » (sans profil) vaut aussi pour le profil filtré.
+        domain += ["|", ("vehicle_kind", "in", kw["vehicle_kind"].split(",")), ("vehicle_kind", "=", False)]
     if kw.get("site_id"):
         domain.append(("site_id", "=", int_or_none(kw, "site_id")))
     if kw.get("owner_id"):

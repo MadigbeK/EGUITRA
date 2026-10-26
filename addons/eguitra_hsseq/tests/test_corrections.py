@@ -350,3 +350,29 @@ class TestCorrections(HsseqCase):
         status, lifted = self.api("admin.hsseq", "POST", f"/hsseq/checks/{far.id}/lift",
                                   {"nonconformity_id": far_nc.id, "attachment_ids": [photo["id"]]})
         self.assertEqual((status, [n["status"] for n in lifted["nonconformities"]]), (200, ["lifted"]), lifted)
+
+    def test_risques_tous_profils_et_recherche_des_audits(self):
+        """Le filtre vehicle_kind garde les risques « tous profils » ; recherche texte (q) sur les audits et
+        les constats."""
+        Risk = self.env["eguitra.hsseq.risk"]
+        base = {"company_id": self.company.id, "owner_id": self.hsseq.id, "hazard": "Danger", "raw_severity": 2,
+                "raw_probability": 2, "residual_severity": 2, "residual_probability": 2}
+        every = Risk.create(dict(base, feared_event="Fatigue du conducteur"))
+        tipper = Risk.create(dict(base, vehicle_kind="tipper", feared_event="Renversement de la benne"))
+        tanker = Risk.create(dict(base, vehicle_kind="tanker", feared_event="Fuite au dôme"))
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/risks?vehicle_kind=tipper")
+        ids = {r["id"] for r in listing["items"]}
+        self.assertEqual((every.id in ids, tipper.id in ids, tanker.id in ids), (True, True, False))
+        Audit = self.env["eguitra.hsseq.audit"]
+        dock = Audit.create({"title": "Audit du quai de dépotage", "standard": "internal", "planned_date": self.day,
+                             "company_id": self.company.id})
+        Audit.create({"title": "Audit des bureaux", "standard": "internal", "planned_date": self.day,
+                      "company_id": self.company.id})
+        self.env["eguitra.hsseq.finding"].create({"audit_id": dock.id, "classification": "minor",
+                                                  "description": "Extincteur périmé au quai 2"})
+        status, audits = self.api("kadi.hsseq", "GET", "/hsseq/audits?q=dépotage")
+        self.assertEqual([a["id"] for a in audits["items"]], [dock.id])
+        status, findings = self.api("kadi.hsseq", "GET", "/hsseq/findings?q=extincteur")
+        self.assertEqual([f["audit"]["id"] for f in findings["items"]], [dock.id])
+        status, findings = self.api("kadi.hsseq", "GET", "/hsseq/findings?q=bureaux")
+        self.assertEqual(findings["items"], [], "Recherche aussi sur l'audit du constat")
