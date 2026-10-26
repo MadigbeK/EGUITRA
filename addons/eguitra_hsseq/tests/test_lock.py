@@ -487,7 +487,7 @@ class TestLock(HsseqCase):
         status, reasons = self.api("kadi.hsseq", "GET", "/hsseq/lock/reasons")
         self.assertEqual([r["code"] for r in reasons], [f"V0{i}" for i in range(1, 10)])
         status, body = self.api("kadi.hsseq", "PATCH", "/hsseq/lock/reasons", {"code": "V07", "active": True})
-        self.assertEqual((status, body["error"]), (422, "not_in_lot_1"))
+        self.assertEqual((status, body["active"], body["lot"]), (200, True, 2), "Lot 2 : V06 à V09 s'activent")
         status, body = self.api("admin.hsseq", "PATCH", "/hsseq/lock/reasons",
                                 {"code": "V02", "vehicle_kinds": ["tanker"], "disabled_sites": [self.site2.id]})
         self.assertEqual((status, body["vehicle_kinds"], body["disabled_sites"][0]["id"]), (200, ["tanker"], self.site2.id))

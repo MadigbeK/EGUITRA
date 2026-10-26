@@ -98,6 +98,21 @@
         <field name="model_id" ref="model_eguitra_hsseq_expiry_alert"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_journey_company" model="ir.rule">
+        <field name="name">Plans de trajet : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_journey"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_journey_stop_company" model="ir.rule">
+        <field name="name">Arrêts des plans de trajet : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_journey_stop"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_immobilization_company" model="ir.rule">
+        <field name="name">Immobilisations HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_immobilization"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_indicator_snapshot_company" model="ir.rule">
         <field name="name">Indicateurs figés : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>

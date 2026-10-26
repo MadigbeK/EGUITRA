@@ -87,6 +87,7 @@ OBJECT_MODELS = {
     "requirement": "eguitra.hsseq.requirement",
     "journey": "eguitra.hsseq.journey",
     "immobilization": "eguitra.hsseq.immobilization",
+    "rotation": "eguitra.transport.rotation",
     "report": "eguitra.hsseq.report.month",
 }
 ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver", "risk", "audit", "finding", "requirement")

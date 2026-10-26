@@ -78,6 +78,13 @@ class EguitraHsseqSettings(models.Model):
         help="Destinataire des notifications de criticité élevée, de dérogation et d'escalade. Vide : les comptes "
              "du profil Direction générale de la société.")
 
+    # ─── Plan de trajet (V08) ─────────────────────────────────────────────
+    night_start_hour = fields.Float("Nuit à partir de (heure)", default=19.0,
+                                    help="Plage de nuit des routes interdites de nuit (heure de Conakry).")
+    night_end_hour = fields.Float("Nuit jusqu'à (heure)", default=6.0)
+    max_driving_hours = fields.Float("Conduite prévue au plus par jour (heures)", default=9.0,
+                                     help="Au-delà, sur une journée, le plan de trajet ouvre le motif V08.")
+
     # ─── Registre des risques (§3) ────────────────────────────────────────
     risk_review_months = fields.Integer("Revue d'un risque tous les (mois)", default=12,
                                         help="Prochaine revue proposée à la création et après chaque revue.")
@@ -86,6 +93,12 @@ class EguitraHsseqSettings(models.Model):
     targets = fields.Json("Cibles des indicateurs", help="Code de l'indicateur -> cible ; à défaut, la cible proposée.")
 
     _company_unique = models.Constraint("unique(company_id)", "Les paramètres HSSEQ de cette société existent déjà.")
+
+    @api.constrains("night_start_hour", "night_end_hour", "max_driving_hours")
+    def _check_journey(self):
+        for s in self:
+            if not (0 <= s.night_start_hour < 24 and 0 <= s.night_end_hour < 24) or s.max_driving_hours < 0:
+                raise ValidationError("Heures de nuit entre 0 et 24, durée de conduite positive.")
 
     @api.constrains("level_moderate_min", "level_significant_min", "level_high_min")
     def _check_levels(self):

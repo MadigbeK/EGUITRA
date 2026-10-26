@@ -14,8 +14,16 @@ Motifs du lot 1, activables par type de véhicule et par site (eguitra.hsseq.loc
   en service des paramètres (avant : avertissement) ;
 - V05 assurance ou visite technique expirée (Transport, _expired_documents) ; absente selon la date de mise
   en service des documents (avant : avertissement).
-V06 à V09 sont déclarés, inactifs au lot 1. V01 et V03 ne sont jamais dérogeables ; une dérogation active
-couvre son motif pour la rotation.
+Motifs du lot 2, livrés désactivés (hsseq ou admin les activent par type de véhicule et par site) :
+- V06 barémage ou certificat d'étanchéité expiré, ou absent selon la date de mise en service des
+  documents (citernes seulement) ;
+- V07 charge pesée au-delà de la charge utile (bennes seulement, _overload de Transport), levé par une
+  nouvelle pesée après délestage ;
+- V08 plan de trajet absent ou non validé, conduite de nuit prévue sur une route interdite de nuit ou
+  conduite prévue au-delà du maximum journalier (eguitra.hsseq.journey) ;
+- V09 véhicule immobilisé par un événement en cours d'enquête (eguitra.hsseq.immobilization).
+V01 et V03 ne sont jamais dérogeables, V02 et V04 à V09 le sont ; une dérogation active couvre son motif
+pour la rotation.
 
 Le verrou s'applique aux rotations chargées à partir de la date de mise en service des paramètres
 (lock_start_date) ; ces rotations ne se valident qu'après leur passage « en route » (motif H01).
@@ -34,6 +42,9 @@ from .common import EXPLOITATION_GROUP, VEHICLE_KINDS, day_start, today, vehicle
 from .waiver import NOT_WAIVABLE, ROTATION_ENDED
 
 V05_KINDS = ("insurance", "inspection")
+V06_KINDS = ("calibration", "tightness")
+# Lot en service : les motifs des lots suivants ne s'évaluent ni ne s'activent.
+CURRENT_LOT = 2
 DOCUMENT_LABELS = {"insurance": "assurance", "inspection": "visite technique", "calibration": "barémage",
                    "tightness": "certificat d'étanchéité"}
 
@@ -63,7 +74,8 @@ class EguitraHsseqLockReason(models.Model):
 
     def _applies(self, kind, site):
         self.ensure_one()
-        return bool(self.enabled and self.lot == 1 and self[kind] and not (site and site in self.disabled_site_ids))
+        return bool(self.enabled and self.lot <= CURRENT_LOT and self[kind]
+                    and not (site and site in self.disabled_site_ids))
 
     @api.model
     def _settings_map(self):
@@ -164,6 +176,14 @@ class EguitraTransportRotation(models.Model):
             rot._hsseq_v04(add, day, settings)
         # V05 : documents du véhicule (Transport).
         rot._hsseq_v05(add, day, settings)
+        # V06 : barémage et étanchéité de la citerne (Transport).
+        rot._hsseq_v06(add, day, settings)
+        # V07 : charge pesée au-delà de la charge utile (benne).
+        rot._hsseq_v07(add)
+        # V08 : plan de trajet.
+        rot._hsseq_v08(add, settings)
+        # V09 : véhicule immobilisé par un événement en cours d'enquête.
+        rot._hsseq_v09(add)
 
         waived = []
         if apply_waivers:
@@ -268,6 +288,48 @@ class EguitraTransportRotation(models.Model):
         if missing:
             text = ", ".join(f"{DOCUMENT_LABELS.get(k, k)} non renseignée" for k in missing)
             add("V05", info=text, severity="block" if settings._required_from("documents_required_from", day) else "warn")
+
+    def _hsseq_v06(self, add, day, settings):
+        vehicle = self.vehicle_id
+        if vehicle_kind(vehicle) != "tanker" or not hasattr(vehicle, "_expired_documents"):
+            return
+        expired = vehicle._expired_documents(day, kinds=V06_KINDS)
+        if expired:
+            first = min(expired.mapped("expiry_date"))
+            add("V06", since=day_start(first + timedelta(days=1)), info=", ".join(
+                f"{DOCUMENT_LABELS.get(d.kind, d.kind)} expiré le {d.expiry_date:%d/%m/%Y}" for d in expired))
+        missing = vehicle._missing_documents(kinds=V06_KINDS)
+        if missing:
+            text = ", ".join(f"{DOCUMENT_LABELS.get(k, k)} non renseigné" for k in missing)
+            add("V06", info=text, severity="block" if settings._required_from("documents_required_from", day) else "warn")
+
+    def _hsseq_v07(self, add):
+        if vehicle_kind(self.vehicle_id) != "tipper" or not hasattr(self, "_overload"):
+            return
+        overload = self._overload()
+        if overload > 0:
+            net = self.weight_gross - self.weight_tare
+            add("V07", info=f"Poids net {net:.2f} t pour une charge utile de {self.vehicle_id.payload_tonnes:.2f} t : "
+                            f"délester de {overload:.2f} t, puis nouvelle pesée.")
+
+    def _hsseq_v08(self, add, settings):
+        journey = self._hsseq_journey()
+        problems = []
+        if not journey:
+            problems.append("Aucun plan de trajet pour la rotation.")
+        elif journey.status != "validated":
+            problems.append("Plan de trajet à valider par l'exploitation.")
+        if journey:
+            problems += [issue["label"] for issue in journey._issues(settings)]
+        if problems:
+            add("V08", since=journey.write_date if journey else self.create_date, info=" ".join(problems))
+
+    def _hsseq_v09(self, add):
+        immobilization = self.vehicle_id.hsseq_immobilization_id
+        if immobilization:
+            event = immobilization.event_id
+            add("V09", since=immobilization.since,
+                info=f"{self.vehicle_id.name} immobilisé par l'événement {event.reference} ({event.title}).")
 
     def _hsseq_evaluate(self, detail=True, log=False, attach=False):
         """Évaluation du verrou au format de POST /hsseq/lock/evaluate."""

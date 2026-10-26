@@ -114,7 +114,18 @@ def user_transitions(event):
     transitions = list(event._transitions())
     if "close" in transitions and event._open_actions():
         transitions.remove("close")
+    # Criticité élevée : immobilisation du véhicule proposée (V09, POST /hsseq/events/<id>/immobilize).
+    if event._immobilization_proposed():
+        transitions.append("immobilize")
     return transitions
+
+
+def immobilization_ref(event):
+    active = event.sudo().immobilization_ids.filtered(lambda i: i.status == "active")[:1]
+    if not active:
+        return None
+    return {"id": active.id, "since": active.since, "reason": active.reason or None,
+            "imposed_by": user_ref(active.imposed_by)}
 
 
 def rights(event):
@@ -182,6 +193,7 @@ def event_detail(event):
         "people": [person_row(p) for p in event.person_ids],
         "lost_time": event.lost_time, "days_lost": event.days_lost or 0,
         "leave_id": event.leave_id.id or None, "vehicle_immobilized": event.vehicle_immobilized,
+        "immobilization": immobilization_ref(event), "immobilization_proposed": event._immobilization_proposed(),
         "classified_at": event.classified_at or None, "classified_by": user_ref(event.classified_by),
         "closed_at": event.closed_at or None, "closed_by": user_ref(event.closed_by),
         "reopen_reason": event.reopen_reason or None,

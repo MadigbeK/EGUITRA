@@ -57,7 +57,8 @@ SETTINGS_FIELDS = {
     "level_high_min": "int", "investigation_hours_high": "int", "investigation_days_significant": "int",
     "investigation_days_moderate": "int", "client_notice_hours": "int", "verification_min_criticality": "int",
     "verification_days": "int", "escalation_days": "int", "costly_action_threshold": "float",
-    "check_window_hours": "int", "breath_test_window_hours": "int",
+    "check_window_hours": "int", "breath_test_window_hours": "int", "night_start_hour": "float",
+    "night_end_hour": "float", "max_driving_hours": "float", "risk_review_months": "int",
 }
 
 
@@ -196,7 +197,8 @@ class EguitraHsseqReferentials(http.Controller):
         return {
             "sites": [site_row(s) for s in sites],
             "vehicles": [dict(vehicle_ref(v), site_id=v.site_id.id or None, driver_id=v.driver_id.id or None,
-                              payload_tonnes=(v.payload_tonnes or None) if "payload_tonnes" in v._fields else None)
+                              payload_tonnes=(v.payload_tonnes or None) if "payload_tonnes" in v._fields else None,
+                              immobilized=v.hsseq_immobilized)
                          for v in vehicles],
             "drivers": [dict(driver_ref(d), site_id=on_site.get(d.id)) for d in drivers],
             "owners": [user_ref(u) for u in owners],

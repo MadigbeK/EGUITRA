@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Motifs du verrou de départ (spécification HSSEQ §4). V01 à V05 évalués au lot 1, actifs pour les deux
-    types de véhicule et tous les sites ; V06 à V09 déclarés, inactifs jusqu'au lot 2. Activation par type
-    de véhicule et par site modifiable par les profils hsseq et admin (noupdate). V01 et V03 ne sont jamais
-    dérogeables.
+    Motifs du verrou de départ (spécification HSSEQ §4). V01 à V05 actifs pour les deux types de véhicule et
+    tous les sites ; V06 à V09 (lot 2) livrés désactivés, à activer par les profils hsseq et admin (V06 pour
+    les citernes, V07 pour les bennes). Activation par type de véhicule et par site modifiable (noupdate).
+    V01 et V03 ne sont jamais dérogeables.
 -->
 <odoo noupdate="1">
     <record id="reason_v01" model="eguitra.hsseq.lock.reason">

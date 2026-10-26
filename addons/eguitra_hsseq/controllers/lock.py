@@ -9,6 +9,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, require
 
 from ..models.common import VEHICLE_KINDS, HsseqError
+from ..models.lock import CURRENT_LOT
 from .common import (
     CONFIG,
     companies,
@@ -112,7 +113,7 @@ class EguitraHsseqLock(http.Controller):
             raise ApiError(404, "not_found", "Motif inconnu.")
         values = {}
         if "active" in data:
-            if data["active"] and reason.lot > 1:
+            if data["active"] and reason.lot > CURRENT_LOT:
                 raise HsseqError("not_in_lot_1", f"Le motif {reason.code} relève du lot {reason.lot} : il n'est pas "
                                                  "encore évalué.", fields=["active"])
             values["enabled"] = bool(data["active"])
