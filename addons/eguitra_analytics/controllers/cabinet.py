@@ -9,11 +9,29 @@ période communs (date_to, period, date_from : controllers/common.parse_period).
 from odoo import http
 from odoo.http import request
 
-from odoo.addons.eguitra_api.controllers.framework import api_route
+from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json
 
 from .classeur import export_section
 from .common import CABINET_ACTIVITY, CABINET_READ, envelope, parse_period
 from .contexte import CABINET_SECTIONS
+
+# Réglages de la valeur du temps : lus par les profils de l'activité, écrits par l'administration et la
+# direction (ils changent la valeur du temps, la réalisation et la marge de chaque dossier).
+REGLAGES_WRITE = ("admin", "direction")
+
+
+def _nombre(data, key, low, high, label):
+    """Nombre d'un réglage (None : effacer) borné à ]low, high] ; 422 sinon, avec le motif."""
+    value = data.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(422, "invalid_parameter", f"{label} : nombre attendu.") from e
+    if not low < number <= high:
+        raise ApiError(422, "invalid_parameter", f"{label} : valeur hors des bornes (plus de {low:g}, au plus {high:g}).")
+    return number
 
 
 def _section(name, kw):
@@ -55,6 +73,22 @@ class EguitraAnalyseCabinet(http.Controller):
     def cabinet_activite(self, **kw):
         """Activité et honoraires (6.6), ouverte aussi à la finance."""
         return _section("activite", kw)
+
+    @api_route("/analyse/cabinet/reglages", profiles=CABINET_ACTIVITY)
+    def cabinet_reglages(self, **_kw):
+        """Taux horaire de référence et taux de revient du temps, et les saisies illisibles."""
+        return request.env["eguitra.analytics.cabinet"].reglages()
+
+    @api_route("/analyse/cabinet/reglages", methods=("PATCH",), profiles=REGLAGES_WRITE)
+    def cabinet_reglages_modifier(self, **_kw):
+        """Fixe ou efface (null) le taux horaire de référence (GNF/h) et le taux de revient (% du taux de vente)."""
+        data = read_json()
+        values = {}
+        if "hourly_rate" in data:
+            values["hourly_rate"] = _nombre(data, "hourly_rate", 0, 1e9, "Taux horaire de référence")
+        if "cost_ratio_pct" in data:
+            values["cost_ratio_pct"] = _nombre(data, "cost_ratio_pct", 0, 150, "Taux de revient")
+        return request.env["eguitra.analytics.cabinet"].ecrire_reglages(values)
 
     @api_route("/analyse/cabinet/risques", profiles=CABINET_READ)
     def cabinet_risques(self, **kw):

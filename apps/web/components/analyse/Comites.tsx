@@ -1,22 +1,30 @@
 "use client";
 
 import { type CSSProperties } from "react";
-import { AreaChart, Badge, Card, ErrorBox, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, cx } from "@/components/ui";
 import { COULEUR_DECISION, ETATS } from "@/lib/couleurs";
 import { CarteChaleur, Legende, TableRepli } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtDate, fmtPct, joursOu, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtDate, fmtPct, joursOu, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
+import { RECO, type Recommendation } from "@/lib/axispro-types";
 import type { CabinetComites, Decision } from "@/lib/analyse-types";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, fmtRatio, fmtJours, INSECABLE } from "@/lib/format";
 
-const LIBELLE_DECISION: Record<string, string> = { go: "GO", conditional: "GO sous conditions", hold: "HOLD", no_go: "NO-GO", postponed: "Ajourné" };
+/** Décision d'un comité, dans le vocabulaire de la méthode (CONDITIONAL GO, comme le noyau). */
+const libelleDecision = (code: string) => RECO[code as Recommendation]?.label ?? code;
+
+/** Lecture d'une case de la matrice, donnée par le noyau (la diagonale n'est pas l'accord). */
+const LECTURE_CASE: Record<string, string> = {
+  agree: "Accord : le comité suit la méthode",
+  lenient: "Comité plus favorable que la méthode",
+  strict: "Comité plus sévère que la méthode",
+};
 
 /** Qualité des décisions : accord méthode × comité, décisions par mois, délai de décision, scores à la décision, passages forcés. */
 export function Comites() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -33,29 +41,32 @@ function Corps() {
     <>
       {ag && ag.agreement_pct !== null ? (
         <>
-          Le comité suit la recommandation de la méthode dans <strong className="font-semibold text-ink">{fmtPct(ag.agreement_pct, 0)} des cas</strong> ({ag.agreed} sur {ag.n} revues ; {ag.lenient} plus indulgente{ag.lenient > 1 ? "s" : ""}, {ag.strict} plus sévère{ag.strict > 1 ? "s" : ""}).
+          Le comité suit la recommandation de la méthode dans <strong className="font-semibold text-ink">{fmtPct(ag.agreement_pct, 0)} des cas</strong> ({ag.agreed} sur {pluriel(ag.n, "revue")} ; {ag.lenient} plus indulgente{ag.lenient > 1 ? "s" : ""}, {ag.strict} plus sévère{ag.strict > 1 ? "s" : ""}).
         </>
       ) : (
         <>Pas encore de revue verrouillée avec recommandation : le taux d&apos;accord n&apos;est pas calculable{ag?.excluded ? ` (${pluriel(ag.excluded, "revue exclue", "revues exclues")})` : ""}.</>
       )}{" "}
-      {total > 0 ? `${pluriel(total, "décision")} sur 12 mois` : "Aucune décision sur 12 mois"}
+      {total > 0 ? `${pluriel(total, "décision")} sur la période` : "Aucune décision sur la période"}
       {ttd && ttd.median_days !== null && ttd.n > 0 && `, prises ${joursOu(ttd.median_days)} après l'ouverture en médiane`}
       {d.forced_summary && d.forced_summary.count > 0 ? ` ; ${pluriel(d.forced_summary.count, "passage de gate forcé", "passages de gate forcés")} sur ${d.forced_summary.passages}` : d.forced_summary?.passages ? " ; aucun passage de gate forcé" : ""}.
       {d.favorable_with_knockout?.length > 0 && <> {pluriel(d.favorable_with_knockout.length, "décision favorable", "décisions favorables")} malgré un critère éliminatoire actif.</>}
     </>
   );
   const serieDecisions = d?.decisions?.series ?? [];
+  // Mois du graphique : ceux de la période, étendus aux douze derniers quand elle est plus courte ; ses
+  // décisions ne sont pas celles du total de la période.
   const mois = d?.decisions?.months ?? [];
+  const decisionsDuGraphique = serieDecisions.reduce((s, x) => s + x.values.reduce((a, v) => a + (v ?? 0), 0), 0);
 
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/comites.xlsx${query}`} question="Le comité décide-t-il comme la méthode le recommande ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Recommandation de la méthode × décision du comité" className="xl:col-span-6" actions={ag && ag.agreement_pct !== null ? <Badge tone={ag.agreement_pct >= 85 ? "ok" : ag.agreement_pct >= 70 ? "warn" : "danger"}>Accord {fmtPct(ag.agreement_pct, 0)}{ag.kappa !== null ? ` · kappa ${ag.kappa.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}` : ""}</Badge> : <Badge tone="neutral">Pas encore de revue</Badge>}>
+            <Card title="Recommandation de la méthode × décision du comité" className="xl:col-span-6" actions={ag && ag.agreement_pct !== null ? <Badge tone={ag.agreement_pct >= 85 ? "ok" : ag.agreement_pct >= 70 ? "warn" : "danger"}>Accord {fmtPct(ag.agreement_pct, 0)}{ag.kappa !== null ? ` · kappa ${fmtRatio(ag.kappa)}` : ""}</Badge> : <Badge tone="neutral">Pas encore de revue</Badge>}>
               {ag && ag.matrix.length && ag.n > 0 ? (
                 <>
                   <CarteChaleur
@@ -63,13 +74,18 @@ function Corps() {
                     rows={ag.recommendations.map((r, i) => ({ key: r, label: `Méthode : ${ag.recommendation_labels[i] ?? r}` }))}
                     cols={ag.decisions}
                     formatCol={(c) => ag.decision_labels[ag.decisions.indexOf(c)] ?? c}
-                    cells={ag.recommendations.flatMap((r, i) => ag.decisions.map((c, j) => ({ row: r, col: c, value: ag.matrix[i]?.[j] ?? 0, detail: i === j ? "Accord" : j > i ? "Comité plus indulgent que la méthode" : "Comité plus sévère que la méthode" })))}
+                    cells={ag.recommendations.flatMap((r, i) =>
+                      ag.decisions.map((c, j) => {
+                        const lecture = ag.matrix_kinds?.[i]?.[j] ?? null;
+                        return { row: r, col: c, value: ag.matrix[i]?.[j] ?? 0, detail: lecture ? LECTURE_CASE[lecture] : "Hors du calcul de l'accord", contour: lecture === "agree" ? "var(--g-jade)" : undefined };
+                      }),
+                    )}
                     echelle="sequentielle"
                     format={(v) => String(v)}
                     largeurLibelles={210}
                     hauteurLigne={36}
                   />
-                  <p className="mt-2 text-[12.5px] leading-snug text-muted">La diagonale est l&apos;accord. À droite, le comité accorde plus que la méthode ne recommande ; à gauche, il est plus sévère.</p>
+                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Cases cerclées de vert : accord, la recommandation ramenée à l&apos;échelle du comité (BANKABLE CANDIDATE et APD READY valent GO) rejoint la décision. Sur une ligne, plus à gauche, le comité décide plus favorablement que la méthode ; plus à droite, plus sévèrement. « À compléter » et « Ajourné » restent hors du calcul.</p>
                 </>
               ) : (
                 <Vide titre="Aucune revue verrouillée" hint="Le taux d'accord se calcule sur les revues de comité verrouillées qui portent une recommandation de la méthode." />
@@ -78,13 +94,13 @@ function Corps() {
             <div className="space-y-5 xl:col-span-6">
               <Card title="Délai d'ouverture à première décision" actions={ttd ? <span className="text-[12.5px] text-muted">Médiane {joursOu(ttd.median_days)} · p75 {joursOu(ttd.p75_days)} · {ttd.n} dossier{ttd.n > 1 ? "s" : ""}</span> : undefined}>
                 {ttd && ttd.by_month.length > 1 ? (
-                  <AreaChart label="Délai médian de décision par mois" labels={ttd.by_month.map((m) => moisCourt(m.month))} series={[{ key: "days", label: "Jours", values: combler(ttd.by_month.map((m) => m.days)), color: "var(--accent-vif)" }]} height={150} format={(v) => `${fmtInt(v)} j`} formatAxis={(v) => `${Math.round(v)} j`} />
+                  <AreaChart label="Délai médian de décision par mois" labels={ttd.by_month.map((m) => moisCourt(m.month))} series={[{ key: "days", label: "Jours", values: combler(ttd.by_month.map((m) => m.days)), color: "var(--accent-vif)" }]} height={150} format={(v) => fmtJours(v)} formatAxis={(v) => `${fmtInt(v)}${INSECABLE}j`} />
                 ) : ttd && ttd.rows.length ? (
                   <ul className="space-y-1.5 text-[12.5px]">
                     {ttd.rows.map((r) => (
                       <li key={`${r.id}-${r.date}`} className="flex items-center justify-between gap-3">
                         <span className="truncate"><LienFiche href={r.link}>{r.reference}</LienFiche> · {r.name}</span>
-                        <span className="whitespace-nowrap text-muted">{fmtDate(r.date)} · {joursOu(r.days)} · {LIBELLE_DECISION[r.decision] ?? r.decision}</span>
+                        <span className="whitespace-nowrap text-muted">{fmtDate(r.date)} · {joursOu(r.days)} · {libelleDecision(r.decision)}</span>
                       </li>
                     ))}
                   </ul>
@@ -113,21 +129,21 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Décisions par mois" className="xl:col-span-7">
-              {serieDecisions.length && mois.length && total > 0 ? (
+            <Card title="Décisions par mois" className="xl:col-span-7" actions={mois.length ? <span className="text-[12.5px] text-muted">{mois.length} derniers mois</span> : undefined}>
+              {serieDecisions.length && mois.length && decisionsDuGraphique > 0 ? (
                 <>
                   <Legende className="mb-3" items={serieDecisions.map((s) => ({ key: s.key, label: s.label, couleur: COULEUR_DECISION[s.key] ?? ETATS.neutre, forme: "carre" as const }))} />
                   <BarresEmpilees months={mois} series={serieDecisions} />
                 </>
               ) : (
-                <Vide compact titre="Aucune décision verrouillée sur 12 mois" />
+                <Vide compact titre={`Aucune décision verrouillée sur les ${mois.length || 12} derniers mois`} />
               )}
             </Card>
             <Card title="Score global au moment de la décision" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Un point par revue · trait : médiane</span>}>
               {(d.score_at_decision ?? []).some((s) => s.scores.length > 0) ? <Bandes series={d.score_at_decision} /> : <Vide compact titre="Aucune revue avec score" />}
               <div className="mt-3 grid grid-cols-2 gap-2.5">
-                <Chiffre label="Conditions posées" value={String(d.conditions?.count ?? 0)} hint={d.conditions ? `${d.conditions.done} levées · ${d.conditions.open} ouvertes${d.conditions.overdue ? ` · ${d.conditions.overdue} en retard` : ""}` : undefined} tone={d.conditions?.overdue ? "warn" : undefined} />
-                <Chiffre label="Conditions levées" value={pctOu(d.conditions?.done_rate_pct ?? null, 0)} hint="part des conditions des GO sous conditions" />
+                <Chiffre label="Conditions posées" value={String(d.conditions?.count ?? 0)} hint={d.conditions ? `${pluriel(d.conditions.done, "levée")} · ${pluriel(d.conditions.open, "ouverte")}${d.conditions.overdue ? ` · ${d.conditions.overdue} en retard` : ""}` : undefined} tone={d.conditions?.overdue ? "warn" : undefined} />
+                <Chiffre label="Conditions levées" value={pctOu(d.conditions?.done_rate_pct ?? null, 0)} hint="part des conditions des CONDITIONAL GO" />
               </div>
             </Card>
           </div>

@@ -36,3 +36,5 @@ from . import test_dette_reglements
 from . import test_tva_credit_reporte
 from . import test_pilotage_definitions
 from . import test_api_assets_garde_fous
+from . import test_report_a_nouveau
+from . import test_cloture_exercice

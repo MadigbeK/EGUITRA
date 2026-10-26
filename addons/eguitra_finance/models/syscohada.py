@@ -6,6 +6,14 @@ qui peuvent être débiteurs ou créditeurs (40 à 47, 52, 53, 58) sont classés
 selon le sens de leur solde. La table de correspondance est à valider avec l'expert-comptable
 du client (offre, chapitre 6.5) ; les comptes non classés sont signalés par le contrôle
 « comptes hors états ».
+
+Résultat au bilan, sur le modèle du noyau (aucune écriture de clôture ni d'à-nouveaux à passer) :
+CJ « Résultat net de l'exercice » reprend les comptes 13 et le résultat (classes 6 à 8) de
+l'exercice en cours seulement ; le résultat des exercices précédents qui n'est pas encore affecté,
+plus le solde du compte d'affectation du résultat (type equity_unaffected, « 999999 » du plan de la
+Guinée), rejoint CH « Report à nouveau ». L'OD d'affectation décidée par l'assemblée (débit du
+compte d'affectation, crédit des réserves, du report à nouveau ou des dividendes) fait ainsi passer
+le résultat antérieur en réserves sans déséquilibrer le bilan.
 """
 
 from datetime import timedelta
@@ -77,17 +85,20 @@ CR_ORDER = [
 BILAN_ACTIF = [
     ("AD", "Immobilisations incorporelles", ["21", "281", "291"], [], "all"),
     ("AI", "Immobilisations corporelles", ["22", "23", "24", "282", "283", "284", "292", "293", "294"], [], "all"),
-    ("AP", "Avances et acomptes versés sur immobilisations", ["25"], [], "all"),
+    ("AP", "Avances et acomptes versés sur immobilisations", ["25", "295"], [], "all"),
     ("AQ", "Immobilisations financières", ["26", "27", "296", "297"], [], "all"),
     ("BA", "Actif circulant HAO", ["485", "488", "498"], [], "all"),
     ("BB", "Stocks et encours", ["3"], [], "all"),
-    ("BH", "Fournisseurs, avances versées", ["409"], [], "all"),
+    # Fournisseurs débiteurs : 409 et tout compte 40 au solde débiteur (avance versée sur 401), sous
+    # déduction de leurs dépréciations (490).
+    ("BH", "Fournisseurs, avances versées", ["40"], [], "debit", ["409", "490"]),
     ("BI", "Clients", ["41"], ["419"], "debit", ["491"]),
     ("BJ", "Autres créances", ["42", "43", "44", "45", "46", "47", "185"], ["478", "479"], "debit",
      ["492", "493", "494", "495", "496", "497"]),
     ("BQ", "Titres de placement", ["50", "590"], [], "all"),
-    ("BR", "Valeurs à encaisser", ["51"], [], "all"),
-    ("BS", "Banques, chèques postaux, caisse et assimilés", ["52", "53", "54", "55", "57", "58"], [], "debit"),
+    ("BR", "Valeurs à encaisser", ["51", "591"], [], "all"),
+    ("BS", "Banques, chèques postaux, caisse et assimilés", ["52", "53", "54", "55", "57", "58"], [], "debit",
+     ["592", "593", "594"]),
     ("BU", "Écart de conversion actif", ["478"], [], "all"),
 ]
 BILAN_ACTIF_TOTALS = [
@@ -118,7 +129,7 @@ BILAN_PASSIF = [
     ("DJ", "Fournisseurs d'exploitation", ["40"], ["409"], "credit"),
     ("DK", "Dettes fiscales et sociales", ["42", "43", "44"], [], "credit"),
     ("DM", "Autres dettes", ["41", "45", "46", "47", "185"], ["419", "478", "479"], "credit"),
-    ("DN", "Provisions pour risques à court terme", ["499"], [], "all"),
+    ("DN", "Provisions pour risques à court terme", ["499", "599"], [], "all"),
     ("DQ", "Banques, crédits d'escompte", ["565"], [], "all"),
     ("DR", "Banques, crédits de trésorerie", ["52", "53", "54", "55", "56", "57", "58"], ["565"], "credit"),
     ("DV", "Écart de conversion passif", ["479"], [], "all"),
@@ -203,12 +214,19 @@ class EguitraSyscohada(models.AbstractModel):
     def balance_sheet(self, companies, date_to, exclude_partner_ids=None):
         metrics = self.env["eguitra.finance.metrics"]
         balances = metrics.account_balances(companies, date_to, exclude_partner_ids=exclude_partner_ids)
-        # Le résultat non encore affecté (classes 6 à 8) rejoint la rubrique CJ.
-        result = -sum(b for a, b in balances.items() if a[:1] in "678")
+        # Le compte d'affectation du résultat n'entre dans aucune rubrique par son code : il rejoint le
+        # report à nouveau avec le résultat antérieur qu'il sert à affecter.
+        unaffected = sum(balances.pop(code, 0.0) for code in metrics.unaffected_codes(companies))
+        result = metrics.result_split(companies, date_to, exclude_partner_ids=exclude_partner_ids)
+        previous = result["previous"] - unaffected
         actif, used_a = _compute(balances, BILAN_ACTIF, 1)
         actif = _totals(actif, BILAN_ACTIF_TOTALS)
         passif, used_p = _compute(balances, BILAN_PASSIF, -1)
-        passif["CJ"] = passif.get("CJ", 0.0) + result
+        # CJ : comptes 13 et résultat de l'exercice en cours ; CH : comptes 12 et résultat des exercices
+        # précédents non encore affecté (classes 6 à 8 avant l'exercice, moins ce que l'OD d'affectation
+        # a déjà porté au débit du compte d'affectation).
+        passif["CJ"] = passif.get("CJ", 0.0) + result["current"]
+        passif["CH"] = passif.get("CH", 0.0) + previous
         passif = _totals(passif, BILAN_PASSIF_TOTALS)
         used = used_a | used_p
         unmapped = {a: b for a, b in balances.items() if a[:1] in "12345" and a not in used and abs(b) > 0.005}
@@ -220,6 +238,8 @@ class EguitraSyscohada(models.AbstractModel):
             "total_passif": passif["DZ"],
             "difference": round(actif["BZ"] - passif["DZ"], 2),
             "unmapped_accounts": unmapped,
+            "result_current_year": result["current"],
+            "result_previous_unallocated": previous,
         }
 
     # ─── Tableau des flux de trésorerie ───────────────────────────────────
@@ -249,7 +269,11 @@ class EguitraSyscohada(models.AbstractModel):
         Situation d'ouverture : soldes de la veille du début de période, plus les à-nouveaux
         passés dans la période. Les flux d'investissement et de financement sont lus sur les
         mouvements des comptes concernés ; l'écart avec la trésorerie du bilan, s'il existe,
-        est affiché pour analyse (écritures de reclassement, dettes sur immobilisations…).
+        est affiché pour analyse (écritures de reclassement…). Une acquisition d'immobilisation non
+        encore payée n'est ni un décaissement d'investissement ni une ressource d'exploitation : la
+        variation des dettes sur immobilisations (_fixed_asset_debts) passe du passif circulant aux
+        acquisitions ; de même, une cession non encaissée (créance 485) quitte l'actif circulant HAO
+        et les encaissements de cessions.
         """
         metrics = self.env["eguitra.finance.metrics"]
         start = metrics.account_balances(companies, date_from - timedelta(days=1))
@@ -281,9 +305,11 @@ class EguitraSyscohada(models.AbstractModel):
             "FA": result["XI"] + result["RL"] + result["RN"] - result["TJ"] - result["TL"] - result["TN"] + result["RO"],
             "FB": -(a1["BA"] - a0["BA"]),
             "FC": -(a1["BB"] - a0["BB"]),
-            "FD": -(a1["BG"] - a0["BG"]),
+            # Écarts de conversion (BU, DV) neutralisés : l'écart de fin de mois ajuste la créance ou la dette en
+            # devise sans mouvement de trésorerie ; créances et dettes s'y lisent à leur valeur d'origine.
+            "FD": -(a1["BG"] - a0["BG"]) - (a1["BU"] - a0["BU"]),
             # Les dividendes à payer (465) relèvent du financement (FN), pas du passif circulant.
-            "FE": (p1["DP"] - p0["DP"]) - (_credit_side(end, "465") - _credit_side(start, "465")),
+            "FE": (p1["DP"] - p0["DP"]) + (p1["DV"] - p0["DV"]) - (_credit_side(end, "465") - _credit_side(start, "465")),
             "FF": -debits(["21"]),
             "FG": -debits(["22", "23", "24", "25"]),
             "FH": -debits(["26", "27"]),
@@ -297,6 +323,16 @@ class EguitraSyscohada(models.AbstractModel):
             "FP": credits(["16", "17", "181", "182", "183", "184"], ["161", "162", "166"]),
             "FQ": -debits(["16", "17", "181", "182", "183", "184"], ["166"]),
         }
+        # Dettes sur immobilisations et créances sur cessions : de l'exploitation vers l'investissement.
+        debts0 = self._fixed_asset_debts(companies, date_from - timedelta(days=1), start)
+        debts1 = self._fixed_asset_debts(companies, date_to, end)
+        for code in ("FF", "FG", "FH"):
+            change = debts1[code] - debts0[code]
+            v[code] += change
+            v["FE"] -= change
+        disposals = _prefix_sum(end, "485") - _prefix_sum(start, "485")
+        v["FB"] += disposals
+        v["FI"] -= disposals
         v["ZB"] = sum(v[c] for c in ("FA", "FB", "FC", "FD", "FE"))
         v["ZC"] = sum(v[c] for c in ("FF", "FG", "FH", "FI", "FJ"))
         v["ZD"] = sum(v[c] for c in ("FK", "FL", "FM", "FN"))
@@ -313,6 +349,61 @@ class EguitraSyscohada(models.AbstractModel):
             "treasury_end": treasury_end,
             "difference": round(treasury_end - v["ZH"], 2),
         }
+
+    def _fixed_asset_debts(self, companies, day, balances):
+        """Dettes sur acquisitions d'immobilisations encore dues à la date, par rubrique du tableau des flux
+        (FF : 21, FG : 22 à 25, FH : 26 et 27) : reste dû à la date (lettrages datés au plus tard ce jour)
+        des comptes fournisseurs des pièces qui portent une acquisition, hors à-nouveaux, au prorata de la
+        part des immobilisations dans la pièce ; plus les fournisseurs d'investissements (404, 481, 482,
+        balances : soldes à la date), portés en FG."""
+        self.env.flush_all()
+        investment = "^(404|481|482)"
+        payable = f"(aa.account_type = 'liability_payable' AND {ACC_CODE} !~ '{investment}')"
+        # La recherche part des seules lignes des comptes d'immobilisations (21 à 27, index du compte), et non de
+        # tout le grand livre ; les pièces d'acquisition trouvées sont ensuite lues en entier.
+        self.env.cr.execute(
+            f"""WITH assets AS (
+                    SELECT aa.id FROM account_account aa
+                     WHERE EXISTS (SELECT 1 FROM jsonb_each_text(aa.code_store) c WHERE c.value ~ '^2[1-7]')
+                ), acquisitions AS (
+                    SELECT DISTINCT aml.move_id FROM account_move_line aml
+                     WHERE aml.account_id IN (SELECT id FROM assets) AND aml.debit > 0 AND aml.parent_state = 'posted'
+                       AND aml.company_id = ANY(%(companies)s) AND aml.date <= %(day)s
+                ), bills AS (
+                    SELECT aml.move_id,
+                           SUM(CASE WHEN {ACC_CODE} ~ '^21' THEN aml.balance ELSE 0 END) AS ff,
+                           SUM(CASE WHEN {ACC_CODE} ~ '^2[2-5]' THEN aml.balance ELSE 0 END) AS fg,
+                           SUM(CASE WHEN {ACC_CODE} ~ '^2[67]' THEN aml.balance ELSE 0 END) AS fh,
+                           SUM(CASE WHEN {payable} THEN -aml.balance ELSE 0 END) AS payable
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                      JOIN account_journal aj ON aj.id = aml.journal_id
+                     WHERE aml.move_id IN (SELECT move_id FROM acquisitions) AND aj.code != %(journal)s
+                  GROUP BY aml.move_id
+                    HAVING SUM(CASE WHEN {ACC_CODE} ~ '^2[1-7]' THEN aml.balance ELSE 0 END) > 0
+                       AND SUM(CASE WHEN {payable} THEN -aml.balance ELSE 0 END) > 0
+                ), due AS (
+                    SELECT aml.move_id,
+                           SUM(-aml.balance - COALESCE(cr.amount, 0) + COALESCE(dr.amount, 0)) AS due
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                      JOIN bills b ON b.move_id = aml.move_id
+                 LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount FROM account_partial_reconcile apr
+                                     WHERE apr.credit_move_id = aml.id AND apr.max_date <= %(day)s) cr ON TRUE
+                 LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount FROM account_partial_reconcile apr
+                                     WHERE apr.debit_move_id = aml.id AND apr.max_date <= %(day)s) dr ON TRUE
+                     WHERE {payable}
+                  GROUP BY aml.move_id
+                )
+                SELECT COALESCE(SUM(d.due * b.ff / GREATEST(b.payable, b.ff + b.fg + b.fh)), 0),
+                       COALESCE(SUM(d.due * b.fg / GREATEST(b.payable, b.ff + b.fg + b.fh)), 0),
+                       COALESCE(SUM(d.due * b.fh / GREATEST(b.payable, b.ff + b.fg + b.fh)), 0)
+                  FROM bills b JOIN due d ON d.move_id = b.move_id""",
+            {"companies": list(companies.ids), "day": day, "journal": OPENING_JOURNAL},
+        )
+        ff, fg, fh = (float(v) for v in self.env.cr.fetchone())
+        suppliers = -sum(_prefix_sum(balances, prefix) for prefix in ("404", "481", "482"))
+        return {"FF": ff, "FG": fg + suppliers, "FH": fh}
 
     # ─── Consolidation ────────────────────────────────────────────────────
 
@@ -355,6 +446,11 @@ class EguitraSyscohada(models.AbstractModel):
                              "companies": amounts, "eliminations": total - sum(amounts), "group": total})
             result[kind] = rows
         return result
+
+
+def _prefix_sum(balances, prefix):
+    """Solde (débit positif) des comptes commençant par prefix."""
+    return sum(b for code, b in balances.items() if code.startswith(prefix))
 
 
 def _credit_side(balances, prefix):

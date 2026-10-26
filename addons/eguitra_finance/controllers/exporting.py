@@ -34,15 +34,20 @@ def export_meta(companies, items=()):
     return meta
 
 
+def _sans_signe_nul(text):
+    """« -0 », « -0.00 » : un nombre nul s'écrit sans signe (un solde nul se calcule souvent max(-0.0, 0.0))."""
+    return text[1:] if text.startswith("-") and not text.strip("-0.") else text
+
+
 def _csv_value(value, kind):
     if value is None or value == "":
         return ""
     if kind in ("money", "int"):
-        return f"{float(value):.0f}"
+        return _sans_signe_nul(f"{float(value):.0f}")
     if kind in ("number", "percent"):
-        return f"{float(value):.2f}".replace(".", ",")
+        return _sans_signe_nul(f"{float(value):.2f}").replace(".", ",")
     if kind == "days":
-        return f"{float(value):.1f}".replace(".", ",")
+        return _sans_signe_nul(f"{float(value):.1f}").replace(".", ",")
     if isinstance(value, (date, datetime)):
         return value.strftime("%d/%m/%Y")
     return csv_text(value)

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Modal, Notice, PageHeader, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
+import { ClotureExercice } from "@/components/finance/ClotureExercice";
 import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import { anneeEnCours } from "@/lib/jour";
@@ -62,6 +63,8 @@ const KINDS: Record<string, string> = {
   fx: "Écarts de conversion",
   fx_reversal: "Extourne des écarts de conversion",
   fx_bank: "Réévaluation des devises",
+  fx_provision: "Provision pour perte de change",
+  fx_provision_reversal: "Reprise de la provision pour perte de change",
   ecl: "Pertes de crédit attendues",
 };
 
@@ -112,6 +115,7 @@ export default function ClosingPage() {
           </>
         )}
       </Etat>
+      <ClotureExercice year={selectedYear} />
       <Integrity />
       <RepriseValidation />
       {month && <MonthModal key={month.period} month={month} onClose={() => setMonth(null)} onChanged={() => mutate()} />}

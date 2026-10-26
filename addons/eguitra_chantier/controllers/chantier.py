@@ -30,14 +30,16 @@ def _chantier(chantier_id):
 
 
 def _costs(chantier):
-    """Charges imputées sur l'axe du chantier (achats, caisse, salaires…)."""
+    """Charges imputées sur l'axe du chantier (achats, caisse, salaires…). Le motif du LIKE passe en paramètre :
+    écrit dans la requête (« '6%' »), son « % » était lu par psycopg2 comme un paramètre de plus, et la fiche du
+    chantier répondait 500 (IndexError)."""
+    column = request.env.ref("eguitra_base.analytic_plan_chantier")._column_name()
     request.env.flush_all()
     request.env.cr.execute(
-        """SELECT COALESCE(SUM(-aal.amount), 0) FROM account_analytic_line aal
-             JOIN account_account aa ON aa.id = aal.general_account_id
-            WHERE aal.%s = %%s AND COALESCE(aa.code_store->>(aal.company_id::text), '') LIKE '6%%'"""
-        % request.env.ref("eguitra_base.analytic_plan_chantier")._column_name(),
-        (chantier.analytic_account_id.id,),
+        f"""SELECT COALESCE(SUM(-aal.amount), 0) FROM account_analytic_line aal
+              JOIN account_account aa ON aa.id = aal.general_account_id
+             WHERE aal.{column} = %s AND COALESCE(aa.code_store->>(aal.company_id::text), '') LIKE %s""",
+        (chantier.analytic_account_id.id, "6%"),
     )
     return float(request.env.cr.fetchone()[0])
 

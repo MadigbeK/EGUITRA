@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { type CSSProperties } from "react";
 import { ArrowUpRight, CheckCircle2, AlertTriangle, XCircle } from "@/components/icons";
-import { Anneau, Badge, Card, ErrorBox, cx } from "@/components/ui";
-import { AttenteSection, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtValeur, useContexte, usePeriode } from "@/components/analyse/commun";
+import { Anneau, Badge, Card, cx } from "@/components/ui";
+import { AttenteSection, ErreurLecture, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienSuivi, Vide, fmtValeur, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeFiabilite, Status } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -19,10 +18,9 @@ const ORDRE: Record<Status, number> = { bad: 0, warn: 1, neutral: 3, good: 2 };
 
 /** Fiabilité des données : score et contrôles. Si les chiffres sont douteux, le reste l'est aussi. */
 export function Fiabilite() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -47,7 +45,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/fiabilite.xlsx${query}`} question="Peut-on se fier aux chiffres ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
@@ -119,9 +117,9 @@ function Corps() {
                           </div>
                         </div>
                         {c.link && c.status !== "good" ? (
-                          <Link href={c.link} className="no-print inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
+                          <LienSuivi href={c.link} className="no-print inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
                             Corriger <ArrowUpRight className="h-3.5 w-3.5" />
-                          </Link>
+                          </LienSuivi>
                         ) : (
                           <span />
                         )}

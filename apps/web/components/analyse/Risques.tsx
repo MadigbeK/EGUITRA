@@ -1,8 +1,8 @@
 "use client";
 
-import { AreaChart, Badge, Card, DataTable, ErrorBox } from "@/components/ui";
+import { AreaChart, Badge, Card, DataTable } from "@/components/ui";
 import { MatriceRisques } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, joursOu, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetRisques, Criticality } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -16,10 +16,9 @@ const NIVEAU: Record<Criticality, { label: string; tone: "ok" | "warn" | "danger
 
 /** Risques et exécution : matrice probabilité × impact, vélocité des actions, réactivité des porteurs. */
 export function Risques() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -47,7 +46,7 @@ function Corps() {
           {rm.mitigated_pct !== null && <> ; {pctOu(rm.mitigated_pct, 0)} ont une mesure d&apos;atténuation</>}.
         </>
       )}{" "}
-      {act.overdue > 0 ? `${act.overdue} action${act.overdue > 1 ? "s" : ""} sur ${act.open} ${act.overdue > 1 ? "sont" : "est"} en retard` : `Aucune des ${act.open} actions ouvertes n'est en retard`}
+      {act.overdue > 0 ? `${act.overdue} action${act.overdue > 1 ? "s" : ""} sur ${act.open} ${act.overdue > 1 ? "sont" : "est"} en retard` : act.open > 1 ? `Aucune des ${act.open} actions ouvertes n'est en retard` : act.open === 1 ? "L'action ouverte n'est pas en retard" : "Aucune action ouverte"}
       {act.submitted > 0 && `, ${act.submitted} attend${act.submitted > 1 ? "ent" : ""} une validation`}
       {rep.n > 0 ? ` ; les porteurs répondent en ${joursOu(rep.median_days)} en médiane` : " ; aucune pièce demandée n'a encore été déposée"}
       {rep.pending > 0 && `, ${pluriel(rep.pending, "pièce", "pièces")} en attente`}
@@ -57,7 +56,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/risques.xlsx${query}`} question="Quels risques menacent l'exécution des projets ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && rm && act && rep && (
         <div className="space-y-5">
@@ -84,7 +83,7 @@ function Corps() {
                 <div className="grid grid-cols-3 gap-2.5">
                   <Chiffre label="Actions ouvertes" value={String(act.open)} hint={act.submitted ? `${act.submitted} à valider` : undefined} />
                   <Chiffre label="En retard" value={String(act.overdue)} tone={act.overdue > 5 ? "danger" : act.overdue ? "warn" : "ok"} />
-                  <Chiffre label="Délai médian" value={act.median_days === null ? "–" : joursOu(act.median_days)} hint={act.done ? `${act.done} terminée${act.done > 1 ? "s" : ""} sur 12 mois` : "aucune action terminée"} />
+                  <Chiffre label="Délai médian" value={act.median_days === null ? "–" : joursOu(act.median_days)} hint={act.done ? `${act.done} terminée${act.done > 1 ? "s" : ""} sur la période` : "aucune action terminée sur la période"} />
                 </div>
                 {act.velocity.length > 1 && (
                   <div className="mt-4">
@@ -119,7 +118,7 @@ function Corps() {
                     rowKey={(r) => r.risk_id}
                     columns={[
                       { key: "risk", label: "Risque", render: (r) => <span className="font-medium text-ink">{r.risk}<span className="block text-[11.5px] font-normal text-muted"><LienFiche href={r.link} className="font-normal text-muted">{r.reference}</LienFiche> · {r.name}</span></span> },
-                      { key: "score", label: "Score", align: "right", render: (r) => <Badge tone={NIVEAU[r.level]?.tone ?? "neutral"}>{r.score} · {NIVEAU[r.level]?.label ?? r.level}</Badge> },
+                      { key: "score", label: "Score", align: "right", render: (r) => <Badge tone={NIVEAU[r.level]?.tone ?? "neutral"}>{fmtInt(r.score)} · {NIVEAU[r.level]?.label ?? r.level}</Badge> },
                       { key: "mitigation", label: "Atténuation", render: (r) => (r.mitigation ? <span className="text-ok-texte">{r.treated ? "Traitée" : "Décrite"}</span> : <span className="text-danger">Aucune</span>) },
                     ]}
                   />

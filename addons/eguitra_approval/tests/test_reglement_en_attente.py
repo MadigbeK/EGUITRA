@@ -28,6 +28,16 @@ class TestReglementEnAttente(FinanceDataMixin, ApiCase):
     def _regler(self, bill):
         return self.call("POST", f"/finance/moves/{bill.id}/payments", {"journal_id": self.bank.id}, token=self.token)
 
+    def _retenu(self, partner, body):
+        """Le dernier règlement du tiers est retenu (écriture non comptabilisée) ; sinon, l'état lu pour le dire."""
+        self.env.invalidate_all()
+        payment = self.env["account.payment"].search([("partner_id", "=", partner.id)], order="id desc", limit=1)
+        self.assertTrue(payment, body)
+        self.assertNotEqual(payment.move_id.state, "posted",
+                            ("Règlement comptabilisé sans approbation", payment.state, payment.amount,
+                             {k: body.get(k) for k in ("payment_status", "payment_state", "payments_awaiting_approval")}))
+        return payment
+
     def _demande(self, payment_id):
         return self.env["eguitra.approval.request"].search(
             [("res_model", "=", "account.payment"), ("res_id", "=", payment_id), ("state", "=", "pending")])
@@ -36,6 +46,7 @@ class TestReglementEnAttente(FinanceDataMixin, ApiCase):
         bill = self.make_invoice("in_invoice", 150_000_000)  # 177 000 000 TTC : au-delà du seuil des règlements
         status, body = self._regler(bill)
         self.assertEqual(status, 200, body)
+        self._retenu(self.supplier, body)
         self.assertEqual(body["payment_status"], "submitted", body)
         self.assertEqual(len(body["payments_awaiting_approval"]), 1, body)
         attente = body["payments_awaiting_approval"][0]
@@ -62,7 +73,9 @@ class TestReglementEnAttente(FinanceDataMixin, ApiCase):
     def test_demande_refusee_rouvre_le_reglement(self):
         bill = self.make_invoice("in_invoice", 150_000_000)
         status, body = self._regler(bill)
-        self.assertEqual((status, body["payment_status"]), (200, "submitted"), body)
+        self.assertEqual(status, 200, body)
+        self._retenu(self.supplier, body)
+        self.assertEqual(body["payment_status"], "submitted", body)
         self._demande(body["payments_awaiting_approval"][0]["id"]).with_user(self.dg).action_reject("RIB à vérifier")
         self.env.flush_all()
         status, detail = self.call("GET", f"/finance/moves/{bill.id}", token=self.token)

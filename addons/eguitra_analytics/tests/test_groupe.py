@@ -5,6 +5,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command
 from odoo.tests import tagged
 
+from odoo.addons.eguitra_analytics.models.groupe import _Ctx
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_finance.tests.common import FinanceDataMixin
 
@@ -297,6 +298,14 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(b["payment_score"], 88, "À l'échéance, la moitié de l'encours échue")
         self.assertEqual(c["segment"], "a_surveiller")
         self.assertAlmostEqual(c["overdue"], 118_000_000)
+        # Frontière de valeur des quadrants : le plus petit des deux clients qui font 80 % (B, 300 M) ;
+        # chaque client tombe dans le quadrant de son segment.
+        threshold, good = body["segments"]["value_threshold"], body["segments"]["good_payer_score"]
+        self.assertAlmostEqual(threshold, 300_000_000)
+        for row in (a, b, c):
+            high, payer = row["revenue"] >= threshold, row["payment_score"] is None or row["payment_score"] >= good
+            expected = ("strategiques" if payer else "a_securiser") if high else ("a_developper" if payer else "a_surveiller")
+            self.assertEqual(row["segment"], expected, row["name"])
         self.assertGreater(c["ecl"], 0)
         behaviour = {r["id"]: r for r in body["behaviour"]}
         self.assertEqual(sum(bin_["count"] for bin_ in behaviour[self.client_a.id]["histogram"]), 15)
@@ -369,6 +378,15 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(set(body["sensitivities"]), {"tariff", "volume", "fuel", "payroll"})
         self.assertAlmostEqual(body["sensitivities"]["payroll"], -0.01 * 12 * 20_000_000)
         self.assertLess(body["sensitivities"]["fuel"], 0)
+        # Leviers du transport : le chiffre d'affaires des rotations (6 × 47,76 M sur Siguiri, 6 × 6 M sur
+        # Boké), et non les 1,78 Md de CA du groupe sur douze mois.
+        base, sens = body["sensitivity_base"], body["sensitivities"]
+        self.assertAlmostEqual(base["transport_revenue_12m"], 6 * 47_760_000 + 6 * 6_000_000, delta=1)
+        self.assertAlmostEqual(base["revenue_12m"], 6 * 130_000_000 + 1_000_000_000, delta=1)
+        self.assertAlmostEqual(sens["tariff"], 0.01 * base["transport_revenue_12m"], delta=1)
+        self.assertEqual(base["variable_source"], "coûts déclarés du transport")
+        self.assertAlmostEqual(sens["volume"], sens["tariff"] * (1 - base["variable_rate_pct"] / 100), delta=1)
+        self.assertLess(sens["volume"], sens["tariff"])
 
     def test_fiabilite(self):
         body = self._get("fiabilite")
@@ -382,6 +400,108 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(checks["bank_reconciled"]["status"], "neutral", "Aucun relevé importé")
         self.assertTrue(0 <= body["score"] <= 100)
         self.assertIn("fiabilite.unbilled_rotations", self._ids(body))
+
+    def _ctx(self):
+        return _Ctx(self.company, {"code": "ytd", "date_from": date(2026, 1, 1), "date_to": DATE_TO, "label": "",
+                                   "previous": {"date_from": date(2025, 1, 1), "date_to": date(2025, 6, 30)}})
+
+    def test_libelles_des_etats_et_natures(self):
+        """Chantiers et biens : l'état et la nature arrivent avec leur libellé, l'écran ne montre jamais
+        « preparation » ni « entrepot »."""
+        groupe = self.env["eguitra.analytics.groupe"]
+        route = self.env["eguitra.chantier"].create({"name": "Route Kankan - Kouroussa (fictif)",
+                                                     "company_id": self.company.id, "partner_id": self.customer.id,
+                                                     "contract_amount": 2_000_000_000})
+        # Un chantier sans situation, sans facture ni coût n'est pas listé : une situation datée de la période.
+        self.env["eguitra.chantier.situation"].create({"chantier_id": route.id, "date": date(2026, 3, 31),
+                                                       "cumulative_amount": 500_000_000})
+        self.env["eguitra.property"].create({"name": "Entrepôt de Matoto (fictif)", "company_id": self.company.id,
+                                             "kind": "entrepot", "current_value": 900_000_000})
+        chantier = next(r for r in groupe._chantiers(self._ctx()) if r["name"] == "Route Kankan - Kouroussa (fictif)")
+        self.assertEqual((chantier["state"], chantier["state_label"]), ("preparation", "En préparation"))
+        bien = next(r for r in groupe._immobilier(self._ctx())["properties"] if r["name"] == "Entrepôt de Matoto (fictif)")
+        self.assertEqual((bien["kind"], bien["kind_label"]), ("entrepot", "Entrepôt"))
+
+    def test_ecritures_reprises(self):
+        """Pièces reprises en écritures (« entry ») dans le journal de vente : comptées dans les ventes TTC du
+        DSO, dans l'historique de paiement, et chiffre d'affaires rattaché au tiers de la créance (la ligne de
+        produit n'a pas de tiers)."""
+        groupe = self.env["eguitra.analytics.groupe"]
+        before = groupe._wc(self._ctx(), date(2026, 1, 1), DATE_TO)["sales_ttc"]
+        sale = self.env["account.journal"].search([("company_id", "=", self.company.id), ("type", "=", "sale")], limit=1)
+        client = self.env["res.partner"].create({"name": "MINES DE BOKÉ SA (fictif)", "customer_rank": 1})
+        receivable = client.with_company(self.company).property_account_receivable_id
+        vat = self._account("443") or self._account("44")
+        entry = self._entry([(receivable, 118_000_000, 0, client), (self.acc_services, 0, 100_000_000, None),
+                             (vat, 0, 18_000_000, None)], date(2026, 3, 10), journal=sale)
+        payment = self._entry([(receivable, 0, 118_000_000, client), (self.bank_account, 118_000_000, 0, None)],
+                              date(2026, 4, 20))
+        (entry.line_ids | payment.line_ids).filtered(lambda line: line.account_id == receivable).reconcile()
+        self.env.flush_all()
+        ctx = self._ctx()
+        self.assertAlmostEqual(groupe._wc(ctx, date(2026, 1, 1), DATE_TO)["sales_ttc"] - before, 118_000_000, delta=1,
+                               msg="Ventes TTC lues sur la créance du journal de vente")
+        self.assertAlmostEqual(groupe._client_revenue(ctx, date(2026, 1, 1), DATE_TO).get(client.id), 100_000_000,
+                               delta=1, msg="Chiffre d'affaires rattaché au tiers de la ligne 411")
+        self.assertIn(entry.id, {r["move"] for r in groupe._payment_history(ctx)}, "Règlement appris sur la reprise")
+
+    def test_definitions_de_la_finance(self):
+        """L'Analyse calcule comme la finance : perte attendue de l'écran IFRS, part du premier client de
+        l'alerte de concentration, échéance absente non échue, décaissements sur des mois civils complets."""
+        groupe, metrics = self.env["eguitra.analytics.groupe"], self.env["eguitra.finance.metrics"]
+        ctx = self._ctx()
+        ifrs = self.env["eguitra.ifrs.policy"].expected_credit_loss(self.company, DATE_TO)
+        self.assertAlmostEqual(sum(groupe._expected_loss(ctx).values()), ifrs["ecl"], delta=1)
+        clients = self._get("clients")
+        finance = metrics.working_capital(self.company, date(2026, 1, 1), DATE_TO)["concentration"]
+        self.assertAlmostEqual(clients["concentration"]["top_share"]["first"], finance["pct"], delta=0.05)
+        # Créance sans échéance : non échue au jour d'arrêté (la finance la classe « non échu »).
+        client = self.env["res.partner"].create({"name": "KANKAN NÉGOCE (fictif)", "customer_rank": 1})
+        receivable = client.with_company(self.company).property_account_receivable_id
+        move = self._entry([(receivable, 5_000_000, 0, client), (self.acc_services, 0, 5_000_000, None)], date(2026, 2, 1))
+        self.env.flush_all()
+        self.env.cr.execute("UPDATE account_move_line SET date_maturity = NULL WHERE move_id = %s", (move.id,))
+        self.env.invalidate_all()
+        items = [i for i in groupe._open_items(self._ctx(), "asset_receivable")["items"] if i["partner"] == client.id]
+        self.assertEqual([i["due"] for i in items], [DATE_TO + timedelta(days=1)])
+        # Mois entamé : la moyenne des décaissements reste celle des six mois civils clos.
+        mid = _Ctx(self.company, {"code": "m", "date_from": date(2026, 6, 1), "date_to": date(2026, 6, 15), "label": "",
+                                  "previous": {"date_from": date(2025, 6, 1), "date_to": date(2025, 6, 15)}})
+        end_may = _Ctx(self.company, {"code": "m", "date_from": date(2026, 5, 1), "date_to": date(2026, 5, 31),
+                                      "label": "", "previous": {"date_from": date(2025, 5, 1), "date_to": date(2025, 5, 31)}})
+        self.assertAlmostEqual(groupe._disbursements(mid), groupe._disbursements(end_may), delta=1)
+
+    def test_liens_des_constats(self):
+        """Chaque constat mène à son objet, que l'écran visé sait lire : une ligne (?route=, ?ensemble=,
+        ?client=), un onglet (?onglet=) ou un bloc (#consommation, #doublons)."""
+        transport = self._get("transport")
+        links = {i["id"]: i["link"] for i in transport["insights"]}
+        boke = self.route_boke.id
+        self.assertEqual(links.get(f"transport.route_marge_negative.{boke}"), f"/analyse/transport?route={boke}")
+        self.assertIn(boke, {p["id"] for p in transport["pricing"]}, "La route visée figure dans les tarifs")
+        er02 = next(t for t in transport["trucks"] if t["name"] == "ER-02")
+        self.assertEqual(links.get(f"transport.ensemble_deficitaire.{er02['id']}"),
+                         f"/analyse/transport?ensemble={er02['id']}")
+        self.assertEqual(links.get("transport.consommation_anormale"), "/analyse/transport#consommation")
+        clients = self._get("clients")
+        links = {i["id"]: i["link"] for i in clients["insights"]}
+        self.assertEqual(links.get(f"clients.retard_degradation.{self.client_a.id}"),
+                         f"/analyse/clients?client={self.client_a.id}")
+        self.assertIn(self.client_a.id, {c["id"] for c in clients["segments"]["clients"]})
+        links = {i["id"]: i["link"] for i in self._get("depenses")["insights"]}
+        self.assertEqual(links.get("depenses.doublons"), "/analyse/depenses#doublons")
+        # Point mort et budget : l'onglet qui porte la mesure (Analyse > Rentabilité, Finance > budget).
+        groupe = self.env["eguitra.analytics.groupe"]
+        [point_mort] = groupe._cost_insights({
+            "reliable": True, "safety_margin_pct": 12.0, "method": "Régression mensuelle (essai)",
+            "fixed_monthly": 50_000_000, "variable_rate": 40.0, "r2": 0.9, "n": 12, "breakeven_monthly": 83_000_000,
+            "average_revenue": 95_000_000, "points": [], "line": []})
+        self.assertEqual(point_mort["link"], "/analyse/rentabilite?onglet=structure")
+        [budget] = groupe._budget_insights({"lines": [{
+            "id": 7, "name": "Carburant (essai)", "risk": "dépassement", "risk_probability_pct": 92.0,
+            "annual_budget": 400_000_000, "projected_gap": 60_000_000, "actual_to_date": 230_000_000,
+            "budget_to_date": 200_000_000, "projection": 460_000_000, "monthly_actuals": [40_000_000] * 6}]})
+        self.assertEqual(budget["link"], "/finance/pilotage?onglet=budget")
 
     # ─── Contexte, société et droits ──────────────────────────────────────
 

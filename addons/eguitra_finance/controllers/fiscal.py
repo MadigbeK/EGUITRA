@@ -421,12 +421,14 @@ class EguitraFinanceFiscal(http.Controller):
 
     @api_route("/finance/ifrs", profiles=FIN_READ)
     def ifrs(self, **kw):
-        """Passerelle IFRS : agrégats SYSCOHADA regroupés selon les postes IFRS usuels."""
+        """Passerelle IFRS : agrégats SYSCOHADA regroupés selon les postes IFRS usuels. Résultat de
+        l'exercice comptable de la date (et non de l'année civile), comme les retraitements chiffrés."""
         end = parse_date(kw, "date", today())
-        start = end.replace(month=1, day=1)
+        scope = companies(kw)
+        start = request.env["eguitra.finance.metrics"].sudo().fiscal_year_bounds(scope[:1], end)[0]
         syscohada = request.env["eguitra.syscohada"].sudo()
-        sheet = syscohada.balance_sheet(companies(kw), end)
-        result = syscohada.income_statement(companies(kw), start, end)
+        sheet = syscohada.balance_sheet(scope, end)
+        result = syscohada.income_statement(scope, start, end)
         values = {line["code"]: line["amount"] for line in sheet["actif"] + sheet["passif"] + result["lines"]}
         lines = []
         for label, kind, codes in IFRS_MAP:
@@ -435,7 +437,7 @@ class EguitraFinanceFiscal(http.Controller):
             else:
                 amount = sum(values.get(c, 0.0) for c in codes)
             lines.append({"label": label, "section": kind.split("_")[0], "amount": amount, "syscohada": codes})
-        bridge = request.env["eguitra.ifrs.policy"].sudo().restatements(companies(kw), end)
+        bridge = request.env["eguitra.ifrs.policy"].sudo().restatements(scope, end)
         return dict(bridge, date=end, lines=lines,
                     note="Correspondance indicative et retraitements à valider avec l'expert-comptable.")
 

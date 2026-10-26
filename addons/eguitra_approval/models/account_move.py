@@ -212,7 +212,9 @@ class AccountMove(models.Model):
         demandes approuvées paieraient deux fois le fournisseur."""
         self.ensure_one()
         rows = super()._eguitra_payments_awaiting()
-        payments = self.sudo().matched_payment_ids.filtered(lambda p: p.state == "draft")
+        # Retenu : sans écriture comptabilisée, comme le lit le moteur à l'approbation (_on_approved), et non
+        # selon l'état du règlement, dont le noyau 19 ne garantit pas qu'il reste « draft ».
+        payments = self.sudo().matched_payment_ids.filtered(lambda p: not p.move_id or p.move_id.state == "draft")
         if not payments:
             return rows
         requests = self.env["eguitra.approval.request"].sudo().search([
