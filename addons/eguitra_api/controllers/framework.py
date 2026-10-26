@@ -113,11 +113,23 @@ def _bearer_token():
     return None
 
 
+def mfa_required(env):
+    """La double authentification est-elle exigée (paramètre eguitra_api.mfa_required, 1 par défaut) ?"""
+    return env["ir.config_parameter"].sudo().get_param("eguitra_api.mfa_required", "1") != "0"
+
+
+# Session ouverte sans second facteur (pendant une suspension de la double authentification) alors
+# qu'il est de nouveau exigé : refusée, au renouvellement comme à chaque appel.
+MFA_AGAIN_MESSAGE = "La double authentification est de nouveau exigée : reconnectez-vous avec votre code."
+
+
 def _authenticate():
     raw = _bearer_token()
     token = sudo_env()["eguitra.api.token"]._find(raw, "access")
     if not token or not token._is_valid():
         raise ApiError(401, "unauthenticated", "Session expirée ou invalide.")
+    if not token.mfa_passed and mfa_required(token.env):
+        raise ApiError(401, "mfa_required", MFA_AGAIN_MESSAGE)
     # Pas d'écriture sur le jeton ici : les appels parallèles d'un même écran se bloqueraient.
     user = token.user_id
     request.update_env(user=user.id)

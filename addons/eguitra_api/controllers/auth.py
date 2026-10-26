@@ -10,14 +10,24 @@ from odoo.http import request
 
 from ..models.api_token import REUSE_GRACE_SECONDS
 from ..organisation import APPS as APP_REGISTRY
-from .framework import ApiError, api_route, client_ip, json_response, read_json, require, sudo_env
+from .framework import (
+    MFA_AGAIN_MESSAGE,
+    ApiError,
+    api_route,
+    client_ip,
+    json_response,
+    mfa_required,
+    read_json,
+    require,
+    sudo_env,
+)
 
 MAX_MFA_ATTEMPTS = 5
 APPS = tuple(APP_REGISTRY)
 
 
 def _mfa_required(env):
-    return env["ir.config_parameter"].sudo().get_param("eguitra_api.mfa_required", "1") != "0"
+    return mfa_required(env)
 
 
 def _password_shared(env):
@@ -59,9 +69,12 @@ def _user_agent():
     return request.httprequest.headers.get("User-Agent", "")
 
 
-def _session_payload(env, user, app, family=None, started=None):
+def _session_payload(env, user, app, family=None, started=None, mfa_passed=False):
+    """Jetons d'une session. mfa_passed : la connexion a passé le second facteur (code), marque gardée
+    par toute la lignée ; une session ouverte pendant une suspension de la double authentification
+    ne la porte pas et ne survit pas à son rétablissement."""
     tokens = env["eguitra.api.token"]._issue_session(
-        user, app, family=family, ip=client_ip(), user_agent=_user_agent(), started=started
+        user, app, family=family, ip=client_ip(), user_agent=_user_agent(), started=started, mfa_passed=mfa_passed
     )
     return {"status": "ok", **tokens, "user": user.with_env(env)._eguitra_public()}
 
@@ -141,7 +154,7 @@ class EguitraAuthController(http.Controller):
         except AccessDenied:
             return self._wrong_code(env, token)
         token.revoked = True
-        return _session_payload(env, user, token.app)
+        return _session_payload(env, user, token.app, mfa_passed=True)
 
     @api_route("/auth/mfa/setup", methods=("POST",), auth=False)
     def mfa_setup(self, **_kw):
@@ -153,7 +166,7 @@ class EguitraAuthController(http.Controller):
         if not user.with_user(user)._totp_try_setting(token.payload, _totp_code(code)):
             return self._wrong_code(env, token)
         token.write({"revoked": True, "payload": False})
-        return _session_payload(env, user, token.app)
+        return _session_payload(env, user, token.app, mfa_passed=True)
 
     @api_route("/auth/refresh", methods=("POST",), auth=False)
     def refresh(self, **_kw):
@@ -187,9 +200,15 @@ class EguitraAuthController(http.Controller):
         if token._session_expired():
             token._revoke_family("logout")
             return _refusal(401, "session_expired", "Session expirée : reconnectez-vous.")
+        # Session ouverte sans code pendant une suspension de la double authentification, qui est de
+        # nouveau exigée : elle ne se renouvelle plus (sinon 7 jours, 90 pour Rotations, sans code).
+        if not token.mfa_passed and _mfa_required(env):
+            token._revoke_family("security")
+            return _refusal(401, "mfa_required", MFA_AGAIN_MESSAGE)
         if not token.revoked:
             token.write({"revoked": True, "revoke_reason": "rotation", "rotated_at": now})
-        return _session_payload(env, user, token.app, family=token.family, started=token._session_started())
+        return _session_payload(env, user, token.app, family=token.family, started=token._session_started(),
+                                mfa_passed=token.mfa_passed)
 
     @api_route("/auth/logout", methods=("POST",), auth=False)
     def logout(self, **_kw):

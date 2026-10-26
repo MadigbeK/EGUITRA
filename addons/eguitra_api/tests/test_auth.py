@@ -233,3 +233,30 @@ class TestAuth(ApiCase):
             self.assertEqual((status, body["error"]), (401, "invalid_credentials"))
         status, _b = self.call("POST", "/auth/password", dict(payload, old_password=PASSWORD), token=token)
         self.assertEqual(status, 429, "Essais de l'ancien mot de passe bornés")
+
+    def test_session_sans_code_refusee_au_retablissement_de_la_double_authentification(self):
+        """Audit du noyau, I-A4 : une session ouverte pendant la suspension ne survit pas à son rétablissement."""
+        params = self.env["ir.config_parameter"].sudo()
+        params.set_param("eguitra_api.mfa_required", "0")
+        status, session = self.call("POST", "/auth/login", {"login": "fatou", "password": PASSWORD, "app": "finance"})
+        self.assertEqual((status, session.get("status")), (200, "ok"), session)
+        status, nouvelle = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200, "Pendant la suspension, la session se renouvelle")
+
+        params.set_param("eguitra_api.mfa_required", "1")
+        status, body = self.call("GET", "/auth/me", token=nouvelle["access_token"])
+        self.assertEqual((status, body["error"]), (401, "mfa_required"), "Refusée dès le rétablissement, sans attendre")
+        status, body = self.call("POST", "/auth/refresh", {"refresh_token": nouvelle["refresh_token"]})
+        self.assertEqual((status, body["error"]), (401, "mfa_required"), "Elle ne se renouvelle plus")
+        self.env.invalidate_all()  # jetons écrits par le serveur de test
+        Token = self.env["eguitra.api.token"]
+        lignee = Token._find(nouvelle["refresh_token"], "refresh").family
+        self.assertTrue(all(Token.search([("family", "=", lignee)]).mapped("revoked")), "Toute la lignée est révoquée")
+
+        # Une session ouverte avec le code garde sa marque d'un renouvellement à l'autre.
+        session = self.open_session("fatou")
+        status, nouvelle = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200, nouvelle)
+        self.assertTrue(Token._find(nouvelle["refresh_token"], "refresh").mfa_passed)
+        status, _b = self.call("GET", "/auth/me", token=nouvelle["access_token"])
+        self.assertEqual(status, 200)
