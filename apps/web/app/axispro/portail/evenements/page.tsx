@@ -1,20 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download, Link2, MapPin, Pencil, Plus, Send, Trash2, Users, XCircle } from "@/components/icons";
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import {
-  ChoixPublic, EditeurTexte, LectureSeule, PUBLIC_VIDE, RESERVE_CABINET, Recherche, correspond, majuscule, messageErreur, nomFichier, pluriel, publicIncomplet, resumePublic, telechargerCsv, useEcriture,
-  useRetour, type PublicSaisi,
+  ChoixPublic, EditeurTexte, LectureSeule, PUBLIC_VIDE, Recherche, correspond, majuscule, messageErreur, nomFichier, pluriel, publicIncomplet, resumePublic, saisieModifiee, telechargerCsv,
+  useEcriture, useEnvoiFenetre, useMaintenant, useRetour, type PublicSaisi,
 } from "@/components/portail/cabinet/outils";
 import { dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime } from "@/lib/format";
+import { AIDE_NOMBRE, MONTHS_FR, fmtDateTime, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
 import type { Cibles, EventAdmin, EventKind, RegistrationRow, RegistrationState } from "@/lib/portail-types";
 
 type Onglet = "venir" | "passes" | "brouillons" | "annules";
+type ActionEvenement = "publier" | "annuler" | "supprimer";
+
+/** Inscription lue par le cabinet : la liste d'attente porte son rang (1 : la prochaine place libre). */
+type Inscription = RegistrationRow & { waitlist_since?: string | null; waitlist_rank?: number | null };
 
 const ETAT_INSCRIPTION: Record<RegistrationState, Tone> = {
   registered: "accent",
@@ -24,24 +28,29 @@ const ETAT_INSCRIPTION: Record<RegistrationState, Tone> = {
   cancelled: "neutral",
 };
 
-const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
-
 function classer(e: EventAdmin, maintenant: number): Onglet {
   if (e.state === "draft") return "brouillons";
   if (e.state === "cancelled") return "annules";
   return new Date(e.end).getTime() >= maintenant ? "venir" : "passes";
 }
 
+/** Personnes prévenues de l'annulation : « La personne inscrite… sera prévenue », « Les 3 personnes… seront prévenues ». */
+function prevenus(n: number): string {
+  if (n === 0) return "Personne n'est encore inscrit.";
+  if (n === 1) return "La personne inscrite ou en liste d'attente sera prévenue.";
+  return `Les ${fmtInt(n)} personnes inscrites ou en liste d'attente seront prévenues.`;
+}
+
 export default function EvenementsPage() {
   const ecriture = useEcriture();
   const { data, error, mutate } = useApi<EventAdmin[]>("/axispro/portail/evenements");
-  const { data: cibles } = useApi<Cibles>("/axispro/portail/cibles");
+  const { data: cibles, error: erreurCibles, mutate: majCibles } = useApi<Cibles>("/axispro/portail/cibles");
   const [onglet, setOnglet] = useState<Onglet>("venir");
   const [q, setQ] = useState("");
   const [edition, setEdition] = useState<EventAdmin | "nouveau" | null>(null);
   const [inscriptions, setInscriptions] = useState<EventAdmin | null>(null);
-  const { agir, bandeau } = useRetour();
-  const [maintenant] = useState(() => Date.now());
+  const { agir, envoyer, enCours, occupe, bandeau } = useRetour();
+  const maintenant = useMaintenant();
 
   const tous = data ?? [];
   const compte = (o: Onglet) => tous.filter((e) => classer(e, maintenant) === o).length;
@@ -49,15 +58,16 @@ export default function EvenementsPage() {
     .filter((e) => classer(e, maintenant) === onglet && correspond(q, e.name, e.kind_label, e.speaker, e.location))
     .sort((a, b) => (onglet === "venir" || onglet === "brouillons" ? 1 : -1) * (new Date(a.start).getTime() - new Date(b.start).getTime()));
 
-  async function etat(e: EventAdmin, action: "publier" | "annuler" | "supprimer") {
+  async function etat(e: EventAdmin, action: ActionEvenement) {
+    if (occupe) return;
     const questions = {
       publier: `Publier « ${e.name} » ? Les porteurs visés (${resumePublic(e).toLowerCase()}) seront prévenus et pourront s'inscrire.`,
-      annuler: `Annuler « ${e.name} » ? ${e.registered + e.waitlist > 0 ? `Les ${e.registered + e.waitlist} personnes inscrites ou en liste d'attente seront prévenues.` : "Personne n'est encore inscrit."}`,
+      annuler: `Annuler « ${e.name} » ? ${prevenus(e.registered + e.waitlist)} L'annulation est définitive.`,
       supprimer: `Supprimer définitivement le brouillon « ${e.name} » ?`,
     };
     if (!(await demanderConfirmation(questions[action], { action: { publier: "Publier", annuler: "Annuler l'événement", supprimer: "Supprimer" }[action], danger: action !== "publier" }))) return;
     const ok = { publier: "Événement publié : les porteurs visés sont prévenus.", annuler: "Événement annulé : les inscrits sont prévenus.", supprimer: "Brouillon supprimé." };
-    const r = await agir(() => apiSend("POST", `/axispro/portail/evenements/${e.id}/${action}`), ok[action]);
+    const r = await envoyer(() => apiSend("POST", `/axispro/portail/evenements/${e.id}/${action}`), ok[action], `${e.id}:${action}`);
     if (r !== undefined) await mutate();
   }
 
@@ -67,16 +77,19 @@ export default function EvenementsPage() {
         title="Événements et formations"
         subtitle="Ateliers, formations, webinaires et rencontres proposés aux porteurs : publication, inscriptions, liste d'attente et pointage des présents."
         actions={
-          <Button variant="primary" disabled={!ecriture || !cibles} title={!ecriture ? RESERVE_CABINET : undefined} onClick={() => setEdition("nouveau")}>
-            <Plus className="h-4 w-4" /> Nouvel événement
-          </Button>
+          ecriture ? (
+            <Button variant="primary" disabled={!cibles} onClick={() => setEdition("nouveau")}>
+              <Plus className="h-4 w-4" /> Nouvel événement
+            </Button>
+          ) : undefined
         }
       />
       <OngletsPortail />
       <div className="space-y-4">
         <LectureSeule ecriture={ecriture} />
         {bandeau}
-        {error && <ErrorBox error={error} onRetry={() => void mutate()} />}
+        {erreurCibles && <ErrorBox titre="Dossiers et étapes indisponibles : impossible d'ouvrir un événement." error={erreurCibles} onRetry={() => void majCibles()} />}
+        {error && <ErrorBox titre={data ? "Rechargement impossible : les événements affichés peuvent dater." : undefined} error={error} onRetry={() => void mutate()} />}
         <div className="flex flex-wrap items-end justify-between gap-x-4">
           <Tabs
             value={onglet}
@@ -94,11 +107,11 @@ export default function EvenementsPage() {
           {!data ? (
             !error && <Loading label="Chargement des événements…" />
           ) : rows.length === 0 ? (
-            <Empty title="Aucun événement dans cette sélection." hint={onglet === "venir" ? "Créez un atelier ou une formation : il reste en brouillon tant que vous ne le publiez pas." : undefined} />
+            <Empty title="Aucun événement dans cette sélection." hint={onglet === "venir" && ecriture ? "Créez un atelier ou une formation : il reste en brouillon tant que vous ne le publiez pas." : undefined} />
           ) : (
             <ul className="divide-y divide-line">
               {rows.map((e) => (
-                <LigneEvenement key={e.id} e={e} passe={onglet === "passes"} ecriture={ecriture} onEditer={() => setEdition(e)} onInscriptions={() => setInscriptions(e)} onEtat={(a) => void etat(e, a)} />
+                <LigneEvenement key={e.id} e={e} passe={onglet === "passes"} ecriture={ecriture} enCours={enCours} occupe={occupe} onEditer={() => cibles && setEdition(e)} onInscriptions={() => setInscriptions(e)} onEtat={(a) => void etat(e, a)} />
               ))}
             </ul>
           )}
@@ -122,16 +135,16 @@ export default function EvenementsPage() {
   );
 }
 
-function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }: { e: EventAdmin; passe: boolean; ecriture: boolean; onEditer: () => void; onInscriptions: () => void; onEtat: (a: "publier" | "annuler" | "supprimer") => void }) {
+function LigneEvenement({ e, passe, ecriture, enCours, occupe, onEditer, onInscriptions, onEtat }: { e: EventAdmin; passe: boolean; ecriture: boolean; enCours: string | null; occupe: boolean; onEditer: () => void; onInscriptions: () => void; onEtat: (a: ActionEvenement) => void }) {
   const debut = new Date(e.start);
   const memeJour = debut.toDateString() === new Date(e.end).toDateString();
-  const blocage = !ecriture ? RESERVE_CABINET : undefined;
+  const charge = (a: ActionEvenement) => enCours === `${e.id}:${a}`;
   return (
     <li className={cx("px-5 py-4 sm:px-6", e.state === "cancelled" && "opacity-70")}>
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
         <div aria-hidden className="grid w-14 flex-none place-items-center rounded-xl border border-line bg-panel-2 py-1.5 text-center">
           <span className="font-display text-[22px] font-bold leading-none text-ink">{debut.getDate()}</span>
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{MOIS[debut.getMonth()]}</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{MONTHS_FR[debut.getMonth()]}</span>
         </div>
         <div className="min-w-0 flex-1 basis-72">
           <div className="flex flex-wrap items-center gap-2">
@@ -167,15 +180,12 @@ function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }
         <div className="w-full min-w-[200px] space-y-1.5 text-[12.5px] sm:w-56">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-muted">Inscrits</span>
-            <span className="font-semibold tabular text-ink">
-              {e.registered}
-              {e.capacity ? ` / ${e.capacity} places` : ", sans limite"}
-            </span>
+            <span className="font-semibold tabular text-ink">{e.capacity ? `${fmtInt(e.registered)} / ${pluriel(e.capacity, "place")}` : `${fmtInt(e.registered)}, sans limite`}</span>
           </div>
           {e.capacity ? <ProgressBar value={(e.registered / e.capacity) * 100} epaisseur={6} tone={e.registered >= e.capacity ? "warn" : "accent"} /> : null}
           <div className="flex flex-wrap gap-x-3 text-muted">
-            {e.waitlist > 0 && <span className="font-semibold text-warn">{e.waitlist} en liste d&apos;attente</span>}
-            {(passe || e.attended > 0) && <span>{pluriel(e.attended, "présent", "présents")}</span>}
+            {e.waitlist > 0 && <span className="font-semibold text-warn">{fmtInt(e.waitlist)} en liste d&apos;attente</span>}
+            {(passe || e.attended > 0) && <span>{pluriel(e.attended, "présent")}</span>}
           </div>
         </div>
 
@@ -186,18 +196,18 @@ function LigneEvenement({ e, passe, ecriture, onEditer, onInscriptions, onEtat }
           <Button variant="ghost" size="sm" onClick={onEditer}>
             <Pencil className="h-3.5 w-3.5" /> {ecriture ? "Modifier" : "Voir"}
           </Button>
-          {e.state === "draft" && (
-            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("publier")}>
+          {ecriture && e.state === "draft" && (
+            <Button variant="primary" size="sm" loading={charge("publier")} disabled={occupe} onClick={() => onEtat("publier")}>
               <Send className="h-3.5 w-3.5" /> Publier
             </Button>
           )}
-          {e.state === "published" && !passe && (
-            <Button variant="danger" size="sm" disabled={!ecriture} title={blocage} onClick={() => onEtat("annuler")}>
+          {ecriture && e.state === "published" && !passe && (
+            <Button variant="danger" size="sm" loading={charge("annuler")} disabled={occupe} onClick={() => onEtat("annuler")}>
               <XCircle className="h-3.5 w-3.5" /> Annuler
             </Button>
           )}
-          {e.state === "draft" && (
-            <button type="button" aria-label={`Supprimer le brouillon ${e.name}`} title={blocage ?? "Supprimer le brouillon"} disabled={!ecriture} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40" onClick={() => onEtat("supprimer")}>
+          {ecriture && e.state === "draft" && (
+            <button type="button" aria-label={`Supprimer le brouillon ${e.name}`} title="Supprimer le brouillon" disabled={occupe} aria-busy={charge("supprimer") || undefined} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40" onClick={() => onEtat("supprimer")}>
               <Trash2 className="h-4 w-4" />
             </button>
           )}
@@ -253,12 +263,21 @@ function saisieDe(e: EventAdmin | null): SaisieEvenement {
   };
 }
 
+/** Places saisies : vide ou 0, sans limite ; sinon un entier positif. null : saisie illisible ou invalide. */
+function places(saisie: string): number | null {
+  if (!saisie.trim()) return 0;
+  const n = lireNombre(saisie);
+  return n !== null && Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { evenement: EventAdmin | null; cibles: Cibles; ecriture: boolean; onClose: () => void; onDone: (message: string) => Promise<void> }) {
-  const [f, setF] = useState<SaisieEvenement>(() => saisieDe(evenement));
-  const [envoi, setEnvoi] = useState<"brouillon" | "publier" | null>(null);
-  const [erreur, setErreur] = useState<string | null>(null);
+  const [initial] = useState(() => saisieDe(evenement));
+  const [f, setF] = useState<SaisieEvenement>(initial);
+  const { envoi, occupe, erreur, setErreur, envoyer, fermer } = useEnvoiFenetre(ecriture && saisieModifiee(f, initial), onClose);
   const set = <K extends keyof SaisieEvenement>(k: K, v: SaisieEvenement[K]) => setF((x) => ({ ...x, [k]: v }));
   const etat = evenement?.state ?? "draft";
+  const nbPlaces = places(f.capacity);
+  const erreurPlaces = nombreIllisible(f.capacity) ? AIDE_NOMBRE : nbPlaces === null ? "Nombre de places : un entier positif (0 ou vide : sans limite)." : undefined;
 
   function changerDebut(v: string) {
     setF((x) => {
@@ -274,21 +293,19 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
     if (new Date(f.end) <= new Date(f.start)) return "La fin doit suivre le début.";
     if (f.registration_deadline && new Date(f.registration_deadline) > new Date(f.start)) return "La clôture des inscriptions doit précéder le début.";
     if (f.online_url.trim() && !f.online_url.trim().startsWith("https://")) return "Le lien de connexion doit commencer par https://.";
-    const places = Number(f.capacity || 0);
-    if (!Number.isInteger(places) || places < 0) return "Le nombre de places est un entier positif (0 : sans limite).";
+    if (erreurPlaces) return erreurPlaces;
     if (f.description.length > 20_000) return "Programme trop long (20 000 caractères au plus).";
     return publicIncomplet(f);
   }
 
   async function enregistrer(publier: boolean) {
+    if (occupe) return;
     const probleme = controle();
-    if (probleme) {
-      setErreur(probleme);
+    if (probleme || nbPlaces === null) {
+      setErreur(probleme ?? AIDE_NOMBRE);
       return;
     }
     if (publier && etat === "draft" && !(await demanderConfirmation("Publier cet événement ? Les porteurs visés seront prévenus et pourront s'inscrire.", { action: "Publier" }))) return;
-    setEnvoi(publier ? "publier" : "brouillon");
-    setErreur(null);
     const corps = {
       name: f.name.trim(),
       kind: f.kind,
@@ -298,26 +315,32 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
       end: versIso(f.end),
       location: f.location.trim(),
       online_url: f.online_url.trim(),
-      capacity: Number(f.capacity || 0),
+      capacity: nbPlaces,
       registration_deadline: versIso(f.registration_deadline),
       audience: f.audience,
       dossier_ids: f.audience === "dossiers" ? f.dossier_ids : [],
       gate_codes: f.audience === "gates" ? f.gate_codes : "",
       sector_keywords: f.audience === "sectors" ? f.sector_keywords : "",
     };
-    try {
+    // Publié : le noyau prévient les inscrits d'un changement d'horaire, de lieu ou de lien.
+    const prevenir = etat === "published" && (f.start !== initial.start || f.end !== initial.end || f.location.trim() !== initial.location.trim() || f.online_url.trim() !== initial.online_url.trim());
+    await envoyer(publier ? "publier" : "brouillon", async () => {
       if (!evenement) {
         await apiSend<EventAdmin>("POST", "/axispro/portail/evenements", { ...corps, publish: publier });
       } else {
         await apiSend<EventAdmin>("PATCH", `/axispro/portail/evenements/${evenement.id}`, corps);
         if (publier && etat === "draft") await apiSend("POST", `/axispro/portail/evenements/${evenement.id}/publier`);
       }
-      await onDone(publier && etat === "draft" ? "Événement publié : les porteurs visés sont prévenus." : etat === "draft" ? "Brouillon enregistré." : "Événement mis à jour.");
-    } catch (e) {
-      setErreur(messageErreur(e));
-    } finally {
-      setEnvoi(null);
-    }
+      await onDone(
+        publier && etat === "draft"
+          ? "Événement publié : les porteurs visés sont prévenus."
+          : etat === "draft"
+            ? "Brouillon enregistré."
+            : prevenir
+              ? "Événement mis à jour : les inscrits sont prévenus du changement."
+              : "Événement mis à jour.",
+      );
+    });
   }
 
   return (
@@ -325,19 +348,19 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
       open
       wide
       title={!evenement ? "Nouvel événement" : ecriture ? "Modifier l'événement" : "Événement"}
-      onClose={onClose}
+      onClose={() => void fermer()}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" disabled={occupe} onClick={() => void fermer()}>
             {ecriture ? "Annuler" : "Fermer"}
           </Button>
           {ecriture && etat === "draft" && (
-            <Button variant="secondary" loading={envoi === "brouillon"} disabled={envoi !== null} onClick={() => void enregistrer(false)}>
+            <Button variant="secondary" loading={envoi === "brouillon"} disabled={occupe || Boolean(erreurPlaces)} onClick={() => void enregistrer(false)}>
               Enregistrer le brouillon
             </Button>
           )}
           {ecriture && (
-            <Button variant="primary" loading={envoi === "publier"} disabled={envoi !== null} onClick={() => void enregistrer(etat === "draft")}>
+            <Button variant="primary" loading={envoi === "publier"} disabled={occupe || Boolean(erreurPlaces)} onClick={() => void enregistrer(etat === "draft")}>
               {etat === "draft" ? (
                 <>
                   <Send className="h-4 w-4" /> Publier
@@ -350,9 +373,9 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
         </>
       }
     >
-      <fieldset disabled={!ecriture} className="min-w-0 space-y-4">
+      <fieldset disabled={!ecriture || occupe} className="min-w-0 space-y-4">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
-        {etat === "published" && <Notice tone="accent">Cet événement est publié : les modifications sont visibles des porteurs dès l&apos;enregistrement. Prévenez les inscrits par message en cas de changement de date ou de lieu.</Notice>}
+        {etat === "published" && <Notice tone="accent">Cet événement est publié : les modifications sont visibles des porteurs dès l&apos;enregistrement. Un changement de date, de lieu ou de lien prévient les inscrits et la liste d&apos;attente ; un public élargi reçoit l&apos;annonce de l&apos;événement ; des places ajoutées vont d&apos;abord à la liste d&apos;attente.</Notice>}
         {etat === "cancelled" && <Notice tone="warn">Cet événement est annulé : il n&apos;est plus proposé aux porteurs.</Notice>}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Field label="Intitulé" className="md:col-span-2">
@@ -369,8 +392,8 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
           <Field label="Fin">
             <Input type="datetime-local" value={f.end} min={f.start || undefined} onChange={(e) => set("end", e.target.value)} />
           </Field>
-          <Field label="Places" hint="0 : sans limite.">
-            <Input type="number" inputMode="numeric" min={0} step={1} value={f.capacity} onChange={(e) => set("capacity", e.target.value)} />
+          <Field label="Places" hint="0 ou vide : sans limite." error={erreurPlaces}>
+            <Input inputMode="numeric" value={f.capacity} aria-invalid={erreurPlaces ? true : undefined} onChange={(e) => set("capacity", e.target.value)} />
           </Field>
           <Field label="Clôture des inscriptions" hint="Vide : jusqu'au début.">
             <Input type="datetime-local" value={f.registration_deadline} max={f.start || undefined} onChange={(e) => set("registration_deadline", e.target.value)} />
@@ -399,14 +422,18 @@ function EditeurEvenement({ evenement, cibles, ecriture, onClose, onDone }: { ev
 const ORDRE_ETAT: Record<RegistrationState, number> = { registered: 0, attended: 0, absent: 0, waitlist: 1, cancelled: 2 };
 
 function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: EventAdmin; ecriture: boolean; onClose: () => void; onChange: () => void }) {
-  const { data, error, mutate } = useApi<RegistrationRow[]>(`/axispro/portail/evenements/${evenement.id}/inscriptions`);
+  const { data, error, mutate } = useApi<Inscription[]>(`/axispro/portail/evenements/${evenement.id}/inscriptions`);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState<number | null>(null);
-  const rows = useMemo(() => [...(data ?? [])].sort((a, b) => ORDRE_ETAT[a.state] - ORDRE_ETAT[b.state] || a.date.localeCompare(b.date)), [data]);
+  const verrou = useRef(false);
+  // Liste d'attente dans son ordre (rang du noyau), les autres par date d'inscription.
+  const rows = useMemo(() => [...(data ?? [])].sort((a, b) => ORDRE_ETAT[a.state] - ORDRE_ETAT[b.state] || (a.waitlist_rank ?? 0) - (b.waitlist_rank ?? 0) || a.date.localeCompare(b.date)), [data]);
   const n = (s: RegistrationState) => (data ?? []).filter((r) => r.state === s).length;
 
-  async function pointer(r: RegistrationRow, state: RegistrationState) {
-    if (state === "cancelled" && !(await demanderConfirmation(`Désinscrire ${r.user} ? ${r.state === "registered" ? "La première personne en liste d'attente prendra la place." : ""}`, { action: "Désinscrire", danger: true }))) return;
+  async function pointer(r: Inscription, state: RegistrationState) {
+    if (verrou.current) return;
+    if (state === "cancelled" && !(await demanderConfirmation(`Désinscrire ${r.user} ? ${r.state === "registered" ? "La première personne en liste d'attente prendra la place." : "Il quittera la liste d'attente."}`, { action: "Désinscrire", danger: true }))) return;
+    verrou.current = true;
     setErreur(null);
     setEnCours(r.id);
     try {
@@ -416,18 +443,19 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
     } catch (e) {
       setErreur(messageErreur(e));
     } finally {
+      verrou.current = false;
       setEnCours(null);
     }
   }
 
   function exporter() {
     telechargerCsv(`inscriptions-${nomFichier(evenement.name)}.csv`, [
-      ["Porteur", "Identifiant", "Téléphone", "Dossier", "État", "Question ou attente", "Inscrit le"],
-      ...rows.map((r) => [r.user, r.login, r.phone, r.dossier?.reference, r.state_label, r.note, fmtDateTime(r.date)]),
+      ["Porteur", "Identifiant", "Téléphone", "Dossier", "État", "Rang d'attente", "Question ou attente", "Inscrit le"],
+      ...rows.map((r) => [r.user, r.login, r.phone, r.dossier?.reference, r.state_label, r.waitlist_rank ?? "", r.note, fmtDateTime(r.date)]),
     ]);
   }
 
-  const blocage = !ecriture ? RESERVE_CABINET : undefined;
+  const occupe = enCours !== null;
   return (
     <Modal
       open
@@ -448,23 +476,19 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
       <div className="space-y-4">
         <p className="text-[13.5px] text-ink-2">
           {majuscule(dateLongue(evenement.start))}
-          {evenement.location ? `, ${evenement.location}` : ""}. {evenement.capacity ? `${pluriel(evenement.capacity, "place", "places")}.` : "Sans limite de places."}
+          {evenement.location ? `, ${evenement.location}` : ""}. {evenement.capacity ? `${pluriel(evenement.capacity, "place")}.` : "Sans limite de places."}
         </p>
         {data && (
           <div className="flex flex-wrap gap-2">
-            <Badge tone="accent">{pluriel(n("registered"), "inscrit", "inscrits")}</Badge>
-            <Badge tone="warn">{`${n("waitlist")} en liste d'attente`}</Badge>
-            <Badge tone="ok">{pluriel(n("attended"), "présent", "présents")}</Badge>
-            <Badge tone="danger">{pluriel(n("absent"), "absent", "absents")}</Badge>
-            <Badge>{pluriel(n("cancelled"), "désinscrit", "désinscrits")}</Badge>
+            <Badge tone="accent">{pluriel(n("registered"), "inscrit")}</Badge>
+            <Badge tone="warn">{`${fmtInt(n("waitlist"))} en liste d'attente`}</Badge>
+            <Badge tone="ok">{pluriel(n("attended"), "présent")}</Badge>
+            <Badge tone="danger">{pluriel(n("absent"), "absent")}</Badge>
+            <Badge>{pluriel(n("cancelled"), "désinscrit")}</Badge>
           </div>
         )}
         {erreur && <Notice tone="danger">{erreur}</Notice>}
-        {error ? (
-          <ErrorBox error={error} onRetry={() => void mutate()} />
-        ) : !data ? (
-          <Loading label="Chargement des inscriptions…" />
-        ) : (
+        <Etat data={data} error={error} onRetry={() => void mutate()} label="Chargement des inscriptions…">
           <div className="-mx-5">
             <DataTable
               dense
@@ -496,58 +520,76 @@ function Inscriptions({ evenement, ecriture, onClose, onChange }: { evenement: E
                       <span className="text-muted">–</span>
                     ),
                 },
-                { key: "state", label: "État", sortValue: (r) => ORDRE_ETAT[r.state], render: (r) => <Badge tone={ETAT_INSCRIPTION[r.state]}>{r.state_label}</Badge> },
+                {
+                  key: "state",
+                  label: "État",
+                  sortValue: (r) => ORDRE_ETAT[r.state] * 10_000 + (r.waitlist_rank ?? 0),
+                  render: (r) => (
+                    <span className="flex flex-col items-start gap-0.5">
+                      <Badge tone={ETAT_INSCRIPTION[r.state]}>{r.state_label}</Badge>
+                      {r.state === "waitlist" && r.waitlist_rank ? (
+                        <span className="whitespace-nowrap text-[11.5px] text-muted" title={r.waitlist_since ? `En attente depuis le ${fmtDateTime(r.waitlist_since)}` : undefined}>
+                          {r.waitlist_rank === 1 ? "1re place libre" : `Rang ${fmtInt(r.waitlist_rank)}`}
+                        </span>
+                      ) : null}
+                    </span>
+                  ),
+                },
                 { key: "note", label: "Question ou attente", render: (r) => (r.note ? <span className="line-clamp-2 max-w-[260px] text-[12.5px] text-ink-2" title={r.note}>{r.note}</span> : <span className="text-muted">–</span>) },
                 { key: "date", label: "Inscrit", sortValue: (r) => r.date, render: (r) => <span className="whitespace-nowrap text-[12.5px] text-muted" title={fmtDateTime(r.date)}>{quand(r.date)}</span> },
-                {
-                  key: "pointage",
-                  label: "",
-                  render: (r) =>
-                    r.state === "cancelled" ? null : r.state === "waitlist" ? (
-                      <div className="flex justify-end gap-1">
-                        <Button size="sm" disabled={!ecriture || enCours === r.id} title={blocage ?? "Lui donner une place, au-delà de la limite au besoin"} onClick={() => void pointer(r, "registered")}>
-                          Inscrire
-                        </Button>
-                        <Button variant="ghost" size="sm" disabled={!ecriture || enCours === r.id} title={blocage} onClick={() => void pointer(r, "cancelled")}>
-                          Retirer
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-1">
-                        <div role="group" aria-label={`Pointage de ${r.user}`} className="inline-flex rounded-lg border border-line bg-panel-2 p-0.5">
-                          {(["attended", "absent"] as const).map((s) => {
-                            const actif = r.state === s;
-                            return (
-                              <button
-                                key={s}
-                                type="button"
-                                aria-pressed={actif}
-                                aria-label={`${r.user} ${s === "attended" ? "présent" : "absent"}`}
-                                disabled={!ecriture || enCours === r.id}
-                                title={blocage ?? (actif ? "Annuler le pointage" : undefined)}
-                                onClick={() => void pointer(r, actif ? "registered" : s)}
-                                className={cx(
-                                  "rounded-md px-2.5 py-1 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                                  actif ? (s === "attended" ? "bg-ok-doux text-ok-texte" : "bg-danger-doux text-danger") : "text-muted hover:text-ink",
-                                )}
-                              >
-                                {s === "attended" ? "Présent" : "Absent"}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {r.state === "registered" && (
-                          <button type="button" aria-label={`Désinscrire ${r.user}`} title={blocage ?? "Désinscrire"} disabled={!ecriture || enCours === r.id} onClick={() => void pointer(r, "cancelled")} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40">
-                            <XCircle className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    ),
-                },
+                ...(ecriture
+                  ? [
+                      {
+                        key: "pointage",
+                        label: "",
+                        render: (r: Inscription) =>
+                          r.state === "cancelled" ? null : r.state === "waitlist" ? (
+                            <div className="flex justify-end gap-1">
+                              <Button size="sm" loading={enCours === r.id} disabled={occupe} title="Lui donner une place, au-delà de la limite au besoin" onClick={() => void pointer(r, "registered")}>
+                                Inscrire
+                              </Button>
+                              <Button variant="ghost" size="sm" disabled={occupe} onClick={() => void pointer(r, "cancelled")}>
+                                Retirer
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              <div role="group" aria-label={`Pointage de ${r.user}`} aria-busy={enCours === r.id || undefined} className="inline-flex rounded-lg border border-line bg-panel-2 p-0.5">
+                                {(["attended", "absent"] as const).map((s) => {
+                                  const actif = r.state === s;
+                                  return (
+                                    <button
+                                      key={s}
+                                      type="button"
+                                      aria-pressed={actif}
+                                      aria-label={`${r.user} ${s === "attended" ? "présent" : "absent"}`}
+                                      disabled={occupe}
+                                      title={actif ? "Annuler le pointage" : undefined}
+                                      onClick={() => void pointer(r, actif ? "registered" : s)}
+                                      className={cx(
+                                        "rounded-md px-2.5 py-1 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                                        actif ? (s === "attended" ? "bg-ok-doux text-ok-texte" : "bg-danger-doux text-danger") : "text-muted hover:text-ink",
+                                      )}
+                                    >
+                                      {s === "attended" ? "Présent" : "Absent"}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {r.state === "registered" && (
+                                <button type="button" aria-label={`Désinscrire ${r.user}`} title="Désinscrire" disabled={occupe} onClick={() => void pointer(r, "cancelled")} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40">
+                                  <XCircle className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          ),
+                      },
+                    ]
+                  : []),
               ]}
             />
           </div>
-        )}
+        </Etat>
       </div>
     </Modal>
   );
