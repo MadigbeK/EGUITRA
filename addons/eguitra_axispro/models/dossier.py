@@ -516,6 +516,10 @@ class AxisproDossier(models.Model):
         # Les auteurs se comptent par révision : la nouvelle repart à vide.
         self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False,
                                                         "decision_inputs_by": [Command.clear()]})
+        # Les pièces reçues après la décision défaite entrent dans la nouvelle révision : la prochaine
+        # décision verrouillée les fige comme les autres (sinon une pièce reçue après un verrou
+        # précédent resterait modifiable sous une décision scellée qui s'appuie sur elle).
+        self.sudo().document_ids.filtered("after_lock").write({"after_lock": False})
         self.log("revision", note=f"Révision {self.revision} ouverte après la décision du {previous.date:%d/%m/%Y} "
                                   f"({method.DECISIONS.get(previous.decision, previous.decision)}).")
         return True
@@ -577,7 +581,9 @@ class AxisproDocument(models.Model):
         [("received", "Reçue"), ("validated", "Validée"), ("rejected", "À reprendre")], default="received", required=True
     )
     validity_date = fields.Date("Valable jusqu'au", help="Au-delà, une preuve est comptée comme incomplète.")
-    after_lock = fields.Boolean("Reçue après la décision verrouillée", readonly=True)
+    after_lock = fields.Boolean("Reçue après la décision verrouillée", readonly=True,
+                                help="Pièce reçue après la décision verrouillée en vigueur : elle se traite librement. "
+                                     "Remis à faux à l'ouverture d'une nouvelle révision.")
     comment = fields.Text("Observation du cabinet")
     uploaded_by = fields.Many2one("res.users", default=lambda self: self.env.user, readonly=True)
     uploaded_at = fields.Datetime(default=fields.Datetime.now, readonly=True)

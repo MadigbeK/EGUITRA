@@ -776,6 +776,37 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertEqual((record.decision, record.state), ("go", "draft"))
         self.assertEqual(self.dossier.current_gate_id.code, "G0")
 
+    def test_piece_recue_apres_un_verrou_figee_par_la_decision_suivante(self):
+        """Audit du noyau (C13) : une pièce reçue après le verrou de la révision 1 entre dans la
+        révision 2 ; une fois la décision de la révision 2 scellée sur elle, ni son état ni sa
+        validité ne changent plus (422), et l'empreinte reste intacte."""
+        relecteur = self._relecteur()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
+                                 token=relecteur)
+        self.assertEqual(status, 200, body)
+        path = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        status, first = self.call("POST", path, {"decision": "hold", "motive": "Titre foncier à produire", "lock": True},
+                                  token=self.token)
+        self.assertEqual((status, first["state"]), (200, "locked"), first)
+        piece = self._upload(f"/axispro/dossiers/{self.dossier.id}/documents", "titre_foncier.pdf").json()
+        self.assertTrue(piece["after_lock"], "Reçue après la décision verrouillée de la révision 1")
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=relecteur)
+        self.assertEqual((status, body["revision"]), (200, 2), body)
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}",
+                                 {"status": "met", "document_ids": [piece["id"]]}, token=relecteur)
+        self.assertEqual(status, 200, body)
+        status, second = self.call("POST", path, {"decision": "go", "lock": True}, token=self.token)
+        self.assertEqual((status, second["state"], second["revision"]), (200, "locked", 2), second)
+        self.env.invalidate_all()
+        self.assertFalse(self.env["axispro.document"].browse(piece["id"]).after_lock,
+                         "La pièce fait partie de la révision 2")
+        for change in ({"state": "rejected"}, {"validity_date": "2025-01-31"}):
+            status, body = self.call("PATCH", f"/axispro/documents/{piece['id']}", change, token=self.token)
+            self.assertEqual(status, 422, f"{change} : pièce figée par la décision de la révision 2")
+        self.env.invalidate_all()
+        check = self.env["axispro.review"].browse(second["id"]).verify()
+        self.assertEqual((check["intact"], check["unchanged"]), (True, True), check)
+
     def test_double_clic_ne_franchit_qu_un_gate(self):
         """Audit de l'application web (C4) : l'écran envoie le gate de départ ; s'il n'est plus le gate
         courant (second clic, autre onglet), le noyau refuse (409) sans rien franchir ni journaliser."""
