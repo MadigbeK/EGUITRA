@@ -90,6 +90,10 @@ const DESCRIPTIONS: Record<string, string> = {
   "/rh/simulateur": "Du salaire de base au net, ou du net au brut",
   "/rh/moi": "Vos congés, vos bulletins, votre équipe",
   "/rh/parametres": "Barème, taux, rubriques, absences, jours fériés",
+  "/hsseq": "Indicateurs, départs bloqués, actions en retard, échéances",
+  "/hsseq/evenements": "Déclaration, classement, enquête et clôture",
+  "/hsseq/actions": "Actions correctives et préventives, preuves, efficacité",
+  "/hsseq/controles": "Grilles pré-départ, alcootests et non-conformités",
 };
 
 const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" en attente", " en attente"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };

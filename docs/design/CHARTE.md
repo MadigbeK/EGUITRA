@@ -150,7 +150,10 @@ nom pour les lecteurs d'écran), état, pièce jointe. Les menus sont en texte s
 Les signes d'une interface produite sans regard, relevés dans le guide transmis par le gérant, sont
 écartés. Une couleur par application, tranchée par le gérant le 22 octobre 2026 : Finance vert,
 AxisPro et le portail bleu, Transport ambre, Rotations latérite, RH prune, Analyse or bronze (la
-diagonale d'or du logo, accent #86601c, 5,67:1 sur le blanc). Le violet n'apparaît plus nulle part.
+diagonale d'or du logo, accent #86601c, 5,67:1 sur le blanc). HSSEQ s'y ajoute le 25 octobre 2026
+en pétrole, teinte 192° restée libre et qui ne dit aucun état (accent #0a6e86, 5,85:1 sous le blanc,
+5,18:1 sur le fond ; vif #14a3c2 au décor seulement ; mode nuit #5cc4dc, 8:1 sur le panneau sombre),
+avec le jaune sécurité #f2b705 dans ses icônes. Le violet n'apparaît plus nulle part.
 Pas de dégradé de couleur : boutons principaux, avatars, numéros, colonnes, pastilles et bandeaux
 sont des aplats de la couleur de l'application (`--accent`, `--accent-strong` au survol, et pour les
 grandes surfaces qui portent des textes secondaires, afin que le blanc y garde 4,5:1). Trois surfaces

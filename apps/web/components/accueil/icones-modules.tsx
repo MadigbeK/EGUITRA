@@ -8,7 +8,8 @@
  *
  * La grille reste polychrome. Transport a ses propres dessins (jauge, tampon, route, citerne,
  * flotte), où domine son ambre ; ses écrans qui reprennent un dessin d'une autre application le
- * reprennent recoloré, pour qu'aucune tuile n'en double une autre.
+ * reprennent recoloré, pour qu'aucune tuile n'en double une autre. HSSEQ a les siens (casque,
+ * cadran, panneau, liste à échéance, bloc-notes plombé), au pétrole et au jaune sécurité.
  */
 import { Children, cloneElement, isValidElement, type CSSProperties, type ReactNode } from "react";
 
@@ -29,6 +30,14 @@ const VF = "#6e4e15"; // bronze foncé
 const R = "#e08a1e"; // ambre (Transport)
 const RC = "#fbd29a"; // ambre clair
 const RF = "#8a4908"; // ambre foncé
+const H = "#0a6e86"; // pétrole (HSSEQ)
+const HC = "#9fd8e6"; // pétrole clair
+const HF = "#075668"; // pétrole foncé
+const HV = "#14a3c2"; // pétrole vif
+const JS = "#f2b705"; // jaune sécurité
+const JSF = "#c99200"; // jaune sécurité foncé
+const PL = "#a3b1b6"; // gris plomb
+const PLF = "#5d6d73"; // plomb foncé
 const B = "#ffffff";
 
 /** Rang dans la chorégraphie, et point fixe (en unités de la grille) pour les rotations. */
@@ -730,6 +739,86 @@ const DESSINS: Record<string, ReactNode> = {
       </g>
     </>
   ),
+
+  /* HSSEQ : le casque de sécurité, son bandeau pétrole et l'écusson coché. */
+  hsseq: (
+    <>
+      <g className="a-tombe" style={k(0)}>
+        <path d="M4.5 26a16.5 16.5 0 0 1 33 0Z" fill={JS} />
+        <path className="a-pousse-x" style={k(2)} d="M5.8 19.5H36.2L37.4 24H4.6Z" fill={H} />
+        <path d="M10.5 18.5a12.5 12.5 0 0 1 6.5-6.5" stroke={B} strokeWidth="2.4" fill="none" strokeLinecap="round" opacity=".65" />
+        <rect x="2" y="25" width="39" height="5.5" rx="2.75" fill={JSF} />
+      </g>
+      <g className="a-pop" style={k(4)}>
+        <path d="M37 21.5 44.5 24.3v5.5c0 4.6-3.2 8.3-7.5 9.7-4.3-1.4-7.5-5.1-7.5-9.7v-5.5Z" fill={H} stroke={B} strokeWidth="2.5" strokeLinejoin="round" />
+        <path d="M33.7 30.2l2.4 2.4 4.3-4.7" stroke={B} strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </>
+  ),
+  /* Cockpit : le cadran, ses trois zones et l'aiguille qui s'y pose. */
+  "hs-cockpit": (
+    <>
+      <circle className="a-pop" style={k(0)} cx="24" cy="25" r="20" fill={H} />
+      <circle cx="24" cy="25" r="15.5" fill={B} />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M14.47 30.5A11 11 0 0 1 20.24 14.66" stroke={J} strokeWidth="4.5" fill="none" />
+      <path className="a-trace" style={k(2)} pathLength={1} d="M20.24 14.66A11 11 0 0 1 32.43 17.93" stroke={JS} strokeWidth="4.5" fill="none" />
+      <path className="a-trace" style={k(3)} pathLength={1} d="M32.43 17.93A11 11 0 0 1 33.53 30.5" stroke={C} strokeWidth="4.5" fill="none" />
+      <path className="a-pivote" style={pivot(24, 25, 2)} d="M24 25 27.4 15.6" stroke={F} strokeWidth="3.2" strokeLinecap="round" />
+      <circle cx="24" cy="25" r="3.4" fill={F} />
+      <circle cx="24" cy="25" r="1.2" fill={B} />
+      <rect className="a-pousse-x" style={k(4)} x="19.5" y="33.5" width="9" height="3.4" rx="1.7" fill={HV} />
+    </>
+  ),
+  /* Événements : le panneau d'alerte et son éclair. */
+  "hs-evenements": (
+    <>
+      <g className="a-secoue" style={k(0)}>
+        <path d="M24 6.5 43 39.5H5Z" fill={H} stroke={H} strokeWidth="5" strokeLinejoin="round" />
+        <path d="M24 16 34.8 34.75H13.2Z" fill={JS} stroke={JS} strokeWidth="2.5" strokeLinejoin="round" />
+      </g>
+      <path className="a-pop" style={k(3)} d="M25.5 19 20.5 27.5H24L22.5 33 27.5 24.5H24Z" fill={F} stroke={F} strokeWidth="1" strokeLinejoin="round" />
+    </>
+  ),
+  /* Plan d'actions : la liste cochée et son échéance. */
+  "hs-actions": (
+    <>
+      <rect x="4" y="4" width="31" height="38" rx="5.5" fill={H} />
+      <rect className="a-pop" style={k(0)} x="9" y="10" width="7" height="7" rx="2" fill={JS} />
+      <path className="a-trace" style={k(1)} pathLength={1} d="M10.6 13.6l1.7 1.7 3-3.3" stroke={F} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect className="a-pousse-x" style={k(1)} x="19.5" y="11.8" width="10.5" height="3.4" rx="1.7" fill={B} opacity=".92" />
+      <rect className="a-pop" style={k(2)} x="9" y="19.5" width="7" height="7" rx="2" fill={JS} />
+      <path className="a-trace" style={k(3)} pathLength={1} d="M10.6 23.1l1.7 1.7 3-3.3" stroke={F} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect className="a-pousse-x" style={k(3)} x="19.5" y="21.3" width="8" height="3.4" rx="1.7" fill={B} opacity=".92" />
+      <rect className="a-pop" style={k(4)} x="9.9" y="29.9" width="5.2" height="5.2" rx="1.5" fill="none" stroke={B} strokeWidth="1.8" opacity=".9" />
+      <rect className="a-pousse-x" style={k(4)} x="19.5" y="30.8" width="6" height="3.4" rx="1.7" fill={B} opacity=".7" />
+      <g className="a-saute" style={k(5)}>
+        <rect x="28" y="28" width="17" height="16" rx="3.5" fill={JS} stroke={B} strokeWidth="2.5" />
+        <path d="M28 31.5a3.5 3.5 0 0 1 3.5-3.5h10a3.5 3.5 0 0 1 3.5 3.5V33H28Z" fill={C} />
+        <rect x="31.5" y="25.5" width="2.6" height="5.5" rx="1.3" fill={F} />
+        <rect x="38.9" y="25.5" width="2.6" height="5.5" rx="1.3" fill={F} />
+        <rect x="33" y="36" width="7" height="5" rx="1.4" fill={F} />
+      </g>
+    </>
+  ),
+  /* Contrôles : le bloc-notes coché et le plomb qui pend à son fil. */
+  "hs-controles": (
+    <>
+      <rect x="5" y="7" width="29" height="37" rx="5" fill={HF} />
+      <rect x="9" y="12.5" width="21" height="27" rx="2.5" fill={B} />
+      <g className="a-pop" style={k(0)}>
+        <rect x="13" y="3.5" width="13" height="7.5" rx="2.5" fill={JS} />
+        <rect x="17" y="5.5" width="5" height="2.2" rx="1.1" fill={JSF} />
+      </g>
+      <path className="a-trace" style={k(1)} pathLength={1} d="M13.5 25.5l4 4 8-8.5" stroke={H} strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect className="a-pousse-x" style={k(2)} x="13.5" y="34" width="12" height="3" rx="1.5" fill={HC} />
+      <path className="a-trace" style={k(3)} pathLength={1} d="M26 6.5C35.5 6.5 38.5 13 38 27.5" stroke={PLF} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <g className="a-balance" style={pivot(38, 27.5, 4)}>
+        <circle cx="38" cy="34.5" r="7" fill={PL} stroke={B} strokeWidth="2.5" />
+        <circle cx="38" cy="34.5" r="3.6" fill="none" stroke={PLF} strokeWidth="1.5" />
+        <circle cx="38" cy="34.5" r="1.3" fill={PLF} />
+      </g>
+    </>
+  ),
 };
 
 /**
@@ -748,8 +837,17 @@ DESSINS["tr-proprietaires"] = recolorer(DESSINS.financements, { [T]: R, [J]: F, 
 DESSINS["tr-rentabilite"] = recolorer(DESSINS.rentabilite, { [J]: R, [V]: F });
 DESSINS["tr-parametres"] = recolorer(DESSINS.parametres, { [F]: R, [G]: F });
 
-/** Icône d'un module par son adresse (et deux cas propres à l'accueil : réglages, Rotations). */
+/**
+ * Icône d'un module par son adresse, d'un espace par son code (sélecteur d'espace de la coque), et
+ * deux cas propres à l'accueil : réglages, Rotations.
+ */
 const PAR_ADRESSE: Record<string, string> = {
+  finance: "tableau",
+  transport: "transport",
+  axispro: "dossiers",
+  analyse: "analyse",
+  rh: "rh",
+  hsseq: "hsseq",
   "/finance": "tableau",
   "/finance/pilotage": "budget",
   "/finance/rapport": "rapport",
@@ -779,6 +877,7 @@ const PAR_ADRESSE: Record<string, string> = {
   "/transport/routes": "tr-routes",
   "/transport/bareme": "tr-taxes",
   "/transport/parametres": "tr-parametres",
+  "/transport/departs": "clotures",
   "/finance/chantiers": "chantiers",
   "/finance/immobilier": "immobilier",
   "/axispro": "dossiers",
@@ -825,6 +924,12 @@ const PAR_ADRESSE: Record<string, string> = {
   "/rh/simulateur": "rh-simulateur",
   "/rh/moi": "rh-moi",
   "/rh/parametres": "parametres",
+  "/hsseq": "hsseq",
+  "/hsseq/evenements": "hs-evenements",
+  "/hsseq/actions": "hs-actions",
+  "/hsseq/controles": "hs-controles",
+  "/hsseq/derogations": "valider",
+  "/hsseq/parametres": "parametres",
 };
 
 export function IconeModule({ cle, className }: { cle: string; className?: string }) {

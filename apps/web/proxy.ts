@@ -105,5 +105,5 @@ const PAGE_INDISPONIBLE = `<!doctype html>
 </html>`;
 
 export const config = {
-  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/compte/:path*", "/discussions", "/acces-refuse"],
+  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/hsseq/:path*", "/compte/:path*", "/discussions", "/acces-refuse"],
 };

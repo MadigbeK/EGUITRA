@@ -430,6 +430,70 @@ AxisPro, texte du noyau tel quel, critères à évaluer par gate, knock-outs blo
 provisoire décidé par la méthode. La liste des rotations et Rotations avaient été branchées par la
 session Transport. La maquette d'API sert ces champs. Vérifié en version construite (Next 16.4.2).
 
+## NIMOVA · HSSEQ, lot 1 (25 et 26 octobre 2026)
+
+Huitième application, demandée par la Direction générale d'EGUITRA (spécification v1.0 du
+24/10/2026, diffusion restreinte, gardée hors du dépôt). Le noyau est écrit par la session OTHER,
+l'application native NIMOVA Terrain par la session Mobile App ; le design livre :
+- l'identité : couleur « pétrole » #0a6e86 (teinte libre, hors des couleurs d'état), casque de
+  sécurité pour la tuile, icônes des rubriques, menus du lot 1 ;
+- le contrat d'API (`docs/design/hsseq-contrat.md`), devenu la base du noyau, puis aligné sur son
+  code réel le 26/10 (§13), avec les propositions encore ouvertes (§14) ;
+- la maquette d'API HSSEQ et les comptes de démonstration (`hsseq`, `dg`, `boffa`, `conducteur`) ;
+- le système de conception « terrain » et les maquettes Android de NIMOVA Terrain
+  (`docs/design/mobile/`) : plein soleil, gants, une main, tablette partagée ;
+- les icônes de NIMOVA Terrain (`docs/design/mobile/icones/`, 26/10) : icône d'application, icône
+  adaptative Android en trois couches, image de démarrage et favicon, tirées du pli sur fond forêt,
+  aux noms de `apps/terrain/app.json` ;
+- les écrans web : cockpit (à traiter, indicateurs gravés, comité mensuel au format des donneurs
+  d'ordre, matrice 5 × 5), événements (liste, déclaration, fiche avec classement et enquête), plan
+  d'actions (preuve, efficacité à J+90, validation des actions coûteuses), contrôles,
+  non-conformités et alcootests en statut, paramètres (sites, grilles, motifs, réglages),
+  dérogations (quatre yeux), Départs du jour dans Transport avec le panneau du verrou.
+Écart de police signalé : la spécification ne cite que Funnel Sans ; la charte (Funnel Display pour
+les titres) est gardée.
+
+## NIMOVA · HSSEQ, lot 2 (26 octobre 2026)
+
+Le noyau du lot 2 (session OTHER, branche `hsseq`, figé à `98da669`) n'avait aucun écran : le design
+les livre, sur le même système que le lot 1, avec la maquette d'API alignée (un module par domaine) et
+le contrat complété (§15 de `docs/design/hsseq-contrat.md`).
+- Registre des risques (`/hsseq/risques`) : comptes cliquables, onglets de statut, matrices 5 × 5 brute
+  et résiduelle, fiche avec les mesures dans l'ordre de la hiérarchie des contrôles, revue, archivage.
+- Audits et conformité (`/hsseq/conformite`) : programme d'audits, constats, registre des exigences et
+  leur revue, éléments d'entrée de la revue de direction (le noyau n'a pas encore d'objet « revue »).
+- Habilitations (`/hsseq/habilitations`), lues dans RH ; rapport mensuel au format de chaque donneur
+  d'ordre (`/hsseq/rapports`) ; immobilisations (`/hsseq/immobilisations`) ; plan de trajet et
+  repesée dans le panneau de départ ; paramètres : itinéraires, modèles de rapport, auditeurs.
+- Cockpit : état, famille et cible servis par le noyau (plus aucun état calculé à l'écran), matrice
+  servie, section « Risques et conformité ».
+- Profil auditeur externe : lecture seule, bornée à ses sites et à sa date de fin, sans noms de
+  personnes ; le menu ne lui montre que ce qu'il lit.
+- Compléments du lot 1 branchés : rotations à une date, notes du déclarant, salariés, bloquantes,
+  contrôles complémentaires, efficacité et validation en attente des actions, filtres de profil.
+Écrans écrits par quatre agents en parallèle sur le socle posé par la session, puis intégrés et
+vérifiés ensemble ; les manques relevés dans l'API sont transmis à la session OTHER.
+
+## NIMOVA · HSSEQ, lot 3 (26 octobre 2026)
+
+Lot 3 du noyau (`hsseq@99f7391`, corrections du lot 2 jusqu'à `26a9d40`), écrans livrés sur le même
+système, maquette alignée (un module par domaine) et contrat complété (§16) :
+- Environnement et qualité (`/hsseq/environnement`) : déversements, déchets jusqu'à leur enlèvement
+  avec bordereau, poussières, manquants et contaminations, réclamations clients, consommation et
+  livraisons en graphiques.
+- Documents et urgences (`/hsseq/documents`) : documents à lire et leur accusé, procédures versionnées,
+  alertes flash et retours d'expérience anonymisés, plans d'urgence et exercices, annuaire de crise
+  (appel en un geste au téléphone).
+- Revue de direction (`/hsseq/revues`) : la revue se tient de bout en bout dans le module (éléments
+  d'entrée servis, séance, décisions changées en actions, compte rendu en PDF) ; l'auditeur la lit.
+- Télématique (`/hsseq/telematique`) : violations de conduite, imports en trois temps avec aperçu à blanc.
+- Cockpit : six indicateurs du lot 3, section « Environnement, urgences et terrain », écarts de tonnage
+  des bennes calculés ; nouvelle icône « Feuille » au menu.
+- Corrections du noyau branchées sur le lot 2 : clients des donneurs d'ordre, compteurs et case de
+  matrice des risques, actions filtrées par fiche d'origine, constats avec historique, habilitations
+  exigées par profil de véhicule et EPI, périmètre des modèles de rapport, route complète du plan de
+  trajet, levée des non-conformités, auditeur exclusif.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,

@@ -55,6 +55,7 @@ const COURT: Record<string, string> = {
   "/rh/paie": "Paie",
   "/rh/simulateur": "Simulateur",
   "/rh/moi": "Mon espace",
+  "/hsseq": "Cockpit HSSEQ",
 };
 
 /**

@@ -51,7 +51,7 @@ async function avecSession<R>(appel: () => Promise<R>): Promise<R> {
 export function appHeader(): Record<string, string> {
   const enTetes: Record<string, string> = {};
   const app = window.location.pathname.split("/")[1] ?? "";
-  if (["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app)) enTetes["X-Eguitra-App"] = app;
+  if (["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh", "hsseq"].includes(app)) enTetes["X-Eguitra-App"] = app;
   const societe = document.querySelector<HTMLElement>("[data-societe-id]")?.dataset.societeId;
   if (societe && /^\d{1,9}$/.test(societe)) enTetes["X-Eguitra-Company"] = societe;
   return enTetes;

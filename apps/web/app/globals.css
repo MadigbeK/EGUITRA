@@ -203,6 +203,18 @@
   --accent-lueur: rgb(196 65 122 / 0.35);
 }
 
+/* HSSEQ : le pétrole (teinte 192°), libre entre l'azur d'AxisPro et le jade de la finance, et qui ne
+   dit aucun état. Accent 5,85:1 sous le blanc, 5,18:1 sur le fond ; texte blanc sur --accent-haut
+   4,84:1 ; --accent-vif sert au décor seulement. */
+[data-app="hsseq"] {
+  --accent: #0a6e86;
+  --accent-strong: #075668;
+  --accent-haut: #0c7c96;
+  --accent-vif: #14a3c2;
+  --accent-doux: #e2f2f6;
+  --accent-lueur: rgb(20 163 194 / 0.35);
+}
+
 /* Analyse : l'or bronze de la diagonale du logo, la lecture d'ensemble posée sur les métiers
    (choix du gérant, 22 octobre 2026). Accent 5,67:1 sur le blanc, 5,02 sur le fond ; texte blanc sur
    --accent-haut 4,88:1 ; --accent-vif sert au décor seulement (3,2:1). */
@@ -263,6 +275,17 @@
 [data-theme="sombre"] ::selection {
   background: var(--accent-doux);
   color: var(--ink);
+}
+/* Mode nuit sous HSSEQ : le pétrole éclairci au lieu de l'or de l'Analyse (accent 8:1 sur le panneau). */
+[data-app="hsseq"] [data-theme="sombre"],
+[data-app="hsseq"][data-theme="sombre"] {
+  --accent: #5cc4dc;
+  --accent-strong: #3fb3cf;
+  --accent-haut: #7dd3e6;
+  --accent-vif: #8fd6e8;
+  --accent-doux: #13353d;
+  --accent-ink: #06212a;
+  --accent-lueur: rgb(92 196 220 / 0.4);
 }
 
 /* Rotations : le corail du carburant et de la route. */
@@ -1464,6 +1487,17 @@ input::-ms-clear {
     --accent-doux: #f6eedd;
     --accent-ink: #ffffff;
     color-scheme: light;
+  }
+  /* Sous HSSEQ, l'impression retrouve le pétrole du jour. */
+  [data-app="hsseq"] [data-theme="sombre"],
+  [data-app="hsseq"][data-theme="sombre"] {
+    --accent: #0a6e86;
+    --accent-strong: #075668;
+    --accent-haut: #0c7c96;
+    --accent-vif: #14a3c2;
+    --accent-doux: #e2f2f6;
+    --accent-ink: #ffffff;
+    --accent-lueur: rgb(20 163 194 / 0.35);
   }
   .an-carte,
   .an-page section {

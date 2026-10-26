@@ -26,6 +26,13 @@ const ACHATS: Profile[] = ["achats"];
 const VALIDATION: Profile[] = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier"];
 /** Profils qui gèrent l'espace RH (la direction lit et approuve ; l'administration et la RH écrivent). */
 export const RH_GESTION: Profile[] = ["admin", "direction", "rh"];
+/**
+ * Profils de l'espace HSSEQ : l'administration, la direction (Directeur général), le Responsable HSSEQ
+ * et l'exploitation (chef de parc). Le conducteur n'y entre pas : il passe par le téléphone.
+ */
+export const HSSEQ: Profile[] = ["admin", "direction", "hsseq", "exploitation"];
+/** Lecture de l'auditeur externe (lot 2), en plus : le noyau borne ses réponses à ses sites et refuse toute écriture. */
+const HSSEQ_LECTURE: Profile[] = [...HSSEQ, "auditeur"];
 
 /** Navigation par application ; chaque entrée n'apparaît qu'aux profils listés (offre, chapitre 3.4). */
 export const NAV: Record<AppCode, NavSection[]> = {
@@ -115,6 +122,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/transport", label: "Tableau de bord", icon: "LayoutDashboard" },
         { href: "/transport/rotations", label: "Rotations", icon: "Truck" },
+        // Verrou de départ HSSEQ : le noyau répond 403 aux autres profils.
+        { href: "/transport/departs", label: "Départs du jour", icon: "Lock", profiles: ["admin", "direction", "exploitation"] },
         { href: "/transport/manquants", label: "Manquants", icon: "Droplet" },
       ],
     },
@@ -202,6 +211,50 @@ export const NAV: Record<AppCode, NavSection[]> = {
     {
       label: "Administration",
       items: [{ href: "/rh/parametres", label: "Paramètres RH", icon: "SlidersHorizontal", profiles: ["admin", "rh"] }],
+    },
+  ],
+  // HSSEQ, lot 1 (spécification HSSEQ, § 3 et § 12) : cockpit, événements, plan d'actions, contrôles.
+  // Les rubriques du lot 2 (risques, habilitations, conformité) s'ajouteront ici.
+  hsseq: [
+    {
+      label: "Pilotage",
+      items: [
+        { href: "/hsseq", label: "Cockpit", icon: "LayoutDashboard", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/rapports", label: "Rapport mensuel", icon: "FileText", profiles: ["admin", "direction", "hsseq"] },
+        { href: "/hsseq/revues", label: "Revue de direction", icon: "Gavel", profiles: ["admin", "direction", "hsseq", "auditeur"] },
+      ],
+    },
+    {
+      label: "Maîtrise des risques",
+      items: [
+        { href: "/hsseq/evenements", label: "Événements", icon: "ShieldAlert", profiles: HSSEQ_LECTURE },
+        // Tout compte interne responsable d'une action la met à jour, droits renvoyés par la fiche.
+        { href: "/hsseq/actions", label: "Plan d'actions", icon: "ListChecks", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/risques", label: "Registre des risques", icon: "Target", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/controles", label: "Contrôles", icon: "ShieldCheck", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/derogations", label: "Dérogations", icon: "BadgeCheck", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/immobilisations", label: "Immobilisations", icon: "Lock", profiles: HSSEQ_LECTURE },
+      ],
+    },
+    {
+      label: "Environnement et terrain",
+      items: [
+        { href: "/hsseq/environnement", label: "Environnement et qualité", icon: "Feuille", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/telematique", label: "Télématique", icon: "Radar", profiles: HSSEQ_LECTURE },
+      ],
+    },
+    {
+      label: "Personnel et conformité",
+      items: [
+        // Habilitations : pas l'auditeur (le noyau les sert à l'administration, à la direction, à HSSEQ et au chef de parc).
+        { href: "/hsseq/habilitations", label: "Habilitations", icon: "UserCog", profiles: HSSEQ },
+        { href: "/hsseq/conformite", label: "Audits et conformité", icon: "ScrollText", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/documents", label: "Documents et urgences", icon: "BookOpen", profiles: HSSEQ_LECTURE },
+      ],
+    },
+    {
+      label: "Administration",
+      items: [{ href: "/hsseq/parametres", label: "Paramètres", icon: "SlidersHorizontal", profiles: ["admin", "hsseq"] }],
     },
   ],
 };
