@@ -10,6 +10,29 @@ import { PasDeDossier, jour, messageErreur, useRetour } from "@/components/porta
 import { apiSend, useApi } from "@/lib/api-client";
 import type { ActionRow } from "@/lib/portail-types";
 
+/**
+ * Brouillon du compte rendu d'une action, gardé dans l'onglet (sessionStorage) : fermer la fenêtre,
+ * suivre le lien vers les pièces ou recharger la page ne perd plus le texte en cours.
+ */
+const cleBrouillon = (id: number) => `portail-compte-rendu-${id}`;
+
+function lireBrouillon(id: number): string | null {
+  try {
+    return window.sessionStorage.getItem(cleBrouillon(id));
+  } catch {
+    return null;
+  }
+}
+
+function garderBrouillon(id: number, texte: string | null) {
+  try {
+    if (texte && texte.trim()) window.sessionStorage.setItem(cleBrouillon(id), texte);
+    else window.sessionStorage.removeItem(cleBrouillon(id));
+  } catch {
+    // Stockage indisponible : le texte reste dans la fenêtre tant qu'elle est ouverte.
+  }
+}
+
 const COLONNES: Array<{ key: ActionRow["state"]; titre: string; trait: string; vide: string }> = [
   { key: "todo", titre: "À faire", trait: "bg-line-strong", vide: "Rien à faire pour l'instant." },
   { key: "in_progress", titre: "En cours", trait: "bg-accent-vif", vide: "Aucune action en cours." },
@@ -91,9 +114,13 @@ export default function PlanActions() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
 
+  const [brouillon, setBrouillon] = useState(false);
+
   const ouvrir = useCallback((a: ActionRow) => {
+    const garde = lireBrouillon(a.id);
     setCible(a);
-    setTexte(a.porteur_comment ?? "");
+    setTexte(garde ?? a.porteur_comment ?? "");
+    setBrouillon(garde !== null);
     setErreur(null);
   }, []);
   const fermer = useCallback(() => {
@@ -123,6 +150,7 @@ export default function PlanActions() {
     setErreur(null);
     try {
       await apiSend("POST", `/portail/actions/${cible.id}/report`, { comment });
+      garderBrouillon(cible.id, null);
       setCible(null);
       setRetour({ tone: "ok", texte: "Compte rendu transmis : votre consultant va vérifier, puis valider l'action." });
       void mutate();
@@ -269,15 +297,23 @@ export default function PlanActions() {
                   id="compte-rendu-texte"
                   aria-label={`Compte rendu de l'action « ${cible.name} »`}
                   value={texte}
-                  onChange={(e) => setTexte(e.target.value)}
+                  onChange={(e) => {
+                    setTexte(e.target.value);
+                    garderBrouillon(cible.id, e.target.value);
+                  }}
                   rows={6}
                   maxLength={5000}
                   autoFocus
                   placeholder="Ce que vous avez fait, les résultats obtenus, ce qui reste éventuellement à faire."
                 />
+                {brouillon && <p className="mt-1.5 text-[12px] leading-snug text-muted">Votre brouillon a été repris là où vous l'aviez laissé.</p>}
                 <p className="mt-1.5 text-[12px] leading-snug text-muted">
                   Un justificatif à joindre ? Déposez-le dans{" "}
-                  <Link href="/portail/pieces" className="font-semibold text-accent underline underline-offset-2">Pièces et data room</Link>, puis mentionnez-le ici.
+                  <Link href={`/portail/pieces?dossier=${dossier.id}`} target="_blank" rel="noopener" className="font-semibold text-accent underline underline-offset-2">
+                    Pièces et data room
+                    <span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
+                  </Link>
+                  , un nouvel onglet qui garde ce compte rendu ouvert, puis mentionnez-le ici. Votre texte est gardé même si vous fermez cette fenêtre.
                 </p>
               </div>
               {erreur && <Notice tone="danger">{erreur}</Notice>}
