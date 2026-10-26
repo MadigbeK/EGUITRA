@@ -22,15 +22,15 @@ const MOTIFS = ["Appareil indisponible", "Conducteur absent", "Refus du conducte
  * coffre du téléphone jusqu'à l'envoi, jamais dans la base, puis sont effacés. L'écran est protégé
  * des captures. La confirmation dit « Alcootest fait », sans chiffre ni couleur qui le trahirait.
  */
-export function Alcootest({ user }: { user: Utilisateur }) {
+export function Alcootest({ user, rotationInitiale, conducteurInitial }: { user: Utilisateur; rotationInitiale?: string; conducteurInitial?: string }) {
   return (
     <Module nom="hsseq">
-      <Contenu user={user} />
+      <Contenu user={user} rotationInitiale={rotationInitiale} conducteurInitial={conducteurInitial} />
     </Module>
   );
 }
 
-function Contenu({ user }: { user: Utilisateur }) {
+function Contenu({ user, rotationInitiale, conducteurInitial }: { user: Utilisateur; rotationInitiale?: string; conducteurInitial?: string }) {
   useKeepAwake();
   usePreventScreenCapture("alcootest");
   const router = useRouter();
@@ -39,7 +39,8 @@ function Contenu({ user }: { user: Utilisateur }) {
   const { c } = useTerrain();
   const uuid = useRef(randomUUID());
   const conducteurSeul = user.profiles.includes("conducteur") && !user.profiles.some((p) => p === "exploitation" || p === "hsseq");
-  const [conducteurId, setConducteurId] = useState("");
+  // Depuis un départ, le conducteur de la rotation est déjà choisi.
+  const [conducteurId, setConducteurId] = useState(conducteurInitial ?? "");
   const [realise, setRealise] = useState<boolean | null>(null);
   const [resultat, setResultat] = useState<"negative" | "positive" | null>(null);
   const [lecture, setLecture] = useState("");
@@ -71,7 +72,8 @@ function Contenu({ user }: { user: Utilisateur }) {
     setEnregistrement(true);
     setEchec(false);
     const fiche: NewBreathTest & { offline: boolean } = {
-      rotation_id: null,
+      // Rattaché à la rotation du départ tant que c'est bien son conducteur.
+      rotation_id: rotationInitiale && conducteurInitial && String(driverId) === conducteurInitial ? Number(rotationInitiale) : null,
       driver_id: driverId,
       performed: realise === true,
       ...(realise ? {} : { not_done_reason: raison }),

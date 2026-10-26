@@ -6,11 +6,12 @@ import { Controle } from "../hsseq/Controle";
 /** Contrôle avant départ. Le module n'ouvre qu'aux profils prévus (accueil/modules.ts) ; le noyau refuse le reste. */
 export default function Ecran() {
   const { etape } = useSession();
-  const { vehicule } = useLocalSearchParams<{ vehicule?: string }>();
+  // Ouvert depuis un départ (motif V01) : l'ensemble et la rotation à contrôler.
+  const { vehicule, rotation } = useLocalSearchParams<{ vehicule?: string; rotation?: string }>();
   if (etape.nom !== "ouverte") return null;
   return (
     <Garde user={etape.user} module="controle">
-      <Controle user={etape.user} vehiculeInitial={vehicule} />
+      <Controle user={etape.user} vehiculeInitial={vehicule} rotationInitiale={rotation} />
     </Garde>
   );
 }

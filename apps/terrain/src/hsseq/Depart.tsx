@@ -290,10 +290,18 @@ function Contenu({ user }: { user: Utilisateur }) {
             {r.detail ? <Texte>{r.detail}</Texte> : null}
             {r.resolution ? <Texte variante="service" ton="second">Lève ce motif : {r.resolution}</Texte> : null}
             {r.code === "V01" && controle ? (
-              <Bouton titre="Faire le contrôle avant départ" variante="secondaire" onPress={() => router.push({ pathname: "/controle", params: rotation.vehicle ? { vehicule: String(rotation.vehicle.id) } : {} })} />
+              <Bouton
+                titre="Faire le contrôle avant départ"
+                variante="secondaire"
+                onPress={() => router.push({ pathname: "/controle", params: rotation.vehicle ? { vehicule: String(rotation.vehicle.id), rotation: String(rotation.id) } : {} })}
+              />
             ) : null}
             {r.code === "V03" && r.pending && alcootest ? (
-              <Bouton titre="Faire l'alcootest" variante="secondaire" onPress={() => router.push("/alcootest")} />
+              <Bouton
+                titre="Faire l'alcootest"
+                variante="secondaire"
+                onPress={() => router.push({ pathname: "/alcootest", params: rotation.driver ? { rotation: String(rotation.id), conducteur: String(rotation.driver.id) } : {} })}
+              />
             ) : null}
           </Feuille>
         ))}

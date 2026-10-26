@@ -24,15 +24,15 @@ import { grilleDe, NATURE_VEHICULE, useHsseq } from "./useHsseq";
 type Etape = "vehicule" | "critiques" | "autres" | "recap";
 
 /** Contrôle avant départ (système « terrain », § 3.3 à 3.5 ; contrat HSSEQ, § 7). Couleur : pétrole. */
-export function Controle({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial?: string }) {
+export function Controle({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateur; vehiculeInitial?: string; rotationInitiale?: string }) {
   return (
     <Module nom="hsseq">
-      <Contenu user={user} vehiculeInitial={vehiculeInitial} />
+      <Contenu user={user} vehiculeInitial={vehiculeInitial} rotationInitiale={rotationInitiale} />
     </Module>
   );
 }
 
-function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial?: string }) {
+function Contenu({ user, vehiculeInitial, rotationInitiale }: { user: Utilisateur; vehiculeInitial?: string; rotationInitiale?: string }) {
   useKeepAwake();
   const router = useRouter();
   const envoi = useEnvoi();
@@ -173,10 +173,13 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
     setEnregistrement(true);
     setEchec(false);
     const secondes = Math.round((Date.now() - (debut ?? Date.now())) / 1000);
+    // Contrôle lancé depuis un départ, sur son ensemble : rattaché à la rotation, il lève V01 même si
+    // un contrôle précédent attend un complément ; le conducteur est celui de la rotation (noyau).
+    const rotationId = rotationInitiale && vehiculeId === vehiculeInitial ? Number(rotationInitiale) : null;
     const fiche = ficheControle(grille, reponses, {
       vehicle_id: vehicule.id,
-      rotation_id: null,
-      driver_id: refs?.me.driver_id ?? vehicule.driver_id,
+      rotation_id: rotationId,
+      driver_id: rotationId ? null : (refs?.me.driver_id ?? vehicule.driver_id),
       duration_s: secondes,
       ...positionDeLaFiche(position),
     });
