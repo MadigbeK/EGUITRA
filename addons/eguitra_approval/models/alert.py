@@ -2,6 +2,8 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
+from odoo.addons.eguitra_finance.models.period_close import pluriel
+
 
 class EguitraAlertThreshold(models.Model):
     _inherit = "eguitra.alert.threshold"
@@ -37,6 +39,6 @@ class EguitraPeriodClose(models.Model):
         )
         checks.append(self._check(
             "pending_approvals", "Aucune pièce en attente de validation sur la période", not in_period, False,
-            f"{len(in_period)} pièce(s) en attente de validation.", len(in_period),
+            f"{pluriel(len(in_period), 'pièce')} en attente de validation.", len(in_period),
         ))
         return checks

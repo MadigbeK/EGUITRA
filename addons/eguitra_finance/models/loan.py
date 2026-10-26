@@ -18,6 +18,8 @@ from odoo import api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_round
 
+from .period_close import pluriel
+
 PERIOD_MONTHS = {"monthly": 1, "quarterly": 3, "semiannual": 6, "annual": 12}
 # Écart toléré entre la sortie de banque et le montant de l'échéance (arrondis).
 AMOUNT_TOLERANCE = 1.0
@@ -400,8 +402,9 @@ class EguitraPeriodClose(models.Model):
         ]).filtered(lambda l: Line.search_count([("journal_id", "=", l.move_id.journal_id.id)], limit=1))
         checks.append(self._check(
             "loan_bank_statement", "Échéances d'emprunt rapprochées des relevés", not direct, False,
-            f"{len(direct)} échéance(s) réglée(s) directement sur un compte bancaire à relevés : rapprochez la "
-            "sortie du relevé de l'échéance (Trésorerie, Rapprocher) pour ne pas la compter deux fois.", len(direct),
+            f"{pluriel(len(direct), 'échéance réglée', 'échéances réglées')} directement sur un compte bancaire à "
+            "relevés : rapprochez la sortie du relevé de l'échéance (Trésorerie, Rapprocher) pour ne pas la compter "
+            "deux fois.", len(direct),
         ))
         return checks
 

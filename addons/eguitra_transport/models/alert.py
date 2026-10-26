@@ -2,6 +2,8 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
+from odoo.addons.eguitra_finance.models.period_close import pluriel
+
 from ..nombres import fmt_money, fmt_volume
 
 
@@ -77,7 +79,7 @@ class EguitraPeriodClose(models.Model):
         for control in self.env["eguitra.transport.analysis"].sudo().controls(company):
             detail = "; ".join(control["items"][:6])
             if control["count"] > 6:
-                detail += f" (et {control['count'] - 6} autre(s))"
+                detail += f" (et {pluriel(control['count'] - 6, 'autre')})"
             checks.append(self._check(f"transport_{control['code']}", control["label"], control["ok"], False,
                                       f"{detail}. {control['hint']}", control["count"]))
         return checks
