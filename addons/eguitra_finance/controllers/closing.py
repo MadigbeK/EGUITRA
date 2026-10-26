@@ -1,4 +1,5 @@
-"""Clôtures mensuelles, contrôles d'intégrité, registre des clôtures, sceau et PV de clôture."""
+"""Clôtures mensuelles, contrôles d'intégrité, registre des clôtures, sceau et PV de clôture ; clôture de
+l'exercice (état des douze mois, affectation du résultat, verrouillage définitif : models/year_close.py)."""
 
 from dateutil.relativedelta import relativedelta
 
@@ -7,7 +8,12 @@ from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
-from .common import FIN_READ, FIN_WRITE, parse_date, today
+from .common import FIN_READ, FIN_WRITE, as_float, move_summary, parse_date, require_free_accounts, today
+
+# Profils de la réouverture d'un mois et du verrouillage définitif d'un exercice.
+CLOSING_AUTHORITY = ("admin", "direction")
+# Événements d'un mois au registre ; le verrouillage de l'exercice se lit dans l'état de l'exercice.
+MONTH_ACTIONS = ("close", "reopen")
 
 
 def _period(data):
@@ -15,6 +21,34 @@ def _period(data):
     if not day:
         raise ApiError(400, "missing_fields", "Mois requis (AAAA-MM-01).", fields=["period"])
     return day.replace(day=1)
+
+
+def _year(value):
+    try:
+        year = int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "missing_fields", "Exercice requis (année AAAA).", fields=["year"]) from e
+    if not 2000 <= year <= 2100:
+        raise ApiError(400, "invalid_parameter", "Exercice invalide.")
+    return year
+
+
+def _allocation_lines(data):
+    """Lignes de l'OD d'affectation reçues de l'écran : compte, montant, libellé et tiers facultatifs."""
+    lines = data.get("lines")
+    if not isinstance(lines, list) or not lines:
+        raise ApiError(400, "missing_fields", "Au moins une ligne d'affectation est requise.", fields=["lines"])
+    parsed = []
+    for i, line in enumerate(lines, start=1):
+        if not isinstance(line, dict) or not line.get("account_id"):
+            raise ApiError(400, "missing_fields", f"Ligne {i} : compte requis.")
+        parsed.append({
+            "account_id": int_arg(line, "account_id"),
+            "amount": as_float(line.get("amount"), "amount"),
+            "name": str(line.get("name") or "").strip()[:500],
+            "partner_id": int_arg(line, "partner_id"),
+        })
+    return parsed
 
 
 def _row(close):
@@ -28,7 +62,7 @@ def _row(close):
         "events": [
             {"action": e.action, "user": e.user_id.name, "date": e.date, "reason": e.reason or None,
              "seal": e.seal or None}
-            for e in close.event_ids
+            for e in close.event_ids if e.action in MONTH_ACTIONS
         ],
         "seal": close.seal or None,
         "snapshot": close.snapshot or None,
@@ -71,13 +105,49 @@ class EguitraFinanceClosing(http.Controller):
         close.action_close()
         return _row(close)
 
-    @api_route("/finance/closing/reopen", methods=("POST",), profiles=("admin", "direction"))
+    @api_route("/finance/closing/reopen", methods=("POST",), profiles=CLOSING_AUTHORITY)
     def reopen(self, **_kw):
         data = read_json()
         (reason,) = require(data, "reason")
         close = request.env["eguitra.period.close"]._get(request.env.company, _period(data))
         close.action_reopen(reason)
         return _row(close)
+
+    # ─── Clôture de l'exercice ────────────────────────────────────────────
+
+    @api_route("/finance/closing/year", profiles=FIN_READ)
+    def year_status(self, **kw):
+        """État de l'exercice AAAA (year ; à défaut, l'exercice précédent) : douze mois, résultat,
+        affectation, résultat antérieur restant à affecter, verrouillage définitif et ce qui lui manque."""
+        company = request.env.company
+        if kw.get("year") in (None, ""):
+            start = request.env["eguitra.finance.metrics"].fiscal_year_bounds(company, today())[0]
+            year = (start - relativedelta(days=1)).year
+        else:
+            year = _year(kw["year"])
+        return request.env["eguitra.year.close"].status(company, year)
+
+    @api_route("/finance/closing/year/allocation", methods=("POST",), profiles=FIN_WRITE)
+    def year_allocation(self, **_kw):
+        """OD d'affectation du résultat décidée par l'assemblée, créée en brouillon : elle suit ensuite le
+        circuit de validation des OD (Journaux et OD, ou fiche de la pièce)."""
+        require_free_accounts("OD d'affectation du résultat",
+                              "Elle porte les comptes de réserves, de report à nouveau et de dividendes choisis")
+        data = read_json()
+        year = _year(data.get("year"))
+        day = parse_date(data, "date")
+        if not day:
+            raise ApiError(400, "missing_fields", "Date de l'assemblée requise.", fields=["date"])
+        Year = request.env["eguitra.year.close"]
+        move = Year.create_allocation(request.env.company, year, day, _allocation_lines(data), data.get("note"))
+        return dict(Year.status(request.env.company, year), created=move_summary(move))
+
+    @api_route("/finance/closing/year/lock", methods=("POST",), profiles=CLOSING_AUTHORITY)
+    def year_lock(self, **_kw):
+        """Verrouillage définitif de l'exercice (irréversible) : les douze mois clôturés, aucune pièce en
+        brouillon jusqu'au dernier jour de l'exercice."""
+        year = _year(read_json().get("year"))
+        return request.env["eguitra.year.close"].lock(request.env.company, year)
 
     @api_route("/finance/integrity", profiles=FIN_READ)
     def integrity(self, **_kw):
