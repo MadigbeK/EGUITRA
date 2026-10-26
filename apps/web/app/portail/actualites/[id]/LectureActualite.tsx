@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Flag, ShieldCheck } from "@/components/icons";
 import { Badge, Button, Card, ErrorBox, FEUILLE, Loading, cx } from "@/components/ui";
 import { TexteRiche, dateLongue, quand } from "@/components/portail/commun";
@@ -19,15 +19,31 @@ export function LectureActualite({ id }: { id: number }) {
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
   const [confirme, setConfirme] = useState(false);
+  const [erreurLecture, setErreurLecture] = useState<unknown>(null);
   const lue = useRef<number | null>(null);
 
-  // La lecture est enregistrée par l'API : compteurs du menu et liste à jour.
+  // La lecture s'enregistre une fois la communication affichée, par une route POST : la lecture (GET)
+  // n'écrit rien. Compteurs du menu et liste sont ensuite remis à jour.
+  const enregistrerLecture = useCallback(
+    async (annonce: number) => {
+      setErreurLecture(null);
+      try {
+        const row = await apiSend<AnnouncementRow>("POST", `/portail/actualites/${annonce}/lue`);
+        await mutate(row, false);
+        rafraichir();
+        void mutateListe();
+      } catch (e) {
+        setErreurLecture(e);
+      }
+    },
+    [mutate, rafraichir, mutateListe],
+  );
+
   useEffect(() => {
     if (!data || lue.current === data.id) return;
     lue.current = data.id;
-    rafraichir();
-    void mutateListe();
-  }, [data, rafraichir, mutateListe]);
+    if (!data.read) void enregistrerLecture(data.id);
+  }, [data, enregistrerLecture]);
 
   async function accuser() {
     if (!data) return;
@@ -72,6 +88,12 @@ export function LectureActualite({ id }: { id: number }) {
   return (
     <div>
       <Retour href="/portail/actualites">Toutes les actualités</Retour>
+
+      {erreurLecture !== null && (
+        <div className="mb-4">
+          <ErrorBox error={erreurLecture} titre="Votre lecture n'a pas pu être enregistrée." onRetry={() => void enregistrerLecture(data.id)} />
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <article className={cx(FEUILLE, "min-w-0 overflow-hidden")}>

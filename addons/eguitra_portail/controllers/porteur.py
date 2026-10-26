@@ -3,6 +3,10 @@ communications, ressources et événements du cabinet, son agenda, ses notificat
 
 Le porteur ne lit que ses dossiers (utilisateur du portail du dossier) et les publications dont il fait
 partie du public ; jamais le détail du scoring, les notes internes ni les critères de la grille.
+
+Une lecture (GET) n'écrit rien : ce que l'écran a affiché (communication, conseil, messages) est
+enregistré par une route POST que l'écran appelle ensuite. Une navigation venue d'un autre site ne
+relaie que des GET : elle ne peut donc rien marquer à la place du porteur.
 """
 
 from datetime import timedelta
@@ -83,6 +87,15 @@ def _reads(announcements):
     reads = request.env["portail.announcement.read"].sudo().search(
         [("announcement_id", "in", announcements.ids), ("user_id", "=", _me().id)])
     return {r.announcement_id.id: r for r in reads}
+
+
+def _read(announcement, create=False):
+    """Lecture de la communication par le porteur ; créée sur demande (route POST seulement)."""
+    Read = request.env["portail.announcement.read"].sudo()
+    read = Read.search([("announcement_id", "=", announcement.id), ("user_id", "=", _me().id)], limit=1)
+    if not read and create:
+        read = Read.create({"announcement_id": announcement.id, "user_id": _me().id})
+    return read
 
 
 def _events(dossiers, since):
@@ -375,23 +388,22 @@ class EguitraPortailPorteur(http.Controller):
 
     @api_route("/portail/actualites/<int:announcement_id>", profiles=PORTEUR)
     def actualite(self, announcement_id, **_kw):
+        """Texte de la communication. La lecture n'est pas enregistrée ici : l'écran l'enregistre une fois
+        la communication affichée (POST …/lue)."""
         announcement = self._announcement(announcement_id)
-        Read = request.env["portail.announcement.read"].sudo()
-        read = Read.search([("announcement_id", "=", announcement.id), ("user_id", "=", _me().id)], limit=1)
-        if not read:
-            read = Read.create({"announcement_id": announcement.id, "user_id": _me().id})
-        return vues.announcement_row(announcement, read, full=True)
+        return vues.announcement_row(announcement, _read(announcement), full=True)
+
+    @api_route("/portail/actualites/<int:announcement_id>/lue", methods=("POST",), profiles=PORTEUR)
+    def lire_actualite(self, announcement_id, **_kw):
+        announcement = self._announcement(announcement_id)
+        return vues.announcement_row(announcement, _read(announcement, create=True), full=True)
 
     @api_route("/portail/actualites/<int:announcement_id>/accuse", methods=("POST",), profiles=PORTEUR)
     def accuser(self, announcement_id, **_kw):
         announcement = self._announcement(announcement_id)
-        Read = request.env["portail.announcement.read"].sudo()
-        read = Read.search([("announcement_id", "=", announcement.id), ("user_id", "=", _me().id)], limit=1)
-        now = fields.Datetime.now()
-        if not read:
-            read = Read.create({"announcement_id": announcement.id, "user_id": _me().id, "acknowledged_at": now})
-        elif not read.acknowledged_at:
-            read.acknowledged_at = now
+        read = _read(announcement, create=True)
+        if not read.acknowledged_at:
+            read.acknowledged_at = fields.Datetime.now()
         return vues.announcement_row(announcement, read, full=True)
 
     # ─── Centre de ressources ────────────────────────────────────────────
@@ -421,11 +433,10 @@ class EguitraPortailPorteur(http.Controller):
 
     @api_route("/portail/ressources/<int:article_id>", profiles=PORTEUR)
     def ressource(self, article_id, **_kw):
+        """Contenu à lire. Ni la lecture ni le compteur de lectures ne changent ici : l'écran les
+        enregistre une fois le contenu affiché (POST …/lu)."""
         article, dossiers = self._article(article_id)
-        reaction = self._reaction(article)
-        if not reaction.viewed_at:
-            reaction.viewed_at = fields.Datetime.now()
-        article.write({"view_count": article.view_count + 1})
+        reaction = _reactions(article).get(article.id)
         codes = _gate_codes(dossiers)
         others = _published_articles(dossiers) - article
         related = others.filtered(lambda a: a.category_id == article.category_id)[:3] or others[:3]
@@ -435,6 +446,16 @@ class EguitraPortailPorteur(http.Controller):
         row["helpful_count"] = len(article.reaction_ids.filtered(lambda r: r.helpful == "yes"))
         row["related"] = [vues.article_row(a, reactions.get(a.id), codes) for a in related]
         return row
+
+    @api_route("/portail/ressources/<int:article_id>/lu", methods=("POST",), profiles=PORTEUR)
+    def lire_ressource(self, article_id, **_kw):
+        """Lecture d'un contenu : « Lu » pour le porteur, une lecture de plus au compteur du cabinet."""
+        article, dossiers = self._article(article_id)
+        reaction = self._reaction(article)
+        if not reaction.viewed_at:
+            reaction.viewed_at = fields.Datetime.now()
+        article.write({"view_count": article.view_count + 1})
+        return vues.article_row(article, reaction, _gate_codes(dossiers))
 
     @api_route("/portail/ressources/<int:article_id>/reaction", methods=("POST",), profiles=PORTEUR)
     def reagir(self, article_id, **_kw):

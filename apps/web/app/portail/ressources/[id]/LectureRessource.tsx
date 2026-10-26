@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowUpRight, Check, Download, FileText, Loader2, Mail, X } from "@/components/icons";
 import { Card, ErrorBox, FEUILLE, Loading, cx } from "@/components/ui";
 import { COULEUR, TexteRiche, iconeRubrique, taille } from "@/components/portail/commun";
@@ -26,6 +26,29 @@ export function LectureRessource({ id }: { id: number }) {
   const [envoi, setEnvoi] = useState<"favori" | "utile" | null>(null);
   const [fichier, setFichier] = useState<number | null>(null);
   const [erreur, setErreur] = useState<unknown>(null);
+  const [erreurLecture, setErreurLecture] = useState<unknown>(null);
+  // « Déjà lu » : lu lors d'une visite précédente, pas celle-ci (que l'écran enregistre à l'ouverture).
+  const [dejaLu, setDejaLu] = useState(false);
+  const ouvert = useRef<number | null>(null);
+
+  // Chaque ouverture compte une lecture, enregistrée par une route POST une fois le contenu affiché :
+  // la lecture (GET) n'écrit rien.
+  const enregistrerLecture = useCallback(async () => {
+    setErreurLecture(null);
+    try {
+      const row = await apiSend<ArticleRow>("POST", `/portail/ressources/${id}/lu`);
+      await mutate((d) => (d ? { ...d, ...row } : d), false);
+    } catch (e) {
+      setErreurLecture(e);
+    }
+  }, [id, mutate]);
+
+  useEffect(() => {
+    if (!data || ouvert.current === data.id) return;
+    ouvert.current = data.id;
+    setDejaLu(data.viewed);
+    void enregistrerLecture();
+  }, [data, enregistrerLecture]);
 
   async function reagir(corps: { bookmarked: boolean } | { helpful: boolean }, quoi: "favori" | "utile") {
     if (!data) return;
@@ -159,6 +182,12 @@ export function LectureRessource({ id }: { id: number }) {
     <div>
       <Retour href="/portail/ressources">Conseils et ressources</Retour>
 
+      {erreurLecture !== null && (
+        <div className="mb-4">
+          <ErrorBox error={erreurLecture} titre="Votre lecture n'a pas pu être enregistrée." onRetry={() => void enregistrerLecture()} />
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <article className={cx(FEUILLE, "min-w-0 overflow-hidden")}>
           <header
@@ -187,7 +216,7 @@ export function LectureRessource({ id }: { id: number }) {
                 <span>Par <span className="font-semibold text-ink-2">{data.author}</span></span>
                 {data.published_at && <span>· {dateSimple(data.published_at)}</span>}
                 {data.reading_minutes > 0 && <span>· {data.reading_minutes} min de lecture</span>}
-                {data.viewed && <span className="text-ok-texte">· Déjà lu</span>}
+                {dejaLu && <span className="text-ok-texte">· Déjà lu</span>}
               </p>
             </div>
           </header>
