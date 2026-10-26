@@ -317,7 +317,8 @@ class TestAxispro(ApiCase):
                              ("GET", f"/portail/dossiers/{dossier.id}/messages"),
                              ("POST", f"/portail/dossiers/{dossier.id}/messages")):
             status, _body = self.call(method, path, {"body": "Bonjour"} if method == "POST" else None, token=token)
-            self.assertEqual(status, 404, f"{method} {path} retirée")
+            # Le dépôt d'une pièce (POST …/documents) reste : la lecture sur la même adresse répond 405.
+            self.assertIn(status, (404, 405), f"{method} {path} retirée")
         self.assertFalse(dossier.message_ids, "Aucun message déposé par l'ancienne route")
 
     def test_activites_du_cabinet(self):
