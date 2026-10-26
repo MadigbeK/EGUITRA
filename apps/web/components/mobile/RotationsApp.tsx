@@ -309,13 +309,17 @@ function toPayload(f: Form): Record<string, unknown> {
     date_loading: f.date_loading, vehicle_id: Number(f.vehicle_id), partner_id: Number(f.partner_id),
     route_id: Number(f.route_id), product: f.product,
   };
+  // Une correction envoie aussi les champs qu'elle vide (volume livré, bon, note, frais) : reçue par le
+  // bureau, elle les vide sur le brouillon au lieu d'y laisser l'ancienne valeur. Les mesures restent
+  // omises une fois vides (une masse volumique à 0 remplacerait celle du produit).
+  const correction = Boolean(f.uuid);
   if (f.driver_id) p.driver_id = Number(f.driver_id);
-  if (f.delivery_note.trim()) p.delivery_note = f.delivery_note.trim();
-  if (f.volume_loaded) p.volume_loaded = num(f.volume_loaded);
-  if (f.volume_delivered) p.volume_delivered = num(f.volume_delivered);
-  if (f.note.trim()) p.note = f.note.trim();
-  for (const [k, v] of Object.entries(f.costs)) if (v) p[k] = num(v);
-  for (const [k, v] of Object.entries(f.measures ?? {})) if (v) p[k] = num(v);
+  if (f.delivery_note.trim() || correction) p.delivery_note = f.delivery_note.trim();
+  if (f.volume_loaded.trim() || correction) p.volume_loaded = num(f.volume_loaded);
+  if (f.volume_delivered.trim() || correction) p.volume_delivered = num(f.volume_delivered);
+  if (f.note.trim() || correction) p.note = f.note.trim();
+  for (const [k, v] of Object.entries(f.costs)) if (v.trim() || correction) p[k] = num(v);
+  for (const [k, v] of Object.entries(f.measures ?? {})) if (v.trim()) p[k] = num(v);
   return p;
 }
 
@@ -1023,7 +1027,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                     {/* Le seul état vivant de l'écran est la pastille du réseau : le tampon ne bat pas. */}
                     <Badge tone={tonEtat(mot, "warn")}>{mot}</Badge>
                   </div>
-                  <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtVolume(item.payload.volume_loaded ?? item.payload.volume_delivered)}{INSECABLE}<span className="text-[15px] font-semibold text-muted">m³</span></div>
+                  <div className="mt-3 font-compteur text-[26px] font-bold text-ink">{fmtVolume(item.payload.volume_loaded || item.payload.volume_delivered || 0)}{INSECABLE}<span className="text-[15px] font-semibold text-muted">m³</span></div>
                   {item.message && <div className="mt-2 text-[14px] font-semibold text-danger">{item.message}</div>}
                   <div className="mt-3 flex justify-end gap-2 border-t border-line pt-3">
                     {/* Une correction que le bureau n'a pas prise ne repart pas : on la retire, le bureau corrige. */}
