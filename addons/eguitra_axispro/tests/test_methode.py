@@ -787,3 +787,22 @@ class TestMethodeDansLaPlateforme(ApiCase):
         record = self.env["axispro.review"].browse(review["id"])
         self.assertEqual((record.decision, record.state), ("go", "draft"))
         self.assertEqual(self.dossier.current_gate_id.code, "G0")
+
+    def test_double_clic_ne_franchit_qu_un_gate(self):
+        """Audit de l'application web (C4) : l'écran envoie le gate de départ ; s'il n'est plus le gate
+        courant (second clic, autre onglet), le noyau refuse (409) sans rien franchir ni journaliser."""
+        self.dossier.action_advance_gate()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}", {"status": "not_met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        path = f"/axispro/dossiers/{self.dossier.id}/advance-gate"
+        payload = {"force_reason": "Titre foncier attendu du ministère, décision du comité du 12/10", "from_gate": "G1"}
+        status, body = self.call("POST", path, payload, token=self.token)
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), body)
+        status, body = self.call("POST", path, payload, token=self.token)
+        self.assertEqual((status, body.get("error")), (409, "conflict"), "Second clic : le dossier n'est plus au gate G1")
+        self.assertIn("gate G2", body["message"])
+        self.env.invalidate_all()
+        self.assertEqual(self.dossier.current_gate_id.code, "G2", "Un seul gate franchi")
+        forced = self.dossier.journal_ids.filtered(lambda j: j.kind == "gate" and "forcé" in (j.note or ""))
+        self.assertEqual(len(forced), 1, "Un seul passage forcé au journal")

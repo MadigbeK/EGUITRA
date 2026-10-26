@@ -513,11 +513,20 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/advance-gate", methods=("POST",), profiles=WRITE)
     def advance(self, dossier_id, **_kw):
         """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal, et
-        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403)."""
+        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403). `from_gate` : code du
+        gate de départ que l'écran affiche ; s'il n'est plus le gate courant (double clic, réseau lent,
+        autre onglet), refus 409 sans rien franchir : un clic ne fait jamais passer deux gates."""
         dossier = _dossier(dossier_id)
-        reason = (read_json().get("force_reason") or "").strip()
+        data = read_json()
+        reason = (data.get("force_reason") or "").strip()
         if reason and len(reason) < MIN_FORCE_REASON:
             raise ApiError(400, "invalid_parameter", "Motif du passage forcé trop court.")
+        expected = data.get("from_gate")
+        current = dossier.current_gate_id.code or ""
+        if expected is not None and str(expected) != current:
+            where = f"il est au gate {current}" if current else "il n'a pas de gate courant"
+            raise ApiError(409, "conflict", f"Le dossier n'est plus au gate {expected} : {where}. Rechargez le dossier "
+                                            "avant de décider d'un nouveau passage.")
         dossier.action_advance_gate(force_reason=reason or None)
         return dossier_detail(dossier)
 
