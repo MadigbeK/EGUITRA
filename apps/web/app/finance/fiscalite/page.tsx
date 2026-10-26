@@ -22,6 +22,8 @@ interface Vat {
   base_purchases: number;
   vat_collected: number;
   vat_deductible: number;
+  // Crédit de TVA à l'ouverture du mois (4449, ou 445 non liquidé), déduit de la TVA à payer.
+  vat_credit_prior: number;
   vat_due: number;
   vat_credit: number;
   note: string;
@@ -46,6 +48,7 @@ interface TaxReturn {
   amount_base: number;
   amount_collected: number;
   amount_deductible: number;
+  amount_credit_prior: number;
   amount_due: number;
   amount_credit: number;
   prepared_by: string | null;
@@ -134,11 +137,12 @@ function VatTab({ period, year, month, onPrepared }: { period: string; year: num
       <Etat data={data} error={error} onRetry={() => mutate()} label="Calcul de la TVA du mois…">
         {(d) => (
           <>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <Kpi label="TVA collectée" value={fmtShort(d.vat_collected)} hint={`Base ventes ${fmtGNF(d.base_sales)}`} />
               <Kpi label="TVA déductible" value={fmtShort(d.vat_deductible)} hint={`Base achats ${fmtGNF(d.base_purchases)}`} />
+              <Kpi label="Crédit reporté" value={fmtShort(d.vat_credit_prior)} hint="Crédit de TVA du mois précédent, déduit" />
               <Kpi label="TVA à payer" value={fmtShort(d.vat_due)} tone={d.vat_due > 0 ? "warn" : "neutral"} />
-              <Kpi label="Crédit de TVA" value={fmtShort(d.vat_credit)} tone={d.vat_credit > 0 ? "ok" : "neutral"} />
+              <Kpi label="Crédit à reporter" value={fmtShort(d.vat_credit)} tone={d.vat_credit > 0 ? "ok" : "neutral"} />
             </div>
             <Card
               title="Détail par taxe"
@@ -421,6 +425,7 @@ function History({ year }: { year: number }) {
                 { key: "kind", label: "Nature", render: (r) => KIND[r.kind] },
                 { key: "state", label: "État", render: (r) => <Badge tone={RETURN_STATE[r.state][1]}>{RETURN_STATE[r.state][0]}</Badge> },
                 { key: "amount_base", label: "Base", align: "right", render: (r) => fmtGNF(r.amount_base) },
+                { key: "amount_credit_prior", label: "Crédit reporté", align: "right", render: (r) => (r.amount_credit_prior ? fmtGNF(r.amount_credit_prior) : "–") },
                 { key: "amount_due", label: "À payer", align: "right", render: (r) => fmtGNF(r.amount_due) },
                 { key: "amount_credit", label: "Crédit", align: "right", render: (r) => (r.amount_credit ? fmtGNF(r.amount_credit) : "–") },
                 { key: "filed", label: "Dépôt", render: (r) => (r.filed_date ? `${fmtDate(r.filed_date)}${r.filed_reference ? `, ${r.filed_reference}` : ""}` : "–") },
@@ -457,7 +462,7 @@ function ReturnAction({ record, kind, onClose, onDone }: { record: TaxReturn; ki
   const libelle = `${KIND[record.kind]} de ${fmtMonth(record.period.slice(0, 7))}`;
   async function submit() {
     const question = kind === "file"
-      ? `Marquer la déclaration ${libelle} déposée le ${fmtDate(f.date)} ? Ses montants sont alors figés : elle ne se recalcule plus.`
+      ? `Marquer la déclaration ${libelle} déposée le ${fmtDate(f.date)} ? Ses montants sont alors figés : elle ne se recalcule plus, et les taxes du mois sont verrouillées (aucune pièce portant une taxe ne s'y ajoute ni ne s'y modifie).`
       : `Marquer la déclaration ${libelle} payée le ${fmtDate(f.date)} ? Ce constat est définitif ; le règlement passe par la trésorerie.`;
     if (!(await demanderConfirmation(question, { action: kind === "file" ? "Marquer déposée" : "Marquer payée", danger: true }))) return;
     const ok = await envoi.run("enregistrer", () => apiSend("POST", `/finance/fiscal/returns/${record.id}/${kind}`, f), undefined, "Enregistrement impossible.");

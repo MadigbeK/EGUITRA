@@ -30,3 +30,4 @@ from . import test_tableau_de_bord_design
 from . import test_api_dette
 from . import test_api_seuils
 from . import test_dette_reglements
+from . import test_tva_credit_reporte
