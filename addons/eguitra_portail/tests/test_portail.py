@@ -229,3 +229,56 @@ class TestPortail(ApiCase):
         self.assertIn("Ville : Kindia", demande.body)
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
+
+    # ─── Cloche du cabinet (AxisPro Suite) ───────────────────────────────
+
+    def test_notifications_du_cabinet(self):
+        """Cloche d'AxisPro Suite : le consultant lit ses notifications (message et pièce du porteur),
+        avec le lien de l'élément concerné, en marque une lue puis toutes ; jamais celles d'un autre
+        compte."""
+        status, body = self.post_form(f"/portail/dossiers/{self.dossier_a.id}/fil", self.porteur,
+                                      {"body": "Voici les statuts."}, ("statuts.pdf", PDF))
+        self.assertEqual(status, 200, body)
+        status, liste = self.call("GET", "/axispro/portail/notifications", token=self.cabinet_token)
+        self.assertEqual(status, 200, liste)
+        kinds = {n["kind"] for n in liste["items"] if not n["read"]}
+        self.assertTrue({"message", "document"} <= kinds, kinds)
+        message = next(n for n in liste["items"] if n["kind"] == "message")
+        self.assertEqual((message["link"], message["dossier"]["id"]),
+                         (f"/axispro/portail/messages?dossier={self.dossier_a.id}", self.dossier_a.id))
+        piece = next(n for n in liste["items"] if n["kind"] == "document")
+        self.assertEqual(piece["link"], f"/axispro/dossiers/{self.dossier_a.id}")
+        autre = self.env["portail.notification"].create({"user_id": self.porteur_a.id, "kind": "message",
+                                                         "title": "Pour le porteur"})
+        status, lues = self.call("POST", "/axispro/portail/notifications/lues", {"ids": [message["id"], autre.id]},
+                                 token=self.cabinet_token)
+        self.assertEqual((status, lues["unread"]), (200, liste["unread"] - 1), lues)
+        self.env.invalidate_all()
+        self.assertFalse(autre.read_at, "La notification d'un autre compte reste non lue")
+        _s, apres = self.call("GET", "/axispro/portail/notifications", token=self.cabinet_token)
+        self.assertTrue(next(n for n in apres["items"] if n["id"] == message["id"])["read"])
+        self.assertFalse(next(n for n in apres["items"] if n["id"] == piece["id"])["read"])
+        status, _b = self.call("POST", "/axispro/portail/notifications/lues", {"ids": "1"}, token=self.cabinet_token)
+        self.assertEqual(status, 400, "Liste d'identifiants attendue")
+        status, lues = self.call("POST", "/axispro/portail/notifications/lues", {}, token=self.cabinet_token)
+        self.assertEqual((status, lues["unread"]), (200, 0), "Sans liste : toutes lues")
+
+    def test_notifications_du_cabinet_reservees_a_ses_profils(self):
+        """Rôles par profil : la cloche d'AxisPro Suite sert l'administration, la direction et le cabinet
+        (profils des deux routes) ; la finance et le porteur sont refusés (403)."""
+        cabinet_only = {"company_id": self.cabinet.id, "company_ids": [(6, 0, self.cabinet.ids)]}
+        self._create_user("daf.cloche", "finance", **cabinet_only)
+        self._create_user("dg.cloche", "direction", **cabinet_only)
+        daf = self.open_session("daf.cloche")["access_token"]
+        for token, profile in ((daf, "finance"), (self.porteur, "porteur")):
+            for method, path in (("GET", "/axispro/portail/notifications"),
+                                 ("POST", "/axispro/portail/notifications/lues")):
+                with self.subTest(profile=profile, path=path):
+                    status, body = self.call(method, path, {} if method == "POST" else None, token=token)
+                    self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+        dg = self.open_session("dg.cloche", app="axispro")["access_token"]
+        status, body = self.call("GET", "/axispro/portail/notifications", token=dg)
+        self.assertEqual((status, body["unread"], body["items"]), (200, 0, []), body)
+        status, body = self.call("POST", "/axispro/portail/notifications/lues", {}, token=dg)
+        self.assertEqual((status, body["unread"]), (200, 0))
+

@@ -618,13 +618,27 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/notifications", profiles=READ)
     def notifications(self, **_kw):
+        """Notifications du compte (message ou pièce d'un porteur, compte rendu reçu, rendez-vous
+        demandé ou annulé), les plus récentes d'abord (60), et le nombre de non lues : la cloche
+        d'AxisPro Suite. Chacun ne lit que les siennes."""
         Notification = request.env["portail.notification"].sudo()
         items = Notification.search([("user_id", "=", request.env.user.id)], limit=60)
-        unread = Notification.search_count([("user_id", "=", request.env.user.id), ("read_at", "=", False)])
-        return {"unread": unread, "items": [vues.notification_row(n) for n in items]}
+        return {"unread": self._unread(), "items": [vues.notification_row(n) for n in items]}
+
+    @staticmethod
+    def _unread():
+        return request.env["portail.notification"].sudo().search_count(
+            [("user_id", "=", request.env.user.id), ("read_at", "=", False)])
 
     @api_route("/axispro/portail/notifications/lues", methods=("POST",), profiles=READ)
     def lues(self, **_kw):
-        request.env["portail.notification"].sudo().search(
-            [("user_id", "=", request.env.user.id), ("read_at", "=", False)]).write({"read_at": fields.Datetime.now()})
-        return {"unread": 0}
+        """Marque lues les notifications `ids` du compte (toutes sans `ids`) ; jamais celles d'un autre
+        compte. Rend le nombre de non lues restant."""
+        ids = read_json().get("ids")
+        domain = [("user_id", "=", request.env.user.id), ("read_at", "=", False)]
+        if ids:
+            if not isinstance(ids, list):
+                raise ApiError(400, "invalid_parameter", "ids : liste d'identifiants attendue.")
+            domain.append(("id", "in", [int(i) for i in ids if str(i).isdigit()]))
+        request.env["portail.notification"].sudo().search(domain).write({"read_at": fields.Datetime.now()})
+        return {"unread": self._unread()}
