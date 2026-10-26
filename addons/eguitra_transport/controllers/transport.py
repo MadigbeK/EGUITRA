@@ -82,6 +82,14 @@ def _move_ref(move):
     return {"id": move.id, "name": move.name if move.name and move.name != "/" else None, "state": move.state} if move else None
 
 
+def _depart_fields(rot):
+    """Départ permis à l'utilisateur (écrans : bouton « Faire partir ») et, sinon, pourquoi."""
+    if rot.state != "draft":
+        return {"can_depart": False, "depart_refusal": None}
+    refusal = rot._depart_refusal()
+    return {"can_depart": not refusal, "depart_refusal": refusal}
+
+
 def _rotation_row(rot, detail=False, official=None):
     """Ligne de rotation ; detail : avec les motifs qui s'opposent au départ (fiche, pas la liste)."""
     return {
@@ -120,7 +128,7 @@ def _rotation_row(rot, detail=False, official=None):
         "weight_tare": rot.weight_tare or None, "weight_net": rot.weight_net or None, "over_payload": rot.over_payload,
         "vehicle_kind": rot.vehicle_id.vehicle_kind or None,
         "departure_blockers": rot._departure_blockers() if detail and rot.state == "draft" else None,
-        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by),
+        "departed_at": rot.departed_at or None, "departed_by": _ref(rot.departed_by), **_depart_fields(rot),
         "estimated_margin_rate": rot.estimated_margin_rate if rot.revenue else None,
         "margin_estimated": rot.margin_estimated,
         **_rotation_official(rot, official),

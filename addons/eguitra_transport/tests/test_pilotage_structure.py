@@ -30,8 +30,11 @@ class TestPilotageStructure(TransportCase):
         return bill
 
     def test_pilotage_juge_le_resultat_apres_structure(self):
-        self._rotation().action_validate()
-        self._bill(8_000_000, {str(self.activity.id): 100})  # charge de l'activité, sans ensemble
+        rot = self._rotation()
+        rot.action_validate()
+        # Charges de l'activité, sans ensemble : la structure est ce qui dépasse les coûts directs déclarés
+        # des rotations (les charges de l'activité les comprennent déjà) ; 8 M au-delà.
+        self._bill(rot.total_cost + rot.shortage_net_cost + 8_000_000, {str(self.activity.id): 100})
         report = self.env["eguitra.transport.analysis"].report(self.company, self.first, self.last, "vehicle")
         [row] = [r for r in report["rows"] if r["key"] == self.truck.id]
         self.assertGreater(row["structure"], 0)
