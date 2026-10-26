@@ -20,7 +20,7 @@ société, l'excédent est déduit de la facture du client et/ou porté en créa
 """
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare, float_round
 
 from odoo.addons.eguitra_finance.models.syscohada import OPENING_JOURNAL
@@ -395,6 +395,21 @@ class EguitraTransportRotation(models.Model):
         rotations = super().create(vals_list)
         rotations._apply_tax_rules()
         return rotations
+
+    @api.constrains("volume_loaded", "volume_delivered", "rate", "fuel_liters", "distance_km",
+                    *[c for c, _l in ENTRY_COSTS])
+    def _check_not_negative(self):
+        """Volumes, distance, carburant, tarif et frais ne sont jamais négatifs (audit du 25 octobre, M12) ;
+        la reprise n'y est pas soumise."""
+        if self.env.context.get("eguitra_transport_reprise"):
+            return
+        labels = {"volume_loaded": "volume chargé", "volume_delivered": "volume livré", "rate": "tarif",
+                  "fuel_liters": "carburant (litres)", "distance_km": "distance",
+                  **{c: label.lower() for c, label in ENTRY_COSTS}}
+        for rot in self:
+            negative = [label for field, label in labels.items() if (rot[field] or 0) < 0]
+            if negative:
+                raise ValidationError(f"Rotation {rot._label()} : valeur négative refusée ({', '.join(negative)}).")
 
     def _lock_reason(self):
         """Pourquoi une rotation validée ne bouge plus (audit du 25 octobre, I-T6) : son mois est clôturé

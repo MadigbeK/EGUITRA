@@ -373,6 +373,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
             {r.invoice && <span>· Facture {r.invoice.name ?? "en brouillon"}</span>}
           </div>
           {r.state === "draft" && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : elle se valide par un autre compte.</Notice>}
+          {r.state === "done" && modifiable && <Notice tone="accent">Corriger une rotation validée la remet en saisie : un autre compte la revalide.</Notice>}
           {r.state === "draft" && r.departure_blockers && r.departure_blockers.length > 0 && (
             <Notice tone={r.departure_blockers.some((b) => b.severity === "block") ? "danger" : "warn"}>
               {r.departure_blockers.some((b) => b.severity === "block") ? "Départ impossible pour l'instant : " : "À noter avant le départ : "}

@@ -5,6 +5,8 @@ import io
 import logging
 from contextlib import contextmanager
 
+from psycopg2 import IntegrityError
+
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import content_disposition, request
@@ -42,6 +44,11 @@ FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortag
                            "volume_correction")
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
               "partner_id": "res.partner", "route_id": "eguitra.transport.route"}
+# Nom de chaque référence et message quand elle est inconnue (audit du 25 octobre, M2).
+REF_LABELS = {"vehicle_id": ("Ensemble routier", "Ensemble routier inconnu."),
+              "driver_id": ("Chauffeur", "Chauffeur inconnu."), "partner_id": ("Client", "Client inconnu."),
+              "route_id": ("Route", "Route inconnue."), "product_ids": ("Produit", "Produit inconnu."),
+              "route_ids": ("Route", "Route inconnue.")}
 # Mesures saisies au parc (application Rotations), hors montants ; températures et masse volumique
 # seulement si les manquants se calculent à 15 °C.
 MEASURES = [("fuel_liters", "Carburant (litres)")]
@@ -237,9 +244,9 @@ def _rotation_values(data):
             values[key] = as_float(data[key] or 0, key)
     for key, model in REF_FIELDS.items():
         if data.get(key):
-            record = request.env[model].browse(int(data[key])).exists()
+            record = request.env[model].browse(_int(data[key], REF_LABELS[key][0])).exists()
             if not record:
-                raise ApiError(422, "business_rule", f"Référence inconnue : {key}.")
+                raise ApiError(422, "business_rule", REF_LABELS[key][1])
             values[key] = record.id
     return values
 
@@ -446,21 +453,21 @@ class EguitraTransport(http.Controller):
     def _vehicle_values(self, data):
         values = {k: data[k] or False for k in ("name", "tractor_plate", "trailer_plate", "brand") if k in data}
         if "capacity_liters" in data:
-            values["capacity_liters"] = int(data["capacity_liters"] or 0)
+            values["capacity_liters"] = _int(data["capacity_liters"] or 0, "Capacité")
         if "year" in data:
-            values["year"] = int(data["year"] or 0)
+            values["year"] = _int(data["year"] or 0, "Année")
         if "date_service" in data:
             values["date_service"] = parse_date(data, "date_service") or False
         if data.get("state") in VEHICLE_STATES:
             values["state"] = data["state"]
         if "driver_id" in data:
-            values["driver_id"] = int(data["driver_id"]) if data["driver_id"] else False
+            values["driver_id"] = _int(data["driver_id"], "Chauffeur") if data["driver_id"] else False
         if "asset_id" in data:
             if not _is_finance():
                 raise ApiError(403, "forbidden", "Le rattachement à une immobilisation relève de la finance.")
             asset = request.env["account.asset"]
             if data["asset_id"]:
-                asset = asset.browse(int(data["asset_id"])).exists()
+                asset = asset.browse(_int(data["asset_id"], "Immobilisation")).exists()
                 if not asset or asset.company_id != request.env.company:
                     raise ApiError(422, "business_rule", "Immobilisation inconnue dans la société de travail.")
             values["asset_id"] = asset.id or False
@@ -526,7 +533,8 @@ class EguitraTransport(http.Controller):
                 commands.append((1, doc.id, line))
             else:
                 commands.append((0, 0, line))
-        return commands + [(2, doc.id) for doc in vehicle.document_ids if doc.id not in seen]
+        # Document retiré de la liste : archivé, il reste à l'historique (audit du 25 octobre, M15).
+        return commands + [(1, doc.id, {"active": False}) for doc in vehicle.document_ids if doc.id not in seen]
 
     @api_route("/transport/vehicles", methods=("POST",), profiles=WRITE)
     def create_vehicle(self, **_kw):
@@ -602,7 +610,7 @@ class EguitraTransport(http.Controller):
             # Fiche tiers du chauffeur : frais de mission, créance des manquants.
             partner = request.env["res.partner"]
             if data["partner_id"]:
-                partner = partner.browse(int(data["partner_id"])).exists()
+                partner = partner.browse(_int(data["partner_id"], "Tiers")).exists()
                 if not partner:
                     raise ApiError(422, "business_rule", "Tiers inconnu.")
             values["partner_id"] = partner.id or False
@@ -675,7 +683,7 @@ class EguitraTransport(http.Controller):
         values = {k: data[k] or False for k in ("name", "origin", "destination") if k in data}
         for key in ("distance_km", "distance_return_km"):
             if key in data:
-                values[key] = int(data[key] or 0)
+                values[key] = _int(data[key] or 0, "Distance")
         if "duration_days" in data:
             values["duration_days"] = as_float(data["duration_days"] or 0, "duration_days")
         if "default_rate" in data:
@@ -765,7 +773,7 @@ class EguitraTransport(http.Controller):
         if "code" in data:
             values["code"] = str(data["code"] or "").strip().lower() or False
         if "sequence" in data:
-            values["sequence"] = int(data["sequence"] or 0)
+            values["sequence"] = _int(data["sequence"] or 0, "Ordre")
         if "active" in data:
             values["active"] = bool(data["active"])
         for key in ("density_15", "shortage_price"):
@@ -827,7 +835,7 @@ class EguitraTransport(http.Controller):
             if key in data:
                 account = request.env["account.account"]
                 if data[key]:
-                    account = account.browse(int(data[key])).exists()
+                    account = account.browse(_int(data[key], "Compte")).exists()
                     if not account or company not in account.company_ids:
                         raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
                 values[field] = account.id or False
@@ -897,19 +905,19 @@ class EguitraTransport(http.Controller):
             if key in data:
                 values[key] = parse_date(data, key) or False
         if "sequence" in data:
-            values["sequence"] = int(data["sequence"] or 0)
+            values["sequence"] = _int(data["sequence"] or 0, "Ordre")
         for key, model in (("product_ids", "eguitra.transport.product"), ("route_ids", "eguitra.transport.route")):
             if key in data:
-                ids = [int(i) for i in data[key] or []]
+                ids = [_int(i, REF_LABELS[key][0]) for i in data[key] or []]
                 records = request.env[model].browse(ids).exists()
                 if len(records) != len(set(ids)):
-                    raise ApiError(422, "business_rule", f"Référence inconnue : {key}.")
+                    raise ApiError(422, "business_rule", REF_LABELS[key][1])
                 values[key] = [(6, 0, records.ids)]
         for key in ("account_id", "income_account_id"):
             if key in data:
                 account = request.env["account.account"]
                 if data[key]:
-                    account = account.browse(int(data[key])).exists()
+                    account = account.browse(_int(data[key], "Compte")).exists()
                     if not account or request.env.company not in account.company_ids:
                         raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
                 values[key] = account.id or False
@@ -1082,7 +1090,7 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/rotations/validate", methods=("POST",), profiles=WRITE)
     def validate_many(self, **_kw):
-        ids = [int(i) for i in read_json().get("ids") or []]
+        ids = [_int(i, "Rotation") for i in read_json().get("ids") or []]
         rots = request.env["eguitra.transport.rotation"].browse(ids).exists()
         with _blockers("validate"):
             rots.action_validate()
@@ -1090,7 +1098,7 @@ class EguitraTransport(http.Controller):
 
     @api_route("/transport/invoice", methods=("POST",), profiles=("admin", "finance"))
     def invoice(self, **_kw):
-        ids = [int(i) for i in read_json().get("rotation_ids") or []]
+        ids = [_int(i, "Rotation") for i in read_json().get("rotation_ids") or []]
         rots = request.env["eguitra.transport.rotation"].browse(ids).exists()
         invoices = rots.action_invoice()
         claims = rots.shortage_claim_move_id
@@ -1171,12 +1179,21 @@ class EguitraTransport(http.Controller):
                 results.append({"client_uuid": uuid, "status": "error",
                                 "message": "Ensemble, client et route sont obligatoires."})
                 continue
+            # Le tarif vient des tarifs de la route à la date de chargement, jamais du téléphone (M12).
+            item = {k: v for k, v in item.items() if k != "rate"}
             try:
                 with request.env.cr.savepoint():
                     values = _rotation_values(item)
                     values.update({"client_uuid": uuid, "source": "mobile"})
                     rot = Rotation.create(values)
                 results.append({"client_uuid": uuid, "status": "created", "id": rot.id})
+            except IntegrityError as e:
+                if "client_uuid" in (e.diag.constraint_name or ""):
+                    # Même saisie envoyée deux fois en même temps : l'autre envoi l'a enregistrée (M12).
+                    results.append({"client_uuid": uuid, "status": "exists"})
+                else:
+                    _logger.exception("Synchronisation mobile : saisie %s rejetée", uuid)
+                    results.append({"client_uuid": uuid, "status": "error", "message": "Saisie invalide."})
             except (ApiError, UserError, ValidationError) as e:
                 message = e.message if isinstance(e, ApiError) else str(e.args[0])
                 results.append({"client_uuid": uuid, "status": "error", "message": message})

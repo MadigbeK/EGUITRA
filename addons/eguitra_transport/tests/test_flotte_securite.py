@@ -117,7 +117,7 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual((row["payload_tonnes"], len(row["documents"])), (32, 2))
         self.assertEqual({i["code"] for i in row["document_issues"]},
                          {"document_missing:calibration", "document_missing:tightness"})
-        # Mise à jour par identifiant : le document garde son id (et sa pièce jointe), l'absent est retiré.
+        # Mise à jour par identifiant : le document garde son id (et sa pièce jointe), l'absent est archivé.
         insurance = next(d for d in row["documents"] if d["kind"] == "insurance")
         status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {
             "documents": [{"id": insurance["id"], "kind": "insurance", "reference": "AS-78", "expiry_date": expiry}]}, token)

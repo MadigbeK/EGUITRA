@@ -52,6 +52,7 @@ class EguitraTransportVehicleDocument(models.Model):
     expiry_date = fields.Date("Valable jusqu'au", required=True)
     attachment_id = fields.Many2one("ir.attachment", "Pièce jointe", ondelete="set null")
     note = fields.Text("Note")
+    active = fields.Boolean(default=True, help="Retiré de la fiche de l'ensemble : archivé, gardé à l'historique.")
 
     @api.constrains("date_start", "expiry_date")
     def _check_dates(self):
