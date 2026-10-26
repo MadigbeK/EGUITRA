@@ -10,6 +10,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, require
 
 from ..models.common import AUDITOR_GROUP, EXPLOITATION_GROUP, OBJECT_MODELS, VEHICLE_KINDS
+from ..models.qualification import driver_kinds
 from .common import (
     APP,
     CONFIG,
@@ -112,8 +113,9 @@ def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
         return scope is None or bool(site_id and site_id in scope.ids)
 
     if kind in (None, "qualification"):
-        Type = env["eguitra.rh.qualification.type"].sudo().with_context(active_test=False)
-        mandatory = {t.code: t.mandatory_for_drivers for t in Type.search([])}
+        Rule = env["eguitra.hsseq.qualification.rule"]
+        obligations = Rule._obligations()
+        kinds = driver_kinds(vehicles)
         Employee = env["eguitra.rh.employee"].sudo()
         for row in Employee._hsseq_expiring(comps, horizon, day):
             site_id = on_site.get(row["driver_id"])
@@ -125,7 +127,8 @@ def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
             items.append({
                 "kind": "qualification", "document_kind": row["code"], "subject": subject, "label": row["name"],
                 "expires_on": row["expiry"], "days_left": row["days_left"], "expired": row["days_left"] < 0,
-                "reason_code": "V04" if row["kind"] == "fitness" or mandatory.get(row["code"]) else None,
+                "reason_code": "V04" if row["kind"] == "fitness" or row["code"] in Rule._required_codes(
+                    kinds.get(row["driver_id"]), obligations) else None,
                 "site": site_ref(Site.browse(site_id)) if site_id else None,
             })
     if kind in (None, "vehicle_document") and "eguitra.transport.vehicle.document" in env:
@@ -436,14 +439,17 @@ class EguitraHsseqReferentials(http.Controller):
         matrix = employee._hsseq_matrix_row(
             env["eguitra.rh.qualification.type"].sudo().search([]), day) if employee else None
         cells = {c["code"]: c for c in matrix["qualifications"]} if matrix else {}
+        required = {c["code"] for c in matrix["qualifications"] if c["mandatory"]} if matrix else set()
         return {
             "employee": {"id": employee.id, "name": employee.name, "matricule": employee.matricule} if employee else None,
             "driver": driver_ref(driver),
             "fitness": FITNESS.get(employee._fitness_state(day)) if employee else None,
-            "qualifications": [dict({k: r[k] for k in ("code", "name", "mandatory", "state", "expiry")},
+            "qualifications": [dict({k: r[k] for k in ("code", "name", "state", "expiry")},
+                                    mandatory=r["code"] in required,
                                     **{k: cells.get(r["code"], {}).get(k) for k in ("status", "obtained_on",
                                                                                     "expires_on", "days_left")})
                                for r in employee._qualification_rows(day)] if employee else [],
+            "ppe": matrix["ppe"] if matrix else [],
             "qualifications_status": matrix["status"] if matrix else None,
             "departure_blocked": matrix["blocking"] if matrix else None,
             "rotations": [dict(rotation_ref(r), vehicle=vehicle_ref(r.vehicle_id),

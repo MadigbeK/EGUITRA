@@ -98,3 +98,64 @@ class TestCorrections(HsseqCase):
         book = zipfile.ZipFile(io.BytesIO(response.content))
         self.assertIn("Exigence non conforme du registre", book.read("xl/sharedStrings.xml").decode(),
                       "Filtres des audits sans effet sur la feuille des exigences")
+
+    def test_habilitations_par_profil_de_vehicule_epi_et_alertes(self):
+        """Habilitations exigées par profil de véhicule (V04 et matrice) ; filtre de statut sur la case du
+        type filtré ; EPI remis lus dans RH ; alertes avec ce qu'elles suivent."""
+        status, rules = self.api("kadi.hsseq", "PATCH", "/hsseq/qualifications/rules", {"rules": [
+            {"code": "MATIERES_DANGEREUSES", "tanker": True, "tipper": False},
+            {"code": "ACCES_SITE_MINIER", "tanker": False, "tipper": True}]})
+        self.assertEqual(status, 200, rules)
+        rules = {r["code"]: r for r in rules}
+        self.assertEqual((rules["MATIERES_DANGEREUSES"]["tipper"], rules["MATIERES_DANGEREUSES"]["rule"],
+                          rules["PERMIS"]["tanker"], rules["PERMIS"]["rule"]), (False, True, True, False),
+                         "Sans règle, l'obligation de RH vaut pour les deux profils")
+        status, body = self.api("kadi.hsseq", "PATCH", "/hsseq/qualifications/rules",
+                                {"rules": [{"code": "PERMIS", "tanker": "false", "tipper": True}]})
+        self.assertEqual((status, body["error"]), (400, "invalid_parameter"), "Booléens stricts")
+        for login in ("ibrahima", "dg.hsseq", "rh.hsseq"):
+            status, _b = self.api(login, "PATCH", "/hsseq/qualifications/rules", {"rules": []})
+            self.assertEqual(status, 403, f"{login} ne règle pas les exigences")
+        # V04 : profil de l'ensemble de la rotation.
+        adr = self.employee.qualification_ids.filtered(lambda q: q.type_id.code == "MATIERES_DANGEREUSES")
+        adr.expiry_date = self.day - timedelta(days=3)
+        tanker_rot = self._rotation(driver_id=self.driver.id)
+        self.assertIn("V04", [r["code"] for r in tanker_rot._hsseq_evaluate()["reasons"]], "Citerne : ADR exigé")
+        tipper = self.env["eguitra.transport.vehicle"].create({"name": "BN-07", "vehicle_kind": "tipper",
+                                                               "payload_tonnes": 30, "site_id": self.site.id})
+        evaluation = self._rotation(vehicle_id=tipper.id, driver_id=self.driver.id)._hsseq_evaluate()
+        self.assertNotIn("V04", [r["code"] for r in evaluation["reasons"]], "Benne : ADR non exigé")
+        self.assertIn("V04", [w["code"] for w in evaluation["warnings"]],
+                      "Benne : accès au site minier absent, avertissement avant la mise en service")
+        # Matrice : profil de l'ensemble habituel du conducteur (citerne).
+        status, matrix = self.api("kadi.hsseq", "GET", "/hsseq/qualifications")
+        [row] = [r for r in matrix["items"] if r["employee"]["id"] == self.employee.id]
+        cells = {c["code"]: c for c in row["qualifications"]}
+        self.assertEqual((row["vehicle_kind"], row["blocking"], cells["MATIERES_DANGEREUSES"]["mandatory"],
+                          cells["ACCES_SITE_MINIER"]["mandatory"]), ("tanker", True, True, False))
+        self.assertEqual(cells["ACCES_SITE_MINIER"]["required_for"], {"tanker": False, "tipper": True})
+        # Filtre de statut combiné au type : la case du type filtré, pas le statut d'ensemble.
+        defensive = self.employee.qualification_ids.filtered(lambda q: q.type_id.code == "CONDUITE_DEFENSIVE")
+        defensive.expiry_date = self.day + timedelta(days=10)
+        status, matrix = self.api("kadi.hsseq", "GET", "/hsseq/qualifications?type=CONDUITE_DEFENSIVE&status=expired")
+        self.assertNotIn(self.employee.id, [r["employee"]["id"] for r in matrix["items"]],
+                         "Statut d'ensemble expiré, case du type filtré à renouveler")
+        status, matrix = self.api("kadi.hsseq", "GET", "/hsseq/qualifications?type=CONDUITE_DEFENSIVE&status=to_renew")
+        self.assertIn(self.employee.id, [r["employee"]["id"] for r in matrix["items"]])
+        # EPI remis (RH) : la dernière remise de chaque équipement.
+        Ppe = self.env["eguitra.rh.ppe.issue"]
+        Ppe.create({"employee_id": self.employee.id, "item": "casque", "date": self.day - timedelta(days=800)})
+        Ppe.create({"employee_id": self.employee.id, "item": "casque", "date": self.day - timedelta(days=400),
+                    "renewal_date": self.day - timedelta(days=5), "acknowledged": True})
+        status, matrix = self.api("ibrahima", "GET", "/hsseq/qualifications")
+        [row] = [r for r in matrix["items"] if r["employee"]["id"] == self.employee.id]
+        self.assertEqual([(p["item"], p["to_renew"], p["acknowledged"]) for p in row["ppe"]], [("casque", True, True)])
+        # Alertes : salarié et type suivis, filtre de date.
+        self.env["eguitra.hsseq.expiry.alert"]._cron_alerts()
+        status, alerts = self.api("kadi.hsseq", "GET", "/hsseq/qualifications/alerts?kind=qualification")
+        [alert] = [a for a in alerts if a["item_code"] == "CONDUITE_DEFENSIVE"]
+        self.assertEqual((alert["employee_id"], alert["vehicle_id"], alert["key"]),
+                         (self.employee.id, None, f"employee:{self.employee.id}:CONDUITE_DEFENSIVE"))
+        status, later = self.api("kadi.hsseq", "GET",
+                                 f"/hsseq/qualifications/alerts?expires_from={self.day + timedelta(days=60)}")
+        self.assertEqual(later, [], "Filtre de date d'expiration")

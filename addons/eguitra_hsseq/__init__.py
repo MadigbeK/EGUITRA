@@ -23,6 +23,8 @@ AUDITED_MODELS = [
     "eguitra.hsseq.acknowledgment", "eguitra.hsseq.bulletin", "eguitra.hsseq.emergency.plan", "eguitra.hsseq.drill",
     "eguitra.hsseq.crisis.contact", "eguitra.hsseq.review", "eguitra.hsseq.review.decision",
     "eguitra.hsseq.telematics.violation", "eguitra.hsseq.telematics.import",
+    # Corrections du lot 2.
+    "eguitra.hsseq.qualification.rule",
 ]
 
 

@@ -9,9 +9,10 @@ Motifs du lot 1, activables par type de véhicule et par site (eguitra.hsseq.loc
 - V02 une non-conformité d'un point bloquant encore ouverte sur l'ensemble, d'une rotation à l'autre ;
 - V03 alcootest du conducteur de la rotation absent, non réalisé ou positif (un positif le retire de la
   rotation ; V03 reste alors ouvert pour lui) ;
-- V04 statut RH du conducteur (eguitra_rh, _hsseq_driver_status) : habilitation obligatoire expirée,
-  aptitude inapte ou échue ; habilitation absente ou chauffeur sans dossier salarié selon les dates de mise
-  en service des paramètres (avant : avertissement) ;
+- V04 statut RH du conducteur (eguitra_rh) : habilitation exigée pour le profil de l'ensemble de la
+  rotation (eguitra.hsseq.qualification.rule, à défaut l'obligation de RH) expirée, aptitude inapte ou
+  échue ; habilitation absente ou chauffeur sans dossier salarié selon les dates de mise en service des
+  paramètres (avant : avertissement) ;
 - V05 assurance ou visite technique expirée (Transport, _expired_documents) ; absente selon la date de mise
   en service des documents (avant : avertissement).
 Motifs du lot 2, livrés désactivés (hsseq ou admin les activent par type de véhicule et par site) :
@@ -256,9 +257,7 @@ class EguitraTransportRotation(models.Model):
         if employee._fitness_state(day) in ("inapte", "echue"):
             # Statut seul, sans motif médical.
             blocking.append("Aptitude médicale non valable.")
-        for row in status["qualifications"]:
-            if not row["mandatory"]:
-                continue
+        for row in employee._hsseq_obligations(day, vehicle_kind(self.vehicle_id)):
             if row["state"] == "expiree":
                 blocking.append(f"{row['name']} : expirée.")
                 if row["expiry"] and (since is None or row["expiry"] < since):

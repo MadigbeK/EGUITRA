@@ -1,19 +1,23 @@
 """API des habilitations (spécification §3, §9.3) : matrice des compétences par conducteur, lue dans RH,
-statuts seulement (valid, to_renew, expired, missing), aptitude en statut seul, jamais de détail médical ;
-filtres société, site, statut, type et blocage du verrou (V04) ; alertes J-30 et J-7 envoyées.
+statuts seulement (valid, to_renew, expired, missing), aptitude en statut seul, jamais de détail médical,
+EPI remis ; filtres société, site, statut, type et blocage du verrou (V04) ; alertes J-30 et J-7 envoyées ;
+habilitations exigées selon le profil du véhicule (citerne, benne).
 
 Lecture : administration, direction, hsseq, RH ; chef de parc pour les conducteurs de ses sites. Le
-conducteur lit ses propres habilitations par GET /hsseq/me. L'écriture des habilitations reste dans RH."""
+conducteur lit ses propres habilitations par GET /hsseq/me. L'écriture des habilitations reste dans RH ; les
+exigences par profil de véhicule se règlent par l'administration et hsseq."""
 
 from collections import Counter
+from datetime import timedelta
 
 from odoo import fields, http
 from odoo.http import request
 
-from odoo.addons.eguitra_api.controllers.framework import ApiError
+from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json
 
-from ..models.qualification import STATUS_RANK, driver_sites
+from ..models.qualification import STATUS_RANK, driver_kinds, driver_sites
 from .common import (
+    CONFIG,
     READ_ALL,
     companies,
     company_ref,
@@ -51,7 +55,9 @@ def matrix_rows(comps, day, site=None, types=None):
     employees = env["eguitra.rh.employee"].sudo().search([
         ("company_id", "in", comps.ids), ("driver_id", "!=", False), ("hire_date", "<=", day),
         "|", ("exit_date", "=", False), ("exit_date", ">=", day)], order="name")
-    on_site = driver_sites(env["eguitra.transport.vehicle"].sudo().search([("company_id", "in", comps.ids)]))
+    vehicles = env["eguitra.transport.vehicle"].sudo().search([("company_id", "in", comps.ids)])
+    on_site, kinds = driver_sites(vehicles), driver_kinds(vehicles)
+    obligations = env["eguitra.hsseq.qualification.rule"]._obligations()
     scope = site_scope(QUAL_FULL)
     rows = []
     for employee in employees:
@@ -60,7 +66,7 @@ def matrix_rows(comps, day, site=None, types=None):
             continue
         if scope is not None and not (driver_site and driver_site in scope):
             continue
-        row = employee._hsseq_matrix_row(types, day)
+        row = employee._hsseq_matrix_row(types, day, kinds.get(employee.driver_id.id), obligations)
         row.update(driver=driver_ref(employee.driver_id), site=site_ref(driver_site),
                    company=company_ref(employee.company_id))
         rows.append(row)
@@ -88,9 +94,11 @@ class EguitraHsseqQualifications(http.Controller):
             if wanted - set(STATUS_RANK):
                 raise ApiError(400, "invalid_parameter", "Statut : valid, to_renew, expired ou missing.",
                                fields=["status"])
-            # Statut d'ensemble du conducteur, ou de la case du type filtré.
-            rows = [r for r in rows if r["status"] in wanted or (codes and any(
-                c["status"] in wanted for c in r["qualifications"]))]
+            # Avec un filtre de type : le statut de la case des types filtrés ; sinon le statut d'ensemble.
+            if codes:
+                rows = [r for r in rows if any(c["status"] in wanted for c in r["qualifications"])]
+            else:
+                rows = [r for r in rows if r["status"] in wanted]
         if str(kw.get("blocking", "")) in ("1", "true"):
             rows = [r for r in rows if r["blocking"]]
         if kw.get("search"):
@@ -102,7 +110,8 @@ class EguitraHsseqQualifications(http.Controller):
         except (TypeError, ValueError) as e:
             raise ApiError(400, "invalid_parameter", "Pagination invalide.") from e
         result = page(rows[offset:offset + limit], len(rows), offset, limit, counts)
-        result["types"] = [{"code": t.code, "name": t.name, "mandatory": t.mandatory_for_drivers} for t in types]
+        obligations = request.env["eguitra.hsseq.qualification.rule"]._obligations()
+        result["types"] = [dict(type_obligation(t, obligations), mandatory=t.mandatory_for_drivers) for t in types]
         result["date"] = day
         return result
 
@@ -112,11 +121,75 @@ class EguitraHsseqQualifications(http.Controller):
         domain = [("company_id", "in", companies(kw).ids)]
         if kw.get("kind"):
             domain.append(("kind", "in", kw["kind"].split(",")))
+        # Période d'envoi, puis d'expiration.
+        for key, field, op in (("date_from", "sent_at", ">="), ("date_to", "sent_at", "<"),
+                               ("expires_from", "expiry_date", ">="), ("expires_to", "expiry_date", "<=")):
+            day = date_value(kw, key)
+            if day:
+                domain.append((field, op, day + timedelta(days=1) if key == "date_to" else day))
         if "rh" in request.env.user._eguitra_profiles() and not set(request.env.user._eguitra_profiles()) & {
                 "admin", "direction", "hsseq"}:
             domain.append(("kind", "!=", "vehicle_document"))
         Alert = request.env["eguitra.hsseq.expiry.alert"].sudo()
         rows = Alert.search(domain, limit=500)
-        return [{"id": a.id, "kind": a.kind, "subject": a.subject, "label": a.label, "expires_on": a.expiry_date,
-                 "stage": a.stage, "reason_code": a.reason_code or None, "site": site_ref(a.site_id),
-                 "sent_at": a.sent_at, "recipients": len(a.recipient_ids)} for a in rows]
+        return [alert_row(a) for a in rows]
+
+    # ─── Habilitations exigées selon le profil du véhicule ────────────────
+
+    @hsseq_route("/hsseq/qualifications/rules", profiles=QUAL_READ)
+    def rules(self, **_kw):
+        """Pour chaque type d'habilitation de RH : exigée des conducteurs de citerne, de benne (rule : réglée
+        par HSSEQ ; sinon l'obligation de RH vaut pour les deux)."""
+        obligations = request.env["eguitra.hsseq.qualification.rule"]._obligations()
+        return [type_obligation(t, obligations) for t in qualification_types()]
+
+    @hsseq_route("/hsseq/qualifications/rules", methods=("PATCH",), profiles=CONFIG)
+    def update_rules(self, **_kw):
+        """{rules: [{code, tanker, tipper}]} (booléens stricts) ; {code, reset: true} rend l'obligation de RH."""
+        data = read_json()
+        rows = data.get("rules")
+        if not isinstance(rows, list):
+            raise ApiError(400, "invalid_parameter", "Règles attendues : rules, une liste.", fields=["rules"])
+        types = {t.code: t for t in qualification_types()}
+        Rule = request.env["eguitra.hsseq.qualification.rule"].sudo()
+        Journal = request.env["eguitra.hsseq.journal"]
+        for row in rows:
+            qual_type = types.get(row.get("code")) if isinstance(row, dict) else None
+            if not qual_type:
+                raise ApiError(400, "invalid_parameter", "Type d'habilitation inconnu.", fields=["rules"])
+            rule = Rule.search([("type_id", "=", qual_type.id)], limit=1)
+            if row.get("reset") is True:
+                if rule:
+                    Journal._log("qualification_rule", rule, "reset", note=qual_type.code)
+                    rule.unlink()
+                continue
+            if not all(isinstance(row.get(k), bool) for k in ("tanker", "tipper")):
+                raise ApiError(400, "invalid_parameter", "tanker et tipper : des booléens.", fields=["rules"])
+            before = f"citerne {rule.tanker}, benne {rule.tipper}" if rule else "obligation de RH"
+            values = {"tanker": row["tanker"], "tipper": row["tipper"]}
+            if rule:
+                rule.write(values)
+            else:
+                rule = Rule.create(dict(values, type_id=qual_type.id))
+            Journal._log("qualification_rule", rule, "write", field=qual_type.code, old=before,
+                         new=f"citerne {rule.tanker}, benne {rule.tipper}")
+        obligations = Rule._obligations()
+        return [type_obligation(t, obligations) for t in qualification_types()]
+
+
+def type_obligation(qual_type, obligations):
+    flags = obligations.get(qual_type.code, {"tanker": False, "tipper": False, "rule": False})
+    return {"code": qual_type.code, "name": qual_type.name, "tanker": flags["tanker"], "tipper": flags["tipper"],
+            "rule": flags["rule"], "rh_mandatory": qual_type.mandatory_for_drivers}
+
+
+def alert_row(alert):
+    """Alerte envoyée, avec ce qu'elle suit : salarié et type d'habilitation, ou ensemble et document."""
+    parts = (alert.key or "").split(":")
+    subject_id = int(parts[1]) if len(parts) == 3 and parts[1].isdigit() else None
+    return {"id": alert.id, "key": alert.key, "kind": alert.kind, "subject": alert.subject, "label": alert.label,
+            "employee_id": subject_id if parts[0] == "employee" else None,
+            "vehicle_id": subject_id if parts[0] == "vehicle" else None,
+            "item_code": parts[2] if len(parts) == 3 else None, "expires_on": alert.expiry_date, "stage": alert.stage,
+            "reason_code": alert.reason_code or None, "site": site_ref(alert.site_id), "sent_at": alert.sent_at,
+            "recipients": len(alert.recipient_ids)}

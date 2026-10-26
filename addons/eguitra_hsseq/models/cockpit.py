@@ -401,7 +401,8 @@ class EguitraHsseqCockpit(models.AbstractModel):
         if sites:
             on_site = self.env["eguitra.transport.vehicle"].sudo().search([("site_id", "in", sites.ids)]).driver_id
             drivers = drivers.filtered(lambda e: e.driver_id in on_site)
-        valid = [e for e in drivers if not Employee._hsseq_driver_status(e.driver_id, day)["blocking"]]
+        obligations = self.env["eguitra.hsseq.qualification.rule"]._obligations()
+        valid = [e for e in drivers if not e._hsseq_blocking(day, e._hsseq_vehicle_kind(), obligations)]
         return len(drivers), len(valid)
 
     @api.model

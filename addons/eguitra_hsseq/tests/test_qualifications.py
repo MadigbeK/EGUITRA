@@ -22,7 +22,7 @@ class TestQualifications(HsseqCase):
         matrix, row = self._row()
         self.assertEqual([t["code"] for t in matrix["types"] if t["mandatory"]], list(MANDATORY))
         self.assertEqual(set(row), {"employee", "driver", "site", "company", "status", "fitness", "blocking",
-                                    "qualifications"}, "Aucun détail médical ni justificatif")
+                                    "qualifications", "vehicle_kind", "ppe"}, "Aucun détail médical ni justificatif")
         self.assertEqual((row["status"], row["fitness"], row["blocking"], row["site"]["id"]),
                          ("valid", "fit", False, self.site.id))
         cells = {c["code"]: c for c in row["qualifications"]}

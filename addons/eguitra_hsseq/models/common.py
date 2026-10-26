@@ -105,6 +105,7 @@ OBJECT_MODELS = {
     "review": "eguitra.hsseq.review",
     "violation": "eguitra.hsseq.telematics.violation",
     "telematics_import": "eguitra.hsseq.telematics.import",
+    "qualification_rule": "eguitra.hsseq.qualification.rule",
 }
 # Les alertes flash et retours d'expérience n'ont pas de pièce jointe : une photo échapperait au contrôle
 # d'anonymisation (§9.4).
