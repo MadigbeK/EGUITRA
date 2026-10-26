@@ -198,7 +198,9 @@ class AxisproFunding(models.Model):
 
     dossier_id = fields.Many2one("axispro.dossier", required=True, ondelete="cascade", index=True)
     company_id = fields.Many2one(related="dossier_id.company_id", store=True)
-    currency_id = fields.Many2one(related="company_id.currency_id")
+    # Une démarche se chiffre dans la devise de son dossier, à laquelle le besoin se compare (audit du
+    # noyau, I-X3 : 2 000 000 USD sollicités comptaient comme 2 000 000 GNF). Champ calculé, non stocké.
+    currency_id = fields.Many2one(related="dossier_id.currency_id")
     funder_id = fields.Many2one("res.partner", "Financeur", required=True)
     instrument = fields.Selection(INSTRUMENTS, "Instrument", required=True, default="bank_loan")
     amount_requested = fields.Monetary("Montant sollicité")
@@ -239,12 +241,14 @@ class AxisproDossierPilotage(models.Model):
     funding_ids = fields.One2many("axispro.funding", "dossier_id", "Financements recherchés")
 
     def financial_indicators(self):
-        """Indicateurs du modèle financier ; None tant qu'aucune hypothèse n'est saisie."""
+        """Indicateurs du modèle financier ; None tant qu'aucune hypothèse n'est saisie. `currency` :
+        code de la devise du dossier, dans laquelle s'expriment les montants (VAN, trésorerie) ; la
+        suggestion d'un critère adossé à un indicateur en montant en tire son unité."""
         self.ensure_one()
         plan = self.plan_ids[:1]
         if not plan or not plan.line_ids:
             return None
-        return plan.analysis()["indicators"]
+        return dict(plan.analysis()["indicators"], currency=self.currency_id.name)
 
     def risk_summary(self):
         self.ensure_one()

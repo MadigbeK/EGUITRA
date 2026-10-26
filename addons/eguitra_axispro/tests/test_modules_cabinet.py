@@ -1,5 +1,6 @@
-"""Modules du cabinet (audit du noyau et de l'application web, lot 3) : seuil partiel égal à 0 (I-X4),
-nombres à la française dans les textes (M8)."""
+"""Modules du cabinet (audit du noyau et de l'application web, lot 3) : devise du dossier dans le
+portefeuille, les financements et le modèle financier (I-X3), seuil partiel égal à 0 (I-X4), nombres
+à la française dans les textes (M8)."""
 
 import re
 
@@ -32,6 +33,13 @@ ROWS = (
 )
 GRID = ("\n".join([";".join(HEADER)] + [";".join(row.get(h, "") for h in HEADER) for row in ROWS]) + "\n").encode()
 
+# Plan de financement initial déséquilibré : 1 000 investis, 400 apportés, ni BFR ni impôt.
+GAP = [
+    {"kind": "capex", "name": "Équipement", "amount": 1000, "year": 0, "life": 5},
+    {"kind": "revenue", "name": "Ventes", "quantity": 100, "price": 10},
+    {"kind": "funding", "name": "Apport", "funding_type": "equity", "amount": 400},
+]
+
 
 @tagged("post_install", "-at_install")
 class TestModulesCabinetMoteur(TransactionCase):
@@ -44,6 +52,15 @@ class TestModulesCabinetMoteur(TransactionCase):
         self.assertEqual(engine.suggest("payback", 3, 0.0, {"payback": 2})["status"], "met", "Plus bas est meilleur")
         self.assertEqual(engine.suggest("npv", 1000, 0.0, {"npv": None}), {"status": None, "value": None})
 
+    def test_unite_des_indicateurs_en_montant(self):
+        """I-X3 : aucune devise écrite en dur ; un montant prend la devise du dossier."""
+        units = {key: unit for key, (_label, _higher, unit) in engine.INDICATORS.items()}
+        self.assertNotIn("GNF", units.values())
+        self.assertEqual((units["npv"], units["cash_min"]), (engine.MONEY, engine.MONEY))
+        self.assertEqual(engine.indicator_unit("npv", "USD"), "USD")
+        self.assertEqual(engine.indicator_unit("cash_min"), "devise du dossier")
+        self.assertEqual(engine.indicator_unit("dscr_min", "USD"), "x", "Un ratio garde son unité")
+
     def test_nombres_a_la_francaise(self):
         """M8 : virgule décimale et milliers groupés dans les textes du noyau, jamais « 1.3 »."""
         self.assertEqual(engine.nombre(1234567.4), "1 234 567")
@@ -52,8 +69,8 @@ class TestModulesCabinetMoteur(TransactionCase):
         self.assertEqual((engine.taux(12.5), engine.taux(12), engine.taux(1.3), engine.taux(0)), ("12,5", "12", "1,3", "0"))
         self.assertEqual((heures(7.5), heures(8), heures(1234.25), heures(0.75)), ("7,5", "8", "1 234,25", "0,75"))
 
-    def test_alertes_du_modele_a_la_francaise(self):
-        """M8 : alertes du modèle sans point décimal (« 12,5 % », « 2,50 »)."""
+    def test_alertes_du_modele_a_la_francaise_et_dans_la_devise(self):
+        """M8 et I-X3 : alertes du modèle sans point décimal, montants suivis de la devise du dossier."""
         params = {"horizon": 5, "discount_rate": 12.5, "tax_rate": 0, "receivable_days": 0, "inventory_days": 0,
                   "payable_days": 0, "residual_value": False, "dscr_target": 2.5, "equity_target": 50.5}
         lines = [
@@ -62,13 +79,21 @@ class TestModulesCabinetMoteur(TransactionCase):
             {"kind": "funding", "name": "Apport", "funding_type": "equity", "amount": 100},
             {"kind": "funding", "name": "Prêt", "funding_type": "loan", "amount": 300, "rate": 10, "life": 10},
         ]
-        alerts = engine.analyse(params, lines)["alerts"]
+        alerts = engine.analyse(params, lines, currency="USD")["alerts"]
         text = " ".join(alerts)
         self.assertIn(f"VAN négative au taux d'actualisation de 12,5{NBSP}%", text)
         self.assertIn("sous l'exigence de 2,50.", text)
         self.assertIn(f"sous le minimum de 50,5{NBSP}%.", text)
-        self.assertIn("Plan de financement initial déséquilibré : 600 de ressources manquantes.", alerts)
+        self.assertIn(f"Plan de financement initial déséquilibré : 600{NBSP}USD de ressources manquantes.", alerts)
+        self.assertTrue(any(a.startswith("Trésorerie cumulée négative") and a.endswith(f"{NBSP}USD est nécessaire.")
+                            for a in alerts), alerts)
+        self.assertTrue(any(a.startswith("Dette restant due en fin d'horizon") and a.endswith(f"{NBSP}USD.")
+                            for a in alerts), alerts)
         self.assertFalse(re.search(r"\d\.\d", text), f"Point décimal dans les alertes : {text}")
+        self.assertNotIn("GNF", text)
+        unlabelled = engine.analyse(params, lines)["alerts"]
+        self.assertIn("Plan de financement initial déséquilibré : 600 de ressources manquantes.", unlabelled,
+                      "Sans devise connue, le montant seul")
 
 
 @tagged("post_install", "-at_install")
@@ -83,6 +108,10 @@ class TestModulesCabinetApi(ApiCase):
         cls.promoter = cls.env["res.partner"].create({"name": "Rizerie de Kankan"})
         cls.bank = cls.env["res.partner"].create({"name": "Banque des projets", "is_company": True})
         cls._create_user("consultant.lot3", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        # Devise autre que celle de la société, pour un dossier chiffré en devise étrangère.
+        euro, dollar = cls.env.ref("base.EUR"), cls.env.ref("base.USD")
+        cls.foreign = dollar if cls.cabinet.currency_id == euro else euro
+        cls.foreign.active = True
 
     def setUp(self):
         super().setUp()
@@ -104,6 +133,98 @@ class TestModulesCabinetApi(ApiCase):
 
     def _evaluation(self, dossier, code):
         return dossier.evaluation_ids.filtered(lambda e: e.criterion_id.code == code)
+
+    # ─── I-X3 : devise du dossier ─────────────────────────────────────────
+
+    def test_portefeuille_totalise_par_devise(self):
+        """I-X3 : 500 € de besoin ne s'ajoutent pas aux GNF ; chaque devise a ses totaux, les montants simples
+        ne portent que sur la devise de la société."""
+        local = self.cabinet.currency_id
+        sector_name = "Agro-industrie (essai du lot 3)"
+        d_local = self._dossier(name="Rizerie", sector=sector_name, financing_need=1_000_000, investment=2_000_000)
+        d_foreign = self._dossier(name="Centrale solaire", sector=sector_name, currency_id=self.foreign.id,
+                                  financing_need=500, investment=800)
+        Funding = self.env["axispro.funding"]
+        Funding.create({"dossier_id": d_local.id, "funder_id": self.bank.id, "amount_requested": 600_000,
+                        "amount_granted": 400_000, "state": "signed"})
+        f_foreign = Funding.create({"dossier_id": d_foreign.id, "funder_id": self.bank.id, "amount_requested": 300,
+                                    "amount_granted": 250, "state": "disbursed"})
+        self.assertEqual(f_foreign.currency_id, self.foreign, "Une démarche suit la devise de son dossier")
+
+        status, board = self.call("GET", "/axispro/portfolio", token=self.token)
+        self.assertEqual(status, 200, board)
+        live = self.env["axispro.dossier"].search([("company_id", "=", self.cabinet.id),
+                                                   ("state", "in", ("open", "on_hold"))])
+        fundings = Funding.search([("dossier_id", "in", live.ids)])
+
+        def expected(currency):
+            dossiers = live.filtered(lambda d: d.currency_id == currency)
+            mine = fundings.filtered(lambda f: f.currency_id == currency)
+            return {"need": sum(dossiers.mapped("financing_need")), "investment": sum(dossiers.mapped("investment")),
+                    "requested": sum(mine.filtered(lambda f: f.state not in ("rejected", "withdrawn"))
+                                     .mapped("amount_requested")),
+                    "granted": sum(mine.filtered(lambda f: f.state in ("signed", "disbursed")).mapped("amount_granted"))}
+
+        financing = board["financing"]
+        self.assertEqual(board["currency"], local.name)
+        rows = {r["currency"]: r for r in financing["by_currency"]}
+        self.assertEqual(financing["by_currency"][0]["currency"], local.name, "La devise de la société en tête")
+        for currency in (local, self.foreign):
+            for key, value in expected(currency).items():
+                self.assertAlmostEqual(rows[currency.name][key], value, places=2, msg=f"{currency.name} {key}")
+        for key, value in expected(local).items():
+            self.assertAlmostEqual(financing[key], value, places=2,
+                                   msg=f"{key} : la devise de la société seule, sans les {self.foreign.name}")
+        self.assertGreaterEqual(rows[self.foreign.name]["granted"], 250.0)
+        staged = live.filtered("current_gate_id")
+        for currency in (local, self.foreign):
+            on_gates = sum(g["need_by_currency"].get(currency.name, 0.0) for g in board["funnel"])
+            self.assertAlmostEqual(on_gates, sum(staged.filtered(lambda d, c=currency: d.currency_id == c)
+                                                 .mapped("financing_need")), places=2, msg=currency.name)
+        self.assertAlmostEqual(sum(g["need"] for g in board["funnel"]),
+                               sum(g["need_by_currency"].get(local.name, 0.0) for g in board["funnel"]), places=2,
+                               msg="Besoin d'une étape : la devise de la société seule")
+        sector = next(s for s in board["sectors"] if s["label"] == sector_name)
+        self.assertEqual(sector["investment_by_currency"], {local.name: 2_000_000.0, self.foreign.name: 800.0})
+        self.assertEqual((sector["count"], sector["investment"]), (2, 2_000_000.0), "Les 800 en devise ne s'ajoutent pas")
+        project = next(p for p in board["projects"] if p["id"] == d_foreign.id)
+        self.assertEqual((project["currency"], project["financing_need"]), (self.foreign.name, 500.0))
+        disbursed = next(p for p in financing["pipeline"] if p["state"] == "disbursed")
+        split = {r["currency"]: r for r in disbursed["by_currency"]}
+        foreign_disbursed = fundings.filtered(lambda f: f.state == "disbursed" and f.currency_id == self.foreign)
+        self.assertAlmostEqual(split[self.foreign.name]["granted"], sum(foreign_disbursed.mapped("amount_granted")),
+                               places=2)
+        self.assertAlmostEqual(disbursed["granted"], split.get(local.name, {}).get("granted", 0.0), places=2)
+        self.assertEqual(board["fees"]["currency"], local.name)
+
+        status, rows = self.call("GET", f"/axispro/fundings?dossier_id={d_foreign.id}", token=self.token)
+        self.assertEqual((status, rows[0]["currency"]), (200, self.foreign.name), rows)
+
+    def test_modele_financier_dans_la_devise_du_dossier(self):
+        """I-X3 : le modèle d'un dossier en devise étrangère s'y chiffre (alertes, indicateurs en montant,
+        suggestion d'un critère adossé à la VAN), et dit le verrou du comité."""
+        dossier = self._dossier(name="Centrale solaire", currency_id=self.foreign.id)
+        self._plan(dossier, GAP)
+        status, body = self.call("GET", f"/axispro/dossiers/{dossier.id}/plan", token=self.token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["dossier"]["currency"], self.foreign.name)
+        self.assertIs(body["dossier"]["locked"], False)
+        self.assertEqual(body["options"]["indicators"]["npv"]["unit"], self.foreign.name)
+        self.assertTrue(body["options"]["indicators"]["npv"]["money"])
+        self.assertEqual(body["options"]["indicators"]["dscr_min"]["unit"], "x")
+        self.assertIn(f"Plan de financement initial déséquilibré : 600{NBSP}{self.foreign.name} de ressources "
+                      "manquantes.", body["analysis"]["alerts"])
+        self.assertNotIn("GNF", " ".join(body["analysis"]["alerts"]))
+        status, criteria = self.call("GET", f"/axispro/dossiers/{dossier.id}/criteria", token=self.token)
+        self.assertEqual(status, 200, criteria)
+        npv = next(c for c in criteria if c["code"] == "C002")["suggestion"]
+        self.assertEqual((npv["unit"], npv["currency"], npv["money"]), (self.foreign.name, self.foreign.name, True))
+        status, policy = self.call("GET", f"/axispro/policies/{self.policy.id}", token=self.token)
+        self.assertEqual(policy["indicators"]["npv"]["unit"], "devise du dossier",
+                         "Une grille sert des dossiers de toutes devises")
+        response = self.url_open(f"/api/v1/axispro/dossiers/{dossier.id}/plan.xlsx",
+                                 headers={"Authorization": f"Bearer {self.token}"}, timeout=60)
+        self.assertEqual(response.status_code, 200)
 
     # ─── I-X4 : seuil partiel nul ─────────────────────────────────────────
 

@@ -2,7 +2,8 @@
 (VAN, TRI), couverture de la dette (DSCR, LLCR), point mort, sensibilités et scénarios.
 
 Calcul annuel, sans dépendance au noyau : année 0 = période d'investissement, années 1 à N =
-exploitation. Montants hors taxes, dans la devise de la société.
+exploitation. Montants hors taxes, dans la devise du dossier (un dossier peut être en USD ou en
+EUR : aucune devise n'est écrite en dur, les textes reçoivent la devise du dossier).
 
 Conventions (rappelées à l'écran et dans l'export) :
 - coûts variables : coût unitaire de chaque produit et pourcentage du chiffre d'affaires au prix de
@@ -89,6 +90,11 @@ def taux(value):
     « 1,3 » (et non « 12.5 » ni « 1.3 »)."""
     text = nombre(value, 2)
     return text.rstrip("0").rstrip(",") if "," in text else text
+
+
+def _montant(value, currency):
+    """Montant entier suivi de la devise du dossier quand elle est connue : « 1 500 000 GNF »."""
+    return f"{nombre(value)}{INSECABLE}{currency}" if currency else nombre(value)
 
 
 def npv(rate, flows):
@@ -188,9 +194,10 @@ def _payback(flows):
     return None
 
 
-def analyse(params, lines, factors=None, first_year=None):
+def analyse(params, lines, factors=None, first_year=None, currency=None):
     """Modèle complet. `lines` : dictionnaires de lignes (kind : capex, revenue, variable, fixed,
-    funding) ; `factors` : chocs multiplicatifs (clés de FACTORS)."""
+    funding) ; `factors` : chocs multiplicatifs (clés de FACTORS) ; `currency` : code de la devise du
+    dossier, écrit après les montants des alertes (« 1 500 000 USD »)."""
     p = dict(DEFAULT_PARAMS)
     p.update({k: v for k, v in (params or {}).items() if k in DEFAULT_PARAMS and v is not None})
     for key in DEFAULT_PARAMS:
@@ -435,7 +442,8 @@ def analyse(params, lines, factors=None, first_year=None):
         row("breakeven", "Point mort (chiffre d'affaires)", breakeven),
     ]
 
-    # Textes lus à l'écran et dans l'export : nombres à la française (virgule décimale, jamais « 1.3 »).
+    # Textes lus à l'écran et dans l'export : nombres à la française (virgule décimale, jamais « 1.3 »),
+    # montants dans la devise du dossier.
     alerts = []
     if not revenue_lines:
         alerts.append("Aucun produit saisi : le modèle ne génère pas de chiffre d'affaires.")
@@ -447,15 +455,15 @@ def analyse(params, lines, factors=None, first_year=None):
                       f"sous l'exigence de {nombre(p['dscr_target'], 2)}.")
     if cash_min < 0:
         alerts.append(f"Trésorerie cumulée négative en {labels[cash_min_year]} : un financement complémentaire "
-                      f"de {nombre(-cash_min)} est nécessaire.")
+                      f"de {_montant(-cash_min, currency)} est nécessaire.")
     if financing_plan["gap"] < 0:
-        alerts.append(f"Plan de financement initial déséquilibré : {nombre(-financing_plan['gap'])} de "
+        alerts.append(f"Plan de financement initial déséquilibré : {_montant(-financing_plan['gap'], currency)} de "
                       "ressources manquantes.")
     if resources and indicators["equity_share"] < p["equity_target"]:
         alerts.append(f"Apport des promoteurs de {taux(indicators['equity_share'])}{INSECABLE}% des ressources, "
                       f"sous le minimum de {taux(p['equity_target'])}{INSECABLE}%.")
     if debt_end > 0.5:
-        alerts.append(f"Dette restant due en fin d'horizon : {nombre(debt_end)}.")
+        alerts.append(f"Dette restant due en fin d'horizon : {_montant(debt_end, currency)}.")
 
     return {
         "params": p,
@@ -524,6 +532,11 @@ def stress(params, lines, first_year=None):
     return {"base": base, "sensitivities": sensitivities, "scenarios": scenarios, "margins": margins}
 
 
+# Unité des indicateurs exprimés en montant (VAN, trésorerie) : la devise du modèle, celle du dossier,
+# jamais une devise écrite en dur (audit du noyau, I-X3 : un dossier en USD était libellé en GNF).
+# indicator_unit() la remplace par le code de la devise quand il est connu.
+MONEY = "devise du dossier"
+
 # Indicateurs du modèle utilisables par un critère de la grille : libellé, sens (True : plus haut
 # est meilleur), unité d'affichage.
 INDICATORS = {
@@ -531,14 +544,21 @@ INDICATORS = {
     "llcr": ("LLCR", True, "x"),
     "irr_project": ("TRI du projet", True, "%"),
     "irr_equity": ("TRI des fonds propres", True, "%"),
-    "npv": ("VAN du projet", True, "GNF"),
+    "npv": ("VAN du projet", True, MONEY),
     "payback": ("Délai de récupération", False, "ans"),
     "equity_share": ("Apport des promoteurs", True, "%"),
     "gearing": ("Endettement (dette / fonds propres)", False, "x"),
     "ebitda_margin": ("Marge d'EBE en croisière", True, "%"),
     "breakeven_ratio": ("Point mort en % du CA de croisière", False, "%"),
-    "cash_min": ("Trésorerie cumulée minimale", True, "GNF"),
+    "cash_min": ("Trésorerie cumulée minimale", True, MONEY),
 }
+
+
+def indicator_unit(key, currency=None):
+    """Unité d'affichage d'un indicateur : pour un montant, le code de la devise du dossier
+    (`currency`, « USD »), à défaut « devise du dossier » ; sinon son unité (x, %, ans)."""
+    unit = INDICATORS[key][2]
+    return (currency or MONEY) if unit == MONEY else unit
 
 
 def suggest(indicator, threshold, partial, indicators):

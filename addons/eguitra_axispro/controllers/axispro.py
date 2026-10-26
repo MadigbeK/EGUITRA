@@ -9,7 +9,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
-from ..engine import INDICATORS
+from ..engine import INDICATORS, MONEY, indicator_unit
 from ..models.dossier import COMMITTEE_DECISIONS, HYPOTHESES, STATUSES, YES_NO
 from ..models.policy import SCOPES, WEIGHTINGS, grid_template
 from ..models.review import MOTIVE_REQUIRED, SNAPSHOT_FINANCIAL, motive_missing
@@ -118,7 +118,9 @@ def _policy_payload(policy):
              "indicator_partial": c.indicator_partial if c.indicator and c.indicator_has_partial else None}
             for c in policy.criterion_ids
         ],
-        "indicators": {k: {"label": v[0], "higher": v[1], "unit": v[2]} for k, v in INDICATORS.items()},
+        # Seuil d'un indicateur en montant : dans la devise de chaque dossier évalué (« devise du dossier »).
+        "indicators": {k: {"label": v[0], "higher": v[1], "unit": indicator_unit(k), "money": v[2] == MONEY}
+                       for k, v in INDICATORS.items()},
         "documents": [
             {"id": t.id, "code": t.code, "name": t.name, "category": t.category or None, "gate_id": t.gate_id.id or None,
              "required": t.required, "guidance": t.guidance or None, "criteria": t.criterion_ids.mapped("code")}

@@ -25,7 +25,7 @@ from odoo.exceptions import UserError
 from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, workbook_sheets, xlsx_row
 
 from .. import grille_cabinet
-from ..engine import INDICATORS, suggest
+from ..engine import INDICATORS, MONEY, indicator_unit, suggest
 from ..scoring import DEFAULT_POLICY, REQUIREMENTS, RULES, accord, pluriel
 
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
@@ -611,15 +611,20 @@ class AxisproCriterion(models.Model):
         return self.deliverable or self.domain_id.deliverable or self.guidance or f"Compléter : {self.name}"
 
     def suggestion(self, indicators):
-        """Statut suggéré par le modèle financier (None sans indicateur ou sans modèle)."""
+        """Statut suggéré par le modèle financier (None sans indicateur ou sans modèle). Un indicateur
+        en montant (VAN, trésorerie : `money`) s'exprime dans la devise du dossier, que porte
+        `indicators["currency"]` (dossier.financial_indicators) ; à défaut, celle de la société de la
+        grille. `unit` en est alors le code (« GNF », « USD »), jamais une devise écrite en dur."""
         self.ensure_one()
         if not self.indicator or indicators is None:
             return None
         result = suggest(self.indicator, self.indicator_threshold,
                          self.indicator_partial if self.indicator_has_partial else None, indicators)
         label, higher, unit = INDICATORS[self.indicator]
-        return dict(result, indicator=self.indicator, label=label, unit=unit, higher=higher,
-                    threshold=self.indicator_threshold,
+        money = unit == MONEY
+        currency = (indicators.get("currency") or self.policy_id.company_id.currency_id.name) if money else None
+        return dict(result, indicator=self.indicator, label=label, unit=indicator_unit(self.indicator, currency),
+                    money=money, currency=currency, higher=higher, threshold=self.indicator_threshold,
                     partial=self.indicator_partial if self.indicator_has_partial else None)
 
 
