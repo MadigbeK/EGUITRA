@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_eguitra_chat_channel_user,eguitra.chat.channel comptes internes (lecture),model_eguitra_chat_channel,base.group_user,1,0,0,0
+access_eguitra_chat_member_user,eguitra.chat.member comptes internes (lecture),model_eguitra_chat_member,base.group_user,1,0,0,0
+access_eguitra_chat_message_user,eguitra.chat.message comptes internes (lecture),model_eguitra_chat_message,base.group_user,1,0,0,0
+access_eguitra_chat_read_user,eguitra.chat.read comptes internes (lecture),model_eguitra_chat_read,base.group_user,1,0,0,0
