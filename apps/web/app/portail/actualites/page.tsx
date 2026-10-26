@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRight, Flag } from "@/components/icons";
 import { Badge, Card, Empty, ErrorBox, Loading, Notice, Segmented, cx } from "@/components/ui";
-import { EnTete, quand } from "@/components/portail/commun";
+import { EnTete, formatConakry, jourConakry, quand } from "@/components/portail/commun";
 import { NATURE, TitreSection, dateSimple, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { useApi } from "@/lib/api-client";
 import type { AnnouncementRow } from "@/lib/portail-types";
@@ -88,9 +88,9 @@ export default function Actualites() {
   const parMois = useMemo(() => {
     const groupes: Array<{ cle: string; titre: string; items: AnnouncementRow[] }> = [];
     for (const a of visibles.filter((x) => !x.pinned)) {
-      const d = a.published_at ? new Date(a.published_at) : null;
-      const cle = d ? `${d.getFullYear()}-${d.getMonth()}` : "sans-date";
-      const titre = d ? majuscule(d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })) : "Sans date";
+      // Mois de publication à Conakry.
+      const cle = a.published_at ? jourConakry(a.published_at).slice(0, 7) : "sans-date";
+      const titre = a.published_at ? majuscule(formatConakry(a.published_at, { month: "long", year: "numeric" })) : "Sans date";
       const dernier = groupes[groupes.length - 1];
       if (dernier?.cle === cle) dernier.items.push(a);
       else groupes.push({ cle, titre, items: [a] });

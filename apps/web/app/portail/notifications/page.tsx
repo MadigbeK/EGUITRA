@@ -4,21 +4,20 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Bell, CheckCheck, ChevronRight } from "@/components/icons";
 import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx, demanderConfirmation } from "@/components/ui";
-import { EnTete, KIND_ICON, heure, lienNotification } from "@/components/portail/commun";
+import { EnTete, KIND_ICON, aujourdhui, decalerJour, depuisCle, formatConakry, heure, jourConakry, lienNotification } from "@/components/portail/commun";
 import { texteToutLire, usePortail } from "@/components/portail/PortailShell";
-import { cleDate, depuisCle, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { apiGet, apiSend, useApi } from "@/lib/api-client";
 import type { NotificationRow, Notifications } from "@/lib/portail-types";
 
 type Filtre = "toutes" | "non-lues";
 
+/** Titre d'un jour (AAAA-MM-JJ à Conakry) : « Aujourd'hui », « Hier », sinon la date. */
 function titreJour(cle: string): string {
-  const auj = new Date();
-  const hier = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() - 1);
-  if (cle === cleDate(auj)) return "Aujourd'hui";
-  if (cle === cleDate(hier)) return "Hier";
-  const d = depuisCle(cle);
-  return majuscule(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() !== auj.getFullYear() ? "numeric" : undefined }));
+  const auj = aujourdhui();
+  if (cle === auj) return "Aujourd'hui";
+  if (cle === decalerJour(auj, -1)) return "Hier";
+  return majuscule(formatConakry(depuisCle(cle), { weekday: "long", day: "numeric", month: "long", year: cle.slice(0, 4) !== auj.slice(0, 4) ? "numeric" : undefined }));
 }
 
 /** Notifications chargées par page : la suite se demande, la liste ne s'arrête plus en silence. */
@@ -59,7 +58,7 @@ export default function NotificationsPage() {
     const liste = toutes.filter((n) => filtre === "toutes" || !n.read);
     const out: Array<{ cle: string; items: NotificationRow[] }> = [];
     for (const n of liste) {
-      const cle = jourLocal(n.date);
+      const cle = jourConakry(n.date);
       const dernier = out[out.length - 1];
       if (dernier?.cle === cle) dernier.items.push(n);
       else out.push({ cle, items: [n] });

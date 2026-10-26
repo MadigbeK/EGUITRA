@@ -114,7 +114,10 @@ export function LectureActualite({ id }: { id: number }) {
             <p className="mt-3 text-[13.5px] text-muted">
               {data.published_at && (
                 <>
-                  Publiée le <time dateTime={data.published_at}>{dateLongue(data.published_at, false)}</time> ({quand(data.published_at)})
+                  Publiée{" "}
+                  <time dateTime={data.published_at} title={dateLongue(data.published_at, false)}>
+                    {quand(data.published_at, true)}
+                  </time>
                 </>
               )}
               {data.author && <> par <span className="font-semibold text-ink-2">{data.author}</span></>}

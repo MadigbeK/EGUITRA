@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Calculator, Clock, FileUp, HandCoins, Mail, Sparkles } from "@/components/icons";
 import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, type Tone } from "@/components/ui";
-import { KIND_ICON, dateLongue, quand } from "@/components/portail/commun";
+import { KIND_ICON, dateLongue, formatConakry, instant, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { useApi } from "@/lib/api-client";
 import { INSECABLE, fmtShort } from "@/lib/format";
@@ -143,14 +143,14 @@ export default function AccueilPortail() {
           ) : (
             <ol className="relative space-y-3 before:absolute before:bottom-2 before:left-[23px] before:top-2 before:w-px before:bg-line">
               {data.upcoming.map((u, i) => {
-                const date = new Date(u.date);
+                const date = instant(u.date);
                 return (
                   <li key={i}>
                     <Link href={u.link} className="relative flex items-center gap-3 rounded-xl p-1 hover:bg-panel-2">
                       <span className="z-[1] grid h-12 w-12 flex-none place-items-center rounded-xl border border-line bg-panel text-center leading-none shadow-[var(--ombre-feuille)]">
                         <span>
-                          <span className="block font-display text-[17px] font-bold text-ink">{date.getDate()}</span>
-                          <span className="block text-[10.5px] font-semibold uppercase text-accent">{date.toLocaleDateString("fr-FR", { month: "short" })}</span>
+                          <span className="block font-display text-[17px] font-bold text-ink">{formatConakry(date, { day: "numeric" })}</span>
+                          <span className="block text-[10.5px] font-semibold uppercase text-accent">{formatConakry(date, { month: "short" })}</span>
                         </span>
                       </span>
                       <span className="min-w-0 flex-1">

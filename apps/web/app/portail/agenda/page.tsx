@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronLeft, ChevronRight, Clock, HandCoins, ListChecks, Users, type Icon } from "@/components/icons";
 import { Button, Card, ErrorBox, Loading, cx } from "@/components/ui";
-import { EnTete, heure } from "@/components/portail/commun";
-import { cleDate, depuisCle, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { EnTete, aujourdhui as aujourdhuiConakry, cleDate, decalerJour, depuisCle, formatConakry, heure, jourConakry } from "@/components/portail/commun";
+import { majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { useApi } from "@/lib/api-client";
 import type { AgendaItem } from "@/lib/portail-types";
 
@@ -36,32 +36,38 @@ function lien(item: AgendaItem): string {
   return item.link;
 }
 
-/** Jours couverts par un élément (un événement de plusieurs jours apparaît chaque jour, deux semaines au plus). */
+/** Jours couverts par un élément, à Conakry (un événement de plusieurs jours apparaît chaque jour, deux semaines au plus). */
 function joursDe(item: AgendaItem): string[] {
-  const debut = jourLocal(item.start);
+  const debut = jourConakry(item.start);
   if (item.all_day || !item.end) return [debut];
-  const fin = jourLocal(item.end);
+  const fin = jourConakry(item.end);
   const jours = [debut];
-  const d = depuisCle(debut);
-  while (cleDate(d) < fin && jours.length < 14) {
-    d.setDate(d.getDate() + 1);
-    jours.push(cleDate(d));
+  let cle = debut;
+  while (cle < fin && jours.length < 14) {
+    cle = decalerJour(cle, 1);
+    jours.push(cle);
   }
   return jours;
 }
 
+/**
+ * Jours de la grille d'un mois (mois de 0 à 11), semaines du lundi au dimanche. Dates du calendrier à midi
+ * UTC, lues en UTC : la grille est la même quel que soit le fuseau de l'appareil.
+ */
 function grille(annee: number, mois: number): Date[] {
-  const premier = new Date(annee, mois, 1, 12);
-  const decalage = (premier.getDay() + 6) % 7;
-  const nbJours = new Date(annee, mois + 1, 0).getDate();
+  const premier = new Date(Date.UTC(annee, mois, 1, 12));
+  const decalage = (premier.getUTCDay() + 6) % 7;
+  const nbJours = new Date(Date.UTC(annee, mois + 1, 0, 12)).getUTCDate();
   const semaines = Math.ceil((decalage + nbJours) / 7);
-  return Array.from({ length: semaines * 7 }, (_, i) => new Date(annee, mois, 1 - decalage + i, 12));
+  return Array.from({ length: semaines * 7 }, (_, i) => new Date(Date.UTC(annee, mois, 1 - decalage + i, 12)));
 }
 
-function decaler(cle: string, jours: number): string {
+const decaler = decalerJour;
+
+/** Année et mois (0 à 11) d'un jour AAAA-MM-JJ. */
+function moisDe(cle: string): { annee: number; mois: number } {
   const d = depuisCle(cle);
-  d.setDate(d.getDate() + jours);
-  return cleDate(d);
+  return { annee: d.getUTCFullYear(), mois: d.getUTCMonth() };
 }
 
 function LigneAgenda({ item }: { item: AgendaItem }) {
@@ -90,11 +96,9 @@ function LigneAgenda({ item }: { item: AgendaItem }) {
 /** Agenda unifié : rendez-vous, événements, échéances d'actions et relances de financement. */
 export default function Agenda() {
   const { data, error, mutate } = useApi<AgendaItem[]>("/portail/agenda");
-  const aujourdhui = cleDate(new Date());
-  const [curseur, setCurseur] = useState(() => {
-    const d = new Date();
-    return { annee: d.getFullYear(), mois: d.getMonth() };
-  });
+  // « Aujourd'hui » est le jour de Conakry, comme les dates de l'agenda.
+  const aujourdhui = aujourdhuiConakry();
+  const [curseur, setCurseur] = useState(() => moisDe(aujourdhuiConakry()));
   const [jour, setJour] = useState<string | null>(null);
   const grilleRef = useRef<HTMLDivElement>(null);
   const focaliser = useRef(false);
@@ -123,13 +127,13 @@ export default function Agenda() {
   }, [cleFocus]);
 
   function allerAuMois(annee: number, mois: number) {
-    const d = new Date(annee, mois, 1);
-    setCurseur({ annee: d.getFullYear(), mois: d.getMonth() });
+    const d = new Date(Date.UTC(annee, mois, 1, 12));
+    setCurseur({ annee: d.getUTCFullYear(), mois: d.getUTCMonth() });
   }
 
   function choisir(cle: string, focus = false) {
-    const d = depuisCle(cle);
-    if (d.getFullYear() !== curseur.annee || d.getMonth() !== curseur.mois) setCurseur({ annee: d.getFullYear(), mois: d.getMonth() });
+    const m = moisDe(cle);
+    if (m.annee !== curseur.annee || m.mois !== curseur.mois) setCurseur(m);
     focaliser.current = focus;
     setJour(cle);
   }
@@ -142,12 +146,12 @@ export default function Agenda() {
       choisir(decaler(base, pas[e.key]!), true);
     } else if (e.key === "Home" || e.key === "End") {
       e.preventDefault();
-      const rang = (depuisCle(base).getDay() + 6) % 7;
+      const rang = (depuisCle(base).getUTCDay() + 6) % 7;
       choisir(decaler(base, e.key === "Home" ? -rang : 6 - rang), true);
     } else if (e.key === "PageUp" || e.key === "PageDown") {
       e.preventDefault();
       const d = depuisCle(base);
-      d.setMonth(d.getMonth() + (e.key === "PageUp" ? -1 : 1));
+      d.setUTCMonth(d.getUTCMonth() + (e.key === "PageUp" ? -1 : 1));
       choisir(cleDate(d), true);
     }
   }
@@ -155,7 +159,7 @@ export default function Agenda() {
   if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de votre agenda…" />;
 
-  const titreMois = majuscule(new Date(curseur.annee, curseur.mois, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }));
+  const titreMois = majuscule(formatConakry(new Date(Date.UTC(curseur.annee, curseur.mois, 1, 12)), { month: "long", year: "numeric" }));
   const duMois = data.filter((it) => joursDe(it).some((j) => j.startsWith(prefixeMois)));
   const compteNature = (k: Nature) => duMois.filter((it) => it.kind === k).length;
 
@@ -184,8 +188,8 @@ export default function Agenda() {
             <Button
               variant="ghost"
               onClick={() => {
-                const d = new Date();
-                allerAuMois(d.getFullYear(), d.getMonth());
+                const m = moisDe(aujourdhui);
+                allerAuMois(m.annee, m.mois);
                 setJour(aujourdhui);
               }}
             >
@@ -211,10 +215,10 @@ export default function Agenda() {
               {jours.map((d) => {
                 const cle = cleDate(d);
                 const items = parJour.get(cle) ?? [];
-                const horsMois = d.getMonth() !== curseur.mois;
+                const horsMois = d.getUTCMonth() !== curseur.mois;
                 const estAujourdhui = cle === aujourdhui;
                 const choisi = cle === jour;
-                const libelle = `${majuscule(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}${estAujourdhui ? ", aujourd'hui" : ""}, ${items.length ? pluriel(items.length, "élément") : "rien de prévu"}`;
+                const libelle = `${majuscule(formatConakry(d, { weekday: "long", day: "numeric", month: "long" }))}${estAujourdhui ? ", aujourd'hui" : ""}, ${items.length ? pluriel(items.length, "élément") : "rien de prévu"}`;
                 return (
                   <button
                     key={cle}
@@ -236,7 +240,7 @@ export default function Agenda() {
                         estAujourdhui ? "bg-accent text-white" : choisi ? "text-accent" : "text-ink-2",
                       )}
                     >
-                      {d.getDate()}
+                      {d.getUTCDate()}
                     </span>
                     {items.length > 0 && (
                       <>
@@ -274,7 +278,7 @@ export default function Agenda() {
 
         <aside>
           <Card
-            title={jour ? majuscule(depuisCle(jour).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })) : "Prochainement"}
+            title={jour ? majuscule(formatConakry(depuisCle(jour), { weekday: "long", day: "numeric", month: "long" })) : "Prochainement"}
             actions={
               jour ? (
                 <button type="button" onClick={() => setJour(null)} className="text-[13px] font-semibold text-accent hover:underline">
@@ -319,7 +323,7 @@ export default function Agenda() {
                 {prochains.map((g) => (
                   <li key={g.cle}>
                     <button type="button" onClick={() => choisir(g.cle)} className="mb-1 text-[12px] font-bold uppercase tracking-[0.08em] text-muted hover:text-accent">
-                      {g.cle === aujourdhui ? "Aujourd'hui" : g.cle === decaler(aujourdhui, 1) ? "Demain" : depuisCle(g.cle).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                      {g.cle === aujourdhui ? "Aujourd'hui" : g.cle === decaler(aujourdhui, 1) ? "Demain" : formatConakry(depuisCle(g.cle), { weekday: "long", day: "numeric", month: "long" })}
                     </button>
                     <ul className="-mx-2.5 space-y-0.5">
                       {g.items.map((it, i) => (

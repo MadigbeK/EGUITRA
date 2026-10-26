@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Building2, Calendar, ChevronDown, Clock, MapPin, Plus, Smartphone, Trash2, Users, Wifi, type Icon } from "@/components/icons";
 import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
-import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, heure, quand, versIso, versLocal } from "@/components/portail/commun";
+import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, formatConakry, heure, instant, quand, versIso, versLocal } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { LienBouton, PasDeDossier, majuscule, messageErreur, useRetour } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
@@ -45,15 +45,15 @@ function lienSur(url: string | null): url is string {
 /* ─── Rendez-vous confirmé à venir ─────────────────────────────────────── */
 
 function CarteAVenir({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean; onAnnuler: (m: MeetingRow) => void }) {
-  const d = new Date(m.start!);
+  const d = instant(m.start!);
   const I = ICONE_MODE[m.mode];
   return (
     <article className={cx(FEUILLE, "overflow-hidden")}>
       <div className="flex flex-col sm:flex-row">
         <div className="bg-accent-strong flex items-center gap-4 px-5 py-4 text-white sm:w-44 sm:flex-none sm:flex-col sm:justify-center sm:gap-1 sm:py-6 sm:text-center">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80">{d.toLocaleDateString("fr-FR", { weekday: "long" })}</span>
-          <span className="font-display text-[44px] font-bold leading-none">{d.getDate()}</span>
-          <span className="text-[13.5px] font-semibold">{d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
+          <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/80">{formatConakry(d, { weekday: "long" })}</span>
+          <span className="font-display text-[44px] font-bold leading-none">{formatConakry(d, { day: "numeric" })}</span>
+          <span className="text-[13.5px] font-semibold">{formatConakry(d, { month: "long", year: "numeric" })}</span>
           <span className="ml-auto rounded-full bg-white/15 px-3 py-1 text-[13px] font-semibold sm:ml-0 sm:mt-2">{heure(m.start)}</span>
         </div>
         <div className="min-w-0 flex-1 p-5">
@@ -155,7 +155,7 @@ function CarteEnAttente({ m, ferme, onAnnuler }: { m: MeetingRow; ferme: boolean
           En attente de confirmation
         </Badge>
         <span className="text-[12.5px] text-muted">
-          Demandé {quand(m.create_date)}
+          Demandé {quand(m.create_date, true)}
           {!m.requested_by_me && ` par ${m.requested_by}`}
         </span>
       </div>
@@ -256,7 +256,9 @@ function Demande({ chemin, onClose, onEnvoye }: { chemin: string; onClose: () =>
     if (!objet) return setErreur("Indiquez l'objet du rendez-vous.");
     const choisis = creneaux.filter(Boolean);
     if (!choisis.length) return setErreur("Proposez au moins un créneau.");
-    if (choisis.some((s) => new Date(s).getTime() <= Date.now())) return setErreur("Les créneaux proposés doivent être à venir.");
+    // Un créneau se lit à l'heure de Conakry, comme le cabinet le lira, quel que soit le fuseau de l'appareil.
+    if (choisis.some((s) => !versIso(s))) return setErreur("Un créneau est incomplet : indiquez la date et l'heure.");
+    if (choisis.some((s) => new Date(versIso(s)!).getTime() <= Date.now())) return setErreur("Les créneaux proposés doivent être à venir.");
     if (new Set(choisis).size < choisis.length) return setErreur("Deux créneaux proposés sont identiques.");
     setEnvoi(true);
     setErreur(null);
@@ -367,7 +369,7 @@ function Demande({ chemin, onClose, onEnvoye }: { chemin: string; onClose: () =>
               Proposer un autre créneau
             </Button>
           )}
-          <p className="mt-1.5 text-[12px] text-muted">Plusieurs créneaux laissent plus de chances au cabinet d'en retenir un rapidement.</p>
+          <p className="mt-1.5 text-[12px] text-muted">Heures de Conakry. Plusieurs créneaux laissent plus de chances au cabinet d'en retenir un rapidement.</p>
         </fieldset>
 
         <div>

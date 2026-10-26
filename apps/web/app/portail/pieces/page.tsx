@@ -3,12 +3,11 @@
 import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Circle, Clock, Download, FileText, FileUp, Info, Paperclip, Printer, X, type Icon } from "@/components/icons";
 import { Badge, Button, Card, Empty, ErrorBox, Field, FileButton, Input, Loading, Notice, ProgressBar, Segmented, Select, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
-import { EnTete, FORMATS, quand, taille } from "@/components/portail/commun";
+import { EnTete, FORMATS, dateHeure, quand, taille } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { ZoneDepot } from "@/components/portail/projet/ZoneDepot";
 import { PasDeDossier, messageErreur, telechargerPiece, useRetour, verifierFichier } from "@/components/portail/projet/outils";
 import { apiDownload, apiUpload, useApi } from "@/lib/api-client";
-import { fmtDateTime } from "@/lib/format";
 import type { Fichier, PieceAttendue, PieceState, Pieces } from "@/lib/portail-types";
 
 type Filtre = "toutes" | "deposer" | "reprendre" | "validees";
@@ -71,7 +70,7 @@ function ListeFichiers({ fichiers, cabinet, moi, vide, telechargement, onTelecha
                   {!cabinet && <Badge tone={e.tone}>{e.label}</Badge>}
                 </div>
                 <div className="mt-0.5 text-[12px] text-muted">
-                  Version {f.version} · {fmtDateTime(f.uploaded_at)}
+                  Version {f.version} · {dateHeure(f.uploaded_at)}
                   {f.size ? ` · ${taille(f.size)}` : ""}
                   {(cabinet || f.uploaded_by !== moi) && ` · ${f.uploaded_by}`}
                 </div>
@@ -329,7 +328,7 @@ export default function PiecesPortail() {
                             {piece.last_file && (
                               <div className="mt-2 flex flex-wrap items-center gap-x-2 text-[12px] text-muted">
                                 <span>
-                                  Dernier envoi {quand(piece.last_file.uploaded_at)}, version {piece.version}
+                                  Dernier envoi {quand(piece.last_file.uploaded_at, true)}, version {piece.version}
                                 </span>
                                 <button
                                   type="button"

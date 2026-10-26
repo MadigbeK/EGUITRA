@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { X } from "@/components/icons";
 import { Card, classesBouton, Empty, Notice, cx, type Tone } from "@/components/ui";
 import { apiDownload } from "@/lib/api-client";
-import { FORMATS } from "@/components/portail/commun";
+import { FORMATS, aujourdhui, ecartJours, formatConakry, jourConakry } from "@/components/portail/commun";
 
 export function initiales(nom: string): string {
   const parts = nom.trim().split(/\s+/).filter(Boolean);
@@ -92,38 +92,28 @@ export function messageErreur(e: unknown): string {
   return "Une erreur est survenue. Réessayez dans un instant.";
 }
 
-function enDate(value: string): Date {
-  return new Date(value.length === 10 ? `${value}T12:00:00` : value);
-}
-
-/** « 4 novembre 2026 » pour une date seule (AAAA-MM-JJ) ou une date et heure. */
+/** « 4 novembre 2026 » pour une date seule (AAAA-MM-JJ) ou une date et heure, heure de Conakry. */
 export function jour(value: string | null | undefined, avecAnnee = true): string {
   if (!value) return "";
-  return enDate(value).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: avecAnnee ? "numeric" : undefined });
+  return formatConakry(value, { day: "numeric", month: "long", year: avecAnnee ? "numeric" : undefined });
 }
 
 export function majuscule(texte: string): string {
   return texte ? texte[0]!.toUpperCase() + texte.slice(1) : texte;
 }
 
-/** « Aujourd'hui », « Hier », « Mardi 4 novembre » (l'année si ce n'est pas la courante). */
+/** « Aujourd'hui », « Hier », « Mardi 4 novembre » (l'année si ce n'est pas la courante), à Conakry. */
 export function libelleJour(value: string): string {
-  const d = enDate(value);
-  const auj = new Date();
-  const debut = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const ecart = Math.round((debut(auj) - debut(d)) / 86_400_000);
+  const cle = jourConakry(value);
+  const auj = aujourdhui();
+  const ecart = ecartJours(cle, auj);
   if (ecart === 0) return "Aujourd'hui";
   if (ecart === 1) return "Hier";
-  return majuscule(
-    d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() === auj.getFullYear() ? undefined : "numeric" }),
-  );
+  return majuscule(formatConakry(value, { weekday: "long", day: "numeric", month: "long", year: cle.slice(0, 4) === auj.slice(0, 4) ? undefined : "numeric" }));
 }
 
-/** Clé AAAA-MM-JJ du jour local d'une date. */
-export function cleJour(value: string): string {
-  const d = enDate(value);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+/** Jour AAAA-MM-JJ, à Conakry, d'une date. */
+export const cleJour = jourConakry;
 
 const TAILLE_MAX = 20 * 1024 * 1024;
 const EXTENSIONS = FORMATS.split(",").map((e) => e.trim().toLowerCase());

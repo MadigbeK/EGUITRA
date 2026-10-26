@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown } from "@/components/icons";
 import { Button, cx } from "@/components/ui";
-import { KIND_ICON } from "@/components/portail/commun";
+import { KIND_ICON, formatConakry, jourConakry } from "@/components/portail/commun";
 import type { TimelineItem } from "@/lib/portail-types";
 import { majuscule } from "./outils";
 
@@ -26,11 +26,11 @@ export function FilProjet({ items }: { items: TimelineItem[] }) {
   const mois = useMemo(() => {
     const groupes: Array<{ cle: string; libelle: string; items: TimelineItem[] }> = [];
     for (const t of visibles) {
-      const d = new Date(t.date.length === 10 ? `${t.date}T12:00:00` : t.date);
-      const cle = `${d.getFullYear()}-${d.getMonth()}`;
+      // Mois de l'événement à Conakry.
+      const cle = jourConakry(t.date).slice(0, 7);
       const dernier = groupes[groupes.length - 1];
       if (dernier?.cle === cle) dernier.items.push(t);
-      else groupes.push({ cle, libelle: majuscule(d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })), items: [t] });
+      else groupes.push({ cle, libelle: majuscule(formatConakry(t.date, { month: "long", year: "numeric" })), items: [t] });
     }
     return groupes;
   }, [visibles]);
@@ -49,7 +49,6 @@ export function FilProjet({ items }: { items: TimelineItem[] }) {
           <ol className="relative space-y-4 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-line">
             {m.items.map((t, i) => {
               const I = KIND_ICON[t.kind];
-              const d = new Date(t.date.length === 10 ? `${t.date}T12:00:00` : t.date);
               return (
                 <li key={`${t.date}-${i}`} className="relative flex gap-3">
                   <span className={cx("z-[1] grid h-8 w-8 flex-none place-items-center rounded-full ring-4 ring-panel", TEINTE[t.kind])}>
@@ -59,7 +58,7 @@ export function FilProjet({ items }: { items: TimelineItem[] }) {
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                       <span className="text-[14px] font-medium leading-snug text-ink">{t.title}</span>
                       <time dateTime={t.date} className="flex-none text-[12px] tabular-nums text-muted">
-                        {d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                        {formatConakry(t.date, { weekday: "short", day: "numeric", month: "short" })}
                       </time>
                     </div>
                     {t.detail && <p className="mt-0.5 text-[12.5px] leading-snug text-muted">{t.detail}</p>}

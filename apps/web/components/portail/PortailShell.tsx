@@ -10,10 +10,10 @@ import {
 } from "@/components/icons";
 import { Button, ErrorBox, FEUILLE, PANNEAU, Select, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime, pluriel } from "@/lib/format";
+import { pluriel } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
 import type { Me } from "@/lib/types";
-import { KIND_ICON, lienNotification } from "./commun";
+import { KIND_ICON, dateHeure, lienNotification } from "./commun";
 
 /* ─── Contexte du portail : l'espace du porteur et le dossier choisi ─────── */
 
@@ -359,7 +359,7 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
                     <span className="min-w-0 flex-1">
                       <span className={cx("block text-[13.5px] leading-snug", n.read ? "text-ink-2" : "font-semibold text-ink")}>{n.title}</span>
                       {n.body && <span className="mt-0.5 block truncate text-[12.5px] text-muted">{n.body}</span>}
-                      <span className="mt-0.5 block text-[11.5px] text-muted/80">{fmtDateTime(n.date)}</span>
+                      <span className="mt-0.5 block text-[11.5px] text-muted/80">{dateHeure(n.date)}</span>
                     </span>
                     {!n.read && <span aria-hidden className="mt-2 h-2 w-2 flex-none rounded-full bg-accent-vif" />}
                   </button>
