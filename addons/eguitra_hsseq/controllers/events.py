@@ -192,6 +192,10 @@ def event_detail(event):
         "synced_at": event.synced_at, "offline": event.offline,
         "people": [person_row(p) for p in event.person_ids],
         "lost_time": event.lost_time, "days_lost": event.days_lost or 0,
+        "declared": {"actual_severity": event.declared_actual_severity or None,
+                     "potential_severity": event.declared_potential_severity or None,
+                     "probability": event.declared_probability or None,
+                     "criticality": (event.declared_potential_severity * event.declared_probability) or None},
         "leave_id": event.leave_id.id or None, "vehicle_immobilized": event.vehicle_immobilized,
         "immobilization": immobilization_ref(event), "immobilization_proposed": event._immobilization_proposed(),
         "classified_at": event.classified_at or None, "classified_by": user_ref(event.classified_by),
@@ -271,7 +275,8 @@ def people_commands(data):
         if role not in dict(PERSON_ROLES):
             raise ApiError(400, "invalid_parameter", "Rôle d'une personne inconnu.", fields=["people"])
         values = {"kind": person["kind"], "role": role, "days_off": int(number(person, "days_off"))}
-        target_id = int_or_none(person, "id") or int_or_none(person, "person_id")
+        # person_id (le chauffeur ou le salarié) avant id : une fiche relue renvoie aussi l'id de sa ligne.
+        target_id = int_or_none(person, "person_id") or int_or_none(person, "id")
         if person["kind"] == "driver":
             values["driver_id"] = get("eguitra.transport.driver", target_id, "Chauffeur").id if target_id else False
         elif person["kind"] == "employee":
@@ -354,6 +359,13 @@ class EguitraHsseqEvents(http.Controller):
         values.update({"client_uuid": uuid, "reported_at": reported_at(data), "offline": bool(data.get("offline")),
                        "source": terrain_source(), "reported_by": request.env.uid, "company_id": company.id,
                        "synced_at": fields.Datetime.now()})
+        # Notes estimées par le déclarant : gardées à part du classement, en lecture seule ensuite.
+        for key in NOTE_FIELDS:
+            if data.get(key) not in (None, ""):
+                note = int(number(data, key))
+                if not 1 <= note <= 5:
+                    raise ApiError(400, "invalid_parameter", "Gravités et probabilité se notent de 1 à 5.", fields=[key])
+                values[f"declared_{key}"] = note
         if commands:
             values["person_ids"] = commands
         event = request.env["eguitra.hsseq.event"].sudo().create(values)

@@ -144,6 +144,9 @@ class EguitraHsseqBreathTests(http.Controller):
         for key in ("rotation_id", "driver_id", "site_id"):
             if kw.get(key):
                 domain.append((key, "=", int_or_none(kw, key)))
+        if kw.get("vehicle_kind"):
+            # Par l'ensemble de la rotation du test (un test pas encore rattaché n'a pas de profil).
+            domain.append(("rotation_id.vehicle_id.vehicle_kind", "=", kw["vehicle_kind"]))
         if kw.get("status"):
             if scope == "self":
                 raise forbidden("Le statut d'un alcootest n'est pas lisible par le conducteur.")

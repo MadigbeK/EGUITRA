@@ -162,6 +162,7 @@ def check_line(check):
         "author": None if personal_data_hidden() else user_ref(check.author_id), "reported_at": check.reported_at,
         "result": check.result,
         "open_nonconformities": len(check.nonconformity_ids.filtered(lambda n: n.status == "open")),
+        "open_blocking": len(check.nonconformity_ids.filtered(lambda n: n.status == "open" and n.blocking)),
         "photos_missing": check._photos_missing(),
         "complement_of": {"id": check.complement_of_id.id, "reference": check.complement_of_id.reference}
         if check.complement_of_id else None,
@@ -192,7 +193,8 @@ def check_detail(check):
         "attachments": attachments_rows("check", check),
         "history": [] if is_self_only() else history("check", check),
         "transitions": (["lift"] if lift else []) + (["complement"] if can_complete(check) else []),
-        "rights": {"can_edit": is_hsseq(), "can_close": lift, "can_approve": False},
+        # Pas de correction d'un contrôle saisi (pas de PATCH) : can_edit toujours faux.
+        "rights": {"can_edit": False, "can_close": lift, "can_approve": False},
     })
     return row
 
@@ -492,6 +494,8 @@ class EguitraHsseqChecks(http.Controller):
         for key in ("site_id", "vehicle_id"):
             if kw.get(key):
                 domain.append((key, "=", int_or_none(kw, key)))
+        if kw.get("vehicle_kind"):
+            domain.append(("vehicle_id.vehicle_kind", "=", kw["vehicle_kind"]))
         offset, limit, order = page_args(kw, "-found_at", {"found_at": "found_at"})
         NC = request.env["eguitra.hsseq.nonconformity"].sudo()
         rows = NC.search(domain, offset=offset, limit=limit, order=order)

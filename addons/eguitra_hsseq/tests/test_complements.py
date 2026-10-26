@@ -38,41 +38,103 @@ class TestComplements(HsseqCase):
         self.assertEqual((status, sum(c["count"] for c in other["events"]["matrix"])), (200, 0),
                          "Chef de parc d'un autre site : les événements de Matoto n'y sont pas")
 
-    def test_rotations_d_un_vehicule_a_une_date(self):
+    def test_rotations_a_une_date(self):
+        """GET /hsseq/rotations?vehicle_id=&date= : tous états, pour rattacher un événement à une rotation
+        même partie ou terminée ; conducteur : les siennes ; hors lecture complète, ses sites (fermé par
+        défaut)."""
         today = self.day
         current = self._rotation()
         earlier = self._rotation(date_loading=today - timedelta(days=3))
         earlier.write({"date_delivery": today - timedelta(days=2), "date_return": today - timedelta(days=1)})
-        status, rows = self.api("ibrahima", "GET", f"/hsseq/vehicles/{self.truck.id}/rotations")
-        self.assertEqual((status, [r["id"] for r in rows]), (200, [current.id]), rows)
-        self.assertEqual(set(rows[0]) >= {"id", "name", "date_loading", "state", "vehicle", "driver", "departed_at"}, True)
-        status, rows = self.api("ibrahima", "GET",
-                                f"/hsseq/vehicles/{self.truck.id}/rotations?date={today - timedelta(days=2)}")
-        self.assertEqual([r["id"] for r in rows], [earlier.id], "En route ce jour-là : entre chargement et retour")
-        status, mine = self.driver_api("GET", f"/hsseq/vehicles/{self.truck.id}/rotations")
-        self.assertEqual((status, [r["id"] for r in mine]), (200, [current.id]), "Le conducteur : ses rotations")
+        query = f"/hsseq/rotations?vehicle_id={self.truck.id}"
+        status, body = self.api("ibrahima", "GET", query)
+        self.assertEqual((status, [r["id"] for r in body["items"]]), (200, [current.id]), body)
+        self.assertEqual(set(body["items"][0]) >= {"id", "name", "date_loading", "state", "vehicle", "driver", "site",
+                                                    "departed_at"}, True)
+        self.check(earlier)
+        self.breath(earlier)
+        earlier.with_user(self.parc).action_depart()
+        earlier.action_validate()
+        status, body = self.api("ibrahima", "GET", f"{query}&date={today - timedelta(days=2)}")
+        self.assertEqual([(r["id"], r["state"]) for r in body["items"]], [(earlier.id, "done")],
+                         "Rotation terminée : servie, en route ce jour-là entre chargement et retour")
+        status, body = self.api("dg.hsseq", "GET", "/hsseq/rotations")
+        self.assertIn(current.id, [r["id"] for r in body["items"]], "La direction déclare aussi")
+        status, mine = self.driver_api("GET", query)
+        self.assertEqual((status, [r["id"] for r in mine["items"]]), (200, [current.id]), "Le conducteur : ses rotations")
         current.driver_id = False
-        status, mine = self.driver_api("GET", f"/hsseq/vehicles/{self.truck.id}/rotations")
-        self.assertEqual((status, mine), (200, []), "Rotation d'un autre conducteur : pas servie au conducteur")
-        status, _b = self.api("sekou.parc", "GET", f"/hsseq/vehicles/{self.truck.id}/rotations")
-        self.assertEqual(status, 404, "Ensemble d'un autre site")
+        status, mine = self.driver_api("GET", query)
+        self.assertEqual((status, mine["items"]), (200, []), "Rotation d'un autre conducteur : pas servie au conducteur")
+        self._create_user("moussa.parc", "exploitation")
+        for login in ("sekou.parc", "moussa.parc"):
+            status, body = self.api(login, "GET", query)
+            self.assertEqual((status, body["items"]), (200, []), f"{login} : ensemble hors de ses sites")
         for login in ("rh.hsseq", "fatou"):
-            status, _b = self.api(login, "GET", f"/hsseq/vehicles/{self.truck.id}/rotations")
+            status, _b = self.api(login, "GET", query)
             self.assertEqual(status, 403, f"{login} ne déclare pas d'événement")
 
     def test_salaries_dans_les_referentiels(self):
-        for login in ("kadi.hsseq", "ibrahima"):
+        for login in ("kadi.hsseq", "ibrahima", "dg.hsseq", "admin.hsseq"):
             status, refs = self.api(login, "GET", "/hsseq/referentials")
             self.assertEqual(status, 200, refs)
             [row] = [e for e in refs["employees"] if e["id"] == self.employee.id]
-            self.assertEqual(set(row), {"id", "name", "company", "site"}, "Aucune autre donnée du dossier RH")
-            self.assertEqual((row["name"], row["site"]["id"], row["company"]["id"]),
+            self.assertEqual(set(row), {"id", "name", "company", "site", "site_id"}, "Aucune autre donnée du dossier RH")
+            self.assertEqual((row["name"], row["site_id"], row["company"]["id"]),
                              (self.employee.name, self.site.id, self.company.id))
-        for login in ("dg.hsseq", "admin.hsseq", "rh.hsseq"):
-            status, refs = self.api(login, "GET", "/hsseq/referentials")
-            self.assertEqual((status, refs["employees"]), (200, []), f"{login} ne gère pas les événements")
+        status, refs = self.api("rh.hsseq", "GET", "/hsseq/referentials")
+        self.assertEqual((status, refs["employees"]), (200, []), "La RH ne déclare pas d'événement")
         status, refs = self.driver_api("GET", "/hsseq/referentials")
         self.assertEqual((status, refs["employees"]), (200, []), "Le conducteur ne reçoit pas la liste des salariés")
+
+    def test_notes_du_declarant_et_personnes(self):
+        status, event = self.driver_api("POST", "/hsseq/events", {
+            "client_uuid": "decl-1", "type": "near_miss", "title": "Piéton surpris au recul",
+            "description": "Recul sans guide au dépôt.", "occurred_at": "2026-10-20T06:40:00Z",
+            "actual_severity": 1, "potential_severity": 4, "probability": 3,
+            "people": [{"kind": "driver", "id": 999999, "person_id": self.driver.id, "role": "driver"}]})
+        self.assertEqual(status, 200, event)
+        self.assertEqual(event["declared"], {"actual_severity": 1, "potential_severity": 4, "probability": 3,
+                                             "criticality": 12}, "Notes du déclarant gardées à part")
+        self.assertEqual((event["potential_severity"], event["criticality"]), (None, None), "Pas encore classé")
+        self.assertEqual(event["people"][0]["person_id"], self.driver.id, "person_id lu avant id")
+        status, _b = self.driver_api("PATCH", f"/hsseq/events/{event['id']}", {"potential_severity": 2})
+        self.assertEqual(status, 403, "Notes : en lecture seule après la déclaration")
+        status, classified = self.api("kadi.hsseq", "POST", f"/hsseq/events/{event['id']}/classify",
+                                      {"potential_severity": 3, "probability": 2})
+        self.assertEqual((status, classified["criticality"], classified["declared"]["criticality"]), (200, 6, 12))
+        status, body = self.driver_api("POST", "/hsseq/events", {
+            "client_uuid": "decl-2", "type": "hazard", "title": "x", "description": "x",
+            "occurred_at": "2026-10-20T06:40:00Z", "probability": 6})
+        self.assertEqual((status, body["error"]), (400, "invalid_parameter"))
+
+    def test_complements_des_listes(self):
+        rot = self._rotation()
+        check = self.check(rot, failing=(BRAKES,))
+        self.breath(rot)
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/checks")
+        [line] = [c for c in listing["items"] if c["id"] == check.id]
+        self.assertEqual(line["open_blocking"], 1, "Non-conformités bloquantes ouvertes sur la ligne")
+        status, detail = self.api("kadi.hsseq", "GET", f"/hsseq/checks/{check.id}")
+        self.assertFalse(detail["rights"]["can_edit"], "Pas de correction d'un contrôle saisi")
+        status, ncs = self.api("kadi.hsseq", "GET", "/hsseq/checks/nonconformities?vehicle_kind=tipper")
+        self.assertEqual(ncs["total_count"], 0)
+        status, ncs = self.api("kadi.hsseq", "GET", "/hsseq/checks/nonconformities?vehicle_kind=tanker")
+        self.assertEqual(ncs["total_count"], 1)
+        status, tests = self.api("kadi.hsseq", "GET", "/hsseq/breath-tests?vehicle_kind=tipper")
+        self.assertEqual((status, tests["total_count"]), (200, 0), tests)
+        status, tests = self.api("kadi.hsseq", "GET", "/hsseq/breath-tests?vehicle_kind=tanker")
+        self.assertEqual(tests["total_count"], 1)
+        event = self.event()
+        action = self.env["eguitra.hsseq.action"].create({
+            "origin": "event", "event_id": event.id, "description": "Former au balisage", "owner_id": self.parc.id,
+            "due_date": self.day + timedelta(days=10)})
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/actions")
+        [row] = [a for a in listing["items"] if a["id"] == action.id]
+        self.assertIsNone(row["effective"], "Pas encore vérifiée")
+        action.write({"verified_at": fields.Datetime.now(), "effective": False})
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/actions")
+        [row] = [a for a in listing["items"] if a["id"] == action.id]
+        self.assertIs(row["effective"], False, "Non efficace, sur la ligne")
 
     def test_validation_attendue_des_actions(self):
         self.settings.costly_action_threshold = 50_000_000

@@ -78,6 +78,11 @@ class EguitraHsseqEvent(models.Model):
                                help="Absence pour accident du travail enregistrée par la RH.")
     vehicle_immobilized = fields.Boolean("Véhicule immobilisé", help="Motif V09, lot 2.")
 
+    # ─── Notes du déclarant, gardées à part du classement ─────────────────
+    declared_actual_severity = fields.Integer("Gravité réelle déclarée (1 à 5)", readonly=True)
+    declared_potential_severity = fields.Integer("Gravité potentielle déclarée (1 à 5)", readonly=True)
+    declared_probability = fields.Integer("Probabilité déclarée (1 à 5)", readonly=True)
+
     # ─── Classement (§9.1) ────────────────────────────────────────────────
     actual_severity = fields.Integer("Gravité réelle (1 à 5)")
     potential_severity = fields.Integer("Gravité potentielle (1 à 5)")
@@ -117,10 +122,12 @@ class EguitraHsseqEvent(models.Model):
 
     _client_uuid_unique = models.Constraint("unique(client_uuid)", "Cette déclaration a déjà été reçue.")
 
-    @api.constrains("actual_severity", "potential_severity", "probability")
+    @api.constrains("actual_severity", "potential_severity", "probability", "declared_actual_severity",
+                    "declared_potential_severity", "declared_probability")
     def _check_notes(self):
         for event in self:
-            for name in ("actual_severity", "potential_severity", "probability"):
+            for name in ("actual_severity", "potential_severity", "probability", "declared_actual_severity",
+                         "declared_potential_severity", "declared_probability"):
                 if event[name] and not 1 <= event[name] <= 5:
                     raise ValidationError("Gravités et probabilité se notent de 1 à 5.")
 

@@ -121,6 +121,8 @@ def action_line(action):
         "verification_required": action._verification_required(), "verification_date": action.verification_date or None,
         "site": site_ref(action.site_id), "estimated_cost": action.estimated_cost or 0,
         "approval_required": action._approval_required(),
+        # Résultat de la vérification d'efficacité (nul tant qu'elle n'est pas faite).
+        "effective": action.effective if action.verified_at else None,
         # Validation de la direction attendue : action coûteuse ni validée, ni close, ni annulée.
         "approval_pending": action._approval_pending(),
     }

@@ -36,8 +36,8 @@ from .common import (
     personal_data_hidden,
     profiles,
     rotation_ref,
+    scope_domain,
     scope_level,
-    site_allowed,
     site_ref,
     site_scope,
     text,
@@ -45,8 +45,9 @@ from .common import (
     vehicle_ref,
 )
 
-# Profils qui gèrent les personnes en cause d'un événement : la liste des salariés leur est servie.
-EVENT_PEOPLE = ("hsseq", "exploitation")
+# Profils qui déclarent ou gèrent les personnes en cause d'un événement, hors conducteur : la liste des
+# salariés leur est servie.
+EVENT_PEOPLE = ("admin", "direction", "hsseq", "exploitation")
 # Profils qui déclarent un événement (contrat §2).
 DECLARE = ("admin", "direction", "hsseq", "exploitation", "conducteur")
 FITNESS = {"apte": "fit", "apte_reserve": "review", "inapte": "unfit", "echue": "unfit", "inconnu": "review"}
@@ -159,6 +160,7 @@ def employee_rows(comps, vehicles):
     on_site = driver_sites(vehicles)
     Site = request.env["eguitra.hsseq.site"].sudo()
     return [{"id": e.id, "name": e.name, "company": company_ref(e.company_id),
+             "site_id": on_site.get(e.driver_id.id),
              "site": site_ref(Site.browse(on_site[e.driver_id.id])) if e.driver_id.id in on_site else None}
             for e in employees]
 
@@ -213,27 +215,30 @@ class EguitraHsseqReferentials(http.Controller):
                    "employee_id": employee.id or None, "driver_id": driver.id or None},
         }
 
-    # ─── Rotations d'un véhicule ──────────────────────────────────────────
+    # ─── Rotations à une date ─────────────────────────────────────────────
 
-    @hsseq_route("/hsseq/vehicles/<int:vehicle_id>/rotations", profiles=DECLARE)
-    def vehicle_rotations(self, vehicle_id, **kw):
-        """Rotations de l'ensemble à une date (aujourd'hui par défaut), pour rattacher la déclaration d'un
-        accident survenu en route : chargées ce jour-là ou en cours ce jour-là. Conducteur : ses propres
-        rotations ; chef de parc : les ensembles de ses sites."""
-        vehicle = get("eguitra.transport.vehicle", vehicle_id, "Ensemble")
-        if not site_allowed(vehicle.site_id):
-            raise ApiError(404, "not_found", "Ensemble introuvable.")
+    @hsseq_route("/hsseq/rotations", profiles=DECLARE)
+    def rotations(self, **kw):
+        """Rotations chargées ou en cours à une date (aujourd'hui par défaut), tous états, d'un ensemble
+        (vehicle_id) ou de tous : rattacher un événement à une rotation, même partie ou terminée.
+        Conducteur : ses propres rotations ; hors lecture complète, les ensembles des sites du compte (fermé
+        par défaut)."""
         day = date_value(kw, "date") or today()
-        domain = [("vehicle_id", "=", vehicle.id), ("state", "!=", "cancelled")] + rotation_window_domain(day)
+        domain = [("company_id", "in", companies(kw).ids)] + rotation_window_domain(day)
+        if kw.get("vehicle_id"):
+            vehicle = get("eguitra.transport.vehicle", kw["vehicle_id"], "Ensemble")
+            domain.append(("vehicle_id", "=", vehicle.id))
         if scope_level() == "self":
             driver = my_driver()
-            if not driver:
-                return []
-            domain.append(("driver_id", "=", driver.id))
-        rotations = request.env["eguitra.transport.rotation"].sudo().search(domain, order="date_loading desc, id desc")
-        return [dict(rotation_ref(r), vehicle=vehicle_ref(r.vehicle_id), driver=driver_ref(r.driver_id),
-                     departed_at=r.departed_at or None, date_delivery=r.date_delivery or None,
-                     date_return=r.date_return or None) for r in rotations]
+            domain.append(("driver_id", "=", driver.id if driver else 0))
+        else:
+            domain += scope_domain("vehicle_id.site_id")
+        rotations = request.env["eguitra.transport.rotation"].sudo().search(
+            domain, order="date_loading desc, id desc", limit=200)
+        return {"date": day, "items": [
+            dict(rotation_ref(r), vehicle=vehicle_ref(r.vehicle_id), driver=driver_ref(r.driver_id),
+                 site=site_ref(r.vehicle_id.site_id), departed_at=r.departed_at or None,
+                 date_delivery=r.date_delivery or None, date_return=r.date_return or None) for r in rotations]}
 
     # ─── Sites ────────────────────────────────────────────────────────────
 
