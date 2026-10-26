@@ -2,7 +2,8 @@
 
 Contrat entre la session design et la session OTHER (noyau). Version du 26/10/2026 : décisions du
 noyau intégrées (§12), puis sections alignées sur le code du noyau (`addons/eguitra_hsseq`, branche
-`hsseq`) ; les écarts sont résumés au §13 et ce qui manque encore aux écrans est proposé au §14.
+`hsseq`) ; les écarts sont résumés au §13, les propositions des écrans au §14, et le lot 2, servi par
+le noyau et figé à `hsseq@98da669`, au §15.
 
 - Source : spécification fonctionnelle HSSEQ de la Direction générale, version 1.0 du 24/10/2026
   (diffusion restreinte, non versée au dépôt). Les renvois « §4.2 », « §10 »… désignent ses sections.
@@ -903,10 +904,10 @@ Déjà servis, écrans branchés dessus : `photos_missing` sur la ligne d'un con
 sur la ligne d'une action (l'« approval_pending » des écrans) ; comptes des alcootests
 (`counts.by_status`) ; tri des contrôles (`sort` : `reported_at`, `result`, `reference`).
 
-Manquants, proposés à la session OTHER. Réponse du noyau (26/10) : tous retenus et en cours avec le
-lot 2, sauf la correction d'un contrôle (refusée : pas de `PATCH /hsseq/checks/{id}`, `can_edit`
-d'un contrôle toujours faux). `GET /hsseq/rotations` sera borné aux sites du lecteur. Les écrans
-seront branchés quand ces clés seront servies.
+Manquants, proposés à la session OTHER. Réponse du noyau (26/10) : tous retenus et servis avec le
+lot 2 (`hsseq@4c505ab`), sauf la correction d'un contrôle (refusée : pas de `PATCH /hsseq/checks/{id}`,
+`can_edit` d'un contrôle toujours faux). `GET /hsseq/rotations` est borné aux sites du lecteur. Les
+écrans sont branchés dessus (§15).
 
 | Proposition | Route ou clé | Profil | Pourquoi |
 |---|---|---|---|
@@ -922,3 +923,105 @@ seront branchés quand ces clés seront servies.
 | Filtre de profil | `vehicle_kind` sur `GET /hsseq/checks/nonconformities` et `GET /hsseq/breath-tests` | lecteurs de ces listes | Les vues Non-conformités et Alcootests ne se filtrent pas par citerne ou benne, contrairement aux contrôles. |
 | Non-conformités bloquantes ouvertes | `open_blocking` sur `CheckLine` | lecteurs des contrôles | Marquer V02 dans la liste ; `open_nonconformities` ne dit pas si elles sont bloquantes. |
 | Résultat de la vérification | `effective` sur `ActionLine` | lecteurs des actions | Marquer « Non efficace » dans le plan et dans la fiche d'un événement sans ouvrir chaque action. |
+
+## 15. Lot 2 et compléments servis (26/10, `hsseq@98da669`)
+
+Le noyau du lot 2 est figé à `hsseq@98da669` : la session OTHER ne change plus ni forme, ni route, ni
+droit sans prévenir. Les écrans lisent son code ; la maquette (`docs/design/maquette-api/`) l'imite,
+avec un module par domaine (`hsseq-risques.mjs`, `hsseq-conformite.mjs`, `hsseq-habilitations-rapports.mjs`,
+`hsseq-trajets.mjs`).
+
+### Compléments du lot 1, branchés
+
+| Clé ou route | Écran |
+|---|---|
+| `indicators[].status` (`met`, `watch`, `missed`, `no_data`), `family`, `series[].target` et `series[].status` | Cockpit : sceau des indicateurs, comité (familles, état de chaque mois) ; plus aucun état calculé à l'écran. Sous surveillance : à moins de 15 % de la cible, ou tenue sur 12 mois mais manquée le dernier mois. |
+| `events.matrix` (`potential_severity`), `matrix_unclassified` | Cockpit : matrice de la période (le mois ou 12 mois), sans relire la liste des événements. |
+| `waivers_by_reason` | Cockpit : dérogations par motif, V06 à V09 compris. |
+| `risks`, `audits`, `findings`, `requirements`, `immobilizations`, `iso_maturity` | Cockpit : section « Risques et conformité ». `requirements` et `iso_maturity` nuls pour le chef de parc. |
+| `GET /hsseq/rotations?date=&vehicle_id=` (`{ date, items }`) | Déclaration : rotations du jour de l'événement, même parties ou terminées. |
+| `declared` et notes à `POST /hsseq/events` | Déclaration (notes enregistrées) ; classement (« Estimation du déclarant »). |
+| `referentials.employees` (`site_id`, `site`) | Déclaration : un salarié se choisit dans la liste, ceux du site d'abord. |
+| `open_blocking`, `complement_of`, `awaiting_items`, `complements`, résultat `incomplete`, transitions `complement` | Contrôles : tampon « bloquantes », filtre « Incomplets », fiche (contrôle complémentaire, points en attente). Le contrôle complémentaire se saisit dans NIMOVA Terrain. |
+| `vehicle_kind` sur les non-conformités et les alcootests | Filtre « Profil » des deux listes. |
+| `effective`, `approval_pending` sur `ActionLine`, filtre `approval_pending=1` | Plan d'actions : tampons « Efficace », « Non efficace », « À valider » ; bascule « À valider par la direction ». |
+| Motifs V06 à V09 (lot courant : 2) | Paramètres : livrés désactivés, ils s'activent par type de véhicule et par site. |
+
+### Écrans du lot 2
+
+| Écran | Routes | Lecture | Écriture |
+|---|---|---|---|
+| Registre des risques `/hsseq/risques` | `/hsseq/risks` (+ `/{id}`, `/matrix`, `/{id}/measures`, transitions `activate`, `review`, `archive`, `reactivate`, `export.xlsx`) | administration, direction, hsseq ; chef de parc et auditeur pour leurs sites ; tout compte interne pour ses risques | hsseq ; le propriétaire d'un risque (mesures, revue) |
+| Audits et conformité `/hsseq/conformite` | `/hsseq/audits`, `/hsseq/findings`, `/hsseq/requirements` (+ revue) | audits et constats : administration, direction, hsseq, chef de parc, auditeur ; exigences : sans le chef de parc | hsseq |
+| Habilitations `/hsseq/habilitations` | `/hsseq/qualifications`, `/hsseq/qualifications/alerts` | matrice : administration, direction, hsseq, RH, chef de parc ; alertes : sans le chef de parc | RH, dans son application |
+| Rapport mensuel `/hsseq/rapports` | `/hsseq/reports/keys`, `/templates`, `?template_id=`, `/{modèle}/{AAAA-MM}` (+ `report.xlsx`, `report.pdf`) | administration, direction, hsseq | hsseq ; modèles : administration et hsseq |
+| Immobilisations `/hsseq/immobilisations` | `GET /hsseq/immobilizations`, `POST /hsseq/events/{id}/immobilize`, `POST /hsseq/vehicles/{id}/release` | administration, direction, hsseq, chef de parc, auditeur | hsseq |
+| Plan de trajet et repesée (panneau de départ, Transport) | `GET`, `PUT /hsseq/rotations/{id}/journey`, `POST …/journey/validate`, `POST /hsseq/rotations/{id}/reweigh` | lecteurs du départ | chef de parc |
+| Paramètres : itinéraires, modèles de rapport, auditeurs | `GET`, `PATCH /hsseq/routes` ; `/hsseq/reports/templates` ; `GET`, `PATCH /hsseq/auditors` | administration, hsseq | administration, hsseq |
+
+### Auditeur externe
+
+Profil `auditeur` : lecture seule (403 sur toute écriture), bornée à ses sites et à sa date de fin
+d'accès (403 au-delà, sans date ou sans site). Les noms des personnes ne lui sont pas servis
+(déclarant, auteur d'un contrôle, personnes d'un événement, conducteurs des départs bloqués,
+échéances des personnes, liste des conducteurs). Son menu : cockpit, événements, plan d'actions,
+registre des risques, contrôles (sans les alcootests), dérogations, immobilisations, audits et
+conformité. Sa durée et ses sites se fixent dans « Paramètres › Auditeurs ».
+
+### Manques relevés en branchant le lot 2 (transmis à la session OTHER le 26/10)
+
+Registre des risques :
+- `counts.by_status` de `GET /hsseq/risks` ignore les filtres (sauf la société), contrairement au §1.
+- Pas de filtre par case de matrice (`raw_severity`, `raw_probability`, `residual_severity`,
+  `residual_probability`) : l'écran borne la case à l'écran, sur 500 risques au plus.
+- `vehicle_kind` et `site_id` écartent les risques « tous profils » ou « tous sites ».
+- Pas de filtre `risk_id` sur `GET /hsseq/actions` (comme `event_id`).
+- `history` du plus récent au plus ancien, l'inverse du lot 1 : l'écran trie lui-même.
+- Délai de revue (`risk_review_months`) non servi dans les référentiels.
+
+Audits et conformité :
+- Pas d'objet « revue de direction » (date, participants, éléments d'entrée, décisions, compte rendu),
+  pourtant dans la spécification de `/hsseq/conformite` : l'écran en montre les éléments d'entrée et
+  les actions d'origine « review ».
+- Pas de liste des clients pour le profil hsseq (`partner_id` des audits, exigences, modèles de
+  rapport) : `/finance/partners` lui est fermé. Proposition : `clients` dans les référentiels HSSEQ.
+- Export des audits : la feuille des exigences reprend `status` et `standard` de la liste des audits.
+- Fiche d'un constat sans `history` ni statut de son audit (proposition : `audit: { id, reference, status }`).
+- Pas de compte des revues en retard (exigences) ni des audits planifiés en retard ; pas de recherche
+  sur les audits et les constats ; constats triés par identifiant seulement.
+- `actual_date` d'un audit non contrôlé en `PATCH` (date future acceptée).
+- Modèles audit, constat et exigence sans `_rec_name` : le journal affiche un nom technique.
+
+Habilitations et rapport mensuel :
+- EPI non servis par `/hsseq/qualifications` (RH les tient dans `eguitra.rh.ppe.issue`).
+- Filtre `status` combiné à `type` : il prend le statut d'ensemble ou celui de la case.
+- `mandatory_for_drivers` global : l'ADR ne peut pas être obligatoire pour les seules citernes, ni
+  l'accès au site minier pour les seules bennes.
+- Alertes sans identifiant (`employee_id`, `vehicle_id`, clé) ni filtre de date.
+- `employee.name` servi en clair (sans effet tant que l'auditeur reste hors de `QUAL_READ`).
+- `month_not_frozen` sans élision (« de octobre », « de août ») ; le PDF crée le mois du rapport et
+  journalise un « create » au nom du lecteur ; journal d'une saisie en tuples Python ; société et
+  indicateurs d'un modèle non journalisés.
+- `PATCH` d'un modèle avec une liste `indicators` partielle : les absents sont supprimés ou archivés
+  (l'écran envoie toujours la liste complète) ; numéro d'indicateur en double à rendre en 409.
+- `GET /hsseq/reports?year=` d'une année future liste des mois ; les mois antérieurs à la création
+  d'un modèle sont listés « à valider ».
+- Valeurs calculées par société seulement, sans site ni profil de véhicule : le rapport d'un donneur
+  d'ordre minier mêle citernes et bennes. Proposition : `site_ids` ou `vehicle_kind` sur le modèle.
+
+Trajets, pesées et immobilisations :
+- Décimales avec un point dans des textes français (détail de V07 « délester de 5.00 t », journal de
+  la pesée « 47.800 t ») : il faut une virgule.
+- `_immobilization_proposed` propose de nouveau l'immobilisation après une levée tant que
+  l'événement reste ouvert : à confirmer, sinon ne la proposer que sans aucune immobilisation.
+- Un `PUT` identique d'un plan de trajet dévalide un plan validé (présence des clés, pas valeurs) :
+  l'écran évite cet envoi.
+- `settings_row` sert `None` pour une valeur à 0 (`or None`) : une nuit finissant à minuit ou
+  `max_driving_hours` à 0 reviennent nuls.
+- `PATCH /hsseq/routes/{id}` : `bool("false")` vaut vrai ; il faut un booléen strict.
+- Plan de trajet : arrêts hors de l'intervalle départ-arrivée acceptés (400 attendu) ;
+  `_check_journey` lève une ValidationError sans code ni `fields` ; le même chef de parc saisit et
+  valide (la spécification parle du responsable exploitation, à confirmer) ; `journey_row.route` sans
+  origine, destination ni durée.
+- Aucune lecture HSSEQ du ticket de pesée en cours : l'écran le lit dans `GET /transport/rotations/{id}`.
+

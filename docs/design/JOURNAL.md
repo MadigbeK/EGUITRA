@@ -453,6 +453,27 @@ l'application native NIMOVA Terrain par la session Mobile App ; le design livre 
 Écart de police signalé : la spécification ne cite que Funnel Sans ; la charte (Funnel Display pour
 les titres) est gardée.
 
+## NIMOVA · HSSEQ, lot 2 (26 octobre 2026)
+
+Le noyau du lot 2 (session OTHER, branche `hsseq`, figé à `98da669`) n'avait aucun écran : le design
+les livre, sur le même système que le lot 1, avec la maquette d'API alignée (un module par domaine) et
+le contrat complété (§15 de `docs/design/hsseq-contrat.md`).
+- Registre des risques (`/hsseq/risques`) : comptes cliquables, onglets de statut, matrices 5 × 5 brute
+  et résiduelle, fiche avec les mesures dans l'ordre de la hiérarchie des contrôles, revue, archivage.
+- Audits et conformité (`/hsseq/conformite`) : programme d'audits, constats, registre des exigences et
+  leur revue, éléments d'entrée de la revue de direction (le noyau n'a pas encore d'objet « revue »).
+- Habilitations (`/hsseq/habilitations`), lues dans RH ; rapport mensuel au format de chaque donneur
+  d'ordre (`/hsseq/rapports`) ; immobilisations (`/hsseq/immobilisations`) ; plan de trajet et
+  repesée dans le panneau de départ ; paramètres : itinéraires, modèles de rapport, auditeurs.
+- Cockpit : état, famille et cible servis par le noyau (plus aucun état calculé à l'écran), matrice
+  servie, section « Risques et conformité ».
+- Profil auditeur externe : lecture seule, bornée à ses sites et à sa date de fin, sans noms de
+  personnes ; le menu ne lui montre que ce qu'il lit.
+- Compléments du lot 1 branchés : rotations à une date, notes du déclarant, salariés, bloquantes,
+  contrôles complémentaires, efficacité et validation en attente des actions, filtres de profil.
+Écrans écrits par quatre agents en parallèle sur le socle posé par la session, puis intégrés et
+vérifiés ensemble ; les manques relevés dans l'API sont transmis à la session OTHER.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,
