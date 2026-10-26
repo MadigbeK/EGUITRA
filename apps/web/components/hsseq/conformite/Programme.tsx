@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Download, Plus } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Etat, Field, Kpi, Notice, Segmented, Select, cx, type Column, type Tri } from "@/components/ui";
 import { Tampon } from "@/components/hsseq/commun";
@@ -8,7 +8,7 @@ import { AvecFiche, ChampSite, Pages, requete, useReferentiels } from "@/compone
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt, fmtPct, pluriel } from "@/lib/format";
 import type { Page } from "@/lib/hsseq-types";
-import { ComptesConstats, ORDRE_REFERENTIEL, REFERENTIEL, STATUT_AUDIT, TYPE_AUDITEUR, TamponConformite, anneeCourante, auditEnRetard, messageErreur, parmi, useEtroit, useRafraichir, type VueProps } from "./commun";
+import { ComptesConstats, ORDRE_REFERENTIEL, REFERENTIEL, Recherche, STATUT_AUDIT, TYPE_AUDITEUR, TamponConformite, anneeCourante, auditEnRetard, messageErreur, parmi, useEtroit, useRafraichir, type VueProps } from "./commun";
 import { FenetreAudit } from "./fenetres";
 import { FicheAudit } from "./FicheAudit";
 import type { Audit, AuditCounts, AuditLine, AuditStandard, AuditStatus, Finding, FindingCounts } from "./types";
@@ -34,8 +34,9 @@ function contexte(a: AuditLine): string {
 
 /**
  * Programme d'audits de l'année (§7) : audits réalisés contre planifiés, écarts ouverts, liste par date
- * prévue avec référentiel, site, auditeur, constats par classement et état. Année, référentiel, site,
- * statut et fiche ouverte (audit) portés par l'adresse ; le Responsable HSSEQ planifie depuis la liste.
+ * prévue avec référentiel, site, auditeur, constats par classement et état. Recherche (référence,
+ * intitulé, périmètre, auditeur externe, client), année, référentiel, site, statut et fiche ouverte
+ * (audit) portés par l'adresse ; le Responsable HSSEQ planifie depuis la liste.
  */
 export function Programme({ lire, ecrire, droits }: VueProps) {
   const { data: ref } = useReferentiels();
@@ -46,9 +47,11 @@ export function Programme({ lire, ecrire, droits }: VueProps) {
   const referentiel: AuditStandard | null = parmi(lire("referentiel"), REFERENTIEL);
   const site = lire("site");
   const statut: FiltreStatut = parmi(lire("statut"), STATUT_ADRESSE) ?? "tous";
+  const recherche = lire("q");
   const choisi = Number(lire("audit")) || null;
+  const chercher = useCallback((q: string) => ecrire({ q }), [ecrire]);
 
-  const filtres = { year: annee, standard: referentiel, site_id: site || null };
+  const filtres = { year: annee, standard: referentiel, site_id: site || null, q: recherche || null };
   const cle = `${requete(filtres)}|${statut}`;
   const [tri, setTri] = useState<Tri>({ key: "planned_date", dir: 1 });
   const [position, setPosition] = useState({ cle, offset: 0 });
@@ -74,8 +77,9 @@ export function Programme({ lire, ecrire, droits }: VueProps) {
   async function exporter() {
     setExport("en_cours");
     try {
-      // Année et site seulement : le statut et le référentiel des audits borneraient aussi la feuille des exigences.
-      await apiDownload(`/hsseq/audits/export.xlsx?${requete({ year: annee, site_id: site || null })}`, `audits_conformite_${annee}.xlsx`);
+      // Les filtres de la liste : le statut et le référentiel des audits ne bornent plus la feuille des
+      // exigences, qui a les siens (requirement_status, requirement_source, requirement_standard).
+      await apiDownload(`/hsseq/audits/export.xlsx?${requete({ ...filtres, status: statut === "tous" ? null : STATUT_ADRESSE[statut] })}`, `audits_conformite_${annee}.xlsx`);
       setExport(null);
     } catch (e) {
       setExport(messageErreur(e, "Export impossible."));
@@ -142,6 +146,7 @@ export function Programme({ lire, ecrire, droits }: VueProps) {
   const liste = (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end gap-3">
+        <Recherche valeur={recherche} onChange={chercher} placeholder="Référence, intitulé, client" />
         <Field label="Année" className="w-full sm:w-32">
           <Select value={String(annee)} onChange={(e) => ecrire({ annee: Number(e.target.value) === courante ? null : e.target.value })} options={annees(courante, annee).map((y) => ({ value: y, label: String(y) }))} />
         </Field>
@@ -150,7 +155,7 @@ export function Programme({ lire, ecrire, droits }: VueProps) {
         </Field>
         <ChampSite ref_={ref} valeur={site} onChange={(v) => ecrire({ site: v })} />
         <div className="flex flex-wrap gap-2 sm:ml-auto">
-          <Button loading={export_ === "en_cours"} onClick={() => void exporter()} title="Programme de l'année, constats et, pour leurs lecteurs, registre des exigences">
+          <Button loading={export_ === "en_cours"} onClick={() => void exporter()} title="Audits et constats de la liste filtrée et, pour leurs lecteurs, tout le registre des exigences">
             <Download className="h-4 w-4" /> Exporter
           </Button>
           {droits.hsseq && (
@@ -207,7 +212,7 @@ export function Programme({ lire, ecrire, droits }: VueProps) {
                 setPosition({ cle, offset: 0 });
               }}
               onRowClick={(a) => ecrire({ audit: a.id })}
-              empty={referentiel || site || statut !== "tous" ? "Aucun audit pour ces filtres." : `Aucun audit planifié en ${annee}.`}
+              empty={referentiel || site || recherche || statut !== "tous" ? "Aucun audit pour ces filtres." : `Aucun audit planifié en ${annee}.`}
               columns={colonnes}
             />
             <Pages offset={data.offset} limit={data.limit} total={data.total_count} nom="audits" onPage={(x) => setPosition({ cle, offset: x })} />

@@ -6,20 +6,28 @@ import { Pencil, Plus } from "@/components/icons";
 import { Button, Etat, FileButton, Loading, Notice } from "@/components/ui";
 import { Definitions, FORMATS_PIECE, Panneau, Pieces, Rubrique } from "@/components/hsseq/actions/outils";
 import { apiSend, useApi } from "@/lib/api-client";
-import { CLASSEMENT, Commandes, ListeActions, STATUT_CONSTAT, TamponConformite, deposerPreuve, lien, lienAudit, messageErreur, sansAction, useRafraichir, type Droits, type Message } from "./commun";
+import { INSECABLE } from "@/lib/format";
+import { CLASSEMENT, Commandes, Historique, ListeActions, STATUT_AUDIT, STATUT_CONSTAT, TamponConformite, deposerPreuve, lien, lienAudit, messageErreur, sansAction, useRafraichir, type Droits, type Message } from "./commun";
 import { FenetreAction, FenetreConstat } from "./fenetres";
-import type { Finding } from "./types";
+import type { FindingClass, FindingDetail } from "./types";
 
 const LIEN = "font-semibold text-accent underline-offset-2 hover:underline";
 
+/** Valeurs codées du journal d'un constat, en clair (l'exigence liée y est nommée par sa référence). */
+function valeurConstat(champ: string, v: string): string {
+  if (champ === "classification") return CLASSEMENT[v as FindingClass]?.label ?? v;
+  return v;
+}
+
 /**
- * Fiche d'un constat : classement, description, audit, exigence liée, actions correctives et pièces.
- * Le Responsable HSSEQ le modifie et lui ajoute des actions (origine « audit ») tant que son audit
- * n'est ni clos ni annulé (`rights.can_edit`) ; chaque action se suit dans le plan d'actions.
+ * Fiche d'un constat (GET /hsseq/findings/{id}) : classement, description, audit et son statut, exigence
+ * liée, actions correctives, pièces et journal. Le Responsable HSSEQ le modifie et lui ajoute des
+ * actions (origine « audit ») tant que son audit n'est ni clos ni annulé (`rights.can_edit`) ; sinon la
+ * fiche dit pourquoi elle est en lecture seule. Chaque action se suit dans le plan d'actions.
  */
 export function FicheConstat({ id, droits, onFermer }: { id: number; droits: Droits; onFermer: () => void }) {
   const cle = `/hsseq/findings/${id}`;
-  const { data: f, error, mutate } = useApi<Finding>(cle);
+  const { data: f, error, mutate } = useApi<FindingDetail>(cle);
   const rafraichir = useRafraichir();
   const [message, setMessage] = useState<Message | null>(null);
   const [fenetre, setFenetre] = useState<"edit" | "action" | null>(null);
@@ -49,6 +57,8 @@ export function FicheConstat({ id, droits, onFermer }: { id: number; droits: Dro
 
   const attente = sansAction(f);
   const vivantes = f.actions.filter((a) => a.status !== "cancelled").length;
+  // Audit clos ou annulé : le constat ne se modifie plus et ne reçoit plus d'action (refus du noyau).
+  const fige = f.audit.status === "closed" || f.audit.status === "cancelled";
 
   return (
     <Panneau
@@ -61,6 +71,7 @@ export function FicheConstat({ id, droits, onFermer }: { id: number; droits: Dro
           <Link href={lienAudit(f.audit)} className={LIEN}>
             {f.audit.reference}
           </Link>
+          {`, ${STATUT_AUDIT[f.audit.status].toLocaleLowerCase("fr")}`}
           {f.site ? `, ${f.site.name}` : ""}
         </>
       }
@@ -88,8 +99,13 @@ export function FicheConstat({ id, droits, onFermer }: { id: number; droits: Dro
         )}
       </Commandes>
 
-      {attente && f.classification === "major" && <Notice tone="warn">Écart majeur sans action : l&apos;audit {f.audit.reference} ne se clôt pas tant qu&apos;une action n&apos;y répond pas.</Notice>}
-      {droits.hsseq && !f.rights.can_edit && <Notice tone="neutral">Audit clos ou annulé : le constat ne se modifie plus et ne reçoit plus d&apos;action. Rouvrez l&apos;audit pour y revenir.</Notice>}
+      {attente && f.classification === "major" && !fige && <Notice tone="warn">Écart majeur sans action : l&apos;audit {f.audit.reference} ne se clôt pas tant qu&apos;une action n&apos;y répond pas.</Notice>}
+      {fige && (
+        <Notice tone="neutral">
+          {`Audit ${f.audit.reference} ${f.audit.status === "closed" ? "clos" : "annulé"}${INSECABLE}: le constat est en lecture seule, il ne se modifie plus et ne reçoit plus d'action.`}
+          {droits.hsseq ? (f.audit.status === "closed" ? " Rouvrez l'audit pour y revenir." : " Un audit annulé ne se rouvre pas.") : ""}
+        </Notice>
+      )}
 
       <Definitions
         lignes={[
@@ -142,13 +158,15 @@ export function FicheConstat({ id, droits, onFermer }: { id: number; droits: Dro
         />
       </Rubrique>
 
+      <Historique lignes={f.history} valeur={valeurConstat} />
+
       {fenetre === "edit" && (
         <FenetreConstat
           titre={`Modifier le constat ${f.reference}`}
           constat={f}
           onClose={() => setFenetre(null)}
           envoyer={async (corps) => {
-            const maj = await apiSend<Finding>("PATCH", cle, corps);
+            const maj = await apiSend<FindingDetail>("PATCH", cle, corps);
             await mutate(maj, { revalidate: false });
             void rafraichir(cle);
             setMessage({ tone: "ok", text: "Constat mis à jour." });

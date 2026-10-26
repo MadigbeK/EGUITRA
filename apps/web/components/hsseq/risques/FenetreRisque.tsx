@@ -7,7 +7,7 @@ import { aProfil, aujourdhui, decaler, useReferentiels } from "@/components/hsse
 import { apiSend } from "@/lib/api-client";
 import { INSECABLE } from "@/lib/format";
 import type { Ref, Score, VehicleKind } from "@/lib/hsseq-types";
-import { NATURE_RISQUE, ORDRE_NATURES, messageRisque } from "./libelles";
+import { NATURE_RISQUE, ORDRE_NATURES, messageRisque, revueParDefaut } from "./libelles";
 import type { Risk, RiskInput, RiskNature, RiskPatch } from "./types";
 
 type Note = { gravite: Score; probabilite: Score };
@@ -187,7 +187,7 @@ export function FenetreRisque({ risque, onClose, onEnregistre }: { risque?: Risk
         )}
         <Field
           label="Prochaine revue"
-          hint={creation ? `Sans date, dans 12${INSECABLE}mois (délai des réglages de la société).` : `La revue elle-même se fait par la commande «${INSECABLE}Faire la revue${INSECABLE}».`}
+          hint={creation ? `Sans date, ${revueParDefaut(ref?.risk_review_months)}.` : `La revue elle-même se fait par la commande «${INSECABLE}Faire la revue${INSECABLE}».`}
           error={obligatoire(manque.review_date, "Date de revue obligatoire.")}
         >
           <Input type="date" min={creation ? decaler(aujourdhui(), 1) : undefined} value={f.review_date} onChange={(e) => setF({ ...f, review_date: e.target.value })} />

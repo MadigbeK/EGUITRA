@@ -338,7 +338,11 @@ function TableMois({ titre, r, lignes }: { titre: string; r: MonthlyReport; lign
 
 /* ─── Journal du mois ─────────────────────────────────────────────────── */
 
-/** Opération du journal en clair ; le passage d'état est dit par la validation ou la réouverture. */
+/**
+ * Opération du journal en clair ; le passage d'état est dit par la validation ou la réouverture. Une
+ * saisie est écrite par le noyau en texte (« sans valeur », « valeur 1,5 litres, commentaire « … » ») :
+ * l'avant et l'après se lisent tels quels.
+ */
 function operation(h: ReportHistoryEntry): string {
   switch (h.action) {
     case "create":
@@ -350,7 +354,8 @@ function operation(h: ReportHistoryEntry): string {
     case "reopen":
       return h.note ? `mois rouvert : « ${h.note} »` : "mois rouvert";
     case "write":
-      return h.field === "comment" ? "commentaire du mois modifié" : `saisie de ${h.field ?? "une valeur"}`;
+      if (h.field === "comment") return "commentaire du mois modifié";
+      return h.new_value ? `saisie de ${h.field ?? "une valeur"} : ${h.old_value ? `${h.old_value}, devenu ` : ""}${h.new_value}` : `saisie de ${h.field ?? "une valeur"}`;
     default:
       return h.action;
   }

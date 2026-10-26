@@ -1,43 +1,52 @@
 "use client";
 
 import { Lock } from "@/components/icons";
-import { MOTIFS, Tampon } from "@/components/hsseq/commun";
-import { fmtDate } from "@/lib/format";
-import type { Fitness } from "@/lib/hsseq-types";
-import { APTITUDE, APTITUDE_DETAIL, ETAT_HABILITATION, Repere, delai } from "./outils";
+import { MOTIFS, TYPE_VEHICULE, Tampon } from "@/components/hsseq/commun";
+import { fmtDate, pluriel } from "@/lib/format";
+import type { Fitness, PpeIssue } from "@/lib/hsseq-types";
+import { APTITUDE, APTITUDE_DETAIL, ETAT_HABILITATION, Repere, delai, profilsExiges } from "./outils";
 import type { QualificationCell, QualificationRow, QualificationType } from "./types";
 
 /**
  * Matrice des compétences : un conducteur par ligne (nom figé à gauche quand le tableau défile au
- * téléphone), une habilitation par colonne, puis l'aptitude en statut et le départ. Une case valide se
- * tait (sa date seule) ; à renouveler, échue ou absente, elle porte son repère, son mot et sa couleur.
+ * téléphone, avec son site et le profil de son ensemble), une habilitation par colonne (les profils qui
+ * l'exigent sous son nom), puis l'aptitude en statut, les EPI remis et le départ. Une case valide se tait
+ * (sa date seule) ; à renouveler, échue ou absente, elle porte son repère, son mot et sa couleur. Une
+ * habilitation que le profil du conducteur n'exige pas, absente, se tait aussi.
  */
 export function Matrice({ lignes, types }: { lignes: QualificationRow[]; types: QualificationType[] }) {
   return (
     <div role="region" aria-label="Matrice des compétences" tabIndex={0} className="overflow-x-auto outline-offset-2">
-      <table className="w-full min-w-[720px] border-collapse text-[13px]">
+      <table className="w-full min-w-[820px] border-collapse text-[13px]">
         <caption className="sr-only">
-          Matrice des compétences : une ligne par conducteur, une colonne par habilitation avec son état et son échéance, puis l&apos;aptitude médicale en statut et le droit au départ (motif V04).
+          Matrice des compétences : une ligne par conducteur et le profil de son ensemble, une colonne par habilitation avec son état et son échéance, puis l&apos;aptitude médicale en statut, les équipements de protection remis et le droit au départ (motif V04).
         </caption>
         <thead>
           <tr className="border-y border-line bg-panel-2 text-[12px] font-semibold text-muted">
             <th scope="col" className="sticky left-0 z-[1] bg-panel-2 px-3 py-2.5 pl-5 text-left align-bottom">
               Conducteur
             </th>
-            {types.map((t) => (
-              <th key={t.code} scope="col" className="min-w-[7.75rem] px-3 py-2.5 text-left align-bottom">
-                <span className="block leading-snug text-ink-2">{t.name}</span>
-                {t.mandatory && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-muted" title="Obligatoire pour les conducteurs : échue, elle bloque le départ (V04)">
-                    <Lock className="h-3 w-3" aria-hidden />
-                    Obligatoire
-                  </span>
-                )}
-              </th>
-            ))}
+            {types.map((t) => {
+              const profils = profilsExiges(t);
+              return (
+                <th key={t.code} scope="col" className="min-w-[7.75rem] px-3 py-2.5 text-left align-bottom">
+                  <span className="block leading-snug text-ink-2">{t.name}</span>
+                  {profils && (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-muted" title={`Exigée des conducteurs de ${profils} : échue, elle bloque le départ de ce profil (V04).`}>
+                      <Lock className="h-3 w-3" aria-hidden />
+                      {`Exigée : ${profils}`}
+                    </span>
+                  )}
+                </th>
+              );
+            })}
             <th scope="col" className="min-w-[6.5rem] px-3 py-2.5 text-left align-bottom">
               <span className="block leading-snug text-ink-2">Aptitude médicale</span>
               <span className="mt-1 block text-[11px] font-medium text-muted">Statut seul</span>
+            </th>
+            <th scope="col" className="min-w-[7rem] px-3 py-2.5 text-left align-bottom">
+              <span className="block leading-snug text-ink-2">EPI remis</span>
+              <span className="mt-1 block text-[11px] font-medium text-muted">Tenus par RH</span>
             </th>
             <th scope="col" className="px-3 py-2.5 pr-5 text-left align-bottom">
               Départ
@@ -49,7 +58,7 @@ export function Matrice({ lignes, types }: { lignes: QualificationRow[]; types: 
             <tr key={r.employee.id} className="border-b border-line/70 last:border-0">
               <th scope="row" className="sticky left-0 z-[1] max-w-[13rem] bg-panel px-3 py-2.5 pl-5 text-left align-top font-medium text-ink">
                 <span className="block leading-snug">{r.employee.name}</span>
-                <span className="block text-[12px] font-normal text-muted">{r.site?.name ?? "Sans ensemble attitré"}</span>
+                <span className="block text-[12px] font-normal text-muted">{r.vehicle_kind ? `${r.site?.name ?? "Sans site"} · ${TYPE_VEHICULE[r.vehicle_kind].toLocaleLowerCase("fr")}` : "Sans ensemble attitré"}</span>
               </th>
               {types.map((t) => (
                 <td key={t.code} className="px-3 py-2.5 align-top">
@@ -58,6 +67,9 @@ export function Matrice({ lignes, types }: { lignes: QualificationRow[]; types: 
               ))}
               <td className="px-3 py-2.5 align-top">
                 <Aptitude f={r.fitness} />
+              </td>
+              <td className="px-3 py-2.5 align-top">
+                <Epi ppe={r.ppe ?? []} />
               </td>
               <td className="px-3 py-2.5 pr-5 align-top">
                 <Depart r={r} />
@@ -113,16 +125,38 @@ function Case({ c }: { c: QualificationCell | undefined }) {
       );
     case "missing":
       return c.mandatory ? (
-        <span title={`${c.name} : absente. Obligatoire pour les conducteurs.`} className="inline-flex items-center gap-1.5 whitespace-nowrap font-semibold text-danger">
+        <span title={`${c.name} : absente. Exigée pour le profil de son ensemble.`} className="inline-flex items-center gap-1.5 whitespace-nowrap font-semibold text-danger">
           <Repere forme="losange-vide" />
           Absente
         </span>
       ) : (
-        <span title={`${c.name} : non détenue (facultative).`} className="text-muted">
-          –<span className="sr-only">non détenue</span>
+        <span title={`${c.name} : non détenue, pas exigée pour le profil de son ensemble.`} className="text-muted">
+          –<span className="sr-only">non détenue, pas exigée pour son profil</span>
         </span>
       );
   }
+}
+
+/**
+ * EPI remis par RH (la dernière remise de chaque équipement) : leur nombre et ceux dont le
+ * renouvellement est échu ; le détail (date de remise, renouvellement, remise signée) en infobulle.
+ */
+function Epi({ ppe }: { ppe: PpeIssue[] }) {
+  if (!ppe.length) return <span className="text-muted">Aucun</span>;
+  const aRenouveler = ppe.filter((p) => p.to_renew);
+  const detail = ppe.map((p) => `${p.label} : remis le ${fmtDate(p.issued_on)}${p.renewal_date ? `, à renouveler le ${fmtDate(p.renewal_date)}` : ""}${p.acknowledged ? "" : ", remise non signée"}`).join(" ; ");
+  return (
+    <span title={`${detail}.`} className="block whitespace-nowrap">
+      <span className="text-ink-2">{pluriel(ppe.length, "équipement")}</span>
+      {aRenouveler.length > 0 && (
+        <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-warn">
+          <Repere forme="triangle" />
+          {`${aRenouveler.length} à renouveler`}
+        </span>
+      )}
+      <span className="sr-only">{aRenouveler.length ? `, à renouveler : ${aRenouveler.map((p) => p.label).join(", ")}` : ""}</span>
+    </span>
+  );
 }
 
 /** Aptitude médicale en statut seul : jamais de motif ni de détail médical. */
@@ -138,9 +172,10 @@ function Aptitude({ f }: { f: Fitness }) {
 }
 
 /**
- * Départ au regard du motif V04 : bloqué (habilitation obligatoire échue, aptitude inapte ou échue,
- * habilitation obligatoire absente après la date des réglages), avertissement (obligatoire absente
- * avant cette date, aptitude à revoir), sinon autorisé, au trait.
+ * Départ au regard du motif V04, pour le profil de l'ensemble habituel du conducteur : bloqué
+ * (habilitation exigée échue, aptitude inapte ou échue, habilitation exigée absente après la date des
+ * réglages), avertissement (exigée absente avant cette date, aptitude à revoir), sinon autorisé, au
+ * trait. Au départ, le verrou retient le profil de l'ensemble de la rotation.
  */
 function Depart({ r }: { r: QualificationRow }) {
   if (r.blocking) {
@@ -152,7 +187,7 @@ function Depart({ r }: { r: QualificationRow }) {
     );
   }
   if (r.status === "missing" || r.fitness === "review") {
-    const raison = r.status === "missing" ? "Habilitation obligatoire absente : avertissement jusqu'à la date fixée dans les réglages, puis départ refusé." : APTITUDE_DETAIL.review;
+    const raison = r.status === "missing" ? "Habilitation exigée pour son profil absente : avertissement jusqu'à la date fixée dans les réglages, puis départ refusé." : APTITUDE_DETAIL.review;
     return (
       <span title={raison} className="inline-flex">
         <Tampon mot="Avertissement" />
@@ -182,18 +217,22 @@ export function Legende() {
           <Repere forme="losange" />
           Échue
         </dt>
-        <dd className="m-0">Obligatoire, elle refuse le départ (V04) jusqu&apos;au renouvellement saisi dans RH.</dd>
+        <dd className="m-0">Exigée pour le profil de son ensemble, elle refuse le départ (V04) jusqu&apos;au renouvellement saisi dans RH.</dd>
       </div>
       <div className="flex gap-2">
         <dt className="flex flex-none items-center gap-1.5 font-semibold text-danger">
           <Repere forme="losange-vide" />
           Absente
         </dt>
-        <dd className="m-0">Obligatoire et jamais délivrée : avertissement, puis départ refusé à partir de la date fixée dans les réglages.</dd>
+        <dd className="m-0">Exigée pour son profil et jamais délivrée : avertissement, puis départ refusé à partir de la date fixée dans les réglages. Pas exigée pour son profil, elle se tait (trait).</dd>
       </div>
       <div className="flex gap-2 sm:col-span-2">
         <dt className="flex-none text-muted">Aptitude</dt>
         <dd className="m-0">Statut seul, sans détail médical : apte ; à revoir (apte avec réserve, ou non renseignée) ; non apte (inapte, ou visite échue : départ refusé).</dd>
+      </div>
+      <div className="flex gap-2 sm:col-span-2">
+        <dt className="flex-none text-muted">EPI</dt>
+        <dd className="m-0">Dernière remise de chaque équipement de protection, tenue par RH ; à renouveler quand sa date de renouvellement est passée. Sans effet sur le départ.</dd>
       </div>
     </dl>
   );

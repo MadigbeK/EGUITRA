@@ -259,9 +259,12 @@ export function FicheRisque({ id, onFermer }: { id: number; onFermer: () => void
       <Rubrique
         titre={`Actions du plan (${r.actions.length})`}
         actions={
-          <Link href="/hsseq/actions?origine=risk" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent underline-offset-2 hover:underline">
-            Actions issues des risques <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          // Le plan d'actions filtré par ce risque (risk_id), closes et annulées comprises.
+          r.actions.length > 0 && (
+            <Link href={`/hsseq/actions?risque=${r.id}`} className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent underline-offset-2 hover:underline">
+              Actions du risque au plan <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )
         }
       >
         {r.actions.length === 0 ? (

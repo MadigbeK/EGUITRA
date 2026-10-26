@@ -8,7 +8,7 @@ import { useApi } from "@/lib/api-client";
 import type { TonEtat } from "@/lib/couleurs";
 import type { Cockpit, Indicator, IndicatorStatus } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
-import { GLISSANTS, SANS_OBJET_LOT1, indicateursMontres, lienIndicateur, lienPermis } from "./outils";
+import { GLISSANTS, indicateursMontres, lienIndicateur, lienPermis } from "./outils";
 import { LIEN } from "./ATraiter";
 
 /**
@@ -69,7 +69,8 @@ function Indicateur({ i, c, permis }: { i: Indicator; c: Cockpit; permis: (href:
           </span>
           <span className="block">Source : {i.source}</span>
           {horsSite && <span className="block font-medium text-ink-2">Par société, sans filtre de site</span>}
-          {i.value === null && (SANS_OBJET_LOT1.has(i.code) ? <span className="block">{i.note ?? "Sans objet au lot 1."}</span> : <span className="block">Sans donnée sur la période</span>)}
+          {i.value === null && <span className="block">Sans donnée sur la période</span>}
+          {i.note && <span className="block">{i.note}</span>}
           {lienListe && (
             <Link href={lienListe.href} className={`${LIEN} mt-1`}>
               {lienListe.label} <ArrowUpRight className="h-3.5 w-3.5" />

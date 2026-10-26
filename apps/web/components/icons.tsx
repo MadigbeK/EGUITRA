@@ -542,9 +542,18 @@ export const Sun = dessin("Sun", (
   </>
 ));
 
+/** Feuille : environnement et qualité (NIMOVA · HSSEQ, lot 3). */
+export const Feuille = dessin("Feuille", (
+  <>
+    <path d="M5.2 18.8C5 10.6 10.4 5.4 19.2 4.8c-.4 8.9-5.6 14.2-14 14Z" />
+    <path d="M5.2 18.8 13.2 10.8" strokeOpacity="0.55" />
+    <circle cx="15.6" cy="8.4" r="1.4" {...POINT} />
+  </>
+));
 /** Icônes de la navigation, par le nom inscrit dans `lib/nav.ts`. */
 export const ICONES: Record<string, Icon> = {
   Radar,
+  Feuille,
   ShieldCheck,
   ShieldAlert,
   LayoutDashboard,

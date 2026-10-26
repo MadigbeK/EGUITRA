@@ -61,8 +61,19 @@ export interface RotationJourney {
   /** Nom nul pour l'auditeur (personal_data_hidden). */
   driver: { id: number; name: string | null } | null;
   site: Ref | null;
-  /** Route tarifée de la rotation et sa règle de nuit ; nulle sans route (navette de la mine). */
-  route: { id: number; name: string; night_driving_forbidden: boolean } | null;
+  /**
+   * Route tarifée de la rotation : origine, destination, distance (aller simple, km), durée standard
+   * d'une rotation (jours, départ et retour au dépôt) et règle de nuit ; nulle sans route (navette de la mine).
+   */
+  route: {
+    id: number;
+    name: string;
+    origin: string | null;
+    destination: string | null;
+    distance_km: number | null;
+    duration_days: number | null;
+    night_driving_forbidden: boolean;
+  } | null;
   rules: JourneyRules;
   journey: Journey | null;
   /** « validate » : plan conforme, pas encore validé, ouvert au chef de parc du site. */
@@ -71,7 +82,11 @@ export interface RotationJourney {
   rights: Rights;
 }
 
-/** Corps de PUT /hsseq/rotations/{id}/journey : le plan remplace le précédent, arrêts compris. */
+/**
+ * Corps de PUT /hsseq/rotations/{id}/journey : le plan remplace le précédent, arrêts compris. Un arrêt qui
+ * commence avant le départ prévu ou finit après l'arrivée prévue est refusé (400 invalid_parameter,
+ * fields ["stops"]). Un envoi identique au plan enregistré ne le remet pas à valider.
+ */
 export interface JourneyInput {
   itinerary: string | null;
   night_driving: boolean;
@@ -93,7 +108,7 @@ export interface HsseqRoute {
 /** Réponse de PATCH /hsseq/routes/{id}. */
 export type HsseqRoutePatch = Pick<HsseqRoute, "id" | "name" | "night_driving_forbidden">;
 
-/** Règles de V08 dans les paramètres de la société (GET et PATCH /hsseq/settings) ; nulles quand elles valent 0. */
+/** Règles de V08 dans les paramètres de la société (GET et PATCH /hsseq/settings) ; 0 reste 0 (minuit, pas de maximum). */
 export interface JourneySettings {
   company: Ref;
   night_start_hour?: number | null;

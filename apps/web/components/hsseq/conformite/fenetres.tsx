@@ -14,7 +14,7 @@ import { NIVEAU_MAITRISE } from "@/components/hsseq/commun";
 import { aujourdhui, decaler, useReferentiels } from "@/components/hsseq/actions/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtGNF } from "@/lib/format";
-import type { ControlLevel, HsseqAction, NewAction, Page } from "@/lib/hsseq-types";
+import type { ControlLevel, HsseqAction, NewAction, Page, Ref } from "@/lib/hsseq-types";
 import {
   CLASSEMENT,
   ErreurFenetre,
@@ -100,6 +100,15 @@ function ChoixCartes<K extends string>({ legende, nom, options, valeur, onChange
   );
 }
 
+/**
+ * Clients proposés au choix du client ou donneur d'ordre : `clients` des référentiels (servis à
+ * l'administration, à la direction et au Responsable HSSEQ), le client actuel compris s'il n'y est plus.
+ */
+function optionsClients(clients: Ref[] | undefined, actuel: Ref | null): Array<{ value: number; label: string }> {
+  const liste = clients ?? [];
+  return [...(actuel && !liste.some((c) => c.id === actuel.id) ? [actuel] : []), ...liste].map((c) => ({ value: c.id, label: c.name }));
+}
+
 /** Pied d'une fenêtre : retour, et le bouton qui envoie. */
 function Pied({ onClose, action, envoi, pret, onEnvoyer, retour = "Annuler", danger }: { onClose: () => void; action: string; envoi: boolean; pret: boolean; onEnvoyer: () => void; retour?: string; danger?: boolean }) {
   return (
@@ -116,7 +125,8 @@ function Pied({ onClose, action, envoi, pret, onEnvoyer, retour = "Annuler", dan
 
 /**
  * Planification (sans `audit`) ou modification d'un audit ; en modification, seuls les champs changés
- * partent. Un audit réalisé reçoit aussi sa date de réalisation et sa conclusion.
+ * partent. Le client ou donneur d'ordre se choisit pour un audit client (ou quand l'audit en a déjà un).
+ * Un audit réalisé reçoit aussi sa date de réalisation, passée ou du jour, et sa conclusion.
  */
 export function FenetreAudit({ audit, onClose, envoyer }: { audit?: Audit; onClose: () => void; envoyer: (corps: AuditInput) => Promise<unknown> }) {
   const { data: ref } = useReferentiels();
@@ -124,6 +134,7 @@ export function FenetreAudit({ audit, onClose, envoyer }: { audit?: Audit; onClo
     title: audit?.title ?? "",
     standard: audit?.standard ?? ("iso_45001" as AuditStandard),
     planned_date: audit?.planned_date ?? "",
+    partner_id: audit?.partner ? String(audit.partner.id) : "",
     site_id: audit?.site ? String(audit.site.id) : "",
     scope: audit?.scope ?? "",
     auditor_kind: audit?.auditor_kind ?? ("internal" as AuditorKind),
@@ -139,7 +150,10 @@ export function FenetreAudit({ audit, onClose, envoyer }: { audit?: Audit; onClo
   const actuel = audit?.auditor_kind === "internal" && audit.auditor?.id ? { id: audit.auditor.id, name: audit.auditor.name } : null;
   const comptes = ref?.owners ?? [];
   const auditeurs = actuel && !comptes.some((o) => o.id === actuel.id) ? [actuel, ...comptes] : comptes;
-  const pret = Boolean(f.title.trim() && f.planned_date && (!realise || f.actual_date));
+  // Le noyau refuse une réalisation datée de demain ou plus tard (422 invalid_parameter).
+  const realiseeFuture = realise && Boolean(f.actual_date) && f.actual_date > aujourdhui();
+  const pret = Boolean(f.title.trim() && f.planned_date && (!realise || f.actual_date)) && !realiseeFuture;
+  const client = f.standard === "client" || Boolean(f.partner_id);
 
   function corps(): AuditInput {
     const titre = f.title.trim();
@@ -147,13 +161,15 @@ export function FenetreAudit({ audit, onClose, envoyer }: { audit?: Audit; onClo
     const nom = f.auditor_name.trim() || null;
     const site = f.site_id ? Number(f.site_id) : null;
     const auditeur = f.auditor_id ? Number(f.auditor_id) : null;
+    const partenaire = f.partner_id ? Number(f.partner_id) : null;
     if (!audit) {
-      return { title: titre, standard: f.standard, planned_date: f.planned_date, site_id: site, scope: perimetre, auditor_kind: f.auditor_kind, ...(f.auditor_kind === "internal" ? { auditor_id: auditeur } : { auditor_name: nom }) };
+      return { title: titre, standard: f.standard, planned_date: f.planned_date, site_id: site, scope: perimetre, auditor_kind: f.auditor_kind, ...(f.auditor_kind === "internal" ? { auditor_id: auditeur } : { auditor_name: nom }), ...(partenaire ? { partner_id: partenaire } : {}) };
     }
     const c: AuditInput = {};
     if (titre !== audit.title) c.title = titre;
     if (f.standard !== audit.standard) c.standard = f.standard;
     if (f.planned_date !== audit.planned_date) c.planned_date = f.planned_date;
+    if (partenaire !== (audit.partner?.id ?? null)) c.partner_id = partenaire;
     if (site !== (audit.site?.id ?? null)) c.site_id = site;
     if (perimetre !== (audit.scope ?? null)) c.scope = perimetre;
     if (f.auditor_kind !== audit.auditor_kind) c.auditor_kind = f.auditor_kind;
@@ -195,6 +211,11 @@ export function FenetreAudit({ audit, onClose, envoyer }: { audit?: Audit; onClo
         <Field label="Prévu le">
           <Input type="date" value={f.planned_date} onChange={(e) => setF({ ...f, planned_date: e.target.value })} required />
         </Field>
+        {client && (
+          <Field label="Client ou donneur d'ordre" hint="Le client dont l'audit vérifie les exigences." className="md:col-span-2">
+            <Select value={f.partner_id} onChange={(e) => setF({ ...f, partner_id: e.target.value })} placeholder="Aucun" options={optionsClients(ref?.clients, audit?.partner ?? null)} />
+          </Field>
+        )}
         <Field label="Site" hint="Sans site, l'audit n'est lu que par l'administration, la direction et le Responsable HSSEQ." className="md:col-span-2">
           <Select value={f.site_id} onChange={(e) => setF({ ...f, site_id: e.target.value })} placeholder="Aucun : siège ou plusieurs sites" options={sites.map((s) => ({ value: s.id, label: s.name }))} />
         </Field>
@@ -223,8 +244,8 @@ export function FenetreAudit({ audit, onClose, envoyer }: { audit?: Audit; onClo
         </Field>
         {realise && (
           <>
-            <Field label="Réalisé le">
-              <Input type="date" max={aujourdhui()} value={f.actual_date} onChange={(e) => setF({ ...f, actual_date: e.target.value })} required />
+            <Field label="Réalisé le" error={realiseeFuture ? "Date passée ou du jour." : undefined}>
+              <Input type="date" max={aujourdhui()} value={f.actual_date} onChange={(e) => setF({ ...f, actual_date: e.target.value })} aria-invalid={realiseeFuture || undefined} required />
             </Field>
             <Field label="Conclusion" className="md:col-span-2">
               <Textarea value={f.conclusion} onChange={(e) => setF({ ...f, conclusion: e.target.value })} placeholder="Appréciation d'ensemble, points forts, écarts à traiter" />
@@ -331,9 +352,10 @@ export function FenetreConstat({ titre, constat, onClose, envoyer }: { titre: st
 }
 
 /**
- * Nouvelle action du plan : réponse à un constat (origine « audit ») ou décision de la revue de
- * direction (origine « review », sans fiche d'origine). La clôture exigera une preuve jointe ; au-delà
- * du seuil des paramètres, la direction valide la dépense avant le démarrage.
+ * Nouvelle action du plan : réponse à un constat (origine « audit », le constat en fiche d'origine) ou
+ * décision d'une revue de direction (origine « review », la revue en fiche d'origine, exigée par le
+ * noyau). La clôture exigera une preuve jointe ; au-delà du seuil des paramètres, la direction valide la
+ * dépense avant le démarrage.
  */
 export function FenetreAction({ titre, origine, rappel, onClose, onCreee }: { titre: string; origine: Pick<NewAction, "origin" | "origin_id">; rappel?: ReactNode; onClose: () => void; onCreee: (a: HsseqAction) => void }) {
   const { data: ref } = useReferentiels();
@@ -413,19 +435,25 @@ const EXEMPLE_REFERENCE: Record<RequirementSource, string> = {
   client_contract: "Contrat et article de son annexe HSE",
 };
 
-/** Nouvelle exigence du registre, ou modification ; en modification, seuls les champs changés partent. */
+/**
+ * Nouvelle exigence du registre, ou modification ; en modification, seuls les champs changés partent.
+ * Le donneur d'ordre se choisit pour une exigence d'un contrat client (ou quand elle en a déjà un).
+ */
 export function FenetreExigence({ exigence, onClose, envoyer }: { exigence?: RequirementDetail; onClose: () => void; envoyer: (corps: RequirementInput) => Promise<unknown> }) {
+  const { data: ref } = useReferentiels();
   const [f, setF] = useState(() => ({
     source: exigence?.source ?? ("law" as RequirementSource),
     source_reference: exigence?.source_reference ?? "",
     title: exigence?.title ?? "",
     standard: exigence?.standard ?? ("" as RequirementStandard | ""),
+    partner_id: exigence?.partner ? String(exigence.partner.id) : "",
     summary: exigence?.summary ?? "",
     expected_evidence: exigence?.expected_evidence ?? "",
     next_review_date: exigence?.next_review_date ?? "",
   }));
   const { erreur, envoi, envoyer: lancer } = useEnvoi(onClose, "Enregistrement impossible.");
   const pret = Boolean(f.source_reference.trim() && f.title.trim());
+  const contrat = f.source === "client_contract" || Boolean(f.partner_id);
 
   function corps(): RequirementInput {
     const valeurs: RequirementInput = {
@@ -433,6 +461,7 @@ export function FenetreExigence({ exigence, onClose, envoyer }: { exigence?: Req
       source_reference: f.source_reference.trim(),
       title: f.title.trim(),
       standard: f.standard || null,
+      partner_id: f.partner_id ? Number(f.partner_id) : null,
       summary: f.summary.trim() || null,
       expected_evidence: f.expected_evidence.trim() || null,
       next_review_date: f.next_review_date || null,
@@ -443,6 +472,7 @@ export function FenetreExigence({ exigence, onClose, envoyer }: { exigence?: Req
       source_reference: exigence.source_reference,
       title: exigence.title,
       standard: exigence.standard,
+      partner_id: exigence.partner?.id ?? null,
       summary: exigence.summary,
       expected_evidence: exigence.expected_evidence,
       next_review_date: exigence.next_review_date,
@@ -477,6 +507,11 @@ export function FenetreExigence({ exigence, onClose, envoyer }: { exigence?: Req
         <Field label="Référence du texte" className="md:col-span-2">
           <Input value={f.source_reference} onChange={(e) => setF({ ...f, source_reference: e.target.value })} placeholder={EXEMPLE_REFERENCE[f.source]} maxLength={300} required />
         </Field>
+        {contrat && (
+          <Field label="Client ou donneur d'ordre" hint="Le donneur d'ordre dont le contrat porte l'exigence." className="md:col-span-2">
+            <Select value={f.partner_id} onChange={(e) => setF({ ...f, partner_id: e.target.value })} placeholder="Aucun" options={optionsClients(ref?.clients, exigence?.partner ?? null)} />
+          </Field>
+        )}
         <Field label="Exigence" className="md:col-span-2">
           <Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Ce qui est exigé, en une phrase" maxLength={300} required />
         </Field>

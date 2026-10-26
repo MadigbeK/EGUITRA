@@ -77,7 +77,7 @@ export interface DeviceStamp {
 }
 
 /** Fiche à laquelle une pièce est rattachée (POST /hsseq/attachments, champs model et id). */
-export type AttachmentModel = "event" | "action" | "check" | "nonconformity" | "waiver" | "risk" | "audit" | "finding" | "requirement";
+export type AttachmentModel = "event" | "action" | "check" | "nonconformity" | "waiver" | "risk" | "audit" | "finding" | "requirement" | "review";
 
 /** Photo du constat, photo de la correction, preuve de réalisation, signature, document. */
 export type AttachmentRole = "photo" | "lift" | "evidence" | "signature" | "document";
@@ -101,7 +101,7 @@ export interface Attachment {
 }
 
 /** Fiche suivie par le journal (GET /hsseq/log?model&id). */
-export type LogModel = "event" | "action" | "check" | "nonconformity" | "breath_test" | "waiver" | "lock_reason" | "risk" | "audit" | "finding" | "requirement" | "auditor" | "journey" | "immobilization" | "route" | "rotation";
+export type LogModel = "event" | "action" | "check" | "nonconformity" | "breath_test" | "waiver" | "lock_reason" | "risk" | "audit" | "finding" | "requirement" | "auditor" | "journey" | "immobilization" | "route" | "rotation" | "review";
 
 /** Ligne du journal (§11, traçabilité) : valeurs avant et après, note libre. */
 export interface HistoryEntry {
@@ -148,7 +148,19 @@ export type HsseqErrorCode =
   | "incomplete_answers"
   | "vehicle_kind_mismatch"
   | "reason_not_open"
-  | "not_in_lot_1";
+  | "not_in_lot_1"
+  // Lot 3.
+  | "event_domain_mismatch"
+  | "recovery_required"
+  | "measures_required"
+  | "rotation_partner_mismatch"
+  | "document_missing"
+  | "not_anonymized"
+  | "debrief_required"
+  | "participants_required"
+  | "minutes_required"
+  | "decisions_missing"
+  | "import_rejected";
 
 /* ─── Criticité (§9.1) ────────────────────────────────────────────────── */
 
@@ -423,7 +435,8 @@ export interface EventClassification {
 
 /* ─── Actions (§9.2) ──────────────────────────────────────────────────── */
 
-export type ActionOrigin = "event" | "audit" | "check" | "risk" | "review";
+/** Origine d'une action ; « complaint » (réclamation client) et « drill » (exercice d'urgence) au lot 3. */
+export type ActionOrigin = "event" | "audit" | "check" | "risk" | "review" | "complaint" | "drill";
 
 /** Hiérarchie des mesures, de la plus forte à la plus faible. */
 export type ControlLevel = "elimination" | "substitution" | "engineering" | "administrative" | "ppe";
@@ -953,10 +966,17 @@ export type IndicatorCode =
   | "tipper_variance"
   // Lot 2.
   | "audits_completion"
-  | "immobilizations";
+  | "immobilizations"
+  // Lot 3.
+  | "spills"
+  | "dust_exceedances"
+  | "complaints"
+  | "complaints_on_time"
+  | "telematics_violations"
+  | "drills_completion";
 
 /** Unité d'un indicateur ; commun.tsx la met en forme (fmtIndicateur). */
-export type IndicatorUnit = "rate" | "ratio" | "pct" | "count" | "per_mille" | "l_100km" | "kg_co2_km";
+export type IndicatorUnit = "rate" | "ratio" | "pct" | "count" | "per_mille" | "l_100km" | "kg_co2_km" | "per_100_trips";
 
 /**
  * État d'un indicateur au regard de sa cible (indicator_status du noyau). Sous surveillance : à moins de
@@ -1099,8 +1119,27 @@ export interface Cockpit {
   immobilizations: { active: number; items: CockpitImmobilization[] };
   /** Maturité par norme : nulle sans exigence, ou pour le chef de parc. */
   iso_maturity: IsoMaturity[] | null;
+  /* Lot 3, bornés aux sites du compte. */
+  /** Fiches ouvertes ; contaminations et réclamations nulles pour qui ne les lit pas (chef de parc). */
+  environment: {
+    spills_open: number;
+    wastes_stored: number;
+    dust_exceedances_30d: number;
+    contaminations_open: number | null;
+    complaints_open: number | null;
+    complaints_overdue: number | null;
+  };
+  /** Plans d'urgence en vigueur, exercices en retard et des 30 prochains jours. */
+  emergency: { plans_active: number; overdue: number; upcoming: number };
+  /** Procédures en vigueur et accusés de lecture attendus et reçus. */
+  documents: { procedures_published: number; targets: number; read: number; read_rate: number | null };
+  /** Violations de conduite du mois, par type, et dernier import. */
+  telematics: { violations: number; by_type: Record<ViolationType, number>; last_import_at: string | null };
   computed_at: string;
 }
+
+/** Violation de conduite relevée par la télématique (VIOLATION_TYPES du noyau). */
+export type ViolationType = "speeding" | "harsh_braking" | "night_driving" | "driving_time";
 
 /* ─── Référentiels, paramètres, compte ────────────────────────────────── */
 
@@ -1139,7 +1178,15 @@ export interface Referentials {
    * du chauffeur lié, quand il est connu.
    */
   employees: Array<Ref & { company: Ref; site_id: number | null; site: Ref | null }>;
+  /**
+   * Clients des sociétés, et tiers déjà cités par un audit, une exigence ou un modèle de rapport : le
+   * client ou donneur d'ordre se choisit dans cette liste (identifiant et nom seulement). Servie à
+   * l'administration, à la direction et à hsseq, vide sinon : /finance/partners leur reste fermé.
+   */
+  clients: Ref[];
   criticality_thresholds: CriticalityThreshold[];
+  /** Délai de revue d'un risque, en mois (réglages de la société) : la prochaine revue proposée par défaut. */
+  risk_review_months: number;
   /** Seuil d'une action coûteuse, validée par la direction avant démarrage (GNF). */
   costly_action_threshold: number;
   /** Fenêtres du rattachement automatique à la rotation (heures) : contrôle du véhicule, alcootest du conducteur. */
@@ -1206,12 +1253,33 @@ export type HsseqSettingsPatch = Partial<Omit<HsseqSettings, "company" | "direct
 /** Aptitude médicale en statut seul : apte, à revoir (apte avec réserve, inconnue), inapte ou échue. */
 export type Fitness = "fit" | "review" | "unfit";
 
+/**
+ * Équipement de protection remis au salarié (RH, eguitra.rh.ppe.issue) : la dernière remise de chaque
+ * équipement, servie par la matrice des habilitations et par l'espace du conducteur.
+ */
+export interface PpeIssue {
+  /** Code de l'équipement chez RH (casque, gants, chaussures…). */
+  item: string;
+  label: string;
+  quantity: number;
+  issued_on: string;
+  /** Date de renouvellement prévue ; nulle sans renouvellement. */
+  renewal_date: string | null;
+  /** Renouvellement échu au jour de la situation. */
+  to_renew: boolean;
+  /** Remise signée par le salarié. */
+  acknowledged: boolean;
+}
+
 /** Espace du conducteur (GET /hsseq/me) : compte relié à un salarié RH et à un chauffeur. */
 export interface HsseqMe {
   employee: { id: number; name: string; matricule: string | null } | null;
   driver: Ref | null;
   fitness: Fitness | null;
+  /** `mandatory` : exigée pour le profil de l'ensemble dont il est le chauffeur habituel (règles d'HSSEQ, à défaut RH). */
   qualifications: Array<{ code: string; name: string; mandatory: boolean; state: string; expiry: string | null }>;
+  /** EPI remis par RH, la dernière remise de chaque équipement. */
+  ppe: PpeIssue[];
   /** Rotations du jour (draft) et rotations en route ; verrou nul une fois partie. */
   rotations: Array<RotationRef & { vehicle: VehicleRef | null; lock: LockEvaluation | null }>;
 }

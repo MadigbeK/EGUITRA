@@ -6,11 +6,37 @@ import { Download, Search, X } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Etat, Field, Input, Notice, Select, Tabs, type Tri } from "@/components/ui";
 import { ORIGINE_ACTION, STATUT_ACTION, Tampon } from "@/components/hsseq/commun";
 import { apiDownload, useApi } from "@/lib/api-client";
-import { fmtDate, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDate, pluriel } from "@/lib/format";
 import type { ActionCounts, ActionLine, ActionOrigin, ActionStatus, Page } from "@/lib/hsseq-types";
-import { Origine, Retard } from "./elements";
+import { Origine, Retard, origineLue } from "./elements";
 import { FicheAction } from "./FicheAction";
 import { AvecFiche, Bascule, ChampSite, Pages, aujourdhui, joursEntre, messageErreur, requete, useAdresse, useReferentiels } from "./outils";
+
+/**
+ * Fiche d'origine d'où l'on vient : son paramètre dans l'adresse, la clé du noyau qui filtre ses actions
+ * (list_domain de GET /hsseq/actions), l'origine de ces actions, les mots du bandeau et le lien retour
+ * vers sa fiche quand son écran existe.
+ */
+interface Source {
+  param: string;
+  cle: "event_id" | "risk_id" | "finding_id" | "complaint_id" | "drill_id" | "review_id";
+  origine: string;
+  de: string;
+  lien: ((id: number) => string) | null;
+}
+
+const SOURCES: readonly Source[] = [
+  { param: "evenement", cle: "event_id", origine: "event", de: "de l'événement", lien: (id) => `/hsseq/evenements/${id}` },
+  { param: "risque", cle: "risk_id", origine: "risk", de: "du risque", lien: (id) => `/hsseq/risques?risque=${id}` },
+  { param: "constat", cle: "finding_id", origine: "audit", de: "du constat", lien: (id) => `/hsseq/conformite?vue=constats&statut=tous&constat=${id}` },
+  { param: "revue", cle: "review_id", origine: "review", de: "de la revue de direction", lien: (id) => `/hsseq/revues?revue=${id}` },
+  // Écrans du lot 3 en cours d'écriture : la fiche d'origine est nommée, sans lien retour.
+  { param: "reclamation", cle: "complaint_id", origine: "complaint", de: "de la réclamation", lien: null },
+  { param: "exercice", cle: "drill_id", origine: "drill", de: "de l'exercice d'urgence", lien: null },
+];
+
+/** Paramètres de toutes les fiches d'origine, retirés ensemble pour revenir à tout le registre. */
+const SANS_SOURCE = Object.fromEntries(SOURCES.flatMap((s) => [[s.param, null], [s.cle, null]]));
 
 /** Onglets du registre : le statut, avec le nombre d'actions de la sélection filtrée. */
 type Onglet = "a_traiter" | "a_verifier" | "closes" | "annulees" | "toutes";
@@ -32,15 +58,17 @@ const PAR_PAGE = 50;
 /**
  * Plan d'actions : registre unique des actions correctives et préventives (§3, §9.2). Filtres et
  * fiche ouverte portés par l'adresse (statut, origine, responsable, site, echeance, retard=1, valider=1,
- * q, evenement, action) ; onglets par statut avec leur nombre ; la fiche s'ouvre à côté de la liste.
- * Venu d'un événement (evenement, passé au noyau en event_id), le registre montre toutes ses actions, closes comprises.
+ * q, action, et la fiche d'origine : evenement, risque, constat, reclamation, exercice ou revue) ;
+ * onglets par statut avec leur nombre ; la fiche s'ouvre à côté de la liste. Venu d'une fiche
+ * d'origine (passée au noyau en event_id, risk_id, finding_id, complaint_id, drill_id ou review_id), le
+ * registre montre toutes ses actions, closes comprises.
  */
 export function PlanActions() {
   const { lire, ecrire } = useAdresse();
   const { data: ref } = useReferentiels();
-  // Venu de la fiche d'un événement : « evenement » (ou « event_id », clé du noyau).
-  const evenement = Number(lire("evenement") || lire("event_id")) || null;
-  const ongletParDefaut: Onglet = evenement ? "toutes" : "a_traiter";
+  // Venu d'une fiche d'origine : son paramètre (« evenement », « risque »…) ou la clé du noyau (« event_id »…).
+  const venue = SOURCES.map((s) => ({ source: s, id: Number(lire(s.param) || lire(s.cle)) || null })).find((v) => v.id !== null) ?? null;
+  const ongletParDefaut: Onglet = venue ? "toutes" : "a_traiter";
   const onglet: Onglet = (ORDRE_ONGLETS as string[]).includes(lire("statut")) ? (lire("statut") as Onglet) : ongletParDefaut;
   const origine = lire("origine") as ActionOrigin | "";
   const responsable = lire("responsable");
@@ -60,7 +88,7 @@ export function PlanActions() {
     overdue: retard ? 1 : null,
     approval_pending: aValider ? 1 : null,
     search: recherche || null,
-    event_id: evenement,
+    ...(venue ? { [venue.source.cle]: venue.id } : {}),
   };
   const cle = `${requete(filtres)}|${onglet}`;
   const [tri, setTri] = useState<Tri>({ key: "due_date", dir: 1 });
@@ -128,19 +156,7 @@ export function PlanActions() {
         </Button>
       </div>
       {export_ && export_ !== "en_cours" && <Notice tone="danger">{export_}</Notice>}
-      {evenement && (
-        <div className="flex flex-wrap items-center gap-2 rounded-[10px] bg-accent-doux px-3.5 py-2 text-[13px] text-ink">
-          <span>
-            Actions de l&apos;événement{" "}
-            <Link href={`/hsseq/evenements/${evenement}`} className="font-semibold text-accent underline-offset-2 hover:underline">
-              {data?.items.find((a) => a.event)?.event?.reference ?? "d'origine"}
-            </Link>
-          </span>
-          <button type="button" onClick={() => ecrire({ evenement: null, event_id: null, origine: null, statut: null })} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-ink-2 transition-colors hover:bg-panel hover:text-ink">
-            <X className="h-3.5 w-3.5" /> Tout le registre
-          </button>
-        </div>
-      )}
+      {venue?.id && <Bandeau source={venue.source} id={venue.id} actions={data?.items} onTout={() => ecrire({ ...SANS_SOURCE, origine: null, statut: null })} />}
       <p className="text-[12.5px] leading-snug text-muted">
         Le responsable est relancé à J-7, le jour de l&apos;échéance puis chaque semaine de retard ; au-delà de 30 jours de retard, l&apos;action est escaladée au Directeur général.
       </p>
@@ -215,6 +231,34 @@ export function PlanActions() {
 
 function filtresActifs(f: Record<string, string | number | null>): boolean {
   return Object.values(f).some((v) => v !== null && v !== "");
+}
+
+/**
+ * Bandeau d'une fiche d'origine : « Actions du risque RSK/2026/0003 », la référence lue dans les
+ * actions servies (origin_label), un lien retour vers la fiche quand son écran existe, et le retour à
+ * tout le registre.
+ */
+function Bandeau({ source, id, actions, onTout }: { source: Source; id: number; actions: ActionLine[] | undefined; onTout: () => void }) {
+  const une = actions?.find((a) => a.origin === source.origine && (a.origin_id === id || a.event?.id === id));
+  const reference = (une && origineLue(une).reference) || `n°${INSECABLE}${id}`;
+  const href = source.lien?.(id) ?? null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-[10px] bg-accent-doux px-3.5 py-2 text-[13px] text-ink">
+      <span>
+        Actions {source.de}{" "}
+        {href ? (
+          <Link href={href} className="font-semibold text-accent underline-offset-2 hover:underline">
+            {reference}
+          </Link>
+        ) : (
+          <span className="font-semibold">{reference}</span>
+        )}
+      </span>
+      <button type="button" onClick={onTout} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-ink-2 transition-colors hover:bg-panel hover:text-ink">
+        <X className="h-3.5 w-3.5" /> Tout le registre
+      </button>
+    </div>
+  );
 }
 
 /** Échéance, et le délai qui reste quand la relance de J-7 approche. */

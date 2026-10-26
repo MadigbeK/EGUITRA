@@ -14,7 +14,7 @@ import { Badge, Button, ErrorBox, Field, Input, Loading, Notice, ProgressBar, Se
 import { texteErreur, tonHsseq } from "@/components/hsseq/commun";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import type { TonEtat } from "@/lib/couleurs";
-import { pluriel } from "@/lib/format";
+import { INSECABLE, fmtInt, pluriel } from "@/lib/format";
 import { NATURE_ARRET, deNuit, depuisChamp, duree, dureeArret, ecartsPrevus, heureCk, heureDuJour, jourCk, jourCourt, momentCk, versChamp } from "./outils";
 import type { Journey, JourneyInput, JourneyRules, RotationJourney, StopKind } from "./types";
 
@@ -188,6 +188,15 @@ export function PlanTrajet({ rotationId, onChange }: PlanTrajetProps) {
   );
 }
 
+/** Route de la rotation en une ligne : « Conakry - Siguiri, de Conakry à Siguiri, 790 km, durée standard 2 jours ». */
+function decrireRoute(route: NonNullable<RotationJourney["route"]>): string {
+  const parties = [route.name];
+  if (route.origin && route.destination) parties.push(`de ${route.origin} à ${route.destination}`);
+  if (route.distance_km) parties.push(`${fmtInt(route.distance_km)}${INSECABLE}km`);
+  if (route.duration_days) parties.push(`durée standard ${String(route.duration_days).replace(".", ",")}${INSECABLE}${route.duration_days > 1 ? "jours" : "jour"}`);
+  return parties.join(", ");
+}
+
 /** Règles qui s'appliquent : route et circulation de nuit, conduite prévue au plus par jour. */
 function Regles({ ligne }: { ligne: RotationJourney }) {
   const r = ligne.rules;
@@ -195,7 +204,7 @@ function Regles({ ligne }: { ligne: RotationJourney }) {
   const nuit = `${heureDuJour(r.night_start_hour)} à ${heureDuJour(r.night_end_hour)}`;
   return (
     <p className="mt-1 text-[12.5px] leading-snug text-muted">
-      {route ? `${route.name} : circulation de nuit ${route.night_driving_forbidden ? `interdite de ${nuit}` : "permise"}. ` : "Rotation sans route tarifée : aucune interdiction de nuit. "}
+      {route ? `${decrireRoute(route)} : circulation de nuit ${route.night_driving_forbidden ? `interdite de ${nuit}` : "permise"}. ` : "Rotation sans route tarifée : aucune interdiction de nuit. "}
       {r.max_driving_hours ? `Conduite prévue au plus ${duree(r.max_driving_hours)} par jour. ` : ""}
       Heures de Conakry.
     </p>
@@ -339,9 +348,19 @@ interface Brouillon {
 
 let prochaineCle = 1;
 
+/** Arrivée proposée d'après la durée standard de la route (jours), depuis un départ « datetime-local » ; vide sans durée. */
+function arriveeProposee(depart: string, ligne: RotationJourney): string {
+  const debut = depuisChamp(depart);
+  const jours = ligne.route?.duration_days;
+  return debut && jours ? versChamp(new Date(Date.parse(debut) + jours * 24 * HEURE).toISOString()) : "";
+}
+
 function depuisPlan(ligne: RotationJourney): Brouillon {
   const j = ligne.journey;
-  if (!j) return { depart: `${ligne.rotation.date_loading}T06:00`, arrivee: "", itineraire: "", nuit: false, arrets: [] };
+  if (!j) {
+    const depart = `${ligne.rotation.date_loading}T06:00`;
+    return { depart, arrivee: arriveeProposee(depart, ligne), itineraire: "", nuit: false, arrets: [] };
+  }
   return {
     depart: versChamp(j.planned_departure),
     arrivee: versChamp(j.planned_arrival),
@@ -381,11 +400,13 @@ function SaisiePlan({ ligne, onAnnuler, onEnregistre }: { ligne: RotationJourney
   const horairesOk = depart !== null && arrivee !== null && arrivee > depart;
   const erreurDepart = tente && !depart ? "Heure de départ à saisir." : undefined;
   const erreurArrivee = tente && !arrivee ? "Heure d'arrivée à saisir." : depart && arrivee && arrivee <= depart ? "L'arrivée suit le départ." : undefined;
+  // Comme le noyau : un arrêt commence au départ prévu ou après, et finit à l'arrivée prévue au plus tard.
   const erreursArrets = b.arrets.map((a) => {
     const quand = depuisChamp(a.quand);
     const minutes = Number(a.minutes);
+    const fin = quand && Number.isInteger(minutes) && minutes > 0 ? Date.parse(quand) + minutes * 60_000 : null;
     return {
-      quand: !quand ? (tente ? "Heure à saisir." : undefined) : horairesOk && (quand < depart! || quand >= arrivee!) ? "Entre le départ et l'arrivée." : undefined,
+      quand: !quand ? (tente ? "Heure à saisir." : undefined) : horairesOk && (quand < depart! || (fin ?? Date.parse(quand)) > Date.parse(arrivee!)) ? "Entre le départ et l'arrivée, durée comprise." : undefined,
       minutes: !Number.isInteger(minutes) || minutes <= 0 ? (tente || a.minutes !== "" ? "Minutes, nombre entier." : undefined) : undefined,
     };
   });
@@ -454,7 +475,7 @@ function SaisiePlan({ ligne, onAnnuler, onEnregistre }: { ligne: RotationJourney
         <Field label="Départ prévu" hint="Heure de Conakry." error={erreurDepart}>
           <Input type="datetime-local" value={b.depart} onChange={(e) => setB({ ...b, depart: e.target.value })} required aria-invalid={erreurDepart ? true : undefined} />
         </Field>
-        <Field label="Arrivée prévue" hint="Heure de Conakry." error={erreurArrivee}>
+        <Field label="Arrivée prévue" hint={ligne.route?.duration_days && !ligne.journey ? "Heure de Conakry. Proposée d'après la durée standard de la route : ajustez-la." : "Heure de Conakry."} error={erreurArrivee}>
           <Input type="datetime-local" min={b.depart || undefined} value={b.arrivee} onChange={(e) => setB({ ...b, arrivee: e.target.value })} required aria-invalid={erreurArrivee ? true : undefined} />
         </Field>
       </div>

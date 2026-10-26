@@ -114,6 +114,35 @@ const TON_HSSEQ: Readonly<Record<string, TonEtat>> = {
   // Actions.
   "À faire": "neutral",
   "À vérifier": "warn",
+  // Environnement et qualité (lot 3).
+  "En cours de traitement": "warn",
+  Entreposé: "neutral",
+  Enlevé: "ok",
+  "Bordereau manquant": "warn",
+  "Bordereau joint": "ok",
+  "Seuil dépassé": "danger",
+  Reçue: "warn",
+  Répondue: "neutral",
+  Mineure: "neutral",
+  Majeure: "warn",
+  "Dans le délai": "ok",
+  "Hors délai": "danger",
+  // Documents et urgences (lot 3).
+  "À lire": "warn",
+  "Brouillon à publier": "warn",
+  "Document à joindre": "warn",
+  "Noms à retirer": "danger",
+  "En rédaction": "neutral",
+  Remplacée: "neutral",
+  Diffusée: "neutral",
+  Diffusé: "neutral",
+  Archivé: "neutral",
+  "Sans exercice prévu": "warn",
+  Retiré: "neutral",
+  // Revue de direction (lot 3).
+  Préparée: "neutral",
+  Tenue: "neutral",
+  "À clore": "warn",
   // Audits et conformité (lot 2).
   "Écart majeur": "danger",
   "Écart mineur": "warn",
@@ -280,6 +309,18 @@ const REFUS_PAR_DEFAUT: Readonly<Record<string, string>> = {
   reason_required: "Un motif écrit est obligatoire.",
   unsupported_type: "Formats acceptés : JPEG, PNG ou PDF.",
   too_large: "Fichier trop lourd : 8 Mo au plus.",
+  // Lot 3 : le noyau écrit son message ; ces phrases ne servent que s'il manque.
+  recovery_required: "Décrivez la récupération et le confinement avant de clore le déversement.",
+  rotation_partner_mismatch: "La rotation choisie est celle d'un autre client.",
+  event_domain_mismatch: "L'événement choisi n'est pas du domaine attendu (environnement pour un déversement, qualité pour une contamination).",
+  measures_required: "Décrivez les mesures prises avant de clore la fiche.",
+  document_missing: "Le document exigé n'est pas joint.",
+  not_anonymized: "Le texte cite encore des personnes : rendez-le anonyme avant de le publier.",
+  debrief_required: "Le débriefing de l'exercice est obligatoire.",
+  participants_required: "Indiquez les participants.",
+  minutes_required: "Le compte rendu est obligatoire.",
+  decisions_missing: "Inscrivez au moins une décision.",
+  import_rejected: "Le fichier est refusé : corrigez les lignes signalées.",
 };
 
 /** Champs en cause, en clair et sans doublon (latitude et longitude font une seule position). */
@@ -390,6 +431,8 @@ export const ORIGINE_ACTION: Record<ActionOrigin, string> = {
   check: "Contrôle",
   risk: "Risque",
   review: "Revue de direction",
+  complaint: "Réclamation client",
+  drill: "Exercice d'urgence",
 };
 
 /** Hiérarchie des mesures, de la plus forte (élimination) à la plus faible (EPI). */
@@ -510,6 +553,12 @@ export const INDICATEUR: Record<IndicatorCode, string> = {
   tipper_variance: "Écarts de tonnage, bennes",
   audits_completion: "Audits réalisés contre planifiés",
   immobilizations: "Immobilisations de véhicules",
+  spills: "Déversements",
+  dust_exceedances: "Dépassements du seuil de poussières",
+  complaints: "Réclamations clients",
+  complaints_on_time: "Réclamations traitées dans le délai",
+  telematics_violations: "Violations de conduite pour 100 voyages",
+  drills_completion: "Exercices d'urgence réalisés",
 };
 
 const SUFFIXE: Record<IndicatorUnit, string> = {
@@ -520,6 +569,8 @@ const SUFFIXE: Record<IndicatorUnit, string> = {
   per_mille: `${INSECABLE}‰`,
   l_100km: `${INSECABLE}L/100${INSECABLE}km`,
   kg_co2_km: `${INSECABLE}kg${INSECABLE}CO₂/km`,
+  // « pour 100 voyages » est écrit dans le libellé de l'indicateur.
+  per_100_trips: "",
 };
 
 /**
@@ -543,6 +594,8 @@ export function fmtIndicateur(valeur: number | null | undefined, unite: Indicato
       return `${fmtFixe(valeur, 1)}${SUFFIXE.l_100km}`;
     case "kg_co2_km":
       return `${fmtFixe(valeur, 2)}${SUFFIXE.kg_co2_km}`;
+    case "per_100_trips":
+      return fmtFixe(valeur, 2);
   }
 }
 

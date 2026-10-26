@@ -1,14 +1,16 @@
 /**
  * Outils du rapport mensuel HSSE : écriture des valeurs dans l'unité libre d'un modèle (celles du
  * cockpit gardent leur écriture), libellés des natures, modes et cumuls, état d'un indicateur avec les
- * mots du comité mensuel du cockpit, mois et dates du rapport, nombres saisis à la française.
+ * mots du comité mensuel du cockpit, mois et dates du rapport, nombres saisis à la française, périmètre
+ * d'un modèle (sites et profil de véhicule).
  */
 
 import { INSECABLE, MONTHS_FR, fmtDec, fmtInt } from "@/lib/format";
 import type { IndicatorStatus, IndicatorUnit } from "@/lib/hsseq-types";
 import type { TonEtat } from "@/lib/couleurs";
+import { TYPE_VEHICULE } from "@/components/hsseq/commun";
 import { MOT_ETAT, fmtCase, moisLong, tonEtatIndicateur, type EtatIndicateur } from "@/components/hsseq/cockpit/outils";
-import type { ReportAggregation, ReportDirection, ReportMode, ReportNature } from "./types";
+import type { ReportAggregation, ReportDirection, ReportMode, ReportNature, ReportTemplate } from "./types";
 
 /* ─── Libellés ────────────────────────────────────────────────────────── */
 
@@ -95,3 +97,16 @@ export function deMois(m: string): string {
 
 /** Date du jour, « AAAA-MM-JJ » (Conakry vit à l'heure UTC). */
 export const aujourdhui = () => new Date().toISOString().slice(0, 10);
+
+/* ─── Périmètre d'un modèle ───────────────────────────────────────────── */
+
+/**
+ * Périmètre des valeurs calculées d'un modèle borné à des sites ou à un profil de véhicule : « sites
+ * Kamsar, Boffa, bennes seules », « tous les sites, citernes seules » ; nul pour toute la société.
+ */
+export function perimetre(m: Pick<ReportTemplate, "sites" | "vehicle_kind">): string | null {
+  const sites = m.sites ?? [];
+  if (!sites.length && !m.vehicle_kind) return null;
+  const lieux = sites.length ? `${sites.length > 1 ? "sites" : "site"} ${sites.map((s) => s.name).join(", ")}` : "tous les sites";
+  return `${lieux}, ${m.vehicle_kind ? `${TYPE_VEHICULE[m.vehicle_kind].toLocaleLowerCase("fr")}s seules` : "citernes et bennes"}`;
+}

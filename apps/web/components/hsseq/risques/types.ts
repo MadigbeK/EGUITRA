@@ -101,8 +101,8 @@ export interface Risk extends RiskLine {
 }
 
 /**
- * Comptes de GET /hsseq/risks : `by_status` porte sur tout le registre lisible du compte (filtres
- * ignorés, société exceptée) ; les niveaux et les revues échues, sur la sélection filtrée.
+ * Comptes de GET /hsseq/risks : `by_status` porte sur la sélection filtrée sans le filtre de statut (le
+ * nombre de chaque onglet) ; les niveaux et les revues échues, sur la sélection filtrée, statut compris.
  */
 export interface RiskCounts {
   by_status: Record<RiskStatus, number>;
@@ -138,7 +138,7 @@ export interface MeasureInput {
 
 /**
  * Corps de POST /hsseq/risks (hsseq). Résiduelle absente : elle part de la brute ; date de revue
- * absente : le délai des réglages de la société (12 mois par défaut).
+ * absente : le délai des réglages de la société (risk_review_months des référentiels).
  */
 export interface RiskInput {
   nature: RiskNature;

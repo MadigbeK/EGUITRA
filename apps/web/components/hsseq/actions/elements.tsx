@@ -11,13 +11,15 @@ export const JOURS_ESCALADE = 30;
 
 /** Adresse de l'objet d'origine d'une action : l'événement, ou le contrôle avant départ ouvert dans sa fiche. */
 export function lienOrigine(a: Pick<ActionLine, "origin" | "origin_id">): string | null {
-  if (a.origin === "review") return "/hsseq/conformite?vue=revue";
+  if (a.origin === "review") return a.origin_id ? `/hsseq/revues?revue=${a.origin_id}` : "/hsseq/revues";
   if (!a.origin_id) return null;
   if (a.origin === "event") return `/hsseq/evenements/${a.origin_id}`;
   if (a.origin === "check") return `/hsseq/controles?vue=controles&controle=${a.origin_id}`;
   // Audit : origin_id est le constat ; risque : le risque (ORIGIN_SOURCES du noyau).
   if (a.origin === "audit") return `/hsseq/conformite?vue=constats&statut=tous&constat=${a.origin_id}`;
   if (a.origin === "risk") return `/hsseq/risques?risque=${a.origin_id}`;
+  if (a.origin === "drill") return `/hsseq/documents?vue=urgences&exercice=${a.origin_id}`;
+  if (a.origin === "complaint") return `/hsseq/environnement?vue=reclamations&statut=toutes&reclamation=${a.origin_id}`;
   return null;
 }
 

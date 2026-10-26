@@ -98,13 +98,14 @@ export function moisLong(mois: string): string {
 /**
  * Ordre des indicateurs dans leur famille, servie par le noyau (`family`). Proactifs : ce que l'on fait
  * pour prévenir (contrôles, alcootests, déclaration des presque-accidents, actions, habilitations,
- * audits). Réactifs : ce que l'on constate (accidents, gravité, positifs, dérogations, immobilisations,
- * consommation, écarts de produit). L'ordre donne les références P1…, R1… ; les codes du lot 2 sont
- * ajoutés en fin de liste pour garder les références du lot 1.
+ * audits, réclamations traitées, exercices). Réactifs : ce que l'on constate (accidents, gravité,
+ * positifs, dérogations, immobilisations, consommation, écarts de produit, déversements, poussières,
+ * réclamations, violations de conduite). L'ordre donne les références P1…, R1… ; les codes des lots 2 et
+ * 3 sont ajoutés en fin de liste pour garder les références du lot 1.
  */
 export const ORDRE_FAMILLE: Record<IndicatorFamily, readonly IndicatorCode[]> = {
-  proactive: ["check_completion", "check_compliance", "breath_test_completion", "reporting_ratio", "actions_on_time", "actions_effectiveness", "qualifications_valid", "audits_completion"],
-  reactive: ["frequency_rate", "severity_rate", "road_accidents_per_mkm", "breath_test_positives", "waivers", "fuel_consumption", "co2_emissions", "tanker_shortage", "tipper_variance", "immobilizations"],
+  proactive: ["check_completion", "check_compliance", "breath_test_completion", "reporting_ratio", "actions_on_time", "actions_effectiveness", "qualifications_valid", "audits_completion", "complaints_on_time", "drills_completion"],
+  reactive: ["frequency_rate", "severity_rate", "road_accidents_per_mkm", "breath_test_positives", "waivers", "fuel_consumption", "co2_emissions", "tanker_shortage", "tipper_variance", "immobilizations", "spills", "dust_exceedances", "complaints", "telematics_violations"],
 };
 
 /** Référence d'un indicateur dans le comité : « P3 », « R1 » ; « – » pour un code inconnu de l'écran. */
@@ -128,19 +129,13 @@ function sansObjet(i: Indicator): boolean {
   return i.value === null && i.series.every((p) => p.value === null);
 }
 
-/**
- * Indicateurs servis à vide par le noyau au lot 1, quel que soit le filtre : l'écart de tonnage des
- * bennes (une seule pesée par rotation, pas de tonnage livré). L'écran le dit par la note du noyau.
- */
-export const SANS_OBJET_LOT1: ReadonlySet<IndicatorCode> = new Set<IndicatorCode>(["tipper_variance"]);
-
 /** Profil de véhicule d'un indicateur propre à un type (écarts de livraison ou de tonnage). */
 const PROFIL_INDICATEUR: Partial<Record<IndicatorCode, VehicleKind>> = { tanker_shortage: "tanker", tipper_variance: "tipper" };
 
 /**
- * Indicateurs montrés : tous, sauf ceux qui sont sans objet pour le profil choisi. Sans filtre de
- * profil, un indicateur vide reste à l'écran avec « Sans donnée » ; un indicateur sans objet au lot 1
- * reste montré avec sa note, sauf pour l'autre profil.
+ * Indicateurs montrés : tous, sauf ceux qui sont sans objet pour le profil choisi (écarts de livraison
+ * des citernes pour les bennes, et l'inverse). Sans filtre de profil, un indicateur vide reste à
+ * l'écran avec « Sans donnée ».
  */
 export function indicateursMontres(c: Cockpit): Indicator[] {
   const profil = c.filters.vehicle_kind;
@@ -148,7 +143,7 @@ export function indicateursMontres(c: Cockpit): Indicator[] {
   return c.indicators.filter((i) => {
     const propre = PROFIL_INDICATEUR[i.code];
     if (propre && propre !== profil) return false;
-    return SANS_OBJET_LOT1.has(i.code) || !sansObjet(i);
+    return !sansObjet(i);
   });
 }
 
@@ -233,6 +228,8 @@ export function fmtCase(v: number | null | undefined, unite: IndicatorUnit): str
       return fmtFixe(v, 1);
     case "count":
       return Number.isInteger(v) ? fmtInt(v) : fmtFixe(v, 1);
+    case "per_100_trips":
+      return fmtFixe(v, 2);
   }
 }
 
@@ -256,7 +253,7 @@ export function unite(i: Indicator): string {
     default:
       break;
   }
-  const u: Record<IndicatorUnit, string> = { rate: "taux", ratio: "ratio", pct: "%", count: "nombre", per_mille: "‰", l_100km: "L/100 km", kg_co2_km: "kg CO₂/km" };
+  const u: Record<IndicatorUnit, string> = { rate: "taux", ratio: "ratio", pct: "%", count: "nombre", per_mille: "‰", l_100km: "L/100 km", kg_co2_km: "kg CO₂/km", per_100_trips: "pour 100 voyages" };
   return u[i.unit];
 }
 
@@ -308,6 +305,15 @@ export function lienIndicateur(i: Indicator, c: Cockpit): { href: string; label:
       return { href: "/hsseq/conformite", label: "Programme d'audits" };
     case "immobilizations":
       return { href: "/hsseq/immobilisations", label: "Immobilisations" };
+    case "spills":
+    case "dust_exceedances":
+    case "complaints":
+    case "complaints_on_time":
+      return { href: "/hsseq/environnement", label: "Environnement et qualité" };
+    case "telematics_violations":
+      return { href: "/hsseq/telematique", label: "Violations de conduite" };
+    case "drills_completion":
+      return { href: "/hsseq/documents", label: "Plans d'urgence et exercices" };
     default:
       return null;
   }

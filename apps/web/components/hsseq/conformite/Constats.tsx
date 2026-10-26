@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { X } from "@/components/icons";
 import { Card, DataTable, ErrorBox, Etat, Field, Segmented, Select, cx, type Column, type Tri } from "@/components/ui";
 import { AvecFiche, ChampSite, Pages, requete, useReferentiels } from "@/components/hsseq/actions/outils";
 import { useApi } from "@/lib/api-client";
 import { fmtInt, pluriel } from "@/lib/format";
 import type { Page } from "@/lib/hsseq-types";
-import { CLASSEMENT, ORDRE_CLASSEMENT, STATUT_CONSTAT, TamponConformite, anneeCourante, lienAudit, parmi, sansAction, useEtroit, type VueProps } from "./commun";
+import { CLASSEMENT, ORDRE_CLASSEMENT, Recherche, STATUT_CONSTAT, TamponConformite, anneeCourante, lienAudit, parmi, sansAction, useEtroit, type VueProps } from "./commun";
 import { FicheConstat } from "./FicheConstat";
 import type { AuditCounts, AuditLine, Finding, FindingClass, FindingCounts, FindingStatus } from "./types";
 
@@ -33,9 +33,10 @@ function ResumeActions({ f }: { f: Finding }) {
 }
 
 /**
- * Constats de tous les audits du périmètre : filtres par statut (ouverts par défaut), classement, audit
- * et site, portés par l'adresse avec la fiche ouverte (constat). Venu de la fiche d'un audit (audit),
- * la liste montre tous ses constats, soldés compris.
+ * Constats de tous les audits du périmètre : recherche (référence, description, intitulé de l'audit ou
+ * de l'exigence), filtres par statut (ouverts par défaut), classement, audit et site, portés par
+ * l'adresse avec la fiche ouverte (constat). Venu de la fiche d'un audit (audit), la liste montre tous
+ * ses constats, soldés compris.
  */
 export function Constats({ lire, ecrire, droits }: VueProps) {
   const { data: ref } = useReferentiels();
@@ -46,9 +47,11 @@ export function Constats({ lire, ecrire, droits }: VueProps) {
   const statut: FiltreStatut = parmi(lire("statut"), STATUT_ADRESSE) ?? statutParDefaut;
   const classement: FindingClass | null = parmi(lire("classement"), CLASSEMENT);
   const site = lire("site");
+  const recherche = lire("q");
   const choisi = Number(lire("constat")) || null;
+  const chercher = useCallback((q: string) => ecrire({ q }), [ecrire]);
 
-  const filtres = { classification: classement, audit_id: audit, site_id: site || null };
+  const filtres = { q: recherche || null, classification: classement, audit_id: audit, site_id: site || null };
   const cle = `${requete(filtres)}|${statut}`;
   const [tri, setTri] = useState<Tri>({ key: "id", dir: -1 });
   const [position, setPosition] = useState({ cle, offset: 0 });
@@ -123,6 +126,7 @@ export function Constats({ lire, ecrire, droits }: VueProps) {
   const liste = (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end gap-3">
+        <Recherche valeur={recherche} onChange={chercher} placeholder="Référence, constat, audit, exigence" />
         <div className="-mx-1 overflow-x-auto px-1">
           <Segmented<FiltreStatut>
             label="Constats affichés"
@@ -181,7 +185,7 @@ export function Constats({ lire, ecrire, droits }: VueProps) {
                 setPosition({ cle, offset: 0 });
               }}
               onRowClick={(f) => ecrire({ constat: f.id })}
-              empty={statut === "ouverts" && !classement && !audit && !site ? "Aucun constat ouvert." : "Aucun constat pour ces filtres."}
+              empty={statut === "ouverts" && !classement && !audit && !site && !recherche ? "Aucun constat ouvert." : "Aucun constat pour ces filtres."}
               columns={colonnes}
             />
             <Pages offset={data.offset} limit={data.limit} total={data.total_count} nom="constats" onPage={(x) => setPosition({ cle, offset: x })} />

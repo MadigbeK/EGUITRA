@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Etat, Field, Segmented, Select, cx, type Column, type Tri } from "@/components/ui";
-import { AvecFiche, Bascule, Pages, requete } from "@/components/hsseq/actions/outils";
-import { apiSend, useApi } from "@/lib/api-client";
+import { Download, Plus } from "@/components/icons";
+import { Button, Card, DataTable, ErrorBox, Etat, Field, Notice, Segmented, Select, cx, type Column, type Tri } from "@/components/ui";
+import { AvecFiche, Bascule, Pages, aujourdhui, requete } from "@/components/hsseq/actions/outils";
+import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt, pluriel } from "@/lib/format";
 import type { Page } from "@/lib/hsseq-types";
-import { NORME, ORDRE_NORME, ORDRE_SOURCE, Recherche, SOURCE, STATUT_EXIGENCE, TamponConformite, parmi, useEtroit, useRafraichir, type VueProps } from "./commun";
+import { NORME, ORDRE_NORME, ORDRE_SOURCE, Recherche, SOURCE, STATUT_EXIGENCE, TamponConformite, messageErreur, parmi, useEtroit, useRafraichir, type VueProps } from "./commun";
 import { FenetreExigence } from "./fenetres";
 import { FicheExigence } from "./FicheExigence";
 import type { Requirement, RequirementCounts, RequirementDetail, RequirementSource, RequirementStandard, RequirementStatus } from "./types";
@@ -40,7 +40,8 @@ function Revue({ r }: { r: Requirement }) {
  * Registre des exigences légales, normatives et contractuelles des donneurs d'ordre (§7) : source,
  * référence du texte, preuve attendue, statut de conformité et revues. Recherche, source, référentiel,
  * statut, revues en retard et fiche ouverte (exigence) portés par l'adresse ; le Responsable HSSEQ
- * tient le registre, l'administration, la direction et l'auditeur le lisent.
+ * tient le registre, l'administration, la direction et l'auditeur le lisent. L'export reprend ces
+ * filtres sur la feuille des exigences (requirement_source, requirement_standard, requirement_status).
  */
 export function Exigences({ lire, ecrire, droits }: VueProps) {
   const etroit = useEtroit();
@@ -58,7 +59,24 @@ export function Exigences({ lire, ecrire, droits }: VueProps) {
   const [position, setPosition] = useState({ cle, offset: 0 });
   const offset = position.cle === cle ? position.offset : 0;
   const [creer, setCreer] = useState(false);
+  const [export_, setExport] = useState<string | null>(null);
   const chercher = useCallback((q: string) => ecrire({ q }), [ecrire]);
+
+  async function exporter() {
+    setExport("en_cours");
+    try {
+      // La feuille des exigences a ses propres filtres (requirement_source, requirement_standard,
+      // requirement_status, revues en retard) ; la recherche borne aussi les audits, elle n'est pas
+      // envoyée. Le classeur reprend le programme d'audits de l'année en cours.
+      await apiDownload(
+        `/hsseq/audits/export.xlsx?${requete({ requirement_source: source, requirement_standard: norme, requirement_status: statut === "toutes" ? null : STATUT_ADRESSE[statut], review_overdue: retard ? 1 : null })}`,
+        `audits_conformite_${aujourdhui()}.xlsx`,
+      );
+      setExport(null);
+    } catch (e) {
+      setExport(messageErreur(e, "Export impossible."));
+    }
+  }
 
   // Nombres sans le statut (bascule des statuts) et revues en retard de la sélection ; liste filtrée.
   const { data: compte } = useApi<Page<Requirement, RequirementCounts>>(`/hsseq/requirements?${requete({ ...filtres, limit: 1 })}`, { keepPreviousData: true });
@@ -127,12 +145,18 @@ export function Exigences({ lire, ecrire, droits }: VueProps) {
         <Bascule actif={retard} onChange={(v) => ecrire({ retard: v ? "1" : null })} nombre={retard ? undefined : enRetard?.total_count}>
           Revue en retard
         </Bascule>
-        {droits.hsseq && (
-          <Button variant="primary" className="sm:ml-auto" onClick={() => setCreer(true)}>
-            <Plus className="h-4 w-4" /> Nouvelle exigence
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <Button loading={export_ === "en_cours"} onClick={() => void exporter()} title="Registre des exigences aux filtres de source, de référentiel, de statut et de revue, avec le programme d'audits de l'année">
+            <Download className="h-4 w-4" /> Exporter
           </Button>
-        )}
+          {droits.hsseq && (
+            <Button variant="primary" onClick={() => setCreer(true)}>
+              <Plus className="h-4 w-4" /> Nouvelle exigence
+            </Button>
+          )}
+        </div>
       </div>
+      {export_ && export_ !== "en_cours" && <Notice tone="danger">{export_}</Notice>}
 
       <div className="-mx-1 overflow-x-auto px-1">
         <Segmented<FiltreStatut>

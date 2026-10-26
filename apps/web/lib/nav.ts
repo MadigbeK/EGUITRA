@@ -219,6 +219,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/hsseq", label: "Cockpit", icon: "LayoutDashboard", profiles: HSSEQ_LECTURE },
         { href: "/hsseq/rapports", label: "Rapport mensuel", icon: "FileText", profiles: ["admin", "direction", "hsseq"] },
+        { href: "/hsseq/revues", label: "Revue de direction", icon: "Gavel", profiles: ["admin", "direction", "hsseq", "auditeur"] },
       ],
     },
     {
@@ -234,11 +235,19 @@ export const NAV: Record<AppCode, NavSection[]> = {
       ],
     },
     {
+      label: "Environnement et terrain",
+      items: [
+        { href: "/hsseq/environnement", label: "Environnement et qualité", icon: "Feuille", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/telematique", label: "Télématique", icon: "Radar", profiles: HSSEQ_LECTURE },
+      ],
+    },
+    {
       label: "Personnel et conformité",
       items: [
         // Habilitations : pas l'auditeur (le noyau les sert à l'administration, à la direction, à HSSEQ et au chef de parc).
         { href: "/hsseq/habilitations", label: "Habilitations", icon: "UserCog", profiles: HSSEQ },
         { href: "/hsseq/conformite", label: "Audits et conformité", icon: "ScrollText", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/documents", label: "Documents et urgences", icon: "BookOpen", profiles: HSSEQ_LECTURE },
       ],
     },
     {

@@ -11,6 +11,7 @@ import { ATraiter } from "./ATraiter";
 import { ComiteMensuel } from "./Comite";
 import { BandeIndicateurs } from "./Indicateurs";
 import { Derogations, MatriceEvenements } from "./Matrice";
+import { EnvironnementTerrain } from "./EnvironnementTerrain";
 import { RisquesConformite } from "./RisquesConformite";
 import { aujourdhui, chaine, decalerMois, lireFiltres, moisLong, type Filtres } from "./outils";
 
@@ -18,8 +19,9 @@ import { aujourdhui, chaine, decalerMois, lireFiltres, moisLong, type Filtres } 
  * Cockpit de NIMOVA · HSSEQ (§3, §10), écran du Responsable HSSEQ et du dirigeant : il se lit en dix
  * secondes. En tête, les filtres (période, société, site, profil), portés par l'adresse de la page.
  * Puis ce qui est à traiter (départs bloqués du jour, actions en retard, échéances à 30 jours), les
- * indicateurs, la situation des risques et de la conformité (lot 2), la synthèse du comité mensuel et
- * la matrice de criticité des événements.
+ * indicateurs, la situation des risques et de la conformité (lot 2), celle de l'environnement, des
+ * urgences, des documents et de la télématique (lot 3), la synthèse du comité mensuel et la matrice
+ * de criticité des événements.
  */
 export function Cockpit() {
   const router = useRouter();
@@ -80,6 +82,7 @@ export function Cockpit() {
           <ATraiter c={c} />
           <BandeIndicateurs c={c} />
           <RisquesConformite c={c} />
+          <EnvironnementTerrain c={c} />
           <ComiteMensuel c={c} />
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
             <div className="min-w-0 xl:col-span-7">

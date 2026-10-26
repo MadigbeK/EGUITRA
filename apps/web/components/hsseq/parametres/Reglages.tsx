@@ -29,6 +29,12 @@ const CIBLES_PROPOSEES: Record<IndicatorCode, number> = {
   tipper_variance: 5,
   audits_completion: 100,
   immobilizations: 0,
+  spills: 0,
+  dust_exceedances: 0,
+  complaints: 0,
+  complaints_on_time: 100,
+  telematics_violations: 5,
+  drills_completion: 100,
 };
 
 type Dates = "lock_start_date" | "qualifications_required_from" | "employee_file_required_from" | "documents_required_from";

@@ -21,6 +21,10 @@ import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
 import { enregistrerConformite } from "./hsseq-conformite.mjs";
+import { enregistrerDocuments } from "./hsseq-documents.mjs";
+import { enregistrerEnvironnement } from "./hsseq-environnement.mjs";
+import { enregistrerRevues } from "./hsseq-revues.mjs";
+import { enregistrerTelematique } from "./hsseq-telematique.mjs";
 import { enregistrerHabilitationsRapports } from "./hsseq-habilitations-rapports.mjs";
 import { enregistrerRisques } from "./hsseq-risques.mjs";
 import { enregistrerTrajets, immobilisationDeLEvenement, immobilisationEnCours, immobilisationProposee, immobiliser, motifSurcharge, motifTrajet } from "./hsseq-trajets.mjs";
@@ -6606,7 +6610,7 @@ const HS_SETTINGS_DEFAUT = {
   lock_start_date: TODAY, qualifications_required_from: null, employee_file_required_from: null, documents_required_from: null,
   level_moderate_min: 4, level_significant_min: 8, level_high_min: 15, investigation_hours_high: 72, investigation_days_significant: 7,
   investigation_days_moderate: 15, client_notice_hours: 24, verification_min_criticality: 8, verification_days: 90, escalation_days: 30,
-  night_start_hour: 19, night_end_hour: 6, max_driving_hours: 9,
+  night_start_hour: 19, night_end_hour: 6, max_driving_hours: 9, co2_factor: 2.68, complaint_response_days: 15,
   costly_action_threshold: 50_000_000, check_window_hours: 12, breath_test_window_hours: 4, director_id: null, targets: {},
 };
 const HS_SETTINGS_DATES = ["lock_start_date", "qualifications_required_from", "employee_file_required_from", "documents_required_from"];
@@ -6614,14 +6618,18 @@ const HS_SETTINGS_NOMBRES = ["level_moderate_min", "level_significant_min", "lev
 /** Réglages des plans de trajet (lot 2) : plage de nuit et conduite au plus par jour, en heures décimales. */
 const HS_SETTINGS_DECIMAUX = ["night_start_hour", "night_end_hour", "max_driving_hours"];
 /** Cibles proposées par le contrat (§4), remplacées indicateur par indicateur par `targets`. */
-const HS_TARGETS = { frequency_rate: 5, severity_rate: 0.2, road_accidents_per_mkm: 1.5, reporting_ratio: 10, check_completion: 100, check_compliance: 95, breath_test_completion: 100, breath_test_positives: 0, waivers: 2, actions_on_time: 90, actions_effectiveness: 80, qualifications_valid: 100, fuel_consumption: 44, co2_emissions: 1.18, tanker_shortage: 1.5, tipper_variance: 5, audits_completion: 100, immobilizations: 0 };
+const HS_TARGETS = { frequency_rate: 5, severity_rate: 0.2, road_accidents_per_mkm: 1.5, reporting_ratio: 10, check_completion: 100, check_compliance: 95, breath_test_completion: 100, breath_test_positives: 0, waivers: 2, actions_on_time: 90, actions_effectiveness: 80, qualifications_valid: 100, fuel_consumption: 44, co2_emissions: 1.18, tanker_shortage: 1.5, tipper_variance: 5, audits_completion: 100, immobilizations: 0,
+  spills: 0, dust_exceedances: 0, complaints: 0, complaints_on_time: 100, telematics_violations: 5, drills_completion: 100 };
 /** Famille d'un indicateur pour le comité des donneurs d'ordre (FAMILY du noyau). */
 const HS_FAMILY = {
   frequency_rate: "reactive", severity_rate: "reactive", road_accidents_per_mkm: "reactive", reporting_ratio: "proactive", check_completion: "proactive",
   check_compliance: "proactive", breath_test_completion: "proactive", breath_test_positives: "reactive", waivers: "reactive", actions_on_time: "proactive",
   actions_effectiveness: "proactive", qualifications_valid: "proactive", fuel_consumption: "reactive", co2_emissions: "reactive", tanker_shortage: "reactive",
   tipper_variance: "reactive", audits_completion: "proactive", immobilizations: "reactive",
+  spills: "reactive", dust_exceedances: "reactive", complaints: "reactive", complaints_on_time: "proactive", telematics_violations: "reactive", drills_completion: "proactive",
 };
+/** Première valeur renseignée parmi des noms de champ possibles (tables des modules du lot 3). */
+const hsChamp = (x, ...noms) => noms.map((n) => x?.[n]).find((v) => v !== undefined && v !== null) ?? null;
 /**
  * État d'une valeur au regard de sa cible (indicator_status du noyau, marge de surveillance de 85 %) :
  * met, watch, missed ou no_data. Sens « down » : conforme jusqu'à la cible, sous surveillance jusqu'à
@@ -6668,7 +6676,7 @@ const HS_DOMAINS = ["safety", "health", "security", "environment", "quality"];
 const HS_DOC_LABELS = { insurance: "Assurance", inspection: "Visite technique", calibration: "Barémage", tightness: "Certificat d'étanchéité" };
 const HS_COST_KINDS = ["claim", "deductible", "downtime", "product_loss", "repair", "other"];
 const HS_CONTROL_LEVELS = ["elimination", "substitution", "engineering", "administrative", "ppe"];
-const HS_ORIGINS = ["event", "audit", "check", "risk", "review"];
+const HS_ORIGINS = ["event", "audit", "check", "risk", "review", "complaint", "drill"];
 const HS_FACTORS = ["environment", "equipment", "method", "manpower", "material"];
 const HS_METHODS = ["simple_analysis", "five_whys", "cause_tree"];
 const HS_PROOFS = {
@@ -6792,7 +6800,13 @@ const hsMyDriver = (ctx) => hsEmployee(ctx)?.driver_id ?? null;
 const hsCanSeeEvent = (ctx, e) => hsFull(ctx) || e.reported_by === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, e.site_id));
 const hsCanSeeAction = (ctx, a) => hsFull(ctx) || a.owner_id === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, a.site_id));
 const hsCanSeeCheck = (ctx, c) => hsFull(ctx) || (hsScope(ctx) === "site" ? hsSiteOk(ctx, c.site_id) : c.performed_by === ctx.user.id || (hsMyDriver(ctx) !== null && c.driver_id === hsMyDriver(ctx)));
-const hsCanLift = (ctx, n) => n.status === "open" && (hsIs(ctx, "hsseq") || (hsIs(ctx, "exploitation") && hsSiteOk(ctx, n.site_id)));
+/**
+ * Levée d'une non-conformité ouverte, et dépôt de sa photo de correction (rights.can_close), comme can_lift
+ * du noyau : hsseq et l'administration partout ; un chef de parc, même avec un profil de lecture complète,
+ * sur ses seuls sites ; tout autre compte, jamais.
+ */
+const hsCanLift = (ctx, n) => n.status === "open" && (hsIs(ctx, "hsseq") || hsIs(ctx, "admin")
+  || (hsIs(ctx, "exploitation") && Boolean(n.site_id) && (HS_USER_SITES[ctx.user.id] ?? []).includes(n.site_id)));
 const hsForbidden = (message = "Opération non autorisée pour votre profil.") => new ApiError(403, "forbidden", message);
 /** Règle métier refusée : code précis, 422 par défaut (HsseqError du noyau). */
 const hsRule = (code, message, extra = {}, status = 422) => new ApiError(status, code, message, extra);
@@ -7271,6 +7285,21 @@ function hsActionOriginLabel(a) {
   // Risque (lot 2) : référence et événement redouté.
   const risque = a.origin === "risk" ? (DB.hsseq.risks ?? []).find((x) => x.id === a.origin_id) : null;
   if (risque) return `${risque.reference} ${String(risque.feared_event ?? "").slice(0, 120)}`;
+  // Revue de direction (lot 3) : référence et intitulé.
+  // Réclamation et exercice (lot 3) : leur référence, et l'objet ou le plan.
+  if (a.origin === "complaint") {
+    const c = (DB.hsseq.complaints ?? []).find((x) => x.id === a.origin_id);
+    return c ? `${c.reference} ${String(c.subject ?? c.title ?? c.description ?? "").slice(0, 120)}` : null;
+  }
+  if (a.origin === "drill") {
+    const d = (DB.hsseq.drills ?? []).find((x) => x.id === a.origin_id);
+    const plan = d ? (DB.hsseq.emergencyPlans ?? []).find((x) => x.id === d.plan_id) : null;
+    return d ? `${d.reference}${plan ? ` ${plan.title}` : ""}` : null;
+  }
+  if (a.origin === "review") {
+    const r = (DB.hsseq.reviews ?? []).find((x) => x.id === a.origin_id);
+    return r ? `${r.reference} ${r.title}` : null;
+  }
   return null;
 }
 const hsActionCriticality = (a) => (a.event_id ? hsCriticality(HS.events.find((x) => x.id === a.event_id) ?? {}) ?? 0 : 0);
@@ -7541,7 +7570,8 @@ function hsIndicators(ctx, q, month, period) {
       }],
     ["tanker_shortage", "Écarts de livraison des citernes", "per_mille", "down", "Transport", "Volume manquant ÷ volume livré", true, (m) => (kinds.includes("tanker") && kindFilter !== "tipper" ? tankerShortage(m) : null)],
     // Sans objet au lot 1 : le noyau le sert nul, sans série.
-    ["tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport", "Écart de tonnage ÷ tonnage chargé", true, () => null, "Sans objet au lot 1 : une seule pesée par rotation, pas de tonnage livré."],
+    // Calculé au lot 3 : tonnage chargé (poids net du ticket, à défaut quantité chargée) contre tonnage livré.
+    ["tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport (pesées et livraisons)", "Écart de tonnage ÷ tonnage chargé", true, (m) => (kinds.includes("tipper") && kindFilter !== "tanker" ? tipperVariance(m) : null)],
     // Lot 2 : audits du mois (annulés exclus) et immobilisations posées dans le mois.
     ["audits_completion", "Audits réalisés contre planifiés", "pct", "up", "Audits", "Audits réalisés ÷ audits planifiés du mois (audits annulés exclus)", true,
       (m) => {
@@ -7550,6 +7580,38 @@ function hsIndicators(ctx, q, month, period) {
       }],
     ["immobilizations", "Immobilisations de véhicules (V09)", "count", "down", "Événements, verrou de départ", "Immobilisations posées dans le mois par un événement en cours d'enquête", true,
       (m) => (DB.hsseq.immobilizations ?? []).filter((i) => String(i.since ?? "").slice(0, 7) === m && (!site || i.site_id === site) && kinds.includes(hsKind(hsVehicle(i.vehicle_id)) ?? "tanker")).length],
+    // Lot 3 : environnement, qualité, télématique et urgences, d'après les tables des modules du lot 3.
+    ["spills", "Déversements", "count", "down", "Environnement (déversements)", "Déversements survenus dans le mois", true,
+      (m) => (DB.hsseq.spills ?? []).filter((x) => String(hsChamp(x, "occurred_at", "spilled_at", "date") ?? "").slice(0, 7) === m && (!site || x.site_id === site)).length],
+    ["dust_exceedances", "Dépassements du seuil de poussières", "count", "down", "Environnement (poussières sur site)", "Mesures de poussières au-dessus de leur seuil", true,
+      (m) => (DB.hsseq.dustMeasurements ?? []).filter((x) => x.exceeded && String(hsChamp(x, "measured_on", "measured_at", "date") ?? "").slice(0, 7) === m && (!site || x.site_id === site)).length],
+    ["complaints", "Réclamations clients", "count", "down", "Qualité (réclamations clients)", "Réclamations reçues dans le mois", true,
+      (m) => (DB.hsseq.complaints ?? []).filter((x) => String(hsChamp(x, "received_on", "received_at", "date") ?? "").slice(0, 7) === m && (!site || x.site_id === site)).length],
+    ["complaints_on_time", "Réclamations traitées dans le délai", "pct", "up", "Qualité (réclamations clients)", "Réclamations répondues dans le délai ÷ réclamations dont le délai de réponse est échu", true,
+      (m) => {
+        const echues = (DB.hsseq.complaints ?? []).filter((x) => String(hsChamp(x, "response_due") ?? "").slice(0, 7) === m && String(x.response_due) < TODAY && (!site || x.site_id === site));
+        return pct(echues.filter((x) => { const r = hsChamp(x, "responded_on", "answered_on", "answered_at"); return r && String(r).slice(0, 10) <= String(x.response_due); }).length, echues.length);
+      }],
+    ["telematics_violations", "Violations de conduite par 100 voyages", "per_100_trips", "down", "Télématique (import des violations), Transport", "Violations importées ÷ voyages du mois × 100", true,
+      (m) => {
+        // Sites lus : le filtre, sinon ceux du chef de parc ou de l'auditeur ; voyages des citernes et des bennes.
+        const bornes = site ? [site] : hsScope(ctx) === "all" ? null : hsSites(ctx);
+        const surSites = (siteId) => !bornes || bornes.includes(siteId);
+        const voyages = [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations].filter((r) => {
+          const v = hsVehicle(r.vehicle_id);
+          return ["en_route", "done", "invoiced"].includes(r.state) && r.date_loading.slice(0, 7) === m && v && kinds.includes(hsKind(v)) && surSites(hsVehicleSite(v));
+        }).length;
+        const n = (DB.hsseq.violations ?? DB.hsseq.telematicsViolations ?? []).filter((x) => {
+          const v = hsVehicle(x.vehicle_id);
+          return String(hsChamp(x, "occurred_at", "date") ?? "").slice(0, 7) === m && (!v || kinds.includes(hsKind(v))) && surSites(x.site_id ?? (v ? hsVehicleSite(v) : null));
+        }).length;
+        return voyages ? Math.round((n * 10000) / voyages) / 100 : null;
+      }],
+    ["drills_completion", "Exercices d'urgence réalisés contre planifiés", "pct", "up", "Documents et urgences", "Exercices réalisés ÷ exercices planifiés du mois (exercices annulés exclus)", true,
+      (m) => {
+        const list = (DB.hsseq.drills ?? []).filter((x) => x.status !== "cancelled" && String(x.planned_date ?? "").slice(0, 7) === m && (!site || x.site_id === site));
+        return pct(list.filter((x) => ["done", "performed"].includes(x.status)).length, list.length);
+      }],
   ];
   const s = hsSettings();
   return defs.map(([code, label, unit, direction, source, formula, siteScoped, fn, note = null, companyLevel = false]) => {
@@ -8018,6 +8080,16 @@ function hsEmployeeRows() {
   });
   return [...chauffeurs, ...HS_STAFF].map((e) => ({ id: e.id, name: e.name, company: companyRef(1), site_id: e.site_id, site: hsSiteRef(e.site_id) })).sort((a, b) => byFr(a.name, b.name));
 }
+/**
+ * Clients des sociétés (tiers clients actifs) et tiers déjà cités par un audit, une exigence ou un modèle
+ * de rapport (client_rows du noyau) : identifiant et nom, pour choisir le client ou donneur d'ordre sans
+ * ouvrir /finance/partners.
+ */
+function hsClientRows() {
+  const cites = [...(HS.audits ?? []), ...(HS.requirements ?? []), ...(HS.reportTemplates ?? [])].map((x) => x.partner_id).filter(Boolean);
+  const ids = new Set([...PARTNERS.filter((p) => p.customer && p.active !== false).map((p) => p.id), ...cites]);
+  return [...ids].map(partnerRef).filter(Boolean).sort((a, b) => byFr(a.name, b.name));
+}
 
 route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
   const vehicles = [...DB.vehicles.filter((v) => v.company_id === 1 && v.state !== "off"), ...HS.tippers];
@@ -8035,10 +8107,14 @@ route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
     owners: owners.map((u) => ({ id: u.id, name: u.name })),
     // Profils qui déclarent ou gèrent les personnes en cause, hors conducteur (EVENT_PEOPLE du noyau).
     employees: hasProfile(ctx, ["admin", "direction", "hsseq", "exploitation"]) ? hsEmployeeRows() : [],
+    // Clients : administration, direction et hsseq (CLIENTS du noyau) ; personne d'autre, auditeur compris.
+    clients: hasProfile(ctx, ["admin", "direction", "hsseq"]) ? hsClientRows() : [],
     criticality_thresholds: hsThresholds(s),
     costly_action_threshold: s.costly_action_threshold,
     check_window_hours: s.check_window_hours,
     breath_test_window_hours: s.breath_test_window_hours,
+    // Délai de revue d'un risque (prochaine revue proposée), comme /hsseq/settings.
+    risk_review_months: s.risk_review_months ?? 12,
     vehicle_kinds: [{ code: "tanker", label: "Citerne" }, { code: "tipper", label: "Benne" }],
     me: { profiles: [...ctx.user.profiles].sort(), site_ids: hsSites(ctx), employee_id: hsEmployee(ctx)?.id ?? null, driver_id: mine },
   };
@@ -8189,6 +8265,47 @@ function hsLot2Blocks(ctx, q, month) {
   return blocks;
 }
 
+/**
+ * Situation du lot 3 au cockpit (lot3_blocks du noyau), bornée aux sites du compte, d'après les tables
+ * des modules du lot 3 : environnement et qualité, urgences, documents, télématique du mois.
+ */
+function hsLot3Blocks(ctx, q, month) {
+  const bornes = hsScope(ctx) === "all" ? null : hsSites(ctx);
+  const surSite = (x) => (!bornes || bornes.includes(x.site_id)) && (!q.site_id || x.site_id === Number(q.site_id));
+  const qualite = hasProfile(ctx, ["admin", "direction", "hsseq", "auditeur"]);
+  const depuis30Jours = addDays(TODAY, -30);
+  const complaints = (DB.hsseq.complaints ?? []).filter(surSite);
+  const drills = (DB.hsseq.drills ?? []).filter((x) => x.status === "planned" && surSite(x));
+  const procedures = (DB.hsseq.procedures ?? []).filter((x) => ["published", "active", "in_force"].includes(x.status));
+  const accuses = DB.hsseq.acknowledgements ?? [];
+  const attendus = sum(procedures, (p) => Number(hsChamp(p, "ack_targets", "targets") ?? 0));
+  const lus = sum(procedures, (p) => Number(hsChamp(p, "ack_count", "read") ?? accuses.filter((a) => a.procedure_id === p.id).length));
+  const violations = (DB.hsseq.violations ?? DB.hsseq.telematicsViolations ?? []).filter((x) => String(hsChamp(x, "occurred_at", "date") ?? "").slice(0, 7) === month && surSite(x)
+    && (!q.vehicle_kind || hsKind(hsVehicle(x.vehicle_id)) === q.vehicle_kind));
+  const imports = [...(DB.hsseq.telematicsImports ?? [])].sort((a, b) => String(b.imported_at).localeCompare(String(a.imported_at)));
+  return {
+    environment: {
+      spills_open: (DB.hsseq.spills ?? []).filter((x) => x.status === "open" && surSite(x)).length,
+      wastes_stored: (DB.hsseq.wastes ?? []).filter((x) => x.status === "stored" && surSite(x)).length,
+      dust_exceedances_30d: (DB.hsseq.dustMeasurements ?? []).filter((x) => x.exceeded && String(hsChamp(x, "measured_on", "date") ?? "") >= depuis30Jours && surSite(x)).length,
+      contaminations_open: qualite ? (DB.hsseq.contaminations ?? []).filter((x) => x.status === "open" && surSite(x)).length : null,
+      complaints_open: qualite ? complaints.filter((x) => x.status !== "closed").length : null,
+      complaints_overdue: qualite ? complaints.filter((x) => x.status === "received" && x.response_due && x.response_due < TODAY).length : null,
+    },
+    emergency: {
+      plans_active: (DB.hsseq.emergencyPlans ?? []).filter((x) => x.active !== false && surSite(x)).length,
+      overdue: drills.filter((x) => x.planned_date < TODAY).length,
+      upcoming: drills.filter((x) => x.planned_date >= TODAY && x.planned_date <= addDays(TODAY, 30)).length,
+    },
+    documents: { procedures_published: procedures.length, targets: attendus, read: lus, read_rate: attendus ? Math.round((lus * 1000) / attendus) / 10 : null },
+    telematics: {
+      violations: violations.length,
+      by_type: Object.fromEntries(["speeding", "harsh_braking", "night_driving", "driving_time"].map((k) => [k, violations.filter((x) => hsChamp(x, "violation_type", "type") === k).length])),
+      last_import_at: imports[0]?.imported_at ?? null,
+    },
+  };
+}
+
 route("GET", "/hsseq/cockpit", [...HS_READ, "auditeur"], (ctx) => {
   const q = ctx.query;
   const period = q.period || "month";
@@ -8207,6 +8324,7 @@ route("GET", "/hsseq/cockpit", [...HS_READ, "auditeur"], (ctx) => {
   const byReason = Object.fromEntries(["V02", "V04", "V05", "V06", "V07", "V08", "V09"].map((code) => [code, 0]));
   for (const b of indicators.find((i) => i.code === "waivers")?.breakdown ?? []) byReason[b.reason_code] = (byReason[b.reason_code] ?? 0) + b.count;
   const lot2 = hsLot2Blocks(ctx, q, month);
+  const lot3 = hsLot3Blocks(ctx, q, month);
   const blocked = hsDepartures(ctx, TODAY, q, true);
   let deadlines = hsDeadlines(ctx, { ...q, kind: "", horizon: "30" });
   if (hsPersonalHidden(ctx)) {
@@ -8232,6 +8350,7 @@ route("GET", "/hsseq/cockpit", [...HS_READ, "auditeur"], (ctx) => {
     },
     waivers_by_reason: byReason,
     ...lot2,
+    ...lot3,
     computed_at: hsNow(),
   };
 });
@@ -8590,6 +8709,10 @@ function hsActionOf(ctx, id) {
   return a;
 }
 const HS_ACTION_SORTS = { due_date: (a) => a.due_date, reference: (a) => a.reference, status: (a) => a.status, created_at: (a) => a.created_at };
+/** Fiches d'origine qui filtrent la liste (list_domain du noyau) : clé de la requête et origine des actions. */
+const HS_ACTION_SOURCES = { event_id: "event", risk_id: "risk", finding_id: "audit", complaint_id: "complaint", drill_id: "drill", review_id: "review" };
+/** L'action vient-elle des fiches demandées ? Son origine, et son champ propre (event_id, review_id…) ou origin_id. */
+const hsActionFrom = (a, q) => Object.entries(HS_ACTION_SOURCES).every(([cle, origine]) => !q[cle] || (a.origin === origine && (a[cle] ?? a.origin_id) === hsId(q, cle)));
 function hsActionList(ctx) {
   const q = ctx.query;
   const statuses = hsList(q.status);
@@ -8598,7 +8721,7 @@ function hsActionList(ctx) {
     hsCanSeeAction(ctx, a) && (!q.company_id || Number(q.company_id) === 1) && (!statuses || statuses.includes(a.status)) && (!q.origin || a.origin === q.origin)
     && (!q.owner_id || a.owner_id === hsId(q, "owner_id")) && (!["1", "true"].includes(q.mine) || a.owner_id === ctx.user.id)
     && (!["1", "true"].includes(q.overdue) || hsDaysOverdue(a) > 0) && (!q.site_id || a.site_id === hsId(q, "site_id"))
-    && (!q.due_before || a.due_date <= dateArg(q, "due_before")) && (!q.event_id || a.event_id === hsId(q, "event_id"))
+    && (!q.due_before || a.due_date <= dateArg(q, "due_before")) && hsActionFrom(a, q)
     && (!["1", "true"].includes(q.approval_pending) || hsApprovalPending(a))
     && (!s || [a.reference, a.description].some((x) => x.toLowerCase().includes(s))));
 }
@@ -8670,7 +8793,19 @@ route("POST", "/hsseq/actions", ["hsseq"], (ctx) => {
     if (audit && !["planned", "done"].includes(audit.status)) throw hsRule("invalid_transition", "Audit clos ou annulé : rouvrez-le avant d'ajouter une action à ses constats.");
     site = constat.site_id ?? audit?.site_id ?? null;
   } else if (origin === "review") {
+    // origin_id : la revue de direction (lot 3) ; close, elle ne reçoit plus d'action.
+    if (!originId) throw hsMissing("Revue de direction d'origine manquante.", ["origin_id"]);
+    const revue = (DB.hsseq.reviews ?? []).find((x) => x.id === originId);
+    if (!revue) throw notFound("Revue de direction introuvable.");
+    if (revue.state === "closed") throw hsRule("invalid_transition", "Revue de direction close : rouvrez-la avant d'y ajouter une action.");
     site = null;
+  } else if (origin === "complaint" || origin === "drill") {
+    // origin_id : la réclamation ou l'exercice (lot 3) ; une fiche close ou annulée ne reçoit plus d'action.
+    if (!originId) throw hsMissing("Fiche d'origine manquante.", ["origin_id"]);
+    const source = (origin === "complaint" ? DB.hsseq.complaints : DB.hsseq.drills)?.find((x) => x.id === originId);
+    if (!source) throw notFound(origin === "complaint" ? "Réclamation introuvable." : "Exercice introuvable.");
+    if (["closed", "cancelled"].includes(source.status)) throw hsRule("invalid_transition", origin === "complaint" ? "Réclamation close : rouvrez-la avant d'y ajouter une action." : "Exercice annulé : il ne reçoit plus d'action.");
+    site = source.site_id ?? null;
   }
   const a = hsNewAction({ description: "", origin, origin_id: originId, owner_id: ctx.user.id, due_date: TODAY, created_by: ctx.user.id, site_id: site });
   a.expected_evidence = null;
@@ -8888,12 +9023,12 @@ route("POST", "/hsseq/checks", HS_FIELD, (ctx) => {
   hsLog("check", c.id, ctx.user.id, "create", "result", null, c.result);
   return hsCheckDetail(ctx, c);
 });
-route("POST", "/hsseq/checks/:id/lift", ["hsseq", "exploitation"], (ctx) => {
+route("POST", "/hsseq/checks/:id/lift", ["admin", "hsseq", "exploitation"], (ctx) => {
   const c = hsCheckOf(ctx, ctx.params[0]);
   requireFields(ctx.body, "nonconformity_id");
   const n = HS.ncs.find((x) => x.id === hsId(ctx.body, "nonconformity_id") && x.check_id === c.id);
   if (!n) throw notFound("Non-conformité introuvable sur ce contrôle.");
-  if (n.status === "open" && !hsCanLift(ctx, n)) throw hsForbidden("Levée réservée au chef de parc du site et au Responsable HSSEQ.");
+  if (n.status === "open" && !hsCanLift(ctx, n)) throw hsForbidden("Levée réservée au chef de parc du site, au Responsable HSSEQ et à l'administration.");
   if (n.status !== "open") throw hsRule("invalid_transition", "Cette non-conformité est déjà levée.");
   const pieces = hsClaim(ctx, hsIds(ctx.body, "attachment_ids"), "nonconformity", n.id);
   if (!pieces.some((a) => a.is_photo)) throw hsRule("photo_missing", "La levée exige au moins une photo de la correction, déposée sur la non-conformité.", { fields: ["attachment_ids"] });
@@ -9165,11 +9300,19 @@ const HS_ATTACH_MODELS = {
 };
 /** Fiche close : plus de pièce ajoutée ni retirée. */
 const hsClosed = (model, r) => ({ event: r.status === "closed", action: ["closed", "cancelled"].includes(r.status), nonconformity: r.status !== "open", waiver: !["pending_hsseq", "active"].includes(r.status), risk: r.status === "archived",
-  audit: ["closed", "cancelled"].includes(r.status), finding: ["closed", "cancelled"].includes((DB.hsseq.audits ?? []).find((x) => x.id === r.audit_id)?.status) })[model] ?? false;
-/** Ajouter une pièce : son auteur ou responsable, le chef de parc du site, ou hsseq. */
-function hsCanAttach(ctx, model, r) {
+  audit: ["closed", "cancelled"].includes(r.status), finding: ["closed", "cancelled"].includes((DB.hsseq.audits ?? []).find((x) => x.id === r.audit_id)?.status),
+  review: r.state === "closed", procedure_version: r.status !== "draft", drill: r.status === "cancelled",
+  spill: r.status === "closed", waste: r.status === "collected", contamination: r.status === "closed", complaint: r.status === "closed" })[model] ?? false;
+/**
+ * Ajouter une pièce : son auteur ou responsable, le chef de parc du site, ou hsseq. La photo de levée
+ * d'une non-conformité suit le droit de la levée ; une revue de direction reçoit aussi les pièces de la
+ * direction.
+ */
+function hsCanAttach(ctx, model, r, role = null) {
   if (hsClosed(model, r)) return false;
+  if (model === "nonconformity" && role === "lift") return hsCanLift(ctx, r);
   if (hsIs(ctx, "hsseq")) return true;
+  if (model === "review") return hsIs(ctx, "direction");
   const yard = hsScope(ctx) === "site";
   if (model === "event") return r.reported_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
   if (model === "action") return r.owner_id === ctx.user.id;
@@ -9177,6 +9320,8 @@ function hsCanAttach(ctx, model, r) {
   if (model === "risk") return r.owner_id === ctx.user.id;
   if (model === "check") return r.performed_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
   if (model === "nonconformity") return HS.checks.find((c) => c.id === r.check_id)?.performed_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
+  // Déversement et déchet (lot 3) : le chef de parc du site, comme pour leur saisie.
+  if (model === "spill" || model === "waste") return hsIs(ctx, "exploitation") && hsSiteOk(ctx, r.site_id);
   return model === "waiver" && r.requested_by === ctx.user.id;
 }
 route("POST", "/hsseq/attachments", null, (ctx) => {
@@ -9192,13 +9337,16 @@ route("POST", "/hsseq/attachments", null, (ctx) => {
     id = Number.parseInt(fields.id || fields.object_id || "", 10);
     if (!Number.isFinite(id)) throw hsBad("Identifiant invalide.");
     record = HS_ATTACH_MODELS[model](ctx, id);
-    if (!hsCanAttach(ctx, model, record)) throw hsForbidden("Pièce jointe non autorisée sur cette fiche.");
+    if (!hsCanAttach(ctx, model, record, fields.role ?? null)) throw hsForbidden("Pièce jointe non autorisée sur cette fiche.");
     if (HS.attachments.filter((a) => a.model === model && a.object_id === id).length >= 30) throw businessRule("30 pièces au plus par fiche.");
   } else if (!hasProfile(ctx, ["admin", "direction", "hsseq", "exploitation", "conducteur"])) throw hsForbidden("Dépôt sans fiche réservé aux profils de NIMOVA · HSSEQ.");
   const file = uploadedFile(ctx, 8 * 1048576, "Fichier");
   const mimetype = detectType(file.data);
   if (!["image/jpeg", "image/png", "application/pdf"].includes(mimetype)) throw new ApiError(415, "unsupported_type", "Formats acceptés : JPEG, PNG ou PDF.");
-  const role = ["action", "risk", "audit", "finding", "requirement"].includes(model) ? "evidence" : model === "nonconformity" && record.status === "open" && fields.role === "lift" ? "lift" : "photo";
+  // Preuve (action, risque, audit, constat, exigence, exercice), document (déchet, version de procédure, plan, revue, réclamation), sinon photo.
+  const role = ["action", "risk", "audit", "finding", "requirement", "drill"].includes(model) ? "evidence"
+    : ["waste", "procedure_version", "emergency_plan", "review", "complaint"].includes(model) ? "document"
+    : model === "nonconformity" && record.status === "open" && fields.role === "lift" ? "lift" : "photo";
   const a = hsAttach(model, id, ctx.user.id, checkedName(file.filename, mimetype, "photo"), mimetype, file.data, { caption: fields.caption ? String(fields.caption).slice(0, 300) : null, client_uuid: fields.client_uuid || null, role });
   return hsAttachmentRow(a);
 });
@@ -9386,6 +9534,11 @@ enregistrerRisques(HS_REFS);
 enregistrerConformite(HS_REFS);
 enregistrerHabilitationsRapports(HS_REFS);
 enregistrerTrajets(HS_REFS);
+// Lot 3 HSSEQ : après le lot 2, dont la revue de direction lit les tables.
+enregistrerEnvironnement(HS_REFS);
+enregistrerDocuments(HS_REFS);
+enregistrerTelematique(HS_REFS);
+enregistrerRevues(HS_REFS);
 const server = http.createServer((req, res) => {
   const started = process.hrtime.bigint();
   const chunks = [];

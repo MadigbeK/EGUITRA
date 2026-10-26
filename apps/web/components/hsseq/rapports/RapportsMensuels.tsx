@@ -11,7 +11,7 @@ import { apiDownload, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, pluriel } from "@/lib/format";
 import type { Me } from "@/lib/types";
 import { BROUILLON_VIDE, Historique, Indicateurs, Synthese, type Brouillon, type Lecture } from "./Tableaux";
-import { aujourdhui, deMois, lireNombre, moisCourt, moisLong } from "./outils";
+import { aujourdhui, deMois, lireNombre, moisCourt, moisLong, perimetre } from "./outils";
 import type { MonthlyReport, MonthlyReportPatch, ReportMonthItem, ReportMonths, ReportTemplate } from "./types";
 
 /** Profils qui paramètrent les modèles (CONFIG du noyau). */
@@ -23,8 +23,9 @@ const clos = (x: ReportMonthItem) => x.frozen || x.freeze_date <= aujourdhui();
 /**
  * Rapport mensuel HSSE au format de chaque donneur d'ordre (lecture : administration, direction,
  * Responsable HSSEQ) : choix du modèle, de la société pour un modèle des deux sociétés, de l'année et
- * du mois (frise des mois et leur état) ; puis le rapport du mois. Choix portés par l'adresse (modele,
- * societe, annee, mois) ; par défaut, le dernier mois clos, celui que l'on complète et valide.
+ * du mois (frise des mois et leur état, du premier mois du modèle au mois en cours) ; puis le rapport du
+ * mois. Choix portés par l'adresse (modele, societe, annee, mois) ; par défaut, le dernier mois clos,
+ * celui que l'on complète et valide.
  */
 export function RapportsMensuels() {
   const { lire, ecrire } = useAdresse();
@@ -75,6 +76,15 @@ export function RapportsMensuels() {
   }
 
   const anneeCourante = new Date().getFullYear();
+  // Premier mois du modèle : ni ses mois antérieurs, ni une année à venir ne sont listés par le noyau.
+  const premier = modele.start_month ?? null;
+  const premiereAnnee = premier ? Number(premier.slice(0, 4)) : anneeCourante - 1;
+  const annees = [...new Set([anneeCourante, anneeCourante - 1, annee])].filter((a) => a === annee || (a >= premiereAnnee && a <= anneeCourante)).sort((a, b) => b - a);
+  const vide = annee > anneeCourante
+    ? { title: "Année à venir.", hint: "Le rapport d'un mois s'ouvre au premier jour du mois." }
+    : premier && annee < premiereAnnee
+      ? { title: `Aucun mois en ${annee}.`, hint: `Le rapport de ce modèle commence en ${moisLong(premier)}.` }
+      : { title: "Aucun mois pour cette année.", hint: premier && premier.startsWith(String(annee)) ? `Le rapport de ce modèle commence en ${moisLong(premier)} ; un mois s'ouvre à son premier jour.` : "Le rapport d'un mois s'ouvre au premier jour du mois." };
   return (
     <div className="space-y-5">
       <div role="group" aria-label="Choix du rapport" className="no-print flex flex-wrap items-end gap-3">
@@ -87,7 +97,7 @@ export function RapportsMensuels() {
           </Field>
         )}
         <Field label="Année" className="w-full sm:w-28">
-          <Select value={annee} onChange={(e) => void choisir({ annee: Number(e.target.value) === anneeCourante ? null : e.target.value, mois: null })} options={[...new Set([anneeCourante, anneeCourante - 1, annee])].sort((a, b) => b - a).map((a) => ({ value: a, label: String(a) }))} />
+          <Select value={annee} onChange={(e) => void choisir({ annee: Number(e.target.value) === anneeCourante ? null : e.target.value, mois: null })} options={annees.map((a) => ({ value: a, label: String(a) }))} />
         </Field>
         {parametrage && (
           <Link href={`/hsseq/parametres?onglet=rapports&modele=${modele.id}`} className="mb-2 inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline">
@@ -118,7 +128,7 @@ export function RapportsMensuels() {
           onTransition={() => void muterMois()}
         />
       )}
-      {mois && !choisi && <Empty title="Aucun mois pour cette année." hint="Le rapport d'un mois s'ouvre au premier jour du mois." />}
+      {mois && !choisi && <Empty title={vide.title} hint={vide.hint} />}
     </div>
   );
 }
@@ -153,10 +163,11 @@ function FriseMois({ items, choisi, onChoisir }: { items: ReportMonthItem[]; cho
 }
 
 /**
- * Rapport d'un mois : en-tête (donneur d'ordre, société, période, état, valeurs figées ou provisoires),
- * exports Excel et PDF, validation et réouverture selon `transitions`, synthèse du comité, indicateurs
- * avec la saisie des valeurs et des commentaires (rights.can_edit), commentaire du mois et journal. Les
- * saisies s'envoient ensemble, seulement celles qui changent.
+ * Rapport d'un mois : en-tête (donneur d'ordre, société, période, périmètre du modèle, état, valeurs
+ * figées ou provisoires), exports Excel et PDF, validation et réouverture selon `transitions`, synthèse
+ * du comité, indicateurs avec la saisie des valeurs et des commentaires (rights.can_edit), commentaire du
+ * mois et journal. Les saisies s'envoient ensemble, seulement celles qui changent. Lire le rapport ou son
+ * PDF ne crée pas le mois : la première saisie, la validation ou le gel le crée.
  */
 function Rapport({ modele, mois, societe, onSaisies, onTransition }: { modele: ReportTemplate; mois: string; societe: number | null; onSaisies: (n: number) => void; onTransition: () => void }) {
   const chemin = `/hsseq/reports/${modele.id}/${mois}`;
@@ -270,6 +281,7 @@ function Rapport({ modele, mois, societe, onSaisies, onTransition }: { modele: R
       >
         <p className="max-w-[90ch] text-[13.5px] leading-relaxed text-ink-2">
           Pour <span className="font-semibold text-ink">{client}</span>, {r.company.name}. Période analysée : {r.period_label.toLocaleLowerCase("fr")}.
+          {perimetre(modele) && ` Valeurs calculées sur le périmètre du modèle : ${perimetre(modele)}.`}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           {r.state === "validated" ? <Badge tone={tonHsseq("Validé", "ok")}>Validé</Badge> : <Tampon mot="Brouillon" />}

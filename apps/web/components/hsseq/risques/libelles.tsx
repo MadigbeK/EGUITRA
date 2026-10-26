@@ -8,6 +8,7 @@
 
 import { Badge, cx } from "@/components/ui";
 import { NIVEAU_MAITRISE, texteErreur, tonHsseq } from "@/components/hsseq/commun";
+import { aujourdhui } from "@/components/hsseq/actions/outils";
 import { ApiError, apiUpload } from "@/lib/api-client";
 import type { TonEtat } from "@/lib/couleurs";
 import { INSECABLE, fmtDate } from "@/lib/format";
@@ -115,6 +116,25 @@ export function Revue({ date, echue, statut }: { date: string; echue: boolean; s
       {echue ? <TamponRisque mot="Revue échue" /> : statut === "active" && reste >= 0 && reste <= 30 && <span className="whitespace-nowrap text-[12px] text-muted">{reste === 0 ? "Aujourd'hui" : `Dans ${reste}${INSECABLE}j`}</span>}
     </span>
   );
+}
+
+/** Date « YYYY-MM-DD » décalée de `n` mois, au même jour, ou au dernier du mois quand il n'existe pas (relativedelta du noyau). */
+function ajouterMois(date: string, n: number): string {
+  const [annee, mois, jour] = date.split("-").map(Number);
+  const cible = new Date(Date.UTC(annee ?? 1970, (mois ?? 1) - 1 + n, 1));
+  const dernier = new Date(Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth() + 1, 0)).getUTCDate();
+  cible.setUTCDate(Math.min(jour ?? 1, dernier));
+  return cible.toISOString().slice(0, 10);
+}
+
+/**
+ * Prochaine revue proposée à défaut de date, au délai des réglages de la société (risk_review_months
+ * des référentiels) : « dans 12 mois, le 26/10/2027 (délai des réglages de la société) » ; tant que les
+ * référentiels ne sont pas lus, le délai seul.
+ */
+export function revueParDefaut(mois: number | null | undefined): string {
+  if (!mois) return "au délai de revue des réglages de la société";
+  return `dans ${mois}${INSECABLE}mois, le ${fmtDate(ajouterMois(aujourdhui(), mois))} (délai des réglages de la société)`;
 }
 
 /* ─── Refus du noyau ──────────────────────────────────────────────────── */

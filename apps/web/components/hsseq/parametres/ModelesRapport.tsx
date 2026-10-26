@@ -8,6 +8,7 @@ import { ArrowUpRight, Pencil, Plus } from "@/components/icons";
 import { Button, Etat, FEUILLE, Notice, Tag, cx } from "@/components/ui";
 import { Tampon } from "@/components/hsseq/commun";
 import { EditeurModele } from "@/components/hsseq/rapports/EditeurModele";
+import { moisLong, perimetre } from "@/components/hsseq/rapports/outils";
 import type { ReportTemplate } from "@/components/hsseq/rapports/types";
 import { useApi, useAutorise } from "@/lib/api-client";
 import { fmtPct, pluriel } from "@/lib/format";
@@ -18,8 +19,9 @@ const PARAMETRAGE = ["admin", "hsseq"] as const;
 /**
  * Modèles du rapport mensuel HSSE, un par donneur d'ordre (GET, POST et PATCH
  * /hsseq/reports/templates, administration et Responsable HSSEQ) : nom, donneur d'ordre, société,
- * seuils de l'état, indicateurs proactifs et réactifs, leur ordre et leur plan mois par mois. Le modèle
- * « NIMOVA » reprend les indicateurs du cockpit. `?modele=<id>` ouvre un modèle (lien du rapport mensuel).
+ * périmètre des valeurs calculées (sites, profil de véhicule), premier mois, seuils de l'état,
+ * indicateurs proactifs et réactifs, leur ordre et leur plan mois par mois. Le modèle « NIMOVA » reprend
+ * les indicateurs du cockpit. `?modele=<id>` ouvre un modèle (lien du rapport mensuel).
  */
 export function ModelesRapport() {
   const demande = Number(useSearchParams().get("modele")) || null;
@@ -71,9 +73,10 @@ export function ModelesRapport() {
   );
 }
 
-/** Carte d'un modèle : donneur d'ordre, société, indicateurs en service, seuils de l'état. */
+/** Carte d'un modèle : donneur d'ordre, société, périmètre et premier mois, indicateurs en service, seuils de l'état. */
 function CarteModele({ t, onModifier }: { t: ReportTemplate; onModifier: () => void }) {
   const donneur = t.client_label ?? t.partner?.name;
+  const borne = perimetre(t);
   return (
     <section aria-labelledby={`modele-${t.id}`} className={cx(FEUILLE, "min-w-0 p-6", !t.active && "opacity-80")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -98,6 +101,10 @@ function CarteModele({ t, onModifier }: { t: ReportTemplate; onModifier: () => v
       </div>
       <p className="mt-3 text-[13px] leading-snug text-ink-2">
         {pluriel(t.indicators_count, "indicateur en service", "indicateurs en service")}. Conforme à partir de {fmtPct(t.compliant_ratio * 100, 0)} de la cible, sous surveillance à partir de {fmtPct(t.watch_ratio * 100, 0)}.
+      </p>
+      <p className="mt-1.5 text-[12.5px] leading-snug text-muted">
+        {borne ? `Valeurs calculées sur : ${borne}.` : "Valeurs calculées sur toute la société."}
+        {t.start_month ? ` Rapport tenu depuis ${moisLong(t.start_month)}.` : ""}
       </p>
       {t.active && (
         <Link href={`/hsseq/rapports?modele=${t.id}`} className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline">

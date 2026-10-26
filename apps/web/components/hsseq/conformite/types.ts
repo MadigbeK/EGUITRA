@@ -90,12 +90,13 @@ export interface AuditCounts {
   completion_rate: number | null;
 }
 
-/** Constat (ligne de GET /hsseq/findings et fiche) ; `actions` au format du plan d'actions. */
+/** Constat (ligne de GET /hsseq/findings) ; `actions` au format du plan d'actions. */
 export interface Finding {
   id: number;
   /** « AUD/2026/002-C01 » : référence de l'audit et rang du constat. */
   reference: string;
-  audit: { id: number; reference: string };
+  /** Audit du constat et son statut : clos ou annulé, le constat ne se modifie plus. */
+  audit: { id: number; reference: string; status: AuditStatus };
   classification: FindingClass;
   description: string;
   requirement: { id: number; reference: string; title: string } | null;
@@ -106,6 +107,11 @@ export interface Finding {
   attachments: Piece[];
   /** can_edit : Responsable HSSEQ, audit planifié ou réalisé (modification, nouvelle action). */
   rights: Rights;
+}
+
+/** Fiche d'un constat (GET et PATCH /hsseq/findings/{id}) : la ligne et son journal. */
+export interface FindingDetail extends Finding {
+  history: LigneJournal[];
 }
 
 export interface FindingCounts {
@@ -166,12 +172,17 @@ export interface RequirementCounts {
   by_status: Record<RequirementStatus, number>;
 }
 
-/** Corps de POST /hsseq/audits (title, standard, planned_date obligatoires) et de PATCH /hsseq/audits/{id}. */
+/**
+ * Corps de POST /hsseq/audits (title, standard, planned_date obligatoires) et de PATCH /hsseq/audits/{id}.
+ * Une date de réalisation future est refusée (422 invalid_parameter, fields ["actual_date"]).
+ */
 export interface AuditInput {
   title?: string;
   standard?: AuditStandard;
   planned_date?: string;
   actual_date?: string | null;
+  /** Client ou donneur d'ordre, choisi dans `clients` des référentiels. */
+  partner_id?: number | null;
   site_id?: number | null;
   scope?: string | null;
   auditor_kind?: AuditorKind;
@@ -191,6 +202,8 @@ export interface FindingInput {
 export interface RequirementInput {
   source?: RequirementSource;
   standard?: RequirementStandard | null;
+  /** Donneur d'ordre dont le contrat porte l'exigence, choisi dans `clients` des référentiels. */
+  partner_id?: number | null;
   source_reference?: string;
   title?: string;
   summary?: string | null;

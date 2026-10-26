@@ -3,16 +3,18 @@
 import { useId, useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Plus, RotateCcw, Trash2 } from "@/components/icons";
 import { Button, ErrorBox, Field, Input, Loading, Modal, Notice, Segmented, Select, cx } from "@/components/ui";
-import { INDICATEUR } from "@/components/hsseq/commun";
+import { INDICATEUR, TYPE_VEHICULE } from "@/components/hsseq/commun";
+import { useReferentiels } from "@/components/hsseq/actions/outils";
 import { champsEnErreur, messageErreur } from "@/components/hsseq/parametres/outils";
-import { apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { ApiError, apiSend, useApi } from "@/lib/api-client";
 import { INSECABLE, MONTHS_FR, fmtDateTime, pluriel } from "@/lib/format";
+import type { VehicleKind } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
-import { CUMUL, MODE, NATURE, NATURES_PLURIEL, SENS, UNITES, ecrireNombre, fmtPlan, libelleUnite, lireNombre } from "./outils";
+import { CUMUL, MODE, NATURE, NATURES_PLURIEL, SENS, UNITES, aujourdhui, ecrireNombre, fmtPlan, libelleUnite, lireNombre, moisLong } from "./outils";
 import type { ReportAggregation, ReportDirection, ReportHistoryEntry, ReportIndicatorDef, ReportKey, ReportMode, ReportNature, ReportTemplateDetail, ReportTemplateInput } from "./types";
 
-/** Profils qui lisent les tiers (GET /finance/partners) : eux seuls choisissent la fiche client du donneur d'ordre. */
-const LECTEURS_TIERS = ["admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier", "cabinet"] as const;
+/** Mois « AAAA-MM » d'un champ de saisie. */
+const MOIS = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /** Indicateur en cours de saisie ; `cle` le tient à sa place pendant les déplacements. */
 interface IndicateurEdite {
@@ -65,9 +67,11 @@ function resumePlan(x: IndicateurEdite): string {
 
 /**
  * Création ou modification d'un modèle de rapport (POST, PATCH /hsseq/reports/templates, administration
- * et Responsable HSSEQ) : nom, donneur d'ordre, société, seuils de l'état, puis les indicateurs
- * proactifs et réactifs dans l'ordre du donneur d'ordre. Rien n'est envoyé avant « Enregistrer » ;
- * l'indicateur retiré d'un modèle enregistré reste gardé pour les mois qui ont des valeurs.
+ * et Responsable HSSEQ) : nom, donneur d'ordre (fiche client choisie dans `clients` des référentiels),
+ * société, périmètre des valeurs calculées (sites, profil de véhicule), premier mois du rapport, seuils
+ * de l'état, puis les indicateurs proactifs et réactifs dans l'ordre du donneur d'ordre. Rien n'est
+ * envoyé avant « Enregistrer » ; l'indicateur retiré d'un modèle enregistré reste gardé pour les mois
+ * qui ont des valeurs. Un numéro en double est refusé par le noyau (409).
  */
 export function EditeurModele({ id, onClose, onDone }: { id: number | null; onClose: () => void; onDone: (t: ReportTemplateDetail, cree: boolean) => void }) {
   const { data: detail, error } = useApi<ReportTemplateDetail>(id ? `/hsseq/reports/templates/${id}` : null);
@@ -84,13 +88,19 @@ export function EditeurModele({ id, onClose, onDone }: { id: number | null; onCl
 
 function Formulaire({ detail, cles, onClose, onDone }: { detail: ReportTemplateDetail | null; cles: ReportKey[]; onClose: () => void; onDone: (t: ReportTemplateDetail, cree: boolean) => void }) {
   const { data: me } = useApi<Me>("/auth/me");
-  const lecteurTiers = useAutorise(LECTEURS_TIERS);
-  const { data: tiers } = useApi<{ items: Array<{ id: number; name: string }> }>(lecteurTiers ? "/finance/partners?kind=customer&limit=200" : null);
+  const { data: ref } = useReferentiels();
   const [nom, setNom] = useState(detail?.name ?? "");
   const [libelle, setLibelle] = useState(detail?.client_label ?? "");
   const partenaireInitial = detail?.partner ? String(detail.partner.id) : "";
   const [partenaire, setPartenaire] = useState(partenaireInitial);
   const [societe, setSociete] = useState<string | null>(null);
+  // Périmètre des valeurs calculées : sites (aucun : tous ceux de la société), profil (vide : les deux).
+  const sitesInitiaux = (detail?.sites ?? []).map((s) => s.id);
+  const [sites, setSites] = useState<number[]>(sitesInitiaux);
+  const profilInitial = detail?.vehicle_kind ?? "";
+  const [profil, setProfil] = useState<VehicleKind | "">(profilInitial);
+  const premierInitial = detail?.start_month ?? "";
+  const [premier, setPremier] = useState(premierInitial || aujourdhui().slice(0, 7));
   const [conforme, setConforme] = useState(enPourCent(detail?.compliant_ratio ?? 0.95));
   const [surveillance, setSurveillance] = useState(enPourCent(detail?.watch_ratio ?? 0.85));
   const [actif, setActif] = useState(detail?.active ?? true);
@@ -107,8 +117,15 @@ function Formulaire({ detail, cles, onClose, onDone }: { detail: ReportTemplateD
   const seuilsFaux = c === null || s === null || !(s > 0 && s <= c && c <= 150);
   const actifs = (n: ReportNature) => indicateurs.filter((i) => i.active && i.nature === n);
   const retires = indicateurs.filter((i) => !i.active);
-  const complet = nom.trim() !== "" && !seuilsFaux;
-  const optionsTiers = [...(tiers?.items ?? []), ...(detail?.partner && !tiers?.items.some((p) => p.id === detail.partner?.id) ? [detail.partner] : [])].map((p) => ({ value: p.id, label: p.name }));
+  const premierFaux = !MOIS.test(premier);
+  const complet = nom.trim() !== "" && !seuilsFaux && !premierFaux;
+  // Clients des sociétés (référentiels), la fiche actuelle comprise si elle n'y est plus.
+  const clients = ref?.clients ?? [];
+  const optionsTiers = [...(detail?.partner && !clients.some((p) => p.id === detail.partner?.id) ? [detail.partner] : []), ...clients].map((p) => ({ value: p.id, label: p.name }));
+  // Sites proposés : ceux de la société du modèle (les deux sociétés : tous), actifs ou déjà retenus.
+  const sitesProposes = (ref?.sites ?? []).filter((s) => (!societeChoisie || s.company.id === Number(societeChoisie)) && (s.active || sitesInitiaux.includes(s.id)));
+  const sitesRetenus = sites.filter((id) => sitesProposes.some((s) => s.id === id));
+  const conflit = erreur instanceof ApiError && erreur.body.error === "conflict";
 
   /** Déplace un indicateur d'un rang dans son groupe (proactifs ou réactifs en service). */
   function deplacer(cle: string, sens: -1 | 1) {
@@ -143,6 +160,10 @@ function Formulaire({ detail, cles, onClose, onDone }: { detail: ReportTemplateD
       name: nom.trim(),
       client_label: libelle.trim() || null,
       company_id: societeChoisie ? Number(societeChoisie) : null,
+      // Périmètre et premier mois : envoyés à la création, ou quand ils changent.
+      ...(!detail || sitesRetenus.length !== sitesInitiaux.length || sitesRetenus.some((id) => !sitesInitiaux.includes(id)) ? { site_ids: sitesRetenus } : {}),
+      ...(!detail || profil !== profilInitial ? { vehicle_kind: profil || null } : {}),
+      ...(!detail || premier !== premierInitial ? { start_month: premier } : {}),
       compliant_ratio: c / 100,
       watch_ratio: s / 100,
       active: actif,
@@ -162,7 +183,7 @@ function Formulaire({ detail, cles, onClose, onDone }: { detail: ReportTemplateD
         active: x.active,
       })),
     };
-    if (lecteurTiers && partenaire !== partenaireInitial) corps.partner_id = partenaire ? Number(partenaire) : null;
+    if (partenaire !== partenaireInitial) corps.partner_id = partenaire ? Number(partenaire) : null;
     try {
       const t = detail ? await apiSend<ReportTemplateDetail>("PATCH", `/hsseq/reports/templates/${detail.id}`, corps) : await apiSend<ReportTemplateDetail>("POST", "/hsseq/reports/templates", corps);
       onDone(t, !detail);
@@ -203,21 +224,43 @@ function Formulaire({ detail, cles, onClose, onDone }: { detail: ReportTemplateD
             <Field label="Donneur d'ordre, tel qu'écrit sur le rapport" hint="Repris en tête du classeur Excel et du PDF.">
               <Input value={libelle} onChange={(e) => setLibelle(e.target.value)} />
             </Field>
-            {lecteurTiers ? (
-              <Field label="Fiche client du donneur d'ordre" hint="Facultatif : le client parmi les tiers de NIMOVA.">
-                <Select value={partenaire} onChange={(e) => setPartenaire(e.target.value)} placeholder="Aucune fiche" options={optionsTiers} />
-              </Field>
-            ) : (
-              detail?.partner && (
-                <Field label="Fiche client du donneur d'ordre" hint="Le choix de la fiche revient aux profils qui lisent les tiers (administration).">
-                  <Input value={detail.partner.name} disabled />
-                </Field>
-              )
-            )}
+            <Field label="Fiche client du donneur d'ordre" hint="Facultatif : le client parmi les clients des sociétés.">
+              <Select value={partenaire} onChange={(e) => setPartenaire(e.target.value)} placeholder="Aucune fiche" options={optionsTiers} />
+            </Field>
             <Field label="Société" hint="Un modèle des deux sociétés se tire pour chacune d'elles.">
               <Select value={societeChoisie} onChange={(e) => setSociete(e.target.value)} placeholder="Les deux sociétés" options={(me?.companies ?? []).map((x) => ({ value: x.id, label: x.name }))} />
             </Field>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink">
+            <Field label="Premier mois du rapport" hint="Les mois antérieurs ne sont pas listés au rapport mensuel." error={premierFaux || champs.includes("start_month") ? "Mois au format AAAA-MM." : undefined}>
+              <Input type="month" value={premier} placeholder="AAAA-MM" aria-invalid={premierFaux || undefined} onChange={(e) => setPremier(e.target.value)} />
+            </Field>
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-1 text-[13px] font-medium text-ink-2">Périmètre des valeurs calculées</legend>
+              <p className="mb-2 max-w-[90ch] text-[12.5px] leading-snug text-muted">
+                Les valeurs calculées et figées ne portent que sur ces sites et ce profil de véhicule : le rapport d&apos;un donneur d&apos;ordre minier, sur les seules bennes. Sans site coché, tous les sites de la société.
+              </p>
+              <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+                <Field label="Profil de véhicule" className="w-full sm:w-52" error={champs.includes("vehicle_kind") ? "Profil refusé par le serveur." : undefined}>
+                  <Select
+                    value={profil}
+                    onChange={(e) => setProfil(e.target.value as VehicleKind | "")}
+                    placeholder="Citernes et bennes"
+                    options={(["tanker", "tipper"] as const).map((k) => ({ value: k, label: `${TYPE_VEHICULE[k]}s seules` }))}
+                  />
+                </Field>
+                {sitesProposes.length > 0 && (
+                  <div role="group" aria-label="Sites du rapport" className="flex flex-wrap gap-x-4 gap-y-1.5 pb-2">
+                    {sitesProposes.map((s) => (
+                      <label key={s.id} className="inline-flex cursor-pointer items-center gap-2 text-[13.5px] text-ink">
+                        <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={sites.includes(s.id)} onChange={(e) => setSites(e.target.checked ? [...sites, s.id] : sites.filter((x) => x !== s.id))} />
+                        {s.name}
+                        {!s.active && <span className="text-[12px] text-muted">(inactif)</span>}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </fieldset>
+            <label className="flex items-center gap-2 pb-2 text-sm text-ink sm:col-span-2">
               <input type="checkbox" checked={actif} onChange={(e) => setActif(e.target.checked)} /> Modèle en service, proposé au rapport mensuel
             </label>
             <Field label="Conforme à partir de (% de la cible)" error={seuilsFaux || champs.includes("compliant_ratio") ? `Entre la surveillance et 150${INSECABLE}%.` : undefined}>
@@ -235,7 +278,11 @@ function Formulaire({ detail, cles, onClose, onDone }: { detail: ReportTemplateD
             </p>
             {(champs.includes("indicators") || champs.includes("key")) && (
               <div className="mb-3">
-                <Notice tone="danger">Un indicateur est refusé par le serveur : vérifiez les numéros, les libellés et la valeur calculée de chacun.</Notice>
+                <Notice tone="danger">
+                  {conflit
+                    ? "Chaque numéro est unique dans le modèle, y compris celui d'un indicateur retiré qui garde des valeurs : changez le numéro en double, ou rétablissez l'indicateur retiré qui le porte."
+                    : "Un indicateur est refusé par le serveur : vérifiez les numéros, les libellés et la valeur calculée de chacun."}
+                </Notice>
               </div>
             )}
             <div className="space-y-5">
@@ -367,7 +414,7 @@ function EditeurIndicateur({ x, cles, codesPris, onClose, onValider }: { x: Indi
     >
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
-          <Field label="N°" hint="Celui du donneur d'ordre." error={doublon ? "Déjà pris dans ce modèle, retirés compris." : undefined}>
+          <Field label="N°" hint="Celui du donneur d'ordre." error={doublon ? "Déjà pris dans ce modèle, retirés compris. Pour échanger deux numéros, passez par un numéro provisoire : l'enregistrement les échange en une fois." : undefined}>
             <Input value={f.code} maxLength={32} aria-invalid={doublon || undefined} onChange={(e) => setF({ ...f, code: e.target.value })} placeholder="A1-3" />
           </Field>
           <Field label="Libellé">
@@ -463,15 +510,21 @@ const CHAMP: Readonly<Record<string, string>> = {
   name: "Nom",
   client_label: "Donneur d'ordre",
   partner_id: "Fiche client",
+  company_id: "Société",
+  site_ids: "Sites du rapport",
+  vehicle_kind: "Profil de véhicule",
+  start_month: "Premier mois",
   compliant_ratio: "Seuil de conformité",
   watch_ratio: "Seuil de surveillance",
   active: "Mise en service",
 };
 
-/** Valeur d'un champ du journal, lisible : parts en pour cent, mise en service en mots. */
+/** Valeur d'un champ du journal, lisible : parts en pour cent, mise en service en mots, profil et premier mois en clair. */
 function valeurJournal(champ: string | null, v: string | null): string {
-  if (champ === "active") return v && ["true", "1"].includes(v.toLowerCase()) ? "en service" : "archivé";
-  if (!v) return "vide";
+  if (champ === "active") return v && ["true", "1", "oui"].includes(v.toLowerCase()) ? "en service" : "archivé";
+  if (!v) return champ === "vehicle_kind" ? "citernes et bennes" : champ === "site_ids" ? "tous les sites" : "vide";
+  if (champ === "vehicle_kind") return v === "tanker" || v === "tipper" ? `${TYPE_VEHICULE[v]}s seules` : v;
+  if (champ === "start_month" && /^\d{4}-\d{2}/.test(v)) return moisLong(v.slice(0, 7));
   if (champ === "compliant_ratio" || champ === "watch_ratio") {
     const n = Number(v);
     return Number.isFinite(n) ? `${enPourCent(n)}${INSECABLE}%` : v;

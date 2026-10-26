@@ -4,7 +4,7 @@
  * indicateurs, mois du rapport (plan contre réalisé, cumul de l'année, état, synthèse du comité).
  */
 
-import type { IndicatorFamily, IndicatorStatus, Ref, Rights } from "@/lib/hsseq-types";
+import type { IndicatorFamily, IndicatorStatus, Ref, Rights, VehicleKind } from "@/lib/hsseq-types";
 
 /** Nature d'un indicateur au classement des donneurs d'ordre : proactif ou réactif. */
 export type ReportNature = IndicatorFamily;
@@ -70,6 +70,11 @@ export interface ReportTemplate {
   compliant_ratio: number;
   watch_ratio: number;
   active: boolean;
+  /** Périmètre des valeurs calculées et figées : sites (vide : tous ceux de la société) et profil de véhicule (nul : citernes et bennes). */
+  sites: Ref[];
+  vehicle_kind: VehicleKind | null;
+  /** Premier mois du rapport, « AAAA-MM » : les mois antérieurs ne sont pas listés. */
+  start_month: string;
   indicators_count: number;
   /** can_edit : administration et Responsable HSSEQ. */
   rights: Rights;
@@ -81,12 +86,22 @@ export interface ReportTemplateDetail extends ReportTemplate {
   history: ReportHistoryEntry[];
 }
 
-/** Corps de POST et PATCH /hsseq/reports/templates. */
+/**
+ * Corps de POST et PATCH /hsseq/reports/templates. Un numéro d'indicateur en double dans la liste, ou
+ * déjà pris par un indicateur retiré qui garde ses valeurs, est refusé : 409 conflict, rien n'est
+ * enregistré ; un échange de numéros entre deux indicateurs passe en un seul envoi.
+ */
 export interface ReportTemplateInput {
   name?: string;
   client_label?: string | null;
+  /** Client du donneur d'ordre, choisi dans `clients` des référentiels. */
   partner_id?: number | null;
   company_id?: number | null;
+  /** Sites du périmètre (vide : tous les sites de la société). */
+  site_ids?: number[];
+  vehicle_kind?: VehicleKind | null;
+  /** « AAAA-MM » ; nul : le mois en cours. */
+  start_month?: string | null;
   compliant_ratio?: number;
   watch_ratio?: number;
   active?: boolean;
@@ -94,7 +109,10 @@ export interface ReportTemplateInput {
   indicators?: Array<Omit<ReportIndicatorDef, "id"> & { id?: number }>;
 }
 
-/** Mois de l'année d'un modèle (GET /hsseq/reports). */
+/**
+ * Mois de l'année d'un modèle (GET /hsseq/reports), de son premier mois au mois en cours ; une année à
+ * venir n'en a aucun. La lecture ne crée pas le mois du rapport : un mois jamais saisi est « draft ».
+ */
 export interface ReportMonthItem {
   month: string;
   label: string;

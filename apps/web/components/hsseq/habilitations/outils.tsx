@@ -9,7 +9,18 @@
 import { cx } from "@/components/ui";
 import { pluriel } from "@/lib/format";
 import type { Fitness } from "@/lib/hsseq-types";
-import type { ExpiryAlertKind, QualificationRow, QualificationStatus } from "./types";
+import type { ExpiryAlertKind, QualificationRow, QualificationStatus, RequiredFor } from "./types";
+
+/**
+ * Profils dont les conducteurs doivent détenir une habilitation : « citernes et bennes », « citernes »,
+ * « bennes » ; nul quand elle n'est exigée d'aucun profil.
+ */
+export function profilsExiges(r: RequiredFor): string | null {
+  if (r.tanker && r.tipper) return "citernes et bennes";
+  if (r.tanker) return "citernes";
+  if (r.tipper) return "bennes";
+  return null;
+}
 
 /** Statut d'une habilitation : « Échue » comme les échéances du cockpit, « Absente » comme le motif V04. */
 export const ETAT_HABILITATION: Record<QualificationStatus, string> = {

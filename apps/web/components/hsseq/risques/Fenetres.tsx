@@ -9,10 +9,10 @@
 import { useId, useState } from "react";
 import { Button, Field, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
 import { Criticite } from "@/components/hsseq/commun";
-import { aujourdhui, decaler } from "@/components/hsseq/actions/outils";
+import { aujourdhui, decaler, useReferentiels } from "@/components/hsseq/actions/outils";
 import { INSECABLE, fmtDate } from "@/lib/format";
 import type { ControlLevel } from "@/lib/hsseq-types";
-import { Hierarchie, ORDRE_MAITRISE, ORDRE_STATUTS_MESURE, SENS_MAITRISE, STATUT_MESURE, messageRisque } from "./libelles";
+import { Hierarchie, ORDRE_MAITRISE, ORDRE_STATUTS_MESURE, SENS_MAITRISE, STATUT_MESURE, messageRisque, revueParDefaut } from "./libelles";
 import type { MeasureInput, MeasureStatus, ReviewInput, Risk, RiskMeasure } from "./types";
 
 /** Erreur d'une fenêtre : le message du noyau, au-dessus des boutons. */
@@ -22,9 +22,11 @@ function ErreurFenetre({ texte }: { texte: string | null }) {
 
 /**
  * Revue d'un risque en vigueur : constat facultatif, prochaine revue postérieure à aujourd'hui (à
- * défaut, le délai des réglages de la société). La revue est datée et porte le nom de son auteur.
+ * défaut, le délai des réglages de la société, servi par les référentiels). La revue est datée et porte
+ * le nom de son auteur.
  */
 export function FenetreRevue({ r, onClose, envoyer }: { r: Risk; onClose: () => void; envoyer: (corps: ReviewInput) => Promise<unknown> }) {
+  const { data: ref } = useReferentiels();
   const [constat, setConstat] = useState("");
   const [prochaine, setProchaine] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export function FenetreRevue({ r, onClose, envoyer }: { r: Risk; onClose: () => 
         <Field label="Constat" hint={`Facultatif${INSECABLE}; il est journalisé avec la revue.`}>
           <Textarea value={constat} maxLength={2000} onChange={(e) => setConstat(e.target.value)} placeholder="Mesures vues en place, écarts relevés, cotation confirmée" />
         </Field>
-        <Field label="Prochaine revue le" hint={`Postérieure à aujourd'hui. Sans date, dans 12${INSECABLE}mois (délai des réglages de la société).`} error={dateInvalide ? "La prochaine revue est postérieure à aujourd'hui." : undefined}>
+        <Field label="Prochaine revue le" hint={`Postérieure à aujourd'hui. Sans date, ${revueParDefaut(ref?.risk_review_months)}.`} error={dateInvalide ? "La prochaine revue est postérieure à aujourd'hui." : undefined}>
           <Input type="date" min={demain} value={prochaine} onChange={(e) => setProchaine(e.target.value)} />
         </Field>
         <ErreurFenetre texte={erreur} />

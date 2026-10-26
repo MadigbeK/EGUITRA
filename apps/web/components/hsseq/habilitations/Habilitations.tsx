@@ -9,7 +9,7 @@ import { useApi, useAutorise } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtInt, fmtPct, pluriel } from "@/lib/format";
 import { Alertes, type NatureAlertes } from "./Alertes";
 import { Legende, Matrice } from "./Matrice";
-import { etatLigne, parUrgence } from "./outils";
+import { etatLigne, parUrgence, profilsExiges } from "./outils";
 import type { QualificationMatrix, QualificationStatus } from "./types";
 
 type Vue = "matrice" | "alertes";
@@ -25,6 +25,8 @@ const MOT_FILTRE: Record<QualificationStatus, string> = { valid: "Valides", to_r
 const LECTEURS_ALERTES = ["admin", "direction", "hsseq", "rh"] as const;
 /** Profils qui ouvrent la gestion de NIMOVA · RH, où se saisissent les habilitations. */
 const GESTION_RH = ["admin", "direction", "rh"] as const;
+/** Profils qui règlent les habilitations exigées par profil de véhicule (CONFIG du noyau). */
+const PARAMETRAGE = ["admin", "hsseq"] as const;
 /** Au-delà, la matrice est servie par pages : 500 conducteurs couvrent largement les deux sociétés. */
 const LIMITE = 500;
 
@@ -40,6 +42,7 @@ export function Habilitations() {
   const { data: ref } = useReferentiels();
   const alertesOuvertes = useAutorise(LECTEURS_ALERTES);
   const gestionRh = useAutorise(GESTION_RH);
+  const parametrage = useAutorise(PARAMETRAGE);
   const vue: Vue = lire("vue") === "alertes" && alertesOuvertes ? "alertes" : "matrice";
   const nature: NatureAlertes = (NATURES as readonly string[]).includes(lire("nature")) ? (lire("nature") as NatureAlertes) : "toutes";
 
@@ -87,6 +90,15 @@ export function Habilitations() {
               Salariés dans NIMOVA · RH <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </>
+        )}{" "}
+        Une habilitation est exigée des conducteurs de citerne, de benne ou des deux, selon les règles d&apos;HSSEQ&nbsp;; sans règle, l&apos;obligation de RH vaut pour les deux profils.
+        {parametrage && (
+          <>
+            {" "}
+            <Link href="/hsseq/parametres?onglet=habilitations" className="inline-flex items-center gap-1 font-semibold text-accent underline-offset-2 hover:underline">
+              Habilitations exigées <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </>
         )}
       </Notice>
 
@@ -111,7 +123,15 @@ export function Habilitations() {
             <Recherche valeur={recherche} onChange={(q) => ecrire({ q })} />
             <ChampSite ref_={ref} valeur={site} onChange={(v) => ecrire({ site: v })} />
             <Field label="Habilitation" className="w-full sm:w-60">
-              <Select value={type} onChange={(e) => ecrire({ type: e.target.value, etat: null })} placeholder="Toutes" options={tousTypes.map((t) => ({ value: t.code, label: t.mandatory ? `${t.name} (obligatoire)` : t.name }))} />
+              <Select
+                value={type}
+                onChange={(e) => ecrire({ type: e.target.value, etat: null })}
+                placeholder="Toutes"
+                options={tousTypes.map((t) => {
+                  const profils = profilsExiges(t);
+                  return { value: t.code, label: profils ? `${t.name} (exigée : ${profils})` : t.name };
+                })}
+              />
             </Field>
             <Field label="Situation au" className="w-full sm:w-44">
               <Input type="date" value={date || data?.date || ""} onChange={(e) => ecrire({ date: e.target.value })} />
@@ -129,7 +149,7 @@ export function Habilitations() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="-mx-1 max-w-full overflow-x-auto px-1">
               <Segmented
-                label={nomType ? `État de l'habilitation « ${nomType} »` : "État d'ensemble des habilitations obligatoires"}
+                label={nomType ? `État de l'habilitation « ${nomType} »` : "État d'ensemble des habilitations exigées"}
                 value={etat}
                 onChange={(e) => ecrire({ etat: e === "tous" ? null : e })}
                 options={[
@@ -150,7 +170,7 @@ export function Habilitations() {
           </div>
           {data && (
             <p className="text-[12.5px] leading-snug text-muted">
-              {nomType ? `État de l'habilitation « ${nomType} » au ${fmtDate(data.date)}.` : `État d'ensemble au ${fmtDate(data.date)} : le plus grave des habilitations obligatoires.`}
+              {nomType ? `État de l'habilitation « ${nomType} » au ${fmtDate(data.date)}.` : `État d'ensemble au ${fmtDate(data.date)} : le plus grave des habilitations exigées pour le profil de l'ensemble du conducteur.`}
               {!lectureComplete && ref ? " Conducteurs des ensembles de vos sites." : ""}
               {date ? " Les échéances et le départ sont recalculés à cette date." : ""}
             </p>
@@ -208,8 +228,8 @@ function Chiffres({ data, enAttente }: { data: QualificationMatrix | undefined; 
         tone={taux === null ? "neutral" : taux >= 100 ? "ok" : "danger"}
         hint={`${fmtInt(c.up_to_date)} sur ${pluriel(c.drivers, "conducteur")} sans motif V04 ; cible 100${INSECABLE}%`}
       />
-      <Kpi label="À renouveler" value={fmtInt(c.by_status.to_renew)} tone={c.by_status.to_renew > 0 ? "warn" : "neutral"} hint="Habilitation obligatoire à échéance dans les 30 jours" />
-      <Kpi label="Départ refusé (V04)" value={fmtInt(c.blocking)} tone={c.blocking > 0 ? "danger" : "ok"} hint="Obligatoire échue, aptitude inapte ou échue" />
+      <Kpi label="À renouveler" value={fmtInt(c.by_status.to_renew)} tone={c.by_status.to_renew > 0 ? "warn" : "neutral"} hint="Habilitation exigée à échéance dans les 30 jours" />
+      <Kpi label="Départ refusé (V04)" value={fmtInt(c.blocking)} tone={c.blocking > 0 ? "danger" : "ok"} hint="Exigée échue, aptitude inapte ou échue" />
     </div>
   );
 }

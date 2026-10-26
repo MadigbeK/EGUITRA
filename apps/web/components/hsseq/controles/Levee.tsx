@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Button, Field, FileButton, Modal, Notice, Textarea } from "@/components/ui";
 import { MotifCode, Tampon } from "@/components/hsseq/commun";
-import { apiSend } from "@/lib/api-client";
+import { ApiError, apiSend, apiUpload } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { Attachment, Check, Nonconformity } from "@/lib/hsseq-types";
-import { FORMATS_PHOTO, Pieces, codeErreur, deposerPiece, messageErreur } from "@/components/hsseq/actions/outils";
+import { FORMATS_PHOTO, Pieces, codeErreur, messageErreur } from "@/components/hsseq/actions/outils";
 
 /** Relit les listes de contrôles et de non-conformités après une écriture. */
 export function useRafraichirControles() {
@@ -16,10 +16,11 @@ export function useRafraichirControles() {
 }
 
 /**
- * Levée d'une non-conformité par le chef de parc (ou le Responsable HSSEQ), après correction : au
- * moins une photo de la correction, déposée sur la non-conformité avant l'envoi, sinon le noyau
- * refuse (photo_missing). Les photos déposées ici sont retirées si la levée est abandonnée, pour ne
- * pas passer pour des photos du constat.
+ * Levée d'une non-conformité, ouverte à qui en a le droit (rights.can_close du noyau : le chef de parc
+ * sur ses sites, même avec un autre profil, le Responsable HSSEQ et l'administration partout), après
+ * correction : au moins une photo de la correction, déposée sur la non-conformité avec le rôle « lift »
+ * (même droit que la levée), sinon le noyau refuse (photo_missing). Pièce probante d'une levée, une photo
+ * déposée ici est conservée par le noyau, même si la levée est abandonnée.
  */
 export function LeverNonConformite({ nc, onClose, onLevee }: { nc: Nonconformity; onClose: () => void; onLevee: (c: Check) => void }) {
   const [photos, setPhotos] = useState<Attachment[]>([]);
@@ -33,7 +34,15 @@ export function LeverNonConformite({ nc, onClose, onLevee }: { nc: Nonconformity
     setDepot(true);
     setErreur(null);
     try {
-      const p = await deposerPiece("nonconformity", nc.id, fichier, "Photo de la correction");
+      if (fichier.size > 8 * 1024 * 1024) throw new ApiError(413, { error: "too_large", message: "Fichier trop lourd : 8 Mo au plus." });
+      // Rôle « lift » : le dépôt suit exactement le droit de la levée (can_lift du noyau).
+      const form = new FormData();
+      form.append("file", fichier);
+      form.append("model", "nonconformity");
+      form.append("id", String(nc.id));
+      form.append("role", "lift");
+      form.append("caption", "Photo de la correction");
+      const p = await apiUpload<Attachment>("/hsseq/attachments", form);
       setPhotos((l) => [...l, p]);
     } catch (e) {
       setErreur(messageErreur(e, "Dépôt impossible."));
@@ -42,9 +51,8 @@ export function LeverNonConformite({ nc, onClose, onLevee }: { nc: Nonconformity
     }
   }
 
-  async function abandonner() {
-    // Au mieux : une photo qui ne se retire pas reste sur la non-conformité, sans autre effet.
-    await Promise.allSettled(photos.map((p) => apiSend("DELETE", `/hsseq/attachments/${p.id}`)));
+  function abandonner() {
+    // Les photos de correction déjà déposées restent sur la non-conformité : le noyau ne les retire pas.
     onClose();
   }
 
@@ -67,10 +75,10 @@ export function LeverNonConformite({ nc, onClose, onLevee }: { nc: Nonconformity
       open
       wide
       title="Lever la non-conformité"
-      onClose={() => void abandonner()}
+      onClose={abandonner}
       footer={
         <>
-          <Button onClick={() => void abandonner()}>Annuler</Button>
+          <Button onClick={abandonner}>Annuler</Button>
           <Button variant="primary" loading={envoi} disabled={!photos.length || !commentaire.trim() || depot} onClick={() => void lever()}>
             Lever la non-conformité
           </Button>
@@ -104,9 +112,9 @@ export function LeverNonConformite({ nc, onClose, onLevee }: { nc: Nonconformity
 
         <section>
           <h3 className="mb-1 text-[13px] font-semibold text-ink">Photo de la correction (obligatoire)</h3>
-          <p className="mb-2.5 text-[12.5px] text-muted">Au moins une photo, JPEG ou PNG, 8 Mo au plus. Elle est retirée si vous annulez.</p>
+          <p className="mb-2.5 text-[12.5px] text-muted">Au moins une photo, JPEG ou PNG, 8 Mo au plus. Déposée, elle est conservée comme preuve de la correction, même si vous annulez.</p>
           <div className="space-y-2.5">
-            <Pieces pieces={photos} retirable={() => true} onRetiree={(p) => setPhotos((l) => l.filter((x) => x.id !== p.id))} onErreur={setErreur} />
+            <Pieces pieces={photos} />
             <div className="flex items-center gap-2">
               <FileButton small label={photos.length ? "Ajouter une autre photo" : "Ajouter la photo de la correction"} accept={FORMATS_PHOTO} onFile={(f) => void deposer(f)} />
               {depot && <span className="text-[12px] text-muted">Envoi…</span>}

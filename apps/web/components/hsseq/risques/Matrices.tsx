@@ -1,19 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { X } from "@/components/icons";
 import { Button, Card, ErrorBox, Etat } from "@/components/ui";
 import { MatriceCriticite, NIVEAUX, ORDRE_NIVEAUX } from "@/components/hsseq/commun";
-import { requete, useReferentiels } from "@/components/hsseq/actions/outils";
+import { Pages, requete, useReferentiels } from "@/components/hsseq/actions/outils";
 import { useApi } from "@/lib/api-client";
 import { INSECABLE, fmtInt, pluriel } from "@/lib/format";
 import type { CriticalityLevel, CriticalityThreshold, Page, Score } from "@/lib/hsseq-types";
-import type { CaseMatrice, FiltresRegistre } from "./adresse";
+import { versApiCase, type CaseMatrice, type FiltresRegistre } from "./adresse";
 import { NIVEAU_RISQUES } from "./libelles";
 import { TableRisques } from "./TableRisques";
 import type { RiskCounts, RiskLine, RiskMatrix, RiskMatrixCell } from "./types";
 
-/** Plus grande page du noyau : une case se liste sur au plus tant de risques de son niveau. */
-const PLAFOND = 500;
+/** Risques d'une case par page. */
+const PAR_PAGE = 50;
 
 
 /** Risques par niveau, comptés sur les cases (niveaux du noyau, selon les seuils de la société). */
@@ -134,17 +135,17 @@ function TableauNiveaux({ brute, residuelle, seuils, onNiveau }: { brute: Record
 }
 
 /**
- * Risques d'une case : le noyau ne filtre pas par case ; la liste est lue sur le niveau de la case
- * (raw_level ou level), puis bornée à la case à l'écran, sur au plus 500 risques de ce niveau.
+ * Risques d'une case, filtrés par le noyau (raw_severity et raw_probability, ou residual_severity et
+ * residual_probability) avec les filtres du registre, par pages : la criticité la plus forte de l'autre
+ * cotation d'abord.
  */
 function RisquesDeLaCase({ api, choisie, cellule, risque, ecrire }: { api: Record<string, string | number | null>; choisie: CaseMatrice; cellule: RiskMatrixCell; risque: number | null; ecrire: (maj: Record<string, string | number | null>) => void }) {
   const brute = choisie.cote === "brute";
-  const niveau = brute ? { raw_level: cellule.level } : { level: cellule.level };
-  const { data, error, mutate } = useApi<Page<RiskLine, RiskCounts>>(`/hsseq/risks?${requete({ ...api, ...niveau, sort: brute ? "-raw_criticality" : "-residual_criticality", limit: PLAFOND })}`, { keepPreviousData: true });
-  const lignes = (data?.items ?? []).filter((r) => {
-    const s = brute ? r.raw : r.residual;
-    return s.severity === choisie.gravite && s.probability === choisie.probabilite;
-  });
+  const filtre = { ...api, ...versApiCase(choisie), sort: brute ? "-residual_criticality" : "-raw_criticality" };
+  const cle = requete(filtre);
+  const [position, setPosition] = useState({ cle, offset: 0 });
+  const offset = position.cle === cle ? position.offset : 0;
+  const { data, error, mutate } = useApi<Page<RiskLine, RiskCounts>>(`/hsseq/risks?${requete({ ...filtre, offset, limit: PAR_PAGE })}`, { keepPreviousData: true });
   return (
     <Card
       padded={false}
@@ -157,18 +158,19 @@ function RisquesDeLaCase({ api, choisie, cellule, risque, ecrire }: { api: Recor
     >
       <p className="px-6 pb-3 text-[13px] text-muted">
         Criticité {cellule.criticality}, {NIVEAUX[cellule.level].label.toLocaleLowerCase("fr")}
-        {data ? `${INSECABLE}: ${pluriel(lignes.length, "risque")}.` : "."}
+        {`${INSECABLE}: ${pluriel(data?.total_count ?? cellule.count, "risque")}.`}
       </p>
       {!data ? (
         <Etat error={error} onRetry={() => void mutate()} label="Chargement des risques de la case…" />
       ) : (
         <>
-          <TableRisques lignes={lignes} choisi={risque} compacte={risque !== null} onOuvrir={(id) => ecrire({ risque: id })} vide="Aucun risque dans cette case." />
-          {data.total_count > data.items.length && (
-            <p className="border-t border-line px-5 py-3 text-[12.5px] text-muted">
-              Case établie sur les {fmtInt(data.items.length)} premiers risques de ce niveau, sur {fmtInt(data.total_count)}.
-            </p>
+          {error && (
+            <div className="px-4 pb-3">
+              <ErrorBox error={error} onRetry={() => void mutate()} />
+            </div>
           )}
+          <TableRisques lignes={data.items} choisi={risque} compacte={risque !== null} onOuvrir={(id) => ecrire({ risque: id })} vide="Aucun risque dans cette case." />
+          <Pages offset={data.offset} limit={data.limit} total={data.total_count} nom="risques de la case" onPage={(o) => setPosition({ cle, offset: o })} />
         </>
       )}
     </Card>

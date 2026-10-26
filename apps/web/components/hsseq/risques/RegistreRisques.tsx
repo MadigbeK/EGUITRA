@@ -8,14 +8,17 @@ import { AvecFiche, Bascule, ChampSite, Pages, requete, useAdresse, useReferenti
 import { useApi } from "@/lib/api-client";
 import { fmtInt, pluriel } from "@/lib/format";
 import type { Page, Referentials } from "@/lib/hsseq-types";
-import { ONGLETS, ORDRE_ONGLETS, SANS_FILTRE, TRIS, TRI_DEFAUT, filtresActifs, lireFiltres, versApi, type FiltresRegistre } from "./adresse";
+import { ONGLETS, ORDRE_ONGLETS, SANS_FILTRE, TRIS, TRI_DEFAUT, filtresActifs, lireFiltres, versApi, type FiltresRegistre, type Onglet } from "./adresse";
 import { FicheRisque } from "./FicheRisque";
 import { NATURE_RISQUE, NIVEAU_RISQUES, ORDRE_NATURES } from "./libelles";
 import { Matrices } from "./Matrices";
 import { TableRisques } from "./TableRisques";
-import type { RiskCounts, RiskLine } from "./types";
+import type { RiskCounts, RiskLine, RiskStatus } from "./types";
 
 const PAR_PAGE = 50;
+
+/** Statuts des risques au registre (onglet sans filtre de statut : le noyau écarte les archivés). */
+const AU_REGISTRE: RiskStatus[] = ["draft", "active"];
 
 const OPTIONS_NIVEAUX = [...ORDRE_NIVEAUX].reverse().map((n) => ({ value: n, label: NIVEAUX[n].label }));
 
@@ -23,7 +26,8 @@ type Ecrire = (maj: Record<string, string | number | null>) => void;
 
 /**
  * Registre des risques de NIMOVA · HSSEQ (lot 2, GET /hsseq/risks) : situation du registre en tête,
- * onglets de statut, filtres, liste ou matrices 5 × 5 brute et résiduelle, fiche ouverte à côté.
+ * onglets de statut et leur nombre pour les filtres posés, filtres, liste ou matrices 5 × 5 brute et
+ * résiduelle, fiche ouverte à côté.
  * Filtres, vue et fiche sont portés par l'adresse (voir ./adresse.ts) ; le chef de parc et l'auditeur
  * ne reçoivent du noyau que les risques de leurs sites.
  */
@@ -38,15 +42,17 @@ export function RegistreRisques() {
   const ouverte = f.risque !== null;
 
   const { data, error, mutate } = useApi<Page<RiskLine, RiskCounts>>(f.vue === "liste" ? `/hsseq/risks?${requete({ ...api, sort: f.tri, offset, limit: PAR_PAGE })}` : null, { keepPreviousData: true });
+  // Nombres des onglets : by_status du noyau porte sur la sélection filtrée sans le statut. La liste les
+  // sert ; en vue « Matrices », une page d'un risque, sans le statut de l'onglet.
+  const { data: compte } = useApi<Page<RiskLine, RiskCounts>>(f.vue === "matrices" ? `/hsseq/risks?${requete({ ...api, status: null, limit: 1 })}` : null, { keepPreviousData: true });
+  const parStatut = (f.vue === "liste" ? data : compte)?.counts.by_status;
+  /** Nombre d'un onglet ; « Au registre » : à évaluer et en vigueur, les archivés étant écartés. */
+  const nombre = (o: Onglet) => (parStatut ? (ONGLETS[o].statuts ?? AU_REGISTRE).reduce((n, s) => n + (parStatut[s] ?? 0), 0) : undefined);
   const tri: Tri = { key: f.tri.replace(/^-/, ""), dir: f.tri.startsWith("-") ? -1 : 1 };
 
   const liste = (
     <div className="space-y-4">
-      <Tabs
-        value={f.onglet}
-        onChange={(o) => ecrire({ statut: o === "registre" ? null : o })}
-        tabs={ORDRE_ONGLETS.map((o) => ({ key: o, label: ONGLETS[o].label, count: o === f.onglet && f.vue === "liste" ? data?.total_count : undefined }))}
-      />
+      <Tabs value={f.onglet} onChange={(o) => ecrire({ statut: o === "registre" ? null : o })} tabs={ORDRE_ONGLETS.map((o) => ({ key: o, label: ONGLETS[o].label, count: nombre(o) }))} />
       <Filtres f={f} ref_={ref} ecrire={ecrire} echues={f.vue === "liste" ? data?.counts.review_overdue : undefined} />
       {f.vue === "matrices" ? (
         <Matrices api={api} f={f} ecrire={ecrire} />
@@ -231,7 +237,7 @@ function Filtres({ f, ref_, ecrire, echues }: { f: FiltresRegistre; ref_: Refere
         </div>
       )}
       <p className="text-[12.5px] leading-snug text-muted">
-        Une revue échue relance chaque semaine le propriétaire du risque et le Responsable HSSEQ. Les filtres de profil et de site écartent les risques communs à tous les profils ou à tous les sites.
+        Une revue échue relance chaque semaine le propriétaire du risque et le Responsable HSSEQ. Le filtre de profil garde les risques communs à tous les profils&nbsp;; le filtre de site écarte ceux communs à tous les sites.
       </p>
     </>
   );

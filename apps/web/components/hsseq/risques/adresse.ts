@@ -81,7 +81,10 @@ export function lireFiltres(lire: (cle: string) => string): FiltresRegistre {
   };
 }
 
-/** Paramètres du noyau pour ces filtres, statut de l'onglet compris (sans tri ni page). */
+/**
+ * Paramètres du noyau pour ces filtres, statut de l'onglet compris (sans tri ni page). La case choisie
+ * d'une matrice n'en fait pas partie : elle ne borne que la liste de ses risques (versApiCase).
+ */
 export function versApi(f: FiltresRegistre): Record<string, string | number | null> {
   return {
     status: ONGLETS[f.onglet].statuts?.join(",") ?? null,
@@ -94,6 +97,11 @@ export function versApi(f: FiltresRegistre): Record<string, string | number | nu
     mine: f.miens ? 1 : null,
     search: f.q.trim() || null,
   };
+}
+
+/** Filtre du noyau d'une case de matrice : gravité et probabilité brutes, ou résiduelles. */
+export function versApiCase(c: CaseMatrice): Record<string, number> {
+  return c.cote === "brute" ? { raw_severity: c.gravite, raw_probability: c.probabilite } : { residual_severity: c.gravite, residual_probability: c.probabilite };
 }
 
 /** Un filtre autre que l'onglet de statut est-il posé ? */
