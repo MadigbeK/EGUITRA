@@ -22,6 +22,7 @@ AUDITED_MODELS = [
     "eguitra.hsseq.complaint", "eguitra.hsseq.procedure", "eguitra.hsseq.procedure.version",
     "eguitra.hsseq.acknowledgment", "eguitra.hsseq.bulletin", "eguitra.hsseq.emergency.plan", "eguitra.hsseq.drill",
     "eguitra.hsseq.crisis.contact",
+    "eguitra.hsseq.telematics.violation", "eguitra.hsseq.telematics.import",
 ]
 
 

@@ -102,6 +102,8 @@ OBJECT_MODELS = {
     "emergency_plan": "eguitra.hsseq.emergency.plan",
     "drill": "eguitra.hsseq.drill",
     "crisis_contact": "eguitra.hsseq.crisis.contact",
+    "violation": "eguitra.hsseq.telematics.violation",
+    "telematics_import": "eguitra.hsseq.telematics.import",
 }
 # Les alertes flash et retours d'expérience n'ont pas de pièce jointe : une photo échapperait au contrôle
 # d'anonymisation (§9.4).
@@ -179,6 +181,10 @@ SCENARIOS = [("spill", "Déversement"), ("fire", "Incendie"), ("road_accident", 
              ("intrusion", "Intrusion"), ("medical", "Urgence médicale"), ("explosion", "Explosion"),
              ("other", "Autre scénario")]
 DRILL_STATUSES = [("planned", "Planifié"), ("done", "Réalisé"), ("cancelled", "Annulé")]
+
+# Télématique (OBC, GPS, IVMS) : import générique en attendant l'interface du fournisseur.
+VIOLATION_TYPES = [("speeding", "Excès de vitesse"), ("harsh_braking", "Freinage brusque"),
+                   ("night_driving", "Conduite de nuit"), ("driving_time", "Temps de conduite dépassé")]
 
 # Profils (codes de PROFILE_GROUPS) qui lisent toute fiche HSSEQ de leurs sociétés.
 READ_ALL = frozenset({"admin", "direction", "hsseq"})

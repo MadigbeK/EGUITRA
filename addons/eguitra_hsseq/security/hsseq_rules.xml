@@ -209,4 +209,14 @@
         <field name="model_id" ref="model_eguitra_hsseq_crisis_contact"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_telematics_violation_company" model="ir.rule">
+        <field name="name">Violations télématiques : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_telematics_violation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_telematics_import_company" model="ir.rule">
+        <field name="name">Imports télématiques : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_telematics_import"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>
