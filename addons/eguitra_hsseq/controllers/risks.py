@@ -215,7 +215,8 @@ def list_domain(kw, with_status=True):
         # Un risque « tous profils » (sans profil) vaut aussi pour le profil filtré.
         domain += ["|", ("vehicle_kind", "in", kw["vehicle_kind"].split(",")), ("vehicle_kind", "=", False)]
     if kw.get("site_id"):
-        domain.append(("site_id", "=", int_or_none(kw, "site_id")))
+        # Un risque commun à tous les sites (sans site) vaut aussi pour le site filtré.
+        domain += ["|", ("site_id", "=", int_or_none(kw, "site_id")), ("site_id", "=", False)]
     if kw.get("owner_id"):
         domain.append(("owner_id", "=", int_or_none(kw, "owner_id")))
     if str(kw.get("mine", "")) in ("1", "true"):

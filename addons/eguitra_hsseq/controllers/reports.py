@@ -248,7 +248,10 @@ def month_payload(template, company, month):
     return {
         "template": {"id": template.id, "name": template.name, "client_label": template.client_label or None,
                      "partner": {"id": template.partner_id.id, "name": template.partner_id.name}
-                     if template.partner_id else None},
+                     if template.partner_id else None,
+                     "site_ids": template.sudo().site_ids.ids, "sites": [site_ref(s) for s in template.sudo().site_ids],
+                     "vehicle_kind": template.vehicle_kind or None,
+                     "start_month": template.start_month.strftime("%Y-%m")},
         "company": company_ref(company), "month": month.strftime("%Y-%m"), "label": month_label(month),
         "period_label": f"{MONTHS_FR[0].capitalize()} à {MONTHS_FR[month.month - 1]} {month.year}"
         if month.month > 1 else month_label(month).capitalize(),

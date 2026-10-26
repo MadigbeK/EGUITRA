@@ -245,3 +245,29 @@ class TestCorrectionsLot3(HsseqCase):
         shortage_15 = max(0.0, rotation.volume_loaded_15 - rotation.volume_delivered_15)
         self.assertEqual(tanker["per_mille"], round(shortage_15 * 1000 / rotation.volume_delivered_15, 2),
                          "Manquant et livré à 15 °C")
+
+    def test_restes_du_lot_2_risques_communs_et_perimetre_du_rapport(self):
+        """Le filtre site_id des risques garde les risques communs à tous les sites ; le mois d'un rapport sert
+        dans template ses sites, son profil de véhicule et son premier mois."""
+        payload = {"nature": "safety_hazard", "activity": "Chargement au dépôt", "hazard": "Vapeurs au dôme",
+                   "feared_event": "Inflammation", "owner_id": self.hsseq.id, "raw_severity": 3, "raw_probability": 3, "residual_severity": 2,
+                   "residual_probability": 2}
+        ids = {}
+        for key, site in (("mat", self.site), ("bof", self.site2), ("common", None)):
+            status, risk = self.api("kadi.hsseq", "POST", "/hsseq/risks",
+                                    dict(payload, site_id=site.id if site else None))
+            self.assertEqual(status, 200, risk)
+            ids[key] = risk["id"]
+        status, listing = self.api("kadi.hsseq", "GET", f"/hsseq/risks?site_id={self.site.id}")
+        self.assertEqual({r["id"] for r in listing["items"]} & set(ids.values()), {ids["mat"], ids["common"]})
+        start = self.day.replace(day=1)
+        status, template = self.api("kadi.hsseq", "POST", "/hsseq/reports/templates", {
+            "name": "Rapport HSSE (fictif)", "site_ids": [self.site.id], "vehicle_kind": "tanker",
+            "start_month": f"{start:%Y-%m}", "indicators": [
+                {"code": "B1-1", "label": "Accidents sur route", "nature": "reactive", "mode": "computed",
+                 "key": "road_accidents", "targets": [0] * 12}]})
+        self.assertEqual(status, 200, template)
+        status, report = self.api("kadi.hsseq", "GET", f"/hsseq/reports/{template['id']}/{start:%Y-%m}")
+        self.assertEqual(status, 200, report)
+        self.assertEqual((report["template"]["site_ids"], report["template"]["vehicle_kind"],
+                          report["template"]["start_month"]), ([self.site.id], "tanker", f"{start:%Y-%m}"))
