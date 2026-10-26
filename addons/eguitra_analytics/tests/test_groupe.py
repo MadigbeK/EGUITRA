@@ -405,6 +405,23 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         return _Ctx(self.company, {"code": "ytd", "date_from": date(2026, 1, 1), "date_to": DATE_TO, "label": "",
                                    "previous": {"date_from": date(2025, 1, 1), "date_to": date(2025, 6, 30)}})
 
+    def test_libelles_des_etats_et_natures(self):
+        """Chantiers et biens : l'état et la nature arrivent avec leur libellé, l'écran ne montre jamais
+        « preparation » ni « entrepot »."""
+        groupe = self.env["eguitra.analytics.groupe"]
+        route = self.env["eguitra.chantier"].create({"name": "Route Kankan - Kouroussa (fictif)",
+                                                     "company_id": self.company.id, "partner_id": self.customer.id,
+                                                     "contract_amount": 2_000_000_000})
+        # Un chantier sans situation, sans facture ni coût n'est pas listé : une situation datée de la période.
+        self.env["eguitra.chantier.situation"].create({"chantier_id": route.id, "date": date(2026, 3, 31),
+                                                       "cumulative_amount": 500_000_000})
+        self.env["eguitra.property"].create({"name": "Entrepôt de Matoto (fictif)", "company_id": self.company.id,
+                                             "kind": "entrepot", "current_value": 900_000_000})
+        chantier = next(r for r in groupe._chantiers(self._ctx()) if r["name"] == "Route Kankan - Kouroussa (fictif)")
+        self.assertEqual((chantier["state"], chantier["state_label"]), ("preparation", "En préparation"))
+        bien = next(r for r in groupe._immobilier(self._ctx())["properties"] if r["name"] == "Entrepôt de Matoto (fictif)")
+        self.assertEqual((bien["kind"], bien["kind_label"]), ("entrepot", "Entrepôt"))
+
     def test_ecritures_reprises(self):
         """Pièces reprises en écritures (« entry ») dans le journal de vente : comptées dans les ventes TTC du
         DSO, dans l'historique de paiement, et chiffre d'affaires rattaché au tiers de la créance (la ligne de
