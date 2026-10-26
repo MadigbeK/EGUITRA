@@ -29,21 +29,42 @@ noyau de la session OTHER (branche `hsseq`) :
   réponse de plus de 10 minutes, « Départ non vérifié », jamais « autorisé ». Passage en route par
   le chef de parc seul (`POST /transport/rotations/{id}/depart`).
 - Dérogation (chef de parc) : un seul motif dérogeable, jamais V01 ni V03, justification de
-  30 caractères au moins ; la demande vaut première validation.
-- Non-conformités (chef de parc, Responsable HSSEQ) : levée en ligne, photo de la correction
-  déposée d'abord (`role: "lift"`), puis citée par la levée.
+  30 caractères au moins ; la demande vaut première validation et redemande le code personnel.
+- Non-conformités (chef de parc, Responsable HSSEQ) : levée en ligne, code personnel redemandé,
+  photo de la correction déposée d'abord (`role: "lift"`), puis citée par la levée ; la photo reste
+  sur l'appareil jusqu'à la levée confirmée.
+- Contrôle et alcootest lancés d'un départ : rattachés à sa rotation (`rotation_id`), ce qui lève
+  V01 même quand un contrôle précédent attend un complément.
+- Accident : appels du chef de parc et des secours depuis la déclaration, dans l'ordre de
+  l'annuaire de crise du site (`GET /hsseq/my/crisis-contacts`, gardé sur l'appareil).
+- Documents (tous les profils, lot 3) : procédures en vigueur et alertes qui visent le compte
+  (`GET /hsseq/my/documents`) ; une alerte se lit dans l'application, une procédure dans son
+  document, téléchargé sous la session et ouvert par une application du téléphone ; l'accusé de
+  lecture part par la file d'envoi avec l'heure de lecture, même sans réseau.
+- Mon dossier (conducteur, lot 2) : aptitude médicale en statut seul, habilitations et leurs
+  échéances, blocage du départ (V04) annoncé (`GET /hsseq/me`).
 - Envoi en arrière-plan (`expo-background-task`, toutes les 15 minutes au plus) sous la session
   gardée, un seul envoi à la fois avec le premier plan.
 - Code personnel : choisi après la connexion (4 à 6 chiffres, ni répétés ni suivis), empreinte salée
   au coffre ; redemandé après 5 minutes hors de l'application au téléphone, après 2 minutes sans
-  geste à la tablette (préavis de 20 s) ; cinq erreurs ferment la session sur l'appareil.
+  geste à la tablette (préavis de 20 s, la frappe au clavier compte comme un geste) et avant une
+  dérogation ou une levée ; cinq erreurs ferment la session. Verrouillé, l'écran passe au-dessus de
+  toutes les fenêtres et le contenu dessous est caché au lecteur d'écran.
+- Signature tracée du contrôle (facultative), envoyée avec la fiche.
 
 Socle :
 
 - Connexion par jetons : identifiant et mot de passe, code de double authentification ou son
   activation, remplacement d'un mot de passe provisoire. Le jeton de renouvellement est gardé dans le
   coffre sécurisé de l'appareil, le jeton d'accès en mémoire seulement.
-- Ouverture sans réseau sur le profil gardé : les saisies partent au retour du réseau.
+- Ouverture sans réseau sur le profil gardé : les saisies partent au retour du réseau. Une session
+  reprise au démarrage s'ouvre toujours verrouillée ; un mot de passe provisoire non remplacé
+  rouvre sur son remplacement.
+- File d'envoi : une coupure ou une session finie arrête l'envoi, un refus du bureau sur une saisie
+  n'arrête pas les autres ; une erreur passagère (5xx, 429) ou une heure de saisie refusée
+  (horloge en avance) laissent la saisie en attente ; une correction arrivée après la réception
+  d'une rotation est signalée « Reçue », à corriger au bureau ; une fiche HSSEQ refusée se
+  supprime de « Ma journée ». Photos orphelines balayées à l'ouverture.
 - Rotations, reprise de Rotations web (`apps/web/components/mobile/RotationsApp.tsx`), mêmes champs,
   mêmes contrôles et mêmes messages : saisie, « À envoyer », « Envoyées ». File d'envoi dans une base
   SQLite, envoi idempotent par `client_uuid` (`POST /transport/sync`) à l'ouverture, au retour du
@@ -97,7 +118,8 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
 - Modules par profil (`src/accueil/modules.ts`, matrice du contrat HSSEQ) : Rotations pour admin et
   exploitation ; départ pour admin, hsseq, exploitation et conducteur ; contrôle avant départ et
   alcootest pour hsseq, exploitation et conducteur ; déclaration pour admin, direction, hsseq,
-  exploitation et conducteur ; non-conformités pour hsseq et exploitation. Passage en route et
+  exploitation et conducteur ; non-conformités pour hsseq et exploitation ; documents pour tous ;
+  mon dossier pour le conducteur. Passage en route et
   demande de dérogation : chef de parc (exploitation) seul. Un module hors profil ne
   s'ouvre pas, même par une adresse directe ; le noyau refuse de toute façon le reste.
   Comptes de recette : `test.parc` (agent de parc) et `test.exploitation` ; un compte conducteur
@@ -124,10 +146,12 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
 
 - Compte Expo de l'entreprise pour EAS (constructions, publication en accès restreint, mises à jour
   à distance avec `expo-updates`) : décision et compte du gérant.
-- Icônes et système de conception « terrain » : session DESIGN (`docs/design/mobile/`). Les icônes
-  actuelles sont celles du modèle Expo.
-- Signature des contrôles (tracé ou code personnel) : en attente de la Direction générale (valeur
-  de la signature par code).
+- Signature par code personnel (en plus du tracé) : en attente de la Direction générale (valeur
+  de la signature par code). Départ sans réseau et découpage de V05 : idem.
+- Contrôle complémentaire (`POST /hsseq/checks/<id>/complement`) : le motif V01 du noyau ne cite
+  pas le contrôle à compléter ; question posée à la session OTHER. En attendant, un contrôle
+  complet rattaché à la rotation lève V01.
+- Noyau : aligner `can_attach` sur `can_lift` pour les photos de levée (demandé à OTHER).
 - Tablette en mode kiosque (gestion de flotte Android) avec les tuiles des habitués et le badge QR :
   demande une décision sur les badges et un registre côté serveur.
 - Seconde validation des dérogations par le Responsable HSSEQ : écran web (session DESIGN).

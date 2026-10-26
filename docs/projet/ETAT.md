@@ -220,10 +220,23 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   photo, envoi en arrière-plan, code personnel au réveil et verrouillage de la tablette après
   2 minutes (revue de sécurité : session reprise toujours verrouillée), signature tracée du contrôle.
   64 tests au vert ; parcours vérifiés au téléphone et à la tablette sur le bureau simulé.
+- 26 octobre, soir : relecture contradictoire de l'application (49 constats tenus sur 56), tous
+  corrigés : file d'envoi (refus d'une route sans arrêt des autres, erreurs passagères et horloge
+  décalée laissées en attente, correction reçue trop tard signalée), session (renouvellement lié
+  au compte gardé, mot de passe provisoire repris, étapes de connexion qui expirent), verrou (code
+  redemandé avant dérogation et levée, frappe comptée, contenu caché au lecteur d'écran), photos
+  (cliché brut et orphelines supprimés, photo de levée gardée jusqu'à la levée), départ vérifié
+  rotation par rotation, formulaires protégés (confirmation avant abandon, retour Android, messages
+  d'échec), tâche de fond déclarée avant le routeur. Ajouts sur le noyau HSSEQ de la session OTHER
+  (branche `hsseq`, lots 2 et 3) : appels d'urgence depuis la déclaration d'accident (annuaire de
+  crise), « Documents » (procédures et alertes, accusé de lecture même sans réseau), « Mon
+  dossier » du conducteur (habilitations, aptitude en statut seul). 76 tests au vert, `tsc` et
+  paquet Android au vert ; parcours vérifiés sur le bureau simulé.
 - Ensuite : branchement sur la recette dès l'entrée native de la passerelle (Local, après son audit)
   et l'intégration du module HSSEQ ; compte Expo de l'entreprise (EAS) pour essayer sur de vrais
-  téléphones ; icônes de DESIGN ; réponses de la Direction générale (départ sans réseau, valeur de
-  la signature par code, V05). Hors offre initiale : avenant à chiffrer avec HSSEQ.
+  téléphones ; réponses de la Direction générale (départ sans réseau, valeur de la signature par
+  code, V05) ; contrôle complémentaire et `can_attach` des photos de levée (questions posées à
+  OTHER). Hors offre initiale : avenant à chiffrer avec HSSEQ.
 
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
