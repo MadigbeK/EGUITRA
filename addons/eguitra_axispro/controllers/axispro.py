@@ -6,6 +6,7 @@ Rapports, exports et imports d'évaluation : rapports.py.
 from odoo import http
 from odoo.http import request
 
+from odoo.addons.eguitra_api.controllers.auth import _password_shared
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
@@ -489,7 +490,9 @@ class EguitraAxispro(http.Controller):
         if created:
             user = Users.create({
                 "name": name, "login": str(login).strip().lower(), "password": password,
-                "email": data.get("email") or False, "eguitra_password_temporary": True,
+                # Recette en mot de passe commun (eguitra_api.shared_password) : aucun changement n'y est
+                # permis, le compte garde donc le mot de passe saisi, comme ceux créés par l'administration.
+                "email": data.get("email") or False, "eguitra_password_temporary": not _password_shared(request.env),
                 "company_id": dossier.company_id.id, "company_ids": [(6, 0, dossier.company_id.ids)],
             })
             user._eguitra_set_profiles(["porteur"])
@@ -499,7 +502,8 @@ class EguitraAxispro(http.Controller):
                                        + ("" if created else ", compte existant") + ".")
         # Compte existant : son mot de passe ne change pas (l'écran le dit, au lieu d'ignorer la saisie).
         return dict(dossier_detail(dossier), portal_access={"login": user.login, "created": created,
-                                                             "password_changed": created})
+                                                             "password_changed": created,
+                                                             "password_temporary": bool(user.eguitra_password_temporary)})
 
     @api_route("/axispro/dossiers/<int:dossier_id>/portal-access/<int:user_id>", methods=("DELETE",), profiles=WRITE)
     def portal_revoke(self, dossier_id, user_id, **_kw):
