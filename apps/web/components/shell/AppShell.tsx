@@ -50,7 +50,11 @@ function accueilDe(a: AppCode, me: Me, ouverte: AppCode): string {
  * espace, rubriques en menus illustrés, recherche, applications, société, compte) et le contenu sur
  * toute la largeur. Un filigrane guilloché se grave en haut de chaque écran, comme sur un billet.
  */
-export function AppShell({ app, me, children }: { app: AppCode; me: Me; children: ReactNode }) {
+/**
+ * actions : commandes propres à une application, posées dans la barre du haut avant la société et le
+ * compte (cloche des notifications d'AxisPro Suite).
+ */
+export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me; children: ReactNode; actions?: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [defile, setDefile] = useState(false);
@@ -249,6 +253,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
             </button>
             {ESPACES.some((a) => me.apps.includes(a)) && <Lanceur me={me} app={app} />}
             <EquilibreExercice data={enTete} />
+            {actions}
             <SocieteEnTete app={app} me={me} onCompany={switchCompany} />
             <CompteMenu app={app} me={me} onLogout={logout} />
           </div>
