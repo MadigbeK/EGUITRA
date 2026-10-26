@@ -314,9 +314,11 @@ class EguitraPeriodClose(models.Model):
     # ─── Devises (réévaluation à la clôture) ──────────────────────────────
 
     def _fx_line(self, label, account, amount, currency, partner=False):
-        """Ligne d'écart de change : montant en GNF seulement, montant en devise nul."""
-        values = {"name": label, "account_id": account.id, "debit": max(amount, 0.0), "credit": max(-amount, 0.0),
-                  "partner_id": partner or False}
+        """Ligne d'écart de change : montant en GNF seulement, montant en devise nul. Le solde est écrit tel quel
+        (balance) : donné par le débit et le crédit, il pouvait être recalculé d'après le montant en devise nul
+        (inverse du montant en devise d'une ligne en devise, le solde n'étant pas alors protégé), et l'écriture
+        n'était plus équilibrée."""
+        values = {"name": label, "account_id": account.id, "balance": amount, "partner_id": partner or False}
         if currency:
             values.update({"currency_id": currency.id, "amount_currency": 0.0})
         return Command.create(values)

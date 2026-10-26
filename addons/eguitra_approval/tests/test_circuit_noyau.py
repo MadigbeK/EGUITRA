@@ -117,7 +117,12 @@ class TestCircuitNoyau(FinanceDataMixin, ApiCase):
         status, body = self.call("POST", f"/finance/moves/{refund.id}/payments", {"journal_id": self.bank.id},
                                  token=self.token)
         self.assertEqual(status, 200, body)
-        self.assertEqual(body["payment_status"], "submitted", "Un remboursement de 177 M attend la direction")
+        self.env.invalidate_all()
+        held = self.env["account.payment"].search([("partner_id", "=", self.customer.id)], order="id desc", limit=1)
+        self.assertNotEqual(held.move_id.state, "posted",
+                            ("Remboursement comptabilisé sans approbation", held.state, held.payment_type, held.amount))
+        self.assertEqual(body["payment_status"], "submitted", ("Un remboursement de 177 M attend la direction",
+                                                               body.get("payments_awaiting_approval")))
         payment = self.env["account.payment"].browse(body["payments_awaiting_approval"][0]["id"])
         self._request(payment).with_user(self.dg).action_approve()
         self.env.invalidate_all()

@@ -619,14 +619,20 @@ class EguitraFinanceMoves(http.Controller):
             if not mode or (mode.company_id and mode.company_id != move.company_id):
                 raise ApiError(422, "business_rule", "Mode de paiement inconnu.")
             mode = mode.sudo(False)
+        before = set(move.sudo().matched_payment_ids.ids)
         wizard = request.env["account.payment.register"].with_context(
             active_model="account.move", active_ids=move.ids
         ).create(values)
         payments = wizard._create_payments()
+        # Règlements créés par l'assistant, retenus compris : le noyau ne les rend pas tous (un règlement retenu
+        # par le circuit n'est pas comptabilisé, et peut manquer à la valeur rendue) ; ils sont rattachés à la pièce.
+        move.invalidate_recordset(["matched_payment_ids"])
+        created = payments | move.matched_payment_ids.filtered(lambda p: p.id not in before)
         if mode:
-            payments.write({"eguitra_payment_mode_id": mode.id})
-        # « submitted » : règlement retenu par le circuit (brouillon), comptabilisé à la dernière approbation.
-        status = "submitted" if payments.filtered(lambda p: p.state == "draft") else "posted"
+            created.write({"eguitra_payment_mode_id": mode.id})
+        # « submitted » : un règlement de cette pièce attend désormais l'approbation (il n'en attendait aucun :
+        # refus plus haut), comptabilisé et lettré à la dernière approbation.
+        status = "submitted" if move._eguitra_payments_awaiting() else "posted"
         return dict(move_detail(move), payment_status=status)
 
     @api_route("/finance/moves/<int:move_id>/pdf", profiles=PURCHASE_READ)
