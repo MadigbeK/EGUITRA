@@ -167,6 +167,15 @@ def _section_link(section, anchor=None, **params):
     return f"/analyse/{section}" + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else "")
 
 
+def _historique_clos(months, values, day):
+    """Série mensuelle sans le mois de la date d'arrêté quand il est entamé : ses chiffres partiels (le 3 du
+    mois, trois jours d'honoraires) tireraient la prévision vers le bas. Renvoie (mois, valeurs, entamé)."""
+    entame = (day + timedelta(days=1)).month == day.month
+    if entame and months and months[-1] == pf.month_key(day):
+        return months[:-1], values[:-1], True
+    return months, values, False
+
+
 def _knockouts_confirmes(snapshot):
     """Knock-outs constatés à la décision : ceux de l'instantané scellé, moins ceux dont le critère n'était
     pas encore évalué (la méthode compte un critère non évalué comme non disponible)."""
@@ -750,7 +759,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 for p in passages:
                     if p["dst"] == code and p["date"] <= b.date_to:
                         arrivals[pf.month_key(p["date"])] += 1
-            values = [float(arrivals.get(m, 0)) for m in months]
+            # Mois entamé écarté de l'historique : la prévision part du dernier mois clos (le mois en cours
+            # devient le premier mois prévu).
+            history, values, _entame = _historique_clos(months, [float(arrivals.get(m, 0)) for m in months], b.date_to)
             fc = _forecast(values, 6)
             point, low, high = fc["forecast"], fc["low"], fc["high"]
             approaching = []
@@ -783,7 +794,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 "gate": code, "label": b.gate_names[code], "rule": rule, "expected_3m": total(point, 3),
                 "expected_6m": total(point, 6), "interval_3m": [total(low, 3), total(high, 3)],
                 "interval_6m": [total(low, 6), total(high, 6)], "method": fc["method"],
-                "mape": _r(fc["mape"]), "history": {"months": months, "values": values},
+                "mape": _r(fc["mape"]), "history": {"months": history, "values": values},
                 "candidates": approaching,
             })
         return result
@@ -2115,10 +2126,14 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
 
         history = pf.months_back(b.date_to, 24)
         values = [totals.get(m, 0.0) for m in history]
+        history, values, entame = _historique_clos(history, values, b.date_to)
         while len(values) > 6 and not values[0]:
             values.pop(0)
             history = history[1:]
-        fc = _forecast(values, 3)
+        fc = _forecast(values, 4 if entame else 3)
+        if entame:
+            # Prévision partie du dernier mois clos : le mois en cours d'abord, puis les trois suivants.
+            fc = dict(fc, forecast=fc["forecast"][1:], low=fc["low"][1:], high=fc["high"][1:])
         backlog = [t for t in sheets if unbilled(t)]
         backlog_hours = sum(t.hours for t in backlog)
         backlog_old = sum(t.hours for t in backlog if (b.date_to - t.date).days > UNBILLED_OLD_DAYS)

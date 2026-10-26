@@ -14,7 +14,12 @@ from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_analytics.engine import portfolio as pf
-from odoo.addons.eguitra_analytics.models.cabinet import _knockouts_confirmes, _recommandation_scellee, _section_link
+from odoo.addons.eguitra_analytics.models.cabinet import (
+    _historique_clos,
+    _knockouts_confirmes,
+    _recommandation_scellee,
+    _section_link,
+)
 from odoo.addons.eguitra_api.tests.common import ApiCase
 
 HEADER = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
@@ -119,6 +124,14 @@ class TestPortefeuilleMethodes(TransactionCase):
         self.assertEqual(pf.agreement_kind("bankable", "hold"), "strict")
         self.assertIsNone(pf.agreement_kind("pending", "go"), "À compléter : hors calcul")
         self.assertIsNone(pf.agreement_kind("go", "postponed"), "Ajourné : hors calcul")
+
+    def test_prevision_sans_mois_entame(self):
+        """Le 3 octobre, trois jours d'honoraires ne valent pas un mois : la prévision part de septembre."""
+        months, values = ["2026-08", "2026-09", "2026-10"], [300.0, 310.0, 30.0]
+        self.assertEqual(_historique_clos(months, values, fields.Date.to_date("2026-10-03")),
+                         (["2026-08", "2026-09"], [300.0, 310.0], True))
+        self.assertEqual(_historique_clos(months, values, fields.Date.to_date("2026-10-31")), (months, values, False),
+                         "Mois clos : gardé")
 
     def test_knockouts_non_evalues(self):
         """Un knock-out dont le critère n'est pas encore évalué n'est pas constaté : ni « décision favorable
