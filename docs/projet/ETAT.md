@@ -200,6 +200,31 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 26 octobre 2026 : discussion interne (branche `chat-interne`, à fusionner)
+
+Demande du gérant : « implémente le chat interne ». Module `eguitra_chat` 19.0.1.0.0 (dépend
+d'`eguitra_api`), ajouté à `release.sh`, `init-db.sh`, `essai.sh` et aux commandes de test.
+- Choix : modèles propres légers, pas le module mail du noyau (`discuss.channel` donne toutes les
+  conversations au groupe Paramètres, ouvre les canaux publics à tout compte interne, rend un message
+  lisible de ses destinataires notifiés, peut envoyer des courriels et repose sur le websocket).
+- Conversations à deux, de groupe (responsable : le créateur, puis le plus ancien membre) et de fiche
+  (dossier AxisPro, chantier, rotation, bien : ouvertes à qui lit la fiche). Comptes internes avec un
+  profil seulement ; conversation et ajout de membres avec des comptes qui partagent une société.
+- Confidentialité par des règles d'enregistrement globales (membres seuls, administration et
+  administrateur du noyau compris) ; lecture seule pour les comptes, écritures par les méthodes du
+  modèle. L'administration retire un compte archivé de ses conversations (Administration >
+  Utilisateurs, compte désactivé), sans les lire. Messages et lectures hors piste d'audit.
+- Messages : texte, jusqu'à cinq pièces jointes contrôlées, réponse, retrait par l'auteur (texte gardé
+  en base, plus servi), non-lus par membre. Relecture par la passerelle : fil ouvert toutes les
+  5 secondes, non-lus toutes les 30 secondes, onglet visible seulement ; ni geste compté pour la
+  déconnexion après inactivité, ni ligne au journal des accès (`api_route(..., journal=False)`).
+- Web : icône et panneau dans l'en-tête de la coque, page `/discussions`, bouton « Discussion » des
+  fiches, guide commun (README des guides, guides Word régénérés, sauf celui du porteur).
+- Tests écrits (`addons/eguitra_chat/tests/test_chat.py`, 10 tests), **pas encore lancés** :
+  `infra/test.sh eguitra_base eguitra_api eguitra_chat` (et `eguitra_axispro` pour le test du dossier).
+- Ensuite : `-u eguitra_base,eguitra_api` et `-i eguitra_chat` en recette, redémarrage du noyau
+  (module d'audit), application web reconstruite.
+
 ### 25 octobre 2026, après-midi : audit approfondi, interrompu par la limite d'usage
 
 - Fait et poussé (branche claude/bold-shannon-gpg2hv, 87a097c), pas encore en production :
