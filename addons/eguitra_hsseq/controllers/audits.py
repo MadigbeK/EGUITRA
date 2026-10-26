@@ -26,7 +26,6 @@ from ..models.common import (
 from .actions import action_line
 from .common import (
     HSSEQ,
-    MANAGERS,
     attachments_rows,
     companies,
     date_value,
@@ -38,6 +37,7 @@ from .common import (
     is_hsseq,
     page,
     page_args,
+    profiles,
     ref,
     scope_domain,
     site_ref,
@@ -62,6 +62,26 @@ def today():
 
 def audit_domain(kw):
     return [("company_id", "in", companies(kw).ids)] + scope_domain()
+
+
+def audit_list_domain(kw):
+    """Domaine de la liste des audits (et de son export) : portée du compte, filtres, année ou période."""
+    domain = audit_domain(kw)
+    if kw.get("status"):
+        domain.append(("status", "in", kw["status"].split(",")))
+    if kw.get("standard"):
+        domain.append(("standard", "in", kw["standard"].split(",")))
+    if kw.get("site_id"):
+        domain.append(("site_id", "=", int_or_none(kw, "site_id")))
+    year = int_or_none(kw, "year") or today().year
+    start, end = date_value(kw, "date_from"), date_value(kw, "date_to")
+    domain.append(("planned_date", ">=", start or today().replace(year=year, month=1, day=1)))
+    domain.append(("planned_date", "<=", end or today().replace(year=year, month=12, day=31)))
+    return domain
+
+
+def reads_requirements():
+    return bool(profiles() & set(REQUIREMENT_READ))
 
 
 def get_audit(audit_id):
@@ -237,17 +257,7 @@ class EguitraHsseqAudits(http.Controller):
 
     @hsseq_route("/hsseq/audits", profiles=AUDIT_READ)
     def audits(self, **kw):
-        domain = audit_domain(kw)
-        if kw.get("status"):
-            domain.append(("status", "in", kw["status"].split(",")))
-        if kw.get("standard"):
-            domain.append(("standard", "in", kw["standard"].split(",")))
-        if kw.get("site_id"):
-            domain.append(("site_id", "=", int_or_none(kw, "site_id")))
-        year = int_or_none(kw, "year") or today().year
-        start, end = date_value(kw, "date_from"), date_value(kw, "date_to")
-        domain.append(("planned_date", ">=", start or today().replace(year=year, month=1, day=1)))
-        domain.append(("planned_date", "<=", end or today().replace(year=year, month=12, day=31)))
+        domain = audit_list_domain(kw)
         offset, limit, order = page_args(kw, "planned_date", AUDIT_SORTS)
         Audit = request.env["eguitra.hsseq.audit"].sudo()
         rows = Audit.search(domain, offset=offset, limit=limit, order=order)
@@ -393,13 +403,12 @@ class EguitraHsseqAudits(http.Controller):
 
     # ─── Registres ────────────────────────────────────────────────────────
 
-    @hsseq_route("/hsseq/audits/export.xlsx", profiles=MANAGERS)
+    @hsseq_route("/hsseq/audits/export.xlsx", profiles=AUDIT_READ)
     def export(self, **kw):
+        """Registre des audits et des constats, avec les mêmes domaines que les listes au même compte ;
+        la feuille des exigences pour les seuls profils qui lisent le registre des exigences."""
         Audit = request.env["eguitra.hsseq.audit"].sudo()
-        audits = Audit.search([("company_id", "in", companies(kw).ids)], order="planned_date, id", limit=10000)
-        Requirement = request.env["eguitra.hsseq.requirement"].sudo()
-        requirements = Requirement.search(self._requirement_domain({}), order="source, source_reference, id",
-                                          limit=10000)
+        audits = Audit.search(audit_list_domain(kw), order="planned_date, id", limit=10000)
         standards, statuses, classes = dict(AUDIT_STANDARDS), dict(AUDIT_STATUSES), dict(FINDING_CLASSES)
         sources, req_statuses = dict(REQUIREMENT_SOURCES), dict(REQUIREMENT_STATUSES)
         meta = export_meta(companies(kw))
@@ -419,12 +428,16 @@ class EguitraHsseqAudits(http.Controller):
              "rows": [[f.reference, f.audit_id.reference, classes.get(f.classification), f.description,
                        f.requirement_id.reference or "", dict(FINDING_STATUSES).get(f.status),
                        ", ".join(f.action_ids.mapped("reference"))] for f in audits.finding_ids], "totals": None},
-            {"title": "Registre des exigences", "meta": meta,
-             "columns": [("Référence", "text"), ("Source", "text"), ("Référence du texte", "text"), ("Exigence", "text"),
-                         ("Preuve attendue", "text"), ("Statut", "text"), ("Dernière revue", "date"),
-                         ("Prochaine revue", "date")],
-             "rows": [[r.reference, sources.get(r.source), r.source_reference, r.title, r.expected_evidence or "",
-                       req_statuses.get(r.status), r.last_review_at.date() if r.last_review_at else None,
-                       r.next_review_date or None] for r in requirements], "totals": None},
         ]
+        if reads_requirements():
+            requirements = request.env["eguitra.hsseq.requirement"].sudo().search(
+                self._requirement_domain(kw), order="source, source_reference, id", limit=10000)
+            sheets.append({
+                "title": "Registre des exigences", "meta": meta,
+                "columns": [("Référence", "text"), ("Source", "text"), ("Référence du texte", "text"),
+                            ("Exigence", "text"), ("Preuve attendue", "text"), ("Statut", "text"),
+                            ("Dernière revue", "date"), ("Prochaine revue", "date")],
+                "rows": [[r.reference, sources.get(r.source), r.source_reference, r.title, r.expected_evidence or "",
+                          req_statuses.get(r.status), r.last_review_at.date() if r.last_review_at else None,
+                          r.next_review_date or None] for r in requirements], "totals": None})
         return table_response(f"audits_conformite_hsseq_{today():%Y%m%d}", sheets)

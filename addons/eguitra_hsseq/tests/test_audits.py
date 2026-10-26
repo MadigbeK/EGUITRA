@@ -1,3 +1,5 @@
+import io
+import zipfile
 from datetime import timedelta
 
 from odoo.tests import tagged
@@ -17,6 +19,51 @@ class TestAudits(HsseqCase):
         cls.auditor = cls._create_user("awa.auditrice", "auditeur")
         cls.auditor.write({"hsseq_audit_until": cls.day + timedelta(days=10),
                            "hsseq_audit_site_ids": [(6, 0, cls.site.ids)]})
+
+    def _download(self, login, path):
+        """Classeur exporté par le compte : noms des feuilles et textes."""
+        token = self.token(login)
+        self.env.flush_all()
+        response = self.url_open("/api/v1" + path, headers={"Authorization": f"Bearer {token}",
+                                                             **(self.headers(login) or {"X-Eguitra-App": "test"})},
+                                 timeout=60)
+        if response.status_code != 200:
+            return response.status_code, None
+        book = zipfile.ZipFile(io.BytesIO(response.content))
+        return 200, book.read("xl/workbook.xml").decode() + book.read("xl/sharedStrings.xml").decode()
+
+    def test_exports_bornes_comme_les_listes(self):
+        """Un export ne montre jamais plus que la liste correspondante au même compte."""
+        self._audit(title="Audit du parc de Matoto")
+        self._audit(site_id=self.site2.id, title="Audit de la base de Boffa")
+        self._audit(site_id=False, title="Audit du siège social")
+        self.api("kadi.hsseq", "POST", "/hsseq/requirements", {
+            "source": "law", "source_reference": "Code de l'environnement, art. 12", "title": "Déclaration des déchets"})
+        status, content = self._download("ibrahima", "/hsseq/audits/export.xlsx")
+        self.assertEqual(status, 200)
+        self.assertIn("Audit du parc de Matoto", content)
+        self.assertNotIn("Audit de la base de Boffa", content, "Chef de parc : les audits de ses sites")
+        self.assertNotIn("Audit du siège social", content, "Audit sans site : profils de lecture complète")
+        self.assertNotIn("Registre des exigences", content, "Le chef de parc ne lit pas les exigences")
+        status, content = self._download("awa.auditrice", "/hsseq/audits/export.xlsx")
+        self.assertEqual(status, 200)
+        self.assertNotIn("Audit de la base de Boffa", content)
+        self.assertIn("Déclaration des déchets", content, "L'auditeur lit le registre des exigences")
+        status, _content = self._download("rh.hsseq", "/hsseq/audits/export.xlsx")
+        self.assertEqual(status, 403)
+        status, content = self._download("dg.hsseq", "/hsseq/audits/export.xlsx")
+        self.assertTrue(all(t in content for t in ("Audit de la base de Boffa", "Audit du siège social",
+                                                   "Registre des exigences")))
+        # Registre des risques : mêmes domaines que sa liste.
+        Risk = self.env["eguitra.hsseq.risk"]
+        base = {"company_id": self.company.id, "owner_id": self.hsseq.id, "raw_severity": 3, "raw_probability": 3,
+                "residual_severity": 3, "residual_probability": 2, "hazard": "Danger"}
+        Risk.create(dict(base, site_id=self.site.id, feared_event="Renversement au parc de Matoto"))
+        Risk.create(dict(base, site_id=self.site2.id, feared_event="Renversement à Boffa"))
+        status, content = self._download("ibrahima", "/hsseq/risks/export.xlsx")
+        self.assertEqual(status, 200)
+        self.assertIn("Renversement au parc de Matoto", content)
+        self.assertNotIn("Renversement à Boffa", content)
 
     def _audit(self, **values):
         payload = {"title": "Audit interne ISO 45001 du parc", "standard": "iso_45001", "site_id": self.site.id,
