@@ -1,10 +1,12 @@
 import { randomUUID } from "expo-crypto";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { BackHandler, Image, KeyboardAvoidingView, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { revenir } from "../accueil/retour";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
+import { useConfirmerCode } from "../auth/Verrou";
 import { DELAI_LISTE } from "../config";
 import { fmtDate, heure, pluriel } from "../format";
 import type { Piece } from "../store/types";
@@ -13,7 +15,7 @@ import { BarreAction, Bandeau, Bouton, Champ, EnTete, Ecran, Feuille, Tampon, Te
 import { Appareil } from "../ui/icones";
 import { espaces, mesures, rayons, textes, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
-import { appareil } from "./appareil";
+import { appareil, supprimerPhoto } from "./appareil";
 import { deposerPhoto } from "./depot";
 import { PrisePhoto } from "./PrisePhoto";
 import type { Nonconformity } from "./types";
@@ -52,6 +54,42 @@ function Contenu() {
   const [levee, setLevee] = useState(false);
   const [retour, setRetour] = useState<{ ton: "ok" | "attention" | "danger"; texte: string } | null>(null);
   const uuid = useRef(randomUUID());
+  const confirmerCode = useConfirmerCode();
+  // Pièce déjà déposée pour cette photo : un nouvel essai après un échec de la levée ne la redépose pas.
+  const depose = useRef<{ photo: string; id: number } | null>(null);
+  const photoRef = useRef(photo);
+  photoRef.current = photo;
+
+  /** Photo remplacée ou abandonnée : elle quitte l'appareil. */
+  const changerPhoto = useCallback((suivante: Piece | null) => {
+    const avant = photoRef.current;
+    if (avant && avant.uri !== suivante?.uri) void supprimerPhoto(avant.uri).catch(() => undefined);
+    depose.current = null;
+    setPhoto(suivante);
+  }, []);
+
+  /** Retour à la liste : la photo d'une levée non faite est abandonnée. */
+  const fermer = useCallback(() => {
+    changerPhoto(null);
+    setCommentaire("");
+    setChoisie(null);
+    uuid.current = randomUUID();
+  }, [changerPhoto]);
+
+  // Retour Android sur une fiche : retour à la liste, pas à « Ma journée ».
+  useEffect(() => {
+    if (!choisie) return;
+    const abonnement = BackHandler.addEventListener("hardwareBackPress", () => {
+      fermer();
+      return true;
+    });
+    return () => abonnement.remove();
+  }, [choisie, fermer]);
+
+  // Écran quitté sans lever : la photo prise ne sert plus.
+  useEffect(() => () => {
+    if (photoRef.current) void supprimerPhoto(photoRef.current.uri).catch(() => undefined);
+  }, []);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -70,19 +108,22 @@ function Contenu() {
 
   async function lever(nc: Nonconformity) {
     if (!photo || levee) return;
-    setLevee(true);
     setRetour(null);
+    // La levée engage la personne devant l'écran : code personnel à l'appui.
+    if (!(await confirmerCode(`Levée de « ${nc.item.label} » à votre nom.`))) return;
+    setLevee(true);
     try {
-      const depot = await deposerPhoto(api, appareil, photo, { model: "nonconformity", id: nc.id, role: "lift" });
+      // La photo reste sur l'appareil jusqu'à la levée confirmée : un échec se réessaie avec elle.
+      const id = depose.current?.photo === photo.uri
+        ? depose.current.id
+        : (await deposerPhoto(api, appareil, photo, { model: "nonconformity", id: nc.id, role: "lift" })).id;
+      depose.current = { photo: photo.uri, id };
       await api.appel("POST", `/hsseq/checks/${nc.check.id}/lift`, {
-        body: { nonconformity_id: nc.id, comment: commentaire.trim(), attachment_ids: [depot.id] },
+        body: { nonconformity_id: nc.id, comment: commentaire.trim(), attachment_ids: [id] },
       });
       vibrer.succes();
       setRetour({ ton: "ok", texte: `Non-conformité levée : ${nc.item.label}.` });
-      setChoisie(null);
-      setPhoto(null);
-      setCommentaire("");
-      uuid.current = randomUUID();
+      fermer();
       void charger();
     } catch (e) {
       vibrer.erreur();
@@ -97,7 +138,7 @@ function Contenu() {
       titre="Non-conformités"
       sousTitre={choisie ? choisie.vehicle?.name ?? "À lever" : "À lever après correction"}
       gauche={(
-        <Pressable accessibilityRole="button" accessibilityLabel={choisie ? "Retour à la liste" : "Retour à Ma journée"} onPress={() => (choisie ? setChoisie(null) : router.back())} style={styles.retour}>
+        <Pressable accessibilityRole="button" accessibilityLabel={choisie ? "Retour à la liste" : "Retour à Ma journée"} onPress={() => (choisie ? fermer() : revenir(router))} style={styles.retour}>
           <Text style={[textes.libelle, { color: c.enteteEncre }]}>‹</Text>
         </Pressable>
       )}
@@ -139,6 +180,7 @@ function Contenu() {
   return (
     <Ecran>
       {entete}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         {retour ? <Bandeau ton={retour.ton} texte={retour.texte} onFermer={() => setRetour(null)} /> : null}
         <Feuille>
@@ -174,11 +216,12 @@ function Contenu() {
       >
         <Bouton style={{ flex: 1 }} titre="Lever la non-conformité" desactive={!photo || !envoi.online || !peutLever} chargement={levee} onPress={() => void lever(choisie)} />
       </BarreAction>
+      </KeyboardAvoidingView>
       <PrisePhoto
         visible={camera}
         rattachement={{ parent_uuid: uuid.current, model: "nonconformity", item_id: choisie.item.id }}
         onFermer={() => setCamera(false)}
-        onPhoto={setPhoto}
+        onPhoto={changerPhoto}
       />
     </Ecran>
   );
