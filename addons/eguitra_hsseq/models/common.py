@@ -125,8 +125,10 @@ REPORT_NATURES = [("proactive", "Proactif"), ("reactive", "Réactif")]
 REPORT_MODES = [("computed", "Calculé par NIMOVA"), ("manual", "Saisi")]
 AGGREGATIONS = [("sum", "Somme des mois"), ("average", "Moyenne des mois"), ("last", "Dernier mois renseigné")]
 REPORT_STATES = [("draft", "Brouillon"), ("validated", "Validé")]
-INDICATOR_STATUSES = [("compliant", "Conforme"), ("watch", "Sous surveillance"), ("non_compliant", "Non conforme"),
+# État d'un indicateur (cockpit, comité, rapport mensuel) et famille du classement des donneurs d'ordre.
+INDICATOR_STATUSES = [("met", "Conforme"), ("watch", "Sous surveillance"), ("missed", "Non conforme"),
                       ("no_data", "Pas de donnée")]
+INDICATOR_FAMILIES = [("proactive", "Proactif"), ("reactive", "Réactif")]
 NOTIFICATION_CHANNELS = [("app", "Dans l'application"), ("email", "Courriel")]
 
 # Profils (codes de PROFILE_GROUPS) qui lisent toute fiche HSSEQ de leurs sociétés.
@@ -183,6 +185,29 @@ def users_in_group(env, xmlid, companies):
     sociétés."""
     users = env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", companies.ids)])
     return users.filtered(lambda u: u.has_group(xmlid))
+
+
+def indicator_status(value, target, direction, compliant_ratio=1.0, watch_ratio=0.85, threshold=None):
+    """État d'un indicateur au regard de sa cible : met (conforme), watch (sous surveillance), missed (non
+    conforme), no_data (pas de valeur ou pas de cible).
+
+    Sens « up » : conforme à partir de cible × compliant_ratio, sous surveillance à partir de cible ×
+    watch_ratio ; sens « down » : conforme jusqu'à cible ÷ compliant_ratio, sous surveillance jusqu'à cible ÷
+    watch_ratio (une cible nulle n'a pas de marge). Un seuil d'alerte explicite (threshold) remplace la
+    marge : entre la cible et le seuil, sous surveillance ; au-delà du seuil, non conforme."""
+    if value is None or target is None:
+        return "no_data"
+    if direction == "up":
+        if threshold is not None:
+            return "met" if value >= target else "watch" if value >= threshold else "missed"
+        if value >= target * compliant_ratio:
+            return "met"
+        return "watch" if value >= target * watch_ratio else "missed"
+    if threshold is not None:
+        return "met" if value <= target else "watch" if value < threshold else "missed"
+    if value <= target / compliant_ratio:
+        return "met"
+    return "watch" if target > 0 and value <= target / watch_ratio else "missed"
 
 
 def matrix_cells(counts, level_of):

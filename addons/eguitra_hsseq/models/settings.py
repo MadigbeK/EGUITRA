@@ -16,7 +16,7 @@ DEFAULT_TARGETS = {
     "check_completion": 100.0, "check_compliance": 95.0, "breath_test_completion": 100.0,
     "breath_test_positives": 0.0, "waivers": 2.0, "actions_on_time": 90.0, "actions_effectiveness": 80.0,
     "qualifications_valid": 100.0, "fuel_consumption": 44.0, "co2_emissions": 1.18, "tanker_shortage": 1.5,
-    "tipper_variance": 5.0,
+    "tipper_variance": 5.0, "audits_completion": 100.0, "immobilizations": 0.0,
 }
 
 

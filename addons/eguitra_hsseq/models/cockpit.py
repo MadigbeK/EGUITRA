@@ -15,7 +15,7 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import api, fields, models
 
-from .common import ACCIDENT_TYPES, WEAK_SIGNAL_TYPES, vehicle_kind
+from .common import ACCIDENT_TYPES, EVENT_TYPES, WEAK_SIGNAL_TYPES, indicator_status, vehicle_kind
 
 MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
              "novembre", "décembre"]
@@ -56,7 +56,22 @@ INDICATORS = [
      "Volume manquant ÷ volume livré", False, True),
     ("tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport",
      "Écart de tonnage ÷ tonnage chargé", False, True),
+    # Lot 2.
+    ("audits_completion", "Audits réalisés contre planifiés", "pct", "up", "Audits",
+     "Audits réalisés ÷ audits planifiés du mois (audits annulés exclus)", False, True),
+    ("immobilizations", "Immobilisations de véhicules (V09)", "count", "down", "Événements, verrou de départ",
+     "Immobilisations posées dans le mois par un événement en cours d'enquête", False, True),
 ]
+# Famille d'un indicateur pour le comité des donneurs d'ordre : proactif (moyens et démarches), réactif
+# (résultats constatés).
+FAMILY = {"frequency_rate": "reactive", "severity_rate": "reactive", "road_accidents_per_mkm": "reactive",
+          "reporting_ratio": "proactive", "check_completion": "proactive", "check_compliance": "proactive",
+          "breath_test_completion": "proactive", "breath_test_positives": "reactive", "waivers": "reactive",
+          "actions_on_time": "proactive", "actions_effectiveness": "proactive", "qualifications_valid": "proactive",
+          "fuel_consumption": "reactive", "co2_emissions": "reactive", "tanker_shortage": "reactive",
+          "tipper_variance": "reactive", "audits_completion": "proactive", "immobilizations": "reactive"}
+# Marge « sous surveillance » du cockpit : jusqu'à 85 % de la cible (sens up), ou cible ÷ 0,85 (sens down).
+WATCH_RATIO = 0.85
 NOTES = {
     "frequency_rate": "12 mois glissants ; heures de RH par société, sans filtre de site.",
     "severity_rate": "12 mois glissants ; heures de RH par société, sans filtre de site.",
@@ -66,7 +81,8 @@ NOTES = {
 COMPONENTS = ("at_accidents", "lost_days", "hours", "road_accidents", "accidents", "weak_signals", "km", "fuel_liters",
               "fuel_km", "departures", "departures_checked", "departures_tested", "checks", "checks_ok",
               "breath_positives", "waivers", "actions_due", "actions_on_time", "actions_verified", "actions_effective",
-              "tanker_shortage", "tanker_delivered")
+              "tanker_shortage", "tanker_delivered", "audits_planned", "audits_done", "immobilizations") + tuple(
+    f"type_{code}" for code, _label in EVENT_TYPES)
 
 
 def month_start(day):
@@ -143,6 +159,22 @@ class EguitraHsseqCockpit(models.AbstractModel):
             row["road_accidents"] += event.event_type == "road_accident"
             row["accidents"] += event.event_type in ACCIDENT_TYPES
             row["weak_signals"] += event.event_type in WEAK_SIGNAL_TYPES
+            row[f"type_{event.event_type}"] += 1
+        # Audits planifiés dans le mois (annulés exclus) et ceux qui sont réalisés.
+        domain = [("company_id", "in", cids), ("status", "!=", "cancelled"), ("planned_date", ">=", start),
+                  ("planned_date", "<=", end)] + ([("site_id", "in", sites.ids)] if sites else [])
+        for audit in env["eguitra.hsseq.audit"].sudo().search(domain):
+            row = bucket(audit.company_id.id, audit.planned_date)
+            if row is not None:
+                row["audits_planned"] += 1
+                row["audits_done"] += audit.status in ("done", "closed")
+        # Immobilisations de véhicules (V09) posées dans le mois.
+        domain = [("company_id", "in", cids), ("since", ">=", start_dt), ("since", "<=", end_dt)] + \
+            self._vehicle_domain("vehicle_id", sites, kind)
+        for immobilization in env["eguitra.hsseq.immobilization"].sudo().search(domain):
+            row = bucket(immobilization.company_id.id, immobilization.since)
+            if row is not None:
+                row["immobilizations"] += 1
         # Départs (rotations parties, validées ou facturées) et kilomètres.
         Rotation = env["eguitra.transport.rotation"].sudo()
         states = [s for s in ("en_route", "done", "invoiced") if s in dict(Rotation._fields["state"].selection)]
@@ -313,6 +345,10 @@ class EguitraHsseqCockpit(models.AbstractModel):
             return r(t["fuel_liters"] * CO2_PER_LITER, t["fuel_km"])
         if code == "tanker_shortage":
             return None if kind == "tipper" else r(t["tanker_shortage"], t["tanker_delivered"], 1000)
+        if code == "audits_completion":
+            return r(t["audits_done"], t["audits_planned"], 100, 1)
+        if code == "immobilizations":
+            return int(t["immobilizations"])
         return None  # tipper_variance : sans objet au lot 1
 
     @api.model
@@ -336,30 +372,43 @@ class EguitraHsseqCockpit(models.AbstractModel):
         indicators = []
         for code, label, unit, direction, source, formula, rolling, site_scoped in INDICATORS:
             series = []
+            target = settings._target(code)
             for p in last12:
                 window = months_back(p, 12) if rolling else [p]
-                series.append({"month": p.strftime("%Y-%m"),
-                               "value": self._value(code, self._sum(comps, companies, window), kind)})
+                point = self._value(code, self._sum(comps, companies, window), kind)
+                series.append({"month": p.strftime("%Y-%m"), "value": point, "target": target,
+                               "status": indicator_status(point, target, direction, watch_ratio=WATCH_RATIO)})
             window = last12 if (rolling or period == "12m") else [month]
             if code == "qualifications_valid":
                 window = [month]
             total = self._sum(comps, companies, window)
             value = self._value(code, total, kind)
-            target = settings._target(code)
             met = None if value is None or target is None else (value <= target if direction == "down" else value >= target)
+            status = indicator_status(value, target, direction, watch_ratio=WATCH_RATIO)
+            # Cible tenue sur la période mais manquée le dernier mois de la série : sous surveillance.
+            if status == "met" and period == "12m" and series[-1]["status"] == "missed":
+                status = "watch"
             breakdown = None
             if code == "waivers":
                 breakdown = [{"site": key.split("|")[0], "reason_code": key.split("|")[1], "count": count}
                              for key, count in sorted(total["waiver_rows"].items())]
             indicators.append({
                 "code": code, "label": label, "value": value, "target": target, "unit": unit, "direction": direction,
-                "met": met, "source": source, "formula": formula, "series": series, "breakdown": breakdown,
-                "site_scoped": site_scoped, "note": NOTES.get(code),
+                "met": met, "status": status, "family": FAMILY.get(code, "reactive"), "source": source,
+                "formula": formula, "series": series, "breakdown": breakdown, "site_scoped": site_scoped,
+                "note": NOTES.get(code),
             })
         rh_total = self._sum(comps, companies, last12)
         month_frozen = bool(companies) and all((c.id, month) in frozen for c in companies)
+        window = last12 if period == "12m" else [month]
+        waiver_rows = self._sum(comps, companies, window)["waiver_rows"]
+        by_reason = {code: 0 for code in ("V02", "V04", "V05", "V06", "V07", "V08", "V09")}
+        for key, count in waiver_rows.items():
+            code = key.split("|")[1]
+            by_reason[code] = by_reason.get(code, 0) + count
         return {
             "indicators": indicators,
+            "waivers_by_reason": by_reason,
             "hours_basis": rh_total["basis"],
             "frozen": month_frozen,
             "frozen_on": min(frozen[(c.id, month)].frozen_on for c in companies) if month_frozen else None,

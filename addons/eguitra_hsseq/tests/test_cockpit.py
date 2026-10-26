@@ -57,3 +57,52 @@ class TestCockpit(HsseqCase):
                          "Un mois ne se fige qu'une fois")
         status, frozen = self.api("kadi.hsseq", "GET", f"/hsseq/cockpit?month={previous:%Y-%m}&company_id={self.company.id}")
         self.assertEqual((status, frozen["period"]["frozen"]), (200, True), frozen)
+
+    def test_indicateurs_du_lot_2(self):
+        env = self.env
+        risk = env["eguitra.hsseq.risk"].create({
+            "company_id": self.company.id, "site_id": self.site.id, "hazard": "Vapeurs au dôme",
+            "feared_event": "Inflammation", "owner_id": self.parc.id, "raw_severity": 4, "raw_probability": 4,
+            "residual_severity": 2, "residual_probability": 3})
+        risk.action_activate()
+        risk.review_date = self.day - timedelta(days=1)
+        Audit = env["eguitra.hsseq.audit"]
+        done = Audit.create({"title": "Audit interne", "standard": "internal", "planned_date": self.day,
+                             "company_id": self.company.id, "site_id": self.site.id})
+        done.action_perform()
+        Audit.create({"title": "Audit ISO 14001", "standard": "iso_14001", "planned_date": self.day,
+                      "company_id": self.company.id, "site_id": self.site.id})
+        env["eguitra.hsseq.finding"].create({"audit_id": done.id, "classification": "major", "description": "Écart"})
+        Requirement = env["eguitra.hsseq.requirement"]
+        for status in ("compliant", "non_compliant"):
+            Requirement.create({"company_id": self.company.id, "source": "standard", "standard": "iso_45001",
+                                "source_reference": "ISO 45001", "title": f"Exigence {status}", "status": status})
+        event = self.event()
+        event.action_classify({"potential_severity": 5, "probability": 4})
+        event.action_immobilize("Expertise")
+        status, cockpit = self.api("kadi.hsseq", "GET", "/hsseq/cockpit")
+        self.assertEqual(status, 200, cockpit)
+        values = {i["code"]: i["value"] for i in cockpit["indicators"]}
+        self.assertEqual((values["audits_completion"], values["immobilizations"]), (50.0, 1),
+                         "Audits réalisés contre planifiés, immobilisations V09 du mois")
+        rows = {i["code"]: i for i in cockpit["indicators"]}
+        audits = rows["audits_completion"]
+        self.assertEqual((audits["status"], audits["family"], audits["series"][-1]["target"]), ("missed", "proactive", 100.0),
+                         "50 % pour une cible de 100 % : non conforme ; indicateur proactif ; cible par mois")
+        self.assertEqual((rows["immobilizations"]["status"], rows["immobilizations"]["family"]), ("missed", "reactive"))
+        self.assertTrue(all(i["status"] in ("met", "watch", "missed", "no_data") for i in cockpit["indicators"]))
+        self.assertEqual(rows["tipper_variance"]["status"], "no_data", "Sans valeur : pas de donnée")
+        self.assertEqual((cockpit["risks"]["by_raw_level"]["high"], cockpit["risks"]["by_residual_level"]["moderate"],
+                          cockpit["risks"]["reviews_overdue"]), (1, 1, 1))
+        self.assertEqual((cockpit["audits"]["planned"], cockpit["audits"]["done"]), (2, 1))
+        self.assertEqual(cockpit["findings"]["open_by_class"]["major"], 1)
+        self.assertEqual(cockpit["requirements"]["non_compliant"], 1)
+        [iso] = cockpit["iso_maturity"]
+        self.assertEqual((iso["standard"], iso["score"]), ("iso_45001", 50.0))
+        self.assertEqual(cockpit["immobilizations"]["active"], 1)
+        self.assertEqual(set(cockpit["waivers_by_reason"]) >= {"V06", "V07", "V08", "V09"}, True)
+        status, yard = self.api("ibrahima", "GET", "/hsseq/cockpit")
+        self.assertEqual((status, yard["requirements"], yard["risks"]["active"]), (200, None, 1),
+                         "Chef de parc : ses sites, sans le registre des exigences")
+        status, other = self.api("sekou.parc", "GET", "/hsseq/cockpit")
+        self.assertEqual((other["risks"]["active"], other["immobilizations"]["active"]), (0, 0), "Autre site")

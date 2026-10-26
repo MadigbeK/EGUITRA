@@ -13,7 +13,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 
 from ..models.cockpit import month_end, month_label, parse_month
-from ..models.common import matrix_cells
+from ..models.common import FINDING_CLASSES, LEVELS, REQUIREMENT_STATUSES, STANDARDS, matrix_cells
 from .actions import overdue_lines
 from .common import (
     COCKPIT_READ,
@@ -23,7 +23,10 @@ from .common import (
     hsseq_route,
     in_scope,
     personal_data_hidden,
+    profiles,
+    site_ref,
     site_scope,
+    vehicle_ref,
 )
 from .lock import departures
 from .referentials import deadline_items
@@ -43,6 +46,55 @@ def event_matrix(comps, month, period, sites, vehicle_kind):
     counts = Counter((e.potential_severity, e.probability) for e in events if e.potential_severity and e.probability)
     settings = request.env["eguitra.hsseq.settings"]._get(comps[:1] or request.env.company)
     return matrix_cells(counts, settings._level), len(events) - sum(counts.values())
+
+
+def lot2_blocks(comps, month, sites):
+    """Situation du lot 2, bornée aux sites (fermé par défaut : un objet sans site n'est compté que sans
+    bornage) : risques par niveau brut et résiduel, revues échues ; audits de l'année ; constats ouverts
+    par classement ; exigences (profils qui lisent le registre) ; immobilisations en cours."""
+    env = request.env
+    day = fields.Date.context_today(env.user)
+    site_domain = [("site_id", "in", sites.ids)] if sites else []
+    base = [("company_id", "in", comps.ids)]
+    risks = env["eguitra.hsseq.risk"].sudo().search(base + site_domain + [("status", "=", "active")])
+    year_audits = env["eguitra.hsseq.audit"].sudo().search(base + site_domain + [
+        ("status", "!=", "cancelled"), ("planned_date", ">=", month.replace(month=1)),
+        ("planned_date", "<=", month_end(month))])
+    done = year_audits.filtered(lambda a: a.status in ("done", "closed"))
+    findings = env["eguitra.hsseq.finding"].sudo().search(base + site_domain + [("status", "=", "open")])
+    immobilizations = env["eguitra.hsseq.immobilization"].sudo().search(base + site_domain + [("status", "=", "active")])
+    blocks = {
+        "risks": {"active": len(risks),
+                  "by_raw_level": {code: len(risks.filtered(lambda r, c=code: r.raw_level == c)) for code, _l in LEVELS},
+                  "by_residual_level": {code: len(risks.filtered(lambda r, c=code: r.residual_level == c))
+                                        for code, _l in LEVELS},
+                  "reviews_overdue": len(risks.filtered(lambda r: r.review_date and r.review_date < day))},
+        "audits": {"year": month.year, "planned": len(year_audits), "done": len(done),
+                   "rate": round(len(done) * 100 / len(year_audits), 1) if year_audits else None},
+        "findings": {"open_by_class": {code: len(findings.filtered(lambda f, c=code: f.classification == c))
+                                       for code, _l in FINDING_CLASSES}},
+        "immobilizations": {"active": len(immobilizations),
+                            "items": [{"id": i.id, "vehicle": vehicle_ref(i.vehicle_id), "site": site_ref(i.site_id),
+                                       "event": {"id": i.event_id.id, "reference": i.event_id.reference},
+                                       "since": i.since} for i in immobilizations[:8]]},
+        "requirements": None, "iso_maturity": None,
+    }
+    if profiles() & {"admin", "direction", "hsseq", "auditeur"}:
+        requirements = env["eguitra.hsseq.requirement"].sudo().search(base)
+        blocks["requirements"] = {"by_status": {code: len(requirements.filtered(lambda r, c=code: r.status == c))
+                                                for code, _l in REQUIREMENT_STATUSES},
+                                  "non_compliant": len(requirements.filtered(lambda r: r.status == "non_compliant"))}
+        maturity = []
+        for code, label in STANDARDS:
+            subset = requirements.filtered(lambda r, c=code: r.standard == c)
+            evaluated = subset.filtered(lambda r: r.status != "not_evaluated")
+            if not subset:
+                continue
+            score = sum(1 if r.status == "compliant" else 0.5 if r.status == "partial" else 0 for r in evaluated)
+            maturity.append({"standard": code, "label": label, "requirements": len(subset), "evaluated": len(evaluated),
+                             "score": round(score * 100 / len(evaluated), 1) if evaluated else None})
+        blocks["iso_maturity"] = maturity or None
+    return blocks
 
 
 class EguitraHsseqCockpit(http.Controller):
@@ -79,6 +131,7 @@ class EguitraHsseqCockpit(http.Controller):
         now = fields.Datetime.now()
         date_to = min(month_end(month), day)
         matrix, unclassified = event_matrix(comps, month, period, sites, vehicle_kind)
+        lot2 = lot2_blocks(comps, month, sites)
         blocked = departures(comps, day, sites or None, vehicle_kind, blocked_only=True)
         deadlines = deadline_items(comps, 30, site=sites if len(sites) == 1 else None, vehicle_kind=vehicle_kind)
         if personal_data_hidden():
@@ -108,6 +161,12 @@ class EguitraHsseqCockpit(http.Controller):
                 "matrix": matrix,
                 "matrix_unclassified": unclassified,
             },
-            "iso_maturity": None,
+            "waivers_by_reason": result["waivers_by_reason"],
+            "risks": lot2["risks"],
+            "audits": lot2["audits"],
+            "findings": lot2["findings"],
+            "requirements": lot2["requirements"],
+            "immobilizations": lot2["immobilizations"],
+            "iso_maturity": lot2["iso_maturity"],
             "computed_at": now,
         }
