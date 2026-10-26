@@ -42,7 +42,7 @@ from odoo.addons.eguitra_axispro.models.timesheet import CABINET_ACTIVITIES, PRO
 from odoo.addons.eguitra_finance.models.finance_metrics import ACC_CODE
 
 from ..engine import portfolio as pf
-from ..engine.forecast import forecast_series
+from ..engine.forecast import forecast_series, method_label
 from ..engine.insights import gnf, insight, pct, rank
 
 OPEN_STATES = ("open", "on_hold")
@@ -984,7 +984,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                     metric={"label": "Arrivées attendues à 6 mois", "value": target["expected_6m"] or 0, "unit": "count",
                             "reference": None, "reference_label": None},
                     confidence=0.55,
-                    method=f"Arrivées mensuelles au gate (journal des passages) prolongées par {target['method'] or 'lissage'} ; "
+                    method=f"Arrivées mensuelles au gate (journal des passages) prolongées par {method_label(target['method'])} ; "
                            "dossiers en approche : médianes des gates restant à franchir moins l'âge dans le gate courant.",
                     action="Préparer les comités et la charge des consultants pour ces arrivées.",
                     link=_section_link("portefeuille", "prevision", gate=target["gate"]),
@@ -2381,7 +2381,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                 metric={"label": "Prévision à 3 mois", "value": total, "unit": "gnf", "reference": None,
                         "reference_label": None},
                 confidence=0.55 if forecast["mape"] is None else max(0.3, min(0.9, 1 - forecast["mape"] / 100)),
-                method=f"Honoraires mensuels prolongés par {forecast['method'] or 'lissage exponentiel'}"
+                method=f"Honoraires mensuels prolongés par {method_label(forecast['method'])}"
                        + (f" (erreur moyenne {pct(forecast['mape'], 0)})." if forecast["mape"] is not None else "."),
                 action="Ajuster la charge des consultants et la prospection à ce niveau d'activité.",
                 link="/analyse/activite",

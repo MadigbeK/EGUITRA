@@ -34,6 +34,16 @@ HW_GAMMAS = (0.05, 0.1, 0.2, 0.4)
 HW_PHIS = (0.9, 0.95, 0.98, 1.0)
 
 
+# Méthodes en clair, pour les textes lus par l'utilisateur (le code reste dans les réponses de l'API).
+METHOD_LABELS = {"holt_winters": "lissage de Holt-Winters additif", "holt": "lissage de Holt à tendance amortie",
+                 "naive": "prévision naïve (dernière valeur)"}
+
+
+def method_label(code):
+    """« lissage de Holt-Winters additif » pour holt_winters ; une méthode inconnue ou absente : « lissage »."""
+    return METHOD_LABELS.get(code or "", "lissage")
+
+
 def _phi_sum(phi, h):
     """φ + φ² + … + φ^h."""
     return sum(phi ** i for i in range(1, h + 1))
