@@ -28,7 +28,9 @@ function Corps() {
   const funders = d?.by_funder ?? [];
   const demande = funders.reduce((s, f) => s + f.requested, 0);
   const obtenu = funders.reduce((s, f) => s + f.granted, 0);
-  const meilleur = [...funders].filter((f) => f.success_pct !== null).sort((a, b) => (b.success_pct ?? 0) - (a.success_pct ?? 0))[0];
+  // Le financeur au meilleur taux de succès (à taux égal, celui qui a tranché le plus de démarches) :
+  // un financeur, et non un type de financeur.
+  const meilleur = [...funders].filter((f) => f.success_pct !== null).sort((a, b) => (b.success_pct ?? 0) - (a.success_pct ?? 0) || b.decided - a.decided)[0];
   const instruction = (d?.pipeline ?? []).filter((p) => ["submitted", "review", "agreed"].includes(p.state));
   const cov = d?.coverage;
   const reponse = d && (
@@ -38,7 +40,14 @@ function Corps() {
       ) : (
         <>
           {fmtShort(demande)} GNF demandés, <strong className="font-semibold text-ink">{fmtShort(obtenu)} GNF obtenus</strong> ({fmtPct((obtenu / demande) * 100, 0)}).
-          {meilleur && meilleur.success_pct !== null ? <> Les {meilleur.type.toLowerCase()} répondent le mieux ({fmtPct(meilleur.success_pct, 0)} de succès{meilleur.avg_days !== null ? `, ${joursOu(meilleur.avg_days)}` : ""}).</> : " Aucune démarche n'est encore décidée : pas de taux de succès."}
+          {meilleur && meilleur.success_pct !== null ? (
+            <>
+              {" "}Le financeur qui répond le mieux est <strong className="font-semibold text-ink">{meilleur.label}</strong> ({meilleur.type.toLowerCase()}) : {fmtPct(meilleur.success_pct, 0)} de succès sur {pluriel(meilleur.decided, "démarche tranchée", "démarches tranchées")}
+              {meilleur.avg_days !== null ? `, décision en ${joursOu(meilleur.avg_days)} en moyenne` : ""}.
+            </>
+          ) : (
+            " Aucune démarche n'est encore décidée : pas de taux de succès."
+          )}
           {instruction.length > 0 && <> {pluriel(instruction.reduce((s, p) => s + p.count, 0), "démarche", "démarches")} en cours pour {fmtShort(instruction.reduce((s, p) => s + p.amount, 0))} GNF.</>}
         </>
       )}
