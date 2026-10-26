@@ -844,6 +844,38 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.env.invalidate_all()
         self.assertEqual(len(self.dossier.journal_ids.filtered(lambda j: j.kind == "gate" and "forcé" in (j.note or ""))), 1)
 
+    def test_administration_seule_ne_scelle_pas(self):
+        """Décision du gérant : l'administration seule (elle porte la direction) ne scelle pas, ne force
+        pas de gate et ne rouvre pas de révision ; un administrateur associé le fait par son profil
+        d'associé, à deux personnes toujours."""
+        cabinet = {"company_id": self.cabinet.id, "company_ids": [(6, 0, self.cabinet.ids)]}
+        self._create_user("admin.seul", "admin", **cabinet)
+        self._create_user("admin.associe", "admin", "cabinet", "associe", **cabinet)
+        admin = self.open_session("admin.seul", app="axispro")["access_token"]
+        admin_associe = self.open_session("admin.associe", app="axispro")["access_token"]
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews", {"decision": "go"},
+                                   token=self.token)
+        self.assertEqual(status, 200, review)
+        lock = f"/axispro/reviews/{review['id']}/lock"
+        status, body = self.call("POST", lock, token=admin)
+        self.assertEqual(status, 403, "Administration seule : pas de sceau")
+        self.assertIn("associé", body["message"])
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/advance-gate",
+                                 {"from_gate": "G0", "force_reason": "Passage demandé par l'administration seule"},
+                                 token=admin)
+        self.assertEqual(status, 403, "Administration seule : ni passage, ni passage forcé")
+        status, locked = self.call("POST", lock, token=admin_associe)
+        self.assertEqual((status, locked["state"]), (200, "locked"), "Administrateur associé : sceau permis")
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=admin)
+        self.assertEqual(status, 403, "Administration seule : pas de réouverture")
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=admin_associe)
+        self.assertEqual(status, 403, "Celui qui a verrouillé ne rouvre pas, même associé (deux personnes)")
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self._relecteur())
+        self.assertEqual((status, body["revision"]), (200, 2), body)
+
     def test_associe_seul_auteur_ne_scelle_pas(self):
         """Les quatre yeux s'appliquent aussi à l'associé : seul auteur de la révision, il ne scelle pas
         sa propre décision ; un second associé le fait."""

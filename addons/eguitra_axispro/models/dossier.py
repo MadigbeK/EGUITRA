@@ -254,14 +254,18 @@ class AxisproDossier(models.Model):
 
     def _check_decision_right(self, action):
         """Sceller la décision du comité, forcer le passage d'un gate, ouvrir une nouvelle révision :
-        réservé à un associé du cabinet ou à la direction ouverte à la société du dossier (refus 403),
+        réservé à un associé du cabinet ou à la direction ouverte à la société du dossier, sans profil
+        d'administration (refus 403),
         avant les quatre yeux, qui s'appliquent toujours. Compte système hors contrôle."""
         for dossier in self:
             if _system(dossier.env):
                 continue
             user = dossier.env.user
             associe = user.has_group(DECISION_GROUPS[0])
-            direction = user.has_group(DECISION_GROUPS[1]) and dossier.company_id in user.sudo().company_ids
+            # L'administration porte la direction : seule, elle ne scelle pas (décision du gérant) ; un
+            # administrateur associé garde ce droit par son profil d'associé.
+            direction = (user.has_group(DECISION_GROUPS[1]) and not user.has_group("eguitra_base.group_profile_admin")
+                         and dossier.company_id in user.sudo().company_ids)
             if not (associe or direction):
                 raise AccessError(
                     f"Réservé à un associé du cabinet ou à la direction : vous ne pouvez pas {action} "
