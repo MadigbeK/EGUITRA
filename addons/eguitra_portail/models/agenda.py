@@ -3,7 +3,7 @@ rendez-vous entre un porteur et son consultant (demande, confirmation, compte re
 
 from datetime import timedelta
 
-import psycopg2
+from psycopg2.errors import SerializationFailure
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
@@ -120,7 +120,7 @@ class PortailEvent(models.Model):
         try:
             self.env.cr.execute("SELECT id FROM portail_event WHERE id IN %s FOR UPDATE", (ids,))
             self.env.cr.execute("UPDATE portail_event SET write_date = write_date WHERE id IN %s", (ids,))
-        except psycopg2.errors.SerializationFailure as e:
+        except SerializationFailure as e:
             raise UserError("Plusieurs inscriptions arrivent en même temps sur cet événement : "
                             "réessayez dans un instant.") from e
 
