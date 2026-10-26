@@ -106,6 +106,9 @@ class TestPortail(ApiCase):
         self.assertTrue(message["from_me"])
         _s, suite = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil?after={dernier}", token=self.porteur)
         self.assertEqual([m["id"] for m in suite["messages"]], [message["id"]], "Relecture : les seuls nouveaux messages")
+        self.env["axispro.document"].browse(message["attachments"][0]["id"]).portal_visible = False
+        _s, suite = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/fil?after={dernier}", token=self.porteur)
+        self.assertEqual(suite["messages"][0]["attachments"], [], "Une pièce masquée par le cabinet n'est plus listée")
         self.assertIn("statuts.pdf", self.dossier_a.document_ids.mapped("name"), "La pièce jointe rejoint la data room")
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
         _s, conversations = self.call("GET", "/axispro/portail/conversations", token=self.cabinet_token)

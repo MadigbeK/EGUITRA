@@ -355,7 +355,7 @@ class EguitraPortailPorteur(http.Controller):
             more = bool(messages) and bool(Message.search_count(domain + [("id", "<", min(messages.ids))]))
         messages = messages.sorted(lambda m: (m.date, m.id))
         return {"consultant": vues.person(dossier.consultant_id), "closed": dossier.state == "closed",
-                "messages": [vues.message_row(m, me) for m in messages], "more": more}
+                "messages": [vues.message_row(m, me, porteur=True) for m in messages], "more": more}
 
     @api_route("/portail/dossiers/<int:dossier_id>/fil/lu", methods=("POST",), profiles=PORTEUR)
     def fil_lu(self, dossier_id, **_kw):
@@ -392,7 +392,7 @@ class EguitraPortailPorteur(http.Controller):
             "dossier_id": dossier.id, "body": body[:5000] or f"Pièce jointe : {documents.name}", "author_id": me.id,
             "internal": False, "document_ids": [(6, 0, documents.ids)],
         })
-        return vues.message_row(message, me)
+        return vues.message_row(message, me, porteur=True)
 
     # ─── Rendez-vous ─────────────────────────────────────────────────────
 

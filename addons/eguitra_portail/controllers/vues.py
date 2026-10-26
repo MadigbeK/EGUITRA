@@ -231,11 +231,14 @@ def feedback_row(f):
             "comment": f.comment or None, "date": f.create_date}
 
 
-def message_row(m, me):
+def message_row(m, me, porteur=False):
+    """Message du fil. porteur : sans les pièces jointes que le cabinet a retirées de sa vue (pièce masquée),
+    que la route de téléchargement refuse de toute façon."""
+    documents = m.document_ids.filtered("portal_visible") if porteur else m.document_ids
     return {"id": m.id, "author": m.author_id.name, "from_promoter": m.author_id.share, "from_me": m.author_id == me,
             "date": m.date, "body": m.body, "internal": m.internal,
             "attachments": [{"id": d.id, "name": d.name, "mimetype": d.attachment_id.mimetype,
-                             "size": d.attachment_id.file_size} for d in m.document_ids]}
+                             "size": d.attachment_id.file_size} for d in documents]}
 
 
 def window(days_before, days_after):
