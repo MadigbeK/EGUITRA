@@ -211,6 +211,8 @@ export function MoveForm({
   async function submit(post: boolean) {
     setError(null);
     if (!partner) return setError(sale ? "Choisissez le client." : "Choisissez le fournisseur.");
+    // Vidée, la date partait vide et le noyau datait la pièce du jour, sans le dire.
+    if (!invoiceDate) return setError("Indiquez la date de la pièce.");
     const illisibles = lines.flatMap((l, i) => nombresIllisibles(l).map((champ) => `${champ} de la ligne ${i + 1}`));
     // « Nombre illisible (quantité de la ligne 2) : écrivez par exemple 750 000 ou 2,5. »
     if (illisibles.length) return setError(AIDE_NOMBRE.replace(" :", ` (${illisibles.join(", ")}) :`));
@@ -300,8 +302,8 @@ export function MoveForm({
               kind={sale ? "customer" : "supplier"}
             />
           </Field>
-          <Field label="Date de la pièce">
-            <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+          <Field label="Date de la pièce" error={invoiceDate ? undefined : "Indiquez la date de la pièce."}>
+            <Input type="date" required aria-invalid={!invoiceDate} className={CHAMP_INVALIDE} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
           </Field>
           <Field label="Échéance" hint="Vide : selon les conditions du tiers">
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
