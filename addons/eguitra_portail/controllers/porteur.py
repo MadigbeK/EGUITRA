@@ -409,8 +409,10 @@ class EguitraPortailPorteur(http.Controller):
         data = read_json()
         (subject,) = require(data, "subject")
         mode = data.get("mode") or "office"
-        if mode not in dict(MEETING_MODES):
+        if not isinstance(mode, str) or mode not in dict(MEETING_MODES):
             raise ApiError(400, "invalid_parameter", "Forme de rendez-vous inconnue.")
+        if not isinstance(data.get("slots") or [], list):
+            raise ApiError(400, "invalid_parameter", "Créneaux invalides.")
         slots = [_datetime(s, "Créneau") for s in (data.get("slots") or [])[:3] if s]
         now = fields.Datetime.now()
         if not slots:
@@ -427,12 +429,16 @@ class EguitraPortailPorteur(http.Controller):
         if recent >= MAX_DAILY_MEETING_REQUESTS:
             raise ApiError(429, "too_many_requests",
                            "Trop de demandes de rendez-vous en 24 heures : appelez votre consultant.")
+        try:
+            duration = int(data.get("duration") or 60)
+        except (TypeError, ValueError) as e:
+            raise ApiError(400, "invalid_parameter", "Durée du rendez-vous invalide.") from e
         meeting = request.env["portail.meeting"].sudo().create({
             "dossier_id": dossier.id, "requested_by": me.id, "consultant_id": dossier.consultant_id.id or False,
             "subject": str(subject)[:200], "agenda": str(data.get("agenda") or "")[:3000] or False, "mode": mode,
             "slot_1": slots[0], "slot_2": slots[1] if len(slots) > 1 else False,
             "slot_3": slots[2] if len(slots) > 2 else False,
-            "duration": int(data.get("duration") or 60),
+            "duration": duration,
         })
         request.env["portail.notification"].sudo().notify(
             dossier.consultant_id, "meeting", f"Demande de rendez-vous : {meeting.subject}", f"{me.name}, {dossier.reference}",
@@ -650,6 +656,8 @@ class EguitraPortailPorteur(http.Controller):
     @api_route("/portail/notifications/lues", methods=("POST",), profiles=PORTEUR)
     def lues(self, **_kw):
         ids = read_json().get("ids")
+        if ids is not None and not isinstance(ids, list):
+            raise ApiError(400, "invalid_parameter", "Liste de notifications invalide.")
         domain = [("user_id", "=", _me().id), ("read_at", "=", False)]
         if ids:
             domain.append(("id", "in", [int(i) for i in ids if str(i).isdigit()]))
@@ -680,8 +688,11 @@ class EguitraPortailPorteur(http.Controller):
         def clean(value, size=120):
             return " ".join(str(value or "").split())[:size] or False
 
-        contact = {f: clean(data["user"][f]) for f in ("phone", "email") if f in (data.get("user") or {})}
-        company = {f: clean(data["entreprise"][f]) for f in PROFILE_FIELDS if f in (data.get("entreprise") or {})}
+        user, entreprise = data.get("user") or {}, data.get("entreprise") or {}
+        if not isinstance(user, dict) or not isinstance(entreprise, dict):
+            raise ApiError(400, "invalid_parameter", "Coordonnées invalides.")
+        contact = {f: clean(user[f]) for f in ("phone", "email") if f in user}
+        company = {f: clean(entreprise[f]) for f in PROFILE_FIELDS if f in entreprise}
         for values, label in ((contact, ""), (company, " de l'entreprise")):
             if values.get("email") and "@" not in values["email"]:
                 raise ApiError(422, "business_rule", f"Adresse électronique{label} invalide.")
@@ -718,12 +729,16 @@ class EguitraPortailPorteur(http.Controller):
         dossier_id, score = require(data, "dossier_id", "score")
         dossier = _own(dossier_id)
         topic = data.get("topic") or "global"
-        if topic not in dict(FEEDBACK_TOPICS):
+        if not isinstance(topic, str) or topic not in dict(FEEDBACK_TOPICS):
             raise ApiError(400, "invalid_parameter", "Sujet inconnu.")
         event = request.env["portail.event"]
         if data.get("event_id"):
+            try:
+                event_id = int(data["event_id"])
+            except (TypeError, ValueError) as e:
+                raise ApiError(400, "invalid_parameter", "Événement invalide.") from e
             registration = request.env["portail.event.registration"].sudo().search(
-                [("event_id", "=", int(data["event_id"])), ("user_id", "=", me.id)], limit=1)
+                [("event_id", "=", event_id), ("user_id", "=", me.id)], limit=1)
             if not registration:
                 raise ApiError(422, "business_rule", "Vous n'étiez pas inscrit à cet événement.")
             event = registration.event_id

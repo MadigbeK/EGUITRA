@@ -303,6 +303,24 @@ class TestPortail(ApiCase):
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
 
+    def test_saisies_mal_formees(self):
+        """Une saisie mal formée est refusée (400), jamais une erreur interne (500)."""
+        demande = f"/portail/dossiers/{self.dossier_a.id}/rendez-vous"
+        creneau = [FUTURE.isoformat()]
+        for corps in ({"subject": "Point", "slots": creneau, "duration": "une heure"},
+                      {"subject": "Point", "slots": creneau, "mode": ["office"]},
+                      {"subject": "Point", "slots": FUTURE.isoformat()}):
+            status, body = self.call("POST", demande, corps, token=self.porteur)
+            self.assertEqual(status, 400, body)
+        for corps in ({"dossier_id": self.dossier_a.id, "score": 4, "event_id": "atelier"},
+                      {"dossier_id": self.dossier_a.id, "score": 4, "topic": ["global"]}):
+            status, body = self.call("POST", "/portail/avis", corps, token=self.porteur)
+            self.assertEqual(status, 400, body)
+        status, body = self.call("PATCH", "/portail/profil", {"user": "+224 620 00 00 00"}, token=self.porteur)
+        self.assertEqual(status, 400, body)
+        status, body = self.call("POST", "/portail/notifications/lues", {"ids": 5}, token=self.porteur)
+        self.assertEqual(status, 400, body)
+
     def test_faq_qui_voit_mes_documents(self):
         faq = next(a for a in ARTICLES if a["name"] == "Qui voit mes documents ?")
         self.assertNotIn("ne sont visibles que par vous et par les consultants", faq["body"])
