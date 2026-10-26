@@ -285,6 +285,9 @@ class AxisproDossier(models.Model):
             "fiche": {"name": self.name, "promoter": self.promoter_id.name, "sector": self.sector, "location": self.location},
             "hyp": dict({h: self[h] or None for h in HYPOTHESES}, dscr=dscr),
             "investment": self.investment, "capex_criterion_id": policy.capex_criterion_id.id,
+            # Gate courant : les knock-outs encore à évaluer des gates non atteints ne sont pas actifs, et
+            # le prochain gate se cherche à partir de lui (scoring.compute).
+            "current_gate_index": index.get(self.current_gate_id.id, 0) if self.current_gate_id else 0,
         }
         return policy.scoring_settings(), criteria, evaluations, domains, documents, gate_rows, context, financial
 
@@ -365,7 +368,8 @@ class AxisproDossier(models.Model):
             "domains": r["domains"],
             "compartments": compartments,
             "knockouts": [brief(x) for x in r["knockouts"]],
-            "knockouts_pending": sum(1 for x in r["knockouts"] if x["entered"] == "not_assessed"),
+            # Knock-outs encore à évaluer, tous gates confondus (ceux des gates non atteints ne sont pas actifs).
+            "knockouts_pending": sum(1 for x in r["lines"] if x.get("knockout") and x["entered"] == "not_assessed"),
             "critical_open": [brief(x) for x in r["critical_missing"]],
             "critical_missing_excl_ko": len(r["critical_missing_excl_ko"]),
             "requalified": [dict(brief(x), entered=x["entered"], retained=x["status"], alerts=x["alerts"])

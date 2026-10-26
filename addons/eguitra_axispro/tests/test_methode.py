@@ -776,6 +776,44 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertEqual((record.decision, record.state), ("go", "draft"))
         self.assertEqual(self.dossier.current_gate_id.code, "G0")
 
+    def test_knock_out_d_un_gate_non_atteint_pas_encore_actif(self):
+        """Audit du noyau (I-X1) : un knock-out encore à évaluer d'un gate que le dossier n'a pas atteint
+        ne donne ni NO-GO ni classe CRITICAL ; il devient actif à l'arrivée à son gate."""
+        for code in ("C001", "C003", "C005"):
+            self.evals[code].status = "met"
+        self.assertEqual(self.dossier.current_gate_id.code, "G0")
+        score = self.dossier.scoring()
+        self.assertEqual((score["knockouts"], score["knockouts_pending"]), ([], 1), "Foncier (G1) encore à évaluer")
+        self.assertNotEqual(score["method_recommendation"], "no_go")
+        self.assertNotEqual(score["classification"], "CRITICAL / NO-GO")
+        self.assertEqual(score["recommendation"], score["method_recommendation"], "Aucun critère des gates atteints à évaluer")
+        self.dossier.action_advance_gate()
+        score = self.dossier.scoring()
+        self.assertEqual([k["code"] for k in score["knockouts"]], ["C002"], "Gate du foncier atteint : knock-out actif")
+        self.assertEqual((score["method_recommendation"], score["recommendation"]), ("no_go", "pending"))
+        self.evals["C002"].status = "met"
+        self._upload(f"/axispro/evaluations/{self.evals['C002'].id}/evidence", "titre.pdf")
+        self.env.invalidate_all()
+        self.assertEqual(self.dossier.scoring()["knockouts"], [], "Knock-out levé par sa preuve")
+
+    def test_prochain_gate_a_partir_du_gate_courant(self):
+        """Audit du noyau (I-X2) : un dossier passé en force au-delà d'un gate ne voit plus ce gate comme
+        son prochain gate."""
+        self.dossier.action_advance_gate()
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}", {"status": "not_met"},
+                                 token=self._relecteur())
+        self.assertEqual(status, 200, body)
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/advance-gate",
+                                 {"force_reason": "Titre foncier attendu du ministère, décision du comité du 12/10",
+                                  "from_gate": "G1"}, token=self.token)
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), body)
+        self.env.invalidate_all()
+        score = self.dossier.scoring()
+        self.assertEqual(next(g for g in score["gates"] if g["code"] == "G1")["decision"], "no_go",
+                         "Le gate franchi en force reste NO-GO")
+        self.assertGreaterEqual(score["next_gate"]["index"], 2, score["next_gate"])
+        self.assertEqual(body["next_gate"]["code"], score["next_gate"]["code"], "Même prochain gate dans la liste")
+
     def test_piece_recue_apres_un_verrou_figee_par_la_decision_suivante(self):
         """Audit du noyau (C13) : une pièce reçue après le verrou de la révision 1 entre dans la
         révision 2 ; une fois la décision de la révision 2 scellée sur elle, ni son état ni sa

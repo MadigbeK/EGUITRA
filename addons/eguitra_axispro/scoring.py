@@ -27,9 +27,12 @@ Améliorations : les seuils des gates de préqualification et de préfaisabilit�
 les seuls critères des gates atteints (portée « cumulée ») au lieu de toute la grille, ce qui les
 rend atteignables avec les informations disponibles à ce stade ; les « critiques manquants » sont
 aussi donnés hors knock-outs ; seuils, domaines et cibles des règles sont des données de la grille.
+Avec le gate courant du dossier, un knock-out encore à évaluer d'un gate non atteint n'est pas actif.
 """
 
-POINTS = {"met": 1.0, "partial": 0.5, "not_met": 0.0, "na": 1.0}
+import math
+
+POINTS ={"met": 1.0, "partial": 0.5, "not_met": 0.0, "na": 1.0}
 STATUS_LABELS = {
     "not_assessed": "Non évalué",
     "met": "Disponible et exploitable",
@@ -158,7 +161,17 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
     def blocking(status):
         return status == "not_met" or (p["ko_partial_blocks"] and status == "partial")
 
-    knockouts = [x for x in lines if x.get("knockout") and blocking(x["status"])]
+    # Gate courant du dossier (context « current_gate_index ») : un knock-out encore à évaluer d'un
+    # gate non atteint n'est pas actif (il ne donne ni NO-GO ni classe CRITICAL) ; il le devient à
+    # l'arrivée à son gate, ou dès qu'il est évalué non disponible. Sans gate courant (formules seules),
+    # tout knock-out non évalué compte, comme dans le prototype.
+    reached = context.get("current_gate_index")
+
+    def active_knockouts(upto):
+        return [x for x in lines if x.get("knockout") and blocking(x["status"])
+                and (upto is None or x["entered"] != "not_assessed" or x["gate_index"] <= upto)]
+
+    knockouts = active_knockouts(reached)
     critical_missing = [x for x in lines if x.get("critical") and blocking(x["status"])]
 
     gaps = []
@@ -235,6 +248,8 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
     }
     gate_rows = []
     for g in gates:
+        # Chaque gate n'oppose que les knock-outs évalués et ceux, encore à évaluer, des gates jusqu'à lui.
+        ctx["knockouts"] = active_knockouts(None if reached is None else g["index"])
         decision, motifs = _gate(g, ctx)
         in_gate = [x for x in lines if x["gate_index"] == g["index"]]
         gate_rows.append({
@@ -246,11 +261,14 @@ def compute(policy, criteria, evaluations, domains, documents, gates, context):
             # knock-outs actifs que sa règle de passage oppose.
             "pending": sum(1 for x in in_gate if x["entered"] == "not_assessed"),
             "pending_in_scope": sum(1 for x in lines if x["gate_index"] <= g["index"] and x["entered"] == "not_assessed"),
-            "knockouts_blocking": len(_blocking_knockouts(g, knockouts)),
+            "knockouts_blocking": len(_blocking_knockouts(g, ctx["knockouts"])),
             "entry_requirements": g.get("entry_requirements"), "deliverables": g.get("deliverables"),
             "exit_criteria": g.get("exit_criteria"), "min_completeness": g.get("min_completeness"),
         })
-    next_gate = next((g for g in gate_rows if g["decision"] != "go"), None)
+    # Prochain gate à franchir : à partir du gate courant (un dossier passé en force au-delà d'un gate
+    # ne revient pas sur lui), le premier qui n'est pas en GO.
+    start = reached or 0
+    next_gate = next((g for g in gate_rows if g["index"] >= start and g["decision"] != "go"), None)
     recommendation, detail = _recommendation(p, readiness, apd, bankability, knockouts, gate_rows)
 
     return {
