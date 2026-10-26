@@ -8,7 +8,7 @@ import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, Fourni
 import { useApi } from "@/lib/api-client";
 import { RECO, type Recommendation } from "@/lib/axispro-types";
 import type { CabinetComites, Decision } from "@/lib/analyse-types";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, fmtRatio, fmtJours, INSECABLE } from "@/lib/format";
 
 /** Décision d'un comité, dans le vocabulaire de la méthode (CONDITIONAL GO, comme le noyau). */
 const libelleDecision = (code: string) => RECO[code as Recommendation]?.label ?? code;
@@ -66,7 +66,7 @@ function Corps() {
       {d && (
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Recommandation de la méthode × décision du comité" className="xl:col-span-6" actions={ag && ag.agreement_pct !== null ? <Badge tone={ag.agreement_pct >= 85 ? "ok" : ag.agreement_pct >= 70 ? "warn" : "danger"}>Accord {fmtPct(ag.agreement_pct, 0)}{ag.kappa !== null ? ` · kappa ${ag.kappa.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}` : ""}</Badge> : <Badge tone="neutral">Pas encore de revue</Badge>}>
+            <Card title="Recommandation de la méthode × décision du comité" className="xl:col-span-6" actions={ag && ag.agreement_pct !== null ? <Badge tone={ag.agreement_pct >= 85 ? "ok" : ag.agreement_pct >= 70 ? "warn" : "danger"}>Accord {fmtPct(ag.agreement_pct, 0)}{ag.kappa !== null ? ` · kappa ${fmtRatio(ag.kappa)}` : ""}</Badge> : <Badge tone="neutral">Pas encore de revue</Badge>}>
               {ag && ag.matrix.length && ag.n > 0 ? (
                 <>
                   <CarteChaleur
@@ -94,7 +94,7 @@ function Corps() {
             <div className="space-y-5 xl:col-span-6">
               <Card title="Délai d'ouverture à première décision" actions={ttd ? <span className="text-[12.5px] text-muted">Médiane {joursOu(ttd.median_days)} · p75 {joursOu(ttd.p75_days)} · {ttd.n} dossier{ttd.n > 1 ? "s" : ""}</span> : undefined}>
                 {ttd && ttd.by_month.length > 1 ? (
-                  <AreaChart label="Délai médian de décision par mois" labels={ttd.by_month.map((m) => moisCourt(m.month))} series={[{ key: "days", label: "Jours", values: combler(ttd.by_month.map((m) => m.days)), color: "var(--accent-vif)" }]} height={150} format={(v) => `${fmtInt(v)} j`} formatAxis={(v) => `${Math.round(v)} j`} />
+                  <AreaChart label="Délai médian de décision par mois" labels={ttd.by_month.map((m) => moisCourt(m.month))} series={[{ key: "days", label: "Jours", values: combler(ttd.by_month.map((m) => m.days)), color: "var(--accent-vif)" }]} height={150} format={(v) => fmtJours(v)} formatAxis={(v) => `${fmtInt(v)}${INSECABLE}j`} />
                 ) : ttd && ttd.rows.length ? (
                   <ul className="space-y-1.5 text-[12.5px]">
                     {ttd.rows.map((r) => (

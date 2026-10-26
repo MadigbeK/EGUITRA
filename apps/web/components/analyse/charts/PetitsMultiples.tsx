@@ -5,8 +5,8 @@ import { scaleLinear, scalePoint } from "d3-scale";
 import { area, line, curveMonotoneX } from "d3-shape";
 import { Delta } from "@/components/ui";
 import { cx } from "@/lib/cx";
-import { fmtShort } from "@/lib/format";
-import { COULEUR, SERIES, TableRepli, positionDans, plusProche, useLargeur } from "./commun";
+
+import { COULEUR, SERIES, TableRepli, positionDans, plusProche, useLargeur, fmtValeur } from "./commun";
 
 export interface Multiple {
   key: string;
@@ -25,7 +25,7 @@ export function PetitsMultiples({ items, labels, label, format, colonnes = 5, ha
   const [focus, setFocus] = useState<number | null>(null);
   const [commune, setCommune] = useState(commune0);
   const id = useId().replace(/:/g, "");
-  const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
+  const show = format ?? ((v: number) => fmtValeur(v, "gnf"));
   const n = labels.length;
   const maxGlobal = Math.max(1, ...items.flatMap((i) => i.values));
   const minGlobal = Math.min(0, ...items.flatMap((i) => i.values));

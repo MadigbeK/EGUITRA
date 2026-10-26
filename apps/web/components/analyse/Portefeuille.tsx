@@ -3,10 +3,10 @@
 import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, RankBars, cx } from "@/components/ui";
 import { Entonnoir, Puces } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useAncreVisee, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useAncreVisee, useCible, useDefiler, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetPortefeuille } from "@/lib/analyse-types";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, fmtFixe, fmtJours } from "@/lib/format";
 
 /** Où en sont les projets : entonnoir, temps par gate, goulot, secteurs et lieux, pipeline pondéré, prévision des gates. */
 export function Portefeuille() {
@@ -37,7 +37,7 @@ function Corps() {
         <>Aucun dossier actif : le pipeline est vide.</>
       ) : (
         <>
-          {pluriel(actifs, "dossier actif", "dossiers actifs")} pour {fmtShort(d.pipeline_value.raw)} GNF de besoin, soit <strong className="font-semibold text-ink">{fmtShort(d.pipeline_value.weighted)} GNF pondérés</strong> par leur chance d&apos;être financés{d.pipeline_value.ratio_pct !== null ? ` (${fmtPct(d.pipeline_value.ratio_pct, 0)})` : ""}.
+          {pluriel(actifs, "dossier actif", "dossiers actifs")} pour {gnfOu(d.pipeline_value.raw)} de besoin, soit <strong className="font-semibold text-ink">{gnfOu(d.pipeline_value.weighted)} pondérés</strong> par leur chance d&apos;être financés{d.pipeline_value.ratio_pct !== null ? ` (${fmtPct(d.pipeline_value.ratio_pct, 0)})` : ""}.
           {goulot ? <> Le goulot est le gate {goulot.gate} ({goulot.label}) : {goulot.in_gate} dossier{goulot.in_gate > 1 ? "s" : ""} y attend{goulot.in_gate > 1 ? "ent" : ""}{goulot.median_age_days !== null ? ` depuis ${joursOu(goulot.median_age_days)} en médiane` : ""}.</> : " Aucun goulot : les dossiers avancent."}
           {" "}Dans six mois, {d.forecast.apd_6m} dossier{d.forecast.apd_6m > 1 ? "s" : ""} devrai{d.forecast.apd_6m > 1 ? "en" : ""}t atteindre APD et {d.forecast.bankability_6m} la bancabilité, au rythme observé.
           {d.concentration?.top && d.concentration.top_share_pct !== null && d.concentration.top_share_pct >= 50 && <> Le secteur {d.concentration.top} concentre {fmtPct(d.concentration.top_share_pct, 0)} du besoin.</>}
@@ -79,7 +79,7 @@ function Corps() {
                 <Puces
                   label="Durée médiane par gate contre la cible de 45 jours"
                   surligne={gateVise?.gate}
-                  format={(v) => `${fmtInt(v)} j`}
+                  format={(v) => fmtJours(v)}
                   items={mesures.map((t) => ({ key: t.gate, label: `${t.gate} · ${t.label} (${t.n})`, value: t.median_days ?? 0, target: 45, inverse: true, ranges: [45, 70, Math.max(120, (t.p75_days ?? 0) * 1.1, (t.median_days ?? 0) * 1.2)], detail: `p75 : ${joursOu(t.p75_days)} · ${t.n} passage${t.n > 1 ? "s" : ""} observé${t.n > 1 ? "s" : ""}${t.in_gate ? ` · ${t.in_gate} dossier${t.in_gate > 1 ? "s" : ""} présent${t.in_gate > 1 ? "s" : ""}, âge médian ${joursOu(t.median_age_days)}` : ""}${t.forced ? ` · ${t.forced} passage${t.forced > 1 ? "s" : ""} forcé${t.forced > 1 ? "s" : ""}` : ""}` }))}
                 />
               ) : (
@@ -121,7 +121,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Besoin de financement par secteur" className="xl:col-span-4" actions={d.concentration?.hhi !== null && d.concentration?.hhi !== undefined ? <span className="text-[12.5px] text-muted">HHI {d.concentration.hhi.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}</span> : undefined}>
+            <Card title="Besoin de financement par secteur" className="xl:col-span-4" actions={d.concentration?.hhi !== null && d.concentration?.hhi !== undefined ? <span className="text-[12.5px] text-muted">HHI {fmtInt(d.concentration.hhi)}</span> : undefined}>
               {d.by_sector?.length ? <RankBars items={[...d.by_sector].sort((a, b) => b.need - a.need).map((s) => ({ key: s.key, label: s.label, value: s.need, detail: `${pluriel(s.count, "dossier")} · score ${s.avg_score === null ? "–" : fmtInt(s.avg_score)} · ${pctOu(s.share_pct, 0)}` }))} format={(v) => fmtShort(v)} couleur="var(--accent-vif)" /> : <Vide compact titre="Aucun secteur" />}
             </Card>
             <Card title="Par localisation" className="xl:col-span-3">
@@ -135,7 +135,7 @@ function Corps() {
                 empty="Aucun dossier dans le pipeline."
                 columns={[
                   { key: "name", label: "Dossier", render: (r) => <Ciblable id={`pipeline-${r.id}`} actif={r.gate === gateVise?.gate}><LienFiche href={r.link}>{r.name}<span className="block text-[11.5px] font-normal text-muted">{r.reference} · {r.gate}</span></LienFiche></Ciblable> },
-                  { key: "need", label: "Besoin", align: "right", render: (r) => fmtShort(r.need) },
+                  { key: "need", label: "Besoin (GNF)", align: "right", render: (r) => fmtShort(r.need) },
                   {
                     key: "probability",
                     label: "Probabilité",
@@ -148,7 +148,7 @@ function Corps() {
                       </span>
                     ),
                   },
-                  { key: "weighted", label: "Pondéré", align: "right", render: (r) => <span className={cx("font-semibold", r.weighted === 0 ? "text-muted" : "text-ink")}>{fmtShort(r.weighted)}</span> },
+                  { key: "weighted", label: "Pondéré (GNF)", align: "right", render: (r) => <span className={cx("font-semibold", r.weighted === 0 ? "text-muted" : "text-ink")}>{fmtShort(r.weighted)}</span> },
                   { key: "knockout", label: "", render: (r) => (r.knockout ? <Badge tone="danger">Knock-out{r.knockouts.length ? ` ${r.knockouts.join(", ")}` : ""}</Badge> : null) },
                 ]}
               />
@@ -174,7 +174,7 @@ function Corps() {
                           <span className="h-2.5 overflow-hidden rounded-full bg-panel-3">
                             <span className="n-pousser-x block h-full rounded-full bg-accent-vif" style={{ width: `${(v.dossiers_per_month / max) * 100}%`, "--i": i } as CSSProperties} />
                           </span>
-                          <span className="whitespace-nowrap text-right tabular text-muted">{v.dossiers_per_month.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} / mois</span>
+                          <span className="whitespace-nowrap text-right tabular text-muted">{fmtFixe(v.dossiers_per_month, 2)} / mois</span>
                         </li>
                       );
                     })}

@@ -3,8 +3,8 @@
 import { useState, type CSSProperties } from "react";
 import { scaleBand, scaleLinear } from "d3-scale";
 import { area, line, curveMonotoneX } from "d3-shape";
-import { fmtAxe, fmtPct, fmtShort } from "@/lib/format";
-import { Bulle, COULEUR, Cadre, TableRepli, deplacer, plusProche, positionDans, tronquer } from "./commun";
+import { fmtAxe, fmtPct, fmtRatio } from "@/lib/format";
+import { Bulle, COULEUR, Cadre, TableRepli, deplacer, fmtValeur, plusProche, positionDans, tronquer } from "./commun";
 
 const M = { haut: 16, droite: 16, bas: 36, gauche: 44 };
 
@@ -43,8 +43,8 @@ export function Lorenz({ points, gini, paretoCount, clientsCount, hauteur = 280,
               {[0, 25, 50, 75, 100].map((t) => (
                 <g key={t}>
                   <line x1={M.gauche} x2={W - M.droite} y1={y(t)} y2={y(t)} stroke={COULEUR.trait} strokeDasharray="3 5" />
-                  <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{t} %</text>
-                  <text x={x(t)} y={hauteur - M.bas + 16} textAnchor="middle" fontSize={11} fill="var(--muted)">{t} %</text>
+                  <text x={M.gauche - 8} y={y(t)} dy="0.35em" textAnchor="end" fontSize={11} fill="var(--muted)">{fmtPct(t, 0)}</text>
+                  <text x={x(t)} y={hauteur - M.bas + 16} textAnchor="middle" fontSize={11} fill="var(--muted)">{fmtPct(t, 0)}</text>
                 </g>
               ))}
               <text x={(M.gauche + W - M.droite) / 2} y={hauteur - 4} textAnchor="middle" fontSize={11} fill="var(--muted)">Part cumulée des clients (du plus grand au plus petit)</text>
@@ -55,12 +55,12 @@ export function Lorenz({ points, gini, paretoCount, clientsCount, hauteur = 280,
               <line x1={x(0)} x2={x(pareto.x)} y1={y(pareto.y)} y2={y(pareto.y)} stroke={COULEUR.or} strokeDasharray="3 4" className="an-fondu" style={{ "--i": 6 } as CSSProperties} />
               <circle cx={x(pareto.x)} cy={y(pareto.y)} r={5.5} fill={COULEUR.or} stroke="var(--panel)" strokeWidth={2} className="an-eclore" style={{ "--i": 10 } as CSSProperties} />
               <text x={Math.min(x(pareto.x) + 10, W - 150)} y={y(pareto.y) - 10} fontSize={11.5} fontWeight={600} fill="var(--ink)" className="an-fondu" style={{ "--i": 12 } as CSSProperties}>
-                {paretoCount} client{paretoCount > 1 ? "s" : ""} sur {clientsCount} {paretoCount > 1 ? "font" : "fait"} 80 % du CA
+                {paretoCount} client{paretoCount > 1 ? "s" : ""} sur {clientsCount} {paretoCount > 1 ? "font" : "fait"} 80&nbsp;% du CA
               </text>
               <text x={x(62)} y={y(30)} fontSize={11} fill="var(--muted)" textAnchor="middle" transform={`rotate(-${Math.round((Math.atan2(y(0) - y(100), x(100) - x(0)) * 180) / Math.PI)} ${x(62)} ${y(30)})`}>
                 Égalité parfaite
               </text>
-              <text x={x(4)} y={y(94)} fontSize={11.5} fontWeight={600} fill="var(--ink-2)">Gini {gini.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</text>
+              <text x={x(4)} y={y(94)} fontSize={11.5} fontWeight={600} fill="var(--ink-2)">Gini {fmtRatio(gini)}</text>
               {choisi && <circle cx={x(choisi.x)} cy={y(choisi.y)} r={5} fill="var(--panel)" stroke={COULEUR.accent} strokeWidth={2.5} />}
             </svg>
             {choisi && <Bulle x={x(choisi.x)} y={y(choisi.y)} largeur={W} titre={`${fmtPct(choisi.x, 0)} des clients`} lignes={[{ nom: "Part du CA", valeur: fmtPct(choisi.y, 1), couleur: COULEUR.accent }]} />}
@@ -79,7 +79,7 @@ export function Lorenz({ points, gini, paretoCount, clientsCount, hauteur = 280,
  */
 export function Pareto({ items, hauteur = 260, label, format }: { items: Array<{ key: string; label: string; value: number; cumulative_pct: number }>; hauteur?: number; label: string; format?: (v: number) => string }) {
   const [focus, setFocus] = useState<number | null>(null);
-  const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
+  const show = format ?? ((v: number) => fmtValeur(v, "gnf"));
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
     <Cadre
@@ -107,7 +107,7 @@ export function Pareto({ items, hauteur = 260, label, format }: { items: Array<{
                 </g>
               ))}
               {[0, 50, 80, 100].map((t) => (
-                <text key={t} x={W - 36} y={yp(t)} dy="0.35em" fontSize={11} fill={t === 80 ? COULEUR.or : "var(--muted)"} fontWeight={t === 80 ? 700 : 400}>{t} %</text>
+                <text key={t} x={W - 36} y={yp(t)} dy="0.35em" fontSize={11} fill={t === 80 ? COULEUR.or : "var(--muted)"} fontWeight={t === 80 ? 700 : 400}>{fmtPct(t, 0)}</text>
               ))}
               <line x1={M.gauche} x2={W - 44} y1={yp(80)} y2={yp(80)} stroke={COULEUR.or} strokeDasharray="4 4" />
               {items.map((it, i) => {

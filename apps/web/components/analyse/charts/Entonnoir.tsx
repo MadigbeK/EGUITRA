@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { fmtInt, fmtPct, fmtShort } from "@/lib/format";
-import { Bulle, COULEUR, Cadre, SERIES, TableRepli, deplacer, tronquer } from "./commun";
+import { fmtInt, fmtPct } from "@/lib/format";
+import { Bulle, COULEUR, Cadre, SERIES, TableRepli, deplacer, tronquer, fmtValeur } from "./commun";
 
 export interface EtapeEntonnoir {
   key: string;
@@ -25,7 +25,7 @@ export interface EtapeEntonnoir {
  */
 export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES, surligne }: { stages: EtapeEntonnoir[]; hauteur?: number; label: string; format?: (v: number) => string; couleurs?: readonly string[]; surligne?: string | null }) {
   const [focus, setFocus] = useState<number | null>(null);
-  const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
+  const show = format ?? ((v: number) => fmtValeur(v, "gnf"));
   const h = hauteur ?? Math.max(220, stages.length * 54 + 20);
   const max = Math.max(1, ...stages.map((s) => s.count));
   return (

@@ -5,11 +5,11 @@ import { type CSSProperties } from "react";
 import { AreaChart, Card, SERIES, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
-import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import { RECO as RECO_METHODE } from "@/lib/axispro-types";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";
-import { INSECABLE, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtRatio, fmtJours, fmtDec } from "@/lib/format";
 
 /** Cockpit : celui du groupe ou celui du cabinet selon la société de travail. */
 export function Synthese() {
@@ -77,9 +77,9 @@ function CockpitGroupe() {
       ) : (
         <>Le score de santé n&apos;est pas calculable sur la période</>
       )}
-      {ca?.value !== null && ca?.value !== undefined && <> : {fmtShort(ca.value)} GNF de chiffre d&apos;affaires{ca.delta_pct !== null && ` (${ca.delta_pct >= 0 ? "+" : ""}${fmtPct(ca.delta_pct)} sur un an)`}</>}
-      {ebe?.value !== null && ebe?.value !== undefined && <>, {fmtShort(ebe.value)} GNF d&apos;EBE{ebePct?.value !== null && ebePct?.value !== undefined ? ` soit ${fmtPct(ebePct.value)}` : ""}</>}
-      {cash?.value !== null && cash?.value !== undefined && <>, {fmtShort(cash.value)} GNF de trésorerie{cash.target !== null && cash.value < cash.target ? " sous le seuil de sécurité" : ""}</>}.
+      {ca?.value !== null && ca?.value !== undefined && <> : {gnfOu(ca.value)} de chiffre d&apos;affaires{ca.delta_pct !== null && ` (${ca.delta_pct >= 0 ? "+" : ""}${fmtPct(ca.delta_pct)} sur un an)`}</>}
+      {ebe?.value !== null && ebe?.value !== undefined && <>, {gnfOu(ebe.value)} d&apos;EBE{ebePct?.value !== null && ebePct?.value !== undefined ? ` soit ${fmtPct(ebePct.value)}` : ""}</>}
+      {cash?.value !== null && cash?.value !== undefined && <>, {gnfOu(cash.value)} de trésorerie{cash.target !== null && cash.value < cash.target ? " sous le seuil de sécurité" : ""}</>}.
       {alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
   );
@@ -105,7 +105,7 @@ function CockpitGroupe() {
                     axes={AXES_SANTE.map(([k, label]) => {
                       const a = axes[k];
                       const v = nombre(a?.value);
-                      return { key: k, label: a?.label ?? label, score: nombre(a?.score), value: v === null ? undefined : a.unit === "ratio" ? v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) : a.unit === "pct" ? fmtPct(v) : a.unit === "days" ? `${fmtInt(v)} j` : String(v), comment: a?.comment };
+                      return { key: k, label: a?.label ?? label, score: nombre(a?.score), value: v === null ? undefined : a.unit === "ratio" ? fmtRatio(v) : a.unit === "pct" ? fmtPct(v) : a.unit === "days" ? fmtJours(v) : fmtDec(v), comment: a?.comment };
                     })}
                     taille={300}
                   />
@@ -195,7 +195,7 @@ function CockpitGroupe() {
                     labels={mensuel.months.map((m) => moisCourt(m, true))}
                     series={mensuel.series.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: [SERIES[0], SERIES[2], SERIES[1]][i] ?? SERIES[i % SERIES.length]! }))}
                     height={170}
-                    format={(v) => `${fmtShort(v)} GNF`}
+                    format={(v) => gnfOu(v)}
                   />
                 </div>
               )}
@@ -237,9 +237,9 @@ function CockpitCabinet() {
   const reponse = d && (
     <>
       Le cabinet accompagne <strong className="font-semibold text-ink">{dossiers?.value !== null && dossiers?.value !== undefined ? pluriel(dossiers.value, "projet") : "des projets"}</strong>
-      {besoin?.value !== null && besoin?.value !== undefined && <> pour {fmtShort(besoin.value)} GNF de besoin de financement</>}
-      {pipeline?.value !== null && pipeline?.value !== undefined && <>, dont {fmtShort(pipeline.value)} GNF pondérés par leur chance d&apos;être financés</>} ; {murs} dossier{murs > 1 ? "s sont" : " est"} présentable{murs > 1 ? "s" : ""} aux financeurs.
-      {honoraires?.value !== null && honoraires?.value !== undefined && <> Honoraires de la période : {fmtShort(honoraires.value)} GNF{honoraires.delta_pct !== null && ` (${honoraires.delta_pct >= 0 ? "+" : ""}${fmtPct(honoraires.delta_pct)})`}.</>}
+      {besoin?.value !== null && besoin?.value !== undefined && <> pour {gnfOu(besoin.value)} de besoin de financement</>}
+      {pipeline?.value !== null && pipeline?.value !== undefined && <>, dont {gnfOu(pipeline.value)} pondérés par leur chance d&apos;être financés</>} ; {murs} dossier{murs > 1 ? "s sont" : " est"} présentable{murs > 1 ? "s" : ""} aux financeurs.
+      {honoraires?.value !== null && honoraires?.value !== undefined && <> Honoraires de la période : {gnfOu(honoraires.value)}{honoraires.delta_pct !== null && ` (${honoraires.delta_pct >= 0 ? "+" : ""}${fmtPct(honoraires.delta_pct)})`}.</>}
       {alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
   );
@@ -284,7 +284,7 @@ function CockpitCabinet() {
                   quadrants={{ x: seuils?.readiness ?? 65, y: seuils?.bankability ?? 80, labels: [quadrant("presentable", "Présentables aux financeurs"), quadrant("confirm", "Bancabilité à confirmer"), quadrant("structure", "Prêts, à structurer"), quadrant("upstream", "À accompagner en amont")], teintes: ["var(--g-jade)", "var(--g-azur)", "var(--warn-vif)", "var(--danger-vif)"] }}
                   formatX={(v) => String(Math.round(v))}
                   formatY={(v) => String(Math.round(v))}
-                  formatSize={(v) => `${fmtShort(v)} GNF`}
+                  formatSize={(v) => gnfOu(v)}
                   sizeLabel="Besoin"
                   couleurs={couleurs}
                   hauteur={380}

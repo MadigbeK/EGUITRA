@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Badge, Card, DataTable, cx } from "@/components/ui";
 import { Benford, Pareto, PetitsMultiples, Treemap } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pluriel, useAncreVisee, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pluriel, useAncreVisee, usePeriode, gnfOu, fmtPrecis } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeDepenses } from "@/lib/analyse-types";
 import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
@@ -48,7 +48,7 @@ function Corps() {
     <>
       {total > 0 ? (
         <>
-          {fmtShort(total)} GNF de charges sur la période
+          {gnfOu(total)} de charges sur la période
           {premiere && total > 0 && <>, dont {fmtPct((premiere.total / total) * 100, 0)} en {premiere.label.toLowerCase()}</>}
           {d.suppliers?.top_share !== null && d.suppliers?.top_share !== undefined && d.suppliers.pareto[0] && <> ; le premier fournisseur, {d.suppliers.pareto[0].name}, pèse {fmtPct(d.suppliers.top_share, 0)} des achats</>}.
         </>
@@ -62,7 +62,7 @@ function Corps() {
           {benford.warning ? ", à prendre avec réserve" : ""}.
         </>
       )}{" "}
-      {duplicates.length > 0 ? `${pluriel(duplicates.length, "doublon probable", "doublons probables")} pour ${fmtShort(doublons)} GNF` : "Aucun doublon probable"}
+      {duplicates.length > 0 ? `${pluriel(duplicates.length, "doublon probable", "doublons probables")} pour ${gnfOu(doublons)}` : "Aucun doublon probable"}
       {outliers.length > 0 ? ` et ${pluriel(outliers.length, "montant inhabituel", "montants inhabituels")} méritent un second regard.` : ", aucun montant inhabituel."}
     </>
   );
@@ -84,12 +84,12 @@ function Corps() {
                 <>
                   <Benford label="Premier chiffre des montants" digits={benford.digits} n={benford.n} suspicious={benford.suspicious} conformity={benford.conformity_label} hauteur={230} />
                   <div className="mt-3 grid grid-cols-3 gap-2.5">
-                    <Chiffre label="Montants testés" value={fmtInt(benford.n)} hint={`à partir de ${fmtInt(benford.min_amount)} GNF`} />
+                    <Chiffre label="Montants testés" value={fmtInt(benford.n)} hint={`à partir de ${fmtGNF(benford.min_amount)}`} />
                     <Chiffre label="Khi-deux" value={benford.chi2 === null ? "–" : fmtDec(Math.round(benford.chi2 * 10) / 10)} hint={`seuil ${fmtDec(benford.chi2_critical)} à 8 degrés de liberté`} tone={benford.chi2 !== null && benford.chi2 > benford.chi2_critical ? "warn" : undefined} />
-                    <Chiffre label="MAD de Nigrini" value={benford.mad === null ? "–" : benford.mad.toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 4 })} hint="< 0,006 proche · < 0,012 acceptable · < 0,015 marginale" tone={benford.mad === null ? undefined : benford.mad >= 0.015 ? "danger" : benford.mad >= 0.012 ? "warn" : "ok"} />
+                    <Chiffre label="MAD de Nigrini" value={fmtPrecis(benford.mad, 4, 3)} hint="< 0,006 proche · < 0,012 acceptable · < 0,015 marginale" tone={benford.mad === null ? undefined : benford.mad >= 0.015 ? "danger" : benford.mad >= 0.012 ? "warn" : "ok"} />
                   </div>
                   {benford.warning && <p className="mt-3 rounded-xl border border-warn/20 bg-warn-doux/60 px-3 py-2 text-[12.5px] leading-snug text-ink">{benford.warning}</p>}
-                  <p className="mt-3 text-[12.5px] leading-relaxed text-muted">{benford.population}. Dans une population de montants « naturels », 30 % commencent par 1 et 5 % par 9 : un chiffre en excès signale souvent des montants façonnés (seuils d&apos;approbation, arrondis, découpages).</p>
+                  <p className="mt-3 text-[12.5px] leading-relaxed text-muted">{benford.population}. Dans une population de montants « naturels », 30&nbsp;% commencent par 1 et 5&nbsp;% par 9 : un chiffre en excès signale souvent des montants façonnés (seuils d&apos;approbation, arrondis, découpages).</p>
                 </>
               ) : (
                 <Vide titre="Pas assez de montants" hint="Le test demande des factures fournisseurs ou des charges sur la période." />
@@ -98,7 +98,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Fournisseurs : qui pèse" className="xl:col-span-7" actions={d.suppliers ? <span className="text-[12.5px] text-muted">{d.suppliers.pareto_count} fournisseur{d.suppliers.pareto_count > 1 ? "s" : ""} {d.suppliers.pareto_count > 1 ? "font" : "fait"} 80 % · HHI {d.suppliers.hhi === null ? "–" : fmtInt(d.suppliers.hhi)}</span> : undefined}>
+            <Card title="Fournisseurs : qui pèse" className="xl:col-span-7" actions={d.suppliers ? <span className="text-[12.5px] text-muted">{d.suppliers.pareto_count} fournisseur{d.suppliers.pareto_count > 1 ? "s" : ""} {d.suppliers.pareto_count > 1 ? "font" : "fait"} 80&nbsp;% · HHI {d.suppliers.hhi === null ? "–" : fmtInt(d.suppliers.hhi)}</span> : undefined}>
               {d.suppliers?.pareto?.length ? (
                 <>
                   <Pareto label="Achats par fournisseur et part cumulée" items={d.suppliers.pareto.map((s, i) => ({ key: String(s.id ?? i), label: s.name, value: s.amount, cumulative_pct: s.cumulative_pct }))} hauteur={280} />
@@ -107,7 +107,7 @@ function Corps() {
                       <thead>
                         <tr className="border-b border-line text-left text-[12px] text-muted">
                           <th className="py-1.5 pr-3 font-semibold">Fournisseur</th>
-                          <th className="py-1.5 pr-3 text-right font-semibold">Montant</th>
+                          <th className="py-1.5 pr-3 text-right font-semibold">Montant (GNF)</th>
                           <th className="py-1.5 pr-3 text-right font-semibold">Part</th>
                           <th className="py-1.5 text-right font-semibold">Cumul</th>
                         </tr>
@@ -132,14 +132,14 @@ function Corps() {
             <Card title="Dérive des prix par catégorie" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Montant mensuel, 12 mois</span>}>
               {drift.length && d.suppliers.months.length ? (
                 <>
-                  <PetitsMultiples label="Montant mensuel par catégorie de charge" labels={d.suppliers.months.map((m) => moisCourt(m))} items={drift.map((p) => ({ key: p.category, label: p.label, values: p.monthly, detail: p.drift_pct === null ? (p.slope_pct_per_month === null ? undefined : `pente ${p.slope_pct_per_month >= 0 ? "+" : ""}${fmtPct(p.slope_pct_per_month)} par mois`) : `dérive ${p.drift_pct >= 0 ? "+" : ""}${fmtPct(p.drift_pct, 0)} sur six mois` }))} colonnes={2} echelleCommune={false} format={(v) => `${fmtShort(v)} GNF`} />
+                  <PetitsMultiples label="Montant mensuel par catégorie de charge" labels={d.suppliers.months.map((m) => moisCourt(m))} items={drift.map((p) => ({ key: p.category, label: p.label, values: p.monthly, detail: p.drift_pct === null ? (p.slope_pct_per_month === null ? undefined : `pente ${p.slope_pct_per_month >= 0 ? "+" : ""}${fmtPct(p.slope_pct_per_month)} par mois`) : `dérive ${p.drift_pct >= 0 ? "+" : ""}${fmtPct(p.drift_pct, 0)} sur six mois` }))} colonnes={2} echelleCommune={false} format={(v) => gnfOu(v)} />
                   <ul className="mt-3 space-y-1 text-[12px] text-muted">
                     {drift
                       .filter((p) => p.drift_pct !== null && Math.abs(p.drift_pct) >= 10)
                       .map((p) => (
                         <li key={p.category}>
                           <span className="font-semibold text-ink-2">{p.label}</span> : {(p.drift_pct ?? 0) >= 0 ? "+" : ""}
-                          {fmtPct(p.drift_pct ?? 0, 0)} par rapport aux six mois précédents ({fmtShort(p.monthly_avg)} GNF par mois).
+                          {fmtPct(p.drift_pct ?? 0, 0)} par rapport aux six mois précédents ({gnfOu(p.monthly_avg)} par mois).
                         </li>
                       ))}
                   </ul>
@@ -151,7 +151,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title={<span id="doublons">Factures en double probable</span>} className={cx("xl:col-span-6 transition-shadow duration-500", eclat === "doublons" && CIBLE_BLOC)} padded={false} actions={<Badge tone={duplicates.length ? "danger" : "ok"}>{duplicates.length ? `${fmtShort(doublons)} GNF` : "Aucun"}</Badge>}>
+            <Card title={<span id="doublons">Factures en double probable</span>} className={cx("xl:col-span-6 transition-shadow duration-500", eclat === "doublons" && CIBLE_BLOC)} padded={false} actions={<Badge tone={duplicates.length ? "danger" : "ok"}>{duplicates.length ? gnfOu(doublons) : "Aucun"}</Badge>}>
               <DataTable
                 dense
                 rows={duplicates}
@@ -160,7 +160,7 @@ function Corps() {
                 columns={[
                   { key: "partner", label: "Fournisseur", render: (r) => <span className="font-medium text-ink">{r.partner}</span> },
                   { key: "a", label: "Pièces", render: (r) => <span className="font-mono text-[12px] text-ink-2">{r.a.name}<br />{r.b.name}</span> },
-                  { key: "amount", label: "Montants", align: "right", render: (r) => <span>{fmtInt(r.a.amount)}<br />{fmtInt(r.b.amount)}</span> },
+                  { key: "amount", label: "Montants (GNF)", align: "right", render: (r) => <span>{fmtInt(r.a.amount)}<br />{fmtInt(r.b.amount)}</span> },
                   { key: "dates", label: "Dates", render: (r) => <span className="whitespace-nowrap text-[12px] text-muted">{fmtDate(r.a.date)}<br />{fmtDate(r.b.date)}</span> },
                   { key: "score", label: "Score", align: "right", render: (r) => <Badge tone={r.score >= 80 ? "danger" : r.score >= 60 ? "warn" : "neutral"}>{fmtInt(r.score)}</Badge> },
                   { key: "reasons", label: "Pourquoi", render: (r) => <span className="block max-w-[28ch] text-[12px] leading-snug text-muted">{r.reasons.join(", ")}</span> },
@@ -178,7 +178,7 @@ function Corps() {
                   { key: "partner", label: "Tiers", render: (r) => <span className="font-medium text-ink">{r.partner ?? "–"}<span className="block max-w-[26ch] truncate text-[11.5px] font-normal text-muted">{r.label}</span></span> },
                   { key: "category_label", label: "Catégorie" },
                   { key: "amount", label: "Montant", align: "right", render: (r) => <span className="font-semibold text-danger">{fmtGNF(r.amount)}</span> },
-                  { key: "median", label: "Médiane", align: "right", render: (r) => fmtShort(r.median) },
+                  { key: "median", label: "Médiane (GNF)", align: "right", render: (r) => fmtShort(r.median) },
                   { key: "score", label: "Score", align: "right", render: (r) => fmtDec(Math.round(r.score * 10) / 10) },
                   { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
                 ]}

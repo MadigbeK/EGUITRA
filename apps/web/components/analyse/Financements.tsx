@@ -3,7 +3,7 @@
 import { Badge, Card, DataTable, Repartition, cx } from "@/components/ui";
 import { COULEUR_FINANCEMENT, ETATS } from "@/lib/couleurs";
 import { Puces, Sankey } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetFinancements } from "@/lib/analyse-types";
 import { RECO } from "@/lib/axispro-types";
@@ -39,7 +39,7 @@ function Corps() {
         <>Aucune démarche de financement enregistrée sur la période.</>
       ) : (
         <>
-          {fmtShort(demande)} GNF demandés, <strong className="font-semibold text-ink">{fmtShort(obtenu)} GNF obtenus</strong> ({fmtPct((obtenu / demande) * 100, 0)}).
+          {gnfOu(demande)} demandés, <strong className="font-semibold text-ink">{gnfOu(obtenu)} obtenus</strong> ({fmtPct((obtenu / demande) * 100, 0)}).
           {meilleur && meilleur.success_pct !== null ? (
             <>
               {" "}Le financeur qui répond le mieux est <strong className="font-semibold text-ink">{meilleur.label}</strong> ({meilleur.type.toLowerCase()}) : {fmtPct(meilleur.success_pct, 0)} de succès sur {pluriel(meilleur.decided, "démarche tranchée", "démarches tranchées")}
@@ -48,10 +48,10 @@ function Corps() {
           ) : (
             " Aucune démarche n'est encore décidée : pas de taux de succès."
           )}
-          {instruction.length > 0 && <> {pluriel(instruction.reduce((s, p) => s + p.count, 0), "démarche", "démarches")} en cours pour {fmtShort(instruction.reduce((s, p) => s + p.amount, 0))} GNF.</>}
+          {instruction.length > 0 && <> {pluriel(instruction.reduce((s, p) => s + p.count, 0), "démarche", "démarches")} en cours pour {gnfOu(instruction.reduce((s, p) => s + p.amount, 0))}.</>}
         </>
       )}
-      {cov && cov.need > 0 && <> Le besoin des dossiers ({fmtShort(cov.need)} GNF) est couvert à {pctOu(cov.coverage_pct, 1)} ; {fmtShort(cov.uncovered)} GNF restent à trouver.</>}
+      {cov && cov.need > 0 && <> Le besoin des dossiers ({gnfOu(cov.need)}) est couvert à {pctOu(cov.coverage_pct, 1)} ; {gnfOu(cov.uncovered)} restent à trouver.</>}
     </>
   );
   return (
@@ -74,29 +74,29 @@ function Corps() {
                 empty="Aucun financeur sollicité."
                 columns={[
                   { key: "label", label: "Financeur", render: (r) => <span className="font-medium text-ink">{r.label}<span className="block text-[11.5px] font-normal text-muted">{r.type} · {pluriel(r.count, "démarche")}{r.open ? ` · ${r.open} ouverte${r.open > 1 ? "s" : ""}` : ""}</span></span> },
-                  { key: "requested", label: "Demandé", align: "right", render: (r) => fmtShort(r.requested) },
-                  { key: "granted", label: "Obtenu", align: "right", render: (r) => <span className="font-semibold text-ink">{fmtShort(r.granted)}</span> },
+                  { key: "requested", label: "Demandé (GNF)", align: "right", render: (r) => fmtShort(r.requested) },
+                  { key: "granted", label: "Obtenu (GNF)", align: "right", render: (r) => <span className="font-semibold text-ink">{fmtShort(r.granted)}</span> },
                   { key: "success_pct", label: "Succès", align: "right", render: (r) => (r.success_pct === null ? <span className="text-muted" title="Aucune démarche décidée">–</span> : <Badge tone={r.success_pct >= 50 ? "ok" : r.success_pct >= 30 ? "warn" : "danger"}>{fmtPct(r.success_pct, 0)}</Badge>) },
-                  { key: "avg_ticket", label: "Ticket moyen", align: "right", render: (r) => (r.avg_ticket === null ? "–" : fmtShort(r.avg_ticket)) },
+                  { key: "avg_ticket", label: "Ticket moyen (GNF)", align: "right", render: (r) => (r.avg_ticket === null ? "–" : fmtShort(r.avg_ticket)) },
                   { key: "avg_days", label: "Délai", align: "right", render: (r) => (r.avg_days === null ? "–" : joursOu(r.avg_days)) },
                 ]}
               />
               {funders.some((f) => f.success_pct !== null) && (
                 <div className="px-5 pb-5 pt-3">
-                  <Puces label="Taux de succès par financeur" format={(v) => fmtPct(v, 0)} items={funders.filter((f) => f.success_pct !== null).map((f) => ({ key: f.key, label: f.label, value: f.success_pct ?? 0, target: 50, ranges: [30, 50, 100], detail: `${fmtShort(f.granted)} GNF obtenus sur ${fmtShort(f.requested)} demandés` }))} hauteurLigne={38} />
+                  <Puces label="Taux de succès par financeur" format={(v) => fmtPct(v, 0)} items={funders.filter((f) => f.success_pct !== null).map((f) => ({ key: f.key, label: f.label, value: f.success_pct ?? 0, target: 50, ranges: [30, 50, 100], detail: `${gnfOu(f.granted)} obtenus sur ${fmtShort(f.requested)} demandés` }))} hauteurLigne={38} />
                 </div>
               )}
             </Card>
             <Card title="Le pipeline par état" className="xl:col-span-5">
               {(d.pipeline ?? []).some((p) => p.count > 0) ? (
-                <Repartition parts={d.pipeline.filter((p) => p.count > 0).map((p) => ({ key: p.state, label: `${p.label} (${p.count})`, value: p.amount, color: COULEUR_ETAT[p.state] ?? ETATS.neutre }))} format={(v) => `${fmtShort(v)} GNF`} />
+                <Repartition parts={d.pipeline.filter((p) => p.count > 0).map((p) => ({ key: p.state, label: `${p.label} (${p.count})`, value: p.amount, color: COULEUR_ETAT[p.state] ?? ETATS.neutre }))} format={(v) => gnfOu(v)} />
               ) : (
                 <Vide compact titre="Aucune démarche" />
               )}
               {cov && (
                 <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  <Chiffre label="Couverture du besoin" value={pctOu(cov.coverage_pct, 1)} hint={`${fmtShort(cov.granted)} obtenus sur ${fmtShort(cov.need)} GNF`} tone={(cov.coverage_pct ?? 0) < 25 ? "warn" : "ok"} />
-                  <Chiffre label="Attendu des démarches ouvertes" value={`${fmtShort(cov.expected_gnf)}`} hint={`${fmtShort(cov.open_requested)} GNF demandés · succès ${pctOu(cov.success_pct, 0)}`} />
+                  <Chiffre label="Couverture du besoin" value={pctOu(cov.coverage_pct, 1)} hint={`${fmtShort(cov.granted)} obtenus sur ${gnfOu(cov.need)}`} tone={(cov.coverage_pct ?? 0) < 25 ? "warn" : "ok"} />
+                  <Chiffre label="Attendu des démarches ouvertes" value={gnfOu(cov.expected_gnf)} hint={`${gnfOu(cov.open_requested)} demandés · succès ${pctOu(cov.success_pct, 0)}`} />
                 </div>
               )}
             </Card>
@@ -110,11 +110,11 @@ function Corps() {
                 rowKey={(r) => r.id}
                 columns={[
                   { key: "name", label: "Dossier", render: (r) => <LienFiche href={r.link}>{r.name}<span className="block text-[11.5px] font-normal text-muted">{r.reference} · {RECO[r.recommendation]?.label ?? r.recommendation}</span></LienFiche> },
-                  { key: "need", label: "Besoin", align: "right", render: (r) => fmtShort(r.need) },
-                  { key: "granted", label: "Obtenu", align: "right", render: (r) => <span className={cx(r.granted > 0 && "font-semibold text-ok-texte")}>{fmtShort(r.granted)}</span> },
-                  { key: "open_requested", label: "En cours", align: "right", render: (r) => fmtShort(r.open_requested) },
+                  { key: "need", label: "Besoin (GNF)", align: "right", render: (r) => fmtShort(r.need) },
+                  { key: "granted", label: "Obtenu (GNF)", align: "right", render: (r) => <span className={cx(r.granted > 0 && "font-semibold text-ok-texte")}>{fmtShort(r.granted)}</span> },
+                  { key: "open_requested", label: "En cours (GNF)", align: "right", render: (r) => fmtShort(r.open_requested) },
                   { key: "coverage_pct", label: "Couverture", align: "right", render: (r) => <Badge tone={(r.coverage_pct ?? 0) >= 100 ? "ok" : (r.coverage_pct ?? 0) >= 50 ? "warn" : "danger"}>{pctOu(r.coverage_pct, 0)}</Badge> },
-                  { key: "gap", label: "Reste à trouver", align: "right", render: (r) => <span className={cx("font-semibold", r.gap > 0 ? "text-ink" : "text-muted")}>{fmtShort(r.gap)}</span> },
+                  { key: "gap", label: "Reste à trouver (GNF)", align: "right", render: (r) => <span className={cx("font-semibold", r.gap > 0 ? "text-ink" : "text-muted")}>{fmtShort(r.gap)}</span> },
                   { key: "funders", label: "Financeurs", align: "right", render: (r) => fmtInt(r.funders) },
                 ]}
               />

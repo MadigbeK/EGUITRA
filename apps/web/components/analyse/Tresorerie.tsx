@@ -4,11 +4,11 @@ import { type CSSProperties } from "react";
 import { Landmark } from "@/components/icons";
 import { AreaChart, Badge, Card, Compteur, DataTable, SERIES, IconTile, cx } from "@/components/ui";
 import { CarteChaleur, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, pluriel, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, pluriel, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { moisCourt } from "@/components/analyse/charts/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTresorerie } from "@/lib/analyse-types";
-import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
+import { fmtDec, fmtGNF, fmtInt, fmtJours, INSECABLE } from "@/lib/format";
 
 /** Liquidité et prévision à 13 semaines : position, éventail, cycle de conversion, encaissements attendus. */
 export function Tresorerie() {
@@ -33,21 +33,21 @@ function Corps() {
   const total = d?.position?.total ?? 0;
   const reponse = d && (
     <>
-      {fmtShort(total)} GNF en banques et caisses aujourd&apos;hui{d.position.net_cash !== total ? ` (${fmtShort(d.position.net_cash)} GNF nets des découverts)` : ""}.{" "}
+      {gnfOu(total)} en banques et caisses aujourd&apos;hui{d.position.net_cash !== total ? ` (${gnfOu(d.position.net_cash)} nets des découverts)` : ""}.{" "}
       {weeks.length === 0 ? (
         <>Pas de prévision : aucune échéance connue.</>
       ) : d.runway.weeks_p50 !== null ? (
         <>
-          Dans un cas sur deux, la trésorerie passe <strong className="font-semibold text-danger">sous {seuilFixe ? `le seuil de ${fmtShort(seuil)} GNF` : "zéro"} en semaine {d.runway.weeks_p50}</strong>
+          Dans un cas sur deux, la trésorerie passe <strong className="font-semibold text-danger">sous {seuilFixe ? `le seuil de ${gnfOu(seuil)}` : "zéro"} en semaine {d.runway.weeks_p50}</strong>
         </>
       ) : d.runway.weeks_p10 !== null ? (
-        <>Elle reste au-dessus {seuilFixe ? `du seuil de ${fmtShort(seuil)} GNF` : "de zéro"} dans le scénario médian, mais le scénario défavorable passe dessous en semaine {d.runway.weeks_p10}</>
+        <>Elle reste au-dessus {seuilFixe ? `du seuil de ${gnfOu(seuil)}` : "de zéro"} dans le scénario médian, mais le scénario défavorable passe dessous en semaine {d.runway.weeks_p10}</>
       ) : (
-        <>Elle reste au-dessus {seuilFixe ? `du seuil de ${fmtShort(seuil)} GNF` : "de zéro"} sur les 13 semaines</>
+        <>Elle reste au-dessus {seuilFixe ? `du seuil de ${gnfOu(seuil)}` : "de zéro"} sur les 13 semaines</>
       )}
       {bas && (
         <>
-          {" "}; point bas la semaine du {fmtDate(bas.start)} : {fmtShort(bas.balance_p50)} GNF (p10 : {fmtShort(bas.balance_p10)} GNF).
+          {" "}; point bas la semaine du {fmtDate(bas.start)} : {gnfOu(bas.balance_p50)} (p10 : {gnfOu(bas.balance_p10)}).
         </>
       )}
       {!bas && weeks.length > 0 && "."}
@@ -71,7 +71,7 @@ function Corps() {
               <Compteur value={total} className={cx("text-[28px] sm:text-[36px]", total < seuil ? "text-danger" : "text-ink")} />
               <p className="mt-1.5 text-[12.5px] text-muted">
                 {d.position.accounts.length} compte{d.position.accounts.length > 1 ? "s" : ""}
-                {seuilFixe ? ` · seuil de sécurité ${fmtShort(seuil)} GNF` : " · aucun seuil de sécurité paramétré (zéro)"}
+                {seuilFixe ? ` · seuil de sécurité ${gnfOu(seuil)}` : " · aucun seuil de sécurité paramétré (zéro)"}
               </p>
               {d.position.accounts.length === 0 ? (
                 <div className="mt-4">
@@ -113,13 +113,13 @@ function Corps() {
                   <div className="mt-3 grid grid-cols-3 gap-2.5">
                     <Chiffre label={`Semaines avant ${seuilFixe ? "le seuil" : "zéro"} (p50)`} value={d.runway.weeks_p50 === null ? "Plus de 13" : `${d.runway.weeks_p50}`} tone={d.runway.weeks_p50 !== null && d.runway.weeks_p50 <= 8 ? "danger" : "ok"} />
                     <Chiffre label={`Semaines avant ${seuilFixe ? "le seuil" : "zéro"} (p10)`} value={d.runway.weeks_p10 === null ? "Plus de 13" : `${d.runway.weeks_p10}`} tone={d.runway.weeks_p10 !== null && d.runway.weeks_p10 <= 8 ? "warn" : "ok"} />
-                    <Chiffre label="Point bas" value={bas ? fmtShort(bas.balance_p50) : "–"} hint={bas ? `semaine du ${fmtDate(bas.start)} · p10 ${fmtShort(bas.balance_p10)}` : undefined} tone={bas && bas.balance_p50 < seuil ? "danger" : undefined} />
+                    <Chiffre label="Point bas" value={bas ? gnfOu(bas.balance_p50) : "–"} hint={bas ? `semaine du ${fmtDate(bas.start)} · p10 ${gnfOu(bas.balance_p10)}` : undefined} tone={bas && bas.balance_p50 < seuil ? "danger" : undefined} />
                   </div>
                   {(d.forecast.doubtful_excluded > 0 || d.forecast.payables_overdue > 0 || d.forecast.beyond_horizon > 0) && (
                     <p className="mt-3 text-[12px] leading-snug text-muted">
-                      {d.forecast.payables_overdue > 0 && `${fmtShort(d.forecast.payables_overdue)} GNF de dettes fournisseurs déjà échues sont décaissées en semaine 1. `}
-                      {d.forecast.doubtful_excluded > 0 && `${fmtShort(d.forecast.doubtful_excluded)} GNF de créances douteuses sont exclues. `}
-                      {d.forecast.beyond_horizon > 0 && `${fmtShort(d.forecast.beyond_horizon)} GNF d'encaissements tombent au-delà des 13 semaines.`}
+                      {d.forecast.payables_overdue > 0 && `${gnfOu(d.forecast.payables_overdue)} de dettes fournisseurs déjà échues sont décaissées en semaine 1. `}
+                      {d.forecast.doubtful_excluded > 0 && `${gnfOu(d.forecast.doubtful_excluded)} de créances douteuses sont exclues. `}
+                      {d.forecast.beyond_horizon > 0 && `${gnfOu(d.forecast.beyond_horizon)} d'encaissements tombent au-delà des 13 semaines.`}
                     </p>
                   )}
                 </>
@@ -131,7 +131,7 @@ function Corps() {
             <Card title="Cycle de conversion" className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">DSO + DIO − DPO, en jours</span>}>
               {cycle.length && d.cycle.months.length ? (
                 <>
-                  <AreaChart label="DSO, DPO, DIO et cycle de conversion" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={cycle.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={210} format={(v) => `${fmtDec(Math.round(v * 10) / 10)} j`} formatAxis={(v) => `${Math.round(v)} j`} />
+                  <AreaChart label="DSO, DPO, DIO et cycle de conversion" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={cycle.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={210} format={(v) => fmtJours(v)} formatAxis={(v) => `${fmtInt(v)}${INSECABLE}j`} />
                   {bfr && (
                     <div className="mt-4 border-t border-line pt-3">
                       <div className="mb-2 text-[12.5px] font-semibold text-ink-2">Besoin en fonds de roulement</div>
@@ -152,7 +152,7 @@ function Corps() {
                   label="Encaissements attendus par client et par semaine"
                   rows={collections.map((c) => ({ key: String(c.id), label: c.name }))}
                   cols={semaines}
-                  cells={collections.flatMap((c) => c.expected_by_week.map((v, i) => ({ row: String(c.id), col: `S${i + 1}`, value: v > 0 ? v : null, detail: `${fmtGNF(c.open)} ouverts, ${fmtGNF(c.overdue)} échus · délai réel ${c.avg_days_late === null ? "inconnu" : `${c.avg_days_late >= 0 ? "+" : ""}${fmtInt(c.avg_days_late)} j`} (${c.history_source === "client" ? `${pluriel(c.history_n, "facture")} du client` : "délai moyen global"})` })))}
+                  cells={collections.flatMap((c) => c.expected_by_week.map((v, i) => ({ row: String(c.id), col: `S${i + 1}`, value: v > 0 ? v : null, detail: `${fmtGNF(c.open)} ouverts, ${fmtGNF(c.overdue)} échus · délai réel ${c.avg_days_late === null ? "inconnu" : `${c.avg_days_late >= 0 ? "+" : ""}${fmtJours(c.avg_days_late)}`} (${c.history_source === "client" ? `${pluriel(c.history_n, "facture")} du client` : "délai moyen global"})` })))}
                   echelle="sequentielle"
                   format={(v) => fmtShort(v)}
                   hauteurLigne={28}
@@ -170,18 +170,18 @@ function Corps() {
                 rowKey={(w) => w.week}
                 columns={[
                   { key: "start", label: "Semaine", render: (w) => <span className="whitespace-nowrap font-medium text-ink">S{w.week} · {semaineCourte(w.start)} au {semaineCourte(w.end)}</span> },
-                  { key: "inflows", label: "Encaissements", align: "right", render: (w) => fmtInt(w.inflows) },
-                  { key: "outflows", label: "Décaissements", align: "right", render: (w) => fmtInt(w.outflows) },
-                  { key: "net", label: "Flux net", align: "right", render: (w) => <span className={w.net < 0 ? "text-danger" : "text-ok-texte"}>{fmtInt(w.net)}</span> },
-                  { key: "balance_p10", label: "Solde p10", align: "right", render: (w) => <span className={w.balance_p10 < seuil ? "text-danger" : undefined}>{fmtInt(w.balance_p10)}</span> },
-                  { key: "balance_p50", label: "Solde médian", align: "right", render: (w) => <span className={cx("font-semibold", w.balance_p50 < seuil && "text-danger")}>{fmtInt(w.balance_p50)}</span> },
-                  { key: "balance_p90", label: "Solde p90", align: "right", render: (w) => fmtInt(w.balance_p90) },
+                  { key: "inflows", label: "Encaissements (GNF)", align: "right", render: (w) => fmtInt(w.inflows) },
+                  { key: "outflows", label: "Décaissements (GNF)", align: "right", render: (w) => fmtInt(w.outflows) },
+                  { key: "net", label: "Flux net (GNF)", align: "right", render: (w) => <span className={w.net < 0 ? "text-danger" : "text-ok-texte"}>{fmtInt(w.net)}</span> },
+                  { key: "balance_p10", label: "Solde p10 (GNF)", align: "right", render: (w) => <span className={w.balance_p10 < seuil ? "text-danger" : undefined}>{fmtInt(w.balance_p10)}</span> },
+                  { key: "balance_p50", label: "Solde médian (GNF)", align: "right", render: (w) => <span className={cx("font-semibold", w.balance_p50 < seuil && "text-danger")}>{fmtInt(w.balance_p50)}</span> },
+                  { key: "balance_p90", label: "Solde p90 (GNF)", align: "right", render: (w) => fmtInt(w.balance_p90) },
                   { key: "etat", label: "", render: (w) => (w.balance_p50 < seuil ? <Badge tone="danger">Sous le seuil</Badge> : w.balance_p10 < seuil ? <Badge tone="warn">Fragile</Badge> : null) },
                 ]}
               />
               <p className="px-5 py-3 text-[12.5px] leading-snug text-muted">
                 {d.forecast.method || "Encaissements : créances ouvertes datées par le délai de paiement réel de chaque client. Décaissements : dettes fournisseurs à échéance, échéances d'emprunt, charges récurrentes."}
-                {detail && ` Décaissements sur 13 semaines : fournisseurs ${fmtShort(detail.payables.reduce((s, v) => s + v, 0))}, emprunts ${fmtShort(detail.loans.reduce((s, v) => s + v, 0))}, charges récurrentes ${fmtShort(detail.recurring.reduce((s, v) => s + v, 0))} (${fmtShort(d.forecast.recurring_monthly)} par mois), impôts et taxes ${fmtShort(detail.taxes.reduce((s, v) => s + v, 0))} GNF.`}
+                {detail && ` Décaissements sur 13 semaines : fournisseurs ${fmtShort(detail.payables.reduce((s, v) => s + v, 0))}, emprunts ${fmtShort(detail.loans.reduce((s, v) => s + v, 0))}, charges récurrentes ${fmtShort(detail.recurring.reduce((s, v) => s + v, 0))} (${fmtShort(d.forecast.recurring_monthly)} par mois), impôts et taxes ${gnfOu(detail.taxes.reduce((s, v) => s + v, 0))}.`}
               </p>
             </Card>
           )}
@@ -194,12 +194,12 @@ function Corps() {
                 rowKey={(c) => c.id}
                 columns={[
                   { key: "name", label: "Client", render: (c) => <span className="font-medium text-ink">{c.name}</span> },
-                  { key: "open", label: "Encours ouvert", align: "right", render: (c) => fmtInt(c.open) },
-                  { key: "overdue", label: "Échu", align: "right", render: (c) => <span className={c.overdue > 0 ? "font-semibold text-danger" : undefined}>{fmtInt(c.overdue)}</span> },
-                  { key: "doubtful", label: "Douteux", align: "right", render: (c) => (c.doubtful > 0 ? <span className="text-danger">{fmtInt(c.doubtful)}</span> : <span className="text-muted">0</span>) },
+                  { key: "open", label: "Encours ouvert (GNF)", align: "right", render: (c) => fmtInt(c.open) },
+                  { key: "overdue", label: "Échu (GNF)", align: "right", render: (c) => <span className={c.overdue > 0 ? "font-semibold text-danger" : undefined}>{fmtInt(c.overdue)}</span> },
+                  { key: "doubtful", label: "Douteux (GNF)", align: "right", render: (c) => (c.doubtful > 0 ? <span className="text-danger">{fmtInt(c.doubtful)}</span> : <span className="text-muted">0</span>) },
                   { key: "part", label: "Part échue", align: "right", sortValue: (c) => (c.open ? c.overdue / c.open : 0), render: (c) => fmtPct(c.open ? (c.overdue / c.open) * 100 : 0, 0) },
                   { key: "avg_days_late", label: "Retard réel", align: "right", render: (c) => (c.avg_days_late === null ? <span className="text-muted">–</span> : <Badge tone={c.avg_days_late > 30 ? "danger" : c.avg_days_late > 0 ? "warn" : "ok"}>{c.avg_days_late > 0 ? "+" : ""}{joursOu(c.avg_days_late)}</Badge>) },
-                  { key: "expected_total", label: "Attendu sur 13 sem.", align: "right", render: (c) => fmtInt(c.expected_total) },
+                  { key: "expected_total", label: "Attendu sur 13 semaines (GNF)", align: "right", render: (c) => fmtInt(c.expected_total) },
                 ]}
               />
               <p className="px-5 py-3 text-[12.5px] leading-snug text-muted">Retard réel : écart moyen entre l&apos;échéance et le règlement sur 24 mois (négatif : le client paie avant l&apos;échéance).</p>

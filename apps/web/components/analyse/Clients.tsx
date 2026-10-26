@@ -4,10 +4,10 @@ import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, cx, type Tone } from "@/components/ui";
 import { ECHELLE, ETATS } from "@/lib/couleurs";
 import { Bulles, Lorenz, PetitsMultiples } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useAncre, useCible, useDefiler, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { ClientSegment, GroupeClients } from "@/lib/analyse-types";
-import { fmtGNF, fmtInt } from "@/lib/format";
+import { fmtGNF, fmtInt, fmtRatio, fmtJours, fmtFixe, INSECABLE } from "@/lib/format";
 
 const SEGMENT: Record<ClientSegment, { label: string; couleur: string; tone: Tone; lecture: string }> = {
   strategiques: { label: "Stratégiques", couleur: ETATS.bon, tone: "ok", lecture: "Font la valeur et paient bien : à fidéliser." },
@@ -60,13 +60,13 @@ function Corps() {
         <>Aucun chiffre d&apos;affaires par client sur la période.</>
       ) : (
         <>
-          <strong className="font-semibold text-ink">{c.pareto_count} client{c.pareto_count > 1 ? "s" : ""} sur {c.clients}</strong> {c.pareto_count > 1 ? "font" : "fait"} 80 % du chiffre d&apos;affaires
-          {c.gini !== null && ` (Gini ${c.gini.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`}
+          <strong className="font-semibold text-ink">{c.pareto_count} client{c.pareto_count > 1 ? "s" : ""} sur {c.clients}</strong> {c.pareto_count > 1 ? "font" : "fait"} 80&nbsp;% du chiffre d&apos;affaires
+          {c.gini !== null && ` (Gini ${fmtRatio(c.gini)}`}
           {c.top_share.first !== null && `${c.gini !== null ? ", " : " ("}le premier, ${c.top_share.first_name ?? "–"}, pèse ${fmtPct(c.top_share.first, 0)}`}
-          {(c.gini !== null || c.top_share.first !== null) && ")"}. {clients.filter((s) => s.segment === "strategiques").length} client{clients.filter((s) => s.segment === "strategiques").length > 1 ? "s" : ""} stratégique{clients.filter((s) => s.segment === "strategiques").length > 1 ? "s" : ""} porte{clients.filter((s) => s.segment === "strategiques").length > 1 ? "nt" : ""} la valeur ; {surveiller.length} à surveiller. Échus : {fmtShort(echu)} GNF, perte attendue {fmtShort(ecl)} GNF.
+          {(c.gini !== null || c.top_share.first !== null) && ")"}. {clients.filter((s) => s.segment === "strategiques").length} client{clients.filter((s) => s.segment === "strategiques").length > 1 ? "s" : ""} stratégique{clients.filter((s) => s.segment === "strategiques").length > 1 ? "s" : ""} porte{clients.filter((s) => s.segment === "strategiques").length > 1 ? "nt" : ""} la valeur ; {surveiller.length} à surveiller. Échus : {gnfOu(echu)}, perte attendue {gnfOu(ecl)}.
         </>
       )}
-      {c.unassigned_revenue > 0 && <> {fmtShort(c.unassigned_revenue)} GNF de ventes sans client identifié.</>}
+      {c.unassigned_revenue > 0 && <> {gnfOu(c.unassigned_revenue)} de ventes sans client identifié.</>}
     </>
   );
   const lorenz = (c?.lorenz ?? []).map((p) => ({ x: p.x * 100, y: p.y * 100 }));
@@ -95,7 +95,7 @@ function Corps() {
                 <>
                   <Lorenz label="Courbe de Lorenz du chiffre d'affaires par client" points={lorenz} gini={c.gini ?? 0} paretoCount={c.pareto_count} clientsCount={c.clients} hauteur={290} />
                   <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                    <Chiffre label="Indice de Gini" value={c.gini === null ? "–" : c.gini.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} hint="0 = égalité, 1 = un seul client" tone={(c.gini ?? 0) > 0.6 ? "warn" : undefined} />
+                    <Chiffre label="Indice de Gini" value={fmtRatio(c.gini)} hint="0 = égalité, 1 = un seul client" tone={(c.gini ?? 0) > 0.6 ? "warn" : undefined} />
                     <Chiffre label="HHI" value={c.hhi === null ? "–" : fmtInt(c.hhi)} hint={c.hhi === null ? undefined : c.hhi > 2500 ? "Très concentré" : c.hhi > 1500 ? "Concentration modérée" : "Diversifié"} tone={c.hhi === null ? undefined : c.hhi > 2500 ? "danger" : c.hhi > 1500 ? "warn" : "ok"} />
                     <Chiffre label="Premier client" value={pctOu(c.top_share.first, 0)} hint={c.top_share.first_name ?? "du chiffre d'affaires"} />
                     <Chiffre label="Cinq premiers" value={pctOu(c.top_share.top5, 0)} hint="du chiffre d'affaires" tone={(c.top_share.top5 ?? 0) > 50 ? "warn" : undefined} />
@@ -110,7 +110,7 @@ function Corps() {
                 <>
                   <Bulles
                     label="Clients : note de paiement contre chiffre d'affaires, aire selon l'encours"
-                    points={notes.map((s) => ({ id: String(s.id), label: s.name, x: s.payment_score ?? 0, y: Math.max(0, s.revenue), size: Math.max(1, s.open), group: segmentDe(s.segment).label, detail: `${s.avg_days_late === null ? "retard inconnu" : `${s.avg_days_late >= 0 ? "+" : ""}${fmtInt(s.avg_days_late)} j de retard moyen`} · ${fmtGNF(s.overdue)} échus · ${s.trend}` }))}
+                    points={notes.map((s) => ({ id: String(s.id), label: s.name, x: s.payment_score ?? 0, y: Math.max(0, s.revenue), size: Math.max(1, s.open), group: segmentDe(s.segment).label, detail: `${s.avg_days_late === null ? "retard inconnu" : `${s.avg_days_late >= 0 ? "+" : ""}${fmtJours(s.avg_days_late)} de retard moyen`} · ${fmtGNF(s.overdue)} échus · ${s.trend}` }))}
                     xLabel="Note de paiement (0-100)"
                     yLabel="Chiffre d'affaires de la période"
                     xDomain={[0, 100]}
@@ -118,7 +118,7 @@ function Corps() {
                     quadrants={frontiere === null ? undefined : { x: seuilPaiement, y: frontiere, labels: ["Stratégiques", "À sécuriser", "À développer", "À surveiller"], teintes: ["var(--g-jade)", "var(--g-ambre)", "var(--g-azur)", "var(--g-corail)"] }}
                     formatX={(v) => String(Math.round(v))}
                     formatY={(v) => fmtShort(v)}
-                    formatSize={(v) => `${fmtShort(v)} GNF`}
+                    formatSize={(v) => gnfOu(v)}
                     sizeLabel="Encours"
                     couleurs={Object.fromEntries(Object.values(SEGMENT).map((s) => [s.label, s.couleur]))}
                     hauteur={380}
@@ -131,7 +131,7 @@ function Corps() {
                         <span aria-hidden className="mt-1 h-2.5 w-2.5 flex-none rounded-full" style={{ background: segmentDe(q.key).couleur }} />
                         <span>
                           <span className="font-semibold text-ink-2">{q.label}</span> ({q.count}) : {segmentDe(q.key).lecture}
-                          {q.open > 0 && ` Encours ${fmtShort(q.open)} GNF.`}
+                          {q.open > 0 && ` Encours ${gnfOu(q.open)}.`}
                         </span>
                       </li>
                     ))}
@@ -145,7 +145,7 @@ function Corps() {
 
           <Card title="Chiffre d'affaires mensuel des premiers clients" actions={<span className="text-[12.5px] text-muted">12 mois</span>}>
             {d.trends?.series?.length && d.trends.months.length ? (
-              <PetitsMultiples label="Chiffre d'affaires mensuel des premiers clients" labels={d.trends.months.map((m) => moisCourt(m))} items={d.trends.series.map((s) => ({ key: s.key, label: s.label, values: combler(s.values), detail: segmentDe(clients.find((x) => x.id === s.client_id)?.segment ?? "").label }))} format={(v) => `${fmtShort(v)} GNF`} />
+              <PetitsMultiples label="Chiffre d'affaires mensuel des premiers clients" labels={d.trends.months.map((m) => moisCourt(m))} items={d.trends.series.map((s) => ({ key: s.key, label: s.label, values: combler(s.values), detail: segmentDe(clients.find((x) => x.id === s.client_id)?.segment ?? "").label }))} format={(v) => gnfOu(v)} />
             ) : (
               <Vide compact titre="Aucune série mensuelle par client" />
             )}
@@ -167,7 +167,7 @@ function Corps() {
                               <span className="truncate font-medium text-ink">{b.name}</span>
                               <span className="whitespace-nowrap text-[11.5px] text-muted">
                                 {b.n} facture{b.n > 1 ? "s" : ""}
-                                {pente !== null && ` · ${pente >= 0 ? "+" : ""}${pente.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} j/mois`}
+                                {pente !== null && ` · ${pente >= 0 ? "+" : ""}${fmtFixe(pente, 1)}${INSECABLE}j/mois`}
                               </span>
                             </div>
                             <div className="mt-1 flex h-2.5 gap-[2px]" title={b.histogram.map((h) => `${h.label} : ${h.count}`).join(" · ")}>
@@ -203,13 +203,13 @@ function Corps() {
                 columns={[
                   { key: "name", label: "Client", render: (r) => <Ciblable id={`client-${r.id}`} actif={r.id === clientVise?.id}><span className="font-medium text-ink">{r.name}</span></Ciblable> },
                   { key: "segment", label: "Segment", sortValue: (r) => segmentDe(r.segment).label, render: (r) => <Badge tone={segmentDe(r.segment).tone}>{r.segment_label || segmentDe(r.segment).label}</Badge> },
-                  { key: "revenue", label: "CA", align: "right", render: (r) => fmtShort(r.revenue) },
-                  { key: "margin", label: "Marge transport", align: "right", render: (r) => (r.margin === null ? <span className="text-muted" title="Aucune rotation pour ce client">–</span> : <span className={r.margin < 0 ? "text-danger" : undefined}>{fmtShort(r.margin)}</span>) },
+                  { key: "revenue", label: "CA (GNF)", align: "right", render: (r) => fmtShort(r.revenue) },
+                  { key: "margin", label: "Marge transport (GNF)", align: "right", render: (r) => (r.margin === null ? <span className="text-muted" title="Aucune rotation pour ce client">–</span> : <span className={r.margin < 0 ? "text-danger" : undefined}>{fmtShort(r.margin)}</span>) },
                   { key: "growth_pct", label: "Croissance", align: "right", render: (r) => (r.growth_pct === null ? <span className="text-muted">–</span> : <span className={cx("font-semibold", r.growth_pct < 0 ? "text-danger" : "text-ok-texte")}>{r.growth_pct >= 0 ? "+" : ""}{fmtPct(r.growth_pct, 0)}</span>) },
                   { key: "avg_days_late", label: "Retard", align: "right", render: (r) => (r.avg_days_late === null ? <span className="text-muted">–</span> : `${r.avg_days_late > 0 ? "+" : ""}${joursOu(r.avg_days_late)}`) },
                   { key: "payment_score", label: "Note", align: "right", render: (r) => (r.payment_score === null ? <span className="text-muted" title="Sans historique de paiement ni encours : réputé bon payeur">–</span> : <span className={cx("inline-block min-w-9 rounded-full px-1.5 text-center text-[11.5px] font-semibold", r.payment_score >= seuilPaiement ? "bg-ok-doux text-ok-texte" : r.payment_score >= 45 ? "bg-warn-doux text-warn" : "bg-danger-doux text-danger")}>{fmtInt(r.payment_score)}</span>) },
-                  { key: "overdue", label: "Échu", align: "right", render: (r) => <span className={r.overdue > 0 ? "text-danger" : undefined}>{fmtShort(r.overdue)}</span> },
-                  { key: "ecl", label: "Perte attendue", align: "right", render: (r) => fmtShort(r.ecl) },
+                  { key: "overdue", label: "Échu (GNF)", align: "right", render: (r) => <span className={r.overdue > 0 ? "text-danger" : undefined}>{fmtShort(r.overdue)}</span> },
+                  { key: "ecl", label: "Perte attendue (GNF)", align: "right", render: (r) => fmtShort(r.ecl) },
                 ]}
               />
             </Card>

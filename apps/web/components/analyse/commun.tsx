@@ -16,7 +16,7 @@ import { Badge, Button, Empty, ErrorBox, FEUILLE, Input, Kpi as KpiCarte, Notice
 import { ApiError, apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import { APPS, appFromPath, type AppCode, type EntiteSociete } from "@/lib/config";
-import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtFixe, fmtGNF, fmtInt, fmtJours, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { COULEUR, fmtValeur, moisCourt } from "@/components/analyse/charts/commun";
 
 /* ─── Valeurs tolérantes ───────────────────────────────────────────────── */
@@ -45,14 +45,22 @@ export function pctOu(v: number | null | undefined, digits = 1): string {
   return v === null || v === undefined || !Number.isFinite(v) ? "–" : fmtPct(v, digits);
 }
 
-/** « 1,2 Mds GNF » ou « – ». */
+/** « 1,2 Md GNF » ou « – », espace insécable avant l'unité. */
 export function gnfOu(v: number | null | undefined): string {
-  return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${fmtShort(v)} GNF`;
+  return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${fmtShort(v)}${INSECABLE}GNF`;
 }
 
-/** « 38 j » ou « – ». */
-export function joursOu(v: number | null | undefined, digits = 0): string {
-  return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${v.toLocaleString("fr-FR", { maximumFractionDigits: digits })} j`;
+/** « 38,5 j » ou « – » : toujours une décimale, comme fmtJours partout ailleurs. */
+export function joursOu(v: number | null | undefined): string {
+  return v === null || v === undefined || !Number.isFinite(v) ? "–" : fmtJours(v);
+}
+
+/**
+ * Nombre à plus de deux décimales (MAD de Nigrini, ratio sous 1), là où lib/format s'arrête à deux :
+ * « 0,0123 ». Séparateurs français, jamais « 0.0123 ».
+ */
+export function fmtPrecis(v: number | null | undefined, max: number, min = 0): string {
+  return v === null || v === undefined || !Number.isFinite(v) ? "–" : new Intl.NumberFormat("fr-FR", { minimumFractionDigits: min, maximumFractionDigits: max }).format(v);
 }
 
 /** Méthode de prévision du noyau, en clair (holt_winters, holt, naive). */
@@ -590,13 +598,13 @@ function Confiance({ value }: { value: number }) {
   const v = Math.max(0, Math.min(1, nombre(value) ?? 0));
   const n = Math.round(v * 5);
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-muted" title={`Confiance ${Math.round(v * 100)} %`}>
+    <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-muted" title={`Confiance ${fmtPct(v * 100, 0)}`}>
       <span aria-hidden className="inline-flex gap-[2px]">
         {[0, 1, 2, 3, 4].map((i) => (
           <span key={i} className={cx("h-2 w-[7px] rounded-[2px]", i < n ? "bg-accent-vif" : "bg-line-strong/50")} />
         ))}
       </span>
-      Confiance {Math.round(v * 100)} %
+      Confiance {fmtPct(v * 100, 0)}
     </span>
   );
 }
@@ -675,16 +683,17 @@ export function normaliserEvidence(e: Evidence | null | undefined): EvidenceNorm
       }
       if (estDict(d.route)) {
         const r = d.route;
-        return { type: "table", columns: ["Tarif", "GNF/m³"], rows: [["Tarif moyen", fmtInt(nombre(r.avg_rate))], ["Point mort", fmtInt(nombre(r.breakeven_rate))], ["Tarif cible", fmtInt(nombre(r.target_rate))]] };
+        const tarif = (v: unknown) => (nombre(v) === null ? "–" : `${fmtInt(nombre(v))}${INSECABLE}GNF/m³`);
+        return { type: "table", columns: ["Tarif", "GNF/m³"], rows: [["Tarif moyen", tarif(r.avg_rate)], ["Point mort", tarif(r.breakeven_rate)], ["Tarif cible", tarif(r.target_rate)]] };
       }
       if (Array.isArray(d.rotations)) {
-        return { type: "table", columns: ["Rotation", "L/100 km", "Attendu"], rows: liste(d.rotations).filter(estDict).slice(0, 4).map((r) => [texte(r.rotation), (nombre(r.value) ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 }), (nombre(r.expected) ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 })]) };
+        return { type: "table", columns: ["Rotation", "L/100 km", "Attendu"], rows: liste(d.rotations).filter(estDict).slice(0, 4).map((r) => [texte(r.rotation), nombre(r.value) === null ? "–" : `${fmtFixe(nombre(r.value), 1)}${INSECABLE}L/100${INSECABLE}km`, `attendu ${fmtFixe(nombre(r.expected), 1)}`]) };
       }
       if (Array.isArray(d.pairs)) {
-        return { type: "table", columns: ["Fournisseur", "Pièces", "Montant"], rows: liste(d.pairs).filter(estDict).slice(0, 4).map((p) => [texte(p.partner), `${texte(estDict(p.a) ? p.a.name : "")} / ${texte(estDict(p.b) ? p.b.name : "")}`, fmtShort(nombre(p.amount_at_risk))]) };
+        return { type: "table", columns: ["Fournisseur", "Pièces", "Montant"], rows: liste(d.pairs).filter(estDict).slice(0, 4).map((p) => [texte(p.partner), `${texte(estDict(p.a) ? p.a.name : "")} / ${texte(estDict(p.b) ? p.b.name : "")}`, gnfOu(nombre(p.amount_at_risk))]) };
       }
       if (Array.isArray(d.lines)) {
-        return { type: "table", columns: ["Pièce", "Tiers", "Montant"], rows: liste(d.lines).filter(estDict).slice(0, 4).map((l) => [texte(l.move), texte(l.partner, "–"), fmtShort(nombre(l.amount))]) };
+        return { type: "table", columns: ["Pièce", "Tiers", "Montant"], rows: liste(d.lines).filter(estDict).slice(0, 4).map((l) => [texte(l.move), texte(l.partner, "–"), gnfOu(nombre(l.amount))]) };
       }
     }
   } catch {
@@ -761,7 +770,7 @@ export function MiniEvidence({ evidence, severity }: { evidence: Evidence | null
           <tr key={i} className="border-b border-line/60 last:border-0">
             {r.slice(0, 4).map((c, j) => (
               <td key={j} className={cx("max-w-[120px] truncate py-0.5", j > 0 && "text-right text-ink-2")}>
-                {typeof c === "number" ? c.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) : c}
+                {typeof c === "number" ? fmtDec(Math.round(c * 10) / 10) : c}
               </td>
             ))}
           </tr>
@@ -774,7 +783,7 @@ export function MiniEvidence({ evidence, severity }: { evidence: Evidence | null
 /** Valeur d'une métrique de constat, dans son unité. */
 export function valeurMetrique(value: number | null, unit: Unit): string {
   if (value === null || !Number.isFinite(value)) return "–";
-  return unit === "gnf" ? `${fmtShort(value)} GNF` : unit === "ratio" && Math.abs(value) < 1 ? value.toLocaleString("fr-FR", { maximumFractionDigits: 4 }) : fmtValeur(value, unit);
+  return unit === "gnf" ? gnfOu(value) : unit === "ratio" && Math.abs(value) < 1 ? fmtPrecis(value, 4) : fmtValeur(value, unit);
 }
 
 /**
@@ -797,7 +806,7 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
         {impact !== null && impact > 0 && (
           <span className="flex-none text-right">
             <span className="block text-[11.5px] font-medium text-muted">Impact</span>
-            <span className="block font-display text-[15px] font-bold leading-tight tabular text-ink">{fmtShort(impact)} GNF</span>
+            <span className="block font-display text-[15px] font-bold leading-tight tabular text-ink">{gnfOu(impact)}</span>
           </span>
         )}
       </div>

@@ -118,7 +118,7 @@ function Corps() {
                     rowKey={(r) => r.risk_id}
                     columns={[
                       { key: "risk", label: "Risque", render: (r) => <span className="font-medium text-ink">{r.risk}<span className="block text-[11.5px] font-normal text-muted"><LienFiche href={r.link} className="font-normal text-muted">{r.reference}</LienFiche> · {r.name}</span></span> },
-                      { key: "score", label: "Score", align: "right", render: (r) => <Badge tone={NIVEAU[r.level]?.tone ?? "neutral"}>{r.score} · {NIVEAU[r.level]?.label ?? r.level}</Badge> },
+                      { key: "score", label: "Score", align: "right", render: (r) => <Badge tone={NIVEAU[r.level]?.tone ?? "neutral"}>{fmtInt(r.score)} · {NIVEAU[r.level]?.label ?? r.level}</Badge> },
                       { key: "mitigation", label: "Atténuation", render: (r) => (r.mitigation ? <span className="text-ok-texte">{r.treated ? "Traitée" : "Décrite"}</span> : <span className="text-danger">Aucune</span>) },
                     ]}
                   />

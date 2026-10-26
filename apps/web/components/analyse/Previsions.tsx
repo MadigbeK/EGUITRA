@@ -35,8 +35,8 @@ function Corps() {
   const ecart = (x: Landing) => (x.budget ? ((x.estimate - x.budget) / x.budget) * 100 : null);
   const reponse = d && l && (
     <>
-      Le chiffre d&apos;affaires de l&apos;exercice atterrirait à <strong className="font-semibold text-ink">{fmtShort(l.revenue.estimate)} GNF</strong> (entre {fmtShort(l.revenue.low)} et {fmtShort(l.revenue.high)})
-      {l.revenue.budget ? <>, {(ecart(l.revenue) ?? 0) >= 0 ? "+" : ""}{fmtPct(ecart(l.revenue) ?? 0)} par rapport au budget, probabilité de l&apos;atteindre {pctOu(l.revenue.probability_pct, 0)}</> : l.revenue.previous_year ? <>, {(l.revenue.vs_previous_pct ?? 0) >= 0 ? "+" : ""}{fmtPct(l.revenue.vs_previous_pct ?? 0)} sur l&apos;exercice précédent</> : null}, et l&apos;EBE à {fmtShort(l.ebe.estimate)} GNF
+      Le chiffre d&apos;affaires de l&apos;exercice atterrirait à <strong className="font-semibold text-ink">{gnfOu(l.revenue.estimate)}</strong> (entre {fmtShort(l.revenue.low)} et {fmtShort(l.revenue.high)})
+      {l.revenue.budget ? <>, {(ecart(l.revenue) ?? 0) >= 0 ? "+" : ""}{fmtPct(ecart(l.revenue) ?? 0)} par rapport au budget, probabilité de l&apos;atteindre {pctOu(l.revenue.probability_pct, 0)}</> : l.revenue.previous_year ? <>, {(l.revenue.vs_previous_pct ?? 0) >= 0 ? "+" : ""}{fmtPct(l.revenue.vs_previous_pct ?? 0)} sur l&apos;exercice précédent</> : null}, et l&apos;EBE à {gnfOu(l.ebe.estimate)}
       {l.ebe.budget ? <> ({(ecart(l.ebe) ?? 0) >= 0 ? "+" : ""}{fmtPct(ecart(l.ebe) ?? 0)} ; probabilité {pctOu(l.ebe.probability_pct, 0)})</> : null}.
       {!l.revenue.budget && " Aucun budget saisi : la probabilité d'atteinte n'est pas calculable."} Il reste {l.months_remaining} mois pour agir : le simulateur ci-dessous chiffre les leviers.
     </>
@@ -56,7 +56,7 @@ function Corps() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Atterrissage titre="Chiffre d'affaires" cible={l.revenue} />
             <Atterrissage titre="EBE" cible={l.ebe} />
-            <Chiffre label="Réalisé à date" value={`${fmtShort(l.revenue.actual_to_date)} GNF`} hint={`EBE ${fmtShort(l.ebe.actual_to_date)} GNF · reste à venir ${fmtShort(l.revenue.forecast_remaining)} GNF de CA`} grand />
+            <Chiffre label="Réalisé à date" value={gnfOu(l.revenue.actual_to_date)} hint={`EBE ${gnfOu(l.ebe.actual_to_date)} · reste à venir ${gnfOu(l.revenue.forecast_remaining)} de CA`} grand />
             <Chiffre label="Mois restants" value={String(l.months_remaining)} hint={`${d.method}`} grand />
           </div>
 
@@ -79,7 +79,7 @@ function BlocPrevision({ titre, bloc, budget, couleur }: { titre: string; bloc: 
           <Eventail label={`${titre} : historique, prévision et bande p10-p90`} points={serie.map((p) => ({ label: moisCourt(p.month, true), actual: p.actual, forecast: p.forecast, low: p.low, high: p.high }))} cible={budget ? budget / 12 : null} cibleLabel="Budget / 12" couleur={couleur} hauteur={270} />
           {rupture && (
             <p className="mt-2 text-[12px] leading-snug text-muted">
-              Rupture de niveau détectée (CUSUM) à partir de {moisCourt(rupture, true)} : {bloc.cusum?.direction === "up" ? "hausse" : "baisse"} de {fmtShort(bloc.cusum?.mean_before ?? 0)} à {fmtShort(bloc.cusum?.mean_after ?? 0)} GNF par mois.
+              Rupture de niveau détectée (CUSUM) à partir de {moisCourt(rupture, true)} : {bloc.cusum?.direction === "up" ? "hausse" : "baisse"} de {fmtShort(bloc.cusum?.mean_before ?? 0)} à {gnfOu(bloc.cusum?.mean_after ?? 0)} par mois.
             </p>
           )}
         </>
@@ -142,14 +142,14 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
     { key: "simule", label: "EBE simulé", value: ebe, kind: "total" },
   ];
   const scenarios: Array<{ label: string; v: Partial<typeof valeurs> }> = [
-    { label: "Tarif +3 %", v: { tariff: 3 } },
-    { label: "Gasoil +8 %", v: { fuel: 8 } },
-    { label: "Saison sèche : volume +6 %", v: { volume: 6 } },
-    { label: "Masse salariale −4 %", v: { payroll: -4 } },
+    { label: "Tarif +3\u00a0%", v: { tariff: 3 } },
+    { label: "Gasoil +8\u00a0%", v: { fuel: 8 } },
+    { label: "Saison sèche : volume +6\u00a0%", v: { volume: 6 } },
+    { label: "Masse salariale −4\u00a0%", v: { payroll: -4 } },
   ].filter((s) => Object.keys(s.v).every((k) => leviers.some((lv) => lv.key === k)));
   const sb = d.sensitivity_base;
   return (
-    <Card title={<span id="simulateur">Simulateur : et si…</span>} actions={<span className="text-[12.5px] text-muted">{sb?.unit ?? "GNF d'EBE annuel pour une hausse de 1 %"}</span>}>
+    <Card title={<span id="simulateur">Simulateur : et si…</span>} actions={<span className="text-[12.5px] text-muted">{sb?.unit ?? "GNF d'EBE annuel pour une hausse de 1\u00a0%"}</span>}>
       {!sb || base === 0 ? (
         <Vide titre="Simulateur indisponible" hint="Il faut douze mois de chiffre d'affaires et de charges pour calculer les élasticités." />
       ) : (
@@ -167,15 +167,15 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
                     </label>
                     <span className={cx("font-display text-[18px] font-bold tabular", v === 0 ? "text-muted" : v * sens >= 0 ? "text-ok-texte" : "text-danger")}>
                       {v >= 0 ? "+" : ""}
-                      {v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %
+                      {fmtPct(v, 1)}
                     </span>
                   </div>
                   <input id={`sim-${lv.key}`} type="range" min={-10} max={10} step={0.5} value={v} onChange={(e) => setValeurs((s) => ({ ...s, [lv.key]: Number(e.target.value) }))} className="mt-1.5 w-full accent-[var(--accent-vif)]" aria-describedby={`sim-${lv.key}-aide`} />
                   <div id={`sim-${lv.key}-aide`} className="flex justify-between text-[11.5px] text-muted">
                     <span>{lv.aide}</span>
                     <span className="tabular">
-                      1 % = {sens >= 0 ? "+" : "−"}
-                      {fmtShort(Math.abs(sens))} GNF d&apos;EBE
+                      1&nbsp;% = {sens >= 0 ? "+" : "−"}
+                      {gnfOu(Math.abs(sens))} d&apos;EBE
                     </span>
                   </div>
                 </div>
@@ -197,9 +197,9 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
                 <div className="text-[12px] font-medium text-muted">EBE 12 mois simulé</div>
                 <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", ebe < 0 ? "text-danger" : "text-ink")}>
-                  <Valeur value={`${fmtShort(ebe)} GNF`} />
+                  <Valeur value={gnfOu(ebe)} />
                 </div>
-                <div className="text-[11.5px] text-muted">base {fmtShort(base)} GNF</div>
+                <div className="text-[11.5px] text-muted">base {gnfOu(base)}</div>
               </div>
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
                 <div className="text-[12px] font-medium text-muted">Effet annuel sur l&apos;EBE</div>
@@ -211,7 +211,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
               </div>
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
                 <div className="text-[12px] font-medium text-muted">Atterrissage EBE simulé</div>
-                <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", atterrissage < 0 ? "text-danger" : "text-ink")}>{fmtShort(atterrissage)} GNF</div>
+                <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", atterrissage < 0 ? "text-danger" : "text-ink")}>{gnfOu(atterrissage)}</div>
                 <div className="text-[11.5px] text-muted">{restant > 1 ? `effet appliqué aux ${restant} mois restants` : restant === 1 ? "effet appliqué au dernier mois de l'exercice" : "exercice achevé : aucun mois restant"}</div>
               </div>
             </div>

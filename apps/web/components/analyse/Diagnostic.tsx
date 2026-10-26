@@ -7,7 +7,7 @@ import { CarteChaleur, PetitsMultiples } from "@/components/analyse/charts";
 import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, joursOu, pctOu, pluriel, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetDiagnostic, CompartmentRow } from "@/lib/analyse-types";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, fmtFixe, INSECABLE } from "@/lib/format";
 
 /** Faiblesses systémiques des projets : carte domaines × dossiers, critères manquants, knock-outs, preuves, progression. */
 export function Diagnostic() {
@@ -64,7 +64,7 @@ function Compartiments({ rows, vise }: { rows: CompartmentRow[]; vise: string | 
               </span>
             ),
           },
-          { key: "gaps", label: "Manques", align: "right", render: (r) => <span className="tabular">{fmtInt(r.gaps)}{r.gaps_per_dossier !== null && <span className="block text-[11px] text-muted">{r.gaps_per_dossier.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} par dossier</span>}</span> },
+          { key: "gaps", label: "Manques", align: "right", render: (r) => <span className="tabular">{fmtInt(r.gaps)}{r.gaps_per_dossier !== null && <span className="block text-[11px] text-muted">{fmtFixe(r.gaps_per_dossier, 1)} par dossier</span>}</span> },
           { key: "studies", label: "Études renseignées", align: "right", render: (r) => <span className="tabular">{fmtInt(r.studies)}</span> },
           { key: "knockouts", label: "Knock-outs", align: "right", render: (r) => (r.knockouts ? <Badge tone="danger">{r.knockouts}</Badge> : <span className="text-muted">0</span>) },
           {
@@ -237,7 +237,7 @@ function Corps() {
                       </span>
                     ),
                   },
-                  { key: "avg_priority", label: "Priorité", align: "right", render: (r) => (r.avg_priority === null ? "–" : <Badge tone={r.avg_priority >= 2.5 ? "danger" : r.avg_priority >= 2 ? "warn" : "neutral"}>{r.avg_priority.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} / 3</Badge>) },
+                  { key: "avg_priority", label: "Priorité", align: "right", render: (r) => (r.avg_priority === null ? "–" : <Badge tone={r.avg_priority >= 2.5 ? "danger" : r.avg_priority >= 2 ? "warn" : "neutral"}>{fmtFixe(r.avg_priority, 1)} / 3</Badge>) },
                   { key: "theme", label: "À proposer", render: (r) => <span className="block max-w-[30ch] text-[12.5px] font-semibold leading-snug text-accent">{r.theme ?? "–"}</span> },
                   { key: "details", label: "Dossiers concernés", render: (r) => <span className="block max-w-[22ch] text-[12px] leading-snug text-muted">{r.details.map((x, i) => (<span key={x.id}>{i > 0 && ", "}<LienFiche href={x.link} className="font-normal text-muted">{x.reference}</LienFiche></span>))}</span> },
                 ]}
@@ -332,7 +332,7 @@ function Corps() {
             </div>
           </div>
 
-          <Card title="Progression des scores, revue après revue" actions={<span className="text-[12.5px] text-muted">Score Readiness aux instantanés de comité et à ce jour{d.progression?.median_velocity_per_month !== null && d.progression?.median_velocity_per_month !== undefined ? ` · vitesse médiane ${d.progression.median_velocity_per_month.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} point${Math.abs(d.progression.median_velocity_per_month) >= 2 ? "s" : ""} par mois` : ""}</span>}>
+          <Card title="Progression des scores, revue après revue" actions={<span className="text-[12.5px] text-muted">Score Readiness aux instantanés de comité et à ce jour{d.progression?.median_velocity_per_month !== null && d.progression?.median_velocity_per_month !== undefined ? ` · vitesse médiane ${fmtFixe(d.progression.median_velocity_per_month, 1)} point${Math.abs(d.progression.median_velocity_per_month) >= 2 ? "s" : ""} par mois` : ""}</span>}>
             {d.progression?.dossiers?.length && d.progression.dates.length >= 2 ? (
               <>
                 <PetitsMultiples
@@ -342,7 +342,7 @@ function Corps() {
                     const premierConnu = x.scores.find((s) => s !== null) ?? 0;
                     let dernier = premierConnu;
                     const ligne = d.progression.rows.find((r) => r.id === x.id);
-                    return { key: x.reference, label: x.reference, values: x.scores.map((s) => (s === null ? dernier : (dernier = s))), detail: ligne ? `${ligne.name}${ligne.delta !== null ? ` · ${ligne.delta >= 0 ? "+" : ""}${fmtInt(ligne.delta)} pt en ${joursOu(ligne.days)}` : ""}` : undefined };
+                    return { key: x.reference, label: x.reference, values: x.scores.map((s) => (s === null ? dernier : (dernier = s))), detail: ligne ? `${ligne.name}${ligne.delta !== null ? ` · ${ligne.delta >= 0 ? "+" : ""}${fmtInt(ligne.delta)}${INSECABLE}${Math.abs(ligne.delta) >= 2 ? "points" : "point"} en ${joursOu(ligne.days)}` : ""}` : undefined };
                   })}
                   colonnes={4}
                   format={(v) => `${Math.round(v)} / 100`}
