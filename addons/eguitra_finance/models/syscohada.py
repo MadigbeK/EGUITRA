@@ -269,7 +269,11 @@ class EguitraSyscohada(models.AbstractModel):
         Situation d'ouverture : soldes de la veille du début de période, plus les à-nouveaux
         passés dans la période. Les flux d'investissement et de financement sont lus sur les
         mouvements des comptes concernés ; l'écart avec la trésorerie du bilan, s'il existe,
-        est affiché pour analyse (écritures de reclassement, dettes sur immobilisations…).
+        est affiché pour analyse (écritures de reclassement…). Une acquisition d'immobilisation non
+        encore payée n'est ni un décaissement d'investissement ni une ressource d'exploitation : la
+        variation des dettes sur immobilisations (_fixed_asset_debts) passe du passif circulant aux
+        acquisitions ; de même, une cession non encaissée (créance 485) quitte l'actif circulant HAO
+        et les encaissements de cessions.
         """
         metrics = self.env["eguitra.finance.metrics"]
         start = metrics.account_balances(companies, date_from - timedelta(days=1))
@@ -317,6 +321,16 @@ class EguitraSyscohada(models.AbstractModel):
             "FP": credits(["16", "17", "181", "182", "183", "184"], ["161", "162", "166"]),
             "FQ": -debits(["16", "17", "181", "182", "183", "184"], ["166"]),
         }
+        # Dettes sur immobilisations et créances sur cessions : de l'exploitation vers l'investissement.
+        debts0 = self._fixed_asset_debts(companies, date_from - timedelta(days=1), start)
+        debts1 = self._fixed_asset_debts(companies, date_to, end)
+        for code in ("FF", "FG", "FH"):
+            change = debts1[code] - debts0[code]
+            v[code] += change
+            v["FE"] -= change
+        disposals = _prefix_sum(end, "485") - _prefix_sum(start, "485")
+        v["FB"] += disposals
+        v["FI"] -= disposals
         v["ZB"] = sum(v[c] for c in ("FA", "FB", "FC", "FD", "FE"))
         v["ZC"] = sum(v[c] for c in ("FF", "FG", "FH", "FI", "FJ"))
         v["ZD"] = sum(v[c] for c in ("FK", "FL", "FM", "FN"))
@@ -333,6 +347,53 @@ class EguitraSyscohada(models.AbstractModel):
             "treasury_end": treasury_end,
             "difference": round(treasury_end - v["ZH"], 2),
         }
+
+    def _fixed_asset_debts(self, companies, day, balances):
+        """Dettes sur acquisitions d'immobilisations encore dues à la date, par rubrique du tableau des flux
+        (FF : 21, FG : 22 à 25, FH : 26 et 27) : reste dû à la date (lettrages datés au plus tard ce jour)
+        des comptes fournisseurs des pièces qui portent une acquisition, hors à-nouveaux, au prorata de la
+        part des immobilisations dans la pièce ; plus les fournisseurs d'investissements (404, 481, 482,
+        balances : soldes à la date), portés en FG."""
+        self.env.flush_all()
+        investment = "^(404|481|482)"
+        payable = f"(aa.account_type = 'liability_payable' AND {ACC_CODE} !~ '{investment}')"
+        self.env.cr.execute(
+            f"""WITH bills AS (
+                    SELECT aml.move_id,
+                           SUM(CASE WHEN {ACC_CODE} ~ '^21' THEN aml.balance ELSE 0 END) AS ff,
+                           SUM(CASE WHEN {ACC_CODE} ~ '^2[2-5]' THEN aml.balance ELSE 0 END) AS fg,
+                           SUM(CASE WHEN {ACC_CODE} ~ '^2[67]' THEN aml.balance ELSE 0 END) AS fh,
+                           SUM(CASE WHEN {payable} THEN -aml.balance ELSE 0 END) AS payable
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                      JOIN account_journal aj ON aj.id = aml.journal_id
+                     WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
+                       AND aml.date <= %(day)s AND aj.code != %(journal)s
+                  GROUP BY aml.move_id
+                    HAVING SUM(CASE WHEN {ACC_CODE} ~ '^2[1-7]' THEN aml.balance ELSE 0 END) > 0
+                       AND SUM(CASE WHEN {payable} THEN -aml.balance ELSE 0 END) > 0
+                ), due AS (
+                    SELECT aml.move_id,
+                           SUM(-aml.balance - COALESCE(cr.amount, 0) + COALESCE(dr.amount, 0)) AS due
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                      JOIN bills b ON b.move_id = aml.move_id
+                 LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount FROM account_partial_reconcile apr
+                                     WHERE apr.credit_move_id = aml.id AND apr.max_date <= %(day)s) cr ON TRUE
+                 LEFT JOIN LATERAL (SELECT SUM(apr.amount) AS amount FROM account_partial_reconcile apr
+                                     WHERE apr.debit_move_id = aml.id AND apr.max_date <= %(day)s) dr ON TRUE
+                     WHERE {payable}
+                  GROUP BY aml.move_id
+                )
+                SELECT COALESCE(SUM(d.due * b.ff / GREATEST(b.payable, b.ff + b.fg + b.fh)), 0),
+                       COALESCE(SUM(d.due * b.fg / GREATEST(b.payable, b.ff + b.fg + b.fh)), 0),
+                       COALESCE(SUM(d.due * b.fh / GREATEST(b.payable, b.ff + b.fg + b.fh)), 0)
+                  FROM bills b JOIN due d ON d.move_id = b.move_id""",
+            {"companies": list(companies.ids), "day": day, "journal": OPENING_JOURNAL},
+        )
+        ff, fg, fh = (float(v) for v in self.env.cr.fetchone())
+        suppliers = -sum(_prefix_sum(balances, prefix) for prefix in ("404", "481", "482"))
+        return {"FF": ff, "FG": fg + suppliers, "FH": fh}
 
     # ─── Consolidation ────────────────────────────────────────────────────
 
@@ -375,6 +436,11 @@ class EguitraSyscohada(models.AbstractModel):
                              "companies": amounts, "eliminations": total - sum(amounts), "group": total})
             result[kind] = rows
         return result
+
+
+def _prefix_sum(balances, prefix):
+    """Solde (débit positif) des comptes commençant par prefix."""
+    return sum(b for code, b in balances.items() if code.startswith(prefix))
 
 
 def _credit_side(balances, prefix):

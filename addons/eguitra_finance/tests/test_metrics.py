@@ -147,6 +147,64 @@ class TestMetrics(FinanceDataMixin, TransactionCase):
         self.assertAlmostEqual(v["ZH"], 520_000_000, 2)
         self.assertAlmostEqual(flow["difference"], 0, 2, "Le tableau rejoint la trésorerie du bilan")
 
+    def test_flux_achat_d_immobilisation_non_paye(self):
+        """Camion facturé et non payé : ni décaissement d'investissement, ni ressource d'exploitation ; réglé
+        en partie, seule la part payée du camion passe en investissement. Cession non encaissée : aucun
+        encaissement de cession."""
+        env = self.env
+        start = self.today.replace(month=1, day=1)
+        Account = env["account.account"]
+
+        def account(prefix, kind):
+            found = Account.search([("code", "=like", prefix + "%"), ("company_ids", "in", self.company.ids)],
+                                   order="code", limit=1)
+            return found or Account.create({"code": prefix.ljust(6, "0"), "name": f"Compte {prefix} (test)",
+                                            "account_type": kind, "company_ids": [(6, 0, self.company.ids)]})
+
+        def flows():
+            flow = env["eguitra.syscohada"].cash_flow(self.company, start, self.today)
+            self.assertAlmostEqual(flow["difference"], 0, 0, msg="Le tableau rejoint la trésorerie du bilan")
+            return {line["code"]: line["amount"] for line in flow["lines"]}
+
+        bill = env["account.move"].create({
+            "move_type": "in_invoice", "partner_id": self.supplier.id, "invoice_date": self.today,
+            "invoice_line_ids": [(0, 0, {"name": "Camion citerne", "quantity": 1, "price_unit": 500_000_000,
+                                         "account_id": account("245", "asset_fixed").id,
+                                         "tax_ids": [(6, 0, self.tax_purchase.ids)]})],
+        })
+        bill.with_context(eguitra_approval_granted=True).action_post()
+        v = flows()
+        self.assertAlmostEqual(v["FG"], 0, 0, msg="Rien de décaissé pour le camion")
+        self.assertAlmostEqual(v["ZC"], 0, 0)
+        self.assertAlmostEqual(v["ZB"], 0, 0, msg="La dette du camion n'est pas une ressource d'exploitation")
+
+        payable = bill.line_ids.filtered(lambda line: line.account_id.account_type == "liability_payable")
+        payment = env["account.move"].create({
+            "move_type": "entry", "journal_id": self.bank.id, "date": self.today,
+            "line_ids": [(0, 0, {"name": "Règlement du camion", "account_id": payable.account_id.id,
+                                 "partner_id": self.supplier.id, "debit": 236_000_000}),
+                         (0, 0, {"name": "Règlement du camion", "account_id": self.bank.default_account_id.id,
+                                 "credit": 236_000_000})],
+        })
+        payment.action_post()
+        (payable | payment.line_ids.filtered(lambda line: line.account_id == payable.account_id)).reconcile()
+        v = flows()
+        self.assertAlmostEqual(v["FG"], -200_000_000, 0, msg="40 % du camion (hors TVA) payés")
+        self.assertAlmostEqual(v["ZG"], -236_000_000, 0, msg="Sortie de banque")
+
+        sale = env["account.move"].create({
+            "move_type": "entry", "journal_id": self.bank.id, "date": self.today,
+            "line_ids": [(0, 0, {"name": "Cession d'un véhicule", "account_id": account("485", "asset_current").id,
+                                 "debit": 100_000_000}),
+                         (0, 0, {"name": "Cession d'un véhicule", "account_id": account("822", "income_other").id,
+                                 "credit": 100_000_000})],
+        })
+        sale.action_post()
+        v = flows()
+        self.assertAlmostEqual(v["FI"], 0, 0, msg="Cession non encaissée : aucun encaissement")
+        self.assertAlmostEqual(v["FB"], 0, 0, msg="La créance de cession ne pèse pas sur l'exploitation")
+        self.assertAlmostEqual(v["ZG"], -236_000_000, 0)
+
     def test_rapport_mensuel_de_gestion(self):
         report = self.env["eguitra.finance.metrics"].management_report(self.company, self.today)
         income = {line["code"]: line for line in report["income"]}
