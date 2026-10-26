@@ -3,7 +3,7 @@
 Contrat entre la session design et la session OTHER (noyau). Version du 26/10/2026 : décisions du
 noyau intégrées (§12), puis sections alignées sur le code du noyau (`addons/eguitra_hsseq`, branche
 `hsseq`) ; les écarts sont résumés au §13, les propositions des écrans au §14, et le lot 2, servi par
-le noyau et figé à `hsseq@98da669`, au §15.
+le noyau et figé à `hsseq@98da669`, au §15 ; le lot 3 au §16.
 
 - Source : spécification fonctionnelle HSSEQ de la Direction générale, version 1.0 du 24/10/2026
   (diffusion restreinte, non versée au dépôt). Les renvois « §4.2 », « §10 »… désignent ses sections.
@@ -1024,4 +1024,58 @@ Trajets, pesées et immobilisations :
   valide (la spécification parle du responsable exploitation, à confirmer) ; `journey_row.route` sans
   origine, destination ni durée.
 - Aucune lecture HSSEQ du ticket de pesée en cours : l'écran le lit dans `GET /transport/rotations/{id}`.
+
+## 16. Lot 3 servi par le noyau (26/10, `hsseq@99f7391`)
+
+Lot 3 de la spécification : environnement et qualité, documents et plans d'urgence, intégration des
+données télématiques, revue de direction (critère de recette : « revue de direction tenue entièrement à
+partir du module »). Le noyau n'ajoute que des routes et des blocs : les lots 1 et 2 ne changent pas.
+Maquette : `hsseq-environnement.mjs`, `hsseq-documents.mjs`, `hsseq-revues.mjs`, `hsseq-telematique.mjs`.
+
+### Cockpit
+
+| Clé | Écran |
+|---|---|
+| Indicateurs `spills`, `dust_exceedances`, `complaints` (réactifs, nombre), `complaints_on_time`, `drills_completion` (proactifs, %), `telematics_violations` (réactif, unité `per_100_trips`) | Sceaux, comité (familles et références en fin de liste), cibles proposées dans les réglages. |
+| `tipper_variance` calculé (poids net du ticket, à défaut quantité chargée, contre tonnage livré) | Plus d'indicateur « sans objet » au cockpit. |
+| `environment`, `emergency`, `documents`, `telematics` | Section « Environnement, urgences et terrain » : contaminations et réclamations nulles pour qui ne les lit pas. |
+
+### Écrans
+
+| Écran | Routes | Lecture | Écriture |
+|---|---|---|---|
+| Environnement et qualité `/hsseq/environnement` | `/hsseq/spills`, `/hsseq/wastes` (+ `/collect`, bordereau obligatoire), `/hsseq/dust-measurements`, `/hsseq/contaminations`, `/hsseq/complaints` (+ `/answer`), `GET /hsseq/environment/consumption` et `/deliveries` (`group_by` vehicle, site, month, rotation), `/hsseq/environment/export.xlsx` | ENV_READ (administration, direction, hsseq, chef de parc, auditeur) ; contaminations et réclamations : sans le chef de parc | déversements, déchets, poussières : hsseq et chef de parc ; le reste : hsseq |
+| Documents et urgences `/hsseq/documents` | `/hsseq/procedures` (+ versions, publication, relance, archivage, accusé de lecture), `/hsseq/bulletins` (alertes flash et retours d'expérience anonymisés), `/hsseq/my/documents`, `/hsseq/my/crisis-contacts`, `/hsseq/emergency-plans`, `/hsseq/drills` (+ perform, cancel, reopen), `/hsseq/crisis-contacts`, `/hsseq/documents/export.xlsx` | procédures et alertes : administration, direction, hsseq, auditeur ; plans, exercices, annuaire : avec le chef de parc ; documents à lire : tout compte | hsseq ; accusé de lecture : le lecteur |
+| Revue de direction `/hsseq/revues` | `/hsseq/reviews` (+ refresh, hold, close, reopen, décisions, `/decisions/{id}/action`, `report.pdf`) | administration, direction, hsseq (l'auditeur, à venir) | direction, hsseq |
+| Télématique `/hsseq/telematique` | `POST /hsseq/telematics/import` (multipart, `dry_run`), `GET /hsseq/telematics/imports`, `GET /hsseq/telematics/violations` | violations : avec le chef de parc et l'auditeur ; imports : administration, direction, hsseq | hsseq |
+
+Codes d'erreur du lot 3 : `event_domain_mismatch`, `recovery_required`, `measures_required`,
+`rotation_partner_mismatch`, `document_missing`, `not_anonymized` (avec `fields`), `debrief_required`,
+`participants_required`, `minutes_required`, `decisions_missing`, `import_rejected` (avec `errors[]`).
+Pièces jointes : `spill`, `waste`, `contamination`, `complaint`, `procedure_version`, `emergency_plan`,
+`drill`, `review`.
+
+### Manques relevés en branchant le lot 3 (transmis à la session OTHER le 26/10)
+
+- Télématique : pas de filtre `driver_id` sur `/hsseq/telematics/violations` (l'écran l'envoie) ; aperçu
+  à blanc en valeurs brutes du modèle (proposition : format `violation_row`) ; pas de nombre de voyages
+  dans la liste (le ratio ne vient que du cockpit) ; un import rejeté ne laisse aucune trace ; colonnes
+  « Date » et « Heure » séparées non combinées (heure perdue) ; l'avertissement ne cite pas le nom lu
+  dans le fichier ; doublons non bornés à la société.
+- Revue de direction : intitulé par défaut « octobre 2026 à octobre 2026 » sur un seul mois ; message
+  inversé « La période se termine après son début » ; l'auditeur lit les revues sans bornage ni masquage
+  des noms (à trancher) ; actions de revue sans site, en 404 pour l'auditeur ; `report.pdf` d'une revue
+  préparée sort un compte rendu vide ; responsable d'une décision non contrôlé sur la société.
+- Documents et urgences : référence de procédure ou numéro de version en double probablement en 500 ;
+  pas de `participants_required` pour un exercice ; `/hsseq/procedures` ignore `sort` ; `counts.by_status`
+  suit le filtre de statut ; pas de filtre « en retard » sur les exercices ; version de procédure sans
+  nom lisible au journal ; conducteurs absents de `referentials.owners` (participants d'un exercice) ;
+  l'auditeur lit les procédures en rédaction mais pas les alertes en brouillon ; export avec les mêmes
+  filtres pour toutes les feuilles.
+- Environnement et qualité : l'enlèvement d'un déchet sans bordereau lève `proof_required`, pas
+  `document_missing` ; pas de `GET /hsseq/dust-measurements/{id}` ni d'historique d'une mesure ; lignes
+  de contaminations et de réclamations sans `description` ; `history[].by` et `attachments[].created_by`
+  nommés pour l'auditeur ; pas de liste des produits ni des prestataires ; export avec les mêmes filtres
+  pour toutes les feuilles ; ‰ des citernes qui mêle volume corrigé à 15 °C et volume livré non corrigé ;
+  `detected_on` d'une contamination non borné à aujourd'hui.
 

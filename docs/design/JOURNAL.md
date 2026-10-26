@@ -474,6 +474,26 @@ le contrat complété (§15 de `docs/design/hsseq-contrat.md`).
 Écrans écrits par quatre agents en parallèle sur le socle posé par la session, puis intégrés et
 vérifiés ensemble ; les manques relevés dans l'API sont transmis à la session OTHER.
 
+## NIMOVA · HSSEQ, lot 3 (26 octobre 2026)
+
+Lot 3 du noyau (`hsseq@99f7391`, corrections du lot 2 jusqu'à `26a9d40`), écrans livrés sur le même
+système, maquette alignée (un module par domaine) et contrat complété (§16) :
+- Environnement et qualité (`/hsseq/environnement`) : déversements, déchets jusqu'à leur enlèvement
+  avec bordereau, poussières, manquants et contaminations, réclamations clients, consommation et
+  livraisons en graphiques.
+- Documents et urgences (`/hsseq/documents`) : documents à lire et leur accusé, procédures versionnées,
+  alertes flash et retours d'expérience anonymisés, plans d'urgence et exercices, annuaire de crise
+  (appel en un geste au téléphone).
+- Revue de direction (`/hsseq/revues`) : la revue se tient de bout en bout dans le module (éléments
+  d'entrée servis, séance, décisions changées en actions, compte rendu en PDF) ; l'auditeur la lit.
+- Télématique (`/hsseq/telematique`) : violations de conduite, imports en trois temps avec aperçu à blanc.
+- Cockpit : six indicateurs du lot 3, section « Environnement, urgences et terrain », écarts de tonnage
+  des bennes calculés ; nouvelle icône « Feuille » au menu.
+- Corrections du noyau branchées sur le lot 2 : clients des donneurs d'ordre, compteurs et case de
+  matrice des risques, actions filtrées par fiche d'origine, constats avec historique, habilitations
+  exigées par profil de véhicule et EPI, périmètre des modèles de rapport, route complète du plan de
+  trajet, levée des non-conformités, auditeur exclusif.
+
 ## Reste à faire
 
 - Arbitrages du gérant (audit du 22 octobre) : jargon anglais du cabinet (Readiness, Bankability,
