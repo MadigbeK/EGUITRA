@@ -146,6 +146,10 @@ def _visible_messages(dossier):
     return [("dossier_id", "=", dossier.id), ("internal", "=", False)]
 
 
+def _meeting_link(meeting):
+    return f"/portail/rendez-vous?dossier={meeting.dossier_id.id}"
+
+
 class EguitraPortailPorteur(http.Controller):
     # ─── Espace et tableau de bord ───────────────────────────────────────
 
@@ -223,10 +227,10 @@ class EguitraPortailPorteur(http.Controller):
         order = {"high": 0, "normal": 1, "low": 2}
         steps.sort(key=lambda s: order[s["urgency"]])
 
-        upcoming = [{"kind": "meeting", "title": m.subject, "date": m.start, "link": "/portail/rendez-vous"}
+        upcoming = [{"kind": "meeting", "title": m.subject, "date": m.start, "link": _meeting_link(m)}
                     for m in dossier.meeting_ids.filtered(lambda m: m.state == "confirmed" and m.start and m.start >= now)]
         events, registrations = _events(dossier, now)
-        upcoming += [{"kind": "event", "title": e.name, "date": e.start, "link": "/portail/evenements",
+        upcoming += [{"kind": "event", "title": e.name, "date": e.start, "link": f"/portail/evenements#evenement-{e.id}",
                       "registered": bool(registrations.get(e.id) and registrations[e.id].state == "registered")}
                      for e in events if e.state == "published" and e.start >= now]
         upcoming += [{"kind": "action", "title": t.name, "date": vues.at_noon(t.due_date),
@@ -586,7 +590,7 @@ class EguitraPortailPorteur(http.Controller):
         items = []
         for m in dossiers.meeting_ids.filtered(lambda m: m.state in ("confirmed", "done") and m.start and start <= m.start <= end):
             items.append({"key": f"meeting-{m.id}", "kind": "meeting", "title": m.subject, "start": m.start, "end": m.end(),
-                          "all_day": False, "link": "/portail/rendez-vous", "state": m.state,
+                          "all_day": False, "link": _meeting_link(m), "state": m.state,
                           "detail": dict(MEETING_MODES)[m.mode], "dossier": m.dossier_id.reference})
         events, registrations = _events(dossiers, start)
         for e in events.filtered(lambda e: e.state == "published" and e.start <= end):

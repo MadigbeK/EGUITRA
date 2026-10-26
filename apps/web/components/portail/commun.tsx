@@ -53,6 +53,19 @@ export function iconeRubrique(nom: string | null | undefined): Icon {
   return ICONES_RUBRIQUE[nom] ?? (ICONES as Record<string, Icon>)[nom] ?? BookOpen;
 }
 
+/**
+ * Lien d'une notification : une notification qui concerne un dossier ouvre la page sur ce dossier
+ * (?dossier=), même si son lien n'en dit rien ; sinon, un porteur à plusieurs dossiers arriverait sur
+ * celui qu'il avait choisi en dernier.
+ */
+export function lienNotification(n: { link: string | null; dossier: { id: number } | null }): string | null {
+  if (!n.link) return null;
+  if (!n.dossier || !n.link.startsWith("/portail") || /[?&]dossier=/.test(n.link)) return n.link;
+  const [avant, ancre] = n.link.split("#", 2);
+  const lien = `${avant}${avant!.includes("?") ? "&" : "?"}dossier=${n.dossier.id}`;
+  return ancre !== undefined ? `${lien}#${ancre}` : lien;
+}
+
 /* ─── Dates ────────────────────────────────────────────────────────────── */
 
 const JOUR = 86_400_000;

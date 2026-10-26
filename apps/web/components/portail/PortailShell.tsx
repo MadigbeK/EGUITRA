@@ -13,7 +13,7 @@ import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
 import type { Me } from "@/lib/types";
-import { KIND_ICON } from "./commun";
+import { KIND_ICON, lienNotification } from "./commun";
 
 /* ─── Contexte du portail : l'espace du porteur et le dossier choisi ─────── */
 
@@ -255,7 +255,12 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
                 <li key={n.id}>
                   <button
                     type="button"
-                    onClick={() => { if (!n.read) void lire([n.id]); setOpen(false); if (n.link) router.push(n.link); }}
+                    onClick={() => {
+                      if (!n.read) void lire([n.id]);
+                      setOpen(false);
+                      const lien = lienNotification(n);
+                      if (lien) router.push(lien);
+                    }}
                     className={cx("flex w-full gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-panel-2", !n.read && "bg-accent-doux/45")}
                   >
                     <span className="mt-0.5 grid h-8 w-8 flex-none place-items-center rounded-full bg-panel-2 text-accent"><I className="h-4 w-4" /></span>

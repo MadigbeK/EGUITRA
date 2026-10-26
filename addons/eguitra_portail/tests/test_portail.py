@@ -216,7 +216,8 @@ class TestPortail(ApiCase):
         self.assertEqual(confirme["state"], "confirmed")
         self.assertTrue(self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rendez-vous confirmé")))
         _s, agenda = self.call("GET", "/portail/agenda", token=self.porteur)
-        self.assertIn(f"meeting-{demande['id']}", [i["key"] for i in agenda])
+        item = next(i for i in agenda if i["key"] == f"meeting-{demande['id']}")
+        self.assertEqual(item["link"], f"/portail/rendez-vous?dossier={self.dossier_a.id}", "Le lien ouvre le bon dossier")
         porteur_b = self.open_session("porteur.b", app="portail")["access_token"]
         status, _b = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {"reason": "Essai"}, token=porteur_b)
         self.assertEqual(status, 404, "Rendez-vous du dossier d'un autre porteur")
@@ -235,6 +236,18 @@ class TestPortail(ApiCase):
         self.assertEqual(status, 200, annule)
         self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "porteur", None),
                          "Le message de la confirmation ne passe pas pour le motif de l'annulation")
+
+    def test_liens_vers_le_bon_dossier(self):
+        demain = (fields.Datetime.now() + timedelta(hours=24)).replace(microsecond=0)
+        meeting = self.env["portail.meeting"].sudo().create({
+            "dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": "Point mensuel", "slot_1": demain})
+        meeting.confirm(demain)
+        _s, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        lien = f"/portail/rendez-vous?dossier={self.dossier_a.id}"
+        self.assertIn(lien, [u["link"] for u in tableau["upcoming"] if u["kind"] == "meeting"])
+        self.env["portail.notification"]._cron_reminders()
+        rappel = self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rappel : rendez-vous"))
+        self.assertEqual(rappel.link, lien, "Le rappel ouvre les rendez-vous du dossier concerné")
 
     def test_notifications_du_dossier(self):
         self.env["axispro.action"].create({"dossier_id": self.dossier_a.id, "name": "Fournir le bilan d'ouverture",

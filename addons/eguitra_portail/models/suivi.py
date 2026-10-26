@@ -65,7 +65,7 @@ class PortailNotification(models.Model):
                 [("state", "=", "confirmed"), ("start", ">=", tomorrow), ("start", "<", after)]):
             when = fields.Datetime.context_timestamp(meeting, meeting.start)
             self.notify(meeting.dossier_id.portal_user_ids, "meeting", f"Rappel : rendez-vous demain à {when:%H h %M}",
-                        meeting.subject, "/portail/rendez-vous", dossier=meeting.dossier_id)
+                        meeting.subject, f"/portail/rendez-vous?dossier={meeting.dossier_id.id}", dossier=meeting.dossier_id)
         for event in self.env["portail.event"].sudo().search(
                 [("state", "=", "published"), ("start", ">=", tomorrow), ("start", "<", after)]):
             when = fields.Datetime.context_timestamp(event, event.start)

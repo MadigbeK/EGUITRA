@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Bell, CheckCheck, ChevronRight } from "@/components/icons";
 import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx } from "@/components/ui";
-import { EnTete, KIND_ICON, heure } from "@/components/portail/commun";
+import { EnTete, KIND_ICON, heure, lienNotification } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { cleDate, depuisCle, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { apiSend, useApi } from "@/lib/api-client";
@@ -67,7 +67,8 @@ export default function NotificationsPage() {
 
   function ouvrir(n: NotificationRow) {
     if (!n.read) void marquer([n.id]);
-    if (n.link) router.push(n.link);
+    const lien = lienNotification(n);
+    if (lien) router.push(lien);
   }
 
   if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
