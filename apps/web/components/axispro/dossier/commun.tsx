@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { Notice, cx, demanderConfirmation } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { useMoi, type MoiAxispro } from "@/components/axispro/moi";
-import { ApiError, DelaiDepasse } from "@/lib/api-client";
+import { messageErreur as messageSocle } from "@/lib/api-client";
 import { fmtFixe, fmtShort } from "@/lib/format";
 import type { DossierDetail } from "@/lib/axispro-types";
 
@@ -83,11 +83,9 @@ export function PuceCompartiment({ code, nom, className }: { code: string; nom?:
   );
 }
 
-/** Message d'une erreur pour l'utilisateur : celui du noyau, sinon une phrase en français (réseau coupé). */
+/** Message d'une erreur pour l'utilisateur : celui du noyau, du délai dépassé ou de la coupure du réseau (lib/erreurs.ts). */
 export function messageErreur(e: unknown, defaut = "Action impossible."): string {
-  if (e instanceof ApiError) return e.message;
-  if (e instanceof DelaiDepasse) return e.message;
-  return e instanceof TypeError ? "Réseau indisponible : vérifiez la connexion, puis réessayez." : defaut;
+  return messageSocle(e, defaut);
 }
 
 /**
