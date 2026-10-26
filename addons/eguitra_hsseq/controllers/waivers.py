@@ -94,9 +94,7 @@ class EguitraHsseqWaivers(http.Controller):
     def waivers(self, **kw):
         domain = [("company_id", "in", companies(kw).ids)]
         if scope_level() == "site":
-            scoped = yard_domain()
-            if scoped is not None:
-                domain += ["|", ("requested_by", "=", request.env.uid)] + scoped
+            domain += ["|", ("requested_by", "=", request.env.uid)] + yard_domain()
         if kw.get("status"):
             domain.append(("status", "in", kw["status"].split(",")))
         for key in ("rotation_id", "site_id"):

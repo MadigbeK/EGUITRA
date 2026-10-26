@@ -93,7 +93,10 @@ class EguitraHsseqLock(http.Controller):
                 raise forbidden("Site non autorisé.")
             sites = site
         elif scope_level() == "site":
-            sites = my_sites() or None
+            sites = my_sites()
+            if not sites:
+                # Portée fermée par défaut : sans site rattaché, aucun départ.
+                return {"date": day, "total": 0, "allowed": 0, "blocked": 0, "items": []}
         return departures(companies(kw), day, sites, kw.get("vehicle_kind"),
                           str(kw.get("blocked", "")) in ("1", "true"))
 
@@ -147,9 +150,7 @@ class EguitraHsseqLock(http.Controller):
             driver = my_driver()
             domain.append(("driver_id", "=", driver.id if driver else 0))
         elif scope == "site":
-            sites = my_sites()
-            if sites:
-                domain.append(("vehicle_id.site_id", "in", sites.ids))
+            domain.append(("vehicle_id.site_id", "in", my_sites().ids))
         detail = is_hsseq()
         rows = []
         for rot in request.env["eguitra.transport.rotation"].sudo().search(domain, order="date_loading, id"):

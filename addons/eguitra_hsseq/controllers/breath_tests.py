@@ -29,7 +29,6 @@ from .common import (
     int_or_none,
     is_hsseq,
     my_driver,
-    my_sites,
     number,
     page,
     page_args,
@@ -39,6 +38,7 @@ from .common import (
     site_allowed,
     text,
     user_ref,
+    yard_domain,
 )
 
 READ = ("admin", "direction", "hsseq", "exploitation", "conducteur")
@@ -130,9 +130,7 @@ class EguitraHsseqBreathTests(http.Controller):
             driver = my_driver()
             domain.append(("driver_id", "=", driver.id if driver else 0))
         elif scope == "site":
-            sites = my_sites()
-            if sites:
-                domain += ["|", ("site_id", "in", sites.ids), ("site_id", "=", False)]
+            domain += yard_domain()
         day = date_value(kw, "date")
         if day:
             domain.append(("test_date", "=", day))

@@ -69,8 +69,7 @@ def read_domain(kw):
         return domain
     own = [("owner_id", "=", request.env.uid)]
     if is_yard():
-        scoped = yard_domain()
-        return domain if scoped is None else domain + ["|"] + own + scoped
+        return domain + ["|"] + own + yard_domain()
     return domain + own
 
 

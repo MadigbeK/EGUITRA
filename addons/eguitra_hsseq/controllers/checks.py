@@ -127,7 +127,7 @@ def read_domain(kw):
     if reads_all():
         return domain
     if is_yard():
-        return domain + (yard_domain() or [])
+        return domain + yard_domain()
     driver = my_driver()
     own = [("author_id", "=", request.env.uid)]
     return domain + (["|", ("driver_id", "=", driver.id)] + own if driver else own)
@@ -384,7 +384,7 @@ class EguitraHsseqChecks(http.Controller):
         if kw.get("site_id"):
             domain.append(("vehicle_id.site_id", "=", int_or_none(kw, "site_id")))
         elif is_yard():
-            domain += yard_domain("vehicle_id.site_id") or []
+            domain += yard_domain("vehicle_id.site_id")
         rotations = Rotation.search(domain)
         checked = request.env["eguitra.hsseq.check"].sudo().search(
             [("rotation_id", "in", rotations.ids), ("kind", "=", "pre_departure")]).rotation_id
@@ -486,7 +486,7 @@ class EguitraHsseqChecks(http.Controller):
     def nonconformities(self, **kw):
         domain = [("company_id", "in", companies(kw).ids)]
         if is_yard():
-            domain += yard_domain() or []
+            domain += yard_domain()
         if kw.get("status"):
             domain.append(("status", "in", kw["status"].split(",")))
         if str(kw.get("blocking", "")) in ("1", "true"):

@@ -10,10 +10,10 @@ Profil auditeur : lecture seule (toute route d'écriture refusée), bornée à s
 d'accès (au-delà, ou sans date, toute route est refusée en 403) ; jamais les alcootests, et les noms des
 personnes en cause retirés (personal_data_hidden).
 
-Portée par site des fonctions du lot 2 et du cockpit, « fermée par défaut » (site_scope) : un compte sans
-profil de lecture complète ne lit que les objets de ses sites (aucun s'il n'a pas de site) ; un objet sans
-site n'est lu que par les profils de lecture complète. Les routes du lot 1 gardent, pour le chef de parc,
-la règle du contrat (sans site rattaché : tous les sites ; objet sans site : visible).
+Portée par site « fermée par défaut », sur toutes les routes (site_allowed, yard_domain, site_scope) : un
+compte sans profil de lecture complète (chef de parc, auditeur) ne lit que les objets de ses sites, et
+aucun s'il n'a pas de site rattaché ; un objet sans site n'est lu que par les profils de lecture complète
+(et par son déclarant, son auteur ou son responsable).
 """
 
 import functools
@@ -159,30 +159,17 @@ def companies(kw=None):
     return allowed.browse(wanted)
 
 
-def auditor_only():
-    """Auditeur sans profil d'exploitation ni de lecture complète : portée fermée par défaut partout."""
-    return is_auditor() and "exploitation" not in profiles() and not reads_all()
-
-
 def site_allowed(site):
-    """Routes du lot 1 : un chef de parc rattaché à des sites ne lit que leurs objets (un objet sans site
-    reste visible ; sans site rattaché, tous) ; l'auditeur, ses seuls sites."""
+    """Un compte borné par site (chef de parc, auditeur) ne lit que les objets de ses sites, fermé par
+    défaut : aucun sans site rattaché, ni un objet sans site."""
     if not is_yard():
         return True
-    sites = my_sites()
-    if auditor_only():
-        return bool(site) and site in sites
-    return not sites or not site or site in sites
+    return bool(site) and site in my_sites()
 
 
 def yard_domain(field="site_id"):
-    """Domaine de site d'un compte borné par site (is_yard), selon site_allowed ; None : aucun bornage."""
-    sites = my_sites()
-    if auditor_only():
-        return [(field, "in", sites.ids)]
-    if not sites:
-        return None
-    return ["|", (field, "in", sites.ids), (field, "=", False)]
+    """Domaine de site d'un compte borné par site (is_yard), selon site_allowed (liste vide : rien)."""
+    return [(field, "in", my_sites().ids)]
 
 
 def site_scope(full=READ_ALL):

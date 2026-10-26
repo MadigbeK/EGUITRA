@@ -159,6 +159,43 @@ class TestRights(HsseqCase):
         status, body = self.call("POST", "/hsseq/lock/evaluate", {"rotation_id": other.id}, token=token, headers=headers)
         self.assertEqual(status, 404)
 
+    def test_portee_fermee_par_defaut_sur_les_routes_du_lot_1(self):
+        """Chef de parc sans site rattaché : rien ; objet sans site : profils de lecture complète seulement
+        (et son déclarant, son auteur ou son responsable)."""
+        rot, check, test, event, action, waiver = self._fixtures()
+        nobody = self._create_user("moussa.parc", "exploitation")
+        for path, key in (("/hsseq/events", "items"), ("/hsseq/actions", "items"), ("/hsseq/checks", "items"),
+                          ("/hsseq/checks/nonconformities", "items"), ("/hsseq/breath-tests", "items"),
+                          ("/hsseq/waivers", "items"), ("/hsseq/lock/departures", "items"),
+                          ("/hsseq/me/rotations", "items")):
+            status, body = self.api("moussa.parc", "GET", path)
+            self.assertEqual((status, body[key]), (200, []), f"Sans site rattaché : {path} vide")
+        for path in (f"/hsseq/events/{event.id}", f"/hsseq/actions/{action.id}", f"/hsseq/checks/{check.id}",
+                     f"/hsseq/breath-tests/{test.id}", f"/hsseq/waivers/{waiver.id}"):
+            status, _b = self.api("moussa.parc", "GET", path)
+            self.assertEqual(status, 404, f"Sans site rattaché : {path} introuvable")
+        status, _b = self.api("moussa.parc", "POST", "/hsseq/lock/evaluate", {"rotation_id": rot.id})
+        self.assertEqual(status, 404)
+        status, _b = self.api("moussa.parc", "POST", "/hsseq/checks", {
+            "template_id": self.tanker_template.id, "rotation_id": rot.id, "answers": self.answers(self.tanker_template)})
+        self.assertEqual(status, 403, "Contrôle d'un ensemble hors de ses sites")
+        # Objets sans site : invisibles du chef de parc d'un site, sauf ce qu'il a déclaré.
+        loose = self.env["eguitra.transport.vehicle"].create({"name": "ER-99", "tractor_plate": "RC-9999-Z"})
+        loose_check = self.check(vehicle=loose)
+        foreign = self.event(vehicle_id=False, reported_by=self.hsseq.id, title="Glissade au siège")
+        own = self.event(vehicle_id=False, title="Chute de plain-pied au parc")
+        status, events = self.api("ibrahima", "GET", "/hsseq/events")
+        ids = [e["id"] for e in events["items"]]
+        self.assertNotIn(foreign.id, ids, "Événement sans site : profils de lecture complète")
+        self.assertIn(own.id, ids, "Sa propre déclaration reste lisible")
+        status, checks = self.api("ibrahima", "GET", "/hsseq/checks")
+        self.assertNotIn(loose_check.id, [c["id"] for c in checks["items"]], "Ensemble sans site")
+        status, _b = self.api("ibrahima", "GET", f"/hsseq/checks/{loose_check.id}")
+        self.assertEqual(status, 404)
+        status, events = self.api("dg.hsseq", "GET", "/hsseq/events")
+        self.assertIn(foreign.id, [e["id"] for e in events["items"]], "Lecture complète : tout")
+        self.assertTrue(nobody)
+
     def test_pieces_jointes_citees_par_leur_deposant(self):
         status, mine = self.upload("ibrahima")
         self.assertEqual((status, mine["model"]), (200, None), "Déposée avant sa fiche")
