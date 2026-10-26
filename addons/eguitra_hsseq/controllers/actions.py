@@ -37,6 +37,9 @@ from .common import (
 )
 
 SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "created_at": "create_date"}
+# Origine d'une action -> (fiche de l'API, champ de l'action) ; une revue de direction n'a pas de fiche.
+ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id")}
+CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",)}
 TRANSITIONS = ("start", "close", "verify", "approve", "cancel", "reopen")
 
 
@@ -103,9 +106,12 @@ def action_line(action):
         origin_label = f"{action.event_id.reference} {action.event_id.title}"
     elif action.check_id:
         origin_label = action.check_id.reference
+    elif action.risk_id:
+        origin_label = f"{action.risk_id.reference} {action.risk_id.feared_event[:120]}"
     return {
         "id": action.id, "reference": action.reference, "description": action.description, "origin": action.origin,
-        "origin_id": action.origin_id or action.event_id.id or action.check_id.id or None, "origin_label": origin_label,
+        "origin_id": action.origin_id or action.event_id.id or action.check_id.id or action.risk_id.id or None,
+        "origin_label": origin_label,
         "event": {"id": action.event_id.id, "reference": action.event_id.reference} if action.event_id else None,
         "control_level": action.control_level or None, "owner": user_ref(action.owner_id), "due_date": action.due_date,
         "status": action.status, "overdue": action._days_overdue(day) > 0, "days_overdue": action._days_overdue(day),
@@ -245,14 +251,16 @@ class EguitraHsseqActions(http.Controller):
         values["origin"] = origin
         company = request.env.company
         origin_id = int_or_none(data, "origin_id")
-        if origin in ("event", "check"):
+        if origin in ORIGIN_SOURCES:
             if not origin_id:
                 raise ApiError(400, "missing_fields", "Fiche d'origine manquante.", fields=["origin_id"])
-            source = get(OBJECT_MODELS[origin], origin_id, "Fiche d'origine")
-            if origin == "event" and source.status == "closed":
-                raise ApiError(422, "invalid_transition", "Événement clôturé : rouvrez-le avant d'y ajouter une action.")
+            key, field = ORIGIN_SOURCES[origin]
+            source = get(OBJECT_MODELS[key], origin_id, "Fiche d'origine")
+            if origin in CLOSED_SOURCES and source.status in CLOSED_SOURCES[origin]:
+                raise ApiError(422, "invalid_transition", "Fiche d'origine close ou archivée : rouvrez-la avant d'y "
+                                                          "ajouter une action.")
             company = source.company_id
-            values["event_id" if origin == "event" else "check_id"] = source.id
+            values[field] = source.id
         values.update(origin_id=origin_id or 0, company_id=company.id)
         if company not in request.env.companies:
             raise forbidden("Société non autorisée.")

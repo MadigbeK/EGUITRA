@@ -13,7 +13,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
 from ..models.common import ATTACHMENT_OBJECTS
-from . import actions, checks, events, waivers
+from . import actions, checks, events, risks, waivers
 from .common import (
     client_uuid,
     existing_by_uuid,
@@ -33,7 +33,8 @@ FORMATS = {"image/jpeg", "image/png", "application/pdf"}
 # Dépôt sans fiche (avant le formulaire) : comptes des profils de l'application.
 UPLOADERS = {"admin", "direction", "hsseq", "exploitation", "conducteur"}
 MODELS = {"event": "eguitra.hsseq.event", "action": "eguitra.hsseq.action", "check": "eguitra.hsseq.check",
-          "nonconformity": "eguitra.hsseq.nonconformity", "waiver": "eguitra.hsseq.waiver"}
+          "nonconformity": "eguitra.hsseq.nonconformity", "waiver": "eguitra.hsseq.waiver",
+          "risk": "eguitra.hsseq.risk"}
 
 
 def closed(object_key, record):
@@ -41,12 +42,15 @@ def closed(object_key, record):
             "action": record.status in ("closed", "cancelled") if object_key == "action" else False,
             "nonconformity": record.status != "open" if object_key == "nonconformity" else False,
             "waiver": record.status not in ("pending_hsseq", "active") if object_key == "waiver" else False,
+            "risk": record.status == "archived" if object_key == "risk" else False,
             }.get(object_key, False)
 
 
 def can_read(object_key, record):
-    return {"event": events.can_read, "action": actions.can_read, "check": checks.can_read,
-            "nonconformity": lambda nc: checks.can_read(nc.check_id), "waiver": waivers.can_read}[object_key](record)
+    readers = {"event": events.can_read, "action": actions.can_read, "check": checks.can_read,
+               "nonconformity": lambda nc: checks.can_read(nc.check_id), "waiver": waivers.can_read,
+               "risk": risks.can_read}
+    return object_key in readers and readers[object_key](record)
 
 
 def can_attach(object_key, record):
@@ -67,6 +71,8 @@ def can_attach(object_key, record):
         return record.check_id.author_id == user or (yard and site_allowed(record.site_id))
     if object_key == "waiver":
         return record.requested_by == user
+    if object_key == "risk":
+        return record.owner_id == user
     return False
 
 

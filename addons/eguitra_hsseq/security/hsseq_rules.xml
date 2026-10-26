@@ -83,6 +83,16 @@
         <field name="model_id" ref="model_eguitra_hsseq_lock_log"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_risk_company" model="ir.rule">
+        <field name="name">Risques HSSEQ : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_risk"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_risk_measure_company" model="ir.rule">
+        <field name="name">Mesures des risques : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_risk_measure"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_indicator_snapshot_company" model="ir.rule">
         <field name="name">Indicateurs figés : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>

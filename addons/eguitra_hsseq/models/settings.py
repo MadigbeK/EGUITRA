@@ -78,6 +78,10 @@ class EguitraHsseqSettings(models.Model):
         help="Destinataire des notifications de criticité élevée, de dérogation et d'escalade. Vide : les comptes "
              "du profil Direction générale de la société.")
 
+    # ─── Registre des risques (§3) ────────────────────────────────────────
+    risk_review_months = fields.Integer("Revue d'un risque tous les (mois)", default=12,
+                                        help="Prochaine revue proposée à la création et après chaque revue.")
+
     # ─── Cockpit (§10) ────────────────────────────────────────────────────
     targets = fields.Json("Cibles des indicateurs", help="Code de l'indicateur -> cible ; à défaut, la cible proposée.")
 

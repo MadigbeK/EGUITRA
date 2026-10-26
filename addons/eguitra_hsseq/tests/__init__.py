@@ -4,3 +4,4 @@ from . import test_rights
 from . import test_cockpit
 from . import test_complements
 from . import test_auditor
+from . import test_risks

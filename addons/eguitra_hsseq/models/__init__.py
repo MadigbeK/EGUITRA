@@ -11,3 +11,4 @@ from . import breath_test
 from . import waiver
 from . import lock
 from . import cockpit
+from . import risk

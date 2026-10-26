@@ -28,6 +28,16 @@
         <!-- Chaque nuit à 02 h 40 (heure de Conakry, UTC). -->
         <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 02:40:00')"/>
     </record>
+    <record id="cron_risk_reviews" model="ir.cron">
+        <field name="name">HSSEQ : relance des revues de risques échues (chaque semaine tant qu'elles restent à faire)</field>
+        <field name="model_id" ref="model_eguitra_hsseq_risk"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_review_reminders()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque matin à 07 h 30 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:30:00')"/>
+    </record>
     <record id="cron_purge_orphan_attachments" model="ir.cron">
         <field name="name">HSSEQ : purge des pièces déposées et jamais rattachées à une fiche (7 jours)</field>
         <field name="model_id" ref="model_eguitra_hsseq_attachment"/>
