@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Input, Kpi, Loading, PageHeader, Tabs, tonEtat } from "@/components/ui";
 import { MoveDetailModal } from "./MoveDetailModal";
-import { ECRITURE_FINANCE, SAISIE_PIECES } from "./communPieces";
+import { ECRITURE_FINANCE, PagesListe, SAISIE_PIECES, aujourdhui } from "./communPieces";
 import { MoveForm } from "./MoveForm";
 import { useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type MoveSummary, type Paged } from "@/lib/finance-types";
@@ -28,9 +28,12 @@ const VIEWS_ACHATS: Array<{ key: View; label: string }> = [
   { key: "posted", label: "Comptabilisées" },
 ];
 
-function query(kind: "sales" | "purchases", view: View, search: string) {
+/** Pièces par page ; le noyau découpe la liste (offset) et en donne le total. */
+const PAGE = 100;
+
+function query(kind: "sales" | "purchases", view: View, search: string, offset = 0, limit = PAGE) {
   const types = kind === "sales" ? "out_invoice,out_refund" : "in_invoice,in_refund";
-  const params = new URLSearchParams({ type: types, limit: "200" });
+  const params = new URLSearchParams({ type: types, limit: String(limit), offset: String(offset) });
   if (view === "draft") params.set("state", "draft");
   if (view === "posted") params.set("state", "posted");
   if (view === "open") {
@@ -44,8 +47,6 @@ function query(kind: "sales" | "purchases", view: View, search: string) {
   return `/finance/moves?${params.toString()}`;
 }
 
-/** Date du jour au format du noyau (« 2026-10-15 ») : Conakry vit à l'heure UTC. */
-const aujourdhui = () => new Date().toISOString().slice(0, 10);
 
 /**
  * Jours de retard d'une pièce, calculés ligne par ligne avec la règle du filtre « Échues » du noyau :
@@ -139,15 +140,17 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
   const saisie = useAutorise(sale ? ECRITURE_FINANCE : SAISIE_PIECES);
   const [view, setView] = useState<View>("all");
   const [search, setSearch] = useState("");
+  // Rang de la première pièce affichée ; revient à 0 quand le filtre ou la recherche change.
+  const [offset, setOffset] = useState(0);
   const [creating, setCreating] = useState<null | "out_invoice" | "out_refund" | "in_invoice" | "in_refund">(null);
   const [selected, setSelected] = useState<number | null>(null);
-  const { data, error, isLoading, mutate } = useApi<Paged<MoveSummary>>(query(kind, view, search));
+  const { data, error, isLoading, mutate } = useApi<Paged<MoveSummary>>(query(kind, view, search, offset));
   // Encours et retards : finance et direction ; brouillons et pièces comptabilisées : profil Achats.
   const finance = sale || (pret && !achats);
-  const { data: openData } = useApi<Paged<MoveSummary>>(finance ? query(kind, "open", "") : null);
-  const { data: overdueData } = useApi<Paged<MoveSummary>>(finance ? query(kind, "overdue", "") : null);
-  const { data: draftData } = useApi<Paged<MoveSummary>>(achats ? query(kind, "draft", "") : null);
-  const { data: postedData } = useApi<Paged<MoveSummary>>(achats ? query(kind, "posted", "") : null);
+  const { data: openData } = useApi<Paged<MoveSummary>>(finance ? query(kind, "open", "", 0, 1) : null);
+  const { data: overdueData } = useApi<Paged<MoveSummary>>(finance ? query(kind, "overdue", "", 0, 1) : null);
+  const { data: draftData } = useApi<Paged<MoveSummary>>(achats ? query(kind, "draft", "", 0, 1) : null);
+  const { data: postedData } = useApi<Paged<MoveSummary>>(achats ? query(kind, "posted", "", 0, 1) : null);
   const jour = aujourdhui();
 
   return (
@@ -189,16 +192,17 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
       )}
       <Card padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
-          <Tabs tabs={achats ? VIEWS_ACHATS : VIEWS} value={view} onChange={setView} />
-          <Input aria-label="Rechercher une pièce" className="max-w-xs" placeholder="Numéro, référence ou tiers…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Tabs tabs={achats ? VIEWS_ACHATS : VIEWS} value={view} onChange={(v) => { setView(v); setOffset(0); }} />
+          <Input aria-label="Rechercher une pièce" className="max-w-xs" placeholder="Numéro, référence ou tiers…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
         </div>
         {error && (
           <div className="p-4">
             <ErrorBox error={error} onRetry={() => mutate()} />
           </div>
         )}
-        {isLoading && !data ? (
-          <Loading />
+        {/* En échec sans données, l'erreur seule : « Aucune facture » ferait croire la liste vide. */}
+        {!data ? (
+          !error && isLoading && <Loading />
         ) : (
           <DataTable
             rows={data?.items ?? []}
@@ -220,6 +224,7 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
             ]}
           />
         )}
+        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Pièces" onPage={setOffset} />}
       </Card>
       {creating && (
         <MoveForm

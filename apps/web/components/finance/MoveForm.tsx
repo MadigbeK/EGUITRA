@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
-import { CHAMP_INVALIDE, enSaisie, montantDevise } from "./communPieces";
+import { CHAMP_INVALIDE, aujourdhui, enSaisie, montantDevise, taux } from "./communPieces";
 import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
@@ -25,7 +25,6 @@ interface LineDraft {
   original?: Record<string, number>;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
 
 /** Champs d'une ligne dont la saisie n'est pas un nombre lisible (« 2.500.000 », « 2 x 3 »). */
@@ -93,7 +92,7 @@ export function MoveForm({
   const partnerDefaults = withholdings.filter((t) => t.partner_default);
   const lineWithholdings = (l: LineDraft) =>
     l.withholding === "none" ? [] : l.withholding ? withholdings.filter((t) => String(t.id) === l.withholding) : partnerDefaults;
-  const [invoiceDate, setInvoiceDate] = useState(move?.invoice_date ?? today());
+  const [invoiceDate, setInvoiceDate] = useState(move?.invoice_date ?? aujourdhui());
   const [dueDate, setDueDate] = useState(move?.invoice_date_due ?? "");
   const [reference, setReference] = useState(move?.ref ?? "");
   const [narration, setNarration] = useState(move?.narration ?? "");
@@ -263,7 +262,7 @@ export function MoveForm({
   const title = move
     ? `Modifier ${move.move_type.endsWith("_refund") ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
     : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
-  const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))];
+  const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || taux(t.amount) }))];
   const columns = (sale ? 6 : 7) + (withholdings.length > 0 ? 1 : 0);
 
   return (
@@ -317,7 +316,7 @@ export function MoveForm({
           </Field>
           {moveType === "in_invoice" && (commitments?.length ?? 0) > 0 && (
             <Field label="Engagement de dépense" hint="Dans la limite du reste à engager, la pièce ne repasse pas par le circuit d'approbation.">
-              <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtDec(c.remaining)})` }))} />
+              <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtGNF(c.remaining)})` }))} />
             </Field>
           )}
           {/* Devise : fixée à la création du brouillon. */}
@@ -413,9 +412,9 @@ export function MoveForm({
                           onChange={(e) => update(i, { withholding: e.target.value })}
                           aria-label={`Retenue, ligne ${i + 1}`}
                           options={[
-                            { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => `${Math.abs(t.amount)} %`).join(", ")})` : "Aucune (tiers)" },
+                            { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => taux(Math.abs(t.amount))).join(", ")})` : "Aucune (tiers)" },
                             { value: "none", label: "Aucune" },
-                            ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${Math.abs(t.amount)} %)` })),
+                            ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${taux(Math.abs(t.amount))})` })),
                           ]}
                         />
                       </td>

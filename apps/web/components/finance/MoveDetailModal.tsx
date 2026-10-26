@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Undo2, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
-import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, montantDevise, nombreDevise, taux } from "./communPieces";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, aujourdhui, montantDevise, nombreDevise, taux, useTelechargement } from "./communPieces";
 import { MoveForm } from "./MoveForm";
-import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
+import { ApiError, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
 
@@ -66,13 +66,15 @@ export function MoveDetailModal({
   const { data: journals } = useApi<Journal[]>(paying ? "/finance/journals?type=bank,cash" : null);
   const [journalId, setJournalId] = useState("");
   const [amount, setAmount] = useState("");
-  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(aujourdhui);
   const [modeId, setModeId] = useState("");
   const [disputing, setDisputing] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const { data: modes } = useApi<Array<{ id: number; name: string }>>(paying ? "/finance/payment-modes" : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
+  // Pièces jointes et PDF : en chargement pendant le téléchargement, l'échec affiché.
+  const fichiers = useTelechargement();
 
   /**
    * Action sur la pièce, puis relecture de la fiche. Rend vrai si le noyau l'a acceptée : un panneau
@@ -213,10 +215,11 @@ export function MoveDetailModal({
   }
   return (
     <Modal open={moveId !== null} onClose={onClose} title={title} wide>
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!move && !error && <Loading />}
       {move && (
         <div className="space-y-5">
+          {fichiers.erreur && <Notice tone="danger">{fichiers.erreur}</Notice>}
           {message && (
             <Notice tone={message.tone}>
               {message.text}
@@ -296,7 +299,7 @@ export function MoveDetailModal({
               <ul className="space-y-1">
                 {move.attachments.map((a) => (
                   <li key={a.id}>
-                    <button type="button" className="text-sm text-accent underline-offset-2 hover:underline" onClick={() => apiDownload(`/finance/attachments/${a.id}`, a.name)}>
+                    <button type="button" className="text-sm text-accent underline-offset-2 hover:underline" disabled={Boolean(fichiers.enCours)} onClick={() => void fichiers.telecharger(`pj-${a.id}`, `/finance/attachments/${a.id}`, a.name)}>
                       {a.name}
                     </button>
                   </li>
@@ -396,7 +399,7 @@ export function MoveDetailModal({
               </Button>
             )}
             {move.move_type !== "entry" && (
-              <Button onClick={() => apiDownload(`/finance/moves/${move.id}/pdf`, `${move.name ?? "piece"}.pdf`)}>
+              <Button loading={fichiers.enCours === "pdf"} onClick={() => void fichiers.telecharger("pdf", `/finance/moves/${move.id}/pdf`, `${(move.name ?? "piece").split("/").join("-")}.pdf`)}>
                 <Download className="h-4 w-4" /> PDF
               </Button>
             )}

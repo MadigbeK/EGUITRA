@@ -1,7 +1,63 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronLeft, ChevronRight } from "@/components/icons";
+import { Button } from "@/components/ui";
+import { ApiError, apiDownload } from "@/lib/api-client";
 import { INSECABLE, fmtDec, fmtFixe, fmtGNF, fmtInt } from "@/lib/format";
 import type { Profile } from "@/lib/types";
+
+/**
+ * Jour à Conakry, au format du noyau (« 2026-10-25 ») : le noyau date ses pièces à l'heure de
+ * l'Afrique/Conakry ; toISOString donnait le jour UTC, faux sur un poste réglé sur un autre fuseau.
+ */
+export function aujourdhui(): string {
+  const parts = new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Conakry", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const v = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${v("year")}-${v("month")}-${v("day")}`;
+}
+
+/** Pages d'une liste découpée par le noyau (offset) : « Pièces 101 à 200 sur 245 », page précédente et suivante. */
+export function PagesListe({ offset, taille, total, libelle, onPage }: { offset: number; taille: number; total: number; libelle: string; onPage: (offset: number) => void }) {
+  if (total <= taille && offset === 0) return null;
+  const fin = Math.min(offset + taille, total);
+  return (
+    <nav aria-label={`Pages : ${libelle.toLowerCase()}`} className="no-print flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-[13px] text-muted">
+      <span className="tabular">
+        {libelle} {fmtInt(total ? offset + 1 : 0)} à {fmtInt(fin)} sur {fmtInt(total)}
+      </span>
+      <div className="flex gap-2">
+        <Button size="sm" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - taille))}>
+          <ChevronLeft className="h-4 w-4" /> Page précédente
+        </Button>
+        <Button size="sm" disabled={fin >= total} onClick={() => onPage(offset + taille)}>
+          Page suivante <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
+/**
+ * Téléchargement (export, pièce jointe, lettre) : le bouton reste en chargement pendant l'appel, et un échec
+ * s'affiche au lieu de passer inaperçu. enCours : clé du téléchargement en cours.
+ */
+export function useTelechargement() {
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  async function telecharger(cle: string, chemin: string, nom: string) {
+    setEnCours(cle);
+    setErreur(null);
+    try {
+      await apiDownload(chemin, nom);
+    } catch (e) {
+      setErreur(e instanceof ApiError ? `Téléchargement impossible : ${e.message}` : "Téléchargement impossible : vérifiez la connexion, puis réessayez.");
+    } finally {
+      setEnCours(null);
+    }
+  }
+  return { telecharger, enCours, erreur, effacer: () => setErreur(null) };
+}
 
 /**
  * Outils communs aux écrans des pièces, de la trésorerie, des tiers, des relances et des états.
