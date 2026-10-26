@@ -112,6 +112,13 @@ class TestPortefeuilleMethodes(TransactionCase):
                          "À compléter et ajourné écartés ; deux décisions plus favorables que la méthode")
         # po = 1/3 ; pe = (1/3 × 1/3) [GO] + (1/3 × 1/3) [HOLD] = 2/9 ; kappa = (1/3 - 2/9) / (7/9) = 1/7.
         self.assertAlmostEqual(stats["kappa"], 1 / 7)
+        # Lecture des cases : la recommandation ramenée à l'échelle des décisions, pas la diagonale.
+        self.assertEqual(pf.agreement_kind("apd_ready", "go"), "agree", "APD READY vaut GO")
+        self.assertEqual(pf.agreement_kind("conditional", "conditional"), "agree")
+        self.assertEqual(pf.agreement_kind("hold", "conditional"), "lenient")
+        self.assertEqual(pf.agreement_kind("bankable", "hold"), "strict")
+        self.assertIsNone(pf.agreement_kind("pending", "go"), "À compléter : hors calcul")
+        self.assertIsNone(pf.agreement_kind("go", "postponed"), "Ajourné : hors calcul")
 
     def test_liens_vers_les_sections(self):
         self.assertEqual(_section_link("portefeuille", "temps", gate="G2"), "/analyse/portefeuille?gate=G2#temps")
@@ -445,6 +452,14 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual((matrix[("bankable", "go")], matrix[("hold", "conditional")], matrix[("no_go", "hold")]),
                          (1, 1, 1))
         self.assertEqual(sum(matrix.values()), 3)
+        kinds = {(r, d): agreement["matrix_kinds"][i][j] for i, r in enumerate(agreement["recommendations"])
+                 for j, d in enumerate(agreement["decisions"])}
+        self.assertEqual((kinds[("bankable", "go")], kinds[("hold", "conditional")], kinds[("no_go", "hold")]),
+                         ("agree", "lenient", "lenient"), "La lecture des cases rejoint le décompte (1 accord, 2 indulgences)")
+        self.assertEqual((kinds[("apd_ready", "go")], kinds[("go", "go")], kinds[("go", "hold")]),
+                         ("agree", "agree", "strict"), "Hors de la diagonale, APD READY et GO face à GO sont des accords")
+        self.assertIsNone(kinds[("pending", "go")])
+        self.assertIsNone(kinds[("go", "postponed")])
         self.assertEqual((agreement["agreement_pct"], agreement["kappa"], agreement["lenient"], agreement["strict"]),
                          (33.3, 0.143, 2, 0))
         self.assertEqual(body["decisions"]["totals"], {"go": 1, "conditional": 1, "hold": 1, "no_go": 0, "postponed": 0})

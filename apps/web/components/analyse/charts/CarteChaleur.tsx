@@ -9,6 +9,8 @@ export interface CelluleChaleur {
   value: number | null;
   /** Lignes supplémentaires de l'info-bulle (« 18 rotations »). */
   detail?: string;
+  /** Couleur d'un liseré pointillé qui distingue la case (accord méthode × comité, par exemple). */
+  contour?: string;
 }
 
 const LIGNE_H = 30;
@@ -125,7 +127,7 @@ export function CarteChaleur({
                       const actif = focus && focus[0] === i && focus[1] === j;
                       return (
                         <g key={c} onPointerEnter={() => setFocus([i, j])} className="an-eclore" style={{ "--i": i * cols.length + j } as CSSProperties}>
-                          <rect x={gauche + j * cw + 1.5} y={y0 + 1.5} width={cw - 3} height={hauteurLigne - 3} rx={5} style={{ fill: k.fond }} stroke={actif ? "var(--ink)" : "none"} strokeWidth={actif ? 2 : 0} className="an-survol" />
+                          <rect x={gauche + j * cw + 1.5} y={y0 + 1.5} width={cw - 3} height={hauteurLigne - 3} rx={5} style={{ fill: k.fond }} stroke={actif ? "var(--ink)" : (cell?.contour ?? "none")} strokeWidth={actif || cell?.contour ? 2 : 0} strokeDasharray={!actif && cell?.contour ? "4 3" : undefined} className="an-survol" />
                           {ecrire && v !== null && (
                             <text x={gauche + j * cw + cw / 2} y={y0 + hauteurLigne / 2} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={600} fill={k.encre} className="tabular">
                               {format(v)}

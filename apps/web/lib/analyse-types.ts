@@ -939,6 +939,12 @@ export interface CabinetComites extends Envelope {
     recommendation_labels: string[];
     decision_labels: string[];
     matrix: number[][];
+    /**
+     * Lecture de chaque case, même forme que matrix : accord, comité plus favorable ou plus sévère que la
+     * méthode, null hors calcul (À compléter, Ajourné). Lignes et colonnes ne se correspondent pas une à
+     * une : la diagonale n'est pas l'accord.
+     */
+    matrix_kinds?: Array<Array<"agree" | "lenient" | "strict" | null>>;
     agreement_pct: number | null;
     kappa: number | null;
     n: number;

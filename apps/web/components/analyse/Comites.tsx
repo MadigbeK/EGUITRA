@@ -11,6 +11,13 @@ import { fmtInt } from "@/lib/format";
 
 const LIBELLE_DECISION: Record<string, string> = { go: "GO", conditional: "GO sous conditions", hold: "HOLD", no_go: "NO-GO", postponed: "Ajourné" };
 
+/** Lecture d'une case de la matrice, donnée par le noyau (la diagonale n'est pas l'accord). */
+const LECTURE_CASE: Record<string, string> = {
+  agree: "Accord : le comité suit la méthode",
+  lenient: "Comité plus favorable que la méthode",
+  strict: "Comité plus sévère que la méthode",
+};
+
 /** Qualité des décisions : accord méthode × comité, décisions par mois, délai de décision, scores à la décision, passages forcés. */
 export function Comites() {
   return (
@@ -62,13 +69,18 @@ function Corps() {
                     rows={ag.recommendations.map((r, i) => ({ key: r, label: `Méthode : ${ag.recommendation_labels[i] ?? r}` }))}
                     cols={ag.decisions}
                     formatCol={(c) => ag.decision_labels[ag.decisions.indexOf(c)] ?? c}
-                    cells={ag.recommendations.flatMap((r, i) => ag.decisions.map((c, j) => ({ row: r, col: c, value: ag.matrix[i]?.[j] ?? 0, detail: i === j ? "Accord" : j > i ? "Comité plus indulgent que la méthode" : "Comité plus sévère que la méthode" })))}
+                    cells={ag.recommendations.flatMap((r, i) =>
+                      ag.decisions.map((c, j) => {
+                        const lecture = ag.matrix_kinds?.[i]?.[j] ?? null;
+                        return { row: r, col: c, value: ag.matrix[i]?.[j] ?? 0, detail: lecture ? LECTURE_CASE[lecture] : "Hors du calcul de l'accord", contour: lecture === "agree" ? "var(--g-jade)" : undefined };
+                      }),
+                    )}
                     echelle="sequentielle"
                     format={(v) => String(v)}
                     largeurLibelles={210}
                     hauteurLigne={36}
                   />
-                  <p className="mt-2 text-[12.5px] leading-snug text-muted">La diagonale est l&apos;accord. À droite, le comité accorde plus que la méthode ne recommande ; à gauche, il est plus sévère.</p>
+                  <p className="mt-2 text-[12.5px] leading-snug text-muted">Cases cerclées de vert : accord, la recommandation ramenée à l&apos;échelle du comité (BANKABLE CANDIDATE et APD READY valent GO) rejoint la décision. Sur une ligne, plus à gauche, le comité décide plus favorablement que la méthode ; plus à droite, plus sévèrement. « À compléter » et « Ajourné » restent hors du calcul.</p>
                 </>
               ) : (
                 <Vide titre="Aucune revue verrouillée" hint="Le taux d'accord se calcule sur les revues de comité verrouillées qui portent une recommandation de la méthode." />

@@ -1422,6 +1422,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "recommendations": RECOMMENDATION_KEYS, "decisions": DECISION_KEYS,
             "recommendation_labels": [RECOMMENDATION_LABELS[k] for k in RECOMMENDATION_KEYS],
             "decision_labels": [DECISION_LABELS[k] for k in DECISION_KEYS], "matrix": matrix,
+            # Lecture de chaque case (accord, comité plus favorable ou plus sévère, hors calcul) : sept
+            # recommandations face à cinq décisions, la diagonale de la matrice n'est pas l'accord.
+            "matrix_kinds": [[pf.agreement_kind(rk, dk) for dk in DECISION_KEYS] for rk in RECOMMENDATION_KEYS],
             "agreement_pct": _r(stats["agreement_pct"]), "kappa": _r(stats["kappa"], 3), "n": stats["n"],
             "agreed": stats["agreed"], "lenient": stats["lenient"], "strict": stats["strict"],
             "excluded": len(pairs) - stats["n"],
