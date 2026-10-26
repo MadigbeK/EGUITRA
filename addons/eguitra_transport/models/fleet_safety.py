@@ -18,7 +18,7 @@ import json
 from datetime import timedelta
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ..blocking import RotationBlocked, motif
 
@@ -34,6 +34,8 @@ REQUIRED_DOCUMENTS = {"tanker": ("insurance", "inspection", "calibration", "tigh
                       "tipper": ("insurance", "inspection")}
 EXPIRY_WARNING_DAYS = 30
 # États d'un ensemble qui ne part pas (motif T01).
+# Profils qui font partir une rotation (voir _depart_refusal).
+DEPART_PROFILES = ("admin", "exploitation")
 UNAVAILABLE = {"maintenance": "en maintenance", "off": "hors service", "sold": "cédé"}
 
 
@@ -197,9 +199,21 @@ class EguitraTransportRotation(models.Model):
         le passage par « en route » des rotations chargées après sa mise en service."""
         return []
 
+    def _depart_refusal(self):
+        """Pourquoi l'utilisateur ne fait pas partir cette rotation ; None s'il le peut. Faire partir un camion
+        est un geste du parc : profils admin et exploitation, jamais finance ni direction, verrou en service
+        ou non (règle arrêtée avec HSSEQ le 26/10/2026). Le module HSSEQ y ajoute les sites du chef de parc."""
+        self.ensure_one()
+        if self.env.su or set(DEPART_PROFILES) & set(self.env.user._eguitra_profiles()):
+            return None
+        return "Le départ en route est donné par le parc (profil Exploitation) ou un administrateur."
+
     def action_depart(self):
         """Départ en route, évalué par le serveur au moment de la demande (jamais en file hors ligne)."""
         for rot in self:
+            refusal = rot._depart_refusal()
+            if refusal:
+                raise AccessError(refusal)
             if rot.state != "draft":
                 raise UserError(f"Rotation {rot._label()} : seule une rotation saisie part en route.")
             blockers = rot._departure_blockers()
