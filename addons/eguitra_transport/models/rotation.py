@@ -25,6 +25,7 @@ from odoo.tools import float_compare, float_round
 
 from odoo.addons.eguitra_finance.models.syscohada import OPENING_JOURNAL
 
+from ..nombres import fmt_int
 from .product import volume_correction_factor
 from .settings import CLAIMED, DEDUCTED, SHORTAGE_RULES
 
@@ -464,16 +465,20 @@ class EguitraTransportRotation(models.Model):
         }
 
     def _invoice_line_vals(self, account):
+        """Ligne de la rotation : quantité 1 au montant exact (volume facturable × tarif). La précision des
+        quantités de facture (deux décimales) arrondirait 39,875 m³ à 39,88 ; le volume à trois décimales et
+        le tarif au m³ sont écrits dans le libellé (audit du 25 octobre, I-T3)."""
         self.ensure_one()
         billed = self.volume_delivered or self.volume_loaded
-        label = f"Transport {self.product_id.name.lower()} {self.route_id.name}, {fmt_m3(billed)}"
+        label = (f"Transport {self.product_id.name.lower()} {self.route_id.name}, {fmt_m3(billed)} à "
+                 f"{fmt_int(self.rate)} {self.currency_id.name} le m³")
         if self.delivery_note:
             label += f", {fmt_bl(self.delivery_note)}"
         label += f" ({self.name}, {self.vehicle_id.name}, {self.date_loading:%d/%m/%Y})"
         return {
             "name": label,
-            "quantity": billed,
-            "price_unit": self.rate,
+            "quantity": 1,
+            "price_unit": self.revenue,
             "account_id": account.id,
             "analytic_distribution": self._analytic_distribution(),
         }

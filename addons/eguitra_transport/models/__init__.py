@@ -6,6 +6,7 @@ from . import rotation
 from . import standard
 from . import official_rate
 from . import fleet_safety
+from . import invoicing
 from . import ownership
 from . import analysis
 from . import alert
