@@ -3,14 +3,21 @@
 Un bail actif porte un contrat récurrent (module OCA contract) qui produit les factures de loyer
 à chaque échéance ; ces factures sont validées automatiquement (quittancement) et imputées sur
 l'axe du bien et l'activité immobilière. Le produit « Loyer » porte le compte 7073 « Loyers ».
+
+Fin d'un bail : une fin passée ou du jour émet les loyers dus jusqu'à elle puis résilie le bail ; une
+fin future (congé donné) garde le bail en cours et quittancé jusqu'à sa fin, et la tâche de nuit le
+résilie le lendemain de sa fin, après ses derniers loyers. La dernière période, coupée par la fin du
+bail, est facturée au prorata des jours. Ce qui dépend du module contract (période d'une échéance,
+fin de contrat refusée avant la dernière période facturée) est à confirmer en 19.
 """
 
 import logging
+import math
 
 from dateutil.relativedelta import relativedelta
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
 
@@ -23,6 +30,11 @@ KINDS = [
     ("terrain", "Terrain"),
     ("immeuble", "Immeuble"),
 ]
+PERIOD_MONTHS = {"monthly": 1, "quarterly": 3, "yearly": 12}
+# Échéances émises au plus par passage de la tâche de nuit ou de l'émission manuelle (rattrapage étalé) ;
+# la fin d'un bail émet toutes les échéances dues, dans la limite de SAFETY_LIMIT.
+NIGHT_LIMIT = 36
+SAFETY_LIMIT = 1200
 
 
 class EguitraProperty(models.Model):
@@ -62,6 +74,11 @@ class EguitraProperty(models.Model):
         for prop in self:
             prop.occupied = any(l.state == "active" for l in prop.lease_ids)
 
+    def _value(self):
+        """Valeur du bien au patrimoine : la valeur actuelle, à défaut la valeur d'acquisition."""
+        self.ensure_one()
+        return self.current_value or self.acquisition_value or 0.0
+
 
 class EguitraLease(models.Model):
     _name = "eguitra.lease"
@@ -75,6 +92,11 @@ class EguitraLease(models.Model):
     partner_id = fields.Many2one("res.partner", "Locataire", required=True)
     date_start = fields.Date("Prise d'effet", required=True)
     date_end = fields.Date("Échéance du bail")
+    rent_start = fields.Date(
+        "Premier loyer à émettre",
+        help="Bail repris en cours : première échéance que la plateforme émet (les précédentes ont été "
+             "facturées ailleurs). Vide : la prise d'effet.",
+    )
     rent = fields.Monetary("Loyer HT par période", required=True)
     charges = fields.Monetary("Charges par période")
     periodicity = fields.Selection([("monthly", "Mensuel"), ("quarterly", "Trimestriel"), ("yearly", "Annuel")],
@@ -85,6 +107,22 @@ class EguitraLease(models.Model):
                              default="draft", required=True)
     contract_id = fields.Many2one("contract.contract", "Contrat récurrent", readonly=True, copy=False)
     next_invoice_date = fields.Date(related="contract_id.recurring_next_date", string="Prochain loyer")
+    rent_error = fields.Text("Échec du dernier quittancement", readonly=True, copy=False)
+    rent_error_at = fields.Datetime("Date de l'échec", readonly=True, copy=False)
+
+    @api.constrains("rent", "charges", "deposit_amount", "date_start", "date_end", "rent_start")
+    def _check_lease(self):
+        for lease in self:
+            if not math.isfinite(lease.rent or 0.0) or lease.rent <= 0:
+                raise ValidationError("Le loyer par période doit être positif.")
+            if (lease.charges or 0) < 0 or (lease.deposit_amount or 0) < 0:
+                raise ValidationError("Les charges et le dépôt de garantie ne peuvent pas être négatifs.")
+            if lease.date_end and lease.date_end < lease.date_start:
+                raise ValidationError("L'échéance du bail ne peut précéder sa prise d'effet.")
+            if lease.rent_start and lease.rent_start < lease.date_start:
+                raise ValidationError("Le premier loyer à émettre ne peut précéder la prise d'effet du bail.")
+            if lease.rent_start and lease.date_end and lease.rent_start > lease.date_end:
+                raise ValidationError("Le premier loyer à émettre ne peut suivre l'échéance du bail.")
 
     @api.model
     def _rent_product(self, company, vat):
@@ -113,22 +151,37 @@ class EguitraLease(models.Model):
                                    ("company_id", "in", [False, company.id])], limit=1)
         return account or Analytic.create({"name": "Immobilier", "plan_id": plan.id, "company_id": company.id})
 
+    def _first_rent(self):
+        """Première échéance émise par la plateforme : le premier loyer à émettre d'un bail repris en
+        cours, sinon la prise d'effet (rattrapage des échéances passées)."""
+        self.ensure_one()
+        return self.rent_start or self.date_start
+
     def action_activate(self):
         for lease in self:
             if lease.state != "draft":
                 continue
             if lease.property_id.lease_ids.filtered(lambda l: l.state == "active" and l != lease):
-                raise UserError(f"Le bien {lease.property_id.name} a déjà un bail en cours.")
+                raise UserError(f"Le bien {lease.property_id.name} a déjà un bail en cours : activez celui-ci "
+                                "après la fin du bail en cours.")
+            first = lease._first_rent()
+            if first.day > 28:
+                # Le module contract avance d'un mois civil : une échéance le 31 glisse au 28 après février et
+                # la première année compte une échéance de trop (à confirmer en 19).
+                raise UserError(f"Bail {lease.name} : première échéance le {first:%d/%m/%Y}. Une échéance le 29, "
+                                "le 30 ou le 31 glisserait au 28 après un mois court : fixez la prise d'effet (ou le "
+                                "premier loyer à émettre) entre le 1er et le 28, et facturez les jours précédents à part.")
             company = lease.company_id
             journal = self.env["account.journal"].search([("company_id", "=", company.id), ("type", "=", "sale")], limit=1)
             product = self._rent_product(company, lease.vat)
             distribution = {str(lease.property_id.analytic_account_id.id): 100,
                             str(self._activity_account(company).id): 100}
             period = {"monthly": "mensuel", "quarterly": "trimestriel", "yearly": "annuel"}[lease.periodicity]
-            # La récurrence est portée par chaque ligne, à partir de la prise d'effet du bail.
+            # La récurrence est portée par chaque ligne, à partir de la première échéance émise par la
+            # plateforme (prise d'effet, ou premier loyer à émettre d'un bail repris en cours).
             recurrence = {
-                "date_start": lease.date_start, "date_end": lease.date_end or False,
-                "recurring_next_date": lease.date_start, "recurring_rule_type": lease.periodicity,
+                "date_start": first, "date_end": lease.date_end or False,
+                "recurring_next_date": first, "recurring_rule_type": lease.periodicity,
                 "recurring_interval": 1, "recurring_invoicing_type": "pre-paid",
                 "analytic_distribution": distribution, "quantity": 1, "product_id": product.id,
             }
@@ -149,52 +202,120 @@ class EguitraLease(models.Model):
                 "recurring_rule_type": lease.periodicity,
                 "recurring_interval": 1,
                 "recurring_invoicing_type": "pre-paid",
-                "date_start": lease.date_start,
+                "date_start": first,
                 "date_end": lease.date_end or False,
                 "contract_line_fixed_ids": lines,
             })
             lease.write({"state": "active", "contract_id": contract.id})
         return True
 
+    def _invoiced_until(self):
+        """Fin de la dernière période déjà facturée par le contrat (None si aucune)."""
+        self.ensure_one()
+        lines = self.contract_id.sudo().contract_line_ids if self.contract_id else []
+        dates = [line.last_date_invoiced for line in lines if getattr(line, "last_date_invoiced", False)]
+        return max(dates) if dates else None
+
+    def _set_end(self, end):
+        """Fin du bail portée au bail et à son contrat. Le contrat ne finit jamais avant la dernière période
+        déjà facturée, que le module contract refuse (à confirmer en 19) : la part facturée au-delà de la fin
+        du bail s'annule par un avoir (finance)."""
+        self.ensure_one()
+        self.date_end = end
+        if self.contract_id:
+            invoiced = self._invoiced_until()
+            contract_end = max(end, invoiced) if invoiced else end
+            contract = self.contract_id.sudo()
+            contract.contract_line_ids.write({"date_end": contract_end})
+            contract.write({"date_end": contract_end})
+
     def action_terminate(self, date=None):
+        """Fin du bail. Fin passée ou du jour : les loyers dus jusqu'à elle sont émis (toutes les échéances,
+        sans plafond), puis le bail est résilié et le bien redevient libre. Fin future (congé donné) : le bail
+        reste en cours et quittancé jusqu'à sa fin, puis la tâche de nuit le résilie ; aucun loyer n'est perdu."""
         today = fields.Date.context_today(self)
         for lease in self:
             if lease.state != "active":
-                raise UserError("Seul un bail en cours peut être résilié.")
+                raise UserError("Seul un bail en cours peut prendre fin.")
             end = date or today
             if end < lease.date_start:
                 raise UserError("La fin du bail ne peut précéder sa prise d'effet.")
-            # Solde du bail : les échéances dues jusqu'à la fin sont facturées avant la clôture.
-            lease._generate_rents(min(end, today))
-            if lease.contract_id:
-                lease.contract_id.sudo().write({"date_end": end})
-            lease.write({"state": "terminated", "date_end": end})
+            lease._set_end(end)
+            if end <= today:
+                lease._generate_rents(end, limit=None)
+                lease.state = "terminated"
         return True
 
     @api.model
-    def generate_rents(self, companies, until=None):
-        """Factures de loyer échues (rattrapage compris), validées aussitôt : c'est le quittancement."""
-        until = until or fields.Date.context_today(self)
-        leases = self.search([("state", "=", "active"), ("company_id", "in", companies.ids)])
+    def generate_rents(self, companies, until=None, errors=None):
+        """Émission des loyers échus (« Émettre les loyers échus »), comme la tâche de nuit : bail par bail,
+        un échec n'arrêtant pas les autres, et jamais au-delà d'aujourd'hui. Rend les factures émises ;
+        errors (liste) reçoit les échecs, un par bail : {"lease", "message"}."""
+        today = fields.Date.context_today(self)
+        until = min(until or today, today)
         invoices = self.env["account.move"]
-        for lease in leases:
-            invoices |= lease._generate_rents(until)
+        for lease in self.search([("state", "=", "active"), ("company_id", "in", companies.ids)]):
+            created, error = lease._quittancer(until)
+            invoices |= created
+            if error and errors is not None:
+                errors.append({"lease": lease.name, "property": lease.property_id.name, "message": error})
         return invoices
 
-    def _generate_rents(self, until):
-        """Une facture par échéance passée, datée de l'échéance ; 36 au plus par passage."""
+    def _quittancer(self, today, limit=NIGHT_LIMIT):
+        """Quittancement d'un bail en cours, isolé dans son propre point de reprise : loyers échus jusqu'à
+        `today`, puis résiliation d'un bail dont la fin est passée (après toutes ses dernières échéances). Un
+        échec reste inscrit sur le bail (motif et date) jusqu'au prochain passage réussi. Rend (factures,
+        motif de l'échec ou None)."""
         self.ensure_one()
+        ending = bool(self.date_end and self.date_end < today)
+        try:
+            with self.env.cr.savepoint():
+                invoices = self._generate_rents(today, limit=None if ending else limit)
+                if ending:
+                    self.state = "terminated"
+        except Exception as e:  # noqa: BLE001 - tout échec d'un bail est inscrit sur lui, sans arrêter les autres
+            _logger.exception("Quittancement impossible pour le bail %s (id %s)", self.name, self.id)
+            message = (e.args[0] if isinstance(e, (UserError, ValidationError)) and e.args else str(e)) or type(e).__name__
+            self.sudo().write({"rent_error": str(message)[:1000], "rent_error_at": fields.Datetime.now()})
+            return self.env["account.move"], str(message)
+        if self.rent_error:
+            self.sudo().write({"rent_error": False, "rent_error_at": False})
+        return invoices, None
+
+    def _generate_rents(self, until, limit=NIGHT_LIMIT):
+        """Une facture par échéance passée jusqu'à `until`, jamais après la fin du bail, datée de l'échéance et
+        validée. limit : échéances au plus (None : toutes, pour la fin du bail). La dernière période, coupée par
+        la fin du bail, est facturée au prorata des jours."""
+        self.ensure_one()
+        if self.date_end:
+            until = min(until, self.date_end)
         contract = self.contract_id.sudo().with_company(self.company_id)
         invoices = self.env["account.move"]
-        for _ in range(36):
-            if not contract.recurring_next_date or contract.recurring_next_date > until:
+        for _ in range(limit or SAFETY_LIMIT):
+            start = contract.recurring_next_date
+            if not start or start > until:
                 break
             created = contract._recurring_create_invoice()
             if not created:
                 break  # bail échu ou sans ligne à facturer
+            self._prorate_last_period(created, start)
             invoices |= created
         invoices.filtered(lambda m: m.state == "draft").action_post()
         return invoices
+
+    def _prorate_last_period(self, invoices, start):
+        """Dernière période coupée par la fin du bail : loyer et charges au prorata des jours, fin comprise.
+        Une ligne que le module contract aurait déjà proratisée (prix différent du loyer et des charges du
+        bail) n'est pas touchée (à confirmer en 19)."""
+        if not self.date_end:
+            return
+        full_end = start + relativedelta(months=PERIOD_MONTHS[self.periodicity], days=-1)
+        if self.date_end >= full_end:
+            return
+        ratio = ((self.date_end - start).days + 1) / ((full_end - start).days + 1)
+        for line in invoices.invoice_line_ids:
+            if any(amount and abs(line.price_unit - amount) < 0.5 for amount in (self.rent, self.charges)):
+                line.price_unit = line.move_id.currency_id.round(line.price_unit * ratio)
 
     @api.model
     def _disable_contract_cron(self):
@@ -204,27 +325,33 @@ class EguitraLease(models.Model):
             cron.sudo().active = False
 
     @api.model
-    def _cron_generate_rents(self):
-        """Quittancement de chaque nuit, toutes sociétés. Remplace la génération du module contract,
-        qui laisserait des brouillons datés du jour, sans rattrapage. Un bail en erreur est journalisé
-        sans bloquer les autres."""
+    def _cron_generate_rents(self, today=None):
+        """Quittancement de chaque nuit, toutes sociétés : bail par bail (voir _quittancer). Remplace la
+        génération du module contract, qui laisserait des brouillons datés du jour, sans rattrapage."""
+        today = today or fields.Date.context_today(self)
         for lease in self.search([("state", "=", "active")]):
-            try:
-                with self.env.cr.savepoint():
-                    lease._generate_rents(fields.Date.context_today(lease))
-            except Exception:
-                _logger.exception("Quittancement impossible pour le bail %s (id %s)", lease.name, lease.id)
+            lease._quittancer(today)
+
+    @api.model
+    def _net_residual(self, move):
+        """Reste dû d'un loyer, avoirs validés et non lettrés déduits (un loyer annulé par un avoir n'est pas
+        un impayé)."""
+        refunds = move.reversal_move_ids.filtered(lambda r: r.state == "posted") if "reversal_move_ids" in move._fields else []
+        return move.amount_residual - sum(r.amount_residual for r in refunds)
 
     @api.model
     def unpaid_rents(self, companies, today=None):
+        """Loyers échus non réglés : factures de loyer seulement (un avoir n'est pas un impayé), avoirs validés
+        déduits. Pièces lues avec les droits du noyau (les profils immobilier et direction n'ont pas accès aux
+        écritures)."""
         today = today or fields.Date.context_today(self)
         contracts = self.search([("company_id", "in", companies.ids), ("contract_id", "!=", False)]).contract_id
         lines = self.env["account.move.line"].sudo().search([
             ("contract_line_id.contract_id", "in", contracts.ids),
         ])
         moves = lines.move_id.filtered(
-            lambda m: m.state == "posted" and m.payment_state in ("not_paid", "partial") and m.invoice_date_due
-            and m.invoice_date_due < today
+            lambda m: m.move_type == "out_invoice" and m.state == "posted" and m.payment_state in ("not_paid", "partial")
+            and m.invoice_date_due and m.invoice_date_due < today and self._net_residual(m) > 0.5
         )
         return moves.sorted("invoice_date_due")
 
@@ -235,7 +362,9 @@ class EguitraLease(models.Model):
         active = self.search([("state", "=", "active"), ("company_id", "in", companies.ids)])
         factor = {"monthly": 12, "quarterly": 4, "yearly": 1}
         annual_rent = sum((l.rent + (l.charges or 0)) * factor[l.periodicity] for l in active)
-        value = sum(props.mapped("current_value")) or sum(props.mapped("acquisition_value"))
+        # Bien par bien : la valeur actuelle, à défaut la valeur d'acquisition (un seul bien réévalué ne
+        # retire pas les autres du patrimoine).
+        value = sum(p._value() for p in props)
         unpaid = self.unpaid_rents(companies, today)
         expiring = active.filtered(lambda l: l.date_end and l.date_end <= today + relativedelta(months=3))
         return {
@@ -246,7 +375,8 @@ class EguitraLease(models.Model):
             "portfolio_value": value,
             "gross_yield": (annual_rent / value * 100) if value else None,
             "unpaid_count": len(unpaid),
-            "unpaid_amount": sum(unpaid.mapped("amount_residual")),
+            "unpaid_amount": sum(self._net_residual(m) for m in unpaid),
             "leases_expiring_3m": len(expiring),
+            "rent_errors": len(active.filtered("rent_error")),
             "as_of": today,
         }
