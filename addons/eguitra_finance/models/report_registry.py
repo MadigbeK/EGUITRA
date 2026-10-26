@@ -88,6 +88,19 @@ class Report:
     filters: list = field(default_factory=list)
 
 
+def labelled(expr, labels):
+    """Expression SQL qui écrit une valeur codée en clair (« not_paid » : « Non payée ») à l'écran comme dans
+    les exports ; les libellés viennent du registre, jamais de la saisie."""
+    cases = " ".join(f"WHEN '{code}' THEN '{label.replace(chr(39), chr(39) * 2)}'" for code, label in labels)
+    return f"(CASE {expr} {cases} ELSE {expr} END)"
+
+
+PAYMENT_LABELS = (
+    ("not_paid", "Non payée"), ("partial", "Partielle"), ("in_payment", "En paiement"), ("paid", "Payée"),
+    ("reversed", "Extournée"), ("invoicing_legacy", "Historique"), ("blocked", "Bloquée"),
+)
+TAX_USE_LABELS = (("sale", "Collectée"), ("purchase", "Déductible"), ("none", "Autre"))
+
 PAY_STATE = Filter("paiement", "État de paiement", "am.payment_state = %(f_paiement)s", options=(
     ("not_paid", "Non payée"), ("partial", "Partielle"), ("paid", "Payée"), ("in_payment", "En paiement"),
     ("reversed", "Extournée"),
@@ -180,7 +193,7 @@ _reg(Report(
         Column("ht", "Montant HT", "am.amount_untaxed_signed", "money", "sum", align="right"),
         Column("ttc", "Montant TTC", "am.amount_total_signed", "money", "sum", align="right"),
         Column("reste", "Reste dû", "am.amount_residual_signed", "money", "sum", align="right"),
-        Column("paiement", "Paiement", "am.payment_state"),
+        Column("paiement", "Paiement", labelled("am.payment_state", PAYMENT_LABELS)),
     ],
 ))
 _reg(Report(
@@ -207,7 +220,7 @@ _reg(Report(
         Column("ht", "Montant HT", "-am.amount_untaxed_signed", "money", "sum", align="right"),
         Column("ttc", "Montant TTC", "-am.amount_total_signed", "money", "sum", align="right"),
         Column("reste", "Reste à payer", "-am.amount_residual_signed", "money", "sum", align="right"),
-        Column("paiement", "Paiement", "am.payment_state"),
+        Column("paiement", "Paiement", labelled("am.payment_state", PAYMENT_LABELS)),
     ],
 ))
 _reg(Report(
@@ -270,7 +283,7 @@ _reg(Report(
     filters=[Filter("usage", "Type", "tax.type_tax_use = %(f_usage)s", options=(("sale", "Collectée"), ("purchase", "Déductible")))],
     columns=[
         Column("taxe", "Taxe", "COALESCE(tax.name->>'fr_FR', tax.name->>'en_US')"),
-        Column("usage", "Type", "tax.type_tax_use"),
+        Column("usage", "Type", labelled("tax.type_tax_use", TAX_USE_LABELS)),
         Column("compte", "Compte", ACC_CODE),
         Column("montant", "Montant de taxe", "-aml.balance", "money", "sum", align="right"),
     ],

@@ -1,5 +1,6 @@
 """Outils communs aux routes de l'API Finance."""
 
+import math
 from datetime import date
 
 from odoo import fields
@@ -84,10 +85,24 @@ def today():
 
 
 def as_float(value, name):
+    """Nombre reçu d'une application ; « NaN » et l'infini sont refusés comme tout nombre illisible."""
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError) as e:
         raise ApiError(400, "invalid_parameter", f"Nombre invalide : {name}.") from e
+    if not math.isfinite(number):
+        raise ApiError(400, "invalid_parameter", f"Nombre invalide : {name}.")
+    return number
+
+
+def as_int(value, name="identifiant"):
+    """Identifiant reçu d'une application : un entier, sinon refus (400) au lieu d'une erreur interne."""
+    if isinstance(value, bool):
+        raise ApiError(400, "invalid_parameter", f"Identifiant invalide : {name}.")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"Identifiant invalide : {name}.") from e
 
 
 def ref(record):
