@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Button, Card, Field, Input, Notice, PageHeader, PasswordInput } from "@/components/ui";
 import type { AppCode } from "@/lib/config";
+import { MESSAGE_RESEAU } from "@/lib/erreurs";
 
 export function PasswordForm({ app, required = false }: { app: AppCode; required?: boolean }) {
   const [oldPassword, setOld] = useState("");
@@ -17,15 +18,24 @@ export function PasswordForm({ app, required = false }: { app: AppCode; required
     if (newPassword !== confirm) return setError("Les deux saisies du nouveau mot de passe diffèrent.");
     if (newPassword.length < 10) return setError("Le mot de passe doit contenir au moins 10 caractères.");
     setBusy(true);
-    const res = await fetch("/api/session/password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
-    });
-    setBusy(false);
-    const data = (await res.json().catch(() => ({}))) as { message?: string };
-    if (!res.ok) return setError(data.message ?? "Modification impossible.");
-    window.location.href = `/login?app=${app}&message=password_changed`;
+    // Le bouton reste en chargement jusqu'à la page de connexion quand le changement aboutit ; sinon
+    // il est toujours rendu (finally), même sur une coupure du réseau.
+    let modifie = false;
+    try {
+      const res = await fetch("/api/session/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { message?: string };
+      if (!res.ok) return setError(data.message ?? "Modification impossible.");
+      modifie = true;
+      window.location.href = `/login?app=${app}&message=password_changed`;
+    } catch {
+      setError(MESSAGE_RESEAU);
+    } finally {
+      if (!modifie) setBusy(false);
+    }
   }
 
   return (

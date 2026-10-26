@@ -3,17 +3,23 @@
 import { useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, PasswordInput, cx } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
+import { MESSAGE_RESEAU } from "@/lib/erreurs";
 
 type Step = { kind: "credentials" } | { kind: "mfa" } | { kind: "setup"; secret: string; qr: string };
 
+/** Envoi d'une étape de la connexion ; une coupure du réseau rend une réponse en échec qui le dit. */
 async function post(url: string, body: unknown) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = (await res.json().catch(() => ({}))) as Record<string, string>;
-  return { ok: res.ok, status: res.status, data };
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, string>;
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, status: 0, data: { error: "network", message: MESSAGE_RESEAU } as Record<string, string> };
+  }
 }
 
 /** Phrase d'accueil : l'application ouverte, ou le cabinet pour les porteurs de projets. */
@@ -41,35 +47,53 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
     window.location.href = next;
   }
 
+  // Le bouton reste en chargement jusqu'à l'écran suivant quand la connexion aboutit ; sinon il est
+  // toujours rendu (finally), même sur une coupure du réseau.
   async function submitCredentials(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const { ok, data } = await post("/api/session/login", { login, password, app });
-    setBusy(false);
-    if (!ok) return setError(data.message ?? "Connexion impossible.");
-    setPassword("");
-    if (data.status === "ok") return done();
-    if (data.status === "mfa_required") return setStep({ kind: "mfa" });
-    if (data.status === "mfa_setup_required") {
-      return setStep({ kind: "setup", secret: data.secret ?? "", qr: data.qr_png ?? "" });
+    let connecte = false;
+    try {
+      const { ok, data } = await post("/api/session/login", { login, password, app });
+      if (!ok) return setError(data.message ?? "Connexion impossible.");
+      setPassword("");
+      if (data.status === "ok") {
+        connecte = true;
+        return done();
+      }
+      if (data.status === "mfa_required") return setStep({ kind: "mfa" });
+      if (data.status === "mfa_setup_required") {
+        return setStep({ kind: "setup", secret: data.secret ?? "", qr: data.qr_png ?? "" });
+      }
+      setError("Réponse inattendue du service.");
+    } finally {
+      if (!connecte) setBusy(false);
     }
-    setError("Réponse inattendue du service.");
   }
 
   async function submitCode(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const url = step.kind === "setup" ? "/api/session/mfa-setup" : "/api/session/mfa";
-    const { ok, status, data } = await post(url, { code });
-    setBusy(false);
-    if (ok) return done();
-    setCode("");
-    if (status === 401 && data.error === "invalid_token") {
-      setStep({ kind: "credentials" });
+    let connecte = false;
+    try {
+      const url = step.kind === "setup" ? "/api/session/mfa-setup" : "/api/session/mfa";
+      const { ok, status, data } = await post(url, { code });
+      if (ok) {
+        connecte = true;
+        return done();
+      }
+      // Code refusé : il est effacé. Coupure du réseau ou service indisponible : il reste, il pourra
+      // repartir tel quel.
+      if (status === 400 || status === 401) setCode("");
+      if (status === 401 && data.error === "invalid_token") {
+        setStep({ kind: "credentials" });
+      }
+      setError(data.message ?? "Code incorrect.");
+    } finally {
+      if (!connecte) setBusy(false);
     }
-    setError(data.message ?? "Code incorrect.");
   }
 
   return (

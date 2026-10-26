@@ -41,6 +41,9 @@ export class DelaiDepasse extends Error {
   }
 }
 
+/** Message d'une coupure du réseau (aucune réponse du serveur). */
+export const MESSAGE_RESEAU = "Réseau indisponible : vérifiez la connexion puis réessayez.";
+
 /**
  * Aucune réponse : réseau coupé, ou passerelle injoignable. Hérite de TypeError, l'erreur que lève
  * fetch dans ce cas : le code qui reconnaît une coupure (tout ce qui n'est pas une ApiError) ne
@@ -48,7 +51,7 @@ export class DelaiDepasse extends Error {
  */
 export class ReseauIndisponible extends TypeError {
   constructor(public origine?: unknown) {
-    super("Réseau indisponible : vérifiez la connexion puis réessayez.");
+    super(MESSAGE_RESEAU);
     this.name = "ReseauIndisponible";
   }
 }
@@ -65,6 +68,6 @@ function coupure(e: unknown): boolean {
  */
 export function messageErreur(e: unknown, defaut = "Une erreur est survenue. Réessayez."): string {
   if (e instanceof ApiError || e instanceof DelaiDepasse) return e.message;
-  if (coupure(e)) return new ReseauIndisponible().message;
+  if (coupure(e)) return MESSAGE_RESEAU;
   return defaut;
 }
