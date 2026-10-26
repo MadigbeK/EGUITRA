@@ -1,5 +1,5 @@
 import { ApiClient, type Coffre } from "../src/api/client";
-import { ApiError, DelaiDepasse, HorsReseau } from "../src/api/errors";
+import { ApiError, DelaiDepasse, HorsReseau, SESSION_CHANGEE } from "../src/api/errors";
 
 interface Appel {
   url: string;
@@ -227,6 +227,36 @@ describe("ApiClient", () => {
     await expect(api.appel("GET", "/a")).rejects.toMatchObject({ status: 401, code: "http_401" });
     expect(perdue).not.toHaveBeenCalled();
     expect(c.valeur).toBe("renouvellement-1");
+  });
+
+  it("n'écrit pas un jeton renouvelé si le compte gardé a changé : rien n'est oublié", async () => {
+    const { appels, fetchFn } = bureau((a) => (a.url === "/auth/refresh" ? { status: 200, body: JETONS(2) } : { status: 200, body: {} }));
+    const c = coffre("renouvellement-1");
+    const perdue = jest.fn();
+    let memeCompte = false;
+    const api = new ApiClient({ base: "", coffre: c, surSessionPerdue: perdue, fetchFn, verifierSession: async () => memeCompte });
+    await expect(api.appel("GET", "/a")).rejects.toMatchObject({ code: SESSION_CHANGEE });
+    // Compte changé avant l'envoi : le jeton n'est même pas présenté au bureau.
+    expect(appels.filter((a) => a.url === "/auth/refresh")).toHaveLength(0);
+    expect(c.valeur).toBe("renouvellement-1");
+    expect(perdue).not.toHaveBeenCalled();
+    memeCompte = true;
+    await expect(api.appel("GET", "/a")).resolves.toEqual({});
+    expect(c.valeur).toBe("renouvellement-2");
+  });
+
+  it("n'écrase pas un jeton remplacé par un autre client pendant le renouvellement", async () => {
+    const c = coffre("renouvellement-1");
+    const { fetchFn } = bureau((a) => {
+      if (a.url !== "/auth/refresh") return { status: 200, body: {} };
+      c.valeur = "renouvellement-9"; // l'envoi de fond a renouvelé entre-temps
+      return { status: 200, body: JETONS(2) };
+    });
+    const perdue = jest.fn();
+    const api = new ApiClient({ base: "", coffre: c, surSessionPerdue: perdue, fetchFn });
+    await expect(api.appel("GET", "/a")).rejects.toMatchObject({ code: SESSION_CHANGEE });
+    expect(c.valeur).toBe("renouvellement-9");
+    expect(perdue).not.toHaveBeenCalled();
   });
 
   it("change de numéro de session à chaque ouverture et à chaque oubli", async () => {
