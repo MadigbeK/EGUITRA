@@ -6,7 +6,7 @@ import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Modal, No
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
-import { ChampMontant, PastilleSociete, avecSociete, messageErreur, nombre, nomCourt, useMeta } from "./commun";
+import { ChampMontant, PastilleSociete, avecSociete, erreurNombre, messageErreur, nombre, nomCourt, useMeta } from "./commun";
 
 type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "feries" | "departements";
 
@@ -75,7 +75,8 @@ const COMPTES: Array<{ cle: keyof Settings["accounts"]; label: string; aide: str
 ];
 
 function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "paie" | "alertes" | "comptes"; settings: Settings; ecrit: boolean; onSaved: (s: Settings) => void }) {
-  const t = (v: number) => String(v);
+  // Valeurs écrites à la française dans les champs (« 2,5 », et non « 2.5 »).
+  const t = (v: number) => String(v).replace(".", ",");
   const [f, setF] = useState({
     cnss_employee_rate: t(settings.cnss_employee_rate),
     cnss_employer_rate: t(settings.cnss_employer_rate),
@@ -99,6 +100,16 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  // Nombres lus à la française : illisibles ou vides, ils restent en erreur sous leur champ et rien n'est
+  // envoyé (un plafond CNSS illisible valait 0, soit une assiette nulle à la paie suivante).
+  const requis: Array<keyof typeof f> = onglet === "paie"
+    ? ["cnss_employee_rate", "cnss_employer_rate", "cnss_ceiling", "smig", "allowance_exempt_cap", "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours"]
+    : onglet === "alertes" ? ["trial_alert_days", "contract_alert_days", "document_alert_days"] : [];
+  const erreurs: Partial<Record<keyof typeof f, string>> = {};
+  for (const k of requis) erreurs[k] = erreurNombre(f[k], true);
+  if (onglet === "paie") erreurs.rotation_bonus = erreurNombre(f.rotation_bonus);
+  const baremeIllisible = onglet === "paie" && bareme.some((b) => Boolean(erreurNombre(b.from, true) || erreurNombre(b.rate, true)));
+  const bloque = Object.values(erreurs).some(Boolean) || baremeIllisible;
 
   async function enregistrer() {
     setBusy(true);
@@ -140,7 +151,8 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
   const pied = ecrit && (
     <div className="mt-5 flex items-center justify-end gap-3">
       {ok && <span className="text-sm text-ok">Paramètres enregistrés.</span>}
-      <Button variant="primary" loading={busy} onClick={enregistrer}>
+      {bloque && <span className="text-sm text-danger">Un nombre est illisible ou manquant : corrigez le champ signalé en rouge.</span>}
+      <Button variant="primary" loading={busy} disabled={bloque} onClick={enregistrer}>
         Enregistrer
       </Button>
     </div>
@@ -151,13 +163,13 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
       <Card title="Échéancier du tableau de bord">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Fin de période d'essai, prévenir (jours avant)">
+          <Field label="Fin de période d'essai, prévenir (jours avant)" error={erreurs.trial_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.trial_alert_days} onChange={set("trial_alert_days")} />
           </Field>
-          <Field label="Fin de CDD ou de stage (jours avant)">
+          <Field label="Fin de CDD ou de stage (jours avant)" error={erreurs.contract_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.contract_alert_days} onChange={set("contract_alert_days")} />
           </Field>
-          <Field label="Échéance d'un document (jours avant)">
+          <Field label="Échéance d'un document (jours avant)" error={erreurs.document_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.document_alert_days} onChange={set("document_alert_days")} />
           </Field>
         </div>
@@ -193,38 +205,38 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="CNSS, part salariale (%)">
+          <Field label="CNSS, part salariale (%)" error={erreurs.cnss_employee_rate}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.cnss_employee_rate} onChange={set("cnss_employee_rate")} />
           </Field>
-          <Field label="CNSS, part patronale (%)">
+          <Field label="CNSS, part patronale (%)" error={erreurs.cnss_employer_rate}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.cnss_employer_rate} onChange={set("cnss_employer_rate")} />
           </Field>
-          <Field label="Plafond mensuel de la CNSS (GNF)">
+          <Field label="Plafond mensuel de la CNSS (GNF)" error={erreurs.cnss_ceiling}>
             <ChampMontant disabled={!ecrit} value={f.cnss_ceiling} onChange={(v) => setF({ ...f, cnss_ceiling: v })} />
           </Field>
-          <Field label="SMIG mensuel (GNF)" hint="Plancher de l'assiette CNSS, contrôle des salaires">
+          <Field label="SMIG mensuel (GNF)" error={erreurs.smig} hint="Plancher de l'assiette CNSS, contrôle des salaires">
             <ChampMontant disabled={!ecrit} value={f.smig} onChange={(v) => setF({ ...f, smig: v })} />
           </Field>
-          <Field label="Indemnités forfaitaires exonérées de RTS (% du brut)" hint="CGI, art. 55 : 25 %">
+          <Field label="Indemnités forfaitaires exonérées de RTS (% du brut)" error={erreurs.allowance_exempt_cap} hint="CGI, art. 55 : 25 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.allowance_exempt_cap} onChange={set("allowance_exempt_cap")} />
           </Field>
-          <Field label="Versement forfaitaire (%)" hint="CGI, art. 201 : 6 %">
+          <Field label="Versement forfaitaire (%)" error={erreurs.vf_rate} hint="CGI, art. 201 : 6 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.vf_rate} onChange={set("vf_rate")} />
           </Field>
-          <Field label="Congés acquis par mois (jours ouvrables)">
+          <Field label="Congés acquis par mois (jours ouvrables)" error={erreurs.leave_days_per_month}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.leave_days_per_month} onChange={set("leave_days_per_month")} />
           </Field>
-          <Field label="Heures mensuelles (taux horaire)">
+          <Field label="Heures mensuelles (taux horaire)" error={erreurs.monthly_hours}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.monthly_hours} onChange={set("monthly_hours")} />
           </Field>
-          <Field label="Prime par rotation validée (GNF)" hint="Chauffeurs liés au transport ; 0 : pas de prime automatique">
+          <Field label="Prime par rotation validée (GNF)" error={erreurs.rotation_bonus} hint="Chauffeurs liés au transport ; 0 : pas de prime automatique">
             <ChampMontant disabled={!ecrit} value={f.rotation_bonus} onChange={(v) => setF({ ...f, rotation_bonus: v })} />
           </Field>
         </div>
       </Card>
       <Card title={<span className="flex flex-wrap items-center gap-2">Propre à <PastilleSociete company={settings.company} /></span>}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Taxe de formation (%)" hint="2 % (apprentissage, moins de 30 salariés) ou 1,5 %">
+          <Field label="Taxe de formation (%)" error={erreurs.training_tax_rate} hint="2 % (apprentissage, moins de 30 salariés) ou 1,5 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.training_tax_rate} onChange={set("training_tax_rate")} />
           </Field>
           <Field label="Libellé de la taxe de formation">
@@ -254,7 +266,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
                   <ChampMontant disabled={!ecrit} value={b.from} onChange={(v) => setBareme(bareme.map((x, j) => (j === i ? { ...x, from: v } : x)))} />
                 </td>
                 <td className="w-24 py-1 pr-2">
-                  <Input inputMode="decimal" disabled={!ecrit} value={b.rate} onChange={(e) => setBareme(bareme.map((x, j) => (j === i ? { ...x, rate: e.target.value } : x)))} />
+                  <Input inputMode="decimal" aria-invalid={erreurNombre(b.rate, true) ? true : undefined} disabled={!ecrit} value={b.rate} onChange={(e) => setBareme(bareme.map((x, j) => (j === i ? { ...x, rate: e.target.value } : x)))} />
                 </td>
                 <td className="w-10 py-1">
                   {ecrit && (
@@ -267,6 +279,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
             ))}
           </tbody>
         </table>
+        {baremeIllisible && <p role="alert" className="mt-2 text-[12.5px] font-medium text-danger">Seuil ou taux illisible ou vide dans une tranche : écrivez par exemple 1 000 000 ou 2,5.</p>}
         {ecrit && (
           <Button size="sm" className="mt-2" onClick={() => setBareme([...bareme, { from: "", rate: "" }])}>
             <Plus className="h-3.5 w-3.5" /> Ajouter une tranche
@@ -348,7 +361,7 @@ function EditionRubrique({ rubrique, onClose, onDone }: { rubrique: Rubric | nul
     name: rubrique?.name ?? "",
     kind: rubrique?.kind ?? "gain",
     input: rubrique?.input ?? "amount",
-    overtime_rate: String(rubrique?.overtime_rate ?? 0),
+    overtime_rate: String(rubrique?.overtime_rate ?? 0).replace(".", ","),
     cnss: rubrique?.cnss ?? true,
     taxable: rubrique?.taxable ?? true,
     exempt_allowance: rubrique?.exempt_allowance ?? false,
@@ -382,7 +395,7 @@ function EditionRubrique({ rubrique, onClose, onDone }: { rubrique: Rubric | nul
       title={rubrique ? `Rubrique ${rubrique.code}` : "Nouvelle rubrique"}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim()} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim() || Boolean(f.input === "hours" && erreurNombre(f.overtime_rate))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -405,7 +418,7 @@ function EditionRubrique({ rubrique, onClose, onDone }: { rubrique: Rubric | nul
         <Field label="Saisie">
           <Select value={f.input} onChange={(e) => setF({ ...f, input: e.target.value as Rubric["input"] })} options={[{ value: "amount", label: "Montant" }, { value: "hours", label: "Heures (taux horaire majoré)" }]} />
         </Field>
-        <Field label="Majoration des heures (%)">
+        <Field label="Majoration des heures (%)" error={f.input === "hours" ? erreurNombre(f.overtime_rate) : undefined}>
           <Input inputMode="decimal" disabled={f.input !== "hours"} value={f.overtime_rate} onChange={(e) => setF({ ...f, overtime_rate: e.target.value })} />
         </Field>
         <Field label="Compte" hint={f.kind === "gain" ? "Charge : 6611, 6612 primes…" : "Tiers : 421 avances…"} className="sm:col-span-2">
@@ -477,7 +490,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
 }
 
 function EditionTypeAbsence({ type, onClose, onDone }: { type: LeaveType | null; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ code: type?.code ?? "", name: type?.name ?? "", paid: type?.paid ?? true, deducts_balance: type?.deducts_balance ?? false, needs_document: type?.needs_document ?? false, max_days: String(type?.max_days ?? 0), active: type?.active ?? true });
+  const [f, setF] = useState({ code: type?.code ?? "", name: type?.name ?? "", paid: type?.paid ?? true, deducts_balance: type?.deducts_balance ?? false, needs_document: type?.needs_document ?? false, max_days: String(type?.max_days ?? 0).replace(".", ","), active: type?.active ?? true });
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function enregistrer() {
@@ -505,7 +518,7 @@ function EditionTypeAbsence({ type, onClose, onDone }: { type: LeaveType | null;
       title={type ? type.name : "Nouveau type d'absence"}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim()} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim() || Boolean(erreurNombre(f.max_days))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -519,7 +532,7 @@ function EditionTypeAbsence({ type, onClose, onDone }: { type: LeaveType | null;
         <Field label="Code">
           <Input className="font-mono uppercase" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} />
         </Field>
-        <Field label="Durée maximale par demande (jours ouvrables, 0 : sans limite)">
+        <Field error={erreurNombre(f.max_days)} label="Durée maximale par demande (jours ouvrables, 0 : sans limite)">
           <Input inputMode="decimal" value={f.max_days} onChange={(e) => setF({ ...f, max_days: e.target.value })} />
         </Field>
         <Field label="Libellé" className="sm:col-span-2">

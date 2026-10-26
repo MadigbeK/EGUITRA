@@ -7,7 +7,7 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kp
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
-import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
+import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
 
@@ -235,10 +235,12 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
 /** Primes et indemnités versées chaque mois : remplacées en bloc (PATCH fixed_lines). */
 function ElementsFixes({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; onClose: () => void; onDone: () => void }) {
   const rubriques = meta.rubrics.filter((r) => r.active && !r.system && r.kind === "gain");
-  const [lignes, setLignes] = useState(e.fixed_lines.map((l) => ({ rubric_id: String(l.rubric.id), valeur: String(l.rubric.input === "hours" ? l.quantity : l.amount) })));
+  const [lignes, setLignes] = useState(e.fixed_lines.map((l) => ({ rubric_id: String(l.rubric.id), valeur: String(l.rubric.input === "hours" ? l.quantity : l.amount).replace(".", ",") })));
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const rubrique = (id: string) => rubriques.find((r) => r.id === Number(id));
+  // Montant ou heures illisible : en erreur sous le champ, et rien n'est envoyé (il valait 0).
+  const illisible = lignes.some((l) => l.rubric_id && erreurNombre(l.valeur));
 
   async function enregistrer() {
     setBusy(true);
@@ -261,9 +263,9 @@ function ElementsFixes({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; 
       open
       wide
       title={`Éléments fixes, ${e.name}`}
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
-        <Button variant="primary" loading={busy} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={illisible} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -281,7 +283,7 @@ function ElementsFixes({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; 
               <Field label={i === 0 ? "Rubrique" : ""}>
                 <Select value={l.rubric_id} placeholder="Choisir" onChange={(ev) => setLignes(lignes.map((x, j) => (j === i ? { ...x, rubric_id: ev.target.value } : x)))} options={rubriques.map((x) => ({ value: x.id, label: x.name }))} />
               </Field>
-              <Field label={i === 0 ? "Montant ou heures" : ""}>
+              <Field label={i === 0 ? "Montant ou heures" : ""} error={erreurNombre(l.valeur)}>
                 <ChampMontant value={l.valeur} placeholder={r?.input === "hours" ? "heures" : "GNF"} onChange={(v) => setLignes(lignes.map((x, j) => (j === i ? { ...x, valeur: v } : x)))} />
               </Field>
               <Button variant="ghost" aria-label="Retirer" onClick={() => setLignes(lignes.filter((_, j) => j !== i))}>

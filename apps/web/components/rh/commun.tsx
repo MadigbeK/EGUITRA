@@ -9,9 +9,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { LogoSociete } from "@/components/brand";
 import { Check, X } from "@/components/icons";
-import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, type Tone } from "@/components/ui";
+import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { ApiError, DelaiDepasse, apiGet, apiSend, useApi } from "@/lib/api-client";
-import { fmtDec, lireNombre } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDec, lireNombre, nombreIllisible } from "@/lib/format";
 import {
   LEAVE_STATE_LABELS,
   PAYROLL_STATE_LABELS,
@@ -96,6 +96,16 @@ export function nombre(v: string): number {
   return lireNombre(v) ?? 0;
 }
 
+/**
+ * Message sous un champ de nombre : saisie illisible (« 1.500.000 », « 30 j »), ou champ vide quand une
+ * valeur est exigée (un plafond ou un taux vide vaudrait 0). undefined : la saisie est lisible.
+ */
+export function erreurNombre(v: string, requis = false): string | undefined {
+  if (nombreIllisible(v)) return AIDE_NOMBRE;
+  if (requis && !v.trim()) return "Indiquez une valeur (0 si sans objet).";
+  return undefined;
+}
+
 /** Libellé d'une option d'une liste du noyau, à défaut le code. */
 export function libelle<K extends string>(options: Option<K>[] | undefined, code: K | null | undefined, repli?: Record<string, string>): string {
   if (!code) return "–";
@@ -166,9 +176,10 @@ export function ChoixSalarie({ meta, value, onChange, placeholder = "Choisir un 
   );
 }
 
-/** Champ de montant en GNF, saisi librement (espaces acceptés). */
+/** Champ de montant en GNF, saisi librement (espaces acceptés) ; une saisie illisible le met en erreur. */
 export function ChampMontant({ value, onChange, placeholder, disabled }: { value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
-  return <Input inputMode="numeric" className="font-mono" value={value} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />;
+  const illisible = nombreIllisible(value);
+  return <Input inputMode="numeric" aria-invalid={illisible || undefined} className={cx("font-mono", illisible && "border-danger ring-2 ring-danger/15")} value={value} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />;
 }
 
 /**

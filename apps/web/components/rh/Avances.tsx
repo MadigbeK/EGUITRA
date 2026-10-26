@@ -7,7 +7,7 @@ import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice,
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtShort } from "@/lib/format";
 import type { Advance, AdvanceState, Meta } from "@/lib/rh-types";
-import { ChampMontant, ChoixSalarie, FiltreSociete, avecSociete, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { ChampMontant, ChoixSalarie, FiltreSociete, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const ETAT: Record<AdvanceState, { label: string; tone: "warn" | "ok" | "neutral" }> = {
   open: { label: "En cours", tone: "warn" },
@@ -146,7 +146,7 @@ function NouvelleAvance({ meta, onClose, onDone }: { meta: Meta; onClose: () => 
       title="Nouvelle avance ou prêt"
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!salarie || !m || !mens || !premier} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!salarie || !m || !mens || !premier || Boolean(erreurNombre(montant) || erreurNombre(mensualite))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -166,10 +166,10 @@ function NouvelleAvance({ meta, onClose, onDone }: { meta: Meta; onClose: () => 
         <Field label="Date du versement">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        <Field label="Montant (GNF)">
+        <Field label="Montant (GNF)" error={erreurNombre(montant)}>
           <ChampMontant value={montant} onChange={setMontant} />
         </Field>
-        <Field label="Mensualité retenue (GNF)" hint={kind === "avance" ? "Vide : retenue en une fois" : undefined}>
+        <Field label="Mensualité retenue (GNF)" error={erreurNombre(mensualite)} hint={kind === "avance" ? "Vide : retenue en une fois" : undefined}>
           <ChampMontant value={mensualite} onChange={setMensualite} />
         </Field>
         <Field label="Premier mois de retenue">

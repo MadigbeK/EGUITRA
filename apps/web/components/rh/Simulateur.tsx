@@ -6,7 +6,7 @@ import { Button, Card, Empty, Field, Kpi, Notice, PageHeader, Segmented, Select,
 import { apiSend } from "@/lib/api-client";
 import { fmtDec, fmtGNF, fmtInt, fmtPct } from "@/lib/format";
 import type { ContractType, Simulation, SimulationInput } from "@/lib/rh-types";
-import { ChampMontant, messageErreur, nombre, useMeta } from "./commun";
+import { ChampMontant, erreurNombre, messageErreur, nombre, useMeta } from "./commun";
 
 type Mode = "brut" | "net";
 
@@ -72,7 +72,7 @@ export function SimulateurSalaire() {
                 { key: "net", label: "Du net au salaire de base" },
               ]}
             />
-            <Field label={mode === "brut" ? "Salaire de base mensuel (GNF)" : "Net à payer souhaité (GNF)"}>
+            <Field label={mode === "brut" ? "Salaire de base mensuel (GNF)" : "Net à payer souhaité (GNF)"} error={erreurNombre(montant)}>
               <ChampMontant value={montant} onChange={setMontant} placeholder="Par exemple 4 500 000" />
             </Field>
             <Field label="Type de contrat" hint="Stage et apprentissage : ni CNSS ni VF (dans les limites légales)">

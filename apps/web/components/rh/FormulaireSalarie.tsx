@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button, Field, Input, Modal, Notice, Select, Tabs, Textarea } from "@/components/ui";
 import { apiSend } from "@/lib/api-client";
 import type { Employee, EmployeeInput, Meta } from "@/lib/rh-types";
-import { ChampMontant, PastilleSociete, libelleSalarie, messageErreur, nombre, nomCourt, useSocieteDeTravail } from "./commun";
+import { ChampMontant, PastilleSociete, erreurNombre, libelleSalarie, messageErreur, nombre, nomCourt, useSocieteDeTravail } from "./commun";
 
 type Section = "poste" | "identite" | "paiement" | "lien";
 
@@ -54,7 +54,7 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
     mobile_money: employee?.mobile_money ?? "",
     user_id: texte(employee?.user?.id),
     driver_id: texte(employee?.driver?.id),
-    leave_initial: texte(employee?.leave_initial ?? 0),
+    leave_initial: texte(employee?.leave_initial ?? 0).replace(".", ","),
     leave_initial_date: employee?.leave_initial_date ?? "",
     note: employee?.note ?? "",
   });
@@ -139,16 +139,20 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
     }
   }
 
-  const valide = employeur && f.name.trim() && f.hire_date && (f.contract_type !== "cdd" || f.contract_end) && (!salaireChange || f.salary_reason.trim());
+  // Nombres lus à la française : une saisie illisible reste en erreur sous son champ et bloque l'envoi
+  // (« 1.500.000 » valait 0 : un salaire de base nul).
+  const erreurs = { base_salary: erreurNombre(f.base_salary), children: erreurNombre(f.children), leave_initial: erreurNombre(f.leave_initial) };
+  const illisible = Object.values(erreurs).some(Boolean);
+  const valide = employeur && f.name.trim() && f.hire_date && (f.contract_type !== "cdd" || f.contract_end) && (!salaireChange || f.salary_reason.trim()) && !illisible;
   return (
     <Modal
       open
       wide
       title={employee ? `Modifier, ${employee.name}` : "Nouveau salarié"}
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
         <>
-          <span className="mr-auto self-center text-[12.5px] text-muted">Seuls le nom et la date d&apos;embauche sont exigés ; le reste peut se compléter plus tard.</span>
+          <span className="mr-auto self-center text-[12.5px] text-muted">{illisible ? "Un nombre est illisible : corrigez le champ signalé en rouge." : <>Seuls le nom et la date d&apos;embauche sont exigés ; le reste peut se compléter plus tard.</>}</span>
           <Button variant="primary" loading={busy} disabled={!valide} onClick={enregistrer}>
             {employee ? "Enregistrer" : "Créer le dossier"}
           </Button>
@@ -210,7 +214,7 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
           <Field label={f.contract_type === "cdi" ? "Fin du contrat (sans objet en CDI)" : "Fin du contrat"} error={f.contract_type === "cdd" && !f.contract_end ? "Exigée pour un CDD" : undefined}>
             <Input type="date" value={f.contract_end} min={f.hire_date} disabled={f.contract_type === "cdi"} onChange={set("contract_end")} />
           </Field>
-          <Field label="Salaire de base mensuel (GNF)">
+          <Field label="Salaire de base mensuel (GNF)" error={erreurs.base_salary}>
             <ChampMontant value={f.base_salary} onChange={(v) => setF({ ...f, base_salary: v })} />
           </Field>
           <Field label="Activité (imputation de la masse salariale)">
@@ -241,8 +245,8 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
           <Field label="Nationalité">
             <Input value={f.nationality} onChange={set("nationality")} />
           </Field>
-          <Field label="Enfants à charge">
-            <Input inputMode="numeric" value={f.children} onChange={set("children")} />
+          <Field label="Enfants à charge" error={erreurs.children}>
+            <Input inputMode="numeric" aria-invalid={erreurs.children ? true : undefined} value={f.children} onChange={set("children")} />
           </Field>
           <Field label="Pièce d'identité (numéro)">
             <Input value={f.id_number} onChange={set("id_number")} />
@@ -299,8 +303,8 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
               <Select value={f.driver_id} onChange={set("driver_id")} placeholder="Pas un chauffeur" options={chauffeurs.map((d) => ({ value: d.id, label: d.name }))} />
             </Field>
           )}
-          <Field label="Solde de congés de reprise (jours)" hint="Jours acquis et non pris à la date ci-contre">
-            <Input inputMode="decimal" value={f.leave_initial} onChange={set("leave_initial")} />
+          <Field label="Solde de congés de reprise (jours)" hint="Jours acquis et non pris à la date ci-contre" error={erreurs.leave_initial}>
+            <Input inputMode="decimal" aria-invalid={erreurs.leave_initial ? true : undefined} value={f.leave_initial} onChange={set("leave_initial")} />
           </Field>
           <Field label="Date du solde de reprise" hint="Vide : l'acquisition court depuis l'embauche">
             <Input type="date" value={f.leave_initial_date} onChange={set("leave_initial_date")} />

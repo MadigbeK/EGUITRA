@@ -8,7 +8,7 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, I
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { Anomaly, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
-import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, avecSociete, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const TON_ANOMALIE: Record<Anomaly["severity"], Tone> = { danger: "danger", warn: "warn", info: "accent" };
 
@@ -455,7 +455,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
             <Field label="Rubrique">
               <Select value={rubriqueId} onChange={(e) => setRubriqueId(e.target.value)} placeholder="Choisir" options={rubriques.map((r) => ({ value: r.id, label: `${r.name}${r.kind === "deduction" ? " (retenue)" : ""}` }))} />
             </Field>
-            <Field label={rubrique?.input === "hours" ? "Heures" : "Montant (GNF)"}>
+            <Field label={rubrique?.input === "hours" ? "Heures" : "Montant (GNF)"} error={erreurNombre(valeur)}>
               <ChampMontant value={valeur} onChange={setValeur} />
             </Field>
             <Field label="Motif" className="sm:col-span-2">
@@ -463,7 +463,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
             </Field>
             <div className="flex items-center justify-between gap-3 sm:col-span-2">
               <span className="text-[12.5px] text-muted">{rubrique?.input === "hours" ? `Payées au taux horaire majoré de ${fmtDec(rubrique.overtime_rate)} %.` : rubrique ? `${rubrique.cnss ? "Soumis à la CNSS" : "Hors CNSS"}, ${rubrique.taxable ? (rubrique.exempt_allowance ? "exonéré de RTS dans la limite de 25 % du brut" : "soumis à la RTS") : "hors RTS"}.` : ""}</span>
-              <Button variant="primary" loading={busy} disabled={!rubrique || !nombre(valeur)} onClick={ajouter}>
+              <Button variant="primary" loading={busy} disabled={!rubrique || !nombre(valeur) || Boolean(erreurNombre(valeur))} onClick={ajouter}>
                 <Check className="h-4 w-4" /> Ajouter
               </Button>
             </div>
