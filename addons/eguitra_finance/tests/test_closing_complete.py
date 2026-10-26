@@ -197,6 +197,8 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         self.env["account.journal"].create({"name": "Banque ouverte après la clôture", "type": "bank", "code": "BNA9",
                                             "company_id": self.company.id})
         self.company.name = f"{self.company.name} (nouvelle raison sociale)"
+        self.assertIn(self.cash.code, [j["journal"] for j in close.seal_data["journals"]])
+        self.cash.active = False  # journal scellé archivé après la clôture
         self.assertEqual(close.eguitra_verify_seal()["status"], "ok", "Ni le nouveau journal ni le nom ne lèvent le sceau")
         sealed = (close.seal, close.seal_data)
         close.sudo().write({"seal": close._seal_hash(legacy), "seal_data": legacy})

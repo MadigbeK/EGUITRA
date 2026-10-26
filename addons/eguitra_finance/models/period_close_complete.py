@@ -576,7 +576,8 @@ class EguitraPeriodClose(models.Model):
         version = stored.get("version", 1) if stored else SEAL_VERSION
         Move = self.env["account.move"].sudo()
         order = "secure_sequence_number desc, id desc" if "secure_sequence_number" in Move._fields else "date desc, id desc"
-        journals = self.env["account.journal"].sudo().search(
+        # Recalcul d'un sceau posé : journaux archivés depuis compris (ils gardent leurs pièces scellées).
+        journals = self.env["account.journal"].sudo().with_context(active_test=not stored).search(
             [("company_id", "=", company.id), ("type", "in", SECURED_JOURNAL_TYPES)], order="code")
         if stored:
             sealed = {j["journal"] for j in stored.get("journals", [])}
