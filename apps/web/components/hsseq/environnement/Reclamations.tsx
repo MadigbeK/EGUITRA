@@ -48,8 +48,8 @@ function Reponse({ r }: { r: ComplaintLine }) {
 }
 
 /**
- * Réclamations des clients (GET /hsseq/complaints) : à répondre, en retard, répondues et closes en
- * tête ; filtres par statut (en cours par défaut), retard, nature, gravité, client, site et période,
+ * Réclamations des clients (GET /hsseq/complaints), chacune avec son texte en tête de ligne : à
+ * répondre, en retard, répondues et closes en tête ; filtres par statut (en cours par défaut), retard, nature, gravité, client, site et période,
  * portés par l'adresse avec la fiche ouverte (reclamation). Le Responsable HSSEQ les saisit, y répond
  * dans le délai des paramètres et les clôt quand leurs actions le sont.
  */
@@ -104,6 +104,7 @@ export function Reclamations({ lire, ecrire, droits }: VueProps) {
           </span>
           {choisi === r.id && <span className="sr-only"> (fiche ouverte)</span>}
           <span className="mt-0.5 block leading-snug text-ink">{r.partner.name}</span>
+          {r.description && <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-snug text-ink-2">{r.description}</span>}
           <span className="mt-1 block text-[12px] leading-snug text-muted">
             {NATURE_RECLAMATION[r.nature]}, reçue le {fmtDate(r.received_on)}
           </span>

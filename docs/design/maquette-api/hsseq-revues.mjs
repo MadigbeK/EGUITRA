@@ -26,9 +26,11 @@
  */
 
 /**
- * Lecture (REVIEW_READ, hsseq@26a9d40) : l'auditeur lit les revues de ses sociétés, sans bornage par site
- * (revue de société) et sans masquage des noms ; la garde commune de serveur.mjs (hsAuditorGuard) le
- * tient en lecture seule et à sa date de fin d'accès. Écriture (REVIEW_WRITE) : direction et hsseq.
+ * Lecture (REVIEW_READ, hsseq@5119185) : l'auditeur lit les revues de ses sociétés, sans bornage par site
+ * (revue de société), avec les noms du personnel interne (participants, responsables), jamais celui d'un
+ * conducteur ni un indicateur d'alcootest ; dans l'historique et les pièces, la fonction de l'auteur à la
+ * place de son nom. La garde commune de serveur.mjs (hsAuditorGuard) le tient en lecture seule et à sa
+ * date de fin d'accès. Écriture (REVIEW_WRITE) : direction et hsseq.
  */
 const LECTURE = ["admin", "direction", "hsseq", "auditeur"];
 const ECRITURE = ["direction", "hsseq"];
@@ -52,6 +54,8 @@ const CLASSEMENTS = ["major", "minor", "observation"];
 const STATUTS_EXIGENCE = ["compliant", "partial", "non_compliant", "not_evaluated"];
 const NORMES = [["iso_45001", "ISO 45001"], ["iso_14001", "ISO 14001"], ["iso_9001", "ISO 9001"], ["other", "Autre"]];
 const VIOLATIONS = ["speeding", "harsh_braking", "night_driving", "driving_time"];
+/** Fonction d'un compte, servie à l'auditeur à la place de son nom (FUNCTIONS du noyau, premier profil trouvé). */
+const FONCTIONS = [["hsseq", "Responsable HSSEQ"], ["exploitation", "Chef de parc"], ["rh", "Ressources humaines"], ["conducteur", "Conducteur"], ["admin", "Administration"], ["direction", "Direction générale"], ["finance", "Finance"], ["auditeur", "Auditeur"]];
 
 const pad = (n, w = 2) => String(n).padStart(w, "0");
 const ajouterJours = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
@@ -68,6 +72,15 @@ function moisDe(debut, fin) {
   return liste;
 }
 const libelleMois = (mois) => `${MOIS[Number(mois.slice(5, 7)) - 1]} ${mois.slice(0, 4)}`;
+/**
+ * Période en toutes lettres (period_label du noyau) : « octobre 2026 » pour un seul mois, « d'octobre 2026
+ * à décembre 2026 », « de mars 2026 à mai 2026 » sinon (élision devant une voyelle).
+ */
+function libellePeriode(debut, fin) {
+  const premier = libelleMois(debut);
+  if (debut.slice(0, 7) === fin.slice(0, 7)) return premier;
+  return `${/^[aeiouy]/.test(premier) ? "d'" : "de "}${premier} à ${libelleMois(fin)}`;
+}
 const somme = (liste, f) => liste.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const compter = (liste, cles, f) => Object.fromEntries(cles.map((c) => [c, liste.filter((x) => f(x) === c).length]));
 /** Première valeur renseignée parmi des noms de champ possibles (tables du lot 3 écrites en parallèle). */
@@ -287,7 +300,7 @@ export function enregistrerRevues(H) {
       created: registre.filter((a) => dans(a.created_at, r.period_start, r.period_end)).length,
       closed: registre.filter((a) => a.status === "closed" && dans(a.closed_at, r.period_start, r.period_end)).length,
       on_time_rate: valeurs.actions_on_time ?? null, effectiveness_rate: valeurs.actions_effectiveness ?? null,
-      overdue_items: enRetard.slice(0, LIMITE_LISTE).map((a) => ({ id: a.id, reference: a.reference, description: String(a.description).slice(0, 300), origin: a.origin, owner: nom(a.owner_id), due_date: a.due_date, days_overdue: retard(a) })),
+      overdue_items: enRetard.slice(0, LIMITE_LISTE).map((a) => ({ id: a.id, reference: a.reference, description: String(a.description).slice(0, 300), origin: a.origin, owner: nom(a.owner_id), owner_id: a.owner_id ?? null, due_date: a.due_date, days_overdue: retard(a) })),
     };
   }
 
@@ -341,7 +354,7 @@ export function enregistrerRevues(H) {
       active: liste.length,
       by_residual_level: compter(liste, NIVEAUX, (x) => H.hsLevel(criticite(x))),
       reviews_overdue: liste.filter((x) => x.review_date && x.review_date < jour).length,
-      high_residual: eleves.slice(0, LIMITE_LISTE).map((x) => ({ id: x.id, reference: x.reference, feared_event: String(x.feared_event).slice(0, 300), residual_criticality: criticite(x), residual_level: H.hsLevel(criticite(x)), owner: nom(x.owner_id) })),
+      high_residual: eleves.slice(0, LIMITE_LISTE).map((x) => ({ id: x.id, reference: x.reference, feared_event: String(x.feared_event).slice(0, 300), residual_criticality: criticite(x), residual_level: H.hsLevel(criticite(x)), owner: nom(x.owner_id), owner_id: x.owner_id ?? null })),
     };
   }
 
@@ -426,7 +439,7 @@ export function enregistrerRevues(H) {
     const mois = moisDe(r.period_start, r.period_end);
     const { liste, valeurs } = indicateurs(r);
     return {
-      period: { from: r.period_start, to: r.period_end, months: mois, label: mois.length > 1 ? `${libelleMois(mois[0])} à ${libelleMois(mois[mois.length - 1])}` : libelleMois(mois[0]) },
+      period: { from: r.period_start, to: r.period_end, months: mois, label: libellePeriode(r.period_start, r.period_end) },
       generated_on: jour,
       indicators: liste,
       events: evenements(r),
@@ -455,9 +468,35 @@ export function enregistrerRevues(H) {
 
   /* ─── Lignes et fiches ───────────────────────────────────────────────── */
 
+  /* Lecture de l'auditeur (personal_data_hidden du noyau) : noms du personnel interne, jamais celui d'un
+     conducteur ; auteur d'une écriture (journal, pièce) par sa seule fonction ; éléments d'entrée sans
+     indicateur d'alcootest. */
+
+  const masque = (ctx) => H.hsPersonalHidden(ctx);
+  const conducteur = (id) => Boolean(id && compte(id)?.profiles.includes("conducteur"));
+  /** Compte cité par la revue (person du contrôleur) : nom nul pour un conducteur lu par l'auditeur. */
+  const personne = (ctx, id) => (!id ? null : masque(ctx) && conducteur(id) ? { id, name: null } : H.hsUser(id));
+  /** Auteur d'une écriture (actor_ref du noyau) : pour l'auditeur, sa fonction à la place de son nom. */
+  function auteur(ctx, ref) {
+    if (!ref || !masque(ctx)) return ref;
+    const profils = compte(ref.id)?.profiles ?? [];
+    return { id: null, name: null, function: FONCTIONS.find(([code]) => profils.includes(code))?.[1] ?? "Utilisateur interne" };
+  }
+  /** Éléments d'entrée lus par l'auditeur (auditor_inputs) : sans alcootest, sans nom de conducteur. */
+  function entreesLues(ctx, inputs) {
+    if (!inputs || !masque(ctx)) return inputs;
+    const copie = structuredClone(inputs);
+    copie.indicators = (copie.indicators ?? []).filter((i) => !String(i.code).startsWith("breath_test"));
+    for (const item of [...(copie.actions?.overdue_items ?? []), ...(copie.risks?.high_residual ?? [])]) if (conducteur(item.owner_id)) item.owner = null;
+    return copie;
+  }
+
   /** Ligne d'action du plan, avec l'origine que sert le noyau (référence et intitulé de la revue). */
-  function ligneAction(r, a) {
-    return { ...H.hsActionLine(a), origin_label: `${r.reference} ${r.title}` };
+  function ligneAction(ctx, r, a) {
+    const l = { ...H.hsActionLine(a), origin_label: `${r.reference} ${r.title}` };
+    // action_line du noyau (owner_ref) : jamais le nom d'un responsable conducteur pour l'auditeur.
+    if (masque(ctx) && conducteur(a.owner_id)) l.owner = { id: a.owner_id, name: null };
+    return l;
   }
   function ligne(r) {
     const liste = actionsDe(r);
@@ -476,17 +515,17 @@ export function enregistrerRevues(H) {
     const { transitions, rights } = droits(ctx, r);
     return {
       ...ligne(r),
-      participants: r.participant_ids.map((id) => H.hsUser(id)), external_participants: r.external_participants ?? null, agenda: r.agenda ?? null,
-      inputs: r.inputs ?? null, inputs_generated_at: r.inputs_generated_at ?? null, minutes: r.minutes ?? null, conclusion: r.conclusion ?? null,
+      participants: r.participant_ids.map((id) => personne(ctx, id)), external_participants: r.external_participants ?? null, agenda: r.agenda ?? null,
+      inputs: entreesLues(ctx, r.inputs) ?? null, inputs_generated_at: r.inputs_generated_at ?? null, minutes: r.minutes ?? null, conclusion: r.conclusion ?? null,
       decisions: decisionsDe(r).map((d) => {
         const a = d.action_id ? HS.actions.find((x) => x.id === d.action_id) : null;
-        return { id: d.id, sequence: d.sequence, topic: d.topic, description: d.description, owner: H.hsUser(d.owner_id), due_date: d.due_date ?? null, action: a ? ligneAction(r, a) : null };
+        return { id: d.id, sequence: d.sequence, topic: d.topic, description: d.description, owner: personne(ctx, d.owner_id), due_date: d.due_date ?? null, action: a ? ligneAction(ctx, r, a) : null };
       }),
-      actions: actionsDe(r).map((a) => ligneAction(r, a)),
+      actions: actionsDe(r).map((a) => ligneAction(ctx, r, a)),
       closed_at: r.closed_at ?? null, closed_by: H.hsUser(r.closed_by), reopen_reason: r.reopen_reason ?? null,
-      attachments: H.hsAttachments("review", r.id),
+      attachments: H.hsAttachments("review", r.id).map((x) => ({ ...x, created_by: auteur(ctx, x.created_by) })),
       // Le journal du noyau est servi du plus récent au plus ancien.
-      history: H.hsHistory("review", r.id).reverse(), transitions, rights,
+      history: H.hsHistory("review", r.id).reverse().map((h) => ({ ...h, by: auteur(ctx, h.by) })), transitions, rights,
     };
   }
 
@@ -508,7 +547,7 @@ export function enregistrerRevues(H) {
     const debut = v.period_start ?? r?.period_start;
     const fin = v.period_end ?? r?.period_end;
     if (debut && fin) {
-      if (fin < debut) throw H.hsBad("La période se termine après son début.", ["period_end"]);
+      if (fin < debut) throw H.hsBad("La fin de la période précède son début.", ["period_end"]);
       if (moisDe(debut, fin).length > MAX_MOIS) throw H.hsBad("Période d'une revue : 24 mois au plus.", ["period_end"]);
     }
     for (const [cle, max] of [["title", 300], ["external_participants", 2000], ["agenda", 4000], ["minutes", 20000], ["conclusion", 8000]]) if (cle in data) v[cle] = H.hsText(data, cle, max);
@@ -521,7 +560,7 @@ export function enregistrerRevues(H) {
     return v;
   }
 
-  function valeursDecision(data, partiel = false) {
+  function valeursDecision(data, partiel = false, r = null) {
     const v = {};
     if (!partiel || "topic" in data) {
       const t = data.topic || "improvement";
@@ -535,7 +574,7 @@ export function enregistrerRevues(H) {
     if ("owner_id" in data) {
       const id = H.hsId(data, "owner_id");
       const u = id ? compte(id) : null;
-      if (u && u.profiles.every((p) => p === "porteur")) throw H.hsRule("business_rule", "Responsable : un compte interne.", { fields: ["owner_id"] });
+      if (u && (u.profiles.every((p) => p === "porteur") || (r && !u.companies.includes(r.company_id)))) throw H.hsRule("business_rule", "Responsable : un compte interne de la société.", { fields: ["owner_id"] });
       v.owner_id = u ? u.id : null;
     }
     if ("due_date" in data) v.due_date = dateOuNul(data, "due_date");
@@ -577,7 +616,7 @@ export function enregistrerRevues(H) {
       participant_ids: [], external_participants: null, agenda: null, inputs: null, inputs_generated_at: null, minutes: null, conclusion: null, state: "prepared",
       closed_at: null, closed_by: null, reopen_reason: null, ...valeurs,
     };
-    if (!r.title) r.title = `Revue de direction HSSEQ, ${libelleMois(r.period_start)} à ${libelleMois(r.period_end)}`;
+    if (!r.title) r.title = `Revue de direction HSSEQ, ${libellePeriode(r.period_start, r.period_end)}`;
     HS.reviews.push(r);
     H.hsLog("review", r.id, by, "create", null, null, null, at);
     generer(r, jour, at);
@@ -668,7 +707,7 @@ export function enregistrerRevues(H) {
     // Revue du second semestre 2025, tenue le 20 janvier 2026 : ses actions ont été semées par
     // hsseq-conformite.mjs sans fiche d'origine (origin_id nul), elles lui sont rattachées.
     const r1 = creerRevue({
-      title: "Revue de direction HSSEQ, juillet 2025 à décembre 2025", period_start: "2025-07-01", period_end: "2025-12-31", planned_date: "2026-01-20",
+      title: "Revue de direction HSSEQ, de juillet 2025 à décembre 2025", period_start: "2025-07-01", period_end: "2025-12-31", planned_date: "2026-01-20",
       participant_ids: [8, 16, 11, 12, 19, 6], external_participants: "Ibrahima Camara, délégué du personnel des conducteurs", agenda: ordreDuJour,
     }, 16, at("2026-01-06", 10), "2026-01-06");
     tenir(r1, 16, "2026-01-20", at("2026-01-20", 8));
@@ -706,7 +745,7 @@ export function enregistrerRevues(H) {
 
     // Revue du premier semestre 2026, tenue le 16 juillet et close le 23 : décisions et actions suivies au plan.
     const r2 = creerRevue({
-      title: "Revue de direction HSSEQ, janvier 2026 à juin 2026", period_start: "2026-01-01", period_end: "2026-06-30", planned_date: "2026-07-16",
+      title: "Revue de direction HSSEQ, de janvier 2026 à juin 2026", period_start: "2026-01-01", period_end: "2026-06-30", planned_date: "2026-07-16",
       participant_ids: [8, 16, 11, 12, 18, 19, 6], external_participants: "Ibrahima Camara, délégué du personnel des conducteurs\nAïcha Diallo, animatrice sécurité du parc de Matoto", agenda: ordreDuJour,
     }, 16, at("2026-07-01", 10), "2026-07-01");
     tenir(r2, 16, "2026-07-16", at("2026-07-16", 8));
@@ -736,7 +775,7 @@ export function enregistrerRevues(H) {
 
     // Revue du troisième trimestre, préparée le 8 octobre pour la fin du mois, avant l'audit de certification ISO 45001.
     const r3 = creerRevue({
-      title: "Revue de direction HSSEQ, juillet 2026 à septembre 2026", period_start: "2026-07-01", period_end: "2026-09-30", planned_date: "2026-10-29",
+      title: "Revue de direction HSSEQ, de juillet 2026 à septembre 2026", period_start: "2026-07-01", period_end: "2026-09-30", planned_date: "2026-10-29",
       participant_ids: [8, 16, 11, 12, 18, 19], external_participants: "Ibrahima Camara, délégué du personnel des conducteurs",
       agenda: `${ordreDuJour}\n11. Préparation de l'audit de certification ISO 45001, étape 1, du 8 décembre`,
     }, 16, at("2026-10-08", 9, 15), "2026-10-08");
@@ -799,7 +838,7 @@ export function enregistrerRevues(H) {
     const r = modifiable(ctx);
     const b = ctx.body;
     if (b.action !== undefined && (b.action === null || typeof b.action !== "object" || Array.isArray(b.action))) throw H.hsBad("Action invalide.", ["action"]);
-    const valeurs = valeursDecision(b);
+    const valeurs = valeursDecision(b, false, r);
     // L'action est contrôlée avant toute écriture : le noyau annule la décision avec elle sur un refus.
     const action = b.action ? valeursAction(b.action, r, { owner_id: valeurs.owner_id ?? null, due_date: valeurs.due_date ?? null }) : null;
     const at = H.hsNow();
@@ -811,7 +850,7 @@ export function enregistrerRevues(H) {
   route("PATCH", "/hsseq/reviews/:id/decisions/:id", ECRITURE, (ctx) => {
     const r = modifiable(ctx);
     const d = decisionDe(r, ctx.params[1]);
-    Object.assign(d, valeursDecision(ctx.body, true));
+    Object.assign(d, valeursDecision(ctx.body, true, r));
     H.hsLog("review", r.id, ctx.user.id, "decision_updated", null, null, null, H.hsNow(), d.description.slice(0, 300));
     return fiche(ctx, r);
   });
@@ -833,16 +872,30 @@ export function enregistrerRevues(H) {
     return fiche(ctx, r);
   });
 
-  /* Compte rendu en PDF : une page de maquette, le noyau rend le compte rendu complet (douze rubriques). */
+  /*
+   * Compte rendu en PDF : une page de maquette, le noyau rend le compte rendu complet (douze rubriques).
+   * Revue préparée : ses éléments d'entrée du jour, calculés à l'impression sans écriture (review_inputs) ;
+   * figés ensuite. Pour l'auditeur, sans alcootest ni nom de conducteur (« conducteur »).
+   */
 
   route("GET", "/hsseq/reviews/:id/report.pdf", LECTURE, (ctx) => {
     const r = revueDe(ctx, ctx.params[0]);
-    const e = r.inputs ?? {};
+    let jour = null;
+    if (r.state === "prepared" || !r.inputs) {
+      try {
+        jour = elementsEntree(r, TODAY);
+      } catch (e) {
+        console.error(`hsseq-revues : éléments d'entrée du jour de ${r.reference} non calculés.`, e);
+      }
+    }
+    const e = entreesLues(ctx, jour ?? r.inputs) ?? {};
+    const nomLu = (id) => (masque(ctx) && conducteur(id) ? "conducteur" : nom(id));
     const horsCible = (e.indicators ?? []).filter((i) => i.status === "missed").length;
     const lignes = [
       `${H.COMPANIES[r.company_id]?.name ?? ""} ; ${ETATS[r.state]}.`,
-      `Periode : ${e.period?.label ?? `${r.period_start} au ${r.period_end}`}. Prevue le ${r.planned_date}${r.held_on ? `, tenue le ${r.held_on}` : ""}.`,
-      `Participants : ${r.participant_ids.map(nom).join(", ") || "-"}${r.external_participants ? ` ; ${r.external_participants.replaceAll("\n", " ; ")}` : ""}.`,
+      `Periode : ${e.period?.label ?? libellePeriode(r.period_start, r.period_end)}. Prevue le ${r.planned_date}${r.held_on ? `, tenue le ${r.held_on}` : ""}.`,
+      `Elements d'entree : ${r.state === "prepared" ? `du ${TODAY} (revue preparee)` : `rassembles le ${String(r.inputs_generated_at ?? "").slice(0, 10) || "-"}`}.`,
+      `Participants : ${r.participant_ids.map(nomLu).join(", ") || "-"}${r.external_participants ? ` ; ${r.external_participants.replaceAll("\n", " ; ")}` : ""}.`,
       "",
       `Indicateurs non conformes : ${horsCible} sur ${(e.indicators ?? []).length}. Evenements : ${e.events?.total ?? 0}, dont ${e.events?.notable_count ?? 0} marquants. Actions en retard : ${e.actions?.overdue ?? 0}.`,
       "",
@@ -852,7 +905,7 @@ export function enregistrerRevues(H) {
       "Decisions et actions :",
       ...decisionsDe(r).map((d, i) => {
         const a = d.action_id ? HS.actions.find((x) => x.id === d.action_id) : null;
-        return `${i + 1}. [${NATURES[d.topic]}] ${d.description}${a ? ` (${a.reference})` : " (sans action)"}`;
+        return `${i + 1}. [${NATURES[d.topic]}] ${d.description}${d.owner_id ? `, ${nomLu(d.owner_id)}` : ""}${a ? ` (${a.reference})` : " (sans action)"}`;
       }),
       "",
       "Conclusions de la direction :",

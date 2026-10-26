@@ -790,7 +790,12 @@ function charge(H, ctx, modele, societe, m) {
   const fige = Boolean(fiche?.frozen_on);
   const transitions = [...(hsseq && etat === "draft" && (fige || H.TODAY >= gel) ? ["validate"] : []), ...(hsseq && etat === "validated" ? ["reopen"] : [])];
   return {
-    template: { id: modele.id, name: modele.name, client_label: modele.client_label ?? null, partner: partenaire(modele.partner_id) },
+    // Périmètre du modèle servi avec le mois (month_payload, hsseq@93aa37f) : l'en-tête du rapport le lit ici.
+    template: {
+      id: modele.id, name: modele.name, client_label: modele.client_label ?? null, partner: partenaire(modele.partner_id),
+      site_ids: sitesDuModele(H, modele).map((x) => x.id), sites: sitesDuModele(H, modele).map((x) => ({ id: x.id, name: x.name })),
+      vehicle_kind: modele.vehicle_kind ?? null, start_month: modele.start_month.slice(0, 7),
+    },
     company: societeRef(H, societe), month: m, label: moisLabel(m),
     period_label: +m.slice(5, 7) > 1 ? `Janvier à ${MOIS[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}` : `Janvier ${m.slice(0, 4)}`,
     state: etat, frozen: fige, frozen_on: fiche?.frozen_on ?? null, freeze_date: gel, validated_at: fiche?.validated_at ?? null,

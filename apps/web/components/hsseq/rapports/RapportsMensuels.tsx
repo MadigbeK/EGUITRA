@@ -281,7 +281,7 @@ function Rapport({ modele, mois, societe, onSaisies, onTransition }: { modele: R
       >
         <p className="max-w-[90ch] text-[13.5px] leading-relaxed text-ink-2">
           Pour <span className="font-semibold text-ink">{client}</span>, {r.company.name}. Période analysée : {r.period_label.toLocaleLowerCase("fr")}.
-          {perimetre(modele) && ` Valeurs calculées sur le périmètre du modèle : ${perimetre(modele)}.`}
+          {perimetre(r.template) && ` Valeurs calculées sur le périmètre du modèle : ${perimetre(r.template)}.`}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           {r.state === "validated" ? <Badge tone={tonHsseq("Validé", "ok")}>Validé</Badge> : <Tampon mot="Brouillon" />}

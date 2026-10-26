@@ -32,6 +32,23 @@ function annees(courante: number, choisie: number | null): number[] {
   return [...new Set([courante + 1, courante, courante - 1, courante - 2, ...(choisie ? [choisie] : [])])].sort((a, b) => b - a);
 }
 
+/**
+ * Filtres des plans et des exercices pour leurs feuilles de l'export : le site, filtre commun, puis ceux
+ * propres à chaque feuille, préfixés (plans_, drills_) ; l'export des registres reprend la sélection affichée.
+ */
+export function filtresExportUrgences(lire: (cle: string) => string): Record<string, string | null> {
+  const scenario = parmi(lire("scenario"), SCENARIO);
+  const statut = parmi(lire("statut"), FILTRE_EXERCICES);
+  return {
+    site_id: /^\d+$/.test(lire("site")) ? lire("site") : null,
+    plans_scenario: scenario,
+    plans_active: lire("archives") === "1" ? "all" : null,
+    drills_scenario: scenario,
+    drills_status: statut ? FILTRE_EXERCICES[statut].statut : null,
+    drills_year: /^\d{4}$/.test(lire("annee")) ? lire("annee") : null,
+  };
+}
+
 /** Revue d'un plan en vigueur passée (la date de revue n'est pas tenue par le noyau en retard). */
 function revueEchue(p: Pick<PlanLine, "active" | "review_date">): boolean {
   return p.active && p.review_date !== null && p.review_date < aujourdhui();

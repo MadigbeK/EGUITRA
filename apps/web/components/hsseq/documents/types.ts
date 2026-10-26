@@ -95,7 +95,7 @@ export interface ProcedureLine {
   rights: Rights;
 }
 
-/** Comptes de la sélection filtrée, statut compris : l'écran les lit sans filtre de statut pour ses onglets. */
+/** Comptes par statut aux autres filtres de la liste (domaine, recherche), sans celui du statut : ceux des onglets. */
 export interface ProcedureCounts {
   by_status: Record<ProcedureStatus, number>;
 }

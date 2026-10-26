@@ -16,8 +16,8 @@ import { useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtGNF, pluriel } from "@/lib/format";
 import type { ControlLevel, Page, Ref } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
-import { NATURE_DECISION, ORDRE_DU_JOUR_TYPE, ORDRE_NATURES, finDeMois, intituleParDefaut, messageRevue, nombreDeMois, periodeRevue } from "./outils";
-import type { DecisionActionInput, DecisionInput, DecisionTopic, HoldInput, Review, ReviewCounts, ReviewDecision, ReviewInput, ReviewLine } from "./types";
+import { NATURE_DECISION, ORDRE_DU_JOUR_TYPE, ORDRE_NATURES, finDeMois, intituleParDefaut, messageRevue, nombreDeMois, nomCompte, periodeRevue } from "./outils";
+import type { CompteCite, DecisionActionInput, DecisionInput, DecisionTopic, HoldInput, Review, ReviewCounts, ReviewDecision, ReviewInput, ReviewLine } from "./types";
 
 /** Hiérarchie des mesures, de la plus forte à la plus faible. */
 const ORDRE_MAITRISE: readonly ControlLevel[] = ["elimination", "substitution", "engineering", "administrative", "ppe"];
@@ -78,10 +78,13 @@ function Rappel({ children, className }: { children: ReactNode; className?: stri
   return <div className={cx("rounded-[10px] bg-panel-2 px-3 py-2 text-[13px] leading-snug text-ink-2", className)}>{children}</div>;
 }
 
-/** Comptes proposés : les responsables possibles des référentiels, plus ceux déjà retenus, par ordre alphabétique. */
-function comptesProposes(owners: Ref[] | undefined, deja: Ref[] = []): Ref[] {
-  const liste = [...(owners ?? [])];
-  for (const r of deja) if (!liste.some((o) => o.id === r.id)) liste.push(r);
+/**
+ * Comptes proposés : les comptes internes des référentiels, hors conducteurs (servis avec `driver` pour
+ * les participants d'un exercice d'urgence), plus ceux déjà retenus, par ordre alphabétique.
+ */
+function comptesProposes(owners: Array<Ref & { driver?: boolean }> | undefined, deja: CompteCite[] = []): Ref[] {
+  const liste: Ref[] = (owners ?? []).filter((o) => !o.driver);
+  for (const r of deja) if (!liste.some((o) => o.id === r.id)) liste.push({ id: r.id, name: nomCompte(r) });
   return liste.sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 }
 
@@ -151,7 +154,7 @@ export function FenetrePreparation({ revue, onClose, envoyer }: { revue?: Review
   const periodeFin = fin ?? propose.fin;
   const periodeFixe = Boolean(revue && revue.state !== "prepared");
   const mois = nombreDeMois(periodeDebut, periodeFin);
-  const erreurPeriode = !periodeDebut || !periodeFin ? null : periodeFin < periodeDebut ? "La période se termine avant son début." : mois > MAX_MOIS ? `Période de ${mois} mois${INSECABLE}: 24 mois au plus.` : null;
+  const erreurPeriode = !periodeDebut || !periodeFin ? null : periodeFin < periodeDebut ? "La fin de la période précède son début." : mois > MAX_MOIS ? `Période de ${mois} mois${INSECABLE}: 24 mois au plus.` : null;
   const societes = moi?.companies ?? [];
   const societe = f.company_id || String(moi?.company_id ?? "");
   const comptes = comptesProposes(ref?.owners, revue?.participants);

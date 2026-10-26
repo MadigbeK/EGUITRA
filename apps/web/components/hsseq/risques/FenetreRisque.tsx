@@ -45,8 +45,9 @@ export function FenetreRisque({ risque, onClose, onEnregistre }: { risque?: Risk
   // Sites ouverts au compte, et le site actuel du risque même s'il n'en fait pas partie.
   const sites: Ref[] = (ref?.sites ?? []).filter((s) => s.active && (!ref?.me.site_ids.length || ref.me.site_ids.includes(s.id)));
   if (risque?.site && !sites.some((s) => s.id === risque.site?.id)) sites.unshift(risque.site);
-  // Le propriétaire actuel reste dans la liste, même s'il n'est plus proposé par les référentiels.
-  const proposes = ref?.owners ?? [];
+  // Le propriétaire actuel reste dans la liste, même s'il n'est plus proposé par les référentiels ; les
+  // conducteurs, servis par les référentiels pour les participants d'un exercice (`driver`), n'en sont pas.
+  const proposes = (ref?.owners ?? []).filter((o: Ref & { driver?: boolean }) => !o.driver);
   const proprietaires = risque && !proposes.some((o) => o.id === risque.owner.id) ? [risque.owner, ...proposes] : proposes;
 
   const manque = {

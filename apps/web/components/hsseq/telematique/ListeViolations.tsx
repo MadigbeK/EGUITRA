@@ -2,14 +2,16 @@
 
 import type { ReactNode } from "react";
 import { DataTable, Empty, type Column, type Tri } from "@/components/ui";
+import { TYPE_VEHICULE, nomRotation } from "@/components/hsseq/commun";
 import { heureCk, jourCk } from "@/components/hsseq/trajets/outils";
 import type { ViolationType } from "@/lib/hsseq-types";
 import { INSECABLE } from "@/lib/format";
-import { TYPE_VIOLATION } from "./outils";
+import { TYPE_VIOLATION, releve } from "./outils";
+import type { Violation, ViolationPreview } from "./types";
 
 /**
  * Violation telle qu'elle s'affiche, qu'elle vienne de la liste du noyau ou du contrôle à blanc d'un
- * fichier (valeurs brutes rapprochées des référentiels). `onVehicule` et `onConducteur` posent le filtre
+ * fichier (même format de ligne, servi par le noyau). `onVehicule` et `onConducteur` posent le filtre
  * correspondant (raccourci de la liste).
  */
 export interface LigneViolation {
@@ -30,6 +32,25 @@ export interface LigneViolation {
   source: string;
   onVehicule?: () => void;
   onConducteur?: () => void;
+}
+
+/**
+ * Ligne affichée d'une violation de la liste ou du contrôle à blanc ; `avecSite` ajoute le site au détail
+ * du véhicule (compte qui lit plusieurs sites). Les raccourcis de filtre sont posés par la liste.
+ */
+export function versLigne(v: Violation | ViolationPreview, cle: number | string, avecSite: boolean): LigneViolation {
+  return {
+    cle,
+    moment: v.occurred_at,
+    type: v.violation_type,
+    releve: releve(v),
+    vehicule: v.vehicle.name,
+    detailVehicule: [TYPE_VEHICULE[v.vehicle.vehicle_kind], v.vehicle.plate, avecSite ? v.site?.name : null].filter(Boolean).join(", "),
+    conducteur: v.driver?.name ?? null,
+    rotation: v.rotation ? [nomRotation(v.rotation), v.rotation.route_name].filter(Boolean).join(", ") : "Hors rotation",
+    lieu: v.location,
+    source: [v.source, v.external_id ? `réf. ${v.external_id}` : null].filter(Boolean).join(", "),
+  };
 }
 
 /** Bouton d'un nom qui pose un filtre, ou le nom seul. */

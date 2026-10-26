@@ -4,14 +4,11 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Download, X } from "@/components/icons";
 import { Button, Card, Field, FileButton, Input, Notice } from "@/components/ui";
-import { TYPE_VEHICULE, texteErreur } from "@/components/hsseq/commun";
-import { useReferentiels } from "@/components/hsseq/actions/outils";
+import { texteErreur } from "@/components/hsseq/commun";
 import { ApiError, apiUpload } from "@/lib/api-client";
 import { INSECABLE, fmtDec, fmtInt, pluriel } from "@/lib/format";
-import type { Referentials } from "@/lib/hsseq-types";
 import { LignesSignalees } from "./elements";
-import { ListeViolations, type LigneViolation } from "./ListeViolations";
-import { releve } from "./outils";
+import { ListeViolations, versLigne } from "./ListeViolations";
 import type { DryRun, ImportResult, LigneSignalee, RefusImport } from "./types";
 
 /** Taille au plus d'un fichier (MAX_IMPORT du contrôleur). */
@@ -22,8 +19,11 @@ const SOURCES = ["IVMS", "OBC", "GPS"];
 const LIEN = "font-semibold text-accent underline-offset-2 hover:underline";
 const I = INSECABLE;
 
-/** Résultat du dernier envoi : contrôle à blanc passé, fichier refusé ligne à ligne, ou autre refus. */
-type Controle = { etat: "pret"; resultat: DryRun } | { etat: "refuse"; total: number; lignes: LigneSignalee[] } | { etat: "erreur"; message: string };
+/**
+ * Résultat du dernier envoi : contrôle à blanc passé, fichier refusé ligne à ligne (`trace` : refus de
+ * l'import confirmé, gardé dans l'historique), ou autre refus.
+ */
+type Controle = { etat: "pret"; resultat: DryRun } | { etat: "refuse"; total: number; lignes: LigneSignalee[]; trace: boolean } | { etat: "erreur"; message: string };
 
 const REFUS: Partial<Record<string, string>> = {
   forbidden: "L'import des violations est réservé au Responsable HSSEQ.",
@@ -37,12 +37,12 @@ function taille(octets: number): string {
 /**
  * Nouvel import (profil hsseq) : le fichier exporté du système du fournisseur, la source s'il n'en porte
  * pas la colonne, puis le contrôle à blanc (POST /hsseq/telematics/import avec dry_run=1 : rien n'est
- * enregistré), qui liste les lignes refusées et leur motif ou montre les violations à créer, les
- * doublons et les avertissements ; enfin l'import confirmé, tout ou rien. L'aide décrit les colonnes
- * reconnues par le noyau (models/telematics.py) et propose un modèle de fichier.
+ * enregistré), qui liste les lignes refusées et leur motif ou montre les violations à créer (au format de
+ * la liste, servi par le noyau), les doublons et les avertissements ; enfin l'import confirmé, tout ou
+ * rien : refusé, il ne crée aucune violation et reste dans l'historique avec ses lignes en cause. L'aide
+ * décrit les colonnes reconnues par le noyau (models/telematics.py) et propose un modèle de fichier.
  */
 export function NouvelImport({ onVoir }: { onVoir: (id: number) => void }) {
-  const { data: ref } = useReferentiels();
   const { mutate } = useSWRConfig();
   const [fichier, setFichier] = useState<File | null>(null);
   // Le sélecteur est remonté à chaque choix : un fichier corrigé sous le même nom se choisit de nouveau.
@@ -94,7 +94,10 @@ export function NouvelImport({ onVoir }: { onVoir: (id: number) => void }) {
         const lignes = corps.errors ?? [];
         // Le noyau compte toutes les lignes en erreur dans son message et n'en liste que les 200 premières.
         const total = Number(/(\d+)\s*ligne/.exec(corps.message ?? "")?.[1] ?? lignes.length);
-        setControle({ etat: "refuse", total: Math.max(total, lignes.length), lignes });
+        const trace = !aBlanc && Boolean(corps.import_id);
+        setControle({ etat: "refuse", total: Math.max(total, lignes.length), lignes, trace });
+        // L'import confirmé refusé est gardé dans l'historique : il est relu.
+        if (trace) void mutate((k) => typeof k === "string" && k.startsWith("/hsseq/telematics/imports"));
       } else {
         setControle({ etat: "erreur", message: texteErreur(e, REFUS, aBlanc ? "Le fichier n'a pas pu être contrôlé." : "L'import n'a pas abouti.") });
       }
@@ -160,22 +163,23 @@ export function NouvelImport({ onVoir }: { onVoir: (id: number) => void }) {
 
         {importe && <Importe resultat={importe} onVoir={onVoir} onFermer={() => setImporte(null)} />}
         {controle?.etat === "erreur" && <Notice tone="danger">{controle.message}</Notice>}
-        {controle?.etat === "refuse" && <Refus total={controle.total} lignes={controle.lignes} />}
-        {controle?.etat === "pret" && fichier && (
-          <Apercu resultat={controle.resultat} ref_={ref} envoi={envoi} onImporter={() => void envoyer(false)} onAbandonner={abandonner} />
-        )}
+        {controle?.etat === "refuse" && <Refus total={controle.total} lignes={controle.lignes} trace={controle.trace} />}
+        {controle?.etat === "pret" && fichier && <Apercu resultat={controle.resultat} envoi={envoi} onImporter={() => void envoyer(false)} onAbandonner={abandonner} />}
       </div>
     </Card>
   );
 }
 
-/** Fichier refusé : nombre de lignes en cause, puis chaque ligne et son motif (les 200 premières). */
-function Refus({ total, lignes }: { total: number; lignes: LigneSignalee[] }) {
+/**
+ * Fichier refusé : nombre de lignes en cause, puis chaque ligne et son motif (les 200 premières). Un
+ * import confirmé refusé (`trace`) ne crée aucune violation mais reste dans l'historique.
+ */
+function Refus({ total, lignes, trace }: { total: number; lignes: LigneSignalee[]; trace: boolean }) {
   return (
     <div className="space-y-3">
       <Notice tone="danger">
         <p className="m-0 font-semibold">
-          Fichier refusé{I}: {pluriel(total, "ligne en erreur", "lignes en erreur")}. Rien n&apos;est enregistré.
+          Fichier refusé{I}: {pluriel(total, "ligne en erreur", "lignes en erreur")}. {trace ? `Aucune violation n'est enregistrée${I}; le refus est gardé dans l'historique des imports.` : "Rien n'est enregistré."}
         </p>
         <p className="m-0 mt-1 text-ink">Corrigez ces lignes dans le fichier, ou retirez-les, puis choisissez-le de nouveau et contrôlez-le.</p>
       </Notice>
@@ -189,28 +193,11 @@ function Refus({ total, lignes }: { total: number; lignes: LigneSignalee[] }) {
 
 /**
  * Contrôle à blanc réussi : lignes lues, violations à créer, doublons, avertissements (conducteur non
- * reconnu) et les 50 premières violations, rapprochées des référentiels (le noyau sert ici des
- * identifiants) ; puis l'import confirmé, ou l'abandon.
+ * reconnu, nom lu cité) et les 50 premières violations, au format des lignes de la liste (véhicule, site,
+ * conducteur et rotation rattachée servis par le noyau) ; puis l'import confirmé, ou l'abandon.
  */
-function Apercu({ resultat, ref_, envoi, onImporter, onAbandonner }: { resultat: DryRun; ref_: Referentials | undefined; envoi: "controle" | "import" | null; onImporter: () => void; onAbandonner: () => void }) {
-  const vehicules = new Map((ref_?.vehicles ?? []).map((v) => [v.id, v]));
-  const conducteurs = new Map((ref_?.drivers ?? []).map((d) => [d.id, d.name]));
-  const lignes: LigneViolation[] = resultat.preview.map((p, i) => {
-    const v = vehicules.get(p.vehicle_id);
-    return {
-      cle: i,
-      moment: p.occurred_at,
-      type: p.violation_type,
-      // Le noyau sert 0 pour un nombre absent du fichier.
-      releve: releve({ violation_type: p.violation_type, value: p.value || null, limit_value: p.limit_value || null, duration_minutes: p.duration_minutes || null }),
-      vehicule: v?.name ?? `Ensemble n°${I}${p.vehicle_id}`,
-      detailVehicule: v ? [TYPE_VEHICULE[v.vehicle_kind], v.plate].filter(Boolean).join(", ") : "",
-      conducteur: p.driver_id ? (conducteurs.get(p.driver_id) ?? `Conducteur n°${I}${p.driver_id}`) : null,
-      rotation: p.rotation_id ? "Rattachée à la rotation en cours" : "Hors rotation",
-      lieu: p.location || null,
-      source: [p.source, p.external_id ? `réf. ${p.external_id}` : null].filter(Boolean).join(", "),
-    };
-  });
+function Apercu({ resultat, envoi, onImporter, onAbandonner }: { resultat: DryRun; envoi: "controle" | "import" | null; onImporter: () => void; onAbandonner: () => void }) {
+  const lignes = resultat.preview.map((p, i) => versLigne(p, i, true));
   const rien = resultat.to_create === 0;
   return (
     <section aria-labelledby="telematique-apercu" className="space-y-4 border-t border-line pt-5">
@@ -301,7 +288,8 @@ function Importe({ resultat, onVoir, onFermer }: { resultat: ImportResult; onVoi
 
 /** Colonnes reconnues par le noyau (HEADERS de models/telematics.py), une fois accents et majuscules retirés. */
 const COLONNES: Array<{ nom: string; requise?: boolean; entetes: string; contenu: string }> = [
-  { nom: "Date et heure", requise: true, entetes: "Date, Date et heure, Horodatage, Heure, Timestamp", contenu: `jj/mm/aaaa hh:mm, aaaa-mm-jj hh:mm ou cellule de date d'Excel, à l'heure de Conakry${I}; jamais dans le futur.` },
+  { nom: "Date et heure", requise: true, entetes: "Date, Date et heure, Horodatage, Timestamp", contenu: `jj/mm/aaaa hh:mm, aaaa-mm-jj hh:mm ou cellule de date d'Excel, à l'heure de Conakry${I}; jamais dans le futur. La date seule si l'heure a sa colonne.` },
+  { nom: "Heure", entetes: "Heure, Heure locale, Heure de l'événement, Time", contenu: `Colonne à part, qui complète la date${I}: 14:05, 14:05:30, 8h30 ou cellule d'heure d'Excel.` },
   { nom: "Véhicule", requise: true, entetes: "Véhicule, Ensemble, Immatriculation, Code véhicule, Plaque", contenu: "Code de l'ensemble (ER-05) ou immatriculation du tracteur ou de la remorque, espaces et tirets ignorés." },
   { nom: "Type", requise: true, entetes: "Type, Type de violation, Violation, Infraction, Événement, Alerte", contenu: "Excès de vitesse (ou survitesse, vitesse), freinage brusque (freinage), conduite de nuit (nuit), temps de conduite (conduite continue, fatigue), en français ou en anglais." },
   { nom: "Chauffeur", entetes: "Chauffeur, Conducteur, Driver", contenu: `Nom écrit comme dans Transport. Non reconnu ou absent${I}: le chauffeur de la rotation en cours, avec un avertissement s'il n'est pas reconnu.` },

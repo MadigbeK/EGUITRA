@@ -39,11 +39,23 @@ export type AnalysisGroup = "vehicle" | "site" | "month" | "rotation";
 /* ─── Communs ─────────────────────────────────────────────────────────── */
 
 /**
- * Pièce d'une fiche de l'écran, à la forme commune des pièces. Son `model` vaut spill, waste,
- * contamination ou complaint (AttachmentModel de lib/hsseq-types.ts ne les nomme pas encore) ; le
- * noyau pose le rôle « document » sur un déchet (bordereau) et une réclamation, « photo » ailleurs.
+ * Auteur d'une écriture (ligne de journal, pièce déposée) : le compte et son nom ; pour l'auditeur, sa
+ * seule fonction (« Responsable HSSEQ », « Chef de parc »…, à défaut « Utilisateur interne »), id et nom
+ * nuls (actor_ref du noyau).
  */
-export type Piece = Attachment;
+export interface Auteur {
+  id: number | null;
+  name: string | null;
+  function?: string;
+}
+
+/**
+ * Pièce d'une fiche de l'écran, à la forme commune des pièces, son déposant servi comme un auteur. Son
+ * `model` vaut spill, waste, contamination ou complaint (AttachmentModel de lib/hsseq-types.ts ne les
+ * nomme pas encore) ; le noyau pose le rôle « document » sur un déchet (bordereau) et une réclamation,
+ * « photo » ailleurs.
+ */
+export type Piece = Omit<Attachment, "created_by"> & { created_by: Auteur | null };
 
 /** Fiche d'une pièce de cet écran (champ `model` de POST /hsseq/attachments). */
 export type ObjetPiece = "spill" | "waste" | "contamination" | "complaint";
@@ -54,8 +66,8 @@ export interface LigneJournal {
   model: string;
   res_id: number;
   at: string;
-  /** Servi même à l'auditeur par le noyau : l'écran ne le lui montre pas. */
-  by: Ref | null;
+  /** Auteur de l'écriture ; pour l'auditeur, sa seule fonction. Nul : écriture du système. */
+  by: Auteur | null;
   action: string;
   field: string | null;
   old_value: string | null;
@@ -207,7 +219,7 @@ export interface CollectInput {
 
 /* ─── Poussières ──────────────────────────────────────────────────────── */
 
-/** Mesure de poussières (ligne de GET /hsseq/dust-measurements ; pas de fiche servie à part). */
+/** Mesure de poussières (ligne de GET /hsseq/dust-measurements, réponse de la saisie et de la modification). */
 export interface DustMeasure {
   id: number;
   site: Ref;
@@ -225,6 +237,12 @@ export interface DustMeasure {
   measured_by: Ref | null;
   /** can_edit : hsseq, ou chef de parc du site. */
   rights: Rights;
+}
+
+/** Fiche d'une mesure (GET /hsseq/dust-measurements/{id}) : la ligne, sa société et son historique. */
+export interface DustMeasureDetail extends DustMeasure {
+  company: Ref;
+  history: LigneJournal[];
 }
 
 export interface DustCounts {
@@ -245,7 +263,7 @@ export interface DustInput {
 
 /* ─── Contaminations ──────────────────────────────────────────────────── */
 
-/** Ligne de GET /hsseq/contaminations (le constat n'est servi que par la fiche). */
+/** Ligne de GET /hsseq/contaminations. */
 export interface ContaminationLine {
   id: number;
   /** « CTM/2026/0003 ». */
@@ -258,6 +276,8 @@ export interface ContaminationLine {
   /** Produit de la rotation, repris à la saisie. */
   product: Ref | null;
   volume_m3: number | null;
+  /** Constat. */
+  description: string;
   status: ContaminationStatus;
   /** can_edit : hsseq, contamination ouverte ; can_close : clôture permise. */
   rights: Rights;
@@ -265,8 +285,6 @@ export interface ContaminationLine {
 
 export interface Contamination extends ContaminationLine {
   company: Ref;
-  /** Constat. */
-  description: string;
   /** Mesures prises : obligatoires pour clore (measures_required). */
   measures: string | null;
   cost: number;
@@ -298,7 +316,7 @@ export interface ContaminationInput {
 
 /* ─── Réclamations ────────────────────────────────────────────────────── */
 
-/** Ligne de GET /hsseq/complaints (la réclamation elle-même n'est servie que par la fiche). */
+/** Ligne de GET /hsseq/complaints. */
 export interface ComplaintLine {
   id: number;
   /** « REC/2026/0004 ». */
@@ -309,6 +327,8 @@ export interface ComplaintLine {
   received_on: string;
   nature: ComplaintNature;
   severity: ComplaintSeverity;
+  /** La réclamation du client. */
+  description: string;
   /** Réception plus le délai des paramètres de la société (15 jours par défaut), modifiable. */
   response_due: string | null;
   responded_on: string | null;
@@ -326,7 +346,6 @@ export interface ComplaintLine {
 
 export interface Complaint extends ComplaintLine {
   company: Ref;
-  description: string;
   response: string | null;
   responded_by: Ref | null;
   vehicle: VehicleRef | null;
@@ -400,13 +419,16 @@ export interface Consumption {
   source: string;
 }
 
-/** Citernes : volumes en m³ ; manquant ÷ livré, en ‰. */
+/** Citernes : volumes en m³ ; manquant ÷ livré, les deux à 15 °C, en ‰. */
 export interface TankerRow {
   rotations: number;
   loaded_15: number;
   delivered_15: number;
+  /** Livré non corrigé (à la température de livraison). */
   delivered: number;
+  /** Manquant à 15 °C : chargé moins livré, corrigés, jamais négatif par rotation. */
   shortage: number;
+  /** Manquant à 15 °C ÷ livré à 15 °C. */
   per_mille: number | null;
 }
 

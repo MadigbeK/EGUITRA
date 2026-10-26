@@ -164,10 +164,23 @@ export function dePeriode(periode: string): string {
   return /^[aeiouyàâéèêîïôû]/i.test(periode) ? `d'${periode}` : `de ${periode}`;
 }
 
-/** Intitulé que le noyau compose quand la préparation n'en donne pas. */
+/**
+ * Intitulé que le noyau compose quand la préparation n'en donne pas (period_label) : « Revue de
+ * direction HSSEQ, octobre 2026 » sur un mois, « …, d'octobre 2026 à décembre 2026 » sur plusieurs.
+ */
 export function intituleParDefaut(debut: string, fin: string): string {
   if (!debut || !fin) return "Revue de direction HSSEQ";
-  return `Revue de direction HSSEQ, ${moisLong(debut)} à ${moisLong(fin)}`;
+  const premier = moisLong(debut);
+  return `Revue de direction HSSEQ, ${debut.slice(0, 7) === fin.slice(0, 7) ? premier : `${dePeriode(premier)} à ${moisLong(fin)}`}`;
+}
+
+/**
+ * Nom d'un compte cité par la revue. L'auditeur lit les noms du personnel interne, jamais celui d'un
+ * conducteur (nom nul : « Conducteur ») ; l'auteur d'une écriture (journal, pièce) ne lui est servi que
+ * par sa fonction.
+ */
+export function nomCompte(c: { name?: string | null; function?: string | null } | null | undefined, defaut = "Conducteur"): string {
+  return c?.name || c?.function || defaut;
 }
 
 /** « jeudi 29 octobre 2026 ». */

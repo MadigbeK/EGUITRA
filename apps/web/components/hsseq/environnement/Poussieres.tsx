@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import { Pencil, Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Etat, Notice, ProgressBar, cx, type Column, type Tri } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Etat, Loading, Notice, ProgressBar, cx, type Column, type Tri } from "@/components/ui";
 import { AvecFiche, Bascule, ChampSite, Definitions, Pages, Panneau, Rubrique, requete, useReferentiels } from "@/components/hsseq/actions/outils";
 import { Commandes, useEtroit } from "@/components/hsseq/conformite/commun";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtPct } from "@/lib/format";
 import type { Page } from "@/lib/hsseq-types";
-import { ChampsPeriode, Chiffre, ExportRegistres, Situation, TamponEnv, filtresCommuns, fmtPoussiere, nombre, useRafraichir, type Droits, type Message, type VueProps } from "./commun";
+import { ChampsPeriode, Chiffre, ExportRegistres, Historique, Situation, TamponEnv, filtresCommuns, fmtPoussiere, nombre, useRafraichir, type Droits, type Message, type VueProps } from "./commun";
 import { FenetreMesure } from "./fenetres";
-import type { DustCounts, DustInput, DustMeasure } from "./types";
+import type { DustCounts, DustInput, DustMeasure, DustMeasureDetail } from "./types";
 
 const PAR_PAGE = 50;
 const TRIS = ["measured_on", "value"];
@@ -37,9 +37,9 @@ function Jauge({ m }: { m: DustMeasure }) {
 /**
  * Poussières mesurées sur site (GET /hsseq/dust-measurements) : mesures et dépassements en tête,
  * filtres « dépassements seulement », site et période, portés par l'adresse avec la mesure ouverte
- * (mesure). Le Responsable HSSEQ et le chef de parc (ses sites) saisissent et corrigent les mesures ; le
- * noyau calcule le dépassement. Le noyau ne sert pas de fiche à part : la mesure ouverte est lue dans la
- * page affichée.
+ * (mesure), lue dans sa fiche (GET /hsseq/dust-measurements/{id}, avec son historique). Le Responsable
+ * HSSEQ et le chef de parc (ses sites) saisissent et corrigent les mesures ; le noyau calcule le
+ * dépassement.
  */
 export function Poussieres({ lire, ecrire, droits }: VueProps) {
   const { data: ref } = useReferentiels();
@@ -64,7 +64,6 @@ export function Poussieres({ lire, ecrire, droits }: VueProps) {
   const total = compte?.total_count;
   const depasses = compte?.counts.exceeded;
   const compact = etroit || choisi !== null;
-  const ouverte = choisi !== null ? (data?.items.find((m) => m.id === choisi) ?? null) : null;
 
   const colonnes: Column<DustMeasure>[] = [
     {
@@ -167,27 +166,28 @@ export function Poussieres({ lire, ecrire, droits }: VueProps) {
     <AvecFiche
       ouverte={choisi !== null}
       liste={liste}
-      fiche={choisi !== null && <FicheMesure key={choisi} mesure={ouverte} chargee={Boolean(data)} droits={droits} onModifiee={() => mutate()} onFermer={() => ecrire({ mesure: null })} />}
+      fiche={choisi !== null && <FicheMesure key={choisi} id={choisi} droits={droits} onFermer={() => ecrire({ mesure: null })} />}
     />
   );
 }
 
 /**
- * Mesure ouverte, lue dans la page affichée : valeur au regard du seuil, point, méthode, observations ;
- * modification (hsseq ou chef de parc du site, `rights.can_edit`). Absente de la page (lien vers une
- * mesure d'une autre page ou hors des filtres), la fiche le dit ; une mesure modifiée qui sort des
- * filtres reste affichée telle que le noyau l'a renvoyée.
+ * Fiche d'une mesure (GET /hsseq/dust-measurements/{id}), qu'elle soit ou non dans la page affichée :
+ * valeur au regard du seuil, point, méthode, observations, historique (auteurs par leur fonction pour
+ * l'auditeur) ; modification (hsseq ou chef de parc du site, `rights.can_edit`), puis la fiche et les
+ * listes relues (la modification ne renvoie que la ligne, sans historique).
  */
-function FicheMesure({ mesure, chargee, droits, onModifiee, onFermer }: { mesure: DustMeasure | null; chargee: boolean; droits: Droits; onModifiee: () => Promise<unknown>; onFermer: () => void }) {
-  const [derniere, setDerniere] = useState(mesure);
+function FicheMesure({ id, droits, onFermer }: { id: number; droits: Droits; onFermer: () => void }) {
+  const cle = `/hsseq/dust-measurements/${id}`;
+  const { data: m, error, mutate } = useApi<DustMeasureDetail>(cle);
+  const rafraichir = useRafraichir();
   const [message, setMessage] = useState<Message | null>(null);
   const [modifier, setModifier] = useState(false);
-  const m = mesure ?? derniere;
 
   if (!m) {
     return (
       <Panneau etiquette="Poussières sur site" titre="Mesure" onFermer={onFermer}>
-        {chargee ? <Notice tone="neutral">Cette mesure n&apos;est pas dans la liste affichée : retirez les filtres ou changez de page pour la retrouver.</Notice> : <Etat label="Chargement de la mesure…" />}
+        {error ? <Etat error={error} onRetry={() => void mutate()} /> : <Loading label="Chargement de la mesure…" />}
       </Panneau>
     );
   }
@@ -221,6 +221,7 @@ function FicheMesure({ mesure, chargee, droits, onModifiee, onFermer }: { mesure
           ["Mesurée le", fmtDate(m.measured_on)],
           ["Appareil ou méthode", m.method ?? "Non précisé"],
           m.measured_by && ["Saisie par", m.measured_by.name],
+          ["Société", m.company.name],
         ]}
       />
       {m.note && (
@@ -229,15 +230,18 @@ function FicheMesure({ mesure, chargee, droits, onModifiee, onFermer }: { mesure
         </Rubrique>
       )}
 
+      <Historique lignes={m.history} anonyme={droits.anonyme} />
+
       {modifier && (
         <FenetreMesure
           mesure={m}
           droits={droits}
           onClose={() => setModifier(false)}
           envoyer={async (corps: DustInput) => {
-            const maj = await apiSend<DustMeasure>("PATCH", `/hsseq/dust-measurements/${m.id}`, corps);
-            setDerniere(maj);
-            await onModifiee();
+            await apiSend<DustMeasure>("PATCH", cle, corps);
+            // La réponse est la ligne seule : la fiche est relue pour son historique.
+            await mutate();
+            void rafraichir(cle);
             setMessage({ tone: "ok", text: "Mesure mise à jour." });
           }}
         />

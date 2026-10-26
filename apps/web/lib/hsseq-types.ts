@@ -1170,8 +1170,11 @@ export interface Referentials {
   vehicles: Array<VehicleRef & { site_id: number | null; driver_id: number | null; payload_tonnes: number | null }>;
   /** Le conducteur ne reçoit que lui-même. */
   drivers: Array<Ref & { site_id: number | null }>;
-  /** Comptes internes hors conducteurs : responsables possibles d'une action ; vide pour le conducteur. */
-  owners: Ref[];
+  /**
+   * Comptes internes : responsables possibles d'une action, et les conducteurs (nom seul, `driver`), cités
+   * comme participants ; vide pour le conducteur, sans conducteur pour l'auditeur.
+   */
+  owners: Array<Ref & { driver?: boolean }>;
   /**
    * Salariés en poste (RH), pour désigner une personne en cause : servis aux profils qui déclarent hors
    * conducteur (administration, direction, hsseq, exploitation), vides sinon. Site : celui de l'ensemble

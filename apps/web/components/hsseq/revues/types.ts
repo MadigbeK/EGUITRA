@@ -5,7 +5,8 @@
  * Les éléments d'entrée (`inputs`) sont un instantané enregistré par le noyau (champ JSON) : générés à
  * la préparation, régénérés à la demande tant que la revue est préparée, figés à sa tenue. Une revue
  * tenue avant une évolution du noyau peut donc ne pas porter une rubrique récente : chaque rubrique est
- * facultative, et l'écran la lit avec prudence.
+ * facultative, et l'écran la lit avec prudence. L'auditeur les reçoit sans les indicateurs d'alcootest
+ * ni le nom d'un conducteur ; le compte rendu en PDF d'une revue préparée porte ceux du jour.
  */
 
 import type {
@@ -64,13 +65,32 @@ export interface ReviewCounts {
   by_state: Record<ReviewState, number>;
 }
 
+/**
+ * Compte cité par une revue (participant, responsable d'une décision). L'auditeur lit les noms du
+ * personnel interne, jamais celui d'un conducteur : `name` nul (person du contrôleur).
+ */
+export interface CompteCite {
+  id: number;
+  name: string | null;
+}
+
+/**
+ * Auteur d'une écriture (journal, pièce jointe). L'auditeur n'en lit que la fonction (`function`, à
+ * défaut « Utilisateur interne »), sans identifiant ni nom (actor_ref du noyau).
+ */
+export interface Auteur {
+  id: number | null;
+  name: string | null;
+  function?: string;
+}
+
 /** Décision d'une revue (decision_row) et l'action du plan qui la met en œuvre. */
 export interface ReviewDecision {
   id: number;
   sequence: number;
   topic: DecisionTopic;
   description: string;
-  owner: Ref | null;
+  owner: CompteCite | null;
   due_date: string | null;
   action: ActionLine | null;
 }
@@ -81,7 +101,7 @@ export interface ReviewHistoryEntry {
   model: string;
   res_id: number;
   at: string;
-  by: Ref | null;
+  by: Auteur | null;
   /** create, write (champ par champ), refresh, hold, close, reopen, decision_added, decision_updated, decision_removed, decision_action, attachment_removed. */
   action: string;
   field: string | null;
@@ -92,7 +112,7 @@ export interface ReviewHistoryEntry {
 
 /** Fiche d'une revue (review_detail) : la ligne, la séance, les éléments d'entrée, la suite donnée. */
 export interface Review extends ReviewLine {
-  participants: Ref[];
+  participants: CompteCite[];
   external_participants: string | null;
   agenda: string | null;
   inputs: ReviewInputs | null;
@@ -100,12 +120,15 @@ export interface Review extends ReviewLine {
   minutes: string | null;
   conclusion: string | null;
   decisions: ReviewDecision[];
-  /** Toutes les actions d'origine « revue » de cette revue, y compris celles qu'aucune décision ne porte. */
+  /**
+   * Toutes les actions d'origine « revue » de cette revue, y compris celles qu'aucune décision ne porte ;
+   * pour l'auditeur, `owner.name` est nul quand le responsable est un conducteur.
+   */
   actions: ActionLine[];
   closed_at: string | null;
   closed_by: Ref | null;
   reopen_reason: string | null;
-  /** Pièces de rôle « document » (feuille d'émargement, présentation projetée…). */
+  /** Pièces de rôle « document » (feuille d'émargement, présentation projetée…) ; `created_by` : voir Auteur. */
   attachments: Attachment[];
   history: ReviewHistoryEntry[];
   transitions: ReviewTransition[];
@@ -159,8 +182,8 @@ export interface InputActions {
   closed: number;
   on_time_rate: number | null;
   effectiveness_rate: number | null;
-  /** Vingt au plus, l'échéance la plus ancienne d'abord ; `owner` est un nom. */
-  overdue_items: Array<{ id: number; reference: string; description: string; origin: string; owner: string; due_date: string; days_overdue: number }>;
+  /** Vingt au plus, l'échéance la plus ancienne d'abord ; `owner` est un nom, nul pour l'auditeur quand c'est un conducteur. */
+  overdue_items: Array<{ id: number; reference: string; description: string; origin: string; owner: string | null; owner_id?: number; due_date: string; days_overdue: number }>;
 }
 
 export interface InputAudits {
@@ -192,8 +215,8 @@ export interface InputRisks {
   active: number;
   by_residual_level: Partial<Record<CriticalityLevel, number>>;
   reviews_overdue: number;
-  /** Risques en vigueur de niveau résiduel significatif ou élevé ; `owner` est un nom. */
-  high_residual: Array<{ id: number; reference: string; feared_event: string; residual_criticality: number; residual_level: CriticalityLevel; owner: string }>;
+  /** Risques en vigueur de niveau résiduel significatif ou élevé ; `owner` est un nom, nul pour l'auditeur quand c'est un conducteur. */
+  high_residual: Array<{ id: number; reference: string; feared_event: string; residual_criticality: number; residual_level: CriticalityLevel; owner: string | null; owner_id?: number }>;
 }
 
 export interface InputEnvironment {
@@ -244,6 +267,7 @@ export interface InputPreviousReview {
 
 /** Éléments d'entrée d'une revue : chaque rubrique est facultative (instantané enregistré, voir l'en-tête). */
 export interface ReviewInputs {
+  /** `label` : « octobre 2026 » pour un mois, « d'octobre 2026 à décembre 2026 » pour plusieurs. */
   period?: { from: string; to: string; months: string[]; label: string };
   generated_on?: string;
   indicators?: InputIndicator[];

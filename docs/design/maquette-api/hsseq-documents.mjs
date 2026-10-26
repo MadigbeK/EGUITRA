@@ -32,8 +32,14 @@
  * pose le rôle « photo » sur les pièces d'une version, d'un plan ou d'un exercice (corrigé à la lecture en
  * « document » ou « evidence ») et répond 404 au retrait d'une pièce d'une version publiée (422 au noyau) ;
  * l'origine « drill » est ajoutée à HS_ORIGINS pour les actions nées d'un exercice, dont le site est repris
- * de l'exercice à la lecture de sa fiche. Une référence ou un numéro de version en double répond 422
- * business_rule, là où le noyau, sur sa contrainte SQL, répondrait 500.
+ * de l'exercice à la lecture de sa fiche.
+ *
+ * Corrections du noyau (hsseq@5119185) : référence ou numéro de version en double, 409 conflict ;
+ * exercice déclaré réalisé sans participants (ni nombre ni comptes), 422 participants_required ;
+ * GET /hsseq/procedures trié par `sort` (code, title, status, updated_at), ses comptes par statut aux
+ * autres filtres de la liste ; export à filtres communs (company_id, site_id) et propres à chaque feuille,
+ * préfixés (procedures_, plans_, drills_, contacts_). Les conducteurs de referentials.owners (nom seul,
+ * driver vrai) relèvent de serveur.mjs.
  */
 
 const DOC_READ = ["admin", "direction", "hsseq", "auditeur"];
@@ -343,9 +349,10 @@ export function enregistrerDocuments(H) {
     if (!v) throw new ApiError(404, "not_found", "Version introuvable pour cette procédure.");
     return v;
   }
-  function selectionProcedures(ctx, q) {
+  /** Procédures du compte aux filtres de la liste ; `avecStatut` faux : sans celui du statut (compteurs). */
+  function selectionProcedures(ctx, q, avecStatut = true) {
     const ids = societes(ctx, q);
-    const statuts = hsList(q.status);
+    const statuts = avecStatut ? hsList(q.status) : null;
     const texte = String(q.search ?? "").trim().toLowerCase();
     return HS.procedures
       .filter((p) => ids.includes(p.company_id) && (!statuts || statuts.includes(p.status)) && (!q.domain || p.domain === q.domain) && (!texte || p.code.toLowerCase().includes(texte) || p.title.toLowerCase().includes(texte)) && gestionProcedure(ctx, p))
@@ -382,11 +389,13 @@ export function enregistrerDocuments(H) {
     if ("change_summary" in data) v.change_summary = hsText(data, "change_summary", 4000);
     return v;
   }
+  /** Référence de procédure unique dans la société (unique_code du noyau) : 409 conflict sinon. */
   function verifierCode(p, code, societe) {
-    if (HS.procedures.some((x) => x.id !== p?.id && x.company_id === societe && x.code === code)) throw hsRule("business_rule", "Cette référence de procédure existe déjà dans la société.", { fields: ["code"] });
+    if (HS.procedures.some((x) => x.id !== p?.id && x.company_id === societe && x.code === code)) throw new ApiError(409, "conflict", `La référence ${code} existe déjà dans la société.`, { fields: ["code"] });
   }
+  /** Numéro de version unique dans la procédure (unique_version du noyau) : 409 conflict sinon. */
   function verifierVersion(p, version, v = null) {
-    if (HS.procedureVersions.some((x) => x.procedure_id === p.id && x.id !== v?.id && x.version === version)) throw hsRule("business_rule", "Cette version de la procédure existe déjà.", { fields: ["version"] });
+    if (HS.procedureVersions.some((x) => x.procedure_id === p.id && x.id !== v?.id && x.version === version)) throw new ApiError(409, "conflict", `La version ${version} de cette procédure existe déjà.`, { fields: ["version"] });
   }
   function nouvelleProcedure(v, by, at) {
     const p = {
@@ -821,11 +830,21 @@ export function enregistrerDocuments(H) {
 
   /* ─── Routes : registres ──────────────────────────────────────────────── */
 
+  /**
+   * Filtres d'une feuille de l'export (sheet_filters du noyau) : les communs (société, site, période), puis
+   * ceux préfixés du nom de la feuille (drills_status=done…).
+   */
+  function filtresFeuille(q, prefixe, communs = ["company_id", "site_id", "date_from", "date_to"]) {
+    const f = Object.fromEntries(communs.filter((k) => k in q).map((k) => [k, q[k]]));
+    for (const [k, v] of Object.entries(q)) if (k.startsWith(`${prefixe}_`)) f[k.slice(prefixe.length + 1)] = v;
+    return f;
+  }
+
   route("GET", "/hsseq/documents/export.xlsx", PLAN_READ, (ctx) => {
     const q = ctx.query;
     const feuilles = [];
     if (hasProfile(ctx, DOC_READ)) {
-      const lignesP = selectionProcedures(ctx, q).map((p) => {
+      const lignesP = selectionProcedures(ctx, filtresFeuille(q, "procedures", ["company_id"])).map((p) => {
         const v = enVigueur(p);
         const s = v && p.status === "published" ? stats("version_id", v.id, cibles(p)) : null;
         return [p.code, p.title, STATUTS_PROCEDURE[p.status], v?.version ?? "", v?.effective_date ?? "", p.audience_profiles.join(", "), p.site_ids.map((id) => hsSite(id)?.name).filter(Boolean).join(", ") || "Tous", s?.targets ?? "", s?.read ?? "", s?.rate ?? ""];
@@ -840,12 +859,12 @@ export function enregistrerDocuments(H) {
       });
       feuilles.push({ name: "Alertes et retours d'expérience", rows: [["Référence", "Nature", "Titre", "État", "Diffusé le", "Lectures", "Comptes visés"], ...lignesB] });
     }
-    const plans = selectionPlans(ctx, q).sort((a, b) => a.site_id - b.site_id || a.scenario.localeCompare(b.scenario) || a.id - b.id);
+    const plans = selectionPlans(ctx, filtresFeuille(q, "plans")).sort((a, b) => a.site_id - b.site_id || a.scenario.localeCompare(b.scenario) || a.id - b.id);
     feuilles.push({
       name: "Plans d'intervention",
       rows: [["Référence", "Site", "Scénario", "Plan", "Conduite à tenir", "Prochaine revue"], ...plans.map((pl) => [pl.reference, hsSite(pl.site_id)?.name ?? "", SCENARIOS[pl.scenario], pl.title, pl.response, pl.review_date ?? ""])],
     });
-    const exercices = selectionExercices(ctx, q).sort((a, b) => a.planned_date.localeCompare(b.planned_date) || a.id - b.id);
+    const exercices = selectionExercices(ctx, filtresFeuille(q, "drills")).sort((a, b) => a.planned_date.localeCompare(b.planned_date) || a.id - b.id);
     feuilles.push({
       name: "Exercices",
       rows: [
@@ -854,7 +873,7 @@ export function enregistrerDocuments(H) {
       ],
     });
     // Annuaire du compte : sans le filtre de site de la liste (contact_domain du noyau).
-    const contacts = selectionContacts(ctx, { company_id: q.company_id });
+    const contacts = selectionContacts(ctx, { company_id: filtresFeuille(q, "contacts").company_id });
     feuilles.push({
       name: "Annuaire de crise",
       rows: [["Ordre d'appel", "Site", "Fonction", "Nom", "Organisme", "Téléphone", "Second téléphone"], ...contacts.map((c) => [c.call_order, hsSite(c.site_id)?.name ?? "Tous les sites", c.function, c.name, c.organization ?? "", c.phone, c.phone2 ?? ""])],
@@ -864,12 +883,16 @@ export function enregistrerDocuments(H) {
 
   /* ─── Routes : procédures ─────────────────────────────────────────────── */
 
+  /** Dernière écriture d'une procédure (write_date du noyau) : son journal, sinon sa création. */
+  const majLe = (p) => HS.log.filter((l) => l.model === "procedure" && l.res_id === p.id).reduce((m, l) => (l.at > m ? l.at : m), p.created_at ?? "");
+  const TRIS_PROCEDURES = { code: (p) => p.code, title: (p) => p.title, status: (p) => p.status, updated_at: majLe };
+
   route("GET", "/hsseq/procedures", DOC_READ, (ctx) => {
     const q = ctx.query;
-    if (q.sort && !["code", "-code"].includes(q.sort)) throw hsBad("Tri inconnu.", ["sort"]);
-    const lignes = selectionProcedures(ctx, q);
-    // Comme le noyau : comptes par statut sur la sélection filtrée, statut compris.
-    const counts = { by_status: Object.fromEntries(Object.keys(STATUTS_PROCEDURE).map((s) => [s, lignes.filter((p) => p.status === s).length])) };
+    const lignes = trier(selectionProcedures(ctx, q), q.sort, TRIS_PROCEDURES, "code");
+    // Comme le noyau : comptes par statut aux autres filtres de la liste, sans celui du statut.
+    const tous = selectionProcedures(ctx, q, false);
+    const counts = { by_status: Object.fromEntries(Object.keys(STATUTS_PROCEDURE).map((s) => [s, tous.filter((p) => p.status === s).length])) };
     return hsPage(ctx, lignes, counts, (p) => procedureRow(ctx, p));
   });
 
@@ -1089,6 +1112,8 @@ export function enregistrerDocuments(H) {
       if (!bilan) throw hsRule("debrief_required", "Le bilan de l'exercice est obligatoire.", { fields: ["debrief"] });
       const valeurs = { status: "done", performed_date: le, debrief: bilan };
       const participants = hsId(data, "participants_count");
+      // Des participants : leur nombre, ou des comptes présents (posés avant par PATCH).
+      if (!(participants ?? d.participants_count) && !d.participant_ids.length) throw hsRule("participants_required", "Indiquez les participants de l'exercice (nombre ou comptes).", { fields: ["participants_count", "participant_ids"] });
       if (participants !== null) valeurs.participants_count = Math.max(participants, 0);
       ecrire("drill", d, valeurs, by, at);
       hsLog("drill", d.id, by, "perform", null, null, null, at);

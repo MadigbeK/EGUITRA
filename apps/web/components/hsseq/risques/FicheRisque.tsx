@@ -321,7 +321,7 @@ export function FicheRisque({ id, onFermer }: { id: number; onFermer: () => void
               .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
               .map((h) => (
                 <li key={h.id}>
-                  <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"}
+                  <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by ? (h.by.name || (h.by as { function?: string }).function || "Utilisateur interne") : "Système"}
                   {`${INSECABLE}: ${ligneJournal(h)}`}
                 </li>
               ))}

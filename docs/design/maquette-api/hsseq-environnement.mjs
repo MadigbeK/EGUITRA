@@ -21,13 +21,18 @@
  *   (DB.hsseq.actions), d'origine « complaint ».
  * Consommation, émissions et écarts de livraison sont calculés sur les rotations de Transport de la
  * maquette (citernes : DB.rotations, distance de la route aller et retour, carburant d'après son coût ;
- * bennes : postes de la mine de DB.hsseq.rotations), jamais ressaisis.
+ * bennes : postes de la mine de DB.hsseq.rotations), jamais ressaisis. Citernes : volumes ramenés à 15 °C
+ * d'après une température de chargement et de livraison tirée de la rotation (la maquette de Transport
+ * n'en a pas) ; manquant à 15 °C (chargé moins livré, corrigés) ÷ livré à 15 °C, `delivered` restant le
+ * livré non corrigé (tanker_shortage_15 du noyau).
  *
  * Droits du noyau : lecture ENV_READ (administration, direction, hsseq, chef de parc, auditeur) ;
  * contaminations et réclamations QUALITY_READ, sans le chef de parc. Portée fermée par défaut : chef de
  * parc et auditeur lisent les fiches de leurs sites, jamais une fiche sans site. Saisie de terrain
  * (déversements, déchets, poussières) par hsseq et par le chef de parc pour ses sites ; le reste par hsseq.
- * L'auditeur ne reçoit pas les noms des personnes (déclarant, auteur d'une mesure, d'un enlèvement…).
+ * L'auditeur ne reçoit pas les noms des personnes (déclarant, auteur d'une mesure, d'un enlèvement…) ;
+ * l'auteur d'une ligne d'historique ou d'une pièce lui est servi par sa seule fonction (actor_ref du
+ * noyau : { id: null, name: null, function }).
  *
  * Écarts de la maquette, faute de pouvoir toucher aux routes communes de serveur.mjs : une pièce déposée
  * sur ces fiches prend le rôle « photo » (le noyau pose « document » sur un déchet et une réclamation) ;
@@ -109,7 +114,7 @@ export function enregistrerEnvironnement(H) {
 
 function installer(H) {
   const {
-    route, fileReply, xlsxBuffer, ApiError, DB, TODAY, COMPANIES, HS_ATTACH_MODELS, HS_ORIGINS, HS_PNG,
+    route, fileReply, xlsxBuffer, ApiError, DB, USERS, TODAY, COMPANIES, HS_ATTACH_MODELS, HS_ORIGINS, HS_PNG,
     hsIs, hsFull, hsSites, hsSite, hsSiteRef, hsUser, hsVehicle, hsVehicleRef, hsVehicleByName, hsKind, hsVehicleSite,
     hsRotation, hsRotationRef, hsRotationAt, hsForbidden, hsRule, hsMissing, hsBad, hsId, hsText, hsList, hsSort, hsPage,
     hsLog, hsHistory, hsAttach, hsPhoto, hsAttachments, hsSettings, hsNow, hsAddMinutes, hsPersonalHidden, hsNewAction,
@@ -134,6 +139,19 @@ function installer(H) {
   const ecrivain = (ctx, siteId) => hsIs(ctx, "hsseq") || (hsIs(ctx, "exploitation") && siteId !== null && siteId !== undefined && hsSites(ctx).includes(siteId));
   /** Nom d'un compte, retiré pour l'auditeur (person du noyau). */
   const personne = (ctx, id) => (hsPersonalHidden(ctx) ? null : hsUser(id));
+  /** Fonction d'un compte, servie à l'auditeur à la place de son nom (FUNCTIONS du noyau, premier profil trouvé). */
+  const FONCTIONS = [["hsseq", "Responsable HSSEQ"], ["exploitation", "Chef de parc"], ["rh", "Ressources humaines"], ["conducteur", "Conducteur"], ["admin", "Administration"],
+    ["direction", "Direction générale"], ["finance", "Finance"], ["auditeur", "Auditeur"]];
+  /** Auteur d'une écriture (actor_ref du noyau) : son nom, sauf pour l'auditeur, qui ne lit que sa fonction. */
+  function auteur(ctx, ref) {
+    if (!ref || !hsPersonalHidden(ctx)) return ref;
+    const profils = USERS.find((u) => u.id === ref.id)?.profiles ?? [];
+    return { id: null, name: null, function: FONCTIONS.find(([code]) => profils.includes(code))?.[1] ?? "Utilisateur interne" };
+  }
+  /** Historique d'une fiche, le plus récent d'abord, auteurs servis comme le noyau. */
+  const journal = (ctx, modele, id) => [...hsHistory(modele, id)].reverse().map((h) => ({ ...h, by: auteur(ctx, h.by) }));
+  /** Pièces d'une fiche, déposant servi comme le noyau. */
+  const pieces = (ctx, modele, id) => hsAttachments(modele, id).map((a) => ({ ...a, created_by: auteur(ctx, a.created_by) }));
   const lectureQualite = (ctx) => ctx.user.profiles.some((p) => QUALITY_READ.includes(p));
   const societeRef = (id) => ({ id, name: COMPANIES[id]?.name ?? "" });
   const annee = () => TODAY.slice(0, 4);
@@ -307,9 +325,9 @@ function installer(H) {
     return {
       ...ligneDeversement(ctx, s), company: societeRef(s.company_id), recovery: s.recovery, reported_by: personne(ctx, s.reported_by),
       closed_at: s.closed_at, closed_by: personne(ctx, s.closed_by), reopen_reason: s.reopen_reason,
-      attachments: hsAttachments("spill", s.id),
+      attachments: pieces(ctx, "spill", s.id),
       // Comme le noyau : l'entrée la plus récente d'abord.
-      history: [...hsHistory("spill", s.id)].reverse(),
+      history: journal(ctx, "spill", s.id),
       transitions: transitionsDeversement(ctx, s),
     };
   }
@@ -429,7 +447,7 @@ function installer(H) {
   function ficheDechet(ctx, w) {
     return {
       ...ligneDechet(ctx, w), company: societeRef(w.company_id), note: w.note, collected_by: personne(ctx, w.collected_by), reopen_reason: w.reopen_reason,
-      attachments: hsAttachments("waste", w.id), history: [...hsHistory("waste", w.id)].reverse(), transitions: transitionsDechet(ctx, w),
+      attachments: pieces(ctx, "waste", w.id), history: journal(ctx, "waste", w.id), transitions: transitionsDechet(ctx, w),
     };
   }
   /** Champs d'un déchet (waste_values) ; `partiel` pour une modification. */
@@ -516,7 +534,7 @@ function installer(H) {
     const prestataire = hsText(data, "provider_name", 200) ?? w.provider_name;
     const manquants = [...(bordereau ? [] : ["manifest_reference"]), ...(prestataire || rempli(data.provider_id) ? [] : ["provider_id"])];
     if (manquants.length) throw hsMissing("Prestataire et numéro du bordereau sont obligatoires pour l'enlèvement.", manquants);
-    if (!bordereauJoint(w)) throw hsRule("proof_required", "Joignez le bordereau d'enlèvement avant de l'enregistrer.", { fields: ["attachment_ids"] });
+    if (!bordereauJoint(w)) throw hsRule("document_missing", "Joignez le bordereau d'enlèvement avant de l'enregistrer.", { fields: ["attachment_ids"] });
     ecrire("waste", ctx.user.id, w, { status: "collected", pickup_date: jourEnleve, manifest_reference: bordereau, provider_name: prestataire }, SUIVIS_DECHET);
     w.collected_by = ctx.user.id;
     hsLog("waste", w.id, ctx.user.id, "collect");
@@ -558,6 +576,11 @@ function installer(H) {
     const choisis = hsSort(communs(ctx, q, HS.dustMeasurements, (m) => m.measured_on).filter((m) => !oui(q.exceeded) || m.exceeded), q.sort, TRIS_POUSSIERE, "-measured_on");
     return page(ctx, choisis, { exceeded: choisis.filter((m) => m.exceeded).length }, ligneMesure);
   });
+  // Fiche d'une mesure (dust_row avec detail du noyau) : sa société et son historique.
+  route("GET", "/hsseq/dust-measurements/:id", ENV_READ, (ctx) => {
+    const m = fiche(ctx, HS.dustMeasurements, ctx.params[0], "Mesure", ENV_READ);
+    return { ...ligneMesure(ctx, m), company: societeRef(m.company_id), history: journal(ctx, "dust", m.id) };
+  });
   route("POST", "/hsseq/dust-measurements", ENV_FIELD, (ctx) => {
     const data = ctx.body;
     exiger(data, "site_id", "value", "threshold");
@@ -589,15 +612,15 @@ function installer(H) {
     const t = transitionsContamination(ctx, c);
     return {
       id: c.id, reference: c.reference, detected_on: c.detected_on, nature: c.nature, rotation: rotationRef(c.rotation_id), vehicle: hsVehicleRef(c.vehicle_id),
-      site: hsSiteRef(c.site_id), product: produitRef(c.product_id), volume_m3: c.volume_m3 || null, status: c.status,
+      site: hsSiteRef(c.site_id), product: produitRef(c.product_id), volume_m3: c.volume_m3 || null, description: c.description, status: c.status,
       rights: { can_edit: hsIs(ctx, "hsseq") && c.status === "open", can_close: t.includes("close"), can_approve: false },
     };
   }
   function ficheContamination(ctx, c) {
     return {
-      ...ligneContamination(ctx, c), company: societeRef(c.company_id), description: c.description, measures: c.measures, cost: c.cost ?? 0, event: evenementRef(c.event_id),
-      closed_at: c.closed_at, reopen_reason: c.reopen_reason, attachments: hsAttachments("contamination", c.id),
-      history: [...hsHistory("contamination", c.id)].reverse(), transitions: transitionsContamination(ctx, c),
+      ...ligneContamination(ctx, c), company: societeRef(c.company_id), measures: c.measures, cost: c.cost ?? 0, event: evenementRef(c.event_id),
+      closed_at: c.closed_at, reopen_reason: c.reopen_reason, attachments: pieces(ctx, "contamination", c.id),
+      history: journal(ctx, "contamination", c.id), transitions: transitionsContamination(ctx, c),
     };
   }
   /** Champs d'une contamination (contamination_values) ; `partiel` pour une modification. */
@@ -608,7 +631,10 @@ function installer(H) {
       v.description = hsText(data, "description", 4000);
       if (!v.description) throw hsMissing("Décrivez la contamination.", ["description"]);
     }
-    if ("detected_on" in data) v.detected_on = jour(data, "detected_on") ?? TODAY;
+    if ("detected_on" in data) {
+      v.detected_on = jour(data, "detected_on") ?? TODAY;
+      if (v.detected_on > TODAY) throw hsBad("Une contamination se constate à une date passée ou du jour.", ["detected_on"]);
+    }
     if ("site_id" in data) v.site_id = siteDe(data)?.id ?? null;
     if ("volume_m3" in data) v.volume_m3 = positif(data, "volume_m3", true);
     if ("cost" in data) v.cost = positif(data, "cost", true);
@@ -699,7 +725,7 @@ function installer(H) {
     const t = transitionsReclamation(ctx, c);
     return {
       id: c.id, reference: c.reference, partner: clientRef(c.partner_id), rotation: rotationRef(c.rotation_id), site: hsSiteRef(c.site_id), received_on: c.received_on,
-      nature: c.nature, severity: c.severity, response_due: c.response_due, responded_on: c.responded_on, response_days: joursReponse(c),
+      nature: c.nature, severity: c.severity, description: c.description, response_due: c.response_due, responded_on: c.responded_on, response_days: joursReponse(c),
       on_time: c.responded_on ? Boolean(c.response_due && c.responded_on <= c.response_due) : null, overdue: enRetard(c), status: c.status,
       open_actions: actionsOuvertes(c).length,
       rights: { can_edit: hsIs(ctx, "hsseq") && c.status !== "closed", can_close: t.includes("close"), can_approve: false },
@@ -707,9 +733,9 @@ function installer(H) {
   }
   function ficheReclamation(ctx, c) {
     return {
-      ...ligneReclamation(ctx, c), company: societeRef(c.company_id), description: c.description, response: c.response, responded_by: personne(ctx, c.responded_by),
+      ...ligneReclamation(ctx, c), company: societeRef(c.company_id), response: c.response, responded_by: personne(ctx, c.responded_by),
       vehicle: hsVehicleRef(c.vehicle_id), actions: actionsReclamation(c).map(hsActionLine), closed_at: c.closed_at, reopen_reason: c.reopen_reason,
-      attachments: hsAttachments("complaint", c.id), history: [...hsHistory("complaint", c.id)].reverse(), transitions: transitionsReclamation(ctx, c),
+      attachments: pieces(ctx, "complaint", c.id), history: journal(ctx, "complaint", c.id), transitions: transitionsReclamation(ctx, c),
     };
   }
   /** Champs d'une réclamation (complaint_values) ; `partiel` pour une modification. */
@@ -859,7 +885,14 @@ function installer(H) {
         const km = 2 * (DB.routes.find((x) => x.id === r.route_id)?.distance_km ?? 0);
         // Carburant d'après le coût saisi (prix du litre de la période) ; une rotation sur seize sans carburant saisi.
         const carburant = r.id % 16 === 3 ? 0 : arrondi((r.fuel_cost ?? 0) / (r.date_loading >= "2026-06-01" ? 12500 : 12000), 1);
-        liste.push({ r, v, kind: hsKind(v), site: hsVehicleSite(v), km, carburant, charge: r.volume_loaded ?? 0, livre: r.volume_delivered ?? 0, manquant: r.shortage ?? 0 });
+        // Volumes ramenés à 15 °C : chargés au dépôt entre 27 et 31 °C, livrés entre 2 °C de moins et 2 °C de
+        // plus (dilatation du gazole, 0,00084 par degré) ; manquant à 15 °C nul tant que rien n'est livré.
+        const tCharge = 27 + part(r.id, 3) * 4;
+        const tLivre = tCharge - 2 + part(r.id, 4) * 4;
+        const charge15 = arrondi((r.volume_loaded ?? 0) * (1 - 0.00084 * (tCharge - 15)), 3);
+        const livre15 = arrondi((r.volume_delivered ?? 0) * (1 - 0.00084 * (tLivre - 15)), 3);
+        const manquant15 = r.volume_delivered ? Math.max(0, charge15 - livre15) : 0;
+        liste.push({ r, v, kind: hsKind(v), site: hsVehicleSite(v), km, carburant, charge: r.volume_loaded ?? 0, livre: r.volume_delivered ?? 0, charge15, livre15, manquant: manquant15 });
       }
       for (const r of HS.rotations) {
         if (!PARTIES.includes(r.state) || r.date_loading < a.du || r.date_loading > a.au) continue;
@@ -910,7 +943,8 @@ function installer(H) {
   }
   const lignesLivraison = () => [{ rotations: 0, loaded_15: 0, delivered_15: 0, delivered: 0, shortage: 0 }, { rotations: 0, loaded_t: 0, delivered_t: 0, variance_t: 0 }];
   const arrondis = (l) => Object.fromEntries(Object.entries(l).map(([k, v]) => [k, Number.isInteger(v) ? v : arrondi(v, 3)]));
-  const finCiterne = (l) => ({ ...arrondis(l), per_mille: l.delivered ? arrondi((l.shortage * 1000) / l.delivered, 2) : null });
+  /** Citerne : manquant à 15 °C ÷ livré à 15 °C (_finish_tanker du noyau). */
+  const finCiterne = (l) => ({ ...arrondis(l), per_mille: l.delivered_15 ? arrondi((l.shortage * 1000) / l.delivered_15, 2) : null });
   const finBenne = (l) => ({ ...arrondis(l), per_mille: l.loaded_t ? arrondi((l.variance_t * 1000) / l.loaded_t, 2) : null });
   function livraisons(ctx, a) {
     const citernes = new Map();
@@ -931,8 +965,8 @@ function installer(H) {
         if (!citernes.has(cle)) citernes.set(cle, { libelle, l: lignesLivraison()[0] });
         for (const l of [citernes.get(cle).l, totalCiterne]) {
           l.rotations += 1;
-          l.loaded_15 += x.charge;
-          l.delivered_15 += x.livre;
+          l.loaded_15 += x.charge15;
+          l.delivered_15 += x.livre15;
           l.delivered += x.livre;
           l.shortage += x.manquant;
         }
@@ -1030,7 +1064,7 @@ function installer(H) {
         rows: [
           [periode],
           ["Profil", "Ensemble", "Rotations", "Chargé", "Livré", "Écart", "Écart (‰)"],
-          ...livr.tanker.items.map((r) => ["Citerne (m³)", r.label, r.rotations, r.loaded_15, r.delivered, r.shortage, r.per_mille ?? ""]),
+          ...livr.tanker.items.map((r) => ["Citerne (m³ à 15 °C)", r.label, r.rotations, r.loaded_15, r.delivered_15, r.shortage, r.per_mille ?? ""]),
           ...livr.tipper.items.map((r) => ["Benne (t)", r.label, r.rotations, r.loaded_t, r.delivered_t, r.variance_t, r.per_mille ?? ""]),
         ],
       },

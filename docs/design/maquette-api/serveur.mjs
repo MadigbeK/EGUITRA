@@ -6750,7 +6750,8 @@ function hsSiteOk(ctx, siteId) {
 const hsEmployee = (ctx) => HS_EMPLOYEES.find((e) => e.user_id === ctx.user.id) ?? null;
 const hsMyDriver = (ctx) => hsEmployee(ctx)?.driver_id ?? null;
 const hsCanSeeEvent = (ctx, e) => hsFull(ctx) || e.reported_by === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, e.site_id));
-const hsCanSeeAction = (ctx, a) => hsFull(ctx) || a.owner_id === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, a.site_id));
+// L'auditeur lit aussi les actions nées d'une revue de direction, qu'il lit (elles n'ont pas de site).
+const hsCanSeeAction = (ctx, a) => hsFull(ctx) || a.owner_id === ctx.user.id || (hsScope(ctx) === "site" && hsSiteOk(ctx, a.site_id)) || (hsIs(ctx, "auditeur") && a.origin === "review");
 const hsCanSeeCheck = (ctx, c) => hsFull(ctx) || (hsScope(ctx) === "site" ? hsSiteOk(ctx, c.site_id) : c.performed_by === ctx.user.id || (hsMyDriver(ctx) !== null && c.driver_id === hsMyDriver(ctx)));
 /**
  * Levée d'une non-conformité ouverte, et dépôt de sa photo de correction (rights.can_close), comme can_lift
@@ -8051,13 +8052,15 @@ route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
   // Auditeur : pas de liste nominative des conducteurs.
   const drivers = hsPersonalHidden(ctx) ? [] : [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].filter((d) => !self || d.id === mine);
   // Responsables possibles d'une action : comptes internes hors conducteurs ; aucun pour le conducteur.
-  const owners = self ? [] : USERS.filter((u) => u.active && u.companies.includes(1) && u.profiles.some((p) => !["conducteur", "porteur"].includes(p))).sort((a, b) => byFr(a.name, b.name));
+  // Conducteurs servis aussi (nom seul, `driver`), comme participants ; jamais à l'auditeur.
+  const conducteurSeul = (u) => u.profiles.every((p) => p === "conducteur");
+  const owners = self ? [] : USERS.filter((u) => u.active && u.companies.includes(1) && u.profiles.some((p) => p !== "porteur") && !(conducteurSeul(u) && hsPersonalHidden(ctx))).sort((a, b) => byFr(a.name, b.name));
   const s = hsSettings();
   return {
     sites: HS.sites.map(hsSiteRow),
     vehicles: vehicles.map((v) => ({ ...hsVehicleRef(v.id), site_id: hsVehicleSite(v), driver_id: v.driver_id ?? null, payload_tonnes: v.payload_tonnes ?? null, immobilized: Boolean(immobilisationEnCours(v.id)) })),
     drivers: drivers.map((d) => ({ id: d.id, name: d.name, site_id: HS.driverSites.get(d.id) ?? null })).sort((a, b) => byFr(a.name, b.name)),
-    owners: owners.map((u) => ({ id: u.id, name: u.name })),
+    owners: owners.map((u) => ({ id: u.id, name: u.name, ...(conducteurSeul(u) ? { driver: true } : {}) })),
     // Profils qui déclarent ou gèrent les personnes en cause, hors conducteur (EVENT_PEOPLE du noyau).
     employees: hasProfile(ctx, ["admin", "direction", "hsseq", "exploitation"]) ? hsEmployeeRows() : [],
     // Clients : administration, direction et hsseq (CLIENTS du noyau) ; personne d'autre, auditeur compris.

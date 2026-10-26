@@ -38,11 +38,12 @@ function serie(i: Indicator): number[] {
 }
 
 /**
- * Situation du mois en tête de la télématique, lue au cockpit (GET /hsseq/cockpit) : seul le cockpit
- * rapporte les violations aux voyages (départs du mois). Violations pour 100 voyages (valeur, cible et
- * état servis par le noyau, série en gravure), violations du mois par type, dernier import. Elle suit le
- * mois et le site des filtres, pas le type, le véhicule ni le conducteur ; bornée aux sites du compte,
- * comme le cockpit.
+ * Situation du mois en tête de la télématique, lue au cockpit (GET /hsseq/cockpit) pour ce qu'il est seul
+ * à servir : la cible de l'indicateur, son état, sa série et le dernier import. Violations pour 100
+ * voyages du mois (départs du mois), violations du mois par type, dernier import. Elle suit le mois et le
+ * site des filtres, pas le type, le véhicule ni le conducteur ; bornée aux sites du compte, comme le
+ * cockpit. Le rapport aux voyages de la sélection, tous filtres compris, vient de la liste des violations
+ * (counts.departures), sous les filtres.
  */
 export function Situation({ mois, site }: { mois: string; site: number | null }) {
   const { data, error, mutate } = useApi<Cockpit>(`/hsseq/cockpit?${requete({ month: mois, site_id: site })}`, { keepPreviousData: true });
@@ -80,7 +81,7 @@ export function Situation({ mois, site }: { mois: string; site: number | null })
       </div>
       <p className="text-[12.5px] leading-snug text-muted">
         Situation {duMois(mois)}
-        {nomSite ? `, ${nomSite}` : ""}, lue au cockpit&nbsp;: voyages partis dans le mois, violations importées. Elle suit la période et le site choisis, pas les autres filtres.
+        {nomSite ? `, ${nomSite}` : ""}, lue au cockpit&nbsp;: voyages partis dans le mois, violations importées. Elle suit la période et le site choisis&nbsp;; le rapport de la sélection, tous filtres compris, est donné sous les filtres.
         {error ? ` Elle n'a pas pu être relue${INSECABLE}: chiffres du dernier chargement.` : ""}
       </p>
     </section>

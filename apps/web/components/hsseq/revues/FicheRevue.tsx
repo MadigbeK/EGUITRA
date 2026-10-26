@@ -12,6 +12,8 @@
  * compte rendu, inscrire les décisions et leurs actions au plan, conclure, clore ; la revue close se
  * rouvre par le seul Responsable HSSEQ, avec un motif. Les commandes suivent `transitions` et `rights`
  * servis par le noyau, qui refuse le reste ; un lecteur (administration, auditeur) n'en voit aucune.
+ * L'auditeur lit les revues des sociétés de son compte : noms du personnel interne, jamais celui d'un
+ * conducteur ; dans l'historique et les pièces, la fonction de l'auteur à la place de son nom.
  */
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -25,7 +27,7 @@ import { Historique, Rubrique, TexteLong } from "./briques";
 import { Decisions, type EnvoiRevue } from "./Decisions";
 import { ANCRES, ElementsEntree, EnTeteEntree } from "./ElementsEntree";
 import { FenetreMotif, FenetrePreparation, FenetreTenue } from "./Fenetres";
-import { TamponsRevue, dateLongue, dePeriode, deposerPieceRevue, echeanceRelative, messageRevue, nombreDeMois, nomPdf, periodeRevue, revueEnRetard, useRafraichirRevues } from "./outils";
+import { TamponsRevue, dateLongue, dePeriode, deposerPieceRevue, echeanceRelative, messageRevue, nombreDeMois, nomCompte, nomPdf, periodeRevue, revueEnRetard, useRafraichirRevues } from "./outils";
 import type { Review, ReviewInput } from "./types";
 
 type Fenetre = "preparation" | "tenue" | "reouverture";
@@ -247,6 +249,8 @@ export function FicheRevue({ id, onFermer }: { id: number; onFermer: () => void 
   const modifiable = r.rights.can_edit;
   const plusieursSocietes = (moi?.companies.length ?? 0) > 1;
   const genere = r.inputs_generated_at?.slice(0, 10) ?? null;
+  // L'auditeur lit la fonction de l'auteur d'une pièce à la place de son nom (Pieces affiche le nom).
+  const pieces = r.attachments.map((p) => (p.created_by && !p.created_by.name ? { ...p, created_by: { id: p.created_by.id, name: nomCompte(p.created_by, "Utilisateur interne") } } : p));
   const ancien = r.state === "prepared" && genere !== null && joursEntre(genere, aujourdhui()) >= 1;
 
   /** Commande d'une transition sans fenêtre : envoi, message, refus du noyau. */
@@ -361,7 +365,8 @@ export function FicheRevue({ id, onFermer }: { id: number; onFermer: () => void 
               <Pencil className="h-4 w-4" /> {prepare ? "Modifier la préparation" : "Modifier la séance"}
             </Button>
           )}
-          <Button loading={occupe === "pdf"} onClick={() => void telecharger()}>
+          {/* Revue préparée : le dossier de séance porte les éléments d'entrée du jour, calculés à l'impression. */}
+          <Button loading={occupe === "pdf"} onClick={() => void telecharger()} title={prepare ? "Ordre du jour, participants invités et éléments d'entrée du jour" : undefined}>
             <Download className="h-4 w-4" /> {prepare ? "Dossier de séance (PDF)" : "Compte rendu (PDF)"}
           </Button>
           {t.has("reopen") && (
@@ -425,7 +430,7 @@ export function FicheRevue({ id, onFermer }: { id: number; onFermer: () => void 
                 <ul className="flex flex-wrap gap-1.5">
                   {r.participants.map((p) => (
                     <li key={p.id}>
-                      <Tag>{p.name}</Tag>
+                      <Tag>{nomCompte(p)}</Tag>
                     </li>
                   ))}
                 </ul>
@@ -498,7 +503,7 @@ export function FicheRevue({ id, onFermer }: { id: number; onFermer: () => void 
             }
           >
             <Pieces
-              pieces={r.attachments}
+              pieces={pieces}
               retirable={(p) => modifiable && (hsseq || (moi !== undefined && p.created_by?.id === moi.id))}
               onRetiree={() => void mutate()}
               onErreur={(m) => setMessage({ tone: "danger", text: m })}

@@ -74,7 +74,7 @@ export function Sites() {
           site={edition === "nouveau" ? null : edition}
           societes={societes}
           societeDefaut={me.company_id}
-          candidats={ref?.owners ?? []}
+          candidats={(ref?.owners ?? []).filter((o) => !o.driver)}
           onClose={() => setEdition(null)}
           onDone={(s, cree) => {
             setEdition(null);

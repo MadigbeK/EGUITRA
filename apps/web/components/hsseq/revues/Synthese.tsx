@@ -38,11 +38,11 @@ function Bloc({ href, titre, children }: { href?: string; titre: string; childre
 const GRAND = "font-display text-[20px] font-[650] leading-tight tracking-[-0.015em]";
 
 /**
- * Profils qui lisent tout le plan d'actions (READ_ALL du noyau). Une action de revue n'a pas de site :
- * l'auditeur, borné à ses sites sur le plan d'actions, ne les y voit pas, et le bloc des décisions en
- * cours ne lui est pas montré (il lit les actions de chaque revue dans sa fiche).
+ * Profils qui lisent les actions des revues au plan d'actions : ceux qui lisent tout le plan (READ_ALL du
+ * noyau), et l'auditeur, qui y lit les actions des revues des sociétés de son compte (sans site) tant que
+ * son accès court.
  */
-const LECTURE_PLAN = ["admin", "direction", "hsseq"] as const;
+const LECTURE_PLAN = ["admin", "direction", "hsseq", "auditeur"] as const;
 
 export function SyntheseRevues() {
   const planComplet = useAutorise(LECTURE_PLAN);

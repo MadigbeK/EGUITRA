@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 import { ArrowUpRight } from "@/components/icons";
 import { FEUILLE, cx } from "@/components/ui";
 import { INSECABLE, fmtDate, fmtDateTime } from "@/lib/format";
-import { ETAT_REVUE } from "./outils";
+import { ETAT_REVUE, nomCompte } from "./outils";
 import type { ReviewHistoryEntry, ReviewState } from "./types";
 
 /** Lien discret vers un autre écran (registre, plan d'actions). */
@@ -181,7 +181,10 @@ function detail(h: ReviewHistoryEntry): string {
   return ` (${nom})`;
 }
 
-/** Historique de la revue, du plus récent au plus ancien (le noyau le sert ainsi ; l'écran trie lui-même). */
+/**
+ * Historique de la revue, du plus récent au plus ancien (le noyau le sert ainsi ; l'écran trie lui-même).
+ * L'auditeur y lit la fonction de l'auteur à la place de son nom.
+ */
 export function Historique({ lignes }: { lignes: ReviewHistoryEntry[] }) {
   if (!lignes.length) return <p className="text-[13px] text-muted">Aucune entrée.</p>;
   return (
@@ -190,7 +193,7 @@ export function Historique({ lignes }: { lignes: ReviewHistoryEntry[] }) {
         .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
         .map((h) => (
           <li key={h.id}>
-            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"}
+            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by ? nomCompte(h.by, "Utilisateur interne") : "Système"}
             {`${INSECABLE}: ${OPERATION[h.action] ?? h.action}${detail(h)}`}
             {h.note && <span className="text-muted">{` (${h.note})`}</span>}
           </li>

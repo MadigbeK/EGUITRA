@@ -3,8 +3,8 @@
  * Routes et données fictives ; `H` porte les références de serveur.mjs (HS_REFS).
  *
  * Tables, aux noms de champs du noyau : DB.hsseq.telematicsImports (eguitra.hsseq.telematics.import :
- * name, company_id, source, imported_by, imported_at, row_count, created_count, duplicate_count,
- * warnings) et DB.hsseq.violations (eguitra.hsseq.telematics.violation : company_id, occurred_at,
+ * name, company_id, state, source, imported_by, imported_at, row_count, created_count, duplicate_count,
+ * warnings, errors, error_count) et DB.hsseq.violations (eguitra.hsseq.telematics.violation : company_id, occurred_at,
  * vehicle_id, site_id, driver_id, rotation_id, violation_type, source, value, limit_value,
  * duration_minutes, location, external_id, import_id). site_id est le site de l'ensemble, lu à la volée
  * comme le champ lié du noyau ; le cockpit de serveur.mjs lit ces deux tables (violations du mois,
@@ -12,17 +12,18 @@
  *
  * Import (hsseq seul) : fichier CSV (UTF-8 ou Latin-1, séparateur « ; », « , » ou tabulation) ou
  * classeur Excel (.xlsx, lu ici par un petit lecteur de zip, sans macro), 5 Mo au plus, tout ou rien
- * (une ligne en erreur refuse le fichier : 422 import_rejected avec errors[]), dry_run=1 pour le
- * contrôle à blanc ; mêmes colonnes, mêmes messages, mêmes doublons et même rattachement à la rotation
- * que models/telematics.py. Le contrôle à blanc sert `preview` comme le noyau, en valeurs brutes
- * (vehicle_id, driver_id ou false, value à 0 quand elle manque…).
+ * (une ligne en erreur refuse le fichier : 422 import_rejected avec errors[] ; l'import confirmé refusé
+ * laisse sa trace, import « rejected » avec ses erreurs, et sert son import_id), dry_run=1 pour le
+ * contrôle à blanc ; mêmes colonnes (date et heure en une colonne ou en deux), mêmes messages, mêmes
+ * doublons (bornés à la société de l'ensemble) et même rattachement à la rotation que
+ * models/telematics.py. Le contrôle à blanc sert `preview` au format des lignes de la liste
+ * (preview_row du noyau : id et import nuls).
  *
  * Lecture des violations : administration, direction, hsseq ; chef de parc et auditeur bornés aux
- * véhicules de leurs sites (fermé par défaut), sans le nom du chauffeur pour l'auditeur. Historique des
- * imports : administration, direction, hsseq.
- *
- * Écart volontaire, signalé au noyau : filtre driver_id sur GET /hsseq/telematics/violations (absent de
- * controllers/telematics.py au 26/10, l'écran le propose).
+ * véhicules de leurs sites (fermé par défaut), sans le nom du chauffeur pour l'auditeur ; filtres de type,
+ * ensemble, site, conducteur, import, rotation et période ; counts.departures et per_100_trips rapportent
+ * les violations de la période (le mois en cours à ce jour sans dates) aux voyages partis sous les mêmes
+ * filtres (trip_domain du noyau). Historique des imports : administration, direction, hsseq, filtre state.
  */
 
 import { inflateRawSync } from "node:zlib";
@@ -42,7 +43,8 @@ const PARTIES = ["en_route", "done", "invoiced"];
 
 /** En-têtes reconnus (HEADERS du modèle), une fois mis « à plat » : sans accent, en minuscules. */
 const ENTETES = {
-  occurred_at: ["date", "date heure", "date et heure", "horodatage", "heure", "occurred at", "timestamp"],
+  occurred_at: ["date", "date heure", "date et heure", "horodatage", "occurred at", "timestamp"],
+  time: ["heure", "heure de l evenement", "heure locale", "time"],
   vehicle: ["vehicule", "ensemble", "immatriculation", "code vehicule", "vehicle", "plaque"],
   driver: ["chauffeur", "conducteur", "driver"],
   violation_type: ["type", "type de violation", "violation", "infraction", "evenement", "alerte"],
@@ -124,6 +126,23 @@ function lireMoment(valeur) {
   const naif = inverse && composer(+inverse[1], +inverse[2], +inverse[3], +inverse[4], +inverse[5], +(inverse[6] ?? 0));
   if (naif) return naif;
   throw new Error(`date illisible : ${texte}`);
+}
+
+/**
+ * Heure d'une cellule (parse_time du modèle) : heure du classeur (son heure), fraction de jour, ou texte
+ * hh:mm[:ss] (« 8h30 » accepté). Rend « HH:MM:SS » ; lève une Error au message du noyau.
+ */
+function lireHeure(valeur) {
+  if (valeur instanceof Horodatage) return valeur.iso.slice(11, 19);
+  if (typeof valeur === "number" && valeur >= 0 && valeur < 1) {
+    const s = Math.min(Math.round(valeur * 86400), 86399);
+    return `${deux(Math.floor(s / 3600))}:${deux(Math.floor((s % 3600) / 60))}:${deux(s % 60)}`;
+  }
+  const texte = String(valeur ?? "").trim().toLowerCase().replace(/ /g, "").replace(/h/g, ":").replace(/:+$/, "");
+  if (!texte) throw new Error("heure absente");
+  const m = /^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/.exec(texte);
+  if (m && +m[1] <= 23 && +(m[2] ?? 0) <= 59 && +(m[3] ?? 0) <= 59) return `${deux(+m[1])}:${deux(+(m[2] ?? 0))}:${deux(+(m[3] ?? 0))}`;
+  throw new Error(`heure illisible : ${valeur}`);
 }
 
 /** Nombre d'une cellule (parse_number du modèle) : virgule ou point, espaces et unités ignorés ; nul s'il manque. */
@@ -358,7 +377,7 @@ const LIEUX_PARC = [["Route du Niger, Matoto", 50], ["Autoroute Fidel Castro, Ka
 
 /** Enregistre les routes du module et sème ses tables ; appelé une fois par serveur.mjs, après seed(). */
 export function enregistrerTelematique(H) {
-  const { route, ApiError, DB, COMPANIES, hsVehicle, hsVehicleRef, hsVehicleSite, hsSiteRef, hsDriver, hsRotation, hsRotationRef, hsUser, hsFull, hsSites, hsPersonalHidden, hsForbidden, hsBad, hsMissing, hsRule, hsLog, hsNow, hsPage, hsSort, hsList } = H;
+  const { route, ApiError, DB, TODAY, COMPANIES, hsVehicle, hsVehicleRef, hsVehicleSite, hsSiteRef, hsDriver, hsRotation, hsRotationRef, hsUser, hsFull, hsSites, hsPersonalHidden, hsForbidden, hsBad, hsMissing, hsRule, hsLog, hsNow, hsPage, hsSort, hsList } = H;
   const HS = DB.hsseq;
   HS.telematicsImports = [];
   HS.violations = [];
@@ -418,8 +437,11 @@ export function enregistrerTelematique(H) {
       let moment;
       try {
         moment = lireMoment(cellule(ligne, "occurred_at"));
+        // Colonne « Heure » à part : elle complète la date.
+        const heure = cellule(ligne, "time");
+        if ("time" in index && heure !== null && heure !== undefined && heure !== "") moment = `${moment.slice(0, 10)}T${lireHeure(heure)}`;
       } catch (e) {
-        erreurs.push({ line: numero, message: `Date : ${e.message}.` });
+        erreurs.push({ line: numero, message: `Date ou heure : ${e.message}.` });
         return;
       }
       if (Date.parse(`${moment}Z`) > limite) {
@@ -446,9 +468,11 @@ export function enregistrerTelematique(H) {
       const source = (texteCellule(cellule(ligne, "source")) || String(sourceDefaut ?? "")).trim().slice(0, 64);
       const externe = texteCellule(cellule(ligne, "external_id")).trim().slice(0, 128) || false;
       const cle = externe ? `ext|${source}|${externe}` : `ligne|${vehicule.id}|${type}|${moment}`;
+      // Doublons cherchés dans la société de l'ensemble.
+      const societe = vehicule.company_id ?? 1;
       const existe = externe
-        ? HS.violations.some((x) => x.external_id === externe && x.source === source)
-        : HS.violations.some((x) => x.vehicle_id === vehicule.id && x.violation_type === type && x.occurred_at === zulu(moment));
+        ? HS.violations.some((x) => x.company_id === societe && x.external_id === externe && x.source === source)
+        : HS.violations.some((x) => x.company_id === societe && x.vehicle_id === vehicule.id && x.violation_type === type && x.occurred_at === zulu(moment));
       if (vus.has(cle) || existe) {
         doublons += 1;
         return;
@@ -459,7 +483,7 @@ export function enregistrerTelematique(H) {
       const nom = texteCellule(cellule(ligne, "driver")).trim();
       if (nom) {
         conducteur = conducteurs.get(`${vehicule.company_id ?? 1}|${plat(nom)}`) ?? null;
-        if (!conducteur) avertissements.push({ line: numero, message: "Chauffeur non reconnu : celui de la rotation est retenu s'il y en a une." });
+        if (!conducteur) avertissements.push({ line: numero, message: `Chauffeur non reconnu : « ${nom} » ; celui de la rotation est retenu s'il y en a une.` });
       }
       const chauffeur = conducteur?.id ?? rotation?.driver_id ?? null;
       valeurs.push({
@@ -484,10 +508,16 @@ export function enregistrerTelematique(H) {
       location: v.location || null, external_id: v.external_id || null, import: lot ? { id: lot.id, name: lot.name } : null,
     };
   }
+  /** preview_row du contrôleur : violation à créer, au format de violation_row (id et import nuls). */
+  function apercuRow(ctx, v) {
+    const vehicule = hsVehicle(v.vehicle_id);
+    return { ...violationRow(ctx, { ...v, site_id: vehicule ? hsVehicleSite(vehicule) : null, import_id: null }), id: null };
+  }
   /** import_row du contrôleur. */
   const importRow = (b) => ({
-    id: b.id, name: b.name, company: { id: b.company_id, name: COMPANIES[b.company_id]?.name ?? "" }, source: b.source || null, imported_by: hsUser(b.imported_by),
-    imported_at: b.imported_at, rows: b.row_count, created: b.created_count, duplicates: b.duplicate_count, warnings: b.warnings ?? [],
+    id: b.id, name: b.name, company: { id: b.company_id, name: COMPANIES[b.company_id]?.name ?? "" }, state: b.state ?? "done", source: b.source || null,
+    imported_by: hsUser(b.imported_by), imported_at: b.imported_at, rows: b.row_count, created: b.created_count, duplicates: b.duplicate_count,
+    warnings: b.warnings ?? [], errors: b.errors ?? [], error_count: b.error_count ?? 0,
   });
 
   /** Sociétés de travail (companies du contrôleur) : toutes celles du compte, ou celle du filtre company_id. */
@@ -547,18 +577,27 @@ export function enregistrerTelematique(H) {
       if (lignes.length > MAX_ROWS + 1) throw hsRule("business_rule", `Fichier trop long : ${MAX_ROWS} lignes au plus.`);
     }
     const { valeurs, erreurs, avertissements, doublons } = analyser(lignes, ctx.user.companies, source);
-    if (erreurs.length) {
-      throw hsRule("import_rejected", `Import refusé, rien n'est enregistré : ${erreurs.length} ligne(s) en erreur.`, { errors: erreurs.slice(0, MAX_REPORTED) });
-    }
     const lues = lignes.slice(1).filter((l) => l.some((c) => c !== null && c !== undefined && c !== "")).length;
+    if (erreurs.length) {
+      const message = `Import refusé, aucune violation enregistrée : ${erreurs.length} ligne(s) en erreur.`;
+      if (aBlanc) throw hsRule("import_rejected", message, { errors: erreurs.slice(0, MAX_REPORTED) });
+      // Trace de l'import refusé : import « rejected » avec ses erreurs, rien d'autre n'est écrit.
+      const refuse = {
+        id: ++HS.seq.telematics_import, name: String(fichier.filename).slice(0, 200), company_id: ctx.company, state: "rejected", source: source || false,
+        imported_by: ctx.user.id, imported_at: hsNow(), row_count: lues, created_count: 0, duplicate_count: 0, warnings: avertissements.slice(0, MAX_REPORTED),
+        errors: erreurs.slice(0, MAX_REPORTED), error_count: erreurs.length,
+      };
+      HS.telematicsImports.push(refuse);
+      hsLog("telematics_import", refuse.id, ctx.user.id, "rejected", null, null, null, refuse.imported_at, `${erreurs.length} ligne(s) en erreur`);
+      throw hsRule("import_rejected", message, { errors: erreurs.slice(0, MAX_REPORTED), import_id: refuse.id });
+    }
     if (aBlanc) {
-      // Valeurs brutes du modèle, comme le noyau (horodatage sérialisé en ISO avec « Z »).
-      return { dry_run: true, rows: lues, to_create: valeurs.length, duplicates: doublons, warnings: avertissements.slice(0, MAX_REPORTED), preview: valeurs.slice(0, 50) };
+      return { dry_run: true, rows: lues, to_create: valeurs.length, duplicates: doublons, warnings: avertissements.slice(0, MAX_REPORTED), preview: valeurs.slice(0, 50).map((v) => apercuRow(ctx, v)) };
     }
     const maintenant = hsNow();
     const lot = {
-      id: ++HS.seq.telematics_import, name: String(fichier.filename).slice(0, 200), company_id: ctx.company, source: source || false, imported_by: ctx.user.id,
-      imported_at: maintenant, row_count: lues, created_count: valeurs.length, duplicate_count: doublons, warnings: avertissements.slice(0, MAX_REPORTED),
+      id: ++HS.seq.telematics_import, name: String(fichier.filename).slice(0, 200), company_id: ctx.company, state: "done", source: source || false, imported_by: ctx.user.id,
+      imported_at: maintenant, row_count: lues, created_count: valeurs.length, duplicate_count: doublons, warnings: avertissements.slice(0, MAX_REPORTED), errors: [], error_count: 0,
     };
     HS.telematicsImports.push(lot);
     for (const v of valeurs) nouvelle({ ...v, driver_id: v.driver_id || null, rotation_id: v.rotation_id || null, location: v.location || null, external_id: v.external_id || null, import_id: lot.id });
@@ -569,7 +608,8 @@ export function enregistrerTelematique(H) {
   route("GET", "/hsseq/telematics/imports", LECTURE_IMPORTS, (ctx) => {
     const q = ctx.query;
     const ids = societes(ctx, q);
-    const liste = hsSort(HS.telematicsImports.filter((b) => ids.includes(b.company_id)), q.sort, { imported_at: (b) => b.imported_at }, "-imported_at");
+    const etats = hsList(q.state);
+    const liste = hsSort(HS.telematicsImports.filter((b) => ids.includes(b.company_id) && (!etats || etats.includes(b.state ?? "done"))), q.sort, { imported_at: (b) => b.imported_at }, "-imported_at");
     return hsPage(ctx, liste, {}, importRow);
   });
 
@@ -591,8 +631,24 @@ export function enregistrerTelematique(H) {
         (!au || v.occurred_at.slice(0, 10) <= au),
     );
     const selection = base.filter((v) => !types || types.includes(v.violation_type));
-    // Comptes par type sur la sélection filtrée, filtre de type compris (counts du contrôleur).
-    const counts = { by_type: Object.fromEntries(CODES.map((c) => [c, selection.filter((v) => v.violation_type === c).length])) };
+    // Voyages (rotations parties) de la période et des mêmes filtres (trip_domain du contrôleur) : la
+    // période choisie, sinon le mois en cours à ce jour ; l'ensemble donne le site (portée et filtre).
+    const debut = du ?? `${TODAY.slice(0, 7)}-01`;
+    const fin = au ?? TODAY;
+    const voyages = [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations].filter((r) => {
+      const v = hsVehicle(r.vehicle_id);
+      const siteV = v ? hsVehicleSite(v) : null;
+      return ids.includes(r.company_id ?? 1) && PARTIES.includes(r.state) && r.date_loading >= debut && r.date_loading <= fin
+        && (!sites || (siteV !== null && sites.includes(siteV))) && (filtres.site_id === null || siteV === filtres.site_id)
+        && (filtres.vehicle_id === null || r.vehicle_id === filtres.vehicle_id) && (filtres.driver_id === null || r.driver_id === filtres.driver_id);
+    }).length;
+    const dansPeriode = selection.filter((v) => v.occurred_at.slice(0, 10) >= debut && v.occurred_at.slice(0, 10) <= fin).length;
+    // Comptes par type sur la sélection filtrée, filtre de type compris ; rapport aux voyages de la période.
+    const counts = {
+      by_type: Object.fromEntries(CODES.map((c) => [c, selection.filter((v) => v.violation_type === c).length])),
+      period: { date_from: debut, date_to: fin }, departures: voyages, violations_in_period: dansPeriode,
+      per_100_trips: voyages ? Math.round((dansPeriode * 10000) / voyages) / 100 : null,
+    };
     const liste = hsSort(selection, q.sort, { occurred_at: (v) => v.occurred_at, violation_type: (v) => v.violation_type }, "-occurred_at");
     return hsPage(ctx, liste, counts, (v) => violationRow(ctx, v));
   });
@@ -700,11 +756,26 @@ export function enregistrerTelematique(H) {
       const nom = e.benne ? `OBC_Boffa_${e.du}_${e.au}.xlsx` : `IVMS_export_${e.du}_${e.au}.csv`;
       const importe = `${e.lundi}T${e.benne ? "09" : "08"}:${deux(r.int(5, 55))}:00`;
       // Conducteur écrit autrement que dans Transport (« F. Sylla ») : non reconnu, celui de la rotation est retenu.
-      const avertissements = lot.flatMap((t, i) => (t.abrege && t.rotation ? [{ line: reprises.length + i + 2, message: "Chauffeur non reconnu : celui de la rotation est retenu s'il y en a une." }] : []));
+      const abrege = (id) => {
+        const [prenom = "", ...reste] = String(hsDriver(id)?.name ?? "").split(" ");
+        return reste.length ? `${prenom.charAt(0)}. ${reste.join(" ")}` : prenom || "Chauffeur";
+      };
+      const avertissements = lot.flatMap((t, i) => (t.abrege && t.rotation ? [{ line: reprises.length + i + 2, message: `Chauffeur non reconnu : « ${abrege(t.chauffeur)} » ; celui de la rotation est retenu s'il y en a une.` }] : []));
       const crees = lot;
+      const lignes = reprises.length + lot.length;
+      // Un export refusé une fois (heure à 25 h, ensemble mal écrit), tracé, puis corrigé et importé dans l'heure.
+      if (e.k === 9 && !e.benne && lignes >= 2) {
+        const erreurs = [{ line: 2, message: "Date ou heure : heure illisible : 25:10." }, { line: lignes + 1, message: "Véhicule inconnu : ER 5O." }];
+        const refuse = {
+          id: ++HS.seq.telematics_import, name: nom, company_id: 1, state: "rejected", source: e.source, imported_by: fanta, imported_at: `${e.lundi}T07:42:00Z`,
+          row_count: lignes, created_count: 0, duplicate_count: 0, warnings: [], errors: erreurs, error_count: erreurs.length,
+        };
+        HS.telematicsImports.push(refuse);
+        hsLog("telematics_import", refuse.id, fanta, "rejected", null, null, null, refuse.imported_at, `${erreurs.length} ligne(s) en erreur`);
+      }
       const b = {
-        id: ++HS.seq.telematics_import, name: nom, company_id: 1, source: e.source, imported_by: e.k === 6 ? mariama : fanta, imported_at: zulu(importe),
-        row_count: reprises.length + lot.length, created_count: crees.length, duplicate_count: reprises.length, warnings: avertissements,
+        id: ++HS.seq.telematics_import, name: nom, company_id: 1, state: "done", source: e.source, imported_by: e.k === 6 ? mariama : fanta, imported_at: zulu(importe),
+        row_count: lignes, created_count: crees.length, duplicate_count: reprises.length, warnings: avertissements, errors: [], error_count: 0,
       };
       HS.telematicsImports.push(b);
       hsLog("telematics_import", b.id, b.imported_by, "import", null, null, null, b.imported_at, `${crees.length} violation(s), ${reprises.length} doublon(s)`);

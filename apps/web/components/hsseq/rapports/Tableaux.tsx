@@ -371,7 +371,7 @@ export function Historique({ entrees }: { entrees: ReportHistoryEntry[] }) {
       <ol className="mt-2 space-y-1.5 text-[12.5px] leading-snug text-ink-2">
         {lignes.map((h) => (
           <li key={h.id}>
-            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"} : {operation(h)}
+            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by ? (h.by.name || (h.by as { function?: string }).function || "Utilisateur interne") : "Système"} : {operation(h)}
           </li>
         ))}
       </ol>

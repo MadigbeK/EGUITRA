@@ -542,7 +542,7 @@ function HistoriqueModele({ entrees }: { entrees: ReportHistoryEntry[] }) {
       <ol className="mt-2 space-y-1.5 text-[12.5px] leading-snug text-ink-2">
         {lignes.map((h) => (
           <li key={h.id}>
-            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"} :{" "}
+            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by ? (h.by.name || (h.by as { function?: string }).function || "Utilisateur interne") : "Système"} :{" "}
             {h.action === "create" ? "modèle créé" : h.action === "write" && h.field ? `${(CHAMP[h.field] ?? h.field).toLocaleLowerCase("fr")} : « ${valeurJournal(h.field, h.old_value)} » devenu « ${valeurJournal(h.field, h.new_value)} »` : h.action}
           </li>
         ))}

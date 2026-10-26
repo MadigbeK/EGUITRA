@@ -184,7 +184,7 @@ function Editeur({
   const [refus, setRefus] = useState<string | null>(null);
   const modifie = JSON.stringify(versCorps(b)) !== JSON.stringify(versCorps(depuis(inv, attendue)));
   const changer = (maj: Partial<Brouillon>) => setB((x) => ({ ...x, ...maj }));
-  const equipe = referentiels?.owners ?? inv.team;
+  const equipe = referentiels?.owners.filter((o) => !o.driver) ?? inv.team;
 
   async function enregistrer() {
     setEnvoi(true);
@@ -526,7 +526,7 @@ function FenetreEnquete({
         <fieldset>
           <legend className="mb-1.5 text-[13px] font-medium text-ink-2">Équipe d'enquête</legend>
           <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl bg-panel-2 p-2.5">
-            {(referentiels?.owners ?? []).map((p) => (
+            {(referentiels?.owners ?? []).filter((o) => !o.driver).map((p) => (
               <label key={p.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-[13.5px] text-ink hover:bg-panel-3">
                 <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={equipe.includes(p.id)} onChange={(ev) => setEquipe((l) => (ev.target.checked ? [...l, p.id] : l.filter((x) => x !== p.id)))} />
                 {p.name}

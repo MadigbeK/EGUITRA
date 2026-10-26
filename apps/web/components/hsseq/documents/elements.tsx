@@ -96,7 +96,8 @@ export function TauxLecture({ stats }: { stats: ReadStats | null }) {
 
 /**
  * Historique d'une fiche, du plus récent au plus ancien : opération, champ modifié et, pour les champs
- * courts, valeurs avant et après ; `valeur` met une valeur codée en clair (statut, scénario…).
+ * courts, valeurs avant et après ; `valeur` met une valeur codée en clair (statut, scénario…). L'auditeur
+ * y lit la fonction de l'auteur à la place de son nom.
  */
 export function Historique({ lignes, valeur }: { lignes: LigneJournal[]; valeur?: (champ: string, v: string) => string }) {
   if (!lignes.length) return null;
@@ -120,7 +121,7 @@ export function Historique({ lignes, valeur }: { lignes: LigneJournal[]; valeur?
       <ol className="mt-2 space-y-1.5 text-[12.5px] leading-snug text-ink-2">
         {tries.map((h) => (
           <li key={h.id}>
-            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"}
+            <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by ? (h.by.name || (h.by as { function?: string }).function || "Utilisateur interne") : "Système"}
             {`${INSECABLE}: ${OPERATION[h.action] ?? h.action}`}
             {detail(h)}
             {h.note && <span className="text-muted">{` (${h.note.length > 140 ? `${h.note.slice(0, 140).trimEnd()}…` : h.note})`}</span>}

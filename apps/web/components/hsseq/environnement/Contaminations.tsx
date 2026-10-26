@@ -24,8 +24,9 @@ const TRIS = ["detected_on", "reference", "status"];
 
 /**
  * Manquants et contaminations de produit (vue « produit ») : contaminations saisies par le Responsable
- * HSSEQ (GET /hsseq/contaminations), et en tête les manquants des citernes de la période, calculés par
- * Transport (GET /hsseq/environment/deliveries), dont le détail est dans « Consommation et livraisons ».
+ * HSSEQ (GET /hsseq/contaminations), avec leur constat en tête de ligne, et en tête de vue les manquants
+ * des citernes de la période à 15 °C, calculés par Transport (GET /hsseq/environment/deliveries), dont
+ * le détail est dans « Consommation et livraisons ».
  * Filtres par statut (ouvertes par défaut), nature, site et période, portés par l'adresse avec la fiche
  * ouverte (contamination). Ni le chef de parc ni les autres profils de terrain n'y ont accès.
  */
@@ -67,6 +68,7 @@ export function Contaminations({ lire, ecrire, droits }: VueProps) {
           </span>
           {choisi === c.id && <span className="sr-only"> (fiche ouverte)</span>}
           <span className="mt-0.5 block leading-snug text-ink">{NATURE_CONTAMINATION[c.nature].label}</span>
+          {c.description && <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-snug text-ink-2">{c.description}</span>}
           <span className="mt-1 block text-[12px] leading-snug text-muted">
             Constatée le {fmtDate(c.detected_on)}
             {c.site ? `, ${c.site.name}` : ""}
@@ -104,7 +106,7 @@ export function Contaminations({ lire, ecrire, droits }: VueProps) {
         </Chiffre>
         <Chiffre valeur={citernes ? fmtIndicateur(citernes.per_mille, "per_mille") : "–"} onClick={() => ecrire({ vue: "consommation", statut: null, nature: null, contamination: null, profil: "citerne" })}>
           {citernes && citernes.rotations
-            ? `manquant des citernes ${du || au ? "sur la période" : "ce mois-ci"} : ${fmtM3(citernes.shortage)} sur ${fmtM3(citernes.delivered)} livrés`
+            ? `manquant des citernes ${du || au ? "sur la période" : "ce mois-ci"} : ${fmtM3(citernes.shortage)} sur ${fmtM3(citernes.delivered_15)} livrés, à 15 °C`
             : `manquant des citernes ${du || au ? "sur la période" : "ce mois-ci"}, aucune livraison`}
         </Chiffre>
         <Chiffre valeur={nombre(parStatut?.closed)}>{(parStatut?.closed ?? 0) > 1 ? "contaminations closes" : "contamination close"}</Chiffre>
@@ -137,7 +139,7 @@ export function Contaminations({ lire, ecrire, droits }: VueProps) {
       </div>
 
       <p className="text-[12.5px] leading-snug text-muted">
-        Présence d&apos;eau, mélange, impuretés ou produit hors spécification, reliés à la rotation en cause ; la contamination se clôt une fois les mesures prises décrites. Les manquants viennent de Transport : volume chargé moins volume livré.
+        Présence d&apos;eau, mélange, impuretés ou produit hors spécification, reliés à la rotation en cause ; la contamination se clôt une fois les mesures prises décrites. Les manquants viennent de Transport : volume chargé moins volume livré, ramenés à 15 °C, rapportés au livré à 15 °C.
       </p>
 
       <Card padded={false}>

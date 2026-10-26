@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { FileUp, X } from "@/components/icons";
 import { Button, Card, ErrorBox, Etat, Field, Input, Select, type Tri } from "@/components/ui";
-import { TYPE_VEHICULE, nomRotation } from "@/components/hsseq/commun";
+import { TYPE_VEHICULE, fmtIndicateur } from "@/components/hsseq/commun";
 import { Bascule, ChampSite, Pages, requete, useReferentiels } from "@/components/hsseq/actions/outils";
 import { moisLong } from "@/components/hsseq/cockpit/outils";
 import { useApi } from "@/lib/api-client";
-import { INSECABLE, pluriel } from "@/lib/format";
+import { INSECABLE, fmtDate, pluriel } from "@/lib/format";
 import type { Page, Referentials, ViolationType } from "@/lib/hsseq-types";
-import { ListeViolations, type LigneViolation } from "./ListeViolations";
+import { ListeViolations, versLigne, type LigneViolation } from "./ListeViolations";
 import {
   ORDRE_TYPES,
   SANS_FILTRE,
@@ -17,10 +17,10 @@ import {
   TRI_DEFAUT,
   TYPE_VIOLATION,
   aujourdhui,
+  bornes,
   filtresActifs,
   moisCourant,
   moisProposes,
-  releve,
   versApi,
   type FiltresViolations,
 } from "./outils";
@@ -39,10 +39,11 @@ const capitale = (texte: string) => texte.charAt(0).toLocaleUpperCase("fr") + te
 
 /**
  * Violations de conduite (GET /hsseq/telematics/violations) : bascules des types avec leur nombre,
- * période, site, véhicule et conducteur portés par l'adresse, puis la liste de la plus récente à la plus
- * ancienne (ou par type). Le chef de parc et l'auditeur ne reçoivent du noyau que les véhicules de leurs
- * sites ; l'auditeur (`nomsCaches`) ni le nom des conducteurs, ni leur filtre. Un nom de véhicule ou de
- * conducteur pose son filtre ; `import` borne la liste aux violations d'un import (onglet « Imports »).
+ * période, site, véhicule et conducteur portés par l'adresse, le rapport aux voyages de la sélection
+ * (counts du noyau), puis la liste de la plus récente à la plus ancienne (ou par type). Le chef de parc
+ * et l'auditeur ne reçoivent du noyau que les véhicules de leurs sites ; l'auditeur (`nomsCaches`) ni le
+ * nom des conducteurs, ni leur filtre. Un nom de véhicule ou de conducteur pose son filtre ; `import`
+ * borne la liste aux violations d'un import (onglet « Imports »).
  */
 export function Violations({ f, ecrire, importeur, nomsCaches }: { f: FiltresViolations; ecrire: Ecrire; importeur: boolean; nomsCaches: boolean }) {
   const { data: ref } = useReferentiels();
@@ -61,16 +62,7 @@ export function Violations({ f, ecrire, importeur, nomsCaches }: { f: FiltresVio
   const tri: Tri = { key: f.tri.replace(/^-/, ""), dir: f.tri.startsWith("-") ? -1 : 1 };
 
   const lignes: LigneViolation[] = (data?.items ?? []).map((v) => ({
-    cle: v.id,
-    moment: v.occurred_at,
-    type: v.violation_type,
-    releve: releve(v),
-    vehicule: v.vehicle.name,
-    detailVehicule: [TYPE_VEHICULE[v.vehicle.vehicle_kind], v.vehicle.plate, plusieursSites ? v.site?.name : null].filter(Boolean).join(", "),
-    conducteur: v.driver?.name ?? null,
-    rotation: v.rotation ? [nomRotation(v.rotation), v.rotation.route_name].filter(Boolean).join(", ") : "Hors rotation",
-    lieu: v.location,
-    source: [v.source, v.external_id ? `réf. ${v.external_id}` : null].filter(Boolean).join(", "),
+    ...versLigne(v, v.id, plusieursSites),
     onVehicule: f.vehicule === v.vehicle.id ? undefined : () => ecrire({ vehicule: v.vehicle.id }),
     onConducteur: nomsCaches || !v.driver || f.conducteur === v.driver.id ? undefined : () => ecrire({ conducteur: v.driver!.id }),
   }));
@@ -110,6 +102,8 @@ export function Violations({ f, ecrire, importeur, nomsCaches }: { f: FiltresVio
           </p>
         )}
       </div>
+
+      {data && <RapportVoyages c={data.counts} sansDates={!bornes(f).date_from && !bornes(f).date_to} />}
 
       {f.import && (
         <div className="flex flex-wrap items-center gap-2 rounded-[10px] bg-accent-doux px-3.5 py-2 text-[13px] text-ink">
@@ -170,6 +164,34 @@ export function Violations({ f, ecrire, importeur, nomsCaches }: { f: FiltresVio
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Rapport aux voyages de la sélection, servi par la liste (counts) : violations de la période pour 100
+ * rotations parties sous les mêmes filtres (sites du compte, site, véhicule, conducteur ; le type ne
+ * borne que les violations). Sans dates choisies, la période est le mois en cours à ce jour, alors que la
+ * liste couvre toutes les dates : la phrase le dit.
+ */
+function RapportVoyages({ c, sansDates }: { c: ViolationCounts; sansDates: boolean }) {
+  const periode = `du ${fmtDate(c.period.date_from)} au ${fmtDate(c.period.date_to)}${sansDates ? " (mois en cours)" : ""}`;
+  return (
+    <p className="m-0 rounded-[10px] bg-panel-2 px-3.5 py-2 text-[13px] leading-snug text-ink-2">
+      {c.departures > 0 ? (
+        <>
+          <span className="font-semibold text-ink">
+            {fmtIndicateur(c.per_100_trips, "per_100_trips")} violations pour 100{INSECABLE}voyages
+          </span>{" "}
+          {periode}
+          {INSECABLE}: {pluriel(c.violations_in_period, "violation")} pour {pluriel(c.departures, "voyage parti", "voyages partis")}, aux filtres choisis.
+        </>
+      ) : (
+        <>
+          Aucun voyage parti {periode} aux filtres choisis{INSECABLE}: pas de rapport aux voyages
+          {c.violations_in_period > 0 ? ` (${pluriel(c.violations_in_period, "violation")} dans la période)` : ""}.
+        </>
+      )}
+    </p>
   );
 }
 

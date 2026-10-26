@@ -191,7 +191,7 @@ function Formulaire({ s, onEnregistre }: { s: HsseqSettings; onEnregistre: (s: H
     }
   }
 
-  const proposes = [...new Map([...(s.director ? [s.director] : []), ...(ref?.owners ?? [])].map((u) => [u.id, u])).values()].sort((x, y) => x.name.localeCompare(y.name, "fr"));
+  const proposes = [...new Map([...(s.director ? [s.director] : []), ...(ref?.owners ?? []).filter((o) => !o.driver)].map((u) => [u.id, u])).values()].sort((x, y) => x.name.localeCompare(y.name, "fr"));
 
   return (
     <div className="space-y-5">

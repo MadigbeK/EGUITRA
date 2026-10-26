@@ -599,7 +599,8 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
   const coutValide = cout === null || (Number.isFinite(cout) && cout >= 0);
   const seuil = ref?.costly_action_threshold ?? SEUIL_DEFAUT;
   // Le responsable actuel reste dans la liste, même s'il n'est plus proposé par les référentiels.
-  const proposes = ref?.owners ?? [];
+  // Un conducteur n'est pas responsable d'une action.
+  const proposes = (ref?.owners ?? []).filter((o) => !o.driver);
   const responsables = proposes.some((o) => o.id === a.owner.id) ? proposes : [a.owner, ...proposes];
 
   function corps(): Record<string, unknown> {

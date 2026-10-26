@@ -20,7 +20,7 @@ import type { ActionLine } from "@/lib/hsseq-types";
 import { LienEcran, Reference, Rubrique } from "./briques";
 import { ANCRES } from "./ElementsEntree";
 import { FenetreActionDecision, FenetreDecision } from "./Fenetres";
-import { NATURE_DECISION, TamponRevue, messageRevue } from "./outils";
+import { NATURE_DECISION, TamponRevue, messageRevue, nomCompte } from "./outils";
 import type { Review, ReviewDecision } from "./types";
 
 /** Écriture sur la revue ; la réponse du noyau est la fiche à jour. */
@@ -46,8 +46,7 @@ function LienAction({ a }: { a: { id: number; reference: string } }) {
 
 /**
  * Action qui met en œuvre une décision : référence, état du moment, responsable et échéance ; un lien
- * vers sa fiche au plan pour qui lit tout le plan (une action de revue n'a pas de site : l'auditeur ne
- * l'y trouverait pas).
+ * vers sa fiche au plan pour qui lit les actions des revues.
  */
 function ActionDecision({ a, lien }: { a: ActionLine; lien: boolean }) {
   const contenu = (
@@ -60,7 +59,7 @@ function ActionDecision({ a, lien }: { a: ActionLine; lien: boolean }) {
         {a.approval_pending && <Tampon mot="À valider" />}
       </span>
       <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">
-        {`${a.owner.name}, échéance le ${fmtDate(a.due_date)}`}
+        {`${nomCompte(a.owner)}, échéance le ${fmtDate(a.due_date)}`}
         {a.overdue ? `, ${pluriel(a.days_overdue, "jour")} de retard` : ""}
       </span>
     </>
@@ -73,16 +72,18 @@ function ActionDecision({ a, lien }: { a: ActionLine; lien: boolean }) {
   );
 }
 
-/** Profils qui lisent tout le plan d'actions (READ_ALL du noyau), où se trouvent les actions de la revue. */
-const LECTURE_PLAN = ["admin", "direction", "hsseq"] as const;
+/**
+ * Profils qui lisent les actions des revues au plan d'actions : ceux qui lisent tout le plan (READ_ALL du
+ * noyau), et l'auditeur, qui y lit les actions des revues des sociétés de son compte tant que son accès court.
+ */
+const LECTURE_PLAN = ["admin", "direction", "hsseq", "auditeur"] as const;
 
 export function Decisions({ r, envoyer }: { r: Review; envoyer: EnvoiRevue }) {
   const planLisible = useAutorise(LECTURE_PLAN);
   const [fenetre, setFenetre] = useState<Fenetre | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: ReactNode } | null>(null);
   const [occupe, setOccupe] = useState<number | null>(null);
-  // Actions nées de la revue, servies avec la fiche (toutes, quel que soit le périmètre du lecteur sur le
-  // plan d'actions : l'auditeur n'y lit que les actions de ses sites, et une action de revue n'a pas de site).
+  // Actions nées de la revue, servies avec la fiche à leur état du moment (une action de revue n'a pas de site).
   const actions = r.actions;
   const modifiable = r.rights.can_edit;
   const liees = new Set(r.decisions.flatMap((d) => (d.action ? [d.action.id] : [])));
@@ -161,7 +162,7 @@ export function Decisions({ r, envoyer }: { r: Review; envoyer: EnvoiRevue }) {
                 </div>
                 <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed text-ink">{d.description}</p>
                 <p className="mt-1 text-[12.5px] text-muted">
-                  {d.owner ? `Responsable${INSECABLE}: ${d.owner.name}` : "Responsable à désigner"}
+                  {d.owner ? `Responsable${INSECABLE}: ${nomCompte(d.owner)}` : "Responsable à désigner"}
                   {d.due_date ? `, échéance le ${fmtDate(d.due_date)}` : ""}
                 </p>
                 <div className="mt-3 border-t border-line/80 pt-2.5">

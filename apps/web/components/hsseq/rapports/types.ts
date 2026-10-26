@@ -202,7 +202,21 @@ export interface ReportHistoryEntry {
 
 /** Rapport d'un mois (GET, PATCH /hsseq/reports/{modèle}/{AAAA-MM}). */
 export interface MonthlyReport {
-  template: { id: number; name: string; client_label: string | null; partner: Ref | null };
+  /**
+   * Modèle du rapport et son périmètre (sites, profil de véhicule, premier mois), servis avec le mois :
+   * l'en-tête du rapport les lit ici plutôt que dans la liste des modèles.
+   */
+  template: {
+    id: number;
+    name: string;
+    client_label: string | null;
+    partner: Ref | null;
+    site_ids: number[];
+    sites: Ref[];
+    vehicle_kind: VehicleKind | null;
+    /** « AAAA-MM ». */
+    start_month: string;
+  };
   company: Ref;
   month: string;
   label: string;

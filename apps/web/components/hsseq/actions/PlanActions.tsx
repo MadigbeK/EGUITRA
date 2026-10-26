@@ -109,7 +109,7 @@ export function PlanActions() {
     return (s ?? (Object.keys(parStatut) as ActionStatus[])).reduce((n, k) => n + (parStatut[k] ?? 0), 0);
   };
 
-  const responsables = ref?.owners ?? [];
+  const responsables = (ref?.owners ?? []).filter((o) => !o.driver);
   const [export_, setExport] = useState<string | null>(null);
 
   const liste = (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Etat, Field, Segmented, Select, Tag, cx, type Column } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Etat, Field, Segmented, Select, Tag, cx, type Column, type Tri } from "@/components/ui";
 import { DOMAINE } from "@/components/hsseq/commun";
 import { AvecFiche, Pages, requete } from "@/components/hsseq/actions/outils";
 import { Recherche } from "@/components/hsseq/conformite/commun";
@@ -16,6 +16,9 @@ import { STATUT_PROCEDURE, TamponDocument, parmi, publicVise, useRafraichir, typ
 import type { Procedure, ProcedureCounts, ProcedureLine, ProcedureStatus } from "./types";
 
 const PAR_PAGE = 100;
+
+/** Tris servis par le noyau (sort de GET /hsseq/procedures) ; les autres colonnes ne se trient pas. */
+const TRIS = ["code", "status"] as const;
 
 /** Filtre de statut porté par l'adresse ; sans lui, les procédures au registre (en vigueur et en rédaction). */
 const FILTRE_STATUT: Record<"registre" | "en-vigueur" | "en-redaction" | "archivees" | "toutes", { label: string; statuts: ProcedureStatus[] | null }> = {
@@ -62,10 +65,20 @@ function Version({ p }: { p: ProcedureLine }) {
 }
 
 /**
+ * Filtres de la liste des procédures pour leur feuille de l'export (préfixe procedures_ du noyau) : l'export
+ * des registres reprend la sélection affichée.
+ */
+export function filtresExportProcedures(lire: (cle: string) => string): Record<string, string | null> {
+  const statut: FiltreStatut = parmi(lire("statut"), FILTRE_STATUT) ?? "registre";
+  return { procedures_status: FILTRE_STATUT[statut].statuts?.join(",") ?? null, procedures_domain: parmi(lire("domaine"), DOMAINE), procedures_search: lire("q").trim() || null };
+}
+
+/**
  * Procédures du groupe (GET /hsseq/procedures) : registre par statut avec ses nombres, recherche et
  * domaine, version en vigueur et taux de lecture de chacune ; la fiche s'ouvre à côté. Filtres et fiche
- * ouverte portés par l'adresse (statut, domaine, q, procedure). L'auditeur ne lit que les procédures de
- * ses sites, sans les noms des lecteurs.
+ * ouverte portés par l'adresse (statut, domaine, q, procedure). Le noyau trie (référence, statut) et
+ * compte les statuts aux autres filtres de la liste. L'auditeur ne lit que les procédures de ses sites,
+ * sans les noms des lecteurs.
  */
 export function Procedures({ lire, ecrire, droits }: VueProps) {
   const rafraichir = useRafraichir();
@@ -74,18 +87,18 @@ export function Procedures({ lire, ecrire, droits }: VueProps) {
   const q = lire("q");
   const choisie = Number(lire("procedure")) || null;
   const filtres = { domain: domaine, search: q.trim() || null };
+  const [tri, setTri] = useState<Tri>({ key: "code", dir: 1 });
   const cle = `${requete(filtres)}|${statut}`;
   const [position, setPosition] = useState({ cle, offset: 0 });
   const offset = position.cle === cle ? position.offset : 0;
   const [creer, setCreer] = useState(false);
 
-  // Nombres des statuts sur la sélection sans filtre de statut (le noyau compte la sélection filtrée).
-  const { data: compte } = useApi<Page<ProcedureLine, ProcedureCounts>>(`/hsseq/procedures?${requete({ ...filtres, limit: 1 })}`, { keepPreviousData: true });
   const { data, error, mutate } = useApi<Page<ProcedureLine, ProcedureCounts>>(
-    `/hsseq/procedures?${requete({ ...filtres, status: FILTRE_STATUT[statut].statuts?.join(",") ?? null, offset, limit: PAR_PAGE })}`,
+    `/hsseq/procedures?${requete({ ...filtres, status: FILTRE_STATUT[statut].statuts?.join(",") ?? null, sort: `${tri.dir === -1 ? "-" : ""}${tri.key}`, offset, limit: PAR_PAGE })}`,
     { keepPreviousData: true },
   );
-  const parStatut = compte?.counts.by_status;
+  // Nombres des statuts : le noyau les compte aux autres filtres de la liste, sans celui du statut.
+  const parStatut = data?.counts.by_status;
   const nombre = (f: FiltreStatut) => (parStatut ? (FILTRE_STATUT[f].statuts ?? TOUS_STATUTS).reduce((n, s) => n + (parStatut[s] ?? 0), 0) : null);
   const compact = choisie !== null;
 
@@ -154,6 +167,12 @@ export function Procedures({ lire, ecrire, droits }: VueProps) {
               <DataTable
                 rows={data.items}
                 rowKey={(p) => p.id}
+                sort={tri}
+                onSort={(t) => {
+                  if (!(TRIS as readonly string[]).includes(t.key)) return;
+                  setTri(t);
+                  setPosition({ cle, offset: 0 });
+                }}
                 onRowClick={(p) => ecrire({ procedure: p.id })}
                 empty={domaine || q.trim() ? "Aucune procédure pour ces filtres." : statut === "archivees" ? "Aucune procédure archivée." : "Aucune procédure dans ce registre."}
                 columns={colonnes.filter((c) => !(compact && c.secondaire))}

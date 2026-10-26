@@ -236,13 +236,15 @@ const CHAMP: Readonly<Record<string, string>> = {
 /** Refus écrits par l'écran, plus précis que le message commun. */
 const REFUS: Partial<Record<string, string>> = {
   document_missing: `Joignez d'abord le document de la version (PDF ou photo)${INSECABLE}: les comptes visés le lisent avant d'en accuser lecture.`,
+  participants_required: `Indiquez les participants de l'exercice${INSECABLE}: leur nombre, ou les comptes présents.`,
   reason_required: `Le motif est obligatoire${INSECABLE}: il est journalisé avec la décision.`,
 };
 
 /**
  * Message d'un refus du noyau : les champs en cause en clair pour missing_fields et invalid_parameter,
  * les refus propres à l'écran, sinon le message du noyau (texteErreur). Le refus de diffusion d'un texte
- * non anonymisé garde le message du noyau, qui nomme les personnes et les immatriculations relevées.
+ * non anonymisé garde le message du noyau, qui nomme les personnes et les immatriculations relevées ; une
+ * référence de procédure ou un numéro de version en double (409 conflict) aussi, qui les cite.
  */
 export function messageDocument(e: unknown, defaut = "L'opération n'a pas abouti."): string {
   if (e instanceof ApiError && (e.body.error === "missing_fields" || e.body.error === "invalid_parameter") && e.body.fields?.length) {

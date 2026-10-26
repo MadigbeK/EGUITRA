@@ -371,7 +371,7 @@ function Actions({ e }: { e: ReviewInputs }) {
                       </>
                     }
                     texte={x.description}
-                    precision={`${x.owner}, échéance le ${fmtDate(x.due_date)}`}
+                    precision={`${x.owner ?? "Conducteur"}, échéance le ${fmtDate(x.due_date)}`}
                     fin={<span className="whitespace-nowrap text-[13px] font-semibold text-danger">{pluriel(x.days_overdue, "jour")}</span>}
                   />
                 ))}

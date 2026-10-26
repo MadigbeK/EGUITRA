@@ -40,6 +40,17 @@ import type {
 
 /* ─── Briques ─────────────────────────────────────────────────────────── */
 
+/**
+ * Compte interne servi par les référentiels (owners) : les conducteurs y figurent par leur nom seul,
+ * `driver` vrai, pour les participants d'un exercice ; jamais pour l'auditeur.
+ */
+type CompteServi = Ref & { driver?: boolean };
+
+/** Responsables possibles (d'un document, d'une action) : les comptes internes hors conducteurs. */
+function sansConducteurs(owners: CompteServi[] | undefined): Ref[] {
+  return (owners ?? []).filter((o) => !o.driver);
+}
+
 /** Envoi d'une fenêtre : occupé pendant l'appel, refus du noyau gardé pour l'affichage, fermeture sur la réussite. */
 function useEnvoi(onClose: () => void, defaut: string, message: (e: unknown, d: string) => string = messageDocument) {
   const [erreur, setErreur] = useState<string | null>(null);
@@ -174,7 +185,7 @@ export function FenetreProcedure({ procedure, onClose, envoyer }: { procedure?: 
   }));
   const { erreur, envoi, envoyer: lancer } = useEnvoi(onClose, procedure ? "Modification impossible." : "Création impossible.");
   const actuel = procedure?.owner ?? null;
-  const comptes = ref?.owners ?? [];
+  const comptes = sansConducteurs(ref?.owners);
   const responsables = actuel && !comptes.some((o) => o.id === actuel.id) ? [actuel, ...comptes] : comptes;
   const pret = Boolean(f.code.trim() && f.title.trim() && f.profils.length && (procedure || (f.version.trim() && f.effective_date)));
 
@@ -596,26 +607,29 @@ export function FenetrePlanifier({ plans, planId, onClose, envoyer }: { plans: P
   );
 }
 
-/** Comptes proposés comme participants : les comptes internes servis par les référentiels, plus ceux déjà retenus. */
-function useComptes(retenus: Ref[]): Ref[] {
+/**
+ * Comptes proposés comme participants : les comptes internes servis par les référentiels, conducteurs
+ * compris (`driver`, nom seul), plus ceux déjà retenus.
+ */
+function useComptes(retenus: Ref[]): CompteServi[] {
   const { data: ref } = useReferentiels();
-  const comptes = ref?.owners ?? [];
+  const comptes: CompteServi[] = ref?.owners ?? [];
   return [...retenus.filter((r) => !comptes.some((c) => c.id === r.id)), ...comptes];
 }
 
 const sansAccents = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("fr");
 
 /**
- * Comptes présents à l'exercice, cochés dans la liste des comptes internes (recherche par le nom). Les
- * conducteurs, que les référentiels ne servent pas comme comptes, se comptent dans le nombre de participants.
+ * Comptes présents à l'exercice, cochés dans la liste des comptes internes, conducteurs compris
+ * (recherche par le nom). Les personnes sans compte se comptent dans le nombre de participants.
  */
-function ChoixComptes({ comptes, choisis, onChange }: { comptes: Ref[]; choisis: number[]; onChange: (ids: number[]) => void }) {
+function ChoixComptes({ comptes, choisis, onChange }: { comptes: CompteServi[]; choisis: number[]; onChange: (ids: number[]) => void }) {
   const [filtre, setFiltre] = useState("");
   const cherche = sansAccents(filtre.trim());
   // Les comptes cochés restent en tête, la recherche ne les masque pas.
   const visibles = comptes.filter((c) => choisis.includes(c.id) || !cherche || sansAccents(c.name).includes(cherche)).sort((a, b) => Number(choisis.includes(b.id)) - Number(choisis.includes(a.id)));
   return (
-    <Groupe legende="Comptes présents (facultatif)" aide={choisis.length ? pluriel(choisis.length, "compte coché", "comptes cochés") : "Les conducteurs se comptent dans le nombre de participants."} className="md:col-span-2">
+    <Groupe legende="Comptes présents (facultatif)" aide={choisis.length ? pluriel(choisis.length, "compte coché", "comptes cochés") : "Les personnes sans compte se comptent dans le nombre de participants."} className="md:col-span-2">
       <Input type="search" value={filtre} onChange={(e) => setFiltre(e.target.value)} placeholder="Rechercher un nom" aria-label="Rechercher un compte" />
       <ul className="mt-2 max-h-44 overflow-y-auto rounded-[10px] border border-line">
         {visibles.map((c) => (
@@ -623,6 +637,7 @@ function ChoixComptes({ comptes, choisis, onChange }: { comptes: Ref[]; choisis:
             <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-ink transition-colors hover:bg-panel-2">
               <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={choisis.includes(c.id)} onChange={(e) => onChange(basculer(choisis, c.id, e.target.checked))} />
               {c.name}
+              {c.driver && <span className="text-[12px] text-muted">conducteur</span>}
             </label>
           </li>
         ))}
@@ -633,9 +648,9 @@ function ChoixComptes({ comptes, choisis, onChange }: { comptes: Ref[]; choisis:
 }
 
 /**
- * Déclaration d'un exercice réalisé : date passée ou du jour, nombre de participants, durée, comptes
- * présents et bilan (obligatoire). Les comptes et la durée partent d'abord sur l'exercice, puis la
- * déclaration avec le bilan.
+ * Déclaration d'un exercice réalisé : date passée ou du jour, participants (leur nombre ou les comptes
+ * présents, l'un des deux au moins : 422 participants_required sinon), durée et bilan (obligatoire). Les
+ * comptes et la durée partent d'abord sur l'exercice, puis la déclaration avec le bilan.
  */
 export function FenetreRealiser({ exercice, onClose, envoyer }: { exercice: Drill; onClose: () => void; envoyer: (declaration: PerformInput, complement: DrillInput | null) => Promise<unknown> }) {
   const jourMax = aujourdhui();
@@ -650,10 +665,12 @@ export function FenetreRealiser({ exercice, onClose, envoyer }: { exercice: Dril
   const { erreur, envoi, envoyer: lancer } = useEnvoi(onClose, "Déclaration impossible.");
   const participants = entier(f.participants);
   const duree = entier(f.duree);
-  const participantsInvalide = participants === null || Number.isNaN(participants) || participants < 1;
+  const participantsInvalide = participants !== null && (Number.isNaN(participants) || participants < 1);
+  // Des participants : leur nombre, ou des comptes présents cochés.
+  const sansParticipants = participants === null && !f.comptes.length;
   const dureeInvalide = duree !== null && Number.isNaN(duree);
   const dateInvalide = !f.performed_date || f.performed_date > jourMax;
-  const pret = !participantsInvalide && !dureeInvalide && !dateInvalide && Boolean(f.debrief.trim());
+  const pret = !participantsInvalide && !sansParticipants && !dureeInvalide && !dateInvalide && Boolean(f.debrief.trim());
 
   function envoyerTout() {
     const complement: DrillInput = {};
@@ -668,8 +685,8 @@ export function FenetreRealiser({ exercice, onClose, envoyer }: { exercice: Dril
         <Field label="Réalisé le" error={f.performed_date > jourMax ? "Date passée ou du jour." : undefined}>
           <Input type="date" max={jourMax} value={f.performed_date} onChange={(e) => setF({ ...f, performed_date: e.target.value })} required />
         </Field>
-        <Field label="Participants" error={f.participants.trim() && participantsInvalide ? "Un nombre entier, un au moins." : undefined}>
-          <Input inputMode="numeric" value={f.participants} onChange={(e) => setF({ ...f, participants: e.target.value })} placeholder="Nombre de personnes" required />
+        <Field label="Participants" error={participantsInvalide ? "Un nombre entier, un au moins." : undefined} hint={sansParticipants ? "Leur nombre, ou les comptes présents cochés plus bas." : undefined}>
+          <Input inputMode="numeric" value={f.participants} onChange={(e) => setF({ ...f, participants: e.target.value })} placeholder="Nombre de personnes" />
         </Field>
         <Field label="Durée (minutes)" error={dureeInvalide ? "Un nombre entier de minutes." : undefined}>
           <Input inputMode="numeric" value={f.duree} onChange={(e) => setF({ ...f, duree: e.target.value })} placeholder="Facultatif" />
@@ -962,7 +979,7 @@ export function FenetreAction({ exercice, onClose, onCreee }: { exercice: Pick<D
           <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Ce qui sera fait, par qui et où" maxLength={4000} />
         </Field>
         <Field label="Responsable">
-          <Select value={f.owner_id} onChange={(e) => setF({ ...f, owner_id: e.target.value })} placeholder="À choisir" options={(ref?.owners ?? []).map((o) => ({ value: o.id, label: o.name }))} />
+          <Select value={f.owner_id} onChange={(e) => setF({ ...f, owner_id: e.target.value })} placeholder="À choisir" options={sansConducteurs(ref?.owners).map((o) => ({ value: o.id, label: o.name }))} />
         </Field>
         <Field label="Échéance">
           <Input type="date" min={aujourdhui()} value={f.due_date} onChange={(e) => setF({ ...f, due_date: e.target.value })} required />

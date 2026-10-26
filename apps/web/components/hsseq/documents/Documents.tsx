@@ -13,15 +13,15 @@
 import { useState } from "react";
 import { Download } from "@/components/icons";
 import { Button, Card, Empty, Loading, Tabs } from "@/components/ui";
-import { aujourdhui, useAdresse } from "@/components/hsseq/actions/outils";
+import { aujourdhui, requete, useAdresse } from "@/components/hsseq/actions/outils";
 import { apiDownload, useApi } from "@/lib/api-client";
 import { Alertes } from "./Alertes";
 import { Annuaire } from "./Annuaire";
 import { messageDocument, useDroits } from "./libelles";
 import { MesDocuments } from "./MesDocuments";
-import { Procedures } from "./Procedures";
+import { Procedures, filtresExportProcedures } from "./Procedures";
 import type { MyDocuments } from "./types";
-import { Urgences } from "./Urgences";
+import { Urgences, filtresExportUrgences } from "./Urgences";
 
 type Vue = "a-lire" | "procedures" | "alertes" | "urgences" | "annuaire";
 
@@ -84,17 +84,30 @@ export function Documents() {
 /**
  * Commande de l'en-tête : export Excel des registres (GET /hsseq/documents/export.xlsx), bornés comme
  * les listes du compte : procédures et alertes pour qui les lit, plans, exercices et annuaire de crise
- * de ses sites.
+ * de ses sites. Les filtres de l'onglet ouvert partent avec la demande, propres à leur feuille (préfixes
+ * procedures_, plans_, drills_ du noyau) : l'export reprend la sélection affichée, les autres feuilles
+ * restent entières. L'adresse est lue au clic (l'en-tête est hors du Suspense de l'écran).
  */
 export function CommandesDocuments() {
   const droits = useDroits();
   const [export_, setExport] = useState<{ envoi: boolean; erreur: string | null }>({ envoi: false, erreur: null });
   if (!droits.urgences) return null;
 
+  /** Filtres de l'onglet ouvert, lus dans l'adresse ; l'onglet par défaut est le premier ouvert au compte. */
+  function filtresOuverts(): Record<string, string | null> {
+    const params = new URLSearchParams(window.location.search);
+    const lire = (cle: string) => params.get(cle) ?? "";
+    const vue = lire("vue") || (droits.aLire ? "a-lire" : droits.documents ? "procedures" : "urgences");
+    if (vue === "procedures" && droits.documents) return filtresExportProcedures(lire);
+    if (vue === "urgences") return filtresExportUrgences(lire);
+    return {};
+  }
+
   async function telecharger() {
     setExport({ envoi: true, erreur: null });
     try {
-      await apiDownload("/hsseq/documents/export.xlsx", `documents_urgences_hsseq_${aujourdhui().replaceAll("-", "")}.xlsx`);
+      const qs = requete(filtresOuverts());
+      await apiDownload(`/hsseq/documents/export.xlsx${qs ? `?${qs}` : ""}`, `documents_urgences_hsseq_${aujourdhui().replaceAll("-", "")}.xlsx`);
       setExport({ envoi: false, erreur: null });
     } catch (e) {
       setExport({ envoi: false, erreur: messageDocument(e, "L'export n'a pas abouti.") });

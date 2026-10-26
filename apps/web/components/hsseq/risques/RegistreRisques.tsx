@@ -237,7 +237,7 @@ function Filtres({ f, ref_, ecrire, echues }: { f: FiltresRegistre; ref_: Refere
         </div>
       )}
       <p className="text-[12.5px] leading-snug text-muted">
-        Une revue échue relance chaque semaine le propriétaire du risque et le Responsable HSSEQ. Le filtre de profil garde les risques communs à tous les profils&nbsp;; le filtre de site écarte ceux communs à tous les sites.
+        Une revue échue relance chaque semaine le propriétaire du risque et le Responsable HSSEQ. Les filtres de profil et de site gardent les risques communs à tous les profils et à tous les sites.
       </p>
     </>
   );

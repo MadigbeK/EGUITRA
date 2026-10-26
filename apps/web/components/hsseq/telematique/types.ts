@@ -31,9 +31,18 @@ export interface Violation {
   import: Ref | null;
 }
 
-/** Comptes par type, sur toute la sélection filtrée (filtre de type compris). */
+/**
+ * Comptes de la liste : par type, sur toute la sélection filtrée (filtre de type compris) ; puis le
+ * rapport aux voyages de la période (les dates choisies, sinon le mois en cours à ce jour) : violations
+ * de la sélection dans la période, rotations parties sous les mêmes filtres (société, sites du compte,
+ * site, ensemble, conducteur ; pas le type) et leur rapport pour 100 voyages, nul sans départ.
+ */
 export interface ViolationCounts {
   by_type: Record<ViolationType, number>;
+  period: { date_from: string; date_to: string };
+  departures: number;
+  violations_in_period: number;
+  per_100_trips: number | null;
 }
 
 /** Tris servis par le noyau (`sort`). */
@@ -45,9 +54,13 @@ export interface LigneSignalee {
   message: string;
 }
 
+/** Importé, ou refusé (ligne illisible) : un import refusé garde sa trace, sans violation créée. */
+export type ImportState = "done" | "rejected";
+
 /** Import d'un fichier (GET /hsseq/telematics/imports, réponse de l'import confirmé). */
 export interface TelematicsImport {
   id: number;
+  state: ImportState;
   /** Nom du fichier envoyé. */
   name: string;
   company: Ref;
@@ -61,8 +74,11 @@ export interface TelematicsImport {
   created: number;
   /** Lignes ignorées : violation déjà enregistrée ou répétée dans le fichier. */
   duplicates: number;
-  /** Lignes dont le chauffeur n'a pas été reconnu (celui de la rotation est retenu). */
+  /** Lignes dont le chauffeur n'a pas été reconnu (le nom lu est cité ; celui de la rotation est retenu). */
   warnings: LigneSignalee[];
+  /** Import refusé : les lignes en cause (les 200 premières) et leur nombre total. */
+  errors: LigneSignalee[];
+  error_count: number;
 }
 
 /** Réponse de l'import confirmé. */
@@ -70,24 +86,8 @@ export interface ImportResult extends TelematicsImport {
   dry_run: false;
 }
 
-/**
- * Violation à créer, lue par le contrôle à blanc : valeurs brutes du modèle, pas des références (le
- * noyau sert les identifiants, `false` pour un champ vide et 0 pour un nombre absent).
- */
-export interface ViolationPreview {
-  company_id: number;
-  occurred_at: string;
-  vehicle_id: number;
-  driver_id: number | false;
-  rotation_id: number | false;
-  violation_type: ViolationType;
-  source: string;
-  value: number;
-  limit_value: number;
-  duration_minutes: number;
-  location: string | false;
-  external_id: string | false;
-}
+/** Violation à créer, lue par le contrôle à blanc : au format des lignes de la liste, sans identifiant ni import. */
+export type ViolationPreview = Omit<Violation, "id" | "import"> & { id: null; import: null };
 
 /** Réponse du contrôle à blanc (dry_run=1) : rien n'est enregistré. */
 export interface DryRun {
@@ -100,9 +100,13 @@ export interface DryRun {
   preview: ViolationPreview[];
 }
 
-/** Corps du refus 422 `import_rejected` : les lignes en cause, les 200 premières. */
+/**
+ * Corps du refus 422 `import_rejected` : les lignes en cause, les 200 premières ; `import_id`, l'import
+ * refusé gardé dans l'historique (import confirmé seulement : le contrôle à blanc ne laisse pas de trace).
+ */
 export interface RefusImport {
   error: "import_rejected";
   message: string;
   errors: LigneSignalee[];
+  import_id?: number;
 }

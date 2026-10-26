@@ -109,7 +109,8 @@ export function enregistrerRisques(H) {
         (!natures || natures.includes(r.nature)) &&
         // Un risque « tous profils » (sans profil) vaut aussi pour le profil filtré.
         (!profils || !r.vehicle_kind || profils.includes(r.vehicle_kind)) &&
-        (!site || r.site_id === site) &&
+        // Un risque commun à tous les sites (sans site) vaut aussi pour le site filtré.
+        (!site || r.site_id === site || r.site_id === null) &&
         (!owner || r.owner_id === owner) &&
         (!oui(q.mine) || r.owner_id === ctx.user.id) &&
         (!niveaux || niveaux.includes(niveau(r, "residual"))) &&

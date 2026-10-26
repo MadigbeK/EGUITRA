@@ -16,8 +16,10 @@ import { aujourdhui, requete } from "@/components/hsseq/actions/outils";
 import { ApiError, apiDownload, apiUpload, useApi } from "@/lib/api-client";
 import type { TonEtat } from "@/lib/couleurs";
 import { INSECABLE, fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt } from "@/lib/format";
+import type { Attachment } from "@/lib/hsseq-types";
 import type { Me, Profile } from "@/lib/types";
 import type {
+  Auteur,
   ComplaintNature,
   ComplaintSeverity,
   ComplaintStatus,
@@ -304,8 +306,7 @@ const REFUS_LOT3: Readonly<Record<string, string>> = {
   measures_required: "Décrivez les mesures prises avant de clore la contamination.",
   rotation_partner_mismatch: "La rotation choisie est celle d'un autre client : choisissez une rotation de ce client, ou retirez-la.",
   event_domain_mismatch: "L'événement choisi n'est pas du bon domaine : environnement pour un déversement, qualité pour une contamination.",
-  document_missing: "Joignez le document avant de poursuivre.",
-  proof_required: "Joignez le bordereau d'enlèvement (PDF ou photo) avant d'enregistrer l'enlèvement.",
+  document_missing: "Joignez le bordereau d'enlèvement (PDF ou photo) avant d'enregistrer l'enlèvement.",
   actions_open: "Des actions de la réclamation ne sont ni closes ni annulées : la réclamation se clôt après elles.",
 };
 
@@ -343,11 +344,24 @@ export async function deposer(objet: ObjetPiece, id: number, fichier: File): Pro
 }
 
 /**
- * Pièces montrées au compte : pour l'auditeur, sans le nom de leur déposant (le noyau le sert ; la
- * spécification le retire de sa lecture).
+ * Nom d'un auteur tel que l'écran l'écrit : son nom ; pour l'auditeur (`anonyme`), la fonction que le
+ * noyau lui sert à la place, jamais un nom (s'il en venait un, il est tu). Nul : rien à écrire.
  */
-export function piecesLues(pieces: Piece[], anonyme: boolean): Piece[] {
-  return anonyme ? pieces.map((p) => ({ ...p, created_by: null })) : pieces;
+export function nomAuteur(a: Auteur | null | undefined, anonyme: boolean): string | null {
+  if (!a) return null;
+  if (a.name && !anonyme) return a.name;
+  return a.function ?? null;
+}
+
+/**
+ * Pièces montrées au compte, à la forme commune des pièces : le déposant par son nom, ou pour l'auditeur
+ * par sa fonction (« par Responsable HSSEQ »).
+ */
+export function piecesLues(pieces: Piece[], anonyme: boolean): Attachment[] {
+  return pieces.map((p) => {
+    const nom = nomAuteur(p.created_by, anonyme);
+    return { ...p, created_by: nom ? { id: p.created_by?.id ?? 0, name: nom } : null };
+  });
 }
 
 /* ─── Journal d'une fiche ─────────────────────────────────────────────── */
@@ -392,7 +406,8 @@ function valeurLue(modele: string, champ: string, v: string): string {
 
 /**
  * Historique d'une fiche, du plus récent au plus ancien, trié par l'écran : opération, champ modifié
- * et, pour les champs courts, valeurs avant et après. Sans auteur pour l'auditeur (`anonyme`).
+ * et, pour les champs courts, valeurs avant et après. L'auteur par son nom, ou pour l'auditeur
+ * (`anonyme`) par la fonction que le noyau lui sert.
  */
 export function Historique({ lignes, anonyme }: { lignes: LigneJournal[]; anonyme: boolean }) {
   if (!lignes.length) return null;
@@ -415,7 +430,7 @@ export function Historique({ lignes, anonyme }: { lignes: LigneJournal[]; anonym
         {triees.map((h) => (
           <li key={h.id}>
             <span className="text-muted">{fmtDateTime(h.at)}</span>
-            {anonyme ? " : " : `, ${h.by?.name ?? "Système"} : `}
+            {`, ${h.by ? (nomAuteur(h.by, anonyme) ?? "Utilisateur interne") : "Système"} : `}
             {OPERATION[h.action] ?? h.action}
             {detail(h)}
             {h.note && <span className="text-muted">{` (${h.note})`}</span>}

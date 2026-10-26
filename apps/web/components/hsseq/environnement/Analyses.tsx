@@ -223,7 +223,10 @@ function Consommation({ c, colonne, mensuel }: { c: Consumption; colonne: string
 type LigneCiterne = TankerRow & { key: number | string; label: string };
 type LigneBenne = TipperRow & { key: number | string; label: string };
 
-/** Manquants des citernes (‰ du livré) et écarts de tonnage des bennes (‰ du chargé), selon le profil choisi. */
+/**
+ * Manquants des citernes (‰ du livré, les deux à 15 °C) et écarts de tonnage des bennes (‰ du chargé),
+ * selon le profil choisi. Le livré non corrigé reste montré sur grand écran, à côté du livré à 15 °C.
+ */
 function Livraisons({ l, colonne, mensuel, profil }: { l: Deliveries; colonne: string; mensuel: boolean; profil: string }) {
   const etroit = useEtroit();
   const citernes = profil !== "benne";
@@ -236,9 +239,14 @@ function Livraisons({ l, colonne, mensuel, profil }: { l: Deliveries; colonne: s
   const colonnesCiternes: Column<LigneCiterne>[] = [
     { key: "label", label: colonne, sortValue: (i) => (mensuel ? String(i.key) : i.label), render: (i) => <span className="block min-w-[7rem] font-medium text-ink">{libelle(i.key, i.label)}</span> },
     { key: "rotations", label: "Rotations", align: "right", render: (i) => fmtInt(i.rotations) },
-    ...(etroit ? [] : [{ key: "loaded_15", label: "Chargé à 15 °C (m³)", align: "right" as const, render: (i: LigneCiterne) => fmtVolume(i.loaded_15) }]),
-    { key: "delivered", label: "Livré (m³)", align: "right", render: (i) => fmtVolume(i.delivered) },
-    { key: "shortage", label: "Manquant (m³)", align: "right", render: (i) => fmtVolume(i.shortage) },
+    ...(etroit
+      ? []
+      : [
+          { key: "loaded_15", label: "Chargé à 15 °C (m³)", align: "right" as const, render: (i: LigneCiterne) => fmtVolume(i.loaded_15) },
+          { key: "delivered", label: "Livré non corrigé (m³)", align: "right" as const, render: (i: LigneCiterne) => <span className="text-muted">{fmtVolume(i.delivered)}</span> },
+        ]),
+    { key: "delivered_15", label: "Livré à 15 °C (m³)", align: "right", render: (i) => fmtVolume(i.delivered_15) },
+    { key: "shortage", label: "Manquant à 15 °C (m³)", align: "right", render: (i) => fmtVolume(i.shortage) },
     { key: "per_mille", label: "‰", align: "right", sortValue: (i) => i.per_mille, render: (i) => <span className="font-semibold text-ink">{i.per_mille === null ? "–" : fmtFixe(i.per_mille, 2)}</span> },
   ];
   const colonnesBennes: Column<LigneBenne>[] = [
@@ -254,7 +262,7 @@ function Livraisons({ l, colonne, mensuel, profil }: { l: Deliveries; colonne: s
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {citernes && (
-          <Kpi label="Manquants des citernes" value={pourMille(tc.per_mille)} hint={tc.rotations ? `${fmtVolume(tc.shortage)}${INSECABLE}m³ manquants sur ${fmtVolume(tc.delivered)}${INSECABLE}m³ livrés, ${pluriel(tc.rotations, "rotation livrée", "rotations livrées")}` : "Aucune livraison de citerne sur la période."} />
+          <Kpi label="Manquants des citernes" value={pourMille(tc.per_mille)} hint={tc.rotations ? `${fmtVolume(tc.shortage)}${INSECABLE}m³ manquants sur ${fmtVolume(tc.delivered_15)}${INSECABLE}m³ livrés, à 15${INSECABLE}°C, ${pluriel(tc.rotations, "rotation livrée", "rotations livrées")}` : "Aucune livraison de citerne sur la période."} />
         )}
         {bennes && (
           <Kpi label="Écarts de tonnage des bennes" value={pourMille(tb.per_mille)} hint={tb.rotations ? `${fmtFixe(tb.variance_t, 1)}${INSECABLE}t d'écart sur ${fmtFixe(tb.loaded_t, 1)}${INSECABLE}t chargées, ${pluriel(tb.rotations, "rotation livrée", "rotations livrées")}` : "Aucune livraison de benne sur la période."} />
@@ -262,7 +270,7 @@ function Livraisons({ l, colonne, mensuel, profil }: { l: Deliveries; colonne: s
       </div>
 
       {citernes && (
-        <Section titre="Citernes : volume manquant ÷ volume livré" aide="Volumes de Transport, à 15 °C quand la rotation corrige ses volumes ; une rotation sans volume livré n'est pas comptée.">
+        <Section titre="Citernes : volume manquant ÷ volume livré, à 15 °C" aide="Volumes de Transport ramenés à 15 °C : manquant (chargé moins livré, corrigés) rapporté au livré à 15 °C ; une rotation sans volume livré n'est pas comptée.">
           {l.tanker.items.length === 0 ? (
             <Empty title="Aucune livraison de citerne sur la période." />
           ) : (
@@ -270,7 +278,7 @@ function Livraisons({ l, colonne, mensuel, profil }: { l: Deliveries; colonne: s
               <Graphique
                 titre={mensuel ? "Manquant des citernes, mois par mois" : `Les plus forts manquants, par ${colonne.toLocaleLowerCase("fr")}`}
                 mensuel={mensuel}
-                points={l.tanker.items.filter((i) => i.per_mille !== null).map((i) => ({ key: i.key, label: libelle(i.key, i.label), value: i.per_mille ?? 0, detail: `${fmtVolume(i.shortage)}${INSECABLE}m³ sur ${fmtVolume(i.delivered)}${INSECABLE}m³` }))}
+                points={l.tanker.items.filter((i) => i.per_mille !== null).map((i) => ({ key: i.key, label: libelle(i.key, i.label), value: i.per_mille ?? 0, detail: `${fmtVolume(i.shortage)}${INSECABLE}m³ sur ${fmtVolume(i.delivered_15)}${INSECABLE}m³ à 15${INSECABLE}°C` }))}
                 format={(v) => pourMille(v)}
                 enCours={enCours}
               />
@@ -285,7 +293,8 @@ function Livraisons({ l, colonne, mensuel, profil }: { l: Deliveries; colonne: s
                       <td className="px-3 py-2.5">Total</td>
                       <td className="px-3 py-2.5 text-right">{fmtInt(tc.rotations)}</td>
                       {!etroit && <td className="px-3 py-2.5 text-right">{fmtVolume(tc.loaded_15)}</td>}
-                      <td className="px-3 py-2.5 text-right">{fmtVolume(tc.delivered)}</td>
+                      {!etroit && <td className="px-3 py-2.5 text-right text-muted">{fmtVolume(tc.delivered)}</td>}
+                      <td className="px-3 py-2.5 text-right">{fmtVolume(tc.delivered_15)}</td>
                       <td className="px-3 py-2.5 text-right">{fmtVolume(tc.shortage)}</td>
                       <td className="px-3 py-2.5 text-right">{tc.per_mille === null ? "–" : fmtFixe(tc.per_mille, 2)}</td>
                     </tr>
