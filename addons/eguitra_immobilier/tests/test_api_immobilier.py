@@ -67,6 +67,20 @@ class TestImmobilierApi(RefusParProfil, FinanceDataMixin, ApiCase):
         status, other = self.call("GET", "/immobilier/leases?property_id=0", token=self.token)
         self.assertEqual((status, other), (200, []))
 
+    def test_loyers_emis_et_bail_termine_par_le_profil_immobilier(self):
+        """Le profil immobilier n'a aucun droit sur la comptabilité : il active un bail (journal des ventes lu
+        avec les droits du noyau), émet les loyers échus et met fin au bail, les factures étant tenues et
+        validées avec les droits du noyau, sans échec inscrit sur le bail."""
+        status, lease = self._bail(activate=True, date_start=(self.first - relativedelta(months=1)).isoformat())
+        self.assertEqual((status, lease.get("state")), (200, "active"), lease)
+        status, body = self.call("POST", "/immobilier/rents/generate", {}, token=self.token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual((len(body["invoices"]), body["errors"]), (2, []), "Mois dernier et mois courant, payables d'avance")
+        status, body = self.call("POST", f"/immobilier/leases/{lease['id']}/terminate", {"date": self.today.isoformat()},
+                                 token=self.token)
+        self.assertEqual((status, body.get("state")), (200, "terminated"), body)
+        self.assertFalse(self.env["eguitra.lease"].browse(lease["id"]).rent_error)
+
     def test_quittance_lue_par_l_immobilier_et_datee_du_reglement(self):
         """La quittance se lit sans droit sur les écritures (I-C1), datée du règlement et non de l'échéance."""
         status, lease = self._bail(activate=True, date_start=(self.first - relativedelta(months=1)).isoformat())

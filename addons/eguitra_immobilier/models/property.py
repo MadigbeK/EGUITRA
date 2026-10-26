@@ -172,7 +172,12 @@ class EguitraLease(models.Model):
                                 "le 30 ou le 31 glisserait au 28 après un mois court : fixez la prise d'effet (ou le "
                                 "premier loyer à émettre) entre le 1er et le 28, et facturez les jours précédents à part.")
             company = lease.company_id
-            journal = self.env["account.journal"].search([("company_id", "=", company.id), ("type", "=", "sale")], limit=1)
+            # Lu avec les droits du noyau : le profil immobilier n'a aucun droit sur la comptabilité (journaux,
+            # pièces), comme le parc dans le transport ; il active un bail sans lire les journaux.
+            journal = self.env["account.journal"].sudo().search(
+                [("company_id", "=", company.id), ("type", "=", "sale")], order="sequence, id", limit=1)
+            if not journal:
+                raise UserError(f"Aucun journal des ventes dans la société {company.name} pour quittancer le bail.")
             product = self._rent_product(company, lease.vat)
             distribution = {str(lease.property_id.analytic_account_id.id): 100,
                             str(self._activity_account(company).id): 100}
@@ -253,7 +258,9 @@ class EguitraLease(models.Model):
         errors (liste) reçoit les échecs, un par bail : {"lease", "message"}."""
         today = fields.Date.context_today(self)
         until = min(until or today, today)
-        invoices = self.env["account.move"]
+        # Factures tenues avec les droits du noyau : une union garde l'environnement de son premier membre, et
+        # le profil immobilier ne lit pas les pièces (la route les résume ensuite pour lui).
+        invoices = self.env["account.move"].sudo()
         for lease in self.search([("state", "=", "active"), ("company_id", "in", companies.ids)]):
             created, error = lease._quittancer(until)
             invoices |= created
@@ -290,7 +297,9 @@ class EguitraLease(models.Model):
         if self.date_end:
             until = min(until, self.date_end)
         contract = self.contract_id.sudo().with_company(self.company_id)
-        invoices = self.env["account.move"]
+        # Avec les droits du noyau, comme le contrat : sinon l'union ramènerait les factures à l'environnement
+        # de l'utilisateur, et leur validation échouerait pour le profil immobilier (aucun droit comptable).
+        invoices = self.env["account.move"].sudo()
         for _ in range(limit or SAFETY_LIMIT):
             start = contract.recurring_next_date
             if not start or start > until:
