@@ -222,7 +222,9 @@ class TestManquants(TransportCase):
                                  {"shortage_tolerance": 1, "shortage_price": 9_000_000}, token=finance)
         self.assertEqual((status, body["shortage_tolerance"]), (200, 1.0), body)
 
-        agent = self.open_session("ibrahima", app="mobile")["access_token"]
+        # Profil exploitation au bureau (application Transport) : une session de Rotations n'ouvre que la
+        # saisie des rotations (eguitra_api, organisation.SESSION_ROUTES).
+        agent = self.open_session("ibrahima", app="transport")["access_token"]
         status, body = self.call("GET", "/transport/settings", token=agent)
         self.assertEqual(status, 200, body)
         self.assertFalse(body["can_edit"])

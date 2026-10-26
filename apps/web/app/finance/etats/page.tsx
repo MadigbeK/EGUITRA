@@ -1,29 +1,52 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Download, Printer } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { IfrsPanel } from "@/components/finance/IfrsPanel";
-import { apiDownload, apiSend, useApi } from "@/lib/api-client";
+import { PartnerPicker } from "@/components/finance/PartnerPicker";
+import { PagesListe, aujourdhui, useTelechargement } from "@/components/finance/communPieces";
+import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt, fmtPct, pluriel } from "@/lib/format";
 
 type Tab = "bilan" | "resultat" | "flux" | "consolide" | "rapports" | "ifrs" | "export";
 interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number; month?: number; pct_revenue?: number | null }
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
-const yearStart = () => `${new Date().getFullYear()}-01-01`;
+// Jour et début d'exercice à Conakry (le jour UTC changeait de date sur un poste réglé ailleurs).
+const todayIso = aujourdhui;
+const yearStart = () => `${aujourdhui().slice(0, 4)}-01-01`;
+
+/**
+ * Bouton de téléchargement par le client commun (application et société de l'écran) : en chargement
+ * pendant l'appel, l'échec écrit sous le bouton au lieu de passer inaperçu.
+ */
+function Telecharger({ chemin, nom, children, size = "sm", variant, disabled }: { chemin: string; nom: string; children: ReactNode; size?: "sm" | "md"; variant?: "primary" | "secondary"; disabled?: boolean }) {
+  const { telecharger, enCours, erreur } = useTelechargement();
+  return (
+    <span className="no-print inline-flex flex-col">
+      <Button size={size} variant={variant} disabled={disabled} loading={enCours !== null} onClick={() => void telecharger("fichier", chemin, nom)}>
+        {children}
+      </Button>
+      {erreur && (
+        <span role="alert" className="mt-1 max-w-xs text-[12px] leading-snug text-danger">
+          {erreur}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /** Boutons d'export d'un état (XLSX et CSV), sur la période affichée. */
 function ExportButtons({ kind, query }: { kind: string; query: string }) {
   return (
     <div className="no-print flex gap-2">
-      <Button size="sm" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=xlsx&${query}`, `${kind}.xlsx`)}>
+      <Telecharger chemin={`/finance/statements/export?kind=${kind}&format=xlsx&${query}`} nom={`${kind}.xlsx`}>
         <Download className="h-3.5 w-3.5" /> XLSX
-      </Button>
-      <Button size="sm" onClick={() => apiDownload(`/finance/statements/export?kind=${kind}&format=csv&${query}`, `${kind}.csv`)}>
+      </Telecharger>
+      <Telecharger chemin={`/finance/statements/export?kind=${kind}&format=csv&${query}`} nom={`${kind}.csv`}>
         <Download className="h-3.5 w-3.5" /> CSV
-      </Button>
+      </Telecharger>
     </div>
   );
 }
@@ -39,9 +62,9 @@ export default function StatementsPage() {
         actions={
           <>
             <ScopeToggle value={scope} onChange={setScope} />
-            <Button onClick={() => apiDownload(`/finance/statements/export?kind=all&format=xlsx&date_to=${todayIso()}&scope=${scope}`, "etats.xlsx")}>
+            <Telecharger size="md" chemin={`/finance/statements/export?kind=all&format=xlsx&date_to=${todayIso()}&scope=${scope}`} nom="etats.xlsx">
               <Download className="h-4 w-4" /> Tous les états (XLSX)
-            </Button>
+            </Telecharger>
             <Button onClick={() => window.print()}>
               <Printer className="h-4 w-4" /> Imprimer
             </Button>
@@ -103,7 +126,7 @@ function StatementTable({ lines, compare, monthly }: { lines: StatementLine[]; c
 
 function BalanceSheet({ scope }: { scope: string }) {
   const [date, setDate] = useState(todayIso());
-  const { data, error } = useApi<{ actif: StatementLine[]; passif: StatementLine[]; difference: number; unmapped_accounts: Record<string, number> }>(
+  const { data, error, mutate } = useApi<{ actif: StatementLine[]; passif: StatementLine[]; difference: number; unmapped_accounts: Record<string, number> }>(
     `/finance/statements/balance-sheet?date=${date}&scope=${scope}`,
   );
   return (
@@ -114,11 +137,11 @@ function BalanceSheet({ scope }: { scope: string }) {
         </Field>
         <ExportButtons kind="bilan" query={`date_to=${date}&scope=${scope}`} />
       </div>
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
         <>
-          {data.difference !== 0 ? <Notice tone="danger">Bilan déséquilibré : écart de {fmtGNF(data.difference)}.</Notice> : <Notice tone="ok">Bilan équilibré au {fmtDate(date)}. Montants nets en GNF.</Notice>}
+          {Math.abs(data.difference) >= 0.5 ? <Notice tone="danger">Bilan déséquilibré : écart de {fmtGNF(data.difference)}.</Notice> : <Notice tone="ok">Bilan équilibré au {fmtDate(date)}. Montants nets en GNF.</Notice>}
           {Object.keys(data.unmapped_accounts).length > 0 && <Notice tone="warn">Comptes hors états : {Object.keys(data.unmapped_accounts).join(", ")}.</Notice>}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <Card title="Actif" padded={false}>
@@ -137,7 +160,7 @@ function BalanceSheet({ scope }: { scope: string }) {
 function IncomeStatement({ scope }: { scope: string }) {
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
-  const { data, error } = useApi<{ lines: StatementLine[]; unmapped_accounts: Record<string, number> }>(
+  const { data, error, mutate } = useApi<{ lines: StatementLine[]; unmapped_accounts: Record<string, number> }>(
     `/finance/statements/income?date_from=${from}&date_to=${to}&compare=previous_year&scope=${scope}`,
   );
   return (
@@ -153,7 +176,7 @@ function IncomeStatement({ scope }: { scope: string }) {
           <ExportButtons kind="resultat" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
         </div>
       </div>
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
         <Card title="Compte de résultat (système normal)" padded={false}>
@@ -167,7 +190,7 @@ function IncomeStatement({ scope }: { scope: string }) {
 function CashFlow({ scope }: { scope: string }) {
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
-  const { data, error } = useApi<{ lines: StatementLine[]; treasury_end: number; difference: number }>(
+  const { data, error, mutate } = useApi<{ lines: StatementLine[]; treasury_end: number; difference: number }>(
     `/finance/statements/cash-flow?date_from=${from}&date_to=${to}&scope=${scope}`,
   );
   return (
@@ -181,12 +204,12 @@ function CashFlow({ scope }: { scope: string }) {
         </Field>
         <div className="ml-auto flex flex-wrap gap-2">
           <ExportButtons kind="flux" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
-          <Button size="sm" onClick={() => apiDownload(`/finance/statements/export?kind=flux_mensuels&format=xlsx&date_from=${from}&date_to=${to}&scope=${scope}`, "flux_mensuels.xlsx")}>
+          <Telecharger chemin={`/finance/statements/export?kind=flux_mensuels&format=xlsx&date_from=${from}&date_to=${to}&scope=${scope}`} nom="flux_mensuels.xlsx">
             <Download className="h-3.5 w-3.5" /> Flux mensuels
-          </Button>
+          </Telecharger>
         </div>
       </div>
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
         <>
@@ -220,6 +243,8 @@ interface RunResult {
   rows: Array<Record<string, unknown>>;
   totals: Record<string, number>;
   total_count: number;
+  /** Rang de la première ligne renvoyée (pages de PAGE_RAPPORT lignes). */
+  offset: number;
 }
 
 function cell(value: unknown, type: string) {
@@ -229,47 +254,51 @@ function cell(value: unknown, type: string) {
   return String(value);
 }
 
+/** Lignes d'un rapport par page ; l'écran s'arrêtait à 2 000 lignes sans le dire, les exports vont plus loin. */
+const PAGE_RAPPORT = 500;
+
 function ReportBuilder({ scope }: { scope: string }) {
-  const { data: catalog } = useApi<{ groups: Array<{ name: string; reports: CatalogReport[] }> }>("/finance/reports/catalog");
+  const { data: catalog, error: erreurCatalogue, mutate: relireCatalogue } = useApi<{ groups: Array<{ name: string; reports: CatalogReport[] }> }>("/finance/reports/catalog");
   const reports = useMemo(() => catalog?.groups.flatMap((g) => g.reports) ?? [], [catalog]);
   const [key, setKey] = useState("balance");
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
   const [filters, setFilters] = useState<Record<string, string>>({});
+  // Tiers choisis dans les filtres de type « tiers » : leur nom, pour le sélecteur.
+  const [tiers, setTiers] = useState<Record<string, { id: number; name: string } | null>>({});
   const [result, setResult] = useState<RunResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const report = reports.find((r) => r.key === key);
 
-  const body = () => ({ report: key, date_from: report?.has_date ? from : undefined, date_to: report?.has_date ? to : undefined, filters, scope, limit: 2000 });
-  async function run() {
+  const criteres = () => ({ report: key, date_from: report?.has_date ? from : undefined, date_to: report?.has_date ? to : undefined, filters, scope });
+  async function run(offset = 0) {
     setBusy(true);
     setError(null);
     try {
-      setResult(await apiSend<RunResult>("POST", "/finance/reports/run", body()));
+      setResult(await apiSend<RunResult>("POST", "/finance/reports/run", { ...criteres(), limit: PAGE_RAPPORT, offset }));
     } catch (e) {
       setError(e);
     } finally {
       setBusy(false);
     }
   }
-  async function exportFile(format: "csv" | "xlsx") {
-    const res = await fetch("/api/odoo/finance/reports/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body(), format }) });
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${key}.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
+  /** Export du rapport entier par le client commun (application et société de l'écran), en GET. */
+  function exportPath(format: "csv" | "xlsx") {
+    const c = criteres();
+    const params = new URLSearchParams({ report: c.report, format, scope: c.scope, filters: JSON.stringify(c.filters) });
+    if (c.date_from) params.set("date_from", c.date_from);
+    if (c.date_to) params.set("date_to", c.date_to);
+    return `/finance/reports/export?${params.toString()}`;
   }
 
   return (
     <div className="space-y-4">
+      {erreurCatalogue && !catalog && <ErrorBox error={erreurCatalogue} onRetry={() => relireCatalogue()} />}
       <Card>
         <div className="no-print grid grid-cols-1 gap-3 md:grid-cols-6">
           <Field label="Rapport" className="md:col-span-2">
-            <Select value={key} onChange={(e) => { setKey(e.target.value); setFilters({}); setResult(null); }} options={reports.map((r) => ({ value: r.key, label: r.label }))} />
+            <Select value={key} onChange={(e) => { setKey(e.target.value); setFilters({}); setTiers({}); setResult(null); }} options={reports.map((r) => ({ value: r.key, label: r.label }))} />
           </Field>
           {report?.has_date && (
             <>
@@ -281,9 +310,21 @@ function ReportBuilder({ scope }: { scope: string }) {
               </Field>
             </>
           )}
-          {report?.filters.filter((f) => f.type !== "partner").map((f) => (
-            <Field key={f.key} label={f.label}>
-              {f.type === "select" ? (
+          {report?.filters.map((f) => (
+            <Field key={f.key} label={f.label} className={f.type === "partner" ? "md:col-span-2" : undefined}>
+              {f.type === "partner" ? (
+                // Filtre « Tiers » : choix d'un tiers existant, sans création depuis un rapport.
+                <PartnerPicker
+                  creation={false}
+                  kind="customer"
+                  placeholder="Tous les tiers"
+                  value={tiers[f.key] ?? null}
+                  onChange={(p) => {
+                    setTiers({ ...tiers, [f.key]: p });
+                    setFilters({ ...filters, [f.key]: p ? String(p.id) : "" });
+                  }}
+                />
+              ) : f.type === "select" ? (
                 <Select value={filters[f.key] ?? ""} onChange={(e) => setFilters({ ...filters, [f.key]: e.target.value })} placeholder="Tous" options={f.options} />
               ) : (
                 <Input value={filters[f.key] ?? ""} onChange={(e) => setFilters({ ...filters, [f.key]: e.target.value })} />
@@ -291,26 +332,26 @@ function ReportBuilder({ scope }: { scope: string }) {
             </Field>
           ))}
           <div className="flex items-end gap-2">
-            <Button variant="primary" loading={busy} onClick={run}>
+            <Button variant="primary" loading={busy} onClick={() => void run(0)}>
               Afficher
             </Button>
           </div>
         </div>
         {report && <p className="mt-2 text-xs text-muted">{report.description}</p>}
       </Card>
-      {Boolean(error) && <ErrorBox error={error} />}
+      {Boolean(error) && <ErrorBox error={error} onRetry={() => void run(result?.offset ?? 0)} />}
       {result && (
         <Card
           title={`${result.label}, ${pluriel(result.total_count, "ligne")}`}
           padded={false}
           actions={
             <div className="no-print flex gap-2">
-              <Button size="sm" onClick={() => exportFile("csv")}>
+              <Telecharger chemin={exportPath("csv")} nom={`${key}.csv`}>
                 <Download className="h-3.5 w-3.5" /> CSV
-              </Button>
-              <Button size="sm" onClick={() => exportFile("xlsx")}>
+              </Telecharger>
+              <Telecharger chemin={exportPath("xlsx")} nom={`${key}.xlsx`}>
                 <Download className="h-3.5 w-3.5" /> XLSX
-              </Button>
+              </Telecharger>
             </div>
           }
         >
@@ -330,13 +371,14 @@ function ReportBuilder({ scope }: { scope: string }) {
                 <tr>
                   {result.columns.map((c, i) => (
                     <td key={c.key} className={cx("px-3 py-2", c.align === "right" && "text-right font-mono")}>
-                      {c.key in result.totals ? fmtInt(result.totals[c.key]) : i === 0 ? "TOTAL" : ""}
+                      {c.key in result.totals ? fmtInt(result.totals[c.key]) : i === 0 ? (result.total_count > result.rows.length ? "TOTAL (toutes les lignes)" : "TOTAL") : ""}
                     </td>
                   ))}
                 </tr>
               ) : undefined
             }
           />
+          <PagesListe offset={result.offset} taille={PAGE_RAPPORT} total={result.total_count} libelle="Lignes" onPage={(o) => void run(o)} />
         </Card>
       )}
     </div>
@@ -356,12 +398,12 @@ function AuditExport({ scope }: { scope: string }) {
         <Field label="Au">
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </Field>
-        <Button onClick={() => apiDownload(`/finance/exports/entries?date_from=${from}&date_to=${to}&scope=${scope}&format=csv`, "ecritures.csv")}>
+        <Telecharger size="md" chemin={`/finance/exports/entries?date_from=${from}&date_to=${to}&scope=${scope}&format=csv`} nom="ecritures.csv">
           <Download className="h-4 w-4" /> CSV
-        </Button>
-        <Button variant="primary" onClick={() => apiDownload(`/finance/exports/entries?date_from=${from}&date_to=${to}&scope=${scope}&format=xlsx`, "ecritures.xlsx")}>
+        </Telecharger>
+        <Telecharger size="md" variant="primary" chemin={`/finance/exports/entries?date_from=${from}&date_to=${to}&scope=${scope}&format=xlsx`} nom="ecritures.xlsx">
           <Download className="h-4 w-4" /> Excel
-        </Button>
+        </Telecharger>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-lg bg-panel-2 p-4">
@@ -379,9 +421,9 @@ function AuditExport({ scope }: { scope: string }) {
           <p className="mb-3 text-xs text-muted">
             Société de travail : en-tête (NIF, RCCM), comptes avec soldes d&apos;ouverture et de clôture, clients et fournisseurs avec leur compte, table des taxes, une transaction par pièce.
           </p>
-          <Button size="sm" disabled={scope === "group"} onClick={() => apiDownload(`/finance/exports/saft?date_from=${from}&date_to=${to}`, "SAF-T.xml")}>
+          <Telecharger disabled={scope === "group"} chemin={`/finance/exports/saft?date_from=${from}&date_to=${to}`} nom="SAF-T.xml">
             <Download className="h-3.5 w-3.5" /> SAF-T (XML)
-          </Button>
+          </Telecharger>
           {scope === "group" && <span className="ml-2 text-xs text-muted">Un fichier par société : quittez la vue consolidée.</span>}
         </div>
       </div>
@@ -403,7 +445,7 @@ interface ConsolidatedData {
 function Consolidated() {
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
-  const { data, error } = useApi<ConsolidatedData>(`/finance/statements/consolidated?date_from=${from}&date_to=${to}`);
+  const { data, error, mutate } = useApi<ConsolidatedData>(`/finance/statements/consolidated?date_from=${from}&date_to=${to}`);
   const table = (rows: ConsolidatedRow[]) => (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px] text-sm">
@@ -436,7 +478,7 @@ function Consolidated() {
         <Field label="Du"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="Au"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
       </div>
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
         <>

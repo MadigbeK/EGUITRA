@@ -19,7 +19,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import RedirectWarning, UserError
 
-from .period_close import pluriel
+from ..formats import pluriel
 
 # Comptes de l'affectation : préfixe, rubrique, libellé de la rubrique. Une perte ne se distribue pas :
 # elle s'impute sur les réserves ou se reporte à nouveau (129), jamais en dividendes.

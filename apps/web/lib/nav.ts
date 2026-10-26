@@ -131,6 +131,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/transport/flotte", label: "Flotte et chauffeurs", icon: "Gauge" },
         { href: "/transport/routes", label: "Routes et tarifs", icon: "Route" },
+        { href: "/transport/bareme", label: "Barème officiel", icon: "Scale" },
         { href: "/transport/parametres", label: "Paramètres", icon: "SlidersHorizontal" },
       ],
     },

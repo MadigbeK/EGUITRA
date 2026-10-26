@@ -5,7 +5,7 @@ from dateutil.relativedelta import relativedelta
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
-from ..models.period_close import pluriel
+from ..formats import pluriel
 from .common import FinanceDataMixin
 
 

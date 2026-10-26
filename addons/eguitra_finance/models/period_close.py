@@ -11,14 +11,10 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from ..formats import pluriel
 from .analytic import ACTIVITY_PLAN, distribution_ids
 
 SECURED_JOURNAL_TYPES = ("sale", "purchase", "general", "bank", "cash")
-
-
-def pluriel(n, un, plusieurs=None):
-    """Nombre et nom accordé, sans « (s) » : « 1 pièce », « 3 pièces » (milliers groupés)."""
-    return f"{n:,}".replace(",", " ") + " " + (un if abs(n) < 2 else plusieurs or un + "s")
 
 
 class EguitraPeriodClose(models.Model):

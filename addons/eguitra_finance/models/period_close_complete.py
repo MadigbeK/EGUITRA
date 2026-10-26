@@ -27,8 +27,9 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
+from ..formats import pluriel
 from .finance_metrics import ACC_CODE
-from .period_close import SECURED_JOURNAL_TYPES, pluriel
+from .period_close import SECURED_JOURNAL_TYPES
 
 CLOSE_KINDS = [
     ("vat", "Liquidation de la TVA"),

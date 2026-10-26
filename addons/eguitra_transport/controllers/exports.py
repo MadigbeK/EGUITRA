@@ -10,7 +10,7 @@ from odoo.addons.eguitra_finance.controllers.exporting import export_meta, table
 from ..models.rotation import COSTS
 from .transport import READ
 
-STATES = {"draft": "Saisie", "done": "Validée", "invoiced": "Facturée", "cancelled": "Annulée"}
+STATES = {"draft": "Saisie", "en_route": "En route", "done": "Validée", "invoiced": "Facturée", "cancelled": "Annulée"}
 # Kilométrage et ratios de la rotation (rentabilité au kilomètre), après les frais (COSTS, dont les
 # pneumatiques). Champs du modèle : un nom erroné lève une erreur au lieu de faire disparaître la colonne.
 RATIOS = [
@@ -46,11 +46,13 @@ class EguitraTransportExports(http.Controller):
                 rot.product_id.name or rot.product or "", rot.delivery_note or "", rot.volume_loaded,
                 rot.volume_delivered, rot.shortage, rot.rate, rot.revenue, *[rot[f] for f, _l in COSTS],
                 rot.total_cost, rot.margin, rot.margin_rate, *[rot[f] for f, _l, _k in RATIOS],
-                rot.invoice_id.name or "",
+                rot.sudo().invoice_id.name or "",
             ])
         # Totaux des seules colonnes additives (montants, volumes, jours) ; pas des ratios (« / »).
         additive = {i for i, (label, kind) in enumerate(columns) if kind in ("money", "number", "days") and "/" not in label}
-        totals = ["TOTAL"] + [sum(r[i] or 0 for r in rows) if i in additive else None for i in range(1, len(columns))]
+        # Les rotations annulées restent listées, hors total (audit du 25 octobre, M12).
+        counted = [row for row, rot in zip(rows, rotations) if rot.state != "cancelled"]
+        totals = ["TOTAL"] + [sum(r[i] or 0 for r in counted) if i in additive else None for i in range(1, len(columns))]
         sheet = {
             "title": "Rotations",
             "meta": export_meta(request.env.company, [("Période", f"{start:%d/%m/%Y} au {end:%d/%m/%Y}"),

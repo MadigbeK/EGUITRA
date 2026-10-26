@@ -1,14 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAppCode } from "@/lib/config";
-import { forbiddenOrigin, sameOrigin } from "@/lib/route-helpers";
+import { messageStatut } from "@/lib/erreurs";
+import { forbiddenOrigin, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import {
   COOKIES,
   accessExpiring,
+  clearCompanyCookie,
   companyCookie,
   clearSessionCookies,
   clientIpFrom,
   odooFetch,
-  refreshSession,
+  renouvelerSession,
   setSessionCookies,
   type SessionTokens,
 } from "@/lib/session";
@@ -17,9 +19,13 @@ import {
  * Passerelle du navigateur vers l'API du noyau, sous l'identité de l'utilisateur connecté.
  * Le jeton est lu dans le cookie httpOnly, renouvelé si nécessaire, puis la réponse est relayée.
  * Les droits sont vérifiés par l'API elle-même : la passerelle n'élargit aucun accès.
+ * Un noyau injoignable (redémarrage, panne) donne un 503 en JSON, en français, sans toucher aux
+ * cookies : seul un refus du noyau ferme la session.
  */
 
 const ALLOWED_PATH = /^[a-zA-Z0-9_\-/.]+$/;
+/** Société déclarée par la page (X-Eguitra-Company) : un identifiant entier, rien d'autre. */
+const SOCIETE = /^\d{1,9}$/;
 
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   if (!sameOrigin(req)) return forbiddenOrigin();
@@ -33,7 +39,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const normalized = new URL(apiPath, "http://passerelle").pathname;
   const sessionProfile = apiPath === "/auth/me" && req.method === "GET";
   if (!ALLOWED_PATH.test(apiPath) || normalized !== apiPath || apiPath.includes("..") || (apiPath.startsWith("/auth/") && !sessionProfile)) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return NextResponse.json({ error: "not_found", message: "Adresse inconnue du service." }, { status: 404 });
   }
 
   const refresh = req.cookies.get(COOKIES.refresh)?.value;
@@ -42,13 +48,33 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const declared = req.headers.get("x-eguitra-app");
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
   const app = isAppCode(declared) ? declared : isAppCode(fromCookie) ? fromCookie : undefined;
-  const company = req.headers.get("x-eguitra-company") ?? (app ? req.cookies.get(companyCookie(app))?.value : undefined);
+  // Société : celle que la page affiche (en-tête posé par le client à chaque appel : deux onglets sur
+  // deux sociétés ne se mélangent pas), à défaut celle mémorisée pour l'application (cookie commun
+  // aux onglets : téléchargement direct, écran sans coque).
+  const enTete = req.headers.get("x-eguitra-company");
+  const declaree = enTete && SOCIETE.test(enTete) ? enTete : undefined;
+  const memorisee = !declaree && app ? req.cookies.get(companyCookie(app))?.value : undefined;
+  let company = declaree ?? memorisee;
+  let retiree = false;
   const clientIp = clientIpFrom(req.headers);
   let renewed: SessionTokens | null = null;
+  // Réponse finale : jetons renouvelés pendant l'appel (quelle que soit l'issue : l'ancien jeton de
+  // renouvellement, déjà remplacé, ne vaudrait plus) et mémoire de société périmée effacée.
+  const finir = (out: NextResponse) => {
+    if (renewed) setSessionCookies(out.cookies, renewed, app);
+    if (retiree && app) clearCompanyCookie(out.cookies, app);
+    return out;
+  };
 
   if ((!access || accessExpiring(req.cookies.get(COOKIES.expires)?.value)) && refresh) {
-    renewed = await refreshSession(refresh, clientIp);
-    if (renewed) access = renewed.access_token;
+    const r = await renouvelerSession(refresh, clientIp);
+    if (r.etat === "ok") {
+      renewed = r.jetons;
+      access = renewed.access_token;
+    } else if (r.etat === "indisponible" && !access) {
+      return serviceIndisponible();
+    }
+    // Refus : le jeton d'accès qui reste (s'il n'a pas encore expiré) est tenté ; le noyau dira 401.
   }
   if (!access) return unauthenticated();
 
@@ -65,15 +91,46 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
       contentType: req.headers.get("content-type"),
     });
 
-  let res = await call(access);
-  if (res.status === 401 && refresh && !renewed) {
-    renewed = await refreshSession(refresh, clientIp);
-    if (renewed) res = await call(renewed.access_token);
+  let res: Response;
+  try {
+    res = await call(access);
+    if (res.status === 401 && refresh && !renewed) {
+      const r = await renouvelerSession(refresh, clientIp);
+      if (r.etat === "indisponible") return serviceIndisponible();
+      if (r.etat === "ok") {
+        renewed = r.jetons;
+        res = await call(renewed.access_token);
+      }
+    }
+    // Société que l'administrateur a retirée au compte. Mémorisée : l'appel est refait dans la société
+    // par défaut et la mémoire périmée est effacée. Affichée par la page : elle reste refusée (une
+    // écriture ne part jamais en silence dans d'autres livres que ceux affichés), avec un message qui
+    // dit quoi faire.
+    if (company && res.status === 403 && (await codeErreur(res)) === "company_forbidden") {
+      await res.body?.cancel().catch(() => undefined);
+      if (!memorisee) {
+        return finir(NextResponse.json({ error: "company_forbidden", message: MESSAGE_SOCIETE_RETIREE }, { status: 403, headers: { "Cache-Control": "no-store" } }));
+      }
+      company = undefined;
+      retiree = true;
+      res = await call(renewed?.access_token ?? access);
+    }
+  } catch {
+    // Noyau injoignable : une session renouvelée juste avant garde quand même ses nouveaux jetons.
+    return finir(serviceIndisponible());
   }
   if (res.status === 401) return unauthenticated();
 
-  const headers = new Headers({ "Cache-Control": "no-store" });
   const type = res.headers.get("content-type") ?? "application/octet-stream";
+  // Réponse d'erreur qui n'est pas du JSON : route inconnue du noyau (identifiant non numérique dans
+  // l'adresse), page d'erreur du serveur. L'écran reçoit un message en français, jamais du HTML.
+  if (!res.ok && !type.startsWith("application/json")) {
+    await res.body?.cancel().catch(() => undefined);
+    const erreur = res.status === 404 ? "not_found" : res.status >= 500 ? "unavailable" : "error";
+    return finir(NextResponse.json({ error: erreur, message: messageStatut(res.status) }, { status: res.status, headers: { "Cache-Control": "no-store" } }));
+  }
+
+  const headers = new Headers({ "Cache-Control": "no-store" });
   if (type.startsWith("application/json")) {
     headers.set("content-type", type);
   } else {
@@ -82,9 +139,15 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     headers.set("content-disposition", attachmentDisposition(res.headers.get("content-disposition")));
     headers.set("content-security-policy", "sandbox; default-src 'none'");
   }
-  const out = new NextResponse(res.body, { status: res.status, headers });
-  if (renewed) setSessionCookies(out.cookies, renewed, app);
-  return out;
+  return finir(new NextResponse(res.body, { status: res.status, headers }));
+}
+
+/** Refus d'une société affichée par la page, retirée du compte depuis son ouverture. */
+const MESSAGE_SOCIETE_RETIREE = "Cette société n'est plus ouverte à votre compte : rechargez la page pour travailler dans votre société par défaut.";
+
+/** Code d'erreur d'une réponse JSON du noyau (sans consommer la réponse). */
+async function codeErreur(res: Response): Promise<string | undefined> {
+  return ((await res.clone().json().catch(() => ({}))) as { error?: string }).error;
 }
 
 /** Content-Disposition « attachment » en conservant le nom de fichier proposé par le noyau. */

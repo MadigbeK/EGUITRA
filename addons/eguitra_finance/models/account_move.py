@@ -22,8 +22,11 @@ class AccountMove(models.Model):
     def eguitra_set_dispute(self, dispute, reason=None):
         """Déclare ou lève un litige sur une facture (motif obligatoire pour le déclarer)."""
         for move in self:
-            if not move.is_invoice(include_receipts=True):
-                raise UserError("Seule une facture ou une pièce d'achat peut être mise en litige.")
+            # Une créance reprise de l'ancien système (écriture portant un compte client) se conteste aussi :
+            # elle est relancée comme une facture.
+            receivable = move.line_ids.filtered(lambda l: l.account_id.account_type == "asset_receivable")
+            if not (move.is_invoice(include_receipts=True) or (move.move_type == "entry" and receivable)):
+                raise UserError("Seule une facture, une pièce d'achat ou une créance reprise peut être mise en litige.")
             if dispute and not (reason or "").strip():
                 raise UserError("Le motif du litige est obligatoire.")
             move.write({
@@ -58,7 +61,29 @@ class AccountMove(models.Model):
         ], limit=1)
         for command in vals.get("invoice_line_ids") or []:
             if isinstance(command, (list, tuple)) and len(command) > 2 and command[0] == 0                     and isinstance(command[2], dict) and command[2].get("display_type", "product") == "product":
-                command[2]["tax_ids"] = [Command.set(exempt.ids)]
+                # Seule la TVA passe en exonération : une retenue à la source (taux négatif) reste due par le
+                # client, sans quoi la créance serait surévaluée de son montant.
+                kept = self._eguitra_withholdings(self._eguitra_tax_ids(command[2].get("tax_ids")))
+                command[2]["tax_ids"] = [Command.set(exempt.ids + kept.ids)]
+
+    @api.model
+    def _eguitra_tax_ids(self, commands):
+        """Identifiants des taxes d'une liste de commandes (set, link) ou d'identifiants."""
+        ids = []
+        for command in commands or []:
+            if isinstance(command, int):
+                ids.append(command)
+            elif isinstance(command, (list, tuple)) and command and command[0] == 6:
+                ids = list(command[2] or [])
+            elif isinstance(command, (list, tuple)) and command and command[0] == 4:
+                ids.append(command[1])
+        return ids
+
+    @api.model
+    def _eguitra_withholdings(self, tax_ids):
+        """Retenues à la source parmi ces taxes (groupe « retenue » ou taux négatif)."""
+        taxes = self.env["account.tax"].browse(tax_ids).exists()
+        return taxes.filtered(lambda t: t.amount < 0 or t.tax_group_id.eguitra_kind == "withholding")
 
     def write(self, vals):
         result = super().write(vals)
@@ -80,13 +105,16 @@ class AccountMove(models.Model):
         quel que soit le module qui crée la pièce (rotations, chantiers, loyers, honoraires)."""
         for move in self.filtered(lambda m: m.move_type in SALE_DOCUMENTS and m.state == "draft"
                                   and m.partner_id.commercial_partner_id.eguitra_vat_exempt):
+            # Lignes portant une TVA non nulle ; leurs retenues à la source sont gardées.
             lines = move.invoice_line_ids.filtered(
-                lambda l: l.display_type == "product" and l.tax_ids.filtered(lambda t: t.amount))
+                lambda l: l.display_type == "product"
+                and (l.tax_ids - self._eguitra_withholdings(l.tax_ids.ids)).filtered(lambda t: t.amount))
             if lines:
                 # Par la pièce (et non ligne à ligne) : le noyau recalcule alors les lignes de TVA.
                 exempt = move._eguitra_exempt_tax().ids
-                move.write({"invoice_line_ids": [Command.update(line.id, {"tax_ids": [Command.set(exempt)]})
-                                                 for line in lines]})
+                move.write({"invoice_line_ids": [
+                    Command.update(line.id, {"tax_ids": [Command.set(exempt + self._eguitra_withholdings(line.tax_ids.ids).ids)]})
+                    for line in lines]})
 
     def _eguitra_post_or_submit(self):
         """Validation demandée depuis les applications ; le moteur d'approbation la transforme
@@ -98,3 +126,10 @@ class AccountMove(models.Model):
         """État d'approbation affiché dans les applications (complété par eguitra_approval)."""
         self.ensure_one()
         return None
+
+    def _eguitra_payments_awaiting(self):
+        """Règlements de la pièce enregistrés mais retenus avant leur comptabilisation, en attente d'une
+        décision (circuit d'approbation, complété par eguitra_approval) : une liste de
+        {id, amount, currency, date, journal, request_id, level, pending_with} ; vide sans circuit."""
+        self.ensure_one()
+        return []
