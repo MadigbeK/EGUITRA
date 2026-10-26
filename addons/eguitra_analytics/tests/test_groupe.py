@@ -369,6 +369,15 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(set(body["sensitivities"]), {"tariff", "volume", "fuel", "payroll"})
         self.assertAlmostEqual(body["sensitivities"]["payroll"], -0.01 * 12 * 20_000_000)
         self.assertLess(body["sensitivities"]["fuel"], 0)
+        # Leviers du transport : le chiffre d'affaires des rotations (6 × 47,76 M sur Siguiri, 6 × 6 M sur
+        # Boké), et non les 1,78 Md de CA du groupe sur douze mois.
+        base, sens = body["sensitivity_base"], body["sensitivities"]
+        self.assertAlmostEqual(base["transport_revenue_12m"], 6 * 47_760_000 + 6 * 6_000_000, delta=1)
+        self.assertAlmostEqual(base["revenue_12m"], 6 * 130_000_000 + 1_000_000_000, delta=1)
+        self.assertAlmostEqual(sens["tariff"], 0.01 * base["transport_revenue_12m"], delta=1)
+        self.assertEqual(base["variable_source"], "coûts déclarés du transport")
+        self.assertAlmostEqual(sens["volume"], sens["tariff"] * (1 - base["variable_rate_pct"] / 100), delta=1)
+        self.assertLess(sens["volume"], sens["tariff"])
 
     def test_fiabilite(self):
         body = self._get("fiabilite")

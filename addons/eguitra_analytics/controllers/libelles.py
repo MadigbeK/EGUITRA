@@ -62,6 +62,7 @@ COLONNES = {
     "products": "Produits", "km": "Kilomètres", "volume": "Volume", "volume_m3": "Volume (m³)",
     "volume_m3_previous": "Volume N-1 (m³)", "rotations": "Rotations", "fuel": "Carburant (L)",
     "fuel_per_100km": "Consommation (L/100 km)", "fuel_12m": "Carburant 12 mois", "tariff": "Tarif",
+    "transport_revenue_12m": "CA transport 12 mois", "variable_source": "Source de la part variable",
     "price": "Effet prix", "mix": "Effet mix", "cost_per_km": "Coût au km", "direct_costs": "Coûts directs",
     "structure": "Charges de structure", "structure_per_km": "Structure au km", "structure_booked": "Structure comptabilisée",
     "structure_booked_per_km": "Structure comptabilisée au km", "net_result": "Résultat net",

@@ -674,15 +674,20 @@ export interface GroupePrevisions extends Envelope {
     revenue: Landing;
     ebe: Landing;
   };
-  /** GNF d'EBE annuel pour une hausse de 1 % de chaque levier. */
-  sensitivities: { tariff: number; volume: number; fuel: number; payroll: number };
+  /**
+   * GNF d'EBE annuel pour une hausse de 1 % de chaque levier. Tarif et volume portent sur le seul
+   * chiffre d'affaires du transport (null sans rotation sur douze mois).
+   */
+  sensitivities: { tariff: number | null; volume: number | null; fuel: number; payroll: number };
   sensitivity_base: {
     revenue_12m: number;
+    /** Chiffre d'affaires des rotations sur douze mois, base des leviers du transport. */
+    transport_revenue_12m?: number;
     ebe_12m: number;
     fuel_12m: number;
     payroll_12m: number;
     variable_rate_pct: number | null;
-    variable_source: string;
+    variable_source: string | null;
     unit: string;
   };
   method: string;

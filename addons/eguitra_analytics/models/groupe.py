@@ -2663,10 +2663,12 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return blocks, self._forecast_insights(ctx, results, landing)
 
     def _sensitivities(self, ctx):
-        """Effet sur l'EBE annuel d'une hausse de 1 %, sur les douze derniers mois : tarif = 1 % du chiffre
-        d'affaires (le prix passe entier dans l'EBE) ; volume = 1 % de la marge sur coûts variables (part
-        variable de la structure de coûts, à défaut celle des coûts déclarés du transport) ; carburant = -1 %
-        du carburant des rotations ; masse salariale = -1 % des charges de personnel (66)."""
+        """Effet sur l'EBE annuel d'une hausse de 1 %, sur les douze derniers mois. Les leviers du transport
+        portent sur le seul chiffre d'affaires des rotations, pas sur celui du groupe (BTP, immobilier,
+        négoce) : tarif = 1 % du chiffre d'affaires du transport (le prix passe entier dans l'EBE) ; volume
+        = 1 % de sa marge sur coûts variables (part variable des coûts déclarés des rotations, à défaut celle
+        de la structure de coûts) ; sans rotation, ces deux leviers valent None. Carburant = -1 % du
+        carburant des rotations ; masse salariale = -1 % des charges de personnel (66), toutes activités."""
         monthly = self._monthly_pl(ctx, 24)
         last12 = list(monthly)[-12:]
         revenue = sum(monthly[k]["XB"] for k in last12)
@@ -2679,22 +2681,23 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 fuel += r["fuel_cost"] or 0.0
                 transport_revenue += r["revenue"] or 0.0
                 transport_costs += (r["total_cost"] or 0.0) + (r["shortage_net_cost"] or 0.0)
-        cost = self._cost_structure(ctx)
-        if cost["reliable"]:
-            variable, source = cost["variable_rate"] / 100, "structure de coûts"
-        elif transport_revenue:
-            variable, source = min(1.0, transport_costs / transport_revenue), "coûts déclarés du transport"
-        else:
-            variable, source = None, None
+        variable, source = None, None
+        if transport_revenue > 0:
+            if transport_costs > 0:
+                variable, source = min(1.0, transport_costs / transport_revenue), "coûts déclarés du transport"
+            else:
+                cost = self._cost_structure(ctx)
+                if cost["reliable"]:
+                    variable, source = cost["variable_rate"] / 100, "structure de coûts"
         sensitivities = {
-            "tariff": revenue * 0.01,
-            "volume": revenue * (1 - variable) * 0.01 if variable is not None else None,
+            "tariff": transport_revenue * 0.01 if transport_revenue > 0 else None,
+            "volume": transport_revenue * (1 - variable) * 0.01 if variable is not None else None,
             "fuel": -fuel * 0.01,
             "payroll": -payroll * 0.01,
         }
-        base = {"revenue_12m": revenue, "ebe_12m": ebe, "fuel_12m": fuel, "payroll_12m": payroll,
-                "variable_rate_pct": variable * 100 if variable is not None else None, "variable_source": source,
-                "unit": "GNF d'EBE annuel pour une hausse de 1 %"}
+        base = {"revenue_12m": revenue, "transport_revenue_12m": transport_revenue, "ebe_12m": ebe, "fuel_12m": fuel,
+                "payroll_12m": payroll, "variable_rate_pct": variable * 100 if variable is not None else None,
+                "variable_source": source, "unit": "GNF d'EBE annuel pour une hausse de 1 %"}
         return sensitivities, base
 
     def _forecast_insights(self, ctx, results, landing):

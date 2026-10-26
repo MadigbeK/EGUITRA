@@ -4,7 +4,7 @@ import { useState } from "react";
 import { RotateCcw, Sparkles } from "@/components/icons";
 import { Anneau, Button, Card, FEUILLE, Valeur, cx } from "@/components/ui";
 import { Cascade, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, moisCourt, pctOu, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, gnfOu, moisCourt, pctOu, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { ForecastBlock, GroupePrevisions, Landing, WaterfallStep } from "@/lib/analyse-types";
 import { fmtGNF } from "@/lib/format";
@@ -129,7 +129,10 @@ function Atterrissage({ titre, cible }: { titre: string; cible: Landing }) {
 function Simulateur({ d }: { d: GroupePrevisions }) {
   const [valeurs, setValeurs] = useState<Record<keyof GroupePrevisions["sensitivities"], number>>({ tariff: 0, volume: 0, fuel: 0, payroll: 0 });
   const base = d.sensitivity_base?.ebe_12m ?? 0;
-  const effets = LEVIERS.map((lv) => ({ ...lv, effet: (d.sensitivities?.[lv.key] ?? 0) * valeurs[lv.key] }));
+  // Les leviers du transport n'existent qu'avec des rotations sur douze mois (le noyau les donne à null).
+  const leviers = LEVIERS.filter((lv) => d.sensitivities?.[lv.key] !== null && d.sensitivities?.[lv.key] !== undefined);
+  const sansTransport = leviers.length < LEVIERS.length;
+  const effets = leviers.map((lv) => ({ ...lv, effet: (d.sensitivities?.[lv.key] ?? 0) * valeurs[lv.key] }));
   const delta = effets.reduce((s, e) => s + e.effet, 0);
   const ebe = base + delta;
   const restant = d.landing.months_remaining;
@@ -144,7 +147,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
     { label: "Gasoil +8 %", v: { fuel: 8 } },
     { label: "Saison sèche : volume +6 %", v: { volume: 6 } },
     { label: "Masse salariale −4 %", v: { payroll: -4 } },
-  ];
+  ].filter((s) => Object.keys(s.v).every((k) => leviers.some((lv) => lv.key === k)));
   const sb = d.sensitivity_base;
   return (
     <Card title={<span id="simulateur">Simulateur : et si…</span>} actions={<span className="text-[12.5px] text-muted">{sb?.unit ?? "GNF d'EBE annuel pour une hausse de 1 %"}</span>}>
@@ -153,7 +156,8 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
       ) : (
         <div className="grid gap-6 xl:grid-cols-12">
           <div className="space-y-5 xl:col-span-5">
-            {LEVIERS.map((lv) => {
+            {sansTransport && <p className="rounded-xl border border-line bg-panel-2/60 px-3 py-2 text-[12.5px] leading-snug text-muted">Aucune rotation sur les douze derniers mois : les leviers du transport (tarif, volume) ne s&apos;appliquent pas.</p>}
+            {leviers.map((lv) => {
               const v = valeurs[lv.key];
               const sens = d.sensitivities?.[lv.key] ?? 0;
               return (
@@ -215,7 +219,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
             <div className="mt-4">
               <Cascade label="Cascade de l'EBE simulé : base, leviers, résultat" steps={steps} hauteur={260} format={(v) => fmtGNF(v)} />
             </div>
-            <p className="mt-2 text-[12px] leading-snug text-muted">Les effets s&apos;additionnent linéairement autour de la structure des douze derniers mois : valable pour des variations de quelques pour cent, pas pour un changement de modèle. Référence : CA {fmtShort(sb.revenue_12m)} GNF, carburant {fmtShort(sb.fuel_12m)} GNF, masse salariale {fmtShort(sb.payroll_12m)} GNF, part variable {pctOu(sb.variable_rate_pct, 0)} ({sb.variable_source}).</p>
+            <p className="mt-2 text-[12px] leading-snug text-muted">Les effets s&apos;additionnent linéairement autour de la structure des douze derniers mois : valable pour des variations de quelques pour cent, pas pour un changement de modèle. Référence : CA du transport {gnfOu(sb.transport_revenue_12m ?? null)} (tarif et volume), carburant {gnfOu(sb.fuel_12m)}, masse salariale de toutes les activités {gnfOu(sb.payroll_12m)}{sb.variable_rate_pct !== null ? `, part variable du transport ${pctOu(sb.variable_rate_pct, 0)}${sb.variable_source ? ` (${sb.variable_source})` : ""}` : ""}.</p>
           </div>
         </div>
       )}
