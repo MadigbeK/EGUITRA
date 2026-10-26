@@ -6,7 +6,7 @@ import { AlertTriangle, Check, CloudOff, Loader2, LogOut, Pencil, RefreshCw, Tra
 import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, classesBouton, cx, demanderConfirmation, tonEtat, useMouvementReduit } from "@/components/ui";
 import { ApiError, DelaiDepasse } from "@/lib/api-client";
 import { cache, claimCache, dernierEnvoi, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
-import { INSECABLE, fmtDate, fmtInt, fmtM3, fmtVolume, pluriel } from "@/lib/format";
+import { AIDE_NOMBRE, INSECABLE, fmtDate, fmtInt, fmtM3, fmtVolume, lireNombre, nombreIllisible, pluriel } from "@/lib/format";
 import { SESSION_EXPIREE, appelBureau, sessionExpiree } from "./bureau";
 
 interface Referentials {
@@ -75,8 +75,17 @@ const STATE_LABEL: Record<SentRotation["state"], string> = {
 
 /** Champs sans lesquels le bureau ne peut pas traiter la rotation, dans l'ordre de l'écran. */
 const REQUIS = ["vehicle_id", "partner_id", "route_id", "volume_loaded"] as const;
-type Requis = (typeof REQUIS)[number];
-type Erreurs = Partial<Record<Requis, string>>;
+/**
+ * Champ signalé en erreur : un champ requis, le volume livré, une mesure (« m:code ») ou un frais
+ * (« f:code ») dont la saisie n'est pas un nombre lisible.
+ */
+type Champ = string;
+type Erreurs = Partial<Record<Champ, string>>;
+
+/** Champs de l'écran dans leur ordre : le premier en erreur reçoit le focus. */
+function ordreChamps(refs: Referentials | null | undefined): Champ[] {
+  return [...REQUIS, "volume_delivered", ...(refs?.measures ?? []).map((m) => `m:${m.code}`), ...(refs?.costs ?? []).map((c) => `f:${c.code}`)];
+}
 
 /** Retour d'une action. `reseau` : il tient au réseau (icône du nuage barré). */
 interface Retour {
@@ -152,7 +161,18 @@ const blank = (): Form => ({
   uuid: null, nouveau_uuid: newUuid(), date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
   delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
-const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+/**
+ * Nombre saisi, à la française (lireNombre : « 36,5 », « 1 500 000 ») ; vide ou illisible : 0. Le
+ * contrôle avant l'enregistrement refuse une saisie illisible (« 36.500 », « 2.500.000 ») au lieu de
+ * l'envoyer lue de travers.
+ */
+const num = (v: string | undefined) => lireNombre(v) ?? 0;
+
+/** Message sous un champ de nombre : illisible, ou négatif (un volume, une mesure, un frais sont positifs). */
+function erreurNombre(v: string | undefined): string | undefined {
+  if (nombreIllisible(v)) return AIDE_NOMBRE;
+  return num(v) < 0 ? "Indiquez un nombre positif." : undefined;
+}
 
 /** Saisie en cours gardée sur le téléphone (application fermée par Android, photo, session expirée). */
 interface Brouillon {
@@ -169,19 +189,34 @@ function formVide(f: Form): boolean {
     && vide(f.volume_delivered) && vide(f.note) && Object.values(f.costs ?? {}).every(vide) && Object.values(f.measures ?? {}).every(vide);
 }
 
-/** Contrôle avant enregistrement (mêmes règles qu'avant) : un message sous chaque champ manquant. */
+/**
+ * Contrôle avant enregistrement : un message sous chaque champ manquant, et sous chaque nombre
+ * illisible ou négatif (volumes, mesures, frais).
+ */
 function controler(f: Form): Erreurs {
   const e: Erreurs = {};
   if (!f.vehicle_id) e.vehicle_id = "Choisissez le camion";
   if (!f.partner_id) e.partner_id = "Choisissez le client";
   if (!f.route_id) e.route_id = "Choisissez la route";
-  if (!num(f.volume_loaded) && !num(f.volume_delivered)) e.volume_loaded = "Indiquez le volume chargé";
+  const charge = erreurNombre(f.volume_loaded);
+  const livre = erreurNombre(f.volume_delivered);
+  if (charge) e.volume_loaded = charge;
+  if (livre) e.volume_delivered = livre;
+  if (!charge && !livre && !num(f.volume_loaded) && !num(f.volume_delivered)) e.volume_loaded = "Indiquez le volume chargé";
+  for (const [k, v] of Object.entries(f.measures ?? {})) {
+    const m = erreurNombre(v);
+    if (m) e[`m:${k}`] = m;
+  }
+  for (const [k, v] of Object.entries(f.costs ?? {})) {
+    const c = erreurNombre(v);
+    if (c) e[`f:${k}`] = c;
+  }
   return e;
 }
 
 /**
  * Frais en GNF groupés par milliers pendant la frappe (« 1 500 000 ») : un zéro de trop se voit.
- * num() retire les espaces avant l'envoi ; une saisie qui n'est pas un entier reste telle quelle.
+ * lireNombre ignore ces espaces à l'envoi ; une saisie qui n'est pas un entier reste telle quelle.
  */
 function grouper(v: string): string {
   const brut = v.replace(/\s/g, "");
@@ -286,7 +321,8 @@ function toPayload(f: Form): Record<string, unknown> {
 
 function fromPayload(item: QueuedRotation, refs: Referentials): Form {
   const p = item.payload;
-  const s = (k: string) => (p[k] === undefined || p[k] === null ? "" : String(p[k]));
+  // Nombres réécrits à la française (« 36,125 ») : lireNombre refuse un point suivi de trois chiffres.
+  const s = (k: string) => (p[k] === undefined || p[k] === null ? "" : typeof p[k] === "number" ? String(p[k]).replace(".", ",") : String(p[k]));
   const pick = (list: Array<{ code: string }>) => Object.fromEntries(list.map((c) => [c.code, s(c.code)]).filter(([, v]) => v));
   return {
     uuid: item.client_uuid, revision: item.revision ?? 1, envoyee: item.envoyee, created_at: item.created_at,
@@ -635,7 +671,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }, [loadQueue, loadRefs, loadSent, sync, me.id]);
 
   /** Le champ fautif vient au milieu de l'écran et reçoit le focus. */
-  function allerAuChamp(k: Requis) {
+  function allerAuChamp(k: Champ) {
     const el = document.getElementById(`rotation-${k}`);
     if (!el) return;
     el.scrollIntoView({ block: "center", behavior: reduit ? "auto" : "smooth" });
@@ -643,7 +679,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   }
 
   /** Une erreur disparaît dès que l'agent touche à son champ. */
-  function corriger(k: Requis) {
+  function corriger(k: Champ) {
     setErreurs((e) => {
       if (!e[k]) return e;
       const suite = { ...e };
@@ -661,11 +697,17 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       setNotice(null);
       const fautes = controler(form);
       setErreurs(fautes);
-      const premier = REQUIS.find((k) => fautes[k]);
+      const premier = ordreChamps(refs).find((k) => fautes[k]) ?? Object.keys(fautes)[0];
       if (premier) {
         const n = Object.keys(fautes).length;
-        annoncer({ tone: "danger", text: n > 1 ? `${n} champs à compléter, signalés en rouge.` : `${fautes[premier]}.` });
-        allerAuChamp(premier);
+        annoncer({ tone: "danger", text: n > 1 ? `${n} champs à compléter ou à corriger, signalés en rouge.` : `${(fautes[premier] ?? "").replace(/\.$/, "")}.` });
+        // Un frais en erreur dans la partie repliée : elle s'ouvre (le champ reçoit le focus ensuite).
+        if (Object.keys(fautes).some((k) => k.startsWith("f:")) && !showCosts) {
+          setShowCosts(true);
+          window.setTimeout(() => allerAuChamp(premier), 0);
+        } else {
+          allerAuChamp(premier);
+        }
         return;
       }
       const vehicle = refs?.vehicles.find((v) => String(v.id) === form.vehicle_id);
@@ -801,7 +843,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     setView(v);
   }
 
-  const invalide = (k: Requis) => (erreurs[k] ? true : undefined);
+  const invalide = (k: Champ) => (erreurs[k] ? true : undefined);
   const champ = cx("min-h-12 text-base", SOUS_BARRE, INVALIDE);
   const champVolume = cx("min-h-14 font-compteur text-[28px] font-semibold tracking-wide", SOUS_BARRE, INVALIDE);
   // À envoyer : en attente ou refusées ; les corrections que le bureau n'a pas prises ne partent plus.
@@ -907,9 +949,9 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
 
               <section className={cx(FEUILLE, "grid grid-cols-2 gap-3 p-4")}>
                 <Field label="Volume chargé (m³)" error={erreurs.volume_loaded} className={LIBELLE}><Input id="rotation-volume_loaded" aria-invalid={invalide("volume_loaded")} className={champVolume} inputMode="decimal" value={form.volume_loaded} onChange={(e) => { corriger("volume_loaded"); setForm({ ...form, volume_loaded: e.target.value }); }} /></Field>
-                <Field label="Volume livré (m³)" className={LIBELLE}><Input className={cx(champVolume, "placeholder:font-sans placeholder:text-sm placeholder:font-normal")} inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => { corriger("volume_loaded"); setForm({ ...form, volume_delivered: e.target.value }); }} /></Field>
+                <Field label="Volume livré (m³)" error={erreurs.volume_delivered} className={LIBELLE}><Input id="rotation-volume_delivered" aria-invalid={invalide("volume_delivered")} className={cx(champVolume, "placeholder:font-sans placeholder:text-sm placeholder:font-normal")} inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => { corriger("volume_loaded"); corriger("volume_delivered"); setForm({ ...form, volume_delivered: e.target.value }); }} /></Field>
                 {(refs.measures ?? []).map((m) => (
-                  <Field key={m.code} label={m.label} className={LIBELLE}><Input className={champ} inputMode="decimal" value={form.measures[m.code] ?? ""} onChange={(e) => setForm({ ...form, measures: { ...form.measures, [m.code]: e.target.value } })} /></Field>
+                  <Field key={m.code} label={m.label} error={erreurs[`m:${m.code}`]} className={LIBELLE}><Input id={`rotation-m:${m.code}`} aria-invalid={invalide(`m:${m.code}`)} className={champ} inputMode="decimal" value={form.measures[m.code] ?? ""} onChange={(e) => { corriger(`m:${m.code}`); setForm({ ...form, measures: { ...form.measures, [m.code]: e.target.value } }); }} /></Field>
                 ))}
               </section>
 
@@ -921,7 +963,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                 {showCosts && (
                   <div className="mt-3 grid grid-cols-2 items-end gap-3 border-t border-line pt-4">
                     {refs.costs.map((c) => (
-                      <Field key={c.code} label={`${c.label} (GNF)`} className={LIBELLE}><Input className={cx(champ, "font-compteur font-semibold tracking-wide")} inputMode="numeric" value={grouper(form.costs[c.code] ?? "")} onChange={(e) => setForm({ ...form, costs: { ...form.costs, [c.code]: e.target.value } })} /></Field>
+                      <Field key={c.code} label={`${c.label} (GNF)`} error={erreurs[`f:${c.code}`]} className={LIBELLE}><Input id={`rotation-f:${c.code}`} aria-invalid={invalide(`f:${c.code}`)} className={cx(champ, "font-compteur font-semibold tracking-wide")} inputMode="numeric" value={grouper(form.costs[c.code] ?? "")} onChange={(e) => { corriger(`f:${c.code}`); setForm({ ...form, costs: { ...form.costs, [c.code]: e.target.value } }); }} /></Field>
                     ))}
                   </div>
                 )}
