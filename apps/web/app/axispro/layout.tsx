@@ -11,7 +11,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
   const me = await requireUser("axispro");
   return (
     <AppShell app="axispro" me={me} actions={<ClocheCabinet />}>
-      <FournisseurMoi moi={{ id: me.id, name: me.name, cabinet: me.profiles.includes("cabinet"), scelle: me.profiles.includes("associe") || me.profiles.includes("direction") }}>{children}</FournisseurMoi>
+      <FournisseurMoi moi={{ id: me.id, name: me.name, cabinet: me.profiles.includes("cabinet"), scelle: me.profiles.includes("associe") || (me.profiles.includes("direction") && !me.profiles.includes("admin")) }}>{children}</FournisseurMoi>
     </AppShell>
   );
 }
