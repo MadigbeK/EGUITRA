@@ -261,17 +261,23 @@ les intérêts hors échéancier. « Régler » est réservé à la caisse et au
 
 ## Clôtures et contrôles (Comptabilité > Clôtures et contrôles)
 
-Clôture mensuelle : la plateforme exécute les contrôles (équilibres, compte de passage, relevés
-rapprochés et soldes des relevés égaux au solde comptable, pièces en attente, encours de dette
-conforme aux échéanciers, échéances rapprochées des relevés, centres de coût imputés avec leur
-activité…). Une anomalie bloquante empêche la clôture. La clôture passe ensuite, chacune une seule
-fois : les dotations aux amortissements du mois, la liquidation de la TVA (pièce « TVA-mm/aaaa »
-datée de la fin du mois, TVA due au 4441 ou crédit reporté au 4451), les factures à établir des
-rotations validées non facturées (pièce « FAE-mm/aaaa », extournée le premier jour du mois suivant)
-et, si des comptes sont en devise, la réévaluation au cours de clôture. Elle verrouille enfin les
-écritures et scelle la période : l'empreinte figure sur le procès-verbal de clôture, à imprimer et
-conserver hors du système ; les contrôles d'intégrité la recalculent. La réouverture est réservée et
-tracée dans le registre.
+Clôture mensuelle : un mois se clôture une fois terminé, à partir du lendemain de son dernier jour.
+La plateforme exécute les contrôles (équilibres, compte de passage, relevés rapprochés et soldes des
+relevés égaux au solde comptable, pièces en attente, alertes bloquantes au dernier jour du mois,
+encours de dette conforme aux échéanciers, échéances rapprochées des relevés, centres de coût imputés
+avec leur activité, références et numérotation…). Une anomalie bloquante empêche la clôture. La
+clôture passe ensuite, chacune une seule fois : les dotations aux amortissements du mois, la
+liquidation de la TVA (pièce « TVA-mm/aaaa » datée de la fin du mois, TVA due au 4441 ou crédit
+reporté au 4449, à défaut gardé au 445), les factures à établir des rotations validées non facturées
+(pièce « FAE-mm/aaaa », extournée le premier jour du mois suivant) et, si des comptes sont en devise,
+la réévaluation au cours de clôture : banques en devise, écarts de conversion des créances et dettes
+encore dues à la fin du mois (478, 479, extournés le mois suivant) et, au dernier mois de
+l'exercice, la provision pour perte de change (pièce « PDC-mm/aaaa », 6971 et 194, reprise le
+premier jour de l'exercice suivant). Elle verrouille enfin les écritures et scelle la période :
+l'empreinte figure sur le procès-verbal de clôture, à imprimer et conserver hors du système ; les
+contrôles d'intégrité la recalculent (un nouveau journal ou un changement de raison sociale ne la
+modifient pas, toute retouche d'une écriture du mois la fait signaler). La réouverture est réservée
+et tracée dans le registre.
 
 Validation de la reprise (même écran) : la valeur de référence de chaque indicateur du classeur est
 chargée depuis le fichier fourni à la reprise ; la plateforme recalcule les 26 indicateurs
@@ -324,6 +330,11 @@ exportés sont ceux du tableau de bord (un seul calcul), arrêtés à la date d'
 « Consolidé du groupe » donne le compte de résultat et le bilan de chaque société, les éliminations
 des opérations entre sociétés du groupe (ventes et achats réciproques, créances et dettes, comptes
 courants) et le total du groupe ; il demande un compte ouvert aux deux sociétés.
+
+Au tableau des flux, une immobilisation achetée et non encore payée n'est ni un décaissement
+d'investissement ni une ressource d'exploitation : seule la part payée passe en acquisitions ; de
+même, une cession non encaissée (créance 485) ne compte pas encore en encaissement. Le fichier SAF-T
+porte sur une période d'un seul exercice.
 
 ## Fiscalité (Comptabilité > Fiscalité)
 
