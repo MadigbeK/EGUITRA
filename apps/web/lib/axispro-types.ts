@@ -732,3 +732,18 @@ export type PortefeuilleDevises = Omit<Portfolio, "funnel" | "sectors" | "projec
   follow_ups: FinancementDevise[];
   fees: Portfolio["fees"] & { currency?: string };
 };
+
+/** Pièce standard d'une version de la grille (GET /axispro/policies/<id>, `documents`). */
+export interface PieceStandard {
+  id: number;
+  code: string;
+  name: string;
+  category: string | null;
+  gate_id: number | null;
+  required: boolean;
+  guidance: string | null;
+  /** Codes des critères justifiés par la pièce. */
+  criteria: string[];
+  /** Identifiants de ces critères (absents des réponses antérieures). */
+  criterion_ids?: number[];
+}
