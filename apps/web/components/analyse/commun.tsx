@@ -888,9 +888,13 @@ export function KpiContrat({ kpi }: { kpi: Kpi }) {
   const ref = kpi.previous !== null && (kpi.previous !== 0 || kpi.delta_pct !== null) ? `N-1 ${fmtValeur(kpi.previous, kpi.unit)}` : null;
   const tendance = nombres(kpi.trend);
   const statut = STATUT[kpi.status] ?? "neutral";
+  // Un taux (marge, réalisation) ou un score varie en points : de 34,7 % à 32,1 %, « 2,6 pts », et non
+  // les 7,4 % relatifs du noyau, qui se liraient comme un écart de taux.
+  const enPoints = kpi.unit === "pct" || kpi.unit === "score";
+  const variation = enPoints ? (kpi.value !== null && kpi.previous !== null ? kpi.value - kpi.previous : null) : kpi.delta_pct;
   return (
     <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
-      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
+      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={variation} deltaUnite={enPoints ? "pts" : "pct"} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
         <div className="px-5 pb-3">
           <Sparkline values={tendance} color={statut === "danger" ? COULEUR.mauvais : statut === "warn" ? COULEUR.alerte : COULEUR.accent} height={32} />
