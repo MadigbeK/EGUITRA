@@ -837,10 +837,15 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     // La déconnexion efface aussi le brouillon (listes du compte) : la saisie non enregistrée est perdue.
     const enCours = formVide(form) ? "" : " La saisie en cours, non enregistrée, sera effacée.";
     if (!(await demanderConfirmation(`${question}${enCours}`, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
-    // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
+    // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone. Le
+    // message dit la cause : pas de réseau, ou refus du serveur (proxy pendant une mise en production).
     const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
-    if (!res?.ok) {
+    if (!res) {
       setNotice({ tone: "warn", text: "Déconnexion impossible sans réseau : réessayez au retour du réseau." });
+      return;
+    }
+    if (!res.ok) {
+      setNotice({ tone: "warn", text: `Déconnexion refusée par le serveur (erreur ${res.status}) : réessayez dans un instant. Rien n'a été effacé du téléphone.` });
       return;
     }
     // Plus aucune écriture du brouillon (le départ de la page la déclencherait après l'effacement).
