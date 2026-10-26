@@ -289,7 +289,16 @@ export function MoveForm({
         {error && <Notice tone="danger">{error}</Notice>}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Field label={sale ? "Client" : "Fournisseur"} className="md:col-span-2">
-            <PartnerPicker value={partner} onChange={setPartner} kind={sale ? "customer" : "supplier"} />
+            <PartnerPicker
+              value={partner}
+              onChange={(p) => {
+                // Un engagement appartient à son fournisseur : gardé, il ferait refuser la pièce (« Engagement
+                // inconnu ») sans que l'utilisateur puisse le retirer.
+                if (p?.id !== partner?.id) setCommitmentId("");
+                setPartner(p);
+              }}
+              kind={sale ? "customer" : "supplier"}
+            />
           </Field>
           <Field label="Date de la pièce">
             <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
