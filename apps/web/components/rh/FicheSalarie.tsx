@@ -7,6 +7,7 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kp
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
+import type { Me } from "@/lib/types";
 import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, accord, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
@@ -20,9 +21,12 @@ export function FicheSalarie({ id }: { id: string }) {
   const [onglet, setOnglet] = useState<Onglet>("identite");
   const [edition, setEdition] = useState(false);
   const [sortie, setSortie] = useState(false);
+  const { data: moi } = useApi<Me>("/auth/me");
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!e || !meta) return <Etat error={erreurMeta} onRetry={() => rafraichirMeta()} label="Chargement du dossier…" />;
-  const ecrit = meta.can_write;
+  // Quatre yeux (refuse_own du noyau) : personne ne modifie son propre dossier ni ses éléments de paie.
+  const propre = Boolean(moi && e.user?.id === moi.id);
+  const ecrit = meta.can_write && !propre;
   const rafraichir = () => void mutate();
 
   return (
@@ -56,6 +60,11 @@ export function FicheSalarie({ id }: { id: string }) {
           )
         }
       />
+      {propre && meta.can_write && (
+        <div className="mb-4">
+          <Notice tone="neutral">Votre propre dossier : un autre membre du service RH le modifie.</Notice>
+        </div>
+      )}
       {e.issues.length > 0 && (
         <div className="mb-4">
           <Notice tone="warn">À compléter : {e.issues.join(" ; ")}.</Notice>
