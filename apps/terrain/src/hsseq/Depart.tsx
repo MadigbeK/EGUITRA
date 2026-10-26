@@ -1,10 +1,13 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { BackHandler, KeyboardAvoidingView, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ApiError } from "../api/errors";
+import { peutOuvrir } from "../accueil/modules";
+import { revenir } from "../accueil/retour";
+import { ApiError, DelaiDepasse } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
+import { useConfirmerCode } from "../auth/Verrou";
 import { DELAI_LISTE } from "../config";
 import { fmtDate, heure, pluriel } from "../format";
 import { useEnvoi } from "../sync/Envoi";
@@ -14,15 +17,28 @@ import { Cadenas } from "../ui/icones";
 import { espaces, mesures, polices, rayons, textes, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
 import type { LockEvaluation, LockReason, MyRotation, MyRotations } from "./types";
-import { derogeables, etatDepart, JAMAIS_DEROGEABLES, JUSTIFICATION_MIN, motifsOuverts, TAMPON_DEPART, titreMotif } from "./verrou";
+import { derogeables, etatDepart, JAMAIS_DEROGEABLES, JUSTIFICATION_MIN, motifsOuverts, sansDoublon, TAMPON_DEPART, titreMotif } from "./verrou";
 
 const CLE = "hsseq.me.rotations";
 
 interface Garde {
   liste: MyRotations;
-  /** Heure de la dernière réponse du bureau, en millisecondes. */
+  /** Heure de la dernière réponse du bureau pour toute la liste, en millisecondes. */
   at: number;
+  /**
+   * Heure de la dernière réponse pour une rotation vérifiée seule (évaluation, départ refusé), ou
+   * null après un échec de vérification : seule cette rotation est rafraîchie, ou dite non vérifiée.
+   */
+  verifs?: Record<string, number | null>;
 }
+
+/** Heure de la dernière réponse du bureau qui vaut pour cette rotation. */
+function verifieA(garde: Garde, r: MyRotation): number | null {
+  const propre = garde.verifs?.[String(r.id)];
+  return propre === undefined ? garde.at : propre;
+}
+
+const heureDe = (ms: number | null) => (ms === null ? "–" : heure(new Date(ms).toISOString()));
 
 /**
  * Départs du jour et verrou (système « terrain », § 3.8 ; contrat HSSEQ, § 9). Le conducteur voit
@@ -45,6 +61,9 @@ function Contenu({ user }: { user: Utilisateur }) {
   const { echanger } = envoi;
   const { c } = useTerrain();
   const chefDeParc = user.profiles.includes("exploitation");
+  // Le conducteur lit « votre permis » ; le chef de parc et le Responsable HSSEQ, « le dossier du conducteur ».
+  const pourConducteur = !chefDeParc && !user.profiles.includes("hsseq") && user.profiles.includes("conducteur");
+  const titre = (r: LockReason) => titreMotif(r, { conducteur: pourConducteur });
   const [garde, setGarde] = useState<Garde | null | undefined>(undefined);
   const [choisie, setChoisie] = useState<number | null>(null);
   const [chargement, setChargement] = useState(false);
@@ -58,7 +77,7 @@ function Contenu({ user }: { user: Utilisateur }) {
     if (cache) setGarde((g) => g ?? cache);
     try {
       const liste = await echanger(() => api.appel<MyRotations>("GET", "/hsseq/me/rotations", { timeout: DELAI_LISTE }));
-      const frais = { liste, at: Date.now() };
+      const frais: Garde = { liste, at: Date.now() };
       setGarde(frais);
       await store.cache.set(CLE, frais);
     } catch {
@@ -77,10 +96,27 @@ function Contenu({ user }: { user: Utilisateur }) {
 
   const rotation = garde?.liste.items.find((r) => r.id === choisie) ?? null;
 
-  /** Remplace une rotation de la liste gardée, après une réponse du bureau. */
-  const remplacer = async (r: MyRotation) => {
+  // Retour Android sur la fiche d'un départ : retour à la liste, pas à « Ma journée ».
+  useEffect(() => {
+    if (choisie === null) return;
+    const abonnement = BackHandler.addEventListener("hardwareBackPress", () => {
+      setChoisie(null);
+      return true;
+    });
+    return () => abonnement.remove();
+  }, [choisie]);
+
+  /**
+   * Remplace une rotation de la liste gardée. `verifie` : heure de la réponse du bureau pour cette
+   * seule rotation, ou null si sa vérification a échoué. Les autres gardent leur propre heure.
+   */
+  const remplacer = async (r: MyRotation, verifie: number | null = Date.now()) => {
     if (!garde) return;
-    const suite = { liste: { ...garde.liste, items: garde.liste.items.map((x) => (x.id === r.id ? r : x)) }, at: Date.now() };
+    const suite: Garde = {
+      liste: { ...garde.liste, items: garde.liste.items.map((x) => (x.id === r.id ? r : x)) },
+      at: garde.at,
+      verifs: { ...garde.verifs, [String(r.id)]: verifie },
+    };
     setGarde(suite);
     await store.cache.set(CLE, suite).catch(() => undefined);
   };
@@ -96,6 +132,8 @@ function Contenu({ user }: { user: Utilisateur }) {
       if (ev.allowed) vibrer.succes();
       else vibrer.erreur();
     } catch (e) {
+      // Sans réponse du bureau, la rotation n'est plus vérifiée : l'écran ne garde pas « Autorisé ».
+      if (!(e instanceof ApiError)) await remplacer(r, null);
       setRetour({ ton: "attention", texte: e instanceof ApiError ? e.message : "Départ non vérifié : le bureau n'a pas pu être joint. Nouvel essai au retour du réseau." });
     } finally {
       setAction(false);
@@ -117,6 +155,11 @@ function Contenu({ user }: { user: Utilisateur }) {
         const blockers = (e.extra.blockers as LockReason[] | undefined) ?? [];
         await remplacer({ ...r, lock: { allowed: false, pending_checks_only: false, reasons: blockers.map((b) => ({ ...b, pending: b.pending ?? false, waiver_id: null })), warnings: [], lock_active: true } });
         setRetour({ ton: "danger", texte: `Départ refusé par le bureau : ${pluriel(blockers.length, "motif")}.` });
+      } else if (e instanceof DelaiDepasse) {
+        // La demande a pu arriver : la liste du bureau dit si la rotation est partie.
+        await remplacer(r, null);
+        setRetour({ ton: "attention", texte: "Le bureau n'a pas répondu à temps : le départ a peut-être été enregistré. Vérification en cours." });
+        void charger();
       } else {
         setRetour({ ton: "attention", texte: e instanceof ApiError ? e.message : "Départ impossible sans réseau : le bureau doit le confirmer." });
       }
@@ -130,7 +173,7 @@ function Contenu({ user }: { user: Utilisateur }) {
       titre="Départ"
       sousTitre={rotation ? `${rotation.vehicle?.name ?? "Rotation"}${rotation.route_name ? `, ${rotation.route_name}` : ""}` : `Départs du ${fmtDate(garde?.liste.date ?? "")}`}
       gauche={(
-        <Pressable accessibilityRole="button" accessibilityLabel={rotation ? "Retour aux départs du jour" : "Retour à Ma journée"} onPress={() => (rotation ? setChoisie(null) : router.back())} style={styles.retour}>
+        <Pressable accessibilityRole="button" accessibilityLabel={rotation ? "Retour aux départs du jour" : "Retour à Ma journée"} onPress={() => (rotation ? setChoisie(null) : revenir(router))} style={styles.retour}>
           <Text style={[textes.libelle, { color: c.enteteEncre }]}>‹</Text>
         </Pressable>
       )}
@@ -161,7 +204,7 @@ function Contenu({ user }: { user: Utilisateur }) {
             <Texte ton="second" style={styles.vide}>{chefDeParc ? "Aucun départ prévu aujourd'hui sur vos sites." : "Aucune rotation à votre nom aujourd'hui."}</Texte>
           ) : null}
           {garde.liste.items.map((r) => {
-            const etat = TAMPON_DEPART[etatDepart(r, envoi.online, garde.at)];
+            const etat = TAMPON_DEPART[etatDepart(r, envoi.online, verifieA(garde, r))];
             const ouverts = r.lock ? motifsOuverts(r.lock.reasons).length : 0;
             return (
               <Pressable key={r.id} accessibilityRole="button" accessibilityLabel={`${r.vehicle?.name ?? "Rotation"}, ${etat.mot}`} onPress={() => { setRetour(null); setChoisie(r.id); }} android_ripple={{ color: c.voile }}>
@@ -189,11 +232,15 @@ function Contenu({ user }: { user: Utilisateur }) {
   }
 
   // Fiche d'un départ.
-  const etat = etatDepart(rotation, envoi.online, garde.at);
+  const verifie = verifieA(garde, rotation);
+  const etat = etatDepart(rotation, envoi.online, verifie);
   const lock = rotation.lock;
-  const ouverts = lock ? motifsOuverts(lock.reasons) : [];
-  const levables = lock ? derogeables(lock.reasons) : [];
-  const avertissements = lock ? [...lock.warnings, ...lock.reasons.filter((r) => r.severity === "warn")] : [];
+  const motifs = lock ? sansDoublon(lock.reasons) : [];
+  const ouverts = motifsOuverts(motifs);
+  const levables = derogeables(motifs);
+  const avertissements = lock ? sansDoublon([...lock.warnings, ...lock.reasons.filter((r) => r.severity === "warn")]) : [];
+  const controle = peutOuvrir(user.profiles, "controle");
+  const alcootest = peutOuvrir(user.profiles, "alcootest");
   return (
     <Ecran>
       {entete}
@@ -210,7 +257,7 @@ function Contenu({ user }: { user: Utilisateur }) {
         ) : etat === "autorise" ? (
           <Feuille style={{ borderColor: c.ok, borderWidth: traits.fort, backgroundColor: c.okDoux }}>
             <Texte variante="titreFort" ton="ok">Départ autorisé</Texte>
-            <Texte>Le bureau a vérifié le départ à {heure(new Date(garde.at).toISOString())}.</Texte>
+            <Texte>Le bureau a vérifié le départ à {heureDe(verifie)}.</Texte>
           </Feuille>
         ) : etat === "a_controler" ? (
           <Feuille style={{ borderColor: c.warn, borderWidth: traits.fort, backgroundColor: c.warnDoux }}>
@@ -225,35 +272,35 @@ function Contenu({ user }: { user: Utilisateur }) {
         ) : (
           <Feuille style={{ borderColor: c.warn, borderWidth: traits.fort, backgroundColor: c.warnDoux }}>
             <Texte variante="titreFort" ton="warn">Départ non vérifié</Texte>
-            <Texte>Dernière réponse du bureau à {heure(new Date(garde.at).toISOString())}. Sans réponse récente, le départ n'est pas autorisé.</Texte>
+            <Texte>{verifie === null ? "La dernière vérification n'a pas abouti." : `Dernière réponse du bureau à ${heureDe(verifie)}.`} Sans réponse récente, le départ n'est pas autorisé.</Texte>
           </Feuille>
         )}
         {lock && lock.lock_active === false ? (
           <Bandeau ton="attention" texte="Le verrou HSSEQ n'est pas encore en service : ses motifs sont affichés, ils ne bloquent pas le départ." />
         ) : null}
 
-        {ouverts.map((r) => (
-          <Feuille key={r.code}>
+        {ouverts.map((r, i) => (
+          <Feuille key={`${r.code}-${i}`}>
             <View style={styles.ligne}>
               <View style={[styles.code, { backgroundColor: c.encre }]}>
                 <Text style={[textes.service, { color: c.surface }]}>{r.code}</Text>
               </View>
-              <Texte variante="libelle" style={{ flex: 1 }}>{titreMotif(r)}</Texte>
+              <Texte variante="libelle" style={{ flex: 1 }}>{titre(r)}</Texte>
             </View>
             {r.detail ? <Texte>{r.detail}</Texte> : null}
             {r.resolution ? <Texte variante="service" ton="second">Lève ce motif : {r.resolution}</Texte> : null}
-            {r.code === "V01" ? (
+            {r.code === "V01" && controle ? (
               <Bouton titre="Faire le contrôle avant départ" variante="secondaire" onPress={() => router.push({ pathname: "/controle", params: rotation.vehicle ? { vehicule: String(rotation.vehicle.id) } : {} })} />
             ) : null}
-            {r.code === "V03" && r.pending ? (
+            {r.code === "V03" && r.pending && alcootest ? (
               <Bouton titre="Faire l'alcootest" variante="secondaire" onPress={() => router.push("/alcootest")} />
             ) : null}
           </Feuille>
         ))}
-        {lock?.reasons.filter((r) => r.waiver_id).map((r) => (
-          <Feuille key={`d-${r.code}`}>
+        {motifs.filter((r) => r.waiver_id).map((r, i) => (
+          <Feuille key={`d-${r.code}-${i}`}>
             <View style={styles.ligne}>
-              <Texte variante="texteDemi" style={{ flex: 1 }}>{r.code}, {titreMotif(r)}</Texte>
+              <Texte variante="texteDemi" style={{ flex: 1 }}>{r.code}, {titre(r)}</Texte>
               <Tampon mot="Sous dérogation" ton="warn" />
             </View>
           </Feuille>
@@ -261,7 +308,7 @@ function Contenu({ user }: { user: Utilisateur }) {
         {avertissements.map((r, i) => (
           <Feuille key={`w-${r.code}-${i}`}>
             <View style={styles.ligne}>
-              <Texte variante="texteDemi" style={{ flex: 1 }}>{titreMotif(r)}</Texte>
+              <Texte variante="texteDemi" style={{ flex: 1 }}>{titre(r)}</Texte>
               <Tampon mot="À surveiller" ton="warn" />
             </View>
             {r.detail ? <Texte variante="service" ton="second">{r.detail}</Texte> : null}
@@ -274,7 +321,7 @@ function Contenu({ user }: { user: Utilisateur }) {
         {!chefDeParc && etat === "autorise" ? <Texte ton="second">Le chef de parc passe la rotation en route.</Texte> : null}
       </ScrollView>
       {etat !== "en_route" ? (
-        <BarreAction etat={envoi.online ? `Vérifié à ${heure(new Date(garde.at).toISOString())}. Seul le bureau autorise le départ.` : "Hors réseau : le départ ne peut pas être vérifié."} tonEtat={envoi.online ? "second" : "warn"}>
+        <BarreAction etat={!envoi.online ? "Hors réseau : le départ ne peut pas être vérifié." : verifie === null ? "Vérification sans réponse : vérifiez à nouveau." : `Vérifié à ${heureDe(verifie)}. Seul le bureau autorise le départ.`} tonEtat={envoi.online && verifie !== null ? "second" : "warn"}>
           {chefDeParc && etat === "autorise" ? (
             <>
               <Bouton titre="Vérifier" variante="secondaire" chargement={action} desactive={!envoi.online} onPress={() => void verifier(rotation)} />
@@ -291,6 +338,7 @@ function Contenu({ user }: { user: Utilisateur }) {
           rotation={rotation}
           motifs={levables}
           jamais={ouverts.filter((r) => JAMAIS_DEROGEABLES.includes(r.code))}
+          titre={titre}
           onFermer={() => setDerogation(false)}
           onEnvoyee={(texte) => {
             setDerogation(false);
@@ -309,16 +357,20 @@ function Contenu({ user }: { user: Utilisateur }) {
  * est donnée par le Responsable HSSEQ. V01 et V03 ne se dérogent jamais.
  */
 function Derogation({
-  visible, rotation, motifs, jamais, onFermer, onEnvoyee,
+  visible, rotation, motifs, jamais, titre, onFermer, onEnvoyee,
 }: {
   visible: boolean;
   rotation: MyRotation;
   motifs: LockReason[];
   jamais: LockReason[];
+  titre: (r: LockReason) => string;
   onFermer: () => void;
   onEnvoyee: (texte: string) => void;
 }) {
   const { api } = useSession();
+  const confirmerCode = useConfirmerCode();
+  // Un motif par code : deux documents expirés sous V05 ne font qu'une demande.
+  const codes = motifs.filter((r, i) => motifs.findIndex((x) => x.code === r.code) === i);
   const { c } = useTerrain();
   const [code, setCode] = useState<string | null>(null);
   const [justification, setJustification] = useState("");
@@ -329,8 +381,10 @@ function Derogation({
 
   async function demander() {
     if (!pret || envoi) return;
-    setEnvoi(true);
     setErreur(null);
+    // La demande vaut première validation : elle engage la personne devant l'écran, code à l'appui.
+    if (!(await confirmerCode("Votre demande de dérogation vaut première validation, à votre nom."))) return;
+    setEnvoi(true);
     try {
       await api.appel("POST", "/hsseq/waivers", { body: { rotation_id: rotation.id, reason_code: code, justification: justification.trim() } });
       vibrer.succes();
@@ -352,11 +406,12 @@ function Derogation({
           <Texte variante="titre" style={{ flex: 1 }}>Demander une dérogation</Texte>
           <Bouton titre="Fermer" variante="discret" onPress={onFermer} />
         </View>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           {erreur ? <Bandeau ton="danger" texte={erreur} /> : null}
           <Texte variante="libelle">Motif à déroger, un seul par demande</Texte>
           <View accessibilityRole="radiogroup" style={{ gap: espaces[3] }}>
-            {motifs.map((r) => {
+            {codes.map((r) => {
               const actif = code === r.code;
               return (
                 <Pressable
@@ -366,7 +421,7 @@ function Derogation({
                   onPress={() => { vibrer.selection(); setCode(r.code); }}
                   style={[styles.radio, { borderColor: actif ? c.accentPlein : c.trait, backgroundColor: actif ? c.accentDoux : c.surface }]}
                 >
-                  <Texte variante="texteDemi">{r.code}, {titreMotif(r)}</Texte>
+                  <Texte variante="texteDemi">{r.code}, {titre(r)}</Texte>
                 </Pressable>
               );
             })}
@@ -375,7 +430,7 @@ function Derogation({
             <Feuille>
               <View style={styles.ligne}>
                 <Cadenas taille={24} couleur={c.dangerTexte} />
-                <Texte variante="texteDemi" style={{ flex: 1 }}>{jamais.map((r) => r.code).join(" et ")} : jamais dérogeables</Texte>
+                <Texte variante="texteDemi" style={{ flex: 1 }}>{[...new Set(jamais.map((r) => r.code))].join(" et ")} : jamais dérogeables</Texte>
               </View>
               <Texte variante="service" ton="second">Le contrôle avant départ et l'alcootest se font toujours.</Texte>
             </Feuille>
@@ -404,6 +459,7 @@ function Derogation({
         <BarreAction etat={!code ? "Choisissez le motif." : longueur < JUSTIFICATION_MIN ? `Encore ${JUSTIFICATION_MIN - longueur} caractères de justification.` : "Votre demande vaut première validation."}>
           <Bouton style={{ flex: 1 }} titre="Valider ma demande" desactive={!pret} chargement={envoi} onPress={() => void demander()} />
         </BarreAction>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );

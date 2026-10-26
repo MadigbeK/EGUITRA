@@ -1,5 +1,5 @@
 import type { LockReason, MyRotation } from "../src/hsseq/types";
-import { derogeables, etatDepart, FRAICHEUR_VERROU, motifsOuverts, titreMotif } from "../src/hsseq/verrou";
+import { derogeables, etatDepart, FRAICHEUR_VERROU, motifsOuverts, sansDoublon, titreMotif } from "../src/hsseq/verrou";
 
 const motif = (code: string, o: Partial<LockReason> = {}): LockReason => ({
   code, label: `Motif ${code}`, source: "HSSEQ", since: null, waivable: true, detail: null, resolution: null,
@@ -42,6 +42,12 @@ describe("verrou de départ", () => {
 
   it("laisse partir quand le verrou n'est pas encore en service", () => {
     expect(etatDepart(rotation([motif("V02")], {}, { lock_active: false }), true, MAINTENANT, MAINTENANT)).toBe("autorise");
+    // Un motif « à faire » ne masque pas non plus le départ : le noyau répond allowed.
+    expect(etatDepart(rotation([motif("V01", { pending: true })], {}, { lock_active: false, allowed: true }), true, MAINTENANT, MAINTENANT)).toBe("autorise");
+  });
+
+  it("suit le refus du bureau même sans motif ouvert", () => {
+    expect(etatDepart(rotation([], {}, { allowed: false }), true, MAINTENANT, MAINTENANT)).toBe("bloque");
   });
 
   it("dit « En route » pour une rotation partie", () => {
@@ -56,5 +62,17 @@ describe("verrou de départ", () => {
   it("donne au conducteur des titres en mots simples, sans dire si l'alcootest manque ou s'il est positif", () => {
     expect(titreMotif(motif("V03"))).toBe("Alcootest : voir le Responsable HSSEQ");
     expect(titreMotif(motif("T01"))).toBe("Motif T01");
+  });
+
+  it("parle au conducteur de son permis, au chef de parc du dossier du conducteur", () => {
+    expect(titreMotif(motif("V04"))).toBe("Votre permis ou une habilitation ne permet pas le départ");
+    expect(titreMotif(motif("V04"), { conducteur: false })).toBe("Le dossier du conducteur ne permet pas le départ");
+    expect(titreMotif(motif("V05"))).toBe("Un document du camion manque ou est expiré");
+  });
+
+  it("garde le libellé du noyau pour un avertissement, et retire les motifs en double", () => {
+    expect(titreMotif(motif("V05", { severity: "warn", label: "Assurance : échéance dans 12 jours" }))).toBe("Assurance : échéance dans 12 jours");
+    const deux = [motif("V05", { detail: "Assurance" }), motif("V05", { detail: "Assurance" }), motif("V05", { detail: "Visite technique" })];
+    expect(sansDoublon(deux)).toHaveLength(2);
   });
 });
