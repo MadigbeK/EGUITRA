@@ -2,12 +2,13 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
-import { Button, Field, Input, Modal, Notice, Select, Textarea } from "@/components/ui";
+import { Button, Field, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
+import { CHAMP_INVALIDE } from "./communPieces";
 import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
 interface LineDraft {
   name: string;
@@ -27,6 +28,14 @@ interface LineDraft {
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
 
+/** Nombre relu d'un brouillon, écrit à la française (« 2,5 ») : relu tel quel par lireNombre. */
+const enSaisie = (n: number) => String(n).replace(".", ",");
+
+/** Champs d'une ligne dont la saisie n'est pas un nombre lisible (« 2.500.000 », « 2 x 3 »). */
+function nombresIllisibles(l: LineDraft): string[] {
+  return [nombreIllisible(l.quantity) && "quantité", nombreIllisible(l.price_unit) && "prix unitaire"].filter((c): c is string => Boolean(c));
+}
+
 /** Lignes d'un brouillon relu pour modification (TVA et retenue : taxes positive et négative de la ligne). */
 function linesOf(move: MoveDetail): LineDraft[] {
   return move.lines
@@ -36,8 +45,8 @@ function linesOf(move: MoveDetail): LineDraft[] {
       const withholding = l.taxes.find((t) => t.amount < 0);
       return {
         name: l.name,
-        quantity: String(l.quantity),
-        price_unit: String(l.price_unit),
+        quantity: enSaisie(l.quantity),
+        price_unit: enSaisie(l.price_unit),
         account_id: l.account ? String(l.account.id) : "",
         tax_id: vat ? String(vat.id) : "none",
         category_id: l.category ? String(l.category.id) : "",
@@ -127,18 +136,22 @@ export function MoveForm({
     return defaultTax ? String(defaultTax.id) : "none";
   }
 
+  // Quantités et prix lus à la française (« 2,5 », « 750 000 ») : une saisie illisible n'entre pas dans
+  // les totaux, elle est signalée sous la ligne et bloque l'enregistrement.
+  const montantLigne = (l: LineDraft) => (lireNombre(l.quantity) ?? 0) * (lireNombre(l.price_unit) ?? 0);
   const totals = { ht: 0, tva: 0, retenues: 0, ttc: 0 };
   for (const l of lines) {
-    const amount = (Number(l.quantity) || 0) * (Number(l.price_unit.replace(/\s/g, "")) || 0);
+    const amount = montantLigne(l);
     const tax = taxes?.find((t) => String(t.id) === effectiveTax(l));
     totals.ht += amount;
     totals.tva += tax ? (amount * tax.amount) / 100 : 0;
   }
   for (const l of lines) {
-    const amount = (Number(l.quantity) || 0) * (Number(l.price_unit.replace(/\s/g, "")) || 0);
+    const amount = montantLigne(l);
     totals.retenues += lineWithholdings(l).reduce((sum, t) => sum + (amount * t.amount) / 100, 0);
   }
   totals.ttc = totals.ht + totals.tva + totals.retenues;
+  const saisieIllisible = lines.some((l) => nombresIllisibles(l).length > 0);
 
   /** Catégories qui font de la dépense une opération diverse (salaires, cotisations, impôts). */
   const entryCategories = lines.map(categoryOf).filter((c): c is ExpenseCategory => Boolean(c?.entry));
@@ -167,8 +180,9 @@ export function MoveForm({
       const tax = effectiveTax(l);
       return {
         name: l.name,
-        quantity: Number(l.quantity) || 1,
-        price_unit: Number(l.price_unit.replace(/\s/g, "")),
+        // Contrôlés avant l'envoi (submit) : jamais une quantité illisible remplacée par 1.
+        quantity: lireNombre(l.quantity),
+        price_unit: lireNombre(l.price_unit),
         account_id: libre && l.account_id ? Number(l.account_id) : undefined,
         category_id: l.category_id ? Number(l.category_id) : undefined,
         tax_ids: tax === "none" ? [] : [Number(tax)],
@@ -197,9 +211,15 @@ export function MoveForm({
   async function submit(post: boolean) {
     setError(null);
     if (!partner) return setError(sale ? "Choisissez le client." : "Choisissez le fournisseur.");
-    if (lines.some((l) => !l.name.trim() || !Number(l.price_unit.replace(/\s/g, "")))) {
-      return setError("Chaque ligne doit avoir un libellé et un montant.");
-    }
+    const illisibles = lines.flatMap((l, i) => nombresIllisibles(l).map((champ) => `${champ} de la ligne ${i + 1}`));
+    // « Nombre illisible (quantité de la ligne 2) : écrivez par exemple 750 000 ou 2,5. »
+    if (illisibles.length) return setError(AIDE_NOMBRE.replace(" :", ` (${illisibles.join(", ")}) :`));
+    const sansLibelle = lines.findIndex((l) => !l.name.trim());
+    if (sansLibelle >= 0) return setError(`Ligne ${sansLibelle + 1} : indiquez le libellé.`);
+    const sansQuantite = lines.findIndex((l) => !lireNombre(l.quantity));
+    if (sansQuantite >= 0) return setError(`Ligne ${sansQuantite + 1} : indiquez une quantité non nulle.`);
+    const sansPrix = lines.findIndex((l) => !lireNombre(l.price_unit));
+    if (sansPrix >= 0) return setError(`Ligne ${sansPrix + 1} : indiquez un prix unitaire non nul.`);
     if (mixed) return setError("Séparez la pièce : une dépense passée en opération diverse ne se mêle pas aux achats.");
     if (!sale && !libre && lines.some((l) => !l.category_id)) return setError("Choisissez la catégorie de dépense de chaque ligne : le compte en découle.");
     if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
@@ -256,10 +276,10 @@ export function MoveForm({
           <Button variant="ghost" onClick={onClose}>
             Annuler
           </Button>
-          <Button onClick={() => submit(false)} loading={busy}>
+          <Button onClick={() => submit(false)} loading={busy} disabled={saisieIllisible}>
             {move ? "Enregistrer" : "Enregistrer en brouillon"}
           </Button>
-          <Button variant="primary" onClick={() => submit(true)} loading={busy}>
+          <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={saisieIllisible}>
             {sale ? "Enregistrer et valider" : "Enregistrer et soumettre"}
           </Button>
         </>
@@ -342,10 +362,27 @@ export function MoveForm({
                       </td>
                     )}
                     <td className="px-2 pt-1.5">
-                      <Input className="text-right" inputMode="decimal" value={l.quantity} onChange={(e) => update(i, { quantity: e.target.value })} aria-label={`Quantité, ligne ${i + 1}`} />
+                      <Input
+                        className={cx("text-right", CHAMP_INVALIDE)}
+                        inputMode="decimal"
+                        value={l.quantity}
+                        onChange={(e) => update(i, { quantity: e.target.value })}
+                        aria-label={`Quantité, ligne ${i + 1}`}
+                        aria-invalid={nombreIllisible(l.quantity)}
+                        aria-describedby={nombresIllisibles(l).length ? `ligne-${i}-nombres` : undefined}
+                      />
                     </td>
                     <td className="px-2 pt-1.5">
-                      <Input className="text-right font-mono" inputMode="numeric" value={l.price_unit} onChange={(e) => update(i, { price_unit: e.target.value })} placeholder="0" aria-label={`Prix unitaire HT, ligne ${i + 1}`} />
+                      <Input
+                        className={cx("text-right font-mono", CHAMP_INVALIDE)}
+                        inputMode="decimal"
+                        value={l.price_unit}
+                        onChange={(e) => update(i, { price_unit: e.target.value })}
+                        placeholder="0"
+                        aria-label={`Prix unitaire HT, ligne ${i + 1}`}
+                        aria-invalid={nombreIllisible(l.price_unit)}
+                        aria-describedby={nombresIllisibles(l).length ? `ligne-${i}-nombres` : undefined}
+                      />
                     </td>
                     <td className="px-2 pt-1.5">
                       {libre ? (
@@ -383,6 +420,11 @@ export function MoveForm({
                   </tr>
                   <tr>
                     <td colSpan={columns} className="px-2 pb-2 pt-1.5">
+                      {nombresIllisibles(l).length > 0 && (
+                        <p id={`ligne-${i}-nombres`} className="mb-1.5 text-[12px] font-medium leading-snug text-danger">
+                          {AIDE_NOMBRE.replace(" :", ` (${nombresIllisibles(l).join(" et ")}) :`)}
+                        </p>
+                      )}
                       <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next, original: undefined })} />
                     </td>
                   </tr>
