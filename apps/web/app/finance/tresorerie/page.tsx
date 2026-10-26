@@ -788,7 +788,7 @@ function MatchModal({ line, onClose, onDone }: { line: StLine; onClose: () => vo
     <Modal
       open
       wide
-      title={`Rapprocher, ${line.label}, ${fmtGNF(line.amount)}`}
+      title={`Rapprocher, ${line.label}, ${montantDevise(line.amount, line.currency)}`}
       onClose={onClose}
       footer={
         <Button variant="primary" loading={busy} disabled={!selected.length && !imputation} onClick={submit}>
