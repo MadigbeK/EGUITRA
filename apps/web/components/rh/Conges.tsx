@@ -6,11 +6,14 @@ import { useSWRConfig } from "swr";
 import { ChevronLeft, ChevronRight, Plus } from "@/components/icons";
 import { Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, Tabs, Textarea, SERIES, cx, demanderConfirmation } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtInt } from "@/lib/format";
 import { LEAVE_STATE_LABELS, type BalanceRow, type Holiday, type Leave, type LeaveState, type Meta } from "@/lib/rh-types";
 import { ChoixSalarie, DecisionAbsence, EtatAbsence, FiltreSociete, accord, avecSociete, jours, messageErreur, moisCourant, periode, useJoursOuvrables, useMeta } from "./commun";
 
 type Onglet = "valider" | "planning" | "absences" | "soldes";
+
+/** Absences rendues au plus par le noyau pour une liste. */
+const LIMITE_ABSENCES = 1000;
 
 /**
  * Absences et congés du personnel des sociétés du compte (filtre « Société » facultatif) : demandes
@@ -284,6 +287,8 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
         </Field>
       </div>
       {erreur && <Notice tone="danger">{erreur}</Notice>}
+      {/* Le noyau rend au plus 1 000 absences, les plus récentes d'abord (GET /rh/leaves). */}
+      {data && data.length >= LIMITE_ABSENCES && <Notice tone="warn">Les {fmtInt(LIMITE_ABSENCES)} absences les plus récentes seulement : précisez le salarié, l&apos;état ou la période pour voir les autres.</Notice>}
       <Card padded={false}>
         {!data ? (
           <Etat error={error} onRetry={() => mutate()} />
