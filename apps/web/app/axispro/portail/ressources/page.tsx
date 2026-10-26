@@ -4,11 +4,13 @@ import { useState, type MouseEvent } from "react";
 import { Download, FileText, Inbox, Pencil, Plus, RotateCcw, Send, Sparkles, Trash2 } from "@/components/icons";
 import { OngletsPortail } from "@/components/portail/cabinet/OngletsPortail";
 import {
-  Coche, EditeurTexte, Intitule, LectureSeule, RESERVE_CABINET, Recherche, basculerCode, correspond, etatPublication, listeCodes, messageErreur, pluriel, useEcriture, useRetour,
+  Coche, EditeurTexte, Intitule, LectureSeule, Recherche, basculerCode, correspond, etatPublication, listeCodes, messageErreur, pluriel, saisieModifiee, useEcriture, useEnvoiFenetre,
+  useRetour,
 } from "@/components/portail/cabinet/outils";
 import { COULEUR, FORMATS, FORMATS_TEXTE, iconeRubrique, quand, taille } from "@/components/portail/commun";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Field, FileButton, IconTile, Input, Kpi, Loading, Modal, Notice, PageHeader, Segmented, Select, Tag, Textarea, cx, demanderConfirmation, type Column } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { AIDE_NOMBRE, fmtInt, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
 import type { ArticleAdmin, ArticleKind, CategoryColor, CategoryRow, Cibles, PublicationState } from "@/lib/portail-types";
 
 type FiltreEtat = "all" | PublicationState;
@@ -18,17 +20,22 @@ const ICONES_PROPOSEES = ["BookOpen", "Landmark", "TrendingUp", "HandCoins", "Sc
 
 const NOM_COULEUR: Record<CategoryColor, string> = { azur: "Azur", lagon: "Lagon", or: "Or", jade: "Jade", corail: "Corail", violet: "Rose" };
 
+/** « 3 utiles, 1 pas utile » : les avis des porteurs sur un contenu. */
+function avisUtiles(utile: number, pasUtile: number): string {
+  return `${pluriel(utile, "utile")}, ${pluriel(pasUtile, "pas utile", "pas utiles")}`;
+}
+
 export default function RessourcesPage() {
   const ecriture = useEcriture();
   const { data, error, mutate } = useApi<ArticleAdmin[]>("/axispro/portail/articles");
   const { data: rubriques, error: erreurRubriques, mutate: majRubriques } = useApi<CategoryRow[]>("/axispro/portail/rubriques");
-  const { data: cibles } = useApi<Cibles>("/axispro/portail/cibles");
+  const { data: cibles, error: erreurCibles, mutate: majCibles } = useApi<Cibles>("/axispro/portail/cibles");
   const [etat, setEtat] = useState<FiltreEtat>("all");
   const [rubrique, setRubrique] = useState("");
   const [q, setQ] = useState("");
   const [edition, setEdition] = useState<ArticleAdmin | "nouveau" | null>(null);
   const [rubriqueEditee, setRubriqueEditee] = useState<CategoryRow | "nouvelle" | null>(null);
-  const { agir, bandeau } = useRetour();
+  const { agir, envoyer, enCours, occupe, bandeau } = useRetour();
 
   const articles = data ?? [];
   const cats = [...(rubriques ?? [])].sort((a, b) => a.sequence - b.sequence || a.name.localeCompare(b.name, "fr"));
@@ -46,6 +53,7 @@ export default function RessourcesPage() {
   );
 
   async function action(a: ArticleAdmin, act: ActionArticle) {
+    if (occupe) return;
     const questions: Record<ActionArticle, string | null> = {
       publier: `Publier « ${a.title} » ? Les porteurs des dossiers en cours en seront prévenus.`,
       brouillon: `Repasser « ${a.title} » en brouillon ? Il disparaîtra du portail jusqu'à sa republication.`,
@@ -55,11 +63,12 @@ export default function RessourcesPage() {
     const question = questions[act];
     if (question && !(await demanderConfirmation(question, { action: { publier: "Publier", brouillon: "Repasser en brouillon", archiver: "Archiver", supprimer: "Supprimer" }[act], danger: act === "supprimer" }))) return;
     const ok: Record<ActionArticle, string> = { publier: "Contenu publié.", brouillon: "Contenu repassé en brouillon.", archiver: "Contenu archivé.", supprimer: "Contenu supprimé." };
-    const r = await agir(() => apiSend("POST", `/axispro/portail/articles/${a.id}/${act}`), ok[act]);
+    const r = await envoyer(() => apiSend("POST", `/axispro/portail/articles/${a.id}/${act}`), ok[act], `${a.id}:${act}`);
     if (r !== undefined) await Promise.all([mutate(), majRubriques()]);
   }
 
-  const blocage = !ecriture ? RESERVE_CABINET : undefined;
+  const charge = (a: ArticleAdmin, act: ActionArticle) => enCours === `${a.id}:${act}`;
+  const ouvrir = (a: ArticleAdmin | "nouveau") => cibles && setEdition(a);
   const stop = (fn: () => void) => (e: MouseEvent) => {
     e.stopPropagation();
     fn();
@@ -77,7 +86,7 @@ export default function RessourcesPage() {
           {(a.featured || a.files.length > 0 || a.video_url || a.gate_codes) && (
             <div className="mt-1 flex flex-wrap gap-1.5">
               {a.featured && <Badge tone="accent">À la une</Badge>}
-              {a.files.length > 0 && <Tag>{pluriel(a.files.length, "fichier", "fichiers")}</Tag>}
+              {a.files.length > 0 && <Tag>{pluriel(a.files.length, "fichier")}</Tag>}
               {a.video_url && <Tag>Vidéo</Tag>}
               {a.gate_codes && <Tag>{`Étapes ${listeCodes(a.gate_codes).join(", ")}`}</Tag>}
             </div>
@@ -116,48 +125,52 @@ export default function RessourcesPage() {
         );
       },
     },
-    { key: "views", label: "Lectures", align: "right", sortValue: (a) => a.stats.views, render: (a) => a.stats.views },
-    { key: "readers", label: "Lecteurs", align: "right", sortValue: (a) => a.stats.readers, render: (a) => a.stats.readers },
+    { key: "views", label: "Lectures", align: "right", sortValue: (a) => a.stats.views, render: (a) => fmtInt(a.stats.views) },
+    { key: "readers", label: "Lecteurs", align: "right", sortValue: (a) => a.stats.readers, render: (a) => fmtInt(a.stats.readers) },
     {
       key: "helpful",
       label: "Utile / pas utile",
       align: "right",
       sortValue: (a) => a.stats.helpful - a.stats.not_helpful,
       render: (a) => (
-        <span title={`${pluriel(a.stats.helpful, "porteur l'a trouvé utile", "porteurs l'ont trouvé utile")}, ${a.stats.not_helpful} pas utile`}>
-          <span className="text-ok-texte">{a.stats.helpful}</span> / <span className={a.stats.not_helpful ? "text-danger" : undefined}>{a.stats.not_helpful}</span>
+        <span title={avisUtiles(a.stats.helpful, a.stats.not_helpful)}>
+          <span className="text-ok-texte">{fmtInt(a.stats.helpful)}</span> / <span className={a.stats.not_helpful ? "text-danger" : undefined}>{fmtInt(a.stats.not_helpful)}</span>
         </span>
       ),
     },
-    { key: "bookmarks", label: "Favoris", align: "right", sortValue: (a) => a.stats.bookmarks, render: (a) => a.stats.bookmarks },
-    {
-      key: "actions",
-      label: "",
-      render: (a) => (
-        <div className="flex items-center justify-end gap-1">
-          {a.state !== "published" && (
-            <Button variant="primary" size="sm" disabled={!ecriture} title={blocage} onClick={stop(() => void action(a, "publier"))}>
-              <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
-            </Button>
-          )}
-          {a.state !== "draft" && (
-            <Button variant="ghost" size="sm" disabled={!ecriture} title={blocage ?? "Repasser en brouillon"} onClick={stop(() => void action(a, "brouillon"))}>
-              <RotateCcw className="h-3.5 w-3.5" /> Brouillon
-            </Button>
-          )}
-          {a.state !== "archived" && (
-            <Button variant="ghost" size="sm" disabled={!ecriture} title={blocage ?? "Archiver"} onClick={stop(() => void action(a, "archiver"))}>
-              <Inbox className="h-3.5 w-3.5" /> Archiver
-            </Button>
-          )}
-          {a.state !== "published" && (
-            <button type="button" aria-label={`Supprimer ${a.title}`} title={blocage ?? "Supprimer"} disabled={!ecriture} onClick={stop(() => void action(a, "supprimer"))} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      ),
-    },
+    { key: "bookmarks", label: "Favoris", align: "right", sortValue: (a) => a.stats.bookmarks, render: (a) => fmtInt(a.stats.bookmarks) },
+    ...(ecriture
+      ? [
+          {
+            key: "actions",
+            label: "",
+            render: (a: ArticleAdmin) => (
+              <div className="flex items-center justify-end gap-1">
+                {a.state !== "published" && (
+                  <Button variant="primary" size="sm" loading={charge(a, "publier")} disabled={occupe} onClick={stop(() => void action(a, "publier"))}>
+                    <Send className="h-3.5 w-3.5" /> {a.state === "archived" ? "Republier" : "Publier"}
+                  </Button>
+                )}
+                {a.state !== "draft" && (
+                  <Button variant="ghost" size="sm" loading={charge(a, "brouillon")} disabled={occupe} title="Repasser en brouillon" onClick={stop(() => void action(a, "brouillon"))}>
+                    <RotateCcw className="h-3.5 w-3.5" /> Brouillon
+                  </Button>
+                )}
+                {a.state !== "archived" && (
+                  <Button variant="ghost" size="sm" loading={charge(a, "archiver")} disabled={occupe} title="Archiver" onClick={stop(() => void action(a, "archiver"))}>
+                    <Inbox className="h-3.5 w-3.5" /> Archiver
+                  </Button>
+                )}
+                {a.state !== "published" && (
+                  <button type="button" aria-label={`Supprimer ${a.title}`} title="Supprimer" disabled={occupe} aria-busy={charge(a, "supprimer") || undefined} onClick={stop(() => void action(a, "supprimer"))} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -166,28 +179,31 @@ export default function RessourcesPage() {
         title="Centre de ressources"
         subtitle="Guides, fiches outils, modèles et vidéos proposés aux porteurs, rangés par rubrique. Un contenu peut être recommandé aux dossiers arrivés à certaines étapes."
         actions={
-          <>
-            <Button disabled={!ecriture} title={blocage} onClick={() => setRubriqueEditee("nouvelle")}>
-              <Plus className="h-4 w-4" /> Nouvelle rubrique
-            </Button>
-            <Button variant="primary" disabled={!ecriture || !cibles} title={blocage} onClick={() => setEdition("nouveau")}>
-              <Plus className="h-4 w-4" /> Nouveau contenu
-            </Button>
-          </>
+          ecriture ? (
+            <>
+              <Button disabled={!cibles} onClick={() => setRubriqueEditee("nouvelle")}>
+                <Plus className="h-4 w-4" /> Nouvelle rubrique
+              </Button>
+              <Button variant="primary" disabled={!cibles} onClick={() => ouvrir("nouveau")}>
+                <Plus className="h-4 w-4" /> Nouveau contenu
+              </Button>
+            </>
+          ) : undefined
         }
       />
       <OngletsPortail />
       <div className="space-y-5">
         <LectureSeule ecriture={ecriture} />
         {bandeau}
-        {error && <ErrorBox error={error} onRetry={() => void mutate()} />}
+        {erreurCibles && <ErrorBox titre="Rubriques, étapes et formats indisponibles : impossible d'ouvrir un contenu." error={erreurCibles} onRetry={() => void majCibles()} />}
+        {error && <ErrorBox titre={data ? "Rechargement impossible : les contenus affichés peuvent dater." : undefined} error={error} onRetry={() => void mutate()} />}
 
         {data && (
           <section aria-label="Chiffres clés" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Contenus publiés" value={String(publies.length)} hint={`sur ${pluriel(articles.length, "contenu", "contenus")}`} />
-            <Kpi label="Brouillons à relire" value={String(brouillons)} tone={brouillons ? "warn" : "ok"} hint={brouillons ? "À relire, compléter puis publier" : "Tout est relu"} />
-            <Kpi label="Lectures" value={String(vues)} hint={`Lecteurs cumulés par contenu : ${articles.reduce((s, a) => s + a.stats.readers, 0)}`} />
-            <Kpi label="Jugés utiles" value={avis ? `${Math.round((utiles / avis) * 100)} %` : "–"} tone={avis ? (utiles / avis >= 0.7 ? "ok" : "warn") : "neutral"} hint={avis ? `sur ${pluriel(avis, "avis", "avis")}` : "Aucun avis pour l'instant"} />
+            <Kpi label="Contenus publiés" value={fmtInt(publies.length)} hint={`sur ${pluriel(articles.length, "contenu")}`} />
+            <Kpi label="Brouillons à relire" value={fmtInt(brouillons)} tone={brouillons ? "warn" : "ok"} hint={brouillons ? "À relire, compléter puis publier" : "Tout est relu"} />
+            <Kpi label="Lectures" value={fmtInt(vues)} hint={`Lecteurs cumulés par contenu : ${fmtInt(articles.reduce((s, a) => s + a.stats.readers, 0))}`} />
+            <Kpi label="Jugés utiles" value={avis ? fmtPct((utiles / avis) * 100, 0) : "–"} tone={avis ? (utiles / avis >= 0.7 ? "ok" : "warn") : "neutral"} hint={avis ? `sur ${pluriel(avis, "avis", "avis")}` : "Aucun avis pour l'instant"} />
           </section>
         )}
 
@@ -195,7 +211,7 @@ export default function RessourcesPage() {
           <Notice tone="warn">
             <span className="flex flex-wrap items-center justify-between gap-3">
               <span>
-                <b>{pluriel(brouillons, "contenu attend", "contenus attendent")} une relecture.</b> Les contenus proposés à l&apos;installation sont des brouillons : relisez-les, adaptez-les au cabinet, puis publiez-les.
+                <b>{pluriel(brouillons, "contenu attend", "contenus attendent")} une relecture.</b> Les contenus proposés à l&apos;installation sont des brouillons : relisez-les, adaptez-les à MB AxisPro Consulting, puis publiez-les.
               </span>
               <Button size="sm" onClick={() => setEtat("draft")}>
                 Afficher les brouillons
@@ -212,10 +228,10 @@ export default function RessourcesPage() {
                 value={etat}
                 onChange={setEtat}
                 options={[
-                  { key: "all", label: `Tous (${articles.length})` },
-                  { key: "draft", label: `Brouillons (${brouillons})` },
-                  { key: "published", label: `Publiés (${publies.length})` },
-                  { key: "archived", label: `Archivés (${articles.filter((a) => a.state === "archived").length})` },
+                  { key: "all", label: `Tous (${fmtInt(articles.length)})` },
+                  { key: "draft", label: `Brouillons (${fmtInt(brouillons)})` },
+                  { key: "published", label: `Publiés (${fmtInt(publies.length)})` },
+                  { key: "archived", label: `Archivés (${fmtInt(articles.filter((a) => a.state === "archived").length)})` },
                 ]}
               />
             </div>
@@ -225,16 +241,20 @@ export default function RessourcesPage() {
           {!data ? (
             !error && <Loading label="Chargement des contenus…" />
           ) : (
-            <DataTable columns={colonnes} rows={rows} rowKey={(a) => a.id} onRowClick={(a) => setEdition(a)} empty={articles.length ? "Aucun contenu dans cette sélection." : "Aucun contenu pour l'instant."} />
+            <DataTable columns={colonnes} rows={rows} rowKey={(a) => a.id} onRowClick={(a) => ouvrir(a)} empty={articles.length ? "Aucun contenu dans cette sélection." : "Aucun contenu pour l'instant."} />
           )}
         </Card>
 
         <Card title="Rubriques" actions={<span className="text-[12.5px] text-muted">Ordre d&apos;affichage au portail</span>}>
-          {erreurRubriques && <ErrorBox error={erreurRubriques} onRetry={() => void majRubriques()} />}
+          {erreurRubriques && (
+            <div className="mb-4">
+              <ErrorBox titre={rubriques ? "Rechargement impossible : les rubriques affichées peuvent dater." : undefined} error={erreurRubriques} onRetry={() => void majRubriques()} />
+            </div>
+          )}
           {!rubriques ? (
             !erreurRubriques && <Loading label="Chargement des rubriques…" />
           ) : cats.length === 0 ? (
-            <Empty title="Aucune rubrique." hint="Créez des rubriques (financement, gestion, juridique…) pour ranger les contenus du centre de ressources." />
+            <Empty title="Aucune rubrique." hint={ecriture ? "Créez des rubriques (financement, gestion, juridique…) pour ranger les contenus du centre de ressources." : undefined} />
           ) : (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {cats.map((c) => (
@@ -243,16 +263,18 @@ export default function RessourcesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate font-semibold text-ink">{c.name}</span>
-                      <span className="flex-none text-[11.5px] tabular text-muted">ordre {c.sequence}</span>
+                      <span className="flex-none text-[11.5px] tabular text-muted">ordre {fmtInt(c.sequence)}</span>
                     </div>
                     {c.description && <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-ink-2">{c.description}</p>}
                     <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[12.5px]">
                       <button type="button" className="font-semibold text-accent hover:underline" onClick={() => setRubrique(String(c.id))}>
-                        {pluriel(c.count ?? 0, "contenu", "contenus")}
+                        {pluriel(c.count ?? 0, "contenu")}
                       </button>
-                      <button type="button" className="inline-flex items-center gap-1 font-semibold text-ink-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40" disabled={!ecriture} title={blocage} onClick={() => setRubriqueEditee(c)}>
-                        <Pencil className="h-3.5 w-3.5" /> Modifier
-                      </button>
+                      {ecriture && (
+                        <button type="button" className="inline-flex items-center gap-1 font-semibold text-ink-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40" disabled={!cibles} onClick={() => setRubriqueEditee(c)}>
+                          <Pencil className="h-3.5 w-3.5" /> Modifier
+                        </button>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -294,35 +316,43 @@ export default function RessourcesPage() {
 
 /* ─── Rubrique ─────────────────────────────────────────────────────────── */
 
+/** Ordre saisi : un entier (vide : 0). null : saisie illisible ou non entière. */
+function ordre(saisie: string): number | null {
+  if (!saisie.trim()) return 0;
+  const n = lireNombre(saisie);
+  return n !== null && Number.isInteger(n) ? n : null;
+}
+
 function EditeurRubrique({ rubrique, couleurs, suivant, onClose, onDone }: { rubrique: CategoryRow | null; couleurs: CategoryColor[]; suivant: number; onClose: () => void; onDone: (message: string) => Promise<void> }) {
-  const [f, setF] = useState({
+  const [initial] = useState(() => ({
     name: rubrique?.name ?? "",
     description: rubrique?.description ?? "",
     icon: rubrique?.icon ?? "BookOpen",
     color: rubrique?.color ?? couleurs[0] ?? "azur",
     sequence: String(rubrique?.sequence ?? suivant),
-  });
-  const [envoi, setEnvoi] = useState(false);
-  const [erreur, setErreur] = useState<string | null>(null);
+  }));
+  const [f, setF] = useState(initial);
+  const { occupe, erreur, setErreur, envoyer, fermer } = useEnvoiFenetre(saisieModifiee(f, initial), onClose);
   const icones = ICONES_PROPOSEES.includes(f.icon) ? ICONES_PROPOSEES : [f.icon, ...ICONES_PROPOSEES];
+  const rang = ordre(f.sequence);
+  const erreurOrdre = nombreIllisible(f.sequence) ? AIDE_NOMBRE : rang === null ? "Ordre : un nombre entier (10, 20, 30…)." : undefined;
 
   async function enregistrer() {
+    if (occupe) return;
     if (!f.name.trim()) {
       setErreur("Donnez un nom à la rubrique.");
       return;
     }
-    setEnvoi(true);
-    setErreur(null);
-    const corps = { name: f.name.trim(), description: f.description.trim(), icon: f.icon, color: f.color, sequence: Number(f.sequence) || 0 };
-    try {
+    if (rang === null) {
+      setErreur(erreurOrdre ?? AIDE_NOMBRE);
+      return;
+    }
+    const corps = { name: f.name.trim(), description: f.description.trim(), icon: f.icon, color: f.color, sequence: rang };
+    await envoyer("rubrique", async () => {
       if (rubrique) await apiSend("PATCH", `/axispro/portail/rubriques/${rubrique.id}`, corps);
       else await apiSend("POST", "/axispro/portail/rubriques", corps);
       await onDone(rubrique ? "Rubrique modifiée." : "Rubrique créée.");
-    } catch (e) {
-      setErreur(messageErreur(e));
-    } finally {
-      setEnvoi(false);
-    }
+    });
   }
 
   const Apercu = iconeRubrique(f.icon);
@@ -330,19 +360,19 @@ function EditeurRubrique({ rubrique, couleurs, suivant, onClose, onDone }: { rub
     <Modal
       open
       title={rubrique ? "Modifier la rubrique" : "Nouvelle rubrique"}
-      onClose={onClose}
+      onClose={() => void fermer()}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" disabled={occupe} onClick={() => void fermer()}>
             Annuler
           </Button>
-          <Button variant="primary" loading={envoi} onClick={() => void enregistrer()}>
+          <Button variant="primary" loading={occupe} disabled={Boolean(erreurOrdre)} onClick={() => void enregistrer()}>
             Enregistrer
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <fieldset disabled={occupe} className="min-w-0 space-y-4">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <div className="flex items-center gap-3 rounded-xl bg-panel-2 p-3">
           <IconTile icon={Apercu} teinte={COULEUR[f.color].teinte} />
@@ -380,11 +410,11 @@ function EditeurRubrique({ rubrique, couleurs, suivant, onClose, onDone }: { rub
               ))}
             </div>
           </div>
-          <Field label="Ordre" hint="Plus petit d'abord.">
-            <Input type="number" inputMode="numeric" step={1} value={f.sequence} onChange={(e) => setF({ ...f, sequence: e.target.value })} />
+          <Field label="Ordre" hint="Plus petit d'abord." error={erreurOrdre}>
+            <Input inputMode="numeric" value={f.sequence} aria-invalid={erreurOrdre ? true : undefined} onChange={(e) => setF({ ...f, sequence: e.target.value })} />
           </Field>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
@@ -419,9 +449,11 @@ function saisieDe(a: ArticleAdmin | null): SaisieArticle {
 
 function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChange, onDone }: { initial: ArticleAdmin | null; rubriques: CategoryRow[]; cibles: Cibles; ecriture: boolean; onClose: () => void; onChange: () => Promise<unknown>; onDone: (message: string) => Promise<void> }) {
   const [article, setArticle] = useState<ArticleAdmin | null>(initial);
-  const [f, setF] = useState<SaisieArticle>(() => saisieDe(initial));
-  const [envoi, setEnvoi] = useState<"brouillon" | "publier" | "fichier" | null>(null);
-  const [retour, setRetour] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  // Saisie de référence : celle du contenu tel qu'enregistré (une longue rédaction ne se perd pas en fermant).
+  const [base, setBase] = useState<SaisieArticle>(() => saisieDe(initial));
+  const [f, setF] = useState<SaisieArticle>(base);
+  const { envoi, occupe, erreur, setErreur, envoyer, fermer } = useEnvoiFenetre(ecriture && saisieModifiee(f, base), onClose);
+  const [info, setInfo] = useState<string | null>(null);
   const set = <K extends keyof SaisieArticle>(k: K, v: SaisieArticle[K]) => setF((x) => ({ ...x, [k]: v }));
   const etat = article?.state ?? "draft";
   const ordreGates = cibles.gates.map((g) => g.code);
@@ -434,14 +466,14 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
   }
 
   async function enregistrer(publier: boolean) {
+    if (occupe) return;
     const probleme = controle();
     if (probleme) {
-      setRetour({ tone: "danger", text: probleme });
+      setErreur(probleme);
       return;
     }
     if (publier && etat !== "published" && !(await demanderConfirmation("Publier ce contenu ? Les porteurs des dossiers en cours en seront prévenus.", { action: "Publier" }))) return;
-    setEnvoi(publier ? "publier" : "brouillon");
-    setRetour(null);
+    setInfo(null);
     const corps = {
       title: f.title.trim(),
       summary: f.summary.trim(),
@@ -453,11 +485,14 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
       video_url: f.video_url.trim(),
       body: f.body,
     };
-    try {
+    await envoyer(publier ? "publier" : "brouillon", async () => {
       const enregistre = article
         ? await apiSend<ArticleAdmin>("PATCH", `/axispro/portail/articles/${article.id}`, corps)
         : await apiSend<ArticleAdmin>("POST", "/axispro/portail/articles", corps);
       setArticle(enregistre);
+      const sauvee = saisieDe(enregistre);
+      setBase(sauvee);
+      setF(sauvee);
       if (!article) await onChange();
       if (publier && etat !== "published") {
         await apiSend("POST", `/axispro/portail/articles/${enregistre.id}/publier`);
@@ -465,43 +500,33 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
         return;
       }
       if (!article) {
-        setRetour({ tone: "ok", text: "Brouillon enregistré. Vous pouvez maintenant joindre des fichiers." });
+        setInfo("Brouillon enregistré. Vous pouvez maintenant joindre des fichiers.");
         return;
       }
-      await onDone(etat === "published" ? "Contenu mis à jour." : "Brouillon enregistré.");
-    } catch (e) {
-      setRetour({ tone: "danger", text: messageErreur(e) });
-    } finally {
-      setEnvoi(null);
-    }
+      await onDone(etat === "published" ? "Contenu mis à jour." : etat === "archived" ? "Contenu archivé enregistré : il reste hors du portail." : "Brouillon enregistré.");
+    });
   }
 
   async function joindre(file: File) {
-    if (!article) return;
-    setEnvoi("fichier");
-    setRetour(null);
+    if (!article || occupe) return;
+    setInfo(null);
     const form = new FormData();
     form.set("file", file);
-    try {
+    const r = await envoyer("fichier", async () => {
       setArticle(await apiUpload<ArticleAdmin>(`/axispro/portail/articles/${article.id}/fichiers`, form));
       await onChange();
-      setRetour({ tone: "ok", text: `Fichier « ${file.name} » ajouté.` });
-    } catch (e) {
-      setRetour({ tone: "danger", text: messageErreur(e) });
-    } finally {
-      setEnvoi(null);
-    }
+      return true;
+    });
+    if (r) setInfo(`Fichier « ${file.name} » ajouté.`);
   }
 
   async function retirer(attId: number, nom: string) {
-    if (!article || !(await demanderConfirmation(`Retirer le fichier « ${nom} » ?`, { action: "Retirer", danger: true }))) return;
-    setRetour(null);
-    try {
+    if (!article || occupe || !(await demanderConfirmation(`Retirer le fichier « ${nom} » ? Les porteurs ne pourront plus le télécharger.`, { action: "Retirer", danger: true }))) return;
+    setInfo(null);
+    await envoyer(`retirer-${attId}`, async () => {
       setArticle(await apiSend<ArticleAdmin>("DELETE", `/axispro/portail/articles/${article.id}/fichiers/${attId}`));
       await onChange();
-    } catch (e) {
-      setRetour({ tone: "danger", text: messageErreur(e) });
-    }
+    });
   }
 
   async function telecharger(attId: number, nom: string) {
@@ -509,7 +534,7 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
     try {
       await apiDownload(`/axispro/portail/articles/${article.id}/fichiers/${attId}`, nom);
     } catch (e) {
-      setRetour({ tone: "danger", text: messageErreur(e) });
+      setErreur(messageErreur(e));
     }
   }
 
@@ -519,36 +544,38 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
       open
       wide
       title={!article ? "Nouveau contenu" : ecriture ? "Modifier le contenu" : "Contenu"}
-      onClose={onClose}
+      onClose={() => void fermer()}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" disabled={occupe} onClick={() => void fermer()}>
             Fermer
           </Button>
           {ecriture && etat !== "published" && (
-            <Button variant="secondary" loading={envoi === "brouillon"} disabled={envoi !== null} onClick={() => void enregistrer(false)}>
+            <Button variant="secondary" loading={envoi === "brouillon"} disabled={occupe} onClick={() => void enregistrer(false)}>
               {etat === "archived" ? "Enregistrer" : "Enregistrer le brouillon"}
             </Button>
           )}
           {ecriture && (
-            <Button variant="primary" loading={envoi === "publier"} disabled={envoi !== null} onClick={() => void enregistrer(true)}>
+            <Button variant="primary" loading={envoi === "publier"} disabled={occupe} onClick={() => void enregistrer(true)}>
               <Send className="h-4 w-4" /> {etat === "published" ? "Enregistrer" : etat === "archived" ? "Republier" : "Publier"}
             </Button>
           )}
         </>
       }
     >
-      <fieldset disabled={!ecriture} className="min-w-0 space-y-4">
-        {retour && <Notice tone={retour.tone}>{retour.text}</Notice>}
+      <fieldset disabled={!ecriture || occupe} className="min-w-0 space-y-4">
+        {erreur && <Notice tone="danger">{erreur}</Notice>}
+        {info && !erreur && <Notice tone="ok">{info}</Notice>}
+        {etat === "archived" && ecriture && <Notice tone="neutral">Ce contenu est archivé : « Enregistrer » garde vos modifications sans le remettre sur le portail ; « Republier » le remet en ligne et prévient les porteurs.</Notice>}
         {article && (
           <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
             <Badge tone={e.tone}>{etat === "draft" ? "Brouillon à relire" : e.label}</Badge>
             <span>
               {article.author}
-              {article.published_at ? `, publié ${quand(article.published_at)}` : ""}, {pluriel(article.reading_minutes || 1, "minute", "minutes")} de lecture.
+              {article.published_at ? `, publié ${quand(article.published_at)}` : ""}, {pluriel(article.reading_minutes || 1, "minute")} de lecture.
             </span>
             <span>
-              {pluriel(article.stats.views, "lecture", "lectures")}, {pluriel(article.stats.readers, "lecteur", "lecteurs")}, {article.stats.helpful} utile, {article.stats.not_helpful} pas utile, {pluriel(article.stats.bookmarks, "favori", "favoris")}.
+              {pluriel(article.stats.views, "lecture")}, {pluriel(article.stats.readers, "lecteur")}, {avisUtiles(article.stats.helpful, article.stats.not_helpful)}, {pluriel(article.stats.bookmarks, "favori")}.
             </span>
           </div>
         )}
@@ -604,7 +631,13 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
       <section aria-label="Fichiers joints" className="mt-5 rounded-xl border border-line p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Intitule hint={`${FORMATS_TEXTE} Dix fichiers au plus.`}>Fichiers joints</Intitule>
-          {ecriture && article && <FileButton small label={envoi === "fichier" ? "Envoi en cours…" : "Ajouter un fichier"} accept={FORMATS} onFile={(file) => void joindre(file)} />}
+          {ecriture && article && (occupe ? (
+            <Button size="sm" loading={envoi === "fichier"} disabled>
+              {envoi === "fichier" ? "Envoi en cours…" : "Ajouter un fichier"}
+            </Button>
+          ) : (
+            <FileButton small label="Ajouter un fichier" accept={FORMATS} onFile={(file) => void joindre(file)} />
+          ))}
         </div>
         {!article ? (
           <p className="mt-2 text-[13px] text-muted">Enregistrez d&apos;abord le contenu (en brouillon) pour y joindre des fichiers.</p>
@@ -623,7 +656,7 @@ function EditeurArticle({ initial, rubriques, cibles, ecriture, onClose, onChang
                   <Download className="h-4 w-4" />
                 </button>
                 {ecriture && (
-                  <button type="button" aria-label={`Retirer ${file.name}`} title="Retirer" className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger" onClick={() => void retirer(file.id, file.name)}>
+                  <button type="button" aria-label={`Retirer ${file.name}`} title="Retirer" disabled={occupe} aria-busy={envoi === `retirer-${file.id}` || undefined} className="rounded-lg p-1.5 text-muted hover:bg-danger-doux hover:text-danger disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void retirer(file.id, file.name)}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 )}

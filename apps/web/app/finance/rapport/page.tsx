@@ -3,12 +3,13 @@
 import { useState, type ReactNode } from "react";
 import { CachetDocument } from "@/components/brand";
 import { Printer } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, PageHeader, cx } from "@/components/ui";
+import { Button, Card, DataTable, ErrorBox, Field, Kpi, Loading, PageHeader, Select, cx } from "@/components/ui";
 import { AlerteLigne, CourbeTresorerie, FluxMensuels } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import type { Alert, CashAccount, CashForecast, Dashboard, DebtSummary, MonthlyCash, Ref, Thresholds, TransportKpis, WorkingCapital } from "@/lib/finance-types";
-import { fmtDate, fmtDec, fmtGNF, fmtInt, fmtMonth, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtGNF, fmtInt, fmtJours, fmtMonth, fmtPct, fmtRatio, fmtShort, fmtVolume } from "@/lib/format";
+import { aujourdhui } from "@/components/finance/communPieces";
 
 interface Report {
   month: string;
@@ -50,11 +51,22 @@ interface Report {
   reading: string[];
 }
 
-const thisMonth = () => new Date().toISOString().slice(0, 7);
-const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+// Mois en cours à Conakry (le mois UTC changeait au dernier soir du mois sur un poste réglé ailleurs).
+const thisMonth = () => aujourdhui().slice(0, 7);
+const ratio = (v: number | null | undefined) => fmtRatio(v);
+
+/** Les 36 derniers mois, du plus récent au plus ancien : { value: « 2026-10 », label: « oct. 2026 » }. */
+function derniersMois(): Array<{ value: string; label: string }> {
+  const [annee, mois] = thisMonth().split("-").map(Number);
+  return Array.from({ length: 36 }, (_, i) => {
+    const total = annee! * 12 + (mois! - 1) - i;
+    const value = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+    return { value, label: fmtMonth(value) };
+  });
+}
 /** Mention d'un seuil laissé à 0 (règle éteinte) : la valeur s'affiche sans être jugée. */
 const NON_FIXE = <span className="ml-1.5 font-sans text-[11.5px] font-normal text-muted">seuil non fixé</span>;
-const jours = (v: number | null) => (v === null ? "–" : `${fmtDec(Math.round(v * 10) / 10)} jours`);
+const jours = (v: number | null) => fmtJours(v);
 
 function delta(current: number, previous: number) {
   if (!previous) return null;
@@ -82,7 +94,7 @@ function Synthese({ titre, lignes }: { titre: string; lignes: Array<[string, Rea
 export default function ManagementReportPage() {
   const [month, setMonth] = useState(thisMonth());
   const [scope, setScope] = useState<"company" | "group">("company");
-  const { data: r, error } = useApi<Report>(`/finance/management-report?month=${month}&scope=${scope}`);
+  const { data: r, error, mutate } = useApi<Report>(`/finance/management-report?month=${month}&scope=${scope}`);
   return (
     <div>
       <PageHeader
@@ -90,13 +102,14 @@ export default function ManagementReportPage() {
         subtitle={r ? `${r.companies.map((c) => c.name).join(", ")}, période arrêtée au ${fmtDate(r.period.end)}, exercice ouvert le ${fmtDate(r.period.fiscal_year_start)}, montants en GNF` : "Synthèse mensuelle pour la direction générale."}
         actions={
           <>
-            <Field label="Mois"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value || thisMonth())} /></Field>
+            {/* Liste des 36 derniers mois : le champ « month » n'existe ni dans Firefox ni dans Safari de bureau. */}
+            <Field label="Mois"><Select value={month} onChange={(e) => setMonth(e.target.value || thisMonth())} options={derniersMois()} /></Field>
             <ScopeToggle value={scope} onChange={setScope} />
             <Button onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimer</Button>
           </>
         }
       />
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!r && !error && <Loading />}
       {r && <Corps r={r} groupe={scope === "group"} />}
     </div>
@@ -120,7 +133,7 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
         <Kpi label="Résultat net cumulé" value={fmtShort(k.net_result_fy)} hint={`EBE ${fmtShort(k.ebe_fy)}`} tone={k.net_result_fy >= 0 ? "ok" : "danger"} />
         <Kpi label="Trésorerie fin de mois" value={fmtShort(k.cash)} hint={`Cash net du mois ${fmtShort(k.cash_net_month)}`} tone={k.cash_net_month < 0 ? "warn" : "accent"} />
         <Kpi label="Encours clients" value={fmtShort(k.receivables)} hint={`dont échu ${fmtShort(k.receivables_overdue)}`} tone={k.receivables_overdue ? "warn" : "neutral"} />
-        <Kpi label="Délai de recouvrement" value={jours(k.dso)} hint={k.dso_target_days ? `Cible ${k.dso_target_days} jours` : "Cible non fixée"} tone={k.dso !== null && k.dso_target_days ? (k.dso > k.dso_target_days ? "danger" : "ok") : "neutral"} />
+        <Kpi label="Délai de recouvrement" value={jours(k.dso)} hint={k.dso_target_days ? `Cible ${fmtJours(k.dso_target_days)}` : "Cible non fixée"} tone={k.dso !== null && k.dso_target_days ? (k.dso > k.dso_target_days ? "danger" : "ok") : "neutral"} />
         <Kpi label="Dette financière" value={fmtShort(r.debt.accounting_outstanding ?? r.debt.outstanding)} hint={r.debt.next_due_date ? `Prochaine échéance ${fmtDate(r.debt.next_due_date)}` : undefined} />
         <Kpi label="DSCR" value={ratio(k.dscr)} hint={`EBE 12 mois / service de la dette, ${dscrMin ? `minimum ${ratio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={k.dscr === null || !dscrMin ? "neutral" : k.dscr < dscrMin ? "danger" : "ok"} />
       </div>
@@ -189,12 +202,12 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
             titre="Activité transport du mois"
             lignes={[
               ["Rotations réalisées", fmtInt(t.rotations)],
-              ["Volume transporté (m³)", fmtDec(t.volume)],
+              ["Volume transporté (m³)", fmtVolume(t.volume)],
               ["Kilomètres parcourus", t.km === null ? "Non calculé" : fmtInt(t.km)],
               ["Chiffre d'affaires transport", fmtInt(t.revenue)],
               ["Marge directe", fmtInt(t.margin)],
               ["Taux de marge directe", <>{fmtPct(t.margin_rate)}{r.thresholds.transport_margin_min ? null : NON_FIXE}</>, t.margin_rate !== null && !!r.thresholds.transport_margin_min && t.margin_rate < r.thresholds.transport_margin_min],
-              ["Camions déficitaires après structure", t.vehicles.basis === "net" ? `${t.vehicles.deficit.length} sur ${t.vehicles.count}` : "Non calculé", t.vehicles.basis === "net" && t.vehicles.deficit.length > 0],
+              ["Camions déficitaires après structure", t.vehicles.basis === "net" ? `${fmtInt(t.vehicles.deficit.length)} sur ${fmtInt(t.vehicles.count)}` : "Non calculé", t.vehicles.basis === "net" && t.vehicles.deficit.length > 0],
               ["Rotations non facturées", fmtInt(t.unbilled.count), t.unbilled.count > 0],
             ]}
           />
@@ -244,8 +257,8 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
           <Card title="Transport : le mois par ensemble routier" padded={false}>
             <DataTable dense rows={r.transport} rowKey={(x) => x.key ?? x.label} empty="Aucune rotation validée ce mois." columns={[
               { key: "label", label: "Ensemble" },
-              { key: "rotations", label: "Rotations", align: "right" },
-              { key: "volume", label: "Volume (m³)", align: "right", render: (x) => fmtDec(x.volume) },
+              { key: "rotations", label: "Rotations", align: "right", render: (x) => fmtInt(x.rotations) },
+              { key: "volume", label: "Volume (m³)", align: "right", render: (x) => fmtVolume(x.volume) },
               { key: "revenue", label: "Chiffre d'affaires", align: "right", render: (x) => fmtInt(x.revenue) },
               { key: "margin", label: "Marge", align: "right", render: (x) => <span className={x.margin < 0 ? "text-danger" : undefined}>{fmtInt(x.margin)}</span> },
             ]} />
@@ -274,7 +287,7 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
         )}
       </Card>
 
-      <CachetDocument emetteur={r.companies.map((c) => c.name).join(" et ")} date={fmtDate(new Date().toISOString().slice(0, 10))} />
+      <CachetDocument emetteur={r.companies.map((c) => c.name).join(" et ")} date={fmtDate(aujourdhui())} />
     </div>
   );
 }

@@ -42,7 +42,9 @@ EVALUATION_COLUMNS = ("code", "critere", "domaine", "gate", "statut", "observati
 
 
 def _plain(value):
-    text = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode().lower().strip()
+    # Un nombre 0 lu dans un classeur (statut « non disponible ») n'est pas une cellule vide.
+    text = unicodedata.normalize("NFKD", str("" if value is None else value)).encode("ascii", "ignore").decode()
+    text = text.lower().strip()
     return " ".join(text.replace("_", " ").replace("/", " ").split())
 
 
@@ -674,7 +676,7 @@ def _evaluation_rows(filename, content):
             raise UserError("Fichier JSON illisible.") from e
         if not isinstance(data, dict) or data.get("format") != EXPORT_FORMAT \
                 or not isinstance(data.get("evaluations") or [], list):
-            raise UserError("Ce fichier JSON n'est pas un export d'évaluation AxisPro.")
+            raise UserError("Ce fichier JSON n'est pas un export d'évaluation de MB AxisPro Consulting.")
         return [(n, item) for n, item in enumerate(data.get("evaluations") or [], start=1) if isinstance(item, dict)]
     if filename.lower().endswith((".xlsx", ".xlsm")):
         raw = workbook_rows(content, sheets=("Scoring", "Évaluation"))

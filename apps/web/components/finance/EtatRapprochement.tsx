@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, Pencil, Printer } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Loading, Modal, Notice, PageHeader, Select, cx } from "@/components/ui";
-import { ApiError, apiDownload, apiSend, useApi } from "@/lib/api-client";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, aujourdhui, enSaisie, useTelechargement } from "./communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { CashAccount } from "@/lib/finance-types";
-import { fmtDate, fmtGNF } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
 interface BookLine { id: number; move_id: number; move: string; date: string; journal: string; label: string | null; partner: string | null; amount: number }
 interface StatementLine { id: number; date: string; label: string; partner: string | null; amount: number; statement: string | null }
@@ -36,7 +37,7 @@ interface Reconciliation {
 }
 interface BankStatement { id: number; name: string; date: string | null; first_date: string | null; lines: number; balance_start: number; balance_end: number; balance_end_real: number; gap: number; is_complete: boolean; is_valid: boolean }
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = aujourdhui;
 
 /**
  * État de rapprochement bancaire, imprimable : solde du relevé, opérations comptabilisées absentes du
@@ -44,13 +45,16 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
  */
 export function EtatRapprochement() {
   const params = useSearchParams();
-  const { data: position } = useApi<{ accounts: CashAccount[] }>("/finance/treasury");
+  const { data: position, error: erreurPosition, mutate: refreshPosition } = useApi<{ accounts: CashAccount[] }>("/finance/treasury");
+  const fichiers = useTelechargement();
   const [journalId, setJournalId] = useState<string>(params.get("journal") ?? "");
   const [day, setDay] = useState(params.get("date") ?? todayIso());
   const current = journalId || String(position?.accounts.find((a) => a.type === "bank")?.journal_id ?? "");
   const { data, error, mutate } = useApi<Reconciliation>(current ? `/finance/treasury/${current}/reconciliation-statement?date=${day}` : null);
   const { data: statements, error: erreurReleves, mutate: refreshStatements } = useApi<BankStatement[]>(current ? `/finance/treasury/${current}/statements` : null);
   const [editing, setEditing] = useState<BankStatement | null>(null);
+  // Correction des soldes d'un relevé : PATCH réservé à la finance et à l'administration.
+  const ecriture = useAutorise(ECRITURE_FINANCE);
   const money = (v: number | null | undefined) => (v === null || v === undefined ? "–" : fmtGNF(v, data?.currency ?? "GNF"));
 
   return (
@@ -63,7 +67,7 @@ export function EtatRapprochement() {
             <Button onClick={() => window.print()} disabled={!data}>
               <Printer className="h-4 w-4" /> Imprimer
             </Button>
-            <Button onClick={() => apiDownload(`/finance/treasury/${current}/reconciliation-statement?date=${day}&format=xlsx`, `rapprochement_${day}.xlsx`)} disabled={!data}>
+            <Button loading={fichiers.enCours === "xlsx"} onClick={() => void fichiers.telecharger("xlsx", `/finance/treasury/${current}/reconciliation-statement?date=${day}&format=xlsx`, `rapprochement_${day}.xlsx`)} disabled={!data}>
               <Download className="h-4 w-4" /> Excel
             </Button>
           </>
@@ -71,13 +75,20 @@ export function EtatRapprochement() {
       />
       <div className="no-print mb-5 flex flex-wrap items-end gap-3">
         <Field label="Compte">
-          <Select value={current} onChange={(e) => setJournalId(e.target.value)} placeholder={position ? undefined : "Chargement…"} options={(position?.accounts ?? []).map((a) => ({ value: a.journal_id, label: `${a.name} (${a.type === "cash" ? "caisse" : "banque"})` }))} />
+          <Select value={current} onChange={(e) => setJournalId(e.target.value)} placeholder={position ? undefined : erreurPosition ? "Comptes indisponibles" : "Chargement…"} options={(position?.accounts ?? []).map((a) => ({ value: a.journal_id, label: `${a.name} (${a.type === "cash" ? "caisse" : "banque"})` }))} />
         </Field>
         <Field label="Arrêté au">
           <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} />
         </Field>
       </div>
-      {error && <ErrorBox error={error} />}
+      {fichiers.erreur && (
+        <div className="mb-4">
+          <Notice tone="danger">{fichiers.erreur}</Notice>
+        </div>
+      )}
+      {/* Comptes en échec : l'erreur avec « Réessayer », au lieu d'un « Chargement… » sans fin. */}
+      {erreurPosition && !position && <ErrorBox error={erreurPosition} onRetry={() => refreshPosition()} />}
+      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && current && <Loading />}
       {data && (
         <div className="space-y-5">
@@ -206,16 +217,20 @@ export function EtatRapprochement() {
                       </div>
                     ),
                   },
-                  {
-                    key: "edit",
-                    label: "",
-                    align: "right",
-                    render: (s) => (
-                      <button type="button" className="no-print text-muted hover:text-ink" aria-label="Corriger les soldes" onClick={() => setEditing(s)}>
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    ),
-                  },
+                  ...(ecriture
+                    ? [
+                        {
+                          key: "edit",
+                          label: "",
+                          align: "right" as const,
+                          render: (s: BankStatement) => (
+                            <button type="button" className="no-print text-muted hover:text-ink" aria-label={`Corriger les soldes du relevé ${s.name}`} onClick={() => setEditing(s)}>
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          ),
+                        },
+                      ]
+                    : []),
                 ]}
               />
             )}
@@ -247,16 +262,18 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 function StatementBalances({ statement, onClose, onSaved }: { statement: BankStatement; onClose: () => void; onSaved: () => void }) {
-  const [start, setStart] = useState(String(statement.balance_start));
-  const [end, setEnd] = useState(String(statement.balance_end_real));
+  const [start, setStart] = useState(enSaisie(statement.balance_start));
+  const [end, setEnd] = useState(enSaisie(statement.balance_end_real));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", "."));
+  // Soldes lus à la française ; vides ou illisibles, ils bloquent l'enregistrement (un vide partait à 0).
+  const debut = lireNombre(start);
+  const fin = lireNombre(end);
   async function save() {
     setBusy(true);
     setError(null);
     try {
-      await apiSend("PATCH", `/finance/treasury/statements/${statement.id}`, { balance_start: num(start), balance_end_real: num(end) });
+      await apiSend("PATCH", `/finance/treasury/statements/${statement.id}`, { balance_start: debut, balance_end_real: fin });
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
@@ -265,16 +282,16 @@ function StatementBalances({ statement, onClose, onSaved }: { statement: BankSta
     }
   }
   return (
-    <Modal open title={`Soldes du relevé ${statement.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={save} disabled={Number.isNaN(num(start)) || Number.isNaN(num(end))}>Enregistrer</Button>}>
+    <Modal open title={`Soldes du relevé ${statement.name}`} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={save} disabled={debut === null || fin === null}>Enregistrer</Button>}>
       <div className="space-y-3">
         {error && <Notice tone="danger">{error}</Notice>}
         <p className="text-sm text-muted">Reportez les soldes imprimés sur le relevé de la banque. Opérations du relevé : {statement.lines}.</p>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Solde initial">
-            <Input inputMode="decimal" className="text-right font-mono" value={start} onChange={(e) => setStart(e.target.value)} />
+          <Field label="Solde initial" error={nombreIllisible(start) ? AIDE_NOMBRE : start.trim() ? undefined : "Indiquez le solde."}>
+            <Input inputMode="decimal" aria-invalid={debut === null} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={start} onChange={(e) => setStart(e.target.value)} />
           </Field>
-          <Field label="Solde final">
-            <Input inputMode="decimal" className="text-right font-mono" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <Field label="Solde final" error={nombreIllisible(end) ? AIDE_NOMBRE : end.trim() ? undefined : "Indiquez le solde."}>
+            <Input inputMode="decimal" aria-invalid={fin === null} className={cx("text-right font-mono", CHAMP_INVALIDE)} value={end} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
       </div>

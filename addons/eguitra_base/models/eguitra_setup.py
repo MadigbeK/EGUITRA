@@ -41,6 +41,11 @@ AUDIT_EXCLUDED_MODELS = [
     "portail.article.reaction",
     "portail.notification",
     "portail.read.marker",
+    # Discussion interne (eguitra_chat) : les messages sont une correspondance privée, que la piste d'audit,
+    # lue par l'administration, ne doit pas recopier ; la lecture de chaque membre change à chaque lecture.
+    # Conversations et membres, eux, sont suivis.
+    "eguitra.chat.message",
+    "eguitra.chat.read",
 ]
 PLATFORM_PREFIXES = ("eguitra.", "axispro.", "portail.")
 

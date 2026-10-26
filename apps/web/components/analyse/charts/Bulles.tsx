@@ -29,16 +29,34 @@ export interface Quadrants {
 const M = { haut: 18, droite: 18, bas: 44, gauche: 54 };
 
 /**
+ * Domaine d'un axe : contient 0 et tous les points, avec 8 % d'air du côté des valeurs. Jamais infini
+ * ni inversé : liste vide ou valeurs toutes nulles donnent [0, 1], valeurs toutes négatives restent
+ * dans le cadre (l'ancien « max × 1,08 » rejetait le plus grand point négatif hors du cadre).
+ */
+function domaine(valeurs: number[]): [number, number] {
+  const finies = valeurs.filter((v) => Number.isFinite(v));
+  if (!finies.length) return [0, 1];
+  const min = Math.min(0, ...finies);
+  const max = Math.max(0, ...finies);
+  const air = (max - min) * 0.08;
+  if (!air) return [0, 1];
+  return [min < 0 ? min - air : 0, max > 0 ? max + air : 0];
+}
+
+/**
  * Nuage à bulles avec quadrants nommés : deux mesures en axes, une troisième en aire, un groupe en
  * couleur. Les quadrants donnent la lecture d'un coup d'œil (« Stratégiques », « À surveiller »).
- * Chaque bulle se survole et se parcourt au clavier (Tab) ; la légende masque un groupe.
+ * Chaque bulle se survole et se parcourt au clavier (Tab) ; la légende masque un groupe. La bulle
+ * visée par un lien (`surligne`) est cerclée de l'accent et porte toujours son nom.
  */
-export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30 }: {
+export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, yRacine, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30, surligne }: {
   points: PointBulle[];
   xLabel: string;
   yLabel: string;
   xDomain?: [number, number];
   yDomain?: [number, number];
+  /** Ordonnée en racine carrée (montants très concentrés : les petits restent lisibles) ; valeurs positives. */
+  yRacine?: boolean;
   quadrants?: Quadrants;
   hauteur?: number;
   label: string;
@@ -51,16 +69,16 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
   rayonMax?: number;
   /** Au-delà de ce nombre de points, seuls les points survolés portent leur nom. */
   libellesMax?: number;
+  /** Identifiant du point visé par un lien. */
+  surligne?: string | null;
 }) {
   const [focus, setFocus] = useState<string | null>(null);
   const [masques, setMasques] = useState<string[]>([]);
   const groupes = [...new Set(points.map((p) => p.group ?? ""))].filter(Boolean);
   const couleurDe = (g: string | undefined) => (g ? couleurs?.[g] ?? SERIES[groupes.indexOf(g) % SERIES.length] ?? COULEUR.accent : COULEUR.accent);
   const visibles = points.filter((p) => !p.group || !masques.includes(p.group));
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const xd = xDomain ?? [Math.min(0, ...xs), Math.max(...xs) * 1.08 || 1];
-  const yd = yDomain ?? [Math.min(0, ...ys), Math.max(...ys) * 1.08 || 1];
+  const xd = xDomain ?? domaine(points.map((p) => p.x));
+  const yd = yDomain ?? domaine(points.map((p) => p.y));
   const teintes = quadrants?.teintes ?? [COULEUR.bon, COULEUR.alerte, COULEUR.alerte, COULEUR.mauvais];
 
   return (
@@ -72,7 +90,9 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
         onPointerLeave={() => setFocus(null)}
         enfants={(W) => {
           const x = scaleLinear().domain(xd).range([M.gauche, W - M.droite]).nice();
-          const y = scaleLinear().domain(yd).range([hauteur - M.bas, M.haut]).nice();
+          const y = yRacine
+            ? scaleSqrt().domain([0, Math.max(1, yd[1])]).range([hauteur - M.bas, M.haut]).nice().clamp(true)
+            : scaleLinear().domain(yd).range([hauteur - M.bas, M.haut]).nice();
           const r = scaleSqrt().domain([0, Math.max(1, ...points.map((p) => p.size))]).range([4, rayonMax ?? Math.min(34, W / 14)]);
           const choisi = focus ? visibles.find((p) => p.id === focus) : undefined;
           const x0 = M.gauche;
@@ -142,7 +162,10 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
                     </circle>
                   );
                 })}
-                {visibles.filter((p) => focus === p.id || (points.length <= libellesMax && r(p.size) > 16)).map((p) => (
+                {visibles.filter((p) => p.id === surligne).map((p) => (
+                  <circle key={`v${p.id}`} cx={x(p.x)} cy={y(p.y)} r={r(p.size) + 5} fill="none" stroke="var(--accent-vif)" strokeWidth={2.5} strokeDasharray="4 3" className="pointer-events-none an-fondu" />
+                ))}
+                {visibles.filter((p) => focus === p.id || p.id === surligne || (points.length <= libellesMax && r(p.size) > 16)).map((p) => (
                   <text key={`l${p.id}`} x={x(p.x)} y={y(p.y) - r(p.size) - 5} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--ink)" className="pointer-events-none an-fondu" style={{ "--i": 4 } as CSSProperties}>
                     {p.label.length > 18 ? `${p.label.slice(0, 17)}…` : p.label}
                   </text>

@@ -9,10 +9,10 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
-from ..engine import INDICATORS
+from ..engine import INDICATORS, MONEY, indicator_unit
 from ..models.dossier import COMMITTEE_DECISIONS, HYPOTHESES, STATUSES, YES_NO
 from ..models.policy import SCOPES, WEIGHTINGS, grid_template
-from ..models.review import SNAPSHOT_FINANCIAL
+from ..models.review import MOTIVE_REQUIRED, SNAPSHOT_FINANCIAL, motive_missing
 from ..scoring import REQUIREMENTS, RULES
 from .common import (
     document_row,
@@ -29,6 +29,7 @@ WRITE = ("cabinet",)
 THRESHOLDS = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable")
 POLICY_FLAGS = ("ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check")
 MIN_FORCE_REASON = 10
+MIN_PORTAL_PASSWORD = 10
 
 
 def int_value(value, key):
@@ -65,11 +66,38 @@ def _draft(policy):
         raise ApiError(422, "business_rule", "Seule une version en brouillon se modifie : créez une nouvelle version.")
 
 
+def _check_motive(decision, motive):
+    """Un HOLD ou un NO-GO se motive dès le brouillon : sans motif, la revue ne pourrait jamais être
+    verrouillée (422, champ motif signalé)."""
+    if motive_missing(decision, motive):
+        raise ApiError(422, "business_rule", MOTIVE_REQUIRED, fields=["motive"])
+
+
 def _percent(data, key):
     value = as_float(data[key] or 0, key)
     if not 0 <= value <= 100:
         raise ApiError(400, "invalid_parameter", f"{key} : valeur de 0 à 100 attendue.")
     return value
+
+
+def _weight(data, key="weight"):
+    """Poids d'un domaine ou d'un critère : nombre positif ou nul (0 le retire du score). Un poids
+    négatif retrancherait des points au score (audit du noyau, M8)."""
+    if data[key] in (None, ""):
+        raise ApiError(400, "invalid_parameter", "Poids : nombre attendu.", fields=[key])
+    value = as_float(data[key], key)
+    if value < 0:
+        raise ApiError(400, "invalid_parameter", "Poids : nombre positif ou nul attendu (0 retire l'élément du score).",
+                       fields=[key])
+    return value
+
+
+def _label(data, key, what):
+    """Intitulé obligatoire d'un élément de la grille : une ligne, 200 caractères au plus."""
+    text = " ".join(str(data[key] or "").split())[:200]
+    if not text:
+        raise ApiError(400, "invalid_parameter", f"{what} : intitulé obligatoire.", fields=[key])
+    return text
 
 
 def _policy_payload(policy):
@@ -111,10 +139,13 @@ def _policy_payload(policy):
              "indicator_partial": c.indicator_partial if c.indicator and c.indicator_has_partial else None}
             for c in policy.criterion_ids
         ],
-        "indicators": {k: {"label": v[0], "higher": v[1], "unit": v[2]} for k, v in INDICATORS.items()},
+        # Seuil d'un indicateur en montant : dans la devise de chaque dossier évalué (« devise du dossier »).
+        "indicators": {k: {"label": v[0], "higher": v[1], "unit": indicator_unit(k), "money": v[2] == MONEY}
+                       for k, v in INDICATORS.items()},
         "documents": [
             {"id": t.id, "code": t.code, "name": t.name, "category": t.category or None, "gate_id": t.gate_id.id or None,
-             "required": t.required, "guidance": t.guidance or None, "criteria": t.criterion_ids.mapped("code")}
+             "required": t.required, "guidance": t.guidance or None, "criteria": t.criterion_ids.mapped("code"),
+             "criterion_ids": t.criterion_ids.ids}
             for t in policy.document_type_ids
         ],
     }
@@ -156,7 +187,7 @@ class EguitraAxispro(http.Controller):
         form = request.httprequest.form
         go = form.get("go_threshold")
         policy = request.env["axispro.policy"].import_grid(
-            request.env.company, form.get("name") or "Politique d'évaluation AxisPro", upload.filename or "grille.xlsx",
+            request.env.company, form.get("name") or "Politique d'évaluation MB AxisPro Consulting", upload.filename or "grille.xlsx",
             upload.read(), go=as_float(go, "go_threshold") if go else None,
             conditional=as_float(form.get("conditional_threshold") or 50, "conditional_threshold"),
             notes=form.get("notes") or None,
@@ -169,12 +200,20 @@ class EguitraAxispro(http.Controller):
         policy = _record("axispro.policy", policy_id, "Politique")
         _draft(policy)
         data = read_json()
-        values = {k: data[k] or False for k in ("name", "notes") if k in data}
+        values = {"notes": data["notes"] or False} if "notes" in data else {}
+        if "name" in data:
+            values["name"] = _label(data, "name", "Politique d'évaluation")
         for key in THRESHOLDS:
             if key in data:
                 values[key] = _percent(data, key)
         if "dscr_target" in data:
-            values["dscr_target"] = as_float(data["dscr_target"] or 0, "dscr_target")
+            # Un DSCR bancaire vide ou nul laisserait passer tous les dossiers à la règle de bancabilité
+            # (audit de l'application web, C1 : « 1,3x » arrivait à 0).
+            dscr = as_float(data["dscr_target"], "dscr_target") if data["dscr_target"] not in (None, "") else None
+            if dscr is None or not 0 < dscr <= 10:
+                raise ApiError(400, "invalid_parameter", "DSCR bancaire : nombre positif attendu, 10 au plus "
+                                                         "(par exemple 1,3).", fields=["dscr_target"])
+            values["dscr_target"] = dscr
         if data.get("weighting") in dict(WEIGHTINGS):
             values["weighting"] = data["weighting"]
         for flag in POLICY_FLAGS:
@@ -227,9 +266,11 @@ class EguitraAxispro(http.Controller):
         domain = _record("axispro.domain", domain_id, "Domaine")
         _draft(domain.policy_id)
         data = read_json()
-        values = {k: data[k] or False for k in ("name", "deliverable") if k in data}
+        values = {"deliverable": data["deliverable"] or False} if "deliverable" in data else {}
+        if "name" in data:
+            values["name"] = _label(data, "name", "Domaine")
         if "weight" in data:
-            values["weight"] = as_float(data["weight"], "weight")
+            values["weight"] = _weight(data)
         if "compartment_id" in data:
             wanted = int_value(data["compartment_id"], "compartment_id") if data["compartment_id"] else 0
             compartment = domain.policy_id.compartment_ids.filtered(lambda k: k.id == wanted)
@@ -254,26 +295,72 @@ class EguitraAxispro(http.Controller):
         criterion = _record("axispro.criterion", criterion_id, "Critère")
         _draft(criterion.policy_id)
         data = read_json()
-        values = {k: data[k] or False for k in ("name", "guidance", "deliverable") if k in data}
+        values = {k: data[k] or False for k in ("guidance", "deliverable") if k in data}
+        if "name" in data:
+            values["name"] = _label(data, "name", f"Critère {criterion.code}")
         for key in ("critical", "knockout", "evidence_required", "bankability"):
             if key in data:
                 values[key] = bool(data[key])
         if data.get("requirement_type") in REQUIREMENTS:
             values["requirement_type"] = data["requirement_type"]
         if "weight" in data:
-            values["weight"] = as_float(data["weight"], "weight")
+            values["weight"] = _weight(data)
         if "indicator" in data:
             if data["indicator"] and data["indicator"] not in INDICATORS:
                 raise ApiError(400, "invalid_parameter", "Indicateur inconnu.")
             values["indicator"] = data["indicator"] or False
         if "indicator_threshold" in data:
-            values["indicator_threshold"] = as_float(data["indicator_threshold"] or 0, "indicator_threshold")
+            # Seuil vide : refusé plutôt qu'enregistré à 0 (un seuil de 0 se saisit).
+            if data["indicator_threshold"] in (None, ""):
+                raise ApiError(400, "invalid_parameter", "Seuil de satisfaction : nombre attendu.",
+                               fields=["indicator_threshold"])
+            values["indicator_threshold"] = as_float(data["indicator_threshold"], "indicator_threshold")
         if "indicator_partial" in data:
             partial = data["indicator_partial"]
             values["indicator_has_partial"] = partial not in (None, "")
             values["indicator_partial"] = as_float(partial, "indicator_partial") if partial not in (None, "") else 0.0
         criterion.write(values)
         return {"status": "ok"}
+
+    @api_route("/axispro/document-types/<int:type_id>", methods=("PATCH",), profiles=WRITE)
+    def update_document_type(self, type_id, **_kw):
+        """Pièce standard de la data room d'une version en brouillon : intitulé, rubrique, gate où elle
+        est attendue (vide : dès l'ouverture), pièce obligatoire, consignes au porteur et critères
+        qu'elle justifie (`criterion_ids`, critères de la même version). Audit du noyau, I-X6 : la
+        grille se modifie par le cabinet sans intervention technique (offre, chapitre 3.7), pièces
+        comprises ; une version en vigueur ou archivée ne se modifie pas (422)."""
+        piece = _record("axispro.document.type", type_id, "Pièce standard")
+        policy = piece.policy_id
+        _draft(policy)
+        data = read_json()
+        values = {}
+        if "name" in data:
+            values["name"] = _label(data, "name", f"Pièce {piece.code}")
+        if "category" in data:
+            values["category"] = " ".join(str(data["category"] or "").split())[:200] or False
+        if "guidance" in data:
+            values["guidance"] = str(data["guidance"] or "").strip()[:5000] or False
+        if "required" in data:
+            values["required"] = bool(data["required"])
+        if "gate_id" in data:
+            wanted = int_value(data["gate_id"], "gate_id") if data["gate_id"] else 0
+            gate = policy.gate_ids.filtered(lambda g: g.id == wanted)
+            if wanted and not gate:
+                raise ApiError(400, "invalid_parameter", "Gate inconnu dans cette version de la grille.",
+                               fields=["gate_id"])
+            values["gate_id"] = gate.id or False
+        if "criterion_ids" in data:
+            if not isinstance(data["criterion_ids"] or [], list):
+                raise ApiError(400, "invalid_parameter", "criterion_ids : liste d'identifiants attendue.",
+                               fields=["criterion_ids"])
+            wanted = {int_value(i, "criterion_ids") for i in data["criterion_ids"] or []}
+            criteria = policy.criterion_ids.filtered(lambda c: c.id in wanted)
+            if len(criteria) != len(wanted):
+                raise ApiError(400, "invalid_parameter", "Critère inconnu dans cette version de la grille.",
+                               fields=["criterion_ids"])
+            values["criterion_ids"] = [(6, 0, criteria.ids)]
+        piece.write(values)
+        return _policy_payload(policy)
 
     # ─── Dossiers ─────────────────────────────────────────────────────────
 
@@ -371,11 +458,15 @@ class EguitraAxispro(http.Controller):
         le dossier d'un autre."""
         dossier = _dossier(dossier_id)
         data = read_json()
-        login, name, password = require(data, "login", "name", "password")
+        login, name = require(data, "login", "name")
+        password = data.get("password") or ""
         Users = request.env["res.users"].sudo().with_context(no_reset_password=True)
         user = Users.with_context(active_test=False).search([("login", "=", str(login).strip().lower())], limit=1)
         if user and not user.share:
             raise ApiError(409, "conflict", "Cet identifiant appartient à un utilisateur interne.")
+        if not user and len(str(password)) < MIN_PORTAL_PASSWORD:
+            raise ApiError(400, "missing_fields", f"Mot de passe provisoire de {MIN_PORTAL_PASSWORD} caractères au "
+                                                  "moins pour un nouveau compte porteur.", fields=["password"])
         if user:
             promoter = dossier.promoter_id.commercial_partner_id
             others = request.env["axispro.dossier"].sudo().search([("portal_user_ids", "in", user.id)]).filtered(
@@ -387,14 +478,51 @@ class EguitraAxispro(http.Controller):
                     f"d'un autre promoteur ({', '.join(sorted(set(others.mapped('promoter_id.name'))))}) : un compte "
                     "porteur ne sert qu'un promoteur. Vérifiez l'identifiant ou choisissez-en un autre pour ce porteur.",
                 )
-        if not user:
+        created = not user
+        if user and not user.active:
+            user.active = True
+        if created:
             user = Users.create({
                 "name": name, "login": str(login).strip().lower(), "password": password,
                 "email": data.get("email") or False, "eguitra_password_temporary": True,
                 "company_id": dossier.company_id.id, "company_ids": [(6, 0, dossier.company_id.ids)],
             })
             user._eguitra_set_profiles(["porteur"])
-        dossier.sudo().portal_user_ids = [(4, user.id)]
+        if user not in dossier.sudo().portal_user_ids:
+            dossier.sudo().portal_user_ids = [(4, user.id)]
+            dossier.log("portal", note=f"Accès au portail ouvert : {user.name} ({user.login})"
+                                       + ("" if created else ", compte existant") + ".")
+        # Compte existant : son mot de passe ne change pas (l'écran le dit, au lieu d'ignorer la saisie).
+        return dict(dossier_detail(dossier), portal_access={"login": user.login, "created": created,
+                                                             "password_changed": created})
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/portal-access/<int:user_id>", methods=("DELETE",), profiles=WRITE)
+    def portal_revoke(self, dossier_id, user_id, **_kw):
+        """Retire au porteur l'accès au dossier (inscrit au journal) ; son compte reste, pour ses autres
+        dossiers du même promoteur, et se désactive s'il n'en suit plus aucun."""
+        dossier = _dossier(dossier_id)
+        user = dossier.sudo().portal_user_ids.filtered(lambda u: u.id == user_id)
+        if not user:
+            raise ApiError(404, "not_found", "Ce porteur n'a pas accès à ce dossier.")
+        dossier.sudo().portal_user_ids = [(3, user.id)]
+        dossier.log("portal", note=f"Accès au portail retiré : {user.name} ({user.login}).")
+        if not request.env["axispro.dossier"].sudo().search_count([("portal_user_ids", "in", user.id)]):
+            user.sudo().active = False
+        return dossier_detail(dossier)
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/lead", methods=("POST",), profiles=WRITE)
+    def change_lead(self, dossier_id, **_kw):
+        """Confie le dossier à un autre responsable : {user_id}, consultant du cabinet ouvert à la
+        société. Seul le responsable en place le fait (ou tout le cabinet si le dossier n'en a pas),
+        changement inscrit au journal ; figé, comme la fiche, par une décision verrouillée."""
+        dossier = _dossier(dossier_id)
+        (user_id,) = require(read_json(), "user_id")
+        wanted = int_value(user_id, "user_id")
+        user = _consultants().filtered(lambda u: u.id == wanted)
+        if not user:
+            raise ApiError(422, "business_rule", "Seul un consultant du cabinet ouvert à cette société peut être "
+                                                 "responsable du dossier.")
+        dossier.change_lead(user)
         return dossier_detail(dossier)
 
     # ─── Évaluation ───────────────────────────────────────────────────────
@@ -506,11 +634,20 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/advance-gate", methods=("POST",), profiles=WRITE)
     def advance(self, dossier_id, **_kw):
         """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal, et
-        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403)."""
+        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403). `from_gate` : code du
+        gate de départ que l'écran affiche ; s'il n'est plus le gate courant (double clic, réseau lent,
+        autre onglet), refus 409 sans rien franchir : un clic ne fait jamais passer deux gates."""
         dossier = _dossier(dossier_id)
-        reason = (read_json().get("force_reason") or "").strip()
+        data = read_json()
+        reason = (data.get("force_reason") or "").strip()
         if reason and len(reason) < MIN_FORCE_REASON:
             raise ApiError(400, "invalid_parameter", "Motif du passage forcé trop court.")
+        expected = data.get("from_gate")
+        current = dossier.current_gate_id.code or ""
+        if expected is not None and str(expected) != current:
+            where = f"il est au gate {current}" if current else "il n'a pas de gate courant"
+            raise ApiError(409, "conflict", f"Le dossier n'est plus au gate {expected} : {where}. Rechargez le dossier "
+                                            "avant de décider d'un nouveau passage.")
         dossier.action_advance_gate(force_reason=reason or None)
         return dossier_detail(dossier)
 
@@ -583,15 +720,16 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/reviews", methods=("POST",), profiles=WRITE)
     def create_review(self, dossier_id, **_kw):
         """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier.
-        La création d'une revue non verrouillée est libre ; le verrou (lock) exige qu'un autre compte
-        ait contribué à la révision (quatre yeux, refus 403, rien n'est créé)."""
+        Un HOLD ou un NO-GO exige un motif, brouillon compris (422, rien n'est créé). La création d'une
+        revue non verrouillée est libre ; le verrou (lock) exige qu'un autre compte ait contribué à la
+        révision (quatre yeux, refus 403, rien n'est créé)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (decision,) = require(data, "decision")
         if decision not in dict(COMMITTEE_DECISIONS):
             raise ApiError(400, "invalid_parameter", "Décision inconnue.")
-        if decision in ("hold", "no_go") and data.get("lock") and not (data.get("motive") or "").strip():
-            raise ApiError(400, "missing_fields", "Motivez une décision HOLD ou NO-GO.", fields=["motive"])
+        _check_motive(decision, data.get("motive"))
+        dossier._check_open()
         result = dossier.evaluate()
         scoring = dossier.scoring(result)
         financial = result.get("financial")
@@ -622,7 +760,13 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/reviews/<int:review_id>", methods=("PATCH",), profiles=WRITE)
     def update_review(self, review_id, **_kw):
+        """Correction d'une revue en brouillon : décision, motif, conditions, membres, instance, compte
+        rendu, date. Une revue verrouillée ne se modifie plus (422) ; un HOLD ou un NO-GO garde un motif
+        (422). Le verrou reste soumis aux quatre yeux (route /lock)."""
         review = _record("axispro.review", review_id, "Revue")
+        if review.state == "locked":
+            raise ApiError(422, "business_rule", "Une décision verrouillée ne se modifie plus : ouvrez une nouvelle "
+                                                 "révision du dossier pour une nouvelle décision.")
         data = read_json()
         values = {k: data[k] or False for k in ("members", "instance", "conditions", "motive", "minutes") if k in data}
         if "decision" in data:
@@ -631,17 +775,19 @@ class EguitraAxispro(http.Controller):
             values["decision"] = data["decision"]
         if "date" in data:
             values["date"] = parse_date(data, "date", today())
+        _check_motive(values.get("decision", review.decision), values["motive"] if "motive" in values else review.motive)
         review.write(values)
         return review_row(review)
 
     @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=WRITE)
     def lock_review(self, review_id, **_kw):
-        """Verrouillage d'une revue : refusé si aucun autre compte n'a contribué à la révision (quatre
+        """Verrouillage d'une revue : un HOLD ou un NO-GO sans motif (brouillon antérieur à la règle) se
+        complète d'abord (422) ; refusé si aucun autre compte n'a contribué à la révision (quatre
         yeux, 403)."""
         review = _record("axispro.review", review_id, "Revue")
-        if review.decision in ("hold", "no_go") and not (review.motive or "").strip():
-            raise ApiError(400, "missing_fields", "Motivez une décision HOLD ou NO-GO avant de la verrouiller.",
-                           fields=["motive"])
+        if motive_missing(review.decision, review.motive):
+            raise ApiError(422, "business_rule", "Motivez une décision HOLD ou NO-GO avant de la verrouiller : "
+                                                 "complétez le brouillon.", fields=["motive"])
         review.action_lock()
         return review_row(review)
 
@@ -678,14 +824,21 @@ class EguitraAxispro(http.Controller):
 
     # ─── Temps et facturation ─────────────────────────────────────────────
 
-    @api_route("/axispro/timesheets", profiles=READ)
-    def timesheets(self, **kw):
+    @staticmethod
+    def _timesheet_domain(kw):
         domain = []
         if kw.get("dossier_id"):
             domain.append(("dossier_id", "=", int_arg(kw, "dossier_id")))
         if kw.get("unbilled") == "1":
             domain += [("billable", "=", True), ("invoice_id", "=", False)]
-        sheets = request.env["axispro.timesheet"].search(domain, limit=int_arg(kw, "limit", 300, 1, 2000))
+        return domain
+
+    @api_route("/axispro/timesheets", profiles=READ)
+    def timesheets(self, **kw):
+        """Saisies de temps, les plus récentes d'abord (300 par défaut, `limit` jusqu'à 2 000) ; les
+        totaux de tout le filtre se lisent dans /axispro/timesheets/summary."""
+        sheets = request.env["axispro.timesheet"].search(self._timesheet_domain(kw),
+                                                         limit=int_arg(kw, "limit", 300, 1, 2000))
         return [
             {"id": t.id, "dossier": {"id": t.dossier_id.id, "reference": t.dossier_id.reference, "name": t.dossier_id.name},
              "user": t.user_id.name, "date": t.date, "hours": t.hours, "description": t.description,
@@ -693,22 +846,64 @@ class EguitraAxispro(http.Controller):
             for t in sheets
         ]
 
+    @api_route("/axispro/timesheets/summary", profiles=READ)
+    def timesheets_summary(self, **kw):
+        """Totaux de toutes les saisies du filtre (mêmes filtres que /axispro/timesheets, sans limite) :
+        nombre de saisies, heures, heures facturables encore sans facture, et par dossier. La liste,
+        elle, est bornée : un total calculé sur elle serait faux au-delà de sa limite."""
+        Timesheet = request.env["axispro.timesheet"]
+        domain = self._timesheet_domain(kw)
+        unbilled = domain + [("billable", "=", True), ("invoice_id", "=", False)]
+        totals = {d.id: [count, hours] for d, count, hours in Timesheet._read_group(
+            domain, ["dossier_id"], ["__count", "hours:sum"])}
+        pending = {d.id: hours for d, hours in Timesheet._read_group(unbilled, ["dossier_id"], ["hours:sum"])}
+        dossiers = request.env["axispro.dossier"].browse(list(totals))
+        rows = [{"id": d.id, "reference": d.reference, "name": d.name, "count": totals[d.id][0],
+                 "hours": totals[d.id][1], "unbilled": pending.get(d.id, 0.0)} for d in dossiers]
+        rows.sort(key=lambda r: -r["hours"])
+        return {"count": sum(r["count"] for r in rows), "hours": sum(r["hours"] for r in rows),
+                "unbilled": sum(r["unbilled"] for r in rows), "dossiers": rows}
+
     @api_route("/axispro/timesheets", methods=("POST",), profiles=WRITE)
     def log_time(self, **_kw):
+        """Saisie de temps sur un dossier : heures positives (audit du noyau, M8 : des heures nulles ou
+        négatives faussaient la charge et la facture), travaux décrits."""
         data = read_json()
         dossier_id, hours, description = require(data, "dossier_id", "hours", "description")
+        dossier = _dossier(int_value(dossier_id, "dossier_id"))
+        hours = as_float(hours, "hours")
+        if hours <= 0:
+            raise ApiError(400, "invalid_parameter", "Heures : nombre positif attendu (par exemple 1,5).",
+                           fields=["hours"])
+        description = " ".join(str(description).split())[:500]
+        if not description:
+            raise ApiError(400, "missing_fields", "Décrivez les travaux.", fields=["description"])
         sheet = request.env["axispro.timesheet"].create({
-            "dossier_id": int(dossier_id), "hours": as_float(hours, "hours"), "description": description,
+            "dossier_id": dossier.id, "hours": hours, "description": description,
             "date": parse_date(data, "date", today()), "billable": data.get("billable", True) is not False,
         })
         return {"id": sheet.id}
 
     @api_route("/axispro/dossiers/<int:dossier_id>/invoice", methods=("POST",), profiles=WRITE)
     def invoice(self, dossier_id, **_kw):
-        """Facture d'honoraires du dossier : seul le cabinet facture (les temps sont fermés à l'admin)."""
+        """Facture d'honoraires du dossier : seul le cabinet facture (les temps sont fermés à l'admin).
+        Taux horaire positif dès qu'il reste des temps à facturer (un taux nul les facturait à zéro et
+        les sortait du carnet) ; lignes complémentaires {name, amount} de montant positif."""
         dossier = _dossier(dossier_id)
         data = read_json()
         sheets = request.env["axispro.timesheet"].search([("dossier_id", "=", dossier.id)])
-        extra = [{"name": str(x["name"]), "amount": as_float(x["amount"], "amount")} for x in data.get("lines") or []]
-        invoice = sheets.action_invoice(as_float(data.get("hourly_rate") or 0, "hourly_rate"), extra)
+        extra = []
+        for x in data.get("lines") or []:
+            name = " ".join(str(x.get("name") or "").split())[:200] if isinstance(x, dict) else ""
+            if not name:
+                raise ApiError(400, "invalid_parameter", "Ligne complémentaire : libellé obligatoire.", fields=["lines"])
+            amount = as_float(x.get("amount"), "amount")
+            if amount <= 0:
+                raise ApiError(400, "invalid_parameter", f"Ligne « {name} » : montant positif attendu.", fields=["lines"])
+            extra.append({"name": name, "amount": amount})
+        rate = data.get("hourly_rate")
+        rate = as_float(rate, "hourly_rate") if rate not in (None, "") else 0.0
+        if rate <= 0 and sheets.filtered(lambda t: t.billable and not t.invoice_id):
+            raise ApiError(400, "invalid_parameter", "Taux horaire : montant positif attendu.", fields=["hourly_rate"])
+        invoice = sheets.action_invoice(rate, extra)
         return move_summary(invoice)

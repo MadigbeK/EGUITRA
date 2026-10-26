@@ -3,7 +3,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { hierarchy, treemap, treemapSquarify, type HierarchyRectangularNode } from "d3-hierarchy";
 import { fmtPct, fmtShort } from "@/lib/format";
-import { Bulle, COULEUR, Cadre, SERIES, TableRepli, teinte, tronquer } from "./commun";
+import { Bulle, COULEUR, Cadre, SERIES, TableRepli, teinte, tronquer, fmtValeur } from "./commun";
 
 export interface FeuilleTreemap {
   key: string;
@@ -23,7 +23,7 @@ type Noeud = { name: string; key?: string; value?: number; children?: Noeud[] };
 export function Treemap({ items, hauteur = 340, label, format, couleurs }: { items: FeuilleTreemap[]; hauteur?: number; label: string; format?: (v: number) => string; couleurs?: Record<string, string> }) {
   const [focus, setFocus] = useState<string | null>(null);
   const [zoom, setZoom] = useState<string | null>(null);
-  const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
+  const show = format ?? ((v: number) => fmtValeur(v, "gnf"));
   const groupes = useMemo(() => [...new Set(items.map((i) => i.group))], [items]);
   const couleurDe = (g: string) => couleurs?.[g] ?? SERIES[groupes.indexOf(g) % SERIES.length] ?? COULEUR.accent;
   const total = items.reduce((s, i) => s + Math.max(0, i.value), 0);

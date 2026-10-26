@@ -7,6 +7,7 @@ import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, nombreIllisible, pluriel } from "@/lib/format";
 import type { Profile } from "@/lib/types";
+import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { ChampNombre, ETAT_ROTATION, INSECABLE, TauxMarge, fmtM3, fmtVolume } from "./commun";
 import { parseNumber, type DepartureIssue, type Ref, type Referentials } from "./types";
 
@@ -22,6 +23,9 @@ interface Rotation {
   name: string | null;
   state: "draft" | "en_route" | "done" | "invoiced" | "cancelled";
   source: "office" | "mobile";
+  /** Départ permis à l'utilisateur (admin, exploitation ; sites du chef de parc avec HSSEQ) et, sinon, pourquoi. */
+  can_depart: boolean;
+  depart_refusal: string | null;
   date_loading: string;
   vehicle: Ref;
   driver: Ref | null;
@@ -133,7 +137,7 @@ export function Rotations() {
       if (action === "depart") {
         // Départ évalué par le serveur, rotation par rotation : un refus dit ses motifs.
         const refus: string[] = [];
-        for (const r of chosen.filter((x) => x.state === "draft")) {
+        for (const r of chosen.filter((x) => x.state === "draft" && x.can_depart)) {
           try {
             await apiSend("POST", `/transport/rotations/${r.id}/depart`);
           } catch (e) {
@@ -176,7 +180,7 @@ export function Rotations() {
         {selection && (
           <div className="flex flex-wrap gap-2">
             {saisie && (
-              <Button loading={enCours} disabled={!chosen.some((r) => r.state === "draft")} onClick={() => run("depart")}>
+              <Button loading={enCours} disabled={!chosen.some((r) => r.state === "draft" && r.can_depart)} onClick={() => run("depart")}>
                 <Truck className="h-4 w-4" /> Départ en route
               </Button>
             )}
@@ -348,7 +352,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
         {(r.state === "en_route" || r.state === "done" || r.state === "cancelled") && <Button loading={busy} onClick={() => action("reset")}>Remettre en saisie</Button>}
         {modifiable && <Button variant="danger" loading={busy} onClick={() => action("cancel")}>Annuler la rotation</Button>}
         {modifiable && <Button loading={busy} disabled={!changes.length || illisible} onClick={enregistrer}>Enregistrer</Button>}
-        {r.state === "draft" && (
+        {r.state === "draft" && r.can_depart && (
           <Button loading={busy} disabled={changes.length > 0 || Boolean(r.departure_blockers?.some((b) => b.severity === "block"))} onClick={() => action("depart")}
             title={changes.length ? "Enregistrez d'abord les modifications" : "Départ évalué par le serveur au moment du clic"}>
             Départ en route
@@ -371,8 +375,10 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
             <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge>
             <span>{r.source === "mobile" ? "Saisie au téléphone" : "Saisie au bureau"}{r.created_by ? ` par ${r.created_by}` : ""}</span>
             {r.invoice && <span>· Facture {r.invoice.name ?? "en brouillon"}</span>}
+            <BoutonDiscussion model="eguitra.transport.rotation" id={r.id} libelle={titre} petit className="ml-auto" />
           </div>
           {r.state === "draft" && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : elle se valide par un autre compte.</Notice>}
+          {r.state === "draft" && !r.can_depart && r.depart_refusal && <Notice tone="accent">{r.depart_refusal}</Notice>}
           {r.state === "done" && modifiable && <Notice tone="accent">Corriger une rotation validée la remet en saisie : un autre compte la revalide.</Notice>}
           {r.state === "draft" && r.departure_blockers && r.departure_blockers.length > 0 && (
             <Notice tone={r.departure_blockers.some((b) => b.severity === "block") ? "danger" : "warn"}>

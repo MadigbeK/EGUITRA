@@ -1,6 +1,8 @@
 """Public d'une publication du cabinet (communication, événement) : tous les porteurs, certains dossiers,
 les dossiers arrivés à certaines étapes ou ceux de certains secteurs."""
 
+import unicodedata
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
@@ -20,6 +22,12 @@ def split_list(value):
         if item and item not in seen:
             seen.append(item)
     return seen
+
+
+def plain(text):
+    """Texte sans accents ni capitales, comme l'aperçu de l'écran : « Énergie » -> « energie »."""
+    decomposed = unicodedata.normalize("NFD", text or "")
+    return "".join(c for c in decomposed if not unicodedata.category(c).startswith("M")).lower()
 
 
 class PortailAudienceMixin(models.AbstractModel):
@@ -54,8 +62,9 @@ class PortailAudienceMixin(models.AbstractModel):
         if self.audience == "gates":
             codes = set(split_list(self.gate_codes))
             return any(d.current_gate_id.code in codes for d in dossiers)
-        words = [w.lower() for w in split_list(self.sector_keywords)]
-        return any(any(w in (d.sector or "").lower() for w in words) for d in dossiers)
+        # Sans accents ni capitales : « energie » vise « Énergie solaire », comme l'aperçu de l'écran.
+        words = [plain(w) for w in split_list(self.sector_keywords)]
+        return any(any(w in plain(d.sector) for w in words) for d in dossiers)
 
     def _audience_dossiers(self):
         """Dossiers ouverts du public, dans la société de la publication."""

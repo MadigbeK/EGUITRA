@@ -1,5 +1,7 @@
 """Rapports financiers : catalogue, exécution, export CSV et XLSX."""
 
+import json
+
 from odoo import http
 from odoo.http import request
 
@@ -32,6 +34,34 @@ def _period(token, day):
     raise ApiError(400, "invalid_parameter", "Période inconnue.")
 
 
+def _query(kw):
+    """Paramètres d'un export demandé en GET (lien de téléchargement du client commun, avec l'application et
+    la société de l'écran) : mêmes clés que le corps JSON ; filters en JSON, columns séparées par des virgules."""
+    data = {k: kw[k] for k in ("report", "format", "date_from", "date_to", "period", "scope", "sort", "sort_dir")
+            if kw.get(k) not in (None, "")}
+    if kw.get("filters"):
+        try:
+            filters = json.loads(kw["filters"])
+        except ValueError as e:
+            raise ApiError(400, "invalid_parameter", "Filtres invalides.") from e
+        if not isinstance(filters, dict):
+            raise ApiError(400, "invalid_parameter", "Filtres invalides.")
+        data["filters"] = filters
+    if kw.get("columns"):
+        data["columns"] = [c for c in kw["columns"].split(",") if c]
+    return data
+
+
+def _count(value, name, default):
+    """Nombre de lignes ou rang demandé : un entier, sinon refus (400) au lieu d'un message technique."""
+    if value in (None, ""):
+        return default
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"Paramètre {name} invalide.") from e
+
+
 def _run(data, limit=None, max_limit=MAX_LIMIT):
     key = data.get("report")
     if key not in REPORTS:
@@ -50,8 +80,8 @@ def _run(data, limit=None, max_limit=MAX_LIMIT):
             filters=data.get("filters") or {},
             sort=data.get("sort"),
             sort_dir=data.get("sort_dir", "desc"),
-            limit=limit or data.get("limit", 200),
-            offset=data.get("offset", 0),
+            limit=limit or _count(data.get("limit"), "limit", 200) or 200,
+            offset=_count(data.get("offset"), "offset", 0),
             max_limit=max_limit,
         )
     except ValueError as e:
@@ -67,9 +97,11 @@ class EguitraFinanceReports(http.Controller):
     def run(self, **_kw):
         return _run(read_json())
 
-    @api_route("/finance/reports/export", methods=("POST",), profiles=FIN_READ)
-    def export(self, **_kw):
-        data = read_json()
+    @api_route("/finance/reports/export", methods=("GET", "POST"), profiles=FIN_READ)
+    def export(self, **kw):
+        """Export CSV ou XLSX d'un rapport : en GET (paramètres dans l'adresse, téléchargement du client
+        commun) ou en POST (corps JSON)."""
+        data = read_json() if request.httprequest.method == "POST" else _query(kw)
         result = _run(data, limit=MAX_EXPORT, max_limit=MAX_EXPORT)
         engine = request.env["eguitra.report.engine"]
         stamp = today().isoformat()

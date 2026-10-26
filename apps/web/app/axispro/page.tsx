@@ -1,19 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { FileText, Lock, Plus, ShieldAlert } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Donut, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Donut, ErrorBox, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ApiError, apiSend, useApi } from "@/lib/api-client";
+import { apiSend, useApi } from "@/lib/api-client";
 import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
-import { fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { AIDE_NOMBRE, aujourdhui, fmtInt, fmtPct, lireNombre, nombreIllisible, pluriel } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
-import { ratio } from "@/components/axispro/cellules";
-import { note, useCabinet } from "@/components/axispro/dossier/commun";
+import { montantDevise, montantsParDevise, ratio, totauxParDevise } from "@/components/axispro/cellules";
+import { fermerSiConfirme, note, useCabinet, useRetour } from "@/components/axispro/dossier/commun";
 
 type Vue = "tableau" | "liste";
+
+/** Dossiers lus au plus (la route en sert 200 par défaut) : la liste le dit quand la borne est atteinte. */
+const LIMITE = 200;
 
 const COULEUR_RECO: Record<Recommendation, string> = COULEUR_VERDICT;
 
@@ -75,11 +78,13 @@ const CLE_VUE = "nimova.axispro.vue";
 export default function DossiersPage() {
   const [state, setState] = useState<"open" | "on_hold" | "closed">("open");
   const [vue, setVue] = useState<Vue>("tableau");
-  const { data, error, mutate } = useApi<DossierSummary[]>(`/axispro/dossiers?state=${state}`);
-  const { data: policy } = useApi<{ version: number; name: string } | null>("/axispro/policy");
+  const { data, error, mutate } = useApi<DossierSummary[]>(`/axispro/dossiers?state=${state}&limit=${LIMITE}`);
+  const { data: policy, error: erreurGrille, mutate: relireGrille } = useApi<{ version: number; name: string; gates: Gate[] } | null>("/axispro/policy");
+  // Devise de la société en tête des totaux (les devises ne s'additionnent pas).
+  const { data: devises } = useApi<Currency[]>("/axispro/currencies");
   const [creating, setCreating] = useState(false);
   const { cabinet } = useCabinet();
-  const rows = data ?? [];
+  const rows = useMemo(() => data ?? [], [data]);
 
   useEffect(() => {
     try {
@@ -98,16 +103,24 @@ export default function DossiersPage() {
     }
   }
 
-  // Étapes de la grille, dans leur ordre (les dossiers suivent la même politique).
-  const etapes: Gate[] = (rows.find((d) => d.gates.length)?.gates ?? []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-  const rang = (g: Gate | null) => (g ? etapes.findIndex((e) => e.id === g.id) : -1);
-  const besoin = rows.reduce((a, d) => a + (d.financing_need ?? 0), 0);
+  // Étapes de la grille, rapprochées par leur code : chaque version de la grille recopie ses gates sous de
+  // nouveaux identifiants, et un dossier garde la version de son ouverture (audit, I-D7). Celles de la
+  // grille en vigueur d'abord, dans leur ordre, puis celles des versions antérieures encore suivies.
+  const etapes = useMemo(() => {
+    const vues = new Map<string, Gate>();
+    const ordre = (gs: Gate[]) => gs.slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    for (const g of [...ordre(policy?.gates ?? []), ...ordre(rows.flatMap((d) => d.gates))]) if (!vues.has(g.code)) vues.set(g.code, g);
+    return [...vues.values()];
+  }, [policy, rows]);
+  const rang = (g: Gate | null) => (g ? etapes.findIndex((e) => e.code === g.code) : -1);
+  const besoin = montantsParDevise(totauxParDevise(rows, (d) => d.currency?.name, (d) => d.financing_need), devises?.[0]?.name);
+  const compte = (n: number) => (data ? fmtInt(n) : "–");
 
   return (
     <div>
       <PageHeader
         title="Dossiers de projets"
-        subtitle={policy ? `Évaluation selon « ${policy.name} », version ${policy.version}.` : "Aucune grille en vigueur : importez-la dans Grille d'évaluation."}
+        subtitle={policy ? `Évaluation selon « ${policy.name} », version ${policy.version}.` : policy === null ? "Aucune grille en vigueur : importez-la dans Grille d'évaluation." : "Évaluation selon la grille en vigueur du cabinet."}
         actions={
           <>
             <Segmented
@@ -128,12 +141,18 @@ export default function DossiersPage() {
           </>
         }
       />
+      {erreurGrille && (
+        <div className="mb-4">
+          <ErrorBox titre="Grille en vigueur indisponible : l'ouverture d'un dossier attend sa lecture." error={erreurGrille} onRetry={() => void relireGrille()} />
+        </div>
+      )}
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Dossiers" value={String(rows.length)} hint={`Besoin de financement : ${fmtShort(besoin)} GNF`} />
-        <Kpi label="Bankable, APD READY ou GO" value={String(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" hint={pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate")} />
-        <Kpi label="CONDITIONAL GO ou HOLD" value={String(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" />
-        <Kpi label="Knock-out actif" value={String(rows.filter((d) => d.knockouts > 0).length)} tone="danger" />
+        <Kpi label="Dossiers" value={compte(rows.length)} hint={data ? `Besoin de financement : ${besoin}` : undefined} />
+        <Kpi label="Bankable, APD READY ou GO" value={compte(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" hint={data ? pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate") : undefined} />
+        <Kpi label="CONDITIONAL GO ou HOLD" value={compte(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" />
+        <Kpi label="Knock-out actif" value={compte(rows.filter((d) => d.knockouts > 0).length)} tone="danger" />
       </div>
+      {rows.length >= LIMITE && <div className="mb-5"><Notice tone="warn">Les {fmtInt(LIMITE)} dossiers les plus récents sont affichés : chiffres, entonnoir et tableau portent sur eux seuls.</Notice></div>}
 
       {rows.length > 0 && etapes.length > 0 && (
         <div className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -163,9 +182,14 @@ export default function DossiersPage() {
         value={state}
         onChange={setState}
       />
+      {data && error && (
+        <div className="mb-4">
+          <ErrorBox titre="Rechargement impossible : les dossiers affichés peuvent dater." error={error} onRetry={() => void mutate()} />
+        </div>
+      )}
       {!data ? (
         <Card padded={false}>
-          <Etat error={error} onRetry={() => mutate()} label="Chargement des dossiers…" />
+          <Etat error={error} onRetry={() => void mutate()} label="Chargement des dossiers…" />
         </Card>
       ) : vue === "tableau" && etapes.length > 0 ? (
         <Tableau etapes={etapes} rows={rows} rang={rang} />
@@ -208,7 +232,7 @@ function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
             const h = Math.max(10, (n / total) * 100);
             const actuels = ici[i] ?? 0;
             return (
-              <div key={g.id} className={cx("flex flex-col px-2", i > 0 && "border-l border-line")}>
+              <div key={g.code} className={cx("flex flex-col px-2", i > 0 && "border-l border-line")}>
                 <div className="text-[12.5px] font-bold text-ink-2">{g.code}</div>
                 <div className="line-clamp-2 min-h-[2.5em] text-[11.5px] leading-tight text-muted" title={g.name}>
                   {g.name}
@@ -235,7 +259,7 @@ function Entonnoir({ etapes, rangs }: { etapes: Gate[]; rangs: number[] }) {
 /** Tableau en colonnes : une colonne par étape, une carte par dossier. */
 function Tableau({ etapes, rows, rang }: { etapes: Gate[]; rows: DossierSummary[]; rang: (g: Gate | null) => number }) {
   const hors = rows.filter((d) => rang(d.current_gate) < 0);
-  const colonnes = [...etapes.map((g, i) => ({ cle: String(g.id), titre: `${g.code} ${g.name}`, dossiers: rows.filter((d) => rang(d.current_gate) === i) })), ...(hors.length ? [{ cle: "hors", titre: "Sans étape", dossiers: hors }] : [])];
+  const colonnes = [...etapes.map((g, i) => ({ cle: g.code, titre: `${g.code} ${g.name}`, dossiers: rows.filter((d) => rang(d.current_gate) === i) })), ...(hors.length ? [{ cle: "hors", titre: "Sans étape", dossiers: hors }] : [])];
   return (
     <div className="-mx-1 overflow-x-auto pb-3">
       <div className="flex min-w-max gap-4 px-1">
@@ -314,7 +338,7 @@ function CarteDossier({ d }: { d: DossierSummary }) {
             <FileText className="h-3.5 w-3.5 text-muted" />
             {d.documents.available}/{d.documents.total}
           </span>
-          <span className="whitespace-nowrap" title="Besoin de financement">{fmtShort(d.financing_need)}</span>
+          <span className="whitespace-nowrap" title="Besoin de financement">{montantDevise(d.financing_need, d.currency?.name)}</span>
         </span>
       </div>
     </Link>
@@ -386,44 +410,79 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
         { key: "next_gate", label: "Prochain gate", render: (d) => (d.next_gate ? <span className="whitespace-nowrap text-[12.5px]">{d.next_gate.code} · {GATE_DECISION[d.next_gate.decision].label}</span> : "–") },
         { key: "irr", label: "TRI", align: "right", sortValue: (d) => d.financial?.irr_project ?? null, render: (d) => fmtPct(d.financial?.irr_project) },
         { key: "dscr", label: "DSCR min.", align: "right", sortValue: (d) => d.financial?.dscr_min ?? null, render: (d) => ratio(d.financial?.dscr_min) },
-        { key: "financing_need", label: "Besoin", align: "right", render: (d) => fmtShort(d.financing_need) },
+        { key: "financing_need", label: "Besoin", align: "right", render: (d) => <span className="whitespace-nowrap">{montantDevise(d.financing_need, d.currency?.name)}</span> },
         { key: "documents", label: "Data room", align: "right", sortValue: (d) => d.dataroom_completeness, render: (d) => fmtPct(d.dataroom_completeness, 0) },
       ]}
     />
   );
 }
 
+/** Montant facultatif d'un champ : vide → 0 (non renseigné), illisible → null (envoi bloqué). */
+function montantLu(v: string): number | null {
+  return v.trim() ? lireNombre(v) : 0;
+}
+
+/** Message sous un champ de montant : saisie illisible ou négative ; rien s'il convient. */
+function erreurMontant(v: string): string | undefined {
+  if (nombreIllisible(v)) return AIDE_NOMBRE;
+  const n = montantLu(v);
+  return n !== null && n < 0 ? "Montant positif attendu." : undefined;
+}
+
+/**
+ * Ouverture d'un dossier : un seul dossier par envoi (double clic, réseau lent : le second clic est
+ * ignoré, le bouton tourne) ; montants lus par lireNombre, envoi bloqué sur une saisie illisible ;
+ * fenêtre non fermable pendant l'envoi, et fermée sur confirmation quand la saisie a changé.
+ */
 function DossierForm({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const [promoter, setPromoter] = useState<{ id: number; name: string } | null>(null);
-  const [f, setF] = useState({ name: "", sector: "", location: "", capacity: "", investment: "", financing_need: "", description: "", hypotheses: "", currency_id: "", date_evaluation: new Date().toISOString().slice(0, 10) });
+  const [initial] = useState(() => ({ name: "", sector: "", location: "", capacity: "", investment: "", financing_need: "", description: "", hypotheses: "", currency_id: "", date_evaluation: aujourdhui() }));
+  const [f, setF] = useState(initial);
   const { data: currencies } = useApi<Currency[]>("/axispro/currencies");
-  const devise = currencies?.find((c) => String(c.id) === f.currency_id)?.name ?? currencies?.[0]?.name ?? "GNF";
-  const [error, setError] = useState<string | null>(null);
-  const num = (v: string) => Number(v.replace(/\s/g, "")) || 0;
-  async function submit() {
-    try {
-      const d = await apiSend<DossierDetail>("POST", "/axispro/dossiers", { ...f, currency_id: f.currency_id || undefined, promoter_id: promoter?.id, investment: num(f.investment), financing_need: num(f.financing_need) });
-      onDone(d.id);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
-    }
+  const devise = currencies?.find((c) => String(c.id) === f.currency_id)?.name ?? currencies?.[0]?.name ?? null;
+  const { envoyer, enCours, bandeau } = useRetour();
+  const investissement = montantLu(f.investment);
+  const besoin = montantLu(f.financing_need);
+  const erreurs = { investment: erreurMontant(f.investment), financing_need: erreurMontant(f.financing_need) };
+  const bloque = !f.name.trim() || !promoter || investissement === null || besoin === null || !!(erreurs.investment || erreurs.financing_need);
+  const modifie = !!promoter || JSON.stringify(f) !== JSON.stringify(initial);
+  async function fermer() {
+    if (enCours) return;
+    if (await fermerSiConfirme(modifie)) onClose();
   }
+  async function submit() {
+    if (bloque) return;
+    const d = await envoyer(
+      () => apiSend<DossierDetail>("POST", "/axispro/dossiers", { ...f, name: f.name.trim(), currency_id: f.currency_id || undefined, promoter_id: promoter.id, investment: investissement, financing_need: besoin }),
+      undefined,
+      "ouvrir",
+    );
+    if (d) onDone(d.id);
+  }
+  const suffixe = devise ? ` (${devise})` : "";
   return (
-    <Modal open wide title="Ouverture d'un dossier" onClose={onClose} footer={<Button variant="primary" onClick={submit} disabled={!f.name || !promoter}>Ouvrir le dossier</Button>}>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {error && <div className="md:col-span-2"><Notice tone="danger">{error}</Notice></div>}
-        <Field label="Projet"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-        <Field label="Promoteur"><PartnerPicker value={promoter} onChange={setPromoter} kind="customer" /></Field>
-        <Field label="Secteur"><Input value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value })} /></Field>
-        <Field label="Localisation"><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
-        <Field label="Capacité"><Input value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value })} /></Field>
-        <Field label="Devise du dossier"><Select value={f.currency_id} onChange={(e) => setF({ ...f, currency_id: e.target.value })} options={(currencies ?? []).map((c, i) => ({ value: i === 0 ? "" : String(c.id), label: c.name }))} /></Field>
-        <Field label="Date d'évaluation"><Input type="date" value={f.date_evaluation} onChange={(e) => setF({ ...f, date_evaluation: e.target.value })} /></Field>
-        <Field label={`Investissement prévu (${devise})`}><Input inputMode="numeric" className="font-mono" value={f.investment} onChange={(e) => setF({ ...f, investment: e.target.value })} /></Field>
-        <Field label={`Besoin de financement (${devise})`}><Input inputMode="numeric" className="font-mono" value={f.financing_need} onChange={(e) => setF({ ...f, financing_need: e.target.value })} /></Field>
-        <Field label="Description" className="md:col-span-2"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
-        <Field label="Hypothèses de décision" className="md:col-span-2"><Textarea value={f.hypotheses} onChange={(e) => setF({ ...f, hypotheses: e.target.value })} /></Field>
-      </div>
+    <Modal open wide title="Ouverture d'un dossier" onClose={() => void fermer()} footer={
+      <>
+        <Button variant="ghost" disabled={!!enCours} onClick={() => void fermer()}>Annuler</Button>
+        <Button variant="primary" loading={enCours === "ouvrir"} onClick={() => void submit()} disabled={bloque}>Ouvrir le dossier</Button>
+      </>
+    }>
+      <fieldset disabled={!!enCours} className="min-w-0">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {bandeau && <div className="md:col-span-2">{bandeau}</div>}
+          <Field label="Projet"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label="Promoteur"><PartnerPicker value={promoter} onChange={setPromoter} kind="customer" /></Field>
+          <Field label="Secteur"><Input value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value })} /></Field>
+          <Field label="Localisation"><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
+          <Field label="Capacité"><Input value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value })} /></Field>
+          <Field label="Devise du dossier"><Select value={f.currency_id} onChange={(e) => setF({ ...f, currency_id: e.target.value })} options={(currencies ?? []).map((c, i) => ({ value: i === 0 ? "" : String(c.id), label: c.name }))} /></Field>
+          <Field label="Date d'évaluation"><Input type="date" value={f.date_evaluation} onChange={(e) => setF({ ...f, date_evaluation: e.target.value })} /></Field>
+          <Field label={`Investissement prévu${suffixe}`} error={erreurs.investment}><Input inputMode="decimal" className="font-mono" aria-invalid={erreurs.investment ? true : undefined} value={f.investment} onChange={(e) => setF({ ...f, investment: e.target.value })} /></Field>
+          <Field label={`Besoin de financement${suffixe}`} error={erreurs.financing_need}><Input inputMode="decimal" className="font-mono" aria-invalid={erreurs.financing_need ? true : undefined} value={f.financing_need} onChange={(e) => setF({ ...f, financing_need: e.target.value })} /></Field>
+          <Field label="Description" className="md:col-span-2"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          <Field label="Hypothèses de décision" className="md:col-span-2"><Textarea value={f.hypotheses} onChange={(e) => setF({ ...f, hypotheses: e.target.value })} /></Field>
+        </div>
+      </fieldset>
     </Modal>
   );
 }

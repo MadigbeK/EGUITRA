@@ -15,6 +15,8 @@ from datetime import timedelta
 
 from odoo import api, fields, models
 
+from ..formats import accord, pluriel
+
 # Règles calculées pendant un appel de active_alerts (alertes, puis règles conformes) : le contexte
 # ne porte qu'un numéro d'appel, le cache vit le temps de l'appel.
 _RULE_CALLS = itertools.count(1)
@@ -279,16 +281,18 @@ class EguitraAlertThreshold(models.Model):
         t = on("receivable_overdue_days")
         if t:
             limit = today - timedelta(days=int(t.value))
+            # Restes dus positifs seulement : un avoir non imputé ou un règlement d'avance n'est pas une
+            # créance ancienne.
             self.env.cr.execute(
                 """SELECT COALESCE(SUM(aml.amount_residual), 0), COUNT(DISTINCT aml.move_id)
                      FROM account_move_line aml JOIN account_account aa ON aa.id = aml.account_id
                     WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aa.account_type = 'asset_receivable'
-                      AND NOT aml.reconciled AND aml.date_maturity < %s""",
+                      AND NOT aml.reconciled AND aml.date_maturity < %s AND aml.amount_residual > 0""",
                 (company.id, limit),
             )
             amount, count = self.env.cr.fetchone()
             add(t, bool(count), "Créances anciennes", f"Aucune créance échue depuis plus de {int(t.value)} jours",
-                f"{count} facture(s) échue(s) depuis plus de {int(t.value)} jours." if count
+                f"{pluriel(count, 'facture')} {accord(count, 'échue')} depuis plus de {int(t.value)} jours." if count
                 else "Les créances échues sont récentes.", float(amount))
 
         t = on("receivable_overdue_amount")
@@ -426,7 +430,7 @@ class EguitraAlertThreshold(models.Model):
                 rules.append(
                     (self._alert if rate < t.value else self._ok)(
                         t, "Marge directe du transport sous le seuil" if rate < t.value else "Marge directe du transport",
-                        f"Marge directe de {_fr(rate)} % sur {kpis['rotations']} rotation(s) de l'exercice, "
+                        f"Marge directe de {_fr(rate)} % sur {pluriel(kpis['rotations'], 'rotation')} de l'exercice, "
                         f"seuil {_fr(t.value, 0)} %.", rate, key="transport_margin_min.global",
                     )
                 )
@@ -439,7 +443,8 @@ class EguitraAlertThreshold(models.Model):
             rules.append(
                 (self._alert if late else self._ok)(
                     t, "Rotations non facturées" if late else "Rotations réalisées et facturées",
-                    f"{len(late)} rotation(s) validée(s) non facturée(s), {_gnf(amount)} de chiffre d'affaires en attente."
+                    f"{pluriel(len(late), 'rotation')} {accord(len(late), 'validée')} {accord(len(late), 'non facturée', 'non facturées')}, "
+                    f"{_gnf(amount)} de chiffre d'affaires en attente."
                     if late else "Toutes les rotations validées sont facturées.", amount,
                 )
             )

@@ -7,6 +7,7 @@ import { pluriel } from "@/components/portail/cabinet/outils";
 import { quand } from "@/components/portail/commun";
 import { Card, Empty, ErrorBox, IconTile, Kpi, PageHeader, Squelette, type Teinte, type Tone } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
+import { fmtFixe, fmtInt } from "@/lib/format";
 import type { Synthese } from "@/lib/portail-types";
 
 const A_FAIRE: Record<Synthese["to_do"][number]["kind"], { icon: Icon; teinte: Teinte; label: string }> = {
@@ -15,8 +16,9 @@ const A_FAIRE: Record<Synthese["to_do"][number]["kind"], { icon: Icon; teinte: T
   action: { icon: ListChecks, teinte: "jade", label: "Compte rendu" },
 };
 
+/** NPS signé : « +33 », « −12 », « 0 ». */
 function signe(n: number) {
-  return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0";
+  return n > 0 ? `+${fmtInt(n)}` : n < 0 ? `−${fmtInt(Math.abs(n))}` : "0";
 }
 
 function toneSatisfaction(moyenne: number | null): Tone {
@@ -31,12 +33,12 @@ export default function PortailSynthesePage() {
     <div>
       <PageHeader
         title="Portail des porteurs"
-        subtitle="L'activité des porteurs de projets sur leur portail : échanges, rendez-vous, contenus publiés et satisfaction. Ce qui attend le cabinet est listé ci-dessous."
+        subtitle="L'activité des porteurs de projets sur leur portail : échanges, rendez-vous, contenus publiés et satisfaction. Ce qui attend MB AxisPro Consulting est listé ci-dessous."
       />
       <OngletsPortail />
       {error && (
         <div className="mb-5">
-          <ErrorBox error={error} onRetry={() => void mutate()} />
+          <ErrorBox titre={data ? "Rechargement impossible : les chiffres affichés peuvent dater." : undefined} error={error} onRetry={() => void mutate()} />
         </div>
       )}
       {!data ? (
@@ -61,50 +63,50 @@ function Contenu({ s }: { s: Synthese }) {
       <section aria-label="Chiffres clés" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           label="Porteurs inscrits"
-          value={String(s.porteurs.total)}
+          value={fmtInt(s.porteurs.total)}
           tone={s.porteurs.never > 0 ? "warn" : "neutral"}
           hint={`${pluriel(s.porteurs.active_30d, "actif", "actifs")} sur 30 jours, ${pluriel(s.porteurs.never, "jamais connecté", "jamais connectés")}`}
         />
         <Kpi
           label="Messages non lus"
-          value={String(s.messages.unread)}
+          value={fmtInt(s.messages.unread)}
           tone={s.messages.waiting > 0 ? "warn" : "neutral"}
           hint={s.messages.waiting ? `${pluriel(s.messages.waiting, "conversation", "conversations")} en attente de réponse` : "Aucune conversation en attente"}
         />
         <Kpi
           label="Rendez-vous demandés"
-          value={String(s.meetings.requested)}
+          value={fmtInt(s.meetings.requested)}
           tone={s.meetings.requested > 0 ? "warn" : "neutral"}
           hint={`${pluriel(s.meetings.upcoming, "rendez-vous confirmé", "rendez-vous confirmés")} à venir`}
         />
         <Kpi
           label="Comptes rendus à valider"
-          value={String(s.actions_submitted)}
+          value={fmtInt(s.actions_submitted)}
           tone={s.actions_submitted > 0 ? "warn" : "neutral"}
           hint="Actions déclarées faites par les porteurs"
         />
         <Kpi
           label="Événements à venir"
-          value={String(s.events.upcoming)}
+          value={fmtInt(s.events.upcoming)}
           hint={pluriel(s.events.registrations, "inscription confirmée", "inscriptions confirmées")}
         />
         <Kpi
           label="Satisfaction des porteurs"
-          value={moyenne === null ? "–" : `${moyenne.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} / 5`}
+          value={moyenne === null ? "–" : `${fmtFixe(moyenne, 1)} / 5`}
           tone={toneSatisfaction(moyenne)}
           hint={s.feedback.count ? `NPS ${s.feedback.nps === null ? "non calculé" : signe(s.feedback.nps)}, sur ${pluriel(s.feedback.count, "avis", "avis")}` : "Aucun avis reçu"}
         />
         <Kpi
           label="Contenus publiés"
-          value={String(s.articles.published)}
+          value={fmtInt(s.articles.published)}
           tone={s.articles.drafts > 0 ? "warn" : "neutral"}
-          hint={`${pluriel(s.articles.views, "lecture", "lectures")}${s.articles.drafts ? `, ${pluriel(s.articles.drafts, "brouillon", "brouillons")} à relire` : ""}`}
+          hint={`${pluriel(s.articles.views, "lecture")}${s.articles.drafts ? `, ${pluriel(s.articles.drafts, "brouillon")} à relire` : ""}`}
         />
         <Kpi
           label="Accusés de lecture en attente"
-          value={String(s.announcements.ack_pending)}
+          value={fmtInt(s.announcements.ack_pending)}
           tone={s.announcements.ack_pending > 0 ? "warn" : "neutral"}
-          hint={pluriel(s.announcements.published, "communication publiée", "communications publiées")}
+          hint={`Porteurs visés sans accusé, sur ${pluriel(s.announcements.published, "communication publiée", "communications publiées")}`}
         />
       </section>
 

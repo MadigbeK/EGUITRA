@@ -132,10 +132,28 @@ class AxisproDossier(models.Model):
             if dossier.current_gate_id and old_gate and dossier.current_gate_id != old_gate:
                 _notify(self.env, dossier.portal_user_ids, "gate", f"Nouvelle étape : {dossier.current_gate_id.name}",
                         f"Votre dossier {dossier.reference} avance.", link, dossier)
-            if dossier.decision and dossier.decision != old_decision:
+            # Une décision scellée est notifiée au verrouillage de sa revue (ci-dessous), même identique à
+            # la précédente ou ajournée ; ce rappel ne sert qu'à une décision écrite autrement.
+            if (dossier.decision and dossier.decision != old_decision
+                    and not self.env.context.get("portail_decision_notifiee")):
                 _notify(self.env, dossier.portal_user_ids, "decision",
                         f"Décision du comité : {decision_porteur(dossier.decision)}",
                         "Votre consultant vous en détaille les conditions.", link, dossier)
+        return result
+
+
+class AxisproReview(models.Model):
+    _inherit = "axispro.review"
+
+    def action_lock(self):
+        """Décision du comité notifiée au porteur à chaque verrouillage : une décision identique à la
+        précédente (nouvelle révision) ou un ajournement l'est aussi (audit du noyau, I-P1)."""
+        todo = self.filtered(lambda r: r.state != "locked")
+        result = super(AxisproReview, self.with_context(portail_decision_notifiee=True)).action_lock()
+        for review in todo.filtered(lambda r: r.state == "locked"):
+            dossier = review.dossier_id
+            _notify(self.env, dossier.portal_user_ids, "decision", f"Décision du comité : {decision_porteur(review.decision)}",
+                    "Votre consultant vous en détaille les conditions.", f"/portail/projet?dossier={dossier.id}", dossier)
         return result
 
 

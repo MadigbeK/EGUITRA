@@ -19,6 +19,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
+import { enregistrerDiscussions } from "./discussions.mjs";
 import { enregistrerProprietaires, fuelPriceAt, marginShown, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
@@ -4040,12 +4041,9 @@ route("PATCH", "/finance/thresholds/:id", ADMIN, (ctx) => {
 });
 
 /* ─── Budget ────────────────────────────────────────────────────────────── */
+/* Les routes par compte (lignes et comparatif de mis_builder_budget) ont été retirées du noyau : l'écran
+   Activités et budget lit /finance/budgets/:id/execution et écrit /finance/budget-lines. */
 
-function budgetOf(id) {
-  const b = DB.budgets.find((x) => x.id === id);
-  if (!b) throw notFound("Budget introuvable.");
-  return b;
-}
 route("GET", "/finance/budgets", FIN_READ, (ctx) =>
   DB.budgets
     .filter((b) => b.company_id === ctx.company)
@@ -4058,52 +4056,6 @@ route("POST", "/finance/budgets", FIN_WRITE, (ctx) => {
   const b = { id: newId("budget"), company_id: ctx.company, name: String(name), date_from: `${y}-01-01`, date_to: `${y}-12-31`, state: "draft", items: [] };
   DB.budgets.push(b);
   return { id: b.id, name: b.name };
-});
-route("GET", "/finance/budgets/:id/lines", FIN_READ, (ctx) => {
-  const b = budgetOf(ctx.params[0]);
-  const rows = new Map();
-  for (const item of b.items) {
-    const a = ACCOUNT_BY_CODE.get(item.account);
-    const row = rows.get(a.id) || { account_id: a.id, code: a.code, name: a.name, months: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, 0])) };
-    row.months[item.month] += item.amount;
-    rows.set(a.id, row);
-  }
-  const lines = [...rows.values()].sort((x, y) => x.code.localeCompare(y.code)).map((r) => ({ ...r, total: sum(Object.values(r.months)) }));
-  return { budget: { id: b.id, name: b.name, year: +b.date_from.slice(0, 4) }, lines };
-});
-route("POST", "/finance/budgets/:id/lines", FIN_WRITE, (ctx) => {
-  const b = budgetOf(ctx.params[0]);
-  const [accountId, month, amount] = requireFields(ctx.body, "account_id", "month", "amount");
-  const account = ACCOUNT_BY_ID.get(Number(accountId));
-  if (!account) throw notFound("Compte introuvable.");
-  const m = Number.parseInt(month, 10);
-  if (!(m >= 1 && m <= 12)) throw badParam("Mois invalide.");
-  const value = Math.max(0, numArg(amount, "amount"));
-  const item = b.items.find((i) => i.account === account.code && i.month === m);
-  if (item) item.amount = value;
-  else b.items.push({ id: newId("budgetItem"), account: account.code, month: m, amount: value });
-  return { status: "ok" };
-});
-route("GET", "/finance/budgets/:id/compare", FIN_READ, (ctx) => {
-  const b = budgetOf(ctx.params[0]);
-  const year = +b.date_from.slice(0, 4);
-  const month = intArg(ctx.query, "month", year === +TODAY.slice(0, 4) ? +TODAY.slice(5, 7) : 12, 1, 12);
-  const end = monthEnd(`${year}-${pad(month)}-01`);
-  const planned = {};
-  for (const item of b.items.filter((i) => i.month <= month)) planned[item.account] = (planned[item.account] || 0) + item.amount;
-  const actual = Object.fromEntries(Object.entries(plRange([b.company_id], b.date_from, end)).filter(([code]) => /^[67]/.test(code)));
-  const threshold = DB.thresholds.find((t) => t.company_id === b.company_id && t.code === "budget_overrun_pct")?.value || 10;
-  const codes = [...new Set([...Object.keys(planned), ...Object.keys(actual)])].sort();
-  const lines = codes.map((code) => {
-    const a = ACCOUNT_BY_CODE.get(code);
-    const sign = code.startsWith("7") ? -1 : 1;
-    const plan = planned[code] || 0;
-    const real = round(sign * (actual[code] || 0));
-    const gap = real - plan;
-    const rate = plan ? (gap / plan) * 100 : null;
-    return { account_id: a.id, code, name: a.name, kind: sign === -1 ? "produit" : "charge", budget: plan, actual: real, gap, gap_pct: rate, alert: rate !== null && (sign === 1 ? rate > threshold : rate < -threshold) };
-  });
-  return { budget: b.name, through: end, threshold_pct: threshold, lines };
 });
 
 /* ─── Tiers ─────────────────────────────────────────────────────────────── */
@@ -6514,6 +6466,10 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
 
 enregistrerAnalyse({ route, ApiError, makeRng, TODAY, COMPANIES });
 enregistrerProprietaires({ route, DB, ApiError, TR_READ, TODAY, COMPANIES, partnerRef, simpleRef, fileReply, xlsxBuffer });
+
+/* ─── Discussion interne (routes dans discussions.mjs) ───────────────────── */
+
+enregistrerDiscussions({ route, ApiError, USERS, userById, DB, nowStamp, detectType, checkedName, fileReply, ACCEPTED });
 
 /* ════════════════════════════════════════════════════════════════════════════
  * Serveur HTTP

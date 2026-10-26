@@ -18,7 +18,7 @@ set -a; . ./.env; set +a
   echo "Base « $DB » refusée : l'essai remplace sa base, il ne vise ni la production ni la recette." >&2; exit 1; }
 [ -f "$DIR/reference.json" ] || { echo "reference.json absent de $DIR." >&2; exit 1; }
 MODULES=(eguitra_base eguitra_api eguitra_finance eguitra_approval eguitra_transport eguitra_chantier
-         eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh)
+         eguitra_immobilier eguitra_axispro eguitra_analytics eguitra_portail eguitra_rh eguitra_chat)
 ODOO=(docker compose run --rm -T odoo-recette odoo)
 
 echo "Essai de reprise sur la base jetable $DB (recette), fichiers de $DIR."

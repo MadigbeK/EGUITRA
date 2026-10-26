@@ -200,6 +200,24 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 26 octobre 2026, soir : audit en production (version 20261026-1845)
+
+- En production : version 20261026-1845 (code 323817d), mise en service à 18 h 46, sauvegarde de base prise juste avant (20261026T1845). Douze modules : base 19.0.1.8.0, api 19.0.1.3.0, finance 19.0.1.9.0, approval 19.0.1.3.0, transport 19.0.1.6.0, chantier 19.0.1.1.0, immobilier 19.0.1.2.0, axispro 19.0.1.5.0, analytics 19.0.1.0.0, portail 19.0.1.3.0, rh 19.0.1.1.0, chat 19.0.1.0.0 (nouveau, chat interne). Images rafraîchies (Odoo 19.0 du 17/10, PostgreSQL 16 du 21/10) : mise à jour mensuelle consignée dans logs/maj-securite/2026-10.md. Double authentification toujours suspendue (décision du gérant).
+- Vérifications : série complète de 658 tests (un seul échec, dû au test, corrigé : 9b905cc) ; répétition sur une copie de la production réussie ; recette mise à jour (douze modules, chat, web) ; contrôle de connexion de chaque compte de test, refus attendus compris (logs/controle-profils.sh sur le serveur) ; après la mise en production : adresses publiques, santé du noyau, supervision, sauvegardes, piste d'audit des paramètres système.
+- Recette : compte test.associe ajouté (second compte du cabinet). Mot de passe commun réappliqué aux 18 comptes.
+- Cahiers de test des utilisateurs : huit fichiers Word, 248 scénarios (docs/projet/tests-utilisateurs/word/, générateur build.js) ; relecture d'AxisPro et du chat en cours.
+- Décisions prises par délégation du gérant (26/10) : scellement d'un comité, passage forcé et réouverture réservés à un associé du cabinet ou à la direction (nouveau profil associé, en cours de développement, prochaine mise en production) ; chat : messages retirés gardés en base comme trace, historique visible des nouveaux membres d'un groupe, relectures automatiques hors du journal des accès.
+- Verrou libéré après la mise en production. Ordre suivant : RH (rh-hsseq, recette), puis OTHER et DESIGN (HSSEQ, recette ; production avec l'accord du gérant, avenant), puis l'évolution AxisPro (profil associé).
+
+### 26 octobre 2026 : intégration de l'audit, interrompue par la limite d'usage
+
+- Fusionné et poussé (0922a14), pas encore en recette ni en production : corrections du noyau du transport, du départ en route (administration et exploitation) et du barème ; espace de suivi des demandes (« Mes demandes », eguitra_api 19.0.1.2.0) ; socle web (pannes, reconnexion, société par onglet, déconnexion après 1 minute d'inactivité puis 30 secondes, eguitra_api 19.0.1.3.0) ; portail des porteurs ; Transport, Rotations hors ligne et RH (eguitra_rh 19.0.1.1.0) ; Finance en deux lots (eguitra_finance 19.0.1.9.0, eguitra_approval 19.0.1.3.0, chantier, immobilier) ; clôture de l'exercice et bilan (CJ limité à l'exercice en cours) ; Analyse.
+- Tests : série du 26/10 à 12 h 15 : 8 échecs, corrigés depuis ; troisième série lancée à 13 h 16 sur 0922a14 (journal ~/eguitra/logs/tests-1026c.log), résultat à lire.
+- En cours (copies isolées) : AxisPro (agent aaa3f12…), chat interne (module eguitra_chat, agent a96e702…). Après eux : série complète, -u de tous les modules en recette, redémarrage, répétition, release.sh, puis libérer le verrou et prévenir RH (rh-hsseq, 98 tests réussis), TRANSPORT, OTHER et DESIGN (HSSEQ).
+- Chat interne fusionné (branche chat-interne) : module eguitra_chat 19.0.1.0.0 (modèles propres plutôt que discuss.channel ; conversations à deux, de groupe et de fiche ; membres seuls lecteurs, administration comprise, par règles d'enregistrement globales ; relectures à 5 s et 30 s hors journal des accès, sans effet sur la déconnexion après inactivité), icône et panneau dans l'en-tête, page /discussions, bouton « Discussion » des fiches (dossier, chantier, rotation, bien), retrait d'un compte archivé par l'administration ; 10 tests écrits, à lancer (infra/test.sh eguitra_base eguitra_api eguitra_chat eguitra_axispro) ; recette : -i eguitra_chat, -u eguitra_base,eguitra_api, redémarrage du noyau, web reconstruit.
+- Demandes du gérant à faire ensuite : vérification complète du système, puis un fichier Word de test par module pour les utilisateurs finaux. Gestion clientèle et WhatsApp : mis de côté, à reprendre.
+- À faire valider par l'expert-comptable : plafond d'exonération de 25 %, avantage en nature (781), plancher CNSS, stagiaires ; résultat non affecté en CH, comptes d'affectation, provision pour perte de change, nouvelles rubriques du bilan.
+
 ### 25 octobre 2026, après-midi : audit approfondi, interrompu par la limite d'usage
 
 - Fait et poussé (branche claude/bold-shannon-gpg2hv, 87a097c), pas encore en production :

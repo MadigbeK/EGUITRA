@@ -5,6 +5,7 @@ Lecture : administration, direction et cabinet ; écriture : cabinet. Tout est b
 travail (MB AxisPro Consulting), que le préfixe /axispro/ impose."""
 
 import base64
+import re
 from datetime import timedelta
 
 from odoo import fields, http
@@ -17,19 +18,48 @@ from odoo.addons.eguitra_axispro.controllers.common import MAX_FILE, store_uploa
 from ..models.agenda import EVENT_KINDS, MEETING_MODES, REGISTRATION_STATES
 from ..models.audience import AUDIENCES
 from ..models.contenu import ANNOUNCEMENT_KINDS, ARTICLE_KINDS, CATEGORY_COLORS
+from ..models.suivi import FEEDBACK_TOPICS
 from . import vues
 
 READ = ("admin", "direction", "cabinet")
 WRITE = ("cabinet",)
 AUDIENCE_FIELDS = ("audience", "gate_codes", "sector_keywords")
+# Listes bornées : l'historique des rendez-vous (tenus, déclinés, annulés ; les demandes et les
+# rendez-vous confirmés sont toujours tous rendus) et le détail des avis. Les totaux de la synthèse
+# portent sur tout. L'écran dit quand une liste atteint sa limite.
+MEETING_HISTORY_LIMIT = 300
+FEEDBACK_LIMIT = 500
 
 
 def _company():
     return request.env.company
 
 
+def _int(value, label, default=None):
+    """Entier saisi (nombre ou chiffres) ; vide : `default`. Une saisie mal formée est refusée (400),
+    jamais lue comme 0."""
+    if value in (None, "") and default is not None:
+        return default
+    if isinstance(value, bool):
+        raise ApiError(400, "invalid_parameter", f"{label} : nombre entier attendu.")
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"-?[0-9]+", value.strip()):
+        return int(value.strip())
+    raise ApiError(400, "invalid_parameter", f"{label} : nombre entier attendu.")
+
+
+def _choice(value, choices, message):
+    """Valeur d'une liste fermée (clé d'une sélection) ; sinon 400."""
+    if not isinstance(value, str) or value not in dict(choices):
+        raise ApiError(400, "invalid_parameter", message)
+    return value
+
+
 def _browse(model, record_id, label):
-    record = request.env[model].sudo().browse(int(record_id)).exists()
+    record = request.env[model].sudo().browse(_int(record_id, label)).exists()
     if not record or record.company_id != _company():
         raise ApiError(404, "not_found", f"{label} introuvable.")
     return record
@@ -43,8 +73,13 @@ def _text(value, size):
     return str(value or "").strip()[:size] or False
 
 
-def _date(value):
-    return fields.Date.to_date(str(value)[:10]) if value else False
+def _date(value, label="Date"):
+    if not value:
+        return False
+    try:
+        return fields.Date.to_date(str(value)[:10])
+    except ValueError as e:
+        raise ApiError(400, "invalid_parameter", f"{label} invalide.") from e
 
 
 def _datetime(value, label="Date"):
@@ -59,14 +94,15 @@ def _datetime(value, label="Date"):
 def _audience(data):
     values = {}
     if "audience" in data:
-        if data["audience"] not in dict(AUDIENCES):
-            raise ApiError(400, "invalid_parameter", "Public inconnu.")
-        values["audience"] = data["audience"]
+        values["audience"] = _choice(data["audience"], AUDIENCES, "Public inconnu.")
     for key in ("gate_codes", "sector_keywords"):
         if key in data:
             values[key] = _text(data[key], 300)
     if "dossier_ids" in data:
-        dossiers = request.env["axispro.dossier"].sudo().browse([int(i) for i in data["dossier_ids"] or []]).exists()
+        ids = data["dossier_ids"] or []
+        if not isinstance(ids, list):
+            raise ApiError(400, "invalid_parameter", "Dossiers visés : liste d'identifiants attendue.")
+        dossiers = request.env["axispro.dossier"].sudo().browse([_int(i, "Dossier visé") for i in ids]).exists()
         values["dossier_ids"] = [(6, 0, dossiers.filtered(lambda d: d.company_id == _company()).ids)]
     return values
 
@@ -78,11 +114,33 @@ def _audience_row(record):
 
 
 def _announcement_admin(a):
+    """Lectures et accusés comptés parmi le public actuel : une jauge ne dépasse jamais son total,
+    même quand un lecteur a quitté le public (dossier clos, public resserré)."""
     audience = a._audience_users() if a.state in ("published", "archived") else request.env["res.users"]
     reads = a.read_ids
     return dict(vues.announcement_row(a, full=True), **_audience_row(a), state=a.state,
-                stats={"audience": len(audience), "read": len(reads),
-                       "acknowledged": len(reads.filtered("acknowledged_at"))})
+                stats={"audience": len(audience), "read": len(reads.user_id & audience),
+                       "acknowledged": len(reads.filtered("acknowledged_at").user_id & audience)})
+
+
+def _feedback_summary(feedback):
+    """Satisfaction calculée sur tous les avis : moyenne, NPS (promoteurs 9 et 10 moins détracteurs
+    0 à 6, sur les avis qui donnent une recommandation), répartition des notes et des sujets."""
+    recommend = [r for r in feedback.mapped("recommend") if r >= 0]
+    promoters = len([r for r in recommend if r >= 9])
+    detractors = len([r for r in recommend if r <= 6])
+    topics = []
+    for key, _label in FEEDBACK_TOPICS:
+        lot = feedback.filtered(lambda f, k=key: f.topic == k)
+        if lot:
+            topics.append({"topic": key, "count": len(lot), "average": round(sum(lot.mapped("score")) / len(lot), 1)})
+    return {"count": len(feedback),
+            "average": round(sum(feedback.mapped("score")) / len(feedback), 1) if feedback else None,
+            "nps": round(100 * (promoters - detractors) / len(recommend)) if recommend else None,
+            "recommend_count": len(recommend), "promoters": promoters, "detractors": detractors,
+            "passives": len(recommend) - promoters - detractors,
+            "scores": {str(n): len(feedback.filtered(lambda f, n=n: f.score == n)) for n in range(1, 6)},
+            "topics": topics}
 
 
 def _article_admin(a):
@@ -128,9 +186,6 @@ class EguitraPortailCabinet(http.Controller):
         waiting = [d for d in dossiers if d.message_ids.filtered(lambda m: not m.internal)[-1:].author_id.share]
         Meeting = request.env["portail.meeting"].sudo()
         feedback = request.env["portail.feedback"].sudo().search([("company_id", "=", company.id)])
-        recommend = [r for r in feedback.mapped("recommend") if r >= 0]
-        promoters = len([r for r in recommend if r >= 9])
-        detractors = len([r for r in recommend if r <= 6])
         actions = request.env["axispro.action"].sudo().search(
             [("company_id", "=", company.id), ("state", "=", "submitted"), ("assignee", "=", "porteur")])
         events = request.env["portail.event"].sudo().search(
@@ -149,14 +204,14 @@ class EguitraPortailCabinet(http.Controller):
             "actions_submitted": len(actions),
             "events": {"upcoming": len(events),
                        "registrations": len(events.registration_ids.filtered(lambda r: r.state == "registered"))},
-            "feedback": {"count": len(feedback),
-                         "average": round(sum(feedback.mapped("score")) / len(feedback), 1) if feedback else None,
-                         "nps": round(100 * (promoters - detractors) / len(recommend)) if recommend else None},
+            "feedback": _feedback_summary(feedback),
             "articles": {"published": Article.search_count([("company_id", "=", company.id), ("state", "=", "published")]),
                          "drafts": Article.search_count([("company_id", "=", company.id), ("state", "=", "draft")]),
                          "views": sum(Article.search([("company_id", "=", company.id)]).mapped("view_count"))},
+            # Accusés attendus : porteurs du public qui n'ont pas encore accusé lecture (l'accusé d'un
+            # ancien lecteur, sorti du public, ne compense pas celui d'un porteur visé).
             "announcements": {"published": len(announcements),
-                              "ack_pending": sum(max(0, len(a._audience_users()) - len(a.read_ids.filtered("acknowledged_at")))
+                              "ack_pending": sum(len(a._audience_users() - a.read_ids.filtered("acknowledged_at").user_id)
                                                  for a in announcements.filtered("require_ack"))},
             "to_do": [
                 *({"kind": "meeting", "title": f"Rendez-vous demandé : {m.subject}",
@@ -284,9 +339,7 @@ class EguitraPortailCabinet(http.Controller):
     def _announcement_values(self, data):
         values = _audience(data)
         if "kind" in data:
-            if data["kind"] not in dict(ANNOUNCEMENT_KINDS):
-                raise ApiError(400, "invalid_parameter", "Nature inconnue.")
-            values["kind"] = data["kind"]
+            values["kind"] = _choice(data["kind"], ANNOUNCEMENT_KINDS, "Nature inconnue.")
         for key, size in (("title", 200), ("body", 60_000), ("cta_url", 500), ("cta_label", 80)):
             if key in data:
                 values["name" if key == "title" else key] = _text(data[key], size)
@@ -294,7 +347,7 @@ class EguitraPortailCabinet(http.Controller):
             if key in data:
                 values[key] = bool(data[key])
         if "expire_date" in data:
-            values["expire_date"] = _date(data["expire_date"])
+            values["expire_date"] = _date(data["expire_date"], "Date de fin de visibilité")
         return values
 
     @api_route("/axispro/portail/annonces", methods=("POST",), profiles=WRITE)
@@ -350,11 +403,9 @@ class EguitraPortailCabinet(http.Controller):
             if key in data:
                 values[key] = _text(data[key], size)
         if "color" in data:
-            if data["color"] not in CATEGORY_COLORS:
-                raise ApiError(400, "invalid_parameter", "Teinte inconnue.")
-            values["color"] = data["color"]
+            values["color"] = _choice(data["color"], [(c, c) for c in CATEGORY_COLORS], "Teinte inconnue.")
         if "sequence" in data:
-            values["sequence"] = int(data["sequence"] or 0)
+            values["sequence"] = _int(data["sequence"], "Ordre", default=0)
         return values
 
     @api_route("/axispro/portail/rubriques", methods=("POST",), profiles=WRITE)
@@ -382,9 +433,7 @@ class EguitraPortailCabinet(http.Controller):
     def _article_values(self, data):
         values = {}
         if "kind" in data:
-            if data["kind"] not in dict(ARTICLE_KINDS):
-                raise ApiError(400, "invalid_parameter", "Format inconnu.")
-            values["kind"] = data["kind"]
+            values["kind"] = _choice(data["kind"], ARTICLE_KINDS, "Format inconnu.")
         for key, size in (("title", 200), ("summary", 300), ("body", 60_000), ("tags", 300), ("gate_codes", 200),
                           ("video_url", 500)):
             if key in data:
@@ -483,18 +532,16 @@ class EguitraPortailCabinet(http.Controller):
     def _event_values(self, data):
         values = _audience(data)
         if "kind" in data:
-            if data["kind"] not in dict(EVENT_KINDS):
-                raise ApiError(400, "invalid_parameter", "Format inconnu.")
-            values["kind"] = data["kind"]
+            values["kind"] = _choice(data["kind"], EVENT_KINDS, "Format inconnu.")
         for key, size in (("name", 200), ("description", 20_000), ("speaker", 200), ("location", 200),
                           ("online_url", 500)):
             if key in data:
                 values[key] = _text(data[key], size)
-        for key in ("start", "end", "registration_deadline"):
+        for key, label in (("start", "Début"), ("end", "Fin"), ("registration_deadline", "Clôture des inscriptions")):
             if key in data:
-                values[key] = _datetime(data[key], key)
+                values[key] = _datetime(data[key], label)
         if "capacity" in data:
-            values["capacity"] = int(data["capacity"] or 0)
+            values["capacity"] = _int(data["capacity"], "Places", default=0)
         return values
 
     @api_route("/axispro/portail/evenements", methods=("POST",), profiles=WRITE)
@@ -508,6 +555,8 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/evenements/<int:event_id>", methods=("PATCH",), profiles=WRITE)
     def modifier_evenement(self, event_id, **_kw):
+        """Publié, l'événement prévient ses inscrits d'un changement d'horaire, de lieu ou de lien, et
+        les porteurs ajoutés au public ; une capacité augmentée donne ses places à la liste d'attente."""
         event = _browse("portail.event", event_id, "Événement")
         event.write(self._event_values(read_json()))
         return vues.event_row(event, cabinet=True)
@@ -530,20 +579,25 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/evenements/<int:event_id>/inscriptions", profiles=READ)
     def inscriptions(self, event_id, **_kw):
+        """Inscriptions ; la liste d'attente porte son rang (1 : la prochaine place libre)."""
         event = _browse("portail.event", event_id, "Événement")
+        rank = {r.id: i for i, r in enumerate(event._waiting(), start=1)}
         return [{"id": r.id, "user": r.user_id.name, "login": r.user_id.login, "phone": r.user_id.partner_id.phone or None,
                  "dossier": {"id": r.dossier_id.id, "reference": r.dossier_id.reference} if r.dossier_id else None,
                  "state": r.state, "state_label": dict(REGISTRATION_STATES)[r.state], "note": r.note or None,
-                 "date": r.create_date} for r in event.registration_ids]
+                 "date": r.create_date, "waitlist_since": r.waitlist_since or None, "waitlist_rank": rank.get(r.id)}
+                for r in event.registration_ids]
 
     @api_route("/axispro/portail/inscriptions/<int:registration_id>", methods=("PATCH",), profiles=WRITE)
     def pointer(self, registration_id, **_kw):
         registration = _browse("portail.event.registration", registration_id, "Inscription")
         (state,) = require(read_json(), "state")
-        if state not in ("registered", "attended", "absent", "cancelled"):
+        if not isinstance(state, str) or state not in ("registered", "attended", "absent", "cancelled"):
             raise ApiError(400, "invalid_parameter", "État inconnu.")
         if state == "cancelled":
             registration.cancel()
+        elif state == "registered" and registration.state == "waitlist":
+            registration.give_seat()
         else:
             registration.state = state
         return {"id": registration.id, "state": registration.state,
@@ -553,7 +607,12 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/rendez-vous", profiles=READ)
     def rendez_vous(self, **_kw):
-        meetings = request.env["portail.meeting"].sudo().search([("company_id", "=", _company().id)], limit=300)
+        """Toutes les demandes et tous les rendez-vous confirmés ; de l'historique (tenus, déclinés,
+        annulés), les MEETING_HISTORY_LIMIT plus récents."""
+        Meeting = request.env["portail.meeting"].sudo()
+        company = [("company_id", "=", _company().id)]
+        meetings = Meeting.search(company + [("state", "in", ("requested", "confirmed"))]) | Meeting.search(
+            company + [("state", "not in", ("requested", "confirmed"))], limit=MEETING_HISTORY_LIMIT)
         order = {"requested": 0, "confirmed": 1, "done": 2, "declined": 3, "cancelled": 4}
         rows = [vues.meeting_row(m, request.env.user) for m in meetings]
         rows.sort(key=lambda r: (order[r["state"]], r["start"] or r["create_date"]))
@@ -565,15 +624,13 @@ class EguitraPortailCabinet(http.Controller):
         data = read_json()
         dossier_id, subject, start = require(data, "dossier_id", "subject", "start")
         dossier = _dossier(dossier_id)
-        mode = data.get("mode") or "office"
-        if mode not in dict(MEETING_MODES):
-            raise ApiError(400, "invalid_parameter", "Forme de rendez-vous inconnue.")
+        mode = _choice(data.get("mode") or "office", MEETING_MODES, "Forme de rendez-vous inconnue.")
         meeting = request.env["portail.meeting"].sudo().create({
             "dossier_id": dossier.id, "requested_by": request.env.user.id, "consultant_id": request.env.user.id,
             "subject": _text(subject, 200), "agenda": _text(data.get("agenda"), 3000), "mode": mode,
-            "duration": int(data.get("duration") or 60),
+            "duration": _int(data.get("duration"), "Durée", default=60),
         })
-        meeting.confirm(_datetime(start), location=_text(data.get("location"), 200),
+        meeting.confirm(_datetime(start, "Date du rendez-vous"), location=_text(data.get("location"), 200),
                         online_url=_text(data.get("online_url"), 500), cabinet_note=_text(data.get("cabinet_note"), 2000))
         return vues.meeting_row(meeting, request.env.user)
 
@@ -589,9 +646,9 @@ class EguitraPortailCabinet(http.Controller):
                 if key in data:
                     values[key] = _text(data[key], size)
             if "duration" in data:
-                values["duration"] = int(data["duration"] or 60)
-            if data.get("mode") in dict(MEETING_MODES):
-                values["mode"] = data["mode"]
+                values["duration"] = _int(data["duration"], "Durée", default=60)
+            if data.get("mode"):
+                values["mode"] = _choice(data["mode"], MEETING_MODES, "Forme de rendez-vous inconnue.")
             if note:
                 values["cabinet_note"] = note
             meeting.confirm(_datetime(data.get("start"), "Date du rendez-vous"), **values)
@@ -602,7 +659,7 @@ class EguitraPortailCabinet(http.Controller):
         elif action == "done":
             meeting.mark_done(_text(data.get("minutes"), 20_000))
         elif action == "minutes":
-            meeting.minutes = _text(data.get("minutes"), 20_000)
+            meeting.share_minutes(_text(data.get("minutes"), 20_000))
         else:
             raise ApiError(400, "invalid_parameter", "Action inconnue.")
         return vues.meeting_row(meeting, request.env.user)
@@ -611,20 +668,36 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/avis", profiles=READ)
     def avis(self, **_kw):
-        feedback = request.env["portail.feedback"].sudo().search([("company_id", "=", _company().id)], limit=500)
+        """Les FEEDBACK_LIMIT avis les plus récents ; moyenne et NPS de tous les avis : la synthèse."""
+        feedback = request.env["portail.feedback"].sudo().search([("company_id", "=", _company().id)],
+                                                                 limit=FEEDBACK_LIMIT)
         return [vues.feedback_row(f) for f in feedback]
 
     # ─── Notifications du cabinet ────────────────────────────────────────
 
     @api_route("/axispro/portail/notifications", profiles=READ)
     def notifications(self, **_kw):
+        """Notifications du compte (message ou pièce d'un porteur, compte rendu reçu, rendez-vous
+        demandé ou annulé), les plus récentes d'abord (60), et le nombre de non lues : la cloche
+        d'AxisPro Suite. Chacun ne lit que les siennes."""
         Notification = request.env["portail.notification"].sudo()
         items = Notification.search([("user_id", "=", request.env.user.id)], limit=60)
-        unread = Notification.search_count([("user_id", "=", request.env.user.id), ("read_at", "=", False)])
-        return {"unread": unread, "items": [vues.notification_row(n) for n in items]}
+        return {"unread": self._unread(), "items": [vues.notification_row(n) for n in items]}
+
+    @staticmethod
+    def _unread():
+        return request.env["portail.notification"].sudo().search_count(
+            [("user_id", "=", request.env.user.id), ("read_at", "=", False)])
 
     @api_route("/axispro/portail/notifications/lues", methods=("POST",), profiles=READ)
     def lues(self, **_kw):
-        request.env["portail.notification"].sudo().search(
-            [("user_id", "=", request.env.user.id), ("read_at", "=", False)]).write({"read_at": fields.Datetime.now()})
-        return {"unread": 0}
+        """Marque lues les notifications `ids` du compte (toutes sans `ids`) ; jamais celles d'un autre
+        compte. Rend le nombre de non lues restant."""
+        ids = read_json().get("ids")
+        domain = [("user_id", "=", request.env.user.id), ("read_at", "=", False)]
+        if ids:
+            if not isinstance(ids, list):
+                raise ApiError(400, "invalid_parameter", "ids : liste d'identifiants attendue.")
+            domain.append(("id", "in", [int(i) for i in ids if str(i).isdigit()]))
+        request.env["portail.notification"].sudo().search(domain).write({"read_at": fields.Datetime.now()})
+        return {"unread": self._unread()}

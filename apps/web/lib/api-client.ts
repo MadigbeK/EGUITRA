@@ -48,7 +48,7 @@ async function avecSession<R>(appel: () => Promise<R>): Promise<R> {
  * dans l'autre société détournait les lectures et les écritures de celui-ci (en-tête lu par la
  * passerelle puis par le noyau, qui refuse une société qui n'est pas ouverte au compte).
  */
-function appHeader(): Record<string, string> {
+export function appHeader(): Record<string, string> {
   const enTetes: Record<string, string> = {};
   const app = window.location.pathname.split("/")[1] ?? "";
   if (["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app)) enTetes["X-Eguitra-App"] = app;

@@ -3,11 +3,12 @@
 // (sur deux niveaux), tableaux, gras (**…**), code (`…`) et liens ([texte](cible), rendus en texte).
 // Largeur d'une colonne : calculée sur la longueur des textes, ou imposée par « {n} » à la fin de son
 // en-tête (poids relatif, de 4 à 60 ; utile aux tableaux à remplir, dont les cellules sont vides).
+// Saut de page : une ligne « <!-- saut de page --> » (invisible à la lecture du Markdown).
 const fs = require('fs');
 const path = require('path');
 const {
-  AlignmentType, BorderStyle, Document, Footer, ImageRun, Packer, PageNumber, Paragraph, ShadingType, Table, TableCell,
-  TableRow, TextRun, VerticalAlign, WidthType,
+  AlignmentType, BorderStyle, Document, Footer, ImageRun, Packer, PageBreak, PageNumber, Paragraph, ShadingType, Table,
+  TableCell, TableRow, TextRun, VerticalAlign, WidthType,
 } = require('docx');
 
 const NAVY = '1C1E6B', TEAL = '1A9E9E', GREY = 'F2F4F7', FONT = 'Calibri', W = 9638;
@@ -77,7 +78,10 @@ function blocks(markdown) {
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { i += 1; continue; }
-    if (line.startsWith('# ')) {
+    if (line.trim() === '<!-- saut de page -->') {
+      out.push(new Paragraph({ children: [new PageBreak()] }));
+      i += 1;
+    } else if (line.startsWith('# ')) {
       out.push(new Paragraph({ children: runs(line.slice(2), { size: 36, bold: true, color: NAVY }), spacing: { after: 160 } }));
       i += 1;
     } else if (line.startsWith('### ')) {

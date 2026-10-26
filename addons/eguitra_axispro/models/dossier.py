@@ -72,6 +72,11 @@ def _input_author(env):
     return not _system(env) and not env.user.share
 
 
+def _montant(value, devise):
+    """Montant entier, milliers groupés par une espace insécable, suivi de la devise du dossier."""
+    return f"{value:,.0f}".replace(",", " ") + (f" {devise}" if devise else "")
+
+
 def _lead_label(dossier):
     """« le responsable du dossier (Nom) » pour un message de refus ; sans nom si le dossier n'a pas
     de responsable désigné (dossier créé par le compte système)."""
@@ -164,7 +169,12 @@ class AxisproDossier(models.Model):
             self._check_unlocked()
         if DECISION_FIELDS & set(vals) and _input_author(self.env):
             vals = dict(vals, decision_inputs_by=[Command.link(self.env.uid)])
-        return super().write(vals)
+        before = {d.id: d.state for d in self} if "state" in vals else {}
+        result = super().write(vals)
+        labels = dict(self._fields["state"].selection)
+        for dossier in self.filtered(lambda d: d.id in before and before[d.id] != d.state):
+            dossier.log("state", before=labels[before[dossier.id]], after=labels[dossier.state])
+        return result
 
     def _note_decision_input(self):
         """Inscrit l'utilisateur parmi les auteurs de la révision en cours (évaluation des critères,
@@ -177,10 +187,34 @@ class AxisproDossier(models.Model):
             todo.write({"decision_inputs_by": [Command.link(uid)]})
 
     def _check_unlocked(self):
+        """Refus d'écrire ce que la décision fige (évaluation, fiche, hypothèses, modèle financier, pièces
+        antérieures) : dossier verrouillé par une décision du comité, ou dossier clos (il se rouvre
+        d'abord)."""
         for dossier in self:
             if dossier.locked_review_id:
                 raise UserError(f"Dossier {dossier.reference} verrouillé par la décision du comité (révision "
                                 f"{dossier.revision}) : ouvrez une nouvelle révision pour le modifier.")
+            dossier._check_open()
+
+    def _check_open(self):
+        """Un dossier clos se consulte ; il ne s'évalue plus, ne passe plus de gate et ne reçoit plus de
+        revue de comité tant qu'il n'est pas rouvert."""
+        for dossier in self:
+            if dossier.state == "closed":
+                raise UserError(f"Dossier {dossier.reference} clos : rouvrez-le (état « En cours ») pour le modifier.")
+
+    def change_lead(self, user):
+        """Nouveau responsable du dossier, choisi par le responsable en place (tout le cabinet si le
+        dossier n'en a pas), inscrit au journal ; figé comme la fiche par une décision verrouillée."""
+        self.ensure_one()
+        lead = self.sudo().consultant_id.filtered(lambda u: u.id != SUPERUSER_ID)
+        if lead and lead != self.env.user and not _system(self.env):
+            raise AccessError(f"Seul {_lead_label(self)} confie le dossier à un autre responsable.")
+        if user == lead:
+            return True
+        self.write({"consultant_id": user.id})
+        self.log("assignment", note="Responsable du dossier", before=lead.name or "Aucun", after=user.name)
+        return True
 
     def evaluators(self):
         """Comptes auteurs de la révision en cours (decision_inputs_by) : ceux qui, depuis son
@@ -285,6 +319,9 @@ class AxisproDossier(models.Model):
             "fiche": {"name": self.name, "promoter": self.promoter_id.name, "sector": self.sector, "location": self.location},
             "hyp": dict({h: self[h] or None for h in HYPOTHESES}, dscr=dscr),
             "investment": self.investment, "capex_criterion_id": policy.capex_criterion_id.id,
+            # Gate courant : les knock-outs encore à évaluer des gates non atteints ne sont pas actifs, et
+            # le prochain gate se cherche à partir de lui (scoring.compute).
+            "current_gate_index": index.get(self.current_gate_id.id, 0) if self.current_gate_id else 0,
         }
         return policy.scoring_settings(), criteria, evaluations, domains, documents, gate_rows, context, financial
 
@@ -300,15 +337,16 @@ class AxisproDossier(models.Model):
     def _extra_anomalies(self, result, financial):
         notes = []
         plan = self.plan_ids[:1]
+        devise = self.currency_id.name or ""
         if financial and plan:
             capex = financial.get("capex_total") or 0
             if self.investment and capex and abs(capex - self.investment) > 0.10 * self.investment:
-                notes.append(f"Investissement de la fiche ({self.investment:,.0f}) et investissements du modèle financier "
-                             f"({capex:,.0f}) diffèrent de plus de 10 %.".replace(",", " "))
+                notes.append(f"Investissement de la fiche ({_montant(self.investment, devise)}) et investissements du "
+                             f"modèle financier ({_montant(capex, devise)}) diffèrent de plus de 10 %.")
             external = (financial.get("funding") or {}).get("loan", 0) + (financial.get("funding") or {}).get("grant", 0)
             if self.financing_need and external and abs(external - self.financing_need) > 0.10 * self.financing_need:
-                notes.append(f"Besoin de financement de la fiche ({self.financing_need:,.0f}) et financements externes du "
-                             f"modèle ({external:,.0f}) diffèrent de plus de 10 %.".replace(",", " "))
+                notes.append(f"Besoin de financement de la fiche ({_montant(self.financing_need, devise)}) et financements "
+                             f"externes du modèle ({_montant(external, devise)}) diffèrent de plus de 10 %.")
             for e in self.evaluation_ids.filtered(lambda e: e.criterion_id.indicator and e.status != "not_assessed"):
                 suggestion = e.criterion_id.suggestion(financial)
                 if suggestion and suggestion.get("status") and suggestion["status"] != e.status:
@@ -365,7 +403,8 @@ class AxisproDossier(models.Model):
             "domains": r["domains"],
             "compartments": compartments,
             "knockouts": [brief(x) for x in r["knockouts"]],
-            "knockouts_pending": sum(1 for x in r["knockouts"] if x["entered"] == "not_assessed"),
+            # Knock-outs encore à évaluer, tous gates confondus (ceux des gates non atteints ne sont pas actifs).
+            "knockouts_pending": sum(1 for x in r["lines"] if x.get("knockout") and x["entered"] == "not_assessed"),
             "critical_open": [brief(x) for x in r["critical_missing"]],
             "critical_missing_excl_ko": len(r["critical_missing_excl_ko"]),
             "requalified": [dict(brief(x), entered=x["entered"], retained=x["status"], alerts=x["alerts"])
@@ -516,6 +555,10 @@ class AxisproDossier(models.Model):
         # Les auteurs se comptent par révision : la nouvelle repart à vide.
         self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False,
                                                         "decision_inputs_by": [Command.clear()]})
+        # Les pièces reçues après la décision défaite entrent dans la nouvelle révision : la prochaine
+        # décision verrouillée les fige comme les autres (sinon une pièce reçue après un verrou
+        # précédent resterait modifiable sous une décision scellée qui s'appuie sur elle).
+        self.sudo().document_ids.filtered("after_lock").write({"after_lock": False})
         self.log("revision", note=f"Révision {self.revision} ouverte après la décision du {previous.date:%d/%m/%Y} "
                                   f"({method.DECISIONS.get(previous.decision, previous.decision)}).")
         return True
@@ -577,7 +620,9 @@ class AxisproDocument(models.Model):
         [("received", "Reçue"), ("validated", "Validée"), ("rejected", "À reprendre")], default="received", required=True
     )
     validity_date = fields.Date("Valable jusqu'au", help="Au-delà, une preuve est comptée comme incomplète.")
-    after_lock = fields.Boolean("Reçue après la décision verrouillée", readonly=True)
+    after_lock = fields.Boolean("Reçue après la décision verrouillée", readonly=True,
+                                help="Pièce reçue après la décision verrouillée en vigueur : elle se traite librement. "
+                                     "Remis à faux à l'ouverture d'une nouvelle révision.")
     comment = fields.Text("Observation du cabinet")
     uploaded_by = fields.Many2one("res.users", default=lambda self: self.env.user, readonly=True)
     uploaded_at = fields.Datetime(default=fields.Datetime.now, readonly=True)
@@ -675,7 +720,7 @@ class AxisproJournal(models.Model):
     kind = fields.Selection(
         [("status", "Statut d'un critère"), ("document", "Data room"), ("gate", "Stage gate"),
          ("decision", "Décision de comité"), ("revision", "Révision"), ("import", "Import"),
-         ("assignment", "Équipe du dossier")],
+         ("assignment", "Équipe du dossier"), ("portal", "Portail du porteur"), ("state", "État du dossier")],
         required=True, readonly=True,
     )
     criterion_id = fields.Many2one("axispro.criterion", "Critère", ondelete="set null", readonly=True)

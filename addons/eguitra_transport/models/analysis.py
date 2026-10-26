@@ -352,7 +352,8 @@ class EguitraTransportAnalysis(models.AbstractModel):
         # Ensembles dont le parc a commencé à saisir les documents : avant, tous seraient « non renseignés ».
         check("vehicle_documents",
               "Documents des ensembles en service à jour (assurance, visite technique ; barémage et étanchéité des citernes)",
-              [issue["label"] for v in in_service.filtered("document_ids") for issue in v._document_issues()],
+              [issue["label"] for v in in_service.filtered(lambda v: v._active_documents())
+               for issue in v._document_issues()],
               "Renouvelez les documents expirés ou à échéance et complétez les manquants (Flotte et chauffeurs). Le "
               "module HSSEQ en fera des motifs de départ.")
         check("vehicle_without_asset", "Ensembles en service rattachés à une immobilisation",

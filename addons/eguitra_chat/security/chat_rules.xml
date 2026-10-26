@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Discussion interne : une conversation, ses membres, ses messages et ses accusés de lecture ne se lisent
+        que par ses membres. Règles globales (aucun groupe) : elles valent pour tous les comptes, l'administration
+        et les administrateurs du noyau compris ; seul le superutilisateur, qui n'est le compte de personne, y
+        échappe. Les comptes n'ont que la lecture (ir.model.access.csv) : les écritures passent par les méthodes
+        du modèle (models/chat.py), qui contrôlent sous l'identité du compte. Les comptes du portail n'ont aucun
+        droit sur ces modèles. Une conversation de fiche se ferme en plus à qui ne lit plus la fiche
+        (eguitra.chat.channel._get_for_user).
+    -->
+    <record id="rule_chat_channel_members" model="ir.rule">
+        <field name="name">Discussion : conversations dont on est membre</field>
+        <field name="model_id" ref="model_eguitra_chat_channel"/>
+        <field name="domain_force">[('member_ids.user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_chat_member_members" model="ir.rule">
+        <field name="name">Discussion : membres des conversations dont on est membre</field>
+        <field name="model_id" ref="model_eguitra_chat_member"/>
+        <field name="domain_force">[('channel_id.member_ids.user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_chat_message_members" model="ir.rule">
+        <field name="name">Discussion : messages des conversations dont on est membre</field>
+        <field name="model_id" ref="model_eguitra_chat_message"/>
+        <field name="domain_force">[('channel_id.member_ids.user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_chat_read_own" model="ir.rule">
+        <field name="name">Discussion : ses propres accusés de lecture</field>
+        <field name="model_id" ref="model_eguitra_chat_read"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+</odoo>
