@@ -263,3 +263,31 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         self.assertEqual(reversal.date, end + timedelta(days=1), "Reprise au premier jour de l'exercice suivant")
         self.assertAlmostEqual(self._balance("194", end + timedelta(days=1)), 0, 0)
         self.assertAlmostEqual(-self._balance("797", end + timedelta(days=1)), 4_000_000, 0, msg="Reprise en 797")
+
+    def test_credit_de_tva_sans_compte_4449(self):
+        """Sans compte de crédit à reporter (4449), la liquidation garde le crédit au 445 et reste équilibrée,
+        même quand un compte 445 est créditeur."""
+        Account = self.env["account.account"]
+        Account.search([("code", "=like", "4449%"), ("company_ids", "in", self.company.ids)]).write({"active": False})
+        self.make_invoice("out_invoice", 10_000_000, day=self.month)  # TVA collectée 1,8 M
+        bill = self.make_invoice("in_invoice", 50_000_000, day=self.month)  # TVA récupérable 9 M
+        deductible = bill.line_ids.filtered(lambda line: line.tax_line_id).account_id
+        other = Account.search([("code", "=like", "445%"), ("company_ids", "in", self.company.ids),
+                                ("id", "!=", deductible.id)], order="code", limit=1)
+        other = other or Account.create({"code": "445800", "name": "TVA récupérable (test)",
+                                         "account_type": "asset_current", "company_ids": [(6, 0, self.company.ids)]})
+        journal = self.env["account.journal"].search(
+            [("company_id", "=", self.company.id), ("type", "=", "general"), ("code", "!=", "AN")], limit=1)
+        self.env["account.move"].create({
+            "move_type": "entry", "journal_id": journal.id, "date": self.month + relativedelta(days=3),
+            "line_ids": [(0, 0, {"name": "Régularisation de TVA", "account_id": self.acc_purchase.id, "debit": 1_000_000}),
+                         (0, 0, {"name": "Régularisation de TVA", "account_id": other.id, "credit": 1_000_000})],
+        }).action_post()
+        close = self._close()
+        vat = close.generated_move_ids.filtered(lambda m: m.eguitra_close_kind == "vat")
+        self.assertEqual(vat.state, "posted", "Liquidation équilibrée et validée")
+        self.assertAlmostEqual(sum(vat.line_ids.mapped("debit")), sum(vat.line_ids.mapped("credit")), 2)
+        self.assertFalse(vat.line_ids.filtered(lambda line: line.account_id.code.startswith("4441")), "Pas de TVA due")
+        self.assertAlmostEqual(self._balance("443"), 0, 2, msg="TVA collectée soldée")
+        self.assertAlmostEqual(self._balance(other.code), 0, 2, msg="445 créditeur soldé")
+        self.assertAlmostEqual(self._balance("445"), 9_000_000 - 1_000_000 - 1_800_000, 2, msg="Crédit gardé au 445")

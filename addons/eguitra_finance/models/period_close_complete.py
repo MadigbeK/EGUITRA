@@ -206,12 +206,23 @@ class EguitraPeriodClose(models.Model):
             if carry:
                 line(carry, max(position, 0.0) - carried)
         else:
-            # Pas de compte de crédit à reporter : le crédit reste au 445 (consommé à hauteur de la TVA collectée).
-            remaining = max(collected, 0.0)
+            # Pas de compte de crédit à reporter : le crédit reste au 445. Les comptes 445 créditeurs se soldent,
+            # puis les débiteurs sont consommés à hauteur de la TVA collectée et de ces soldes créditeurs (ou
+            # complétés d'une TVA collectée débitrice), de sorte qu'ils gardent le crédit et que la pièce soit
+            # équilibrée.
+            consume = collected + sum(-b for b in b445.values() if b < 0)
+            debtors = sorted(code for code, b in b445.items() if b > 0)
             for code, balance in sorted(b445.items()):
-                used = min(balance, remaining) if balance > 0 else balance
-                line(account(code), -used)
-                remaining -= max(used, 0.0)
+                if balance < 0:
+                    line(account(code), -balance)
+            if consume >= 0:
+                for code in debtors:
+                    used = min(b445[code], consume)
+                    line(account(code), -used)
+                    consume -= used
+            else:
+                holder = account(debtors[0]) if debtors else self._close_account("4452", "445")
+                line(holder, -consume)
         if due:
             line(self._close_account("4441"), -due, date_maturity=end.replace(day=1) + relativedelta(months=1, day=15))
         if not lines:
