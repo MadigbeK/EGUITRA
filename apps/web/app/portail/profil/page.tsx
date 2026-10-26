@@ -7,6 +7,7 @@ import { ArrowRight, Building2, KeyRound, Lock, Mail, Send, Smartphone, UserCog 
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Notice, cx, type Tone } from "@/components/ui";
 import { EnTete } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { DossierRef, Profil } from "@/lib/portail-types";
 
@@ -90,7 +91,7 @@ export default function MonProfil() {
     }
   }
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de votre profil…" />;
 
   const contactModifie = JSON.stringify(contact) !== JSON.stringify(contactDe(data));
@@ -123,7 +124,7 @@ export default function MonProfil() {
                 </Field>
               </div>
               <p className="text-[12.5px] leading-snug text-muted">Le cabinet vous joint à ces coordonnées. Votre nom et votre identifiant se changent auprès de votre consultant.</p>
-              {erreur?.ou === "contact" && <ErrorBox error={erreur.e} />}
+              {erreur?.ou === "contact" && <ErrorBox error={erreurLisible(erreur.e)} />}
               {retourContact === "enregistre" && <Notice tone="ok">Vos coordonnées sont enregistrées.</Notice>}
               {retourContact === "transmis" && <Notice tone="ok">Votre compte est celui de la fiche de l'entreprise : votre demande est transmise à votre consultant, qui mettra la fiche à jour.</Notice>}
               <div className="flex justify-end">
@@ -168,7 +169,7 @@ export default function MonProfil() {
                     <Input type="url" inputMode="url" autoComplete="off" value={fiche.website} onChange={(e) => setFiche({ ...fiche, website: e.target.value })} placeholder="https://" />
                   </Field>
                 </div>
-                {erreur?.ou === "fiche" && <ErrorBox error={erreur.e} />}
+                {erreur?.ou === "fiche" && <ErrorBox error={erreurLisible(erreur.e)} />}
                 {demande?.envoyee && (
                   <Notice tone="ok">
                     <div className="font-semibold">Votre demande est transmise à votre consultant, qui mettra la fiche à jour.</div>

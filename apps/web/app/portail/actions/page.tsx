@@ -6,7 +6,7 @@ import { AlertTriangle, Calendar, CheckCircle2, Clock, Pencil, Send } from "@/co
 import { Anneau, Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, Textarea, cx } from "@/components/ui";
 import { EnTete, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
-import { PasDeDossier, jour, messageErreur, useRetour } from "@/components/portail/projet/outils";
+import { PasDeDossier, jour, messageErreur, useRetour, erreurLisible } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { ActionRow } from "@/lib/portail-types";
 
@@ -128,7 +128,7 @@ export default function PlanActions() {
   }, [envoi]);
 
   if (espace && !espace.dossiers.length) return <PasDeDossier />;
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data || !dossier) return <Loading label="Chargement de votre plan d'actions…" />;
 
   const ferme = dossier.state === "closed";

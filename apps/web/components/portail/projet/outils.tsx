@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { X } from "@/components/icons";
 import { Card, classesBouton, Empty, Notice, cx, type Tone } from "@/components/ui";
-import { apiDownload } from "@/lib/api-client";
+import { ApiError, apiDownload } from "@/lib/api-client";
 import { FORMATS, aujourdhui, ecartJours, formatConakry, jourConakry } from "@/components/portail/commun";
 
 export function initiales(nom: string): string {
@@ -86,10 +86,29 @@ export function estIntrouvable(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { status?: unknown }).status === 404;
 }
 
-/** Message d'une erreur d'appel, destiné au porteur. */
+const ERREUR_GENERALE = "Une erreur est survenue. Réessayez dans un instant.";
+
+/**
+ * Message d'une erreur d'appel, destiné au porteur : celui du noyau (ApiError), jamais un message technique
+ * du navigateur en anglais (« Failed to fetch », « Load failed », « Unexpected token… »).
+ */
 export function messageErreur(e: unknown): string {
+  if (e instanceof ApiError) return e.message || ERREUR_GENERALE;
+  // Coupure du réseau ou serveur injoignable : fetch rejette avec une TypeError.
+  if (e instanceof TypeError) return "Le portail ne joint pas le serveur : vérifiez votre connexion, puis réessayez.";
+  // Réponse qui n'est pas celle de l'API (page d'erreur du serveur pendant une mise à jour).
+  if (e instanceof SyntaxError) return "Le service ne répond pas correctement pour l'instant. Réessayez dans un instant.";
   if (e instanceof Error && e.message) return e.message;
-  return "Une erreur est survenue. Réessayez dans un instant.";
+  return ERREUR_GENERALE;
+}
+
+/**
+ * Erreur à confier à ErrorBox : une erreur du noyau telle quelle (son statut, 403 compris, garde son effet),
+ * toute autre remplacée par son message en français.
+ */
+export function erreurLisible(e: unknown): unknown {
+  if (e === null || e === undefined || e instanceof ApiError) return e;
+  return new Error(messageErreur(e));
 }
 
 /** « 4 novembre 2026 » pour une date seule (AAAA-MM-JJ) ou une date et heure, heure de Conakry. */

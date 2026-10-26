@@ -8,6 +8,7 @@ import { EnTete } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { dateSimple } from "@/components/portail/cabinet-porteur/briques";
 import { Etoile } from "@/components/portail/cabinet-porteur/pictos";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { EventRow, FeedbackRow, FeedbackTopic } from "@/lib/portail-types";
 
@@ -132,7 +133,7 @@ export default function VotreAvis() {
     if (sujet === "event" && evenementId === null && passes[0]) setEvenementId(passes[0].id);
   }, [sujet, evenementId, passes]);
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!historique) return <Loading label="Chargement…" />;
 
   const dossiers = espace?.dossiers ?? [];
@@ -250,7 +251,7 @@ export default function VotreAvis() {
 
                 {sujet === "event" &&
                   (passes.length === 0 ? (
-                    !evenements && erreurEvenements ? <ErrorBox error={erreurEvenements} onRetry={() => majEvenements()} /> : <Notice tone="neutral">{evenements ? "Vous n'avez participé à aucun événement du cabinet ces deux derniers mois." : "Chargement de vos événements…"}</Notice>
+                    !evenements && erreurEvenements ? <ErrorBox error={erreurLisible(erreurEvenements)} onRetry={() => majEvenements()} /> : <Notice tone="neutral">{evenements ? "Vous n'avez participé à aucun événement du cabinet ces deux derniers mois." : "Chargement de vos événements…"}</Notice>
                   ) : (
                     <Field label="Événement">
                       <Select
@@ -278,7 +279,7 @@ export default function VotreAvis() {
                   <Notice tone="accent">Vous avez déjà donné un avis sur ce sujet le {dateSimple(precedent.date)} : le nouvel avis le remplacera.</Notice>
                 )}
                 {tente && manque && <Notice tone="warn">{manque}</Notice>}
-                {erreur !== null && <ErrorBox error={erreur} />}
+                {erreur !== null && <ErrorBox error={erreurLisible(erreur)} />}
 
                 <div className="flex justify-end">
                   <Button type="submit" variant="primary" loading={envoi}>

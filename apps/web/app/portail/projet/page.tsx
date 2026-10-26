@@ -9,7 +9,7 @@ import { EnTete, TexteRiche } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { CarteFinancement } from "@/components/portail/projet/Financements";
 import { FilProjet } from "@/components/portail/projet/FilProjet";
-import { Avatar, LienBouton, PasDeDossier, jour } from "@/components/portail/projet/outils";
+import { Avatar, LienBouton, PasDeDossier, jour, erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
 import { INSECABLE, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { DossierRef, Projet } from "@/lib/portail-types";
@@ -40,7 +40,7 @@ export default function MonProjet() {
   const { espace, dossier } = usePortail();
   const { data, error, mutate } = useApi<Projet>(dossier ? `/portail/dossiers/${dossier.id}/projet` : null);
   if (espace && !espace.dossiers.length) return <PasDeDossier />;
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de votre projet…" />;
 
   const d = data.dossier;

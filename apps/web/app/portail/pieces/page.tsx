@@ -6,7 +6,7 @@ import { Badge, Button, Card, Empty, ErrorBox, Field, FileButton, Input, Loading
 import { EnTete, FORMATS, dateHeure, quand, taille } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { ZoneDepot } from "@/components/portail/projet/ZoneDepot";
-import { PasDeDossier, messageErreur, telechargerPiece, useRetour, verifierFichier } from "@/components/portail/projet/outils";
+import { PasDeDossier, messageErreur, telechargerPiece, useRetour, verifierFichier, erreurLisible } from "@/components/portail/projet/outils";
 import { apiDownload, apiUpload, useApi } from "@/lib/api-client";
 import type { Fichier, PieceAttendue, PieceState, Pieces } from "@/lib/portail-types";
 
@@ -133,7 +133,7 @@ export default function PiecesPortail() {
   }, [data, filtre]);
 
   if (espace && !espace.dossiers.length) return <PasDeDossier />;
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data || !dossier) return <Loading label="Chargement de vos pièces…" />;
 
   const id = dossier.id;

@@ -6,6 +6,7 @@ import { ArrowRight, Flag } from "@/components/icons";
 import { Badge, Card, Empty, ErrorBox, Loading, Notice, Segmented, cx } from "@/components/ui";
 import { EnTete, formatConakry, jourConakry, quand } from "@/components/portail/commun";
 import { NATURE, TitreSection, dateSimple, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
 import type { AnnouncementRow } from "@/lib/portail-types";
 
@@ -98,7 +99,7 @@ export default function Actualites() {
     return groupes;
   }, [visibles]);
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement des actualités du cabinet…" />;
 
   const nonLues = data.filter((a) => !a.read).length;

@@ -7,6 +7,7 @@ import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, 
 import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, heure, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { BOUTON_PRINCIPAL, BlocDate, dateSimple, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { EventRow, RegistrationState } from "@/lib/portail-types";
 
@@ -268,7 +269,7 @@ export default function Evenements() {
     }
   }
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement des événements du cabinet…" />;
 
   const liste = vue === "a-venir" ? aVenir : vue === "inscriptions" ? mesInscriptions : passes;
@@ -374,7 +375,7 @@ export default function Evenements() {
             </label>
             {plusieursDossiers && dossier && <p className="text-[12.5px] text-muted">Inscription au titre du dossier {dossier.reference}, {dossier.name}.</p>}
             {inscription.registration_deadline && <p className="text-[12.5px] text-muted">Inscriptions ouvertes jusqu'au {dateSimple(inscription.registration_deadline)}.</p>}
-            {erreur !== null && <ErrorBox error={erreur} />}
+            {erreur !== null && <ErrorBox error={erreurLisible(erreur)} />}
           </div>
         )}
       </Modal>
@@ -398,7 +399,7 @@ export default function Evenements() {
               Vous quittez « <b className="text-ink">{desinscription.name}</b> », {dateLongue(desinscription.start)}.
             </p>
             <p>Votre place reviendra au premier porteur de la liste d'attente. Vous pourrez vous réinscrire tant que les inscriptions restent ouvertes.</p>
-            {erreur !== null && <ErrorBox error={erreur} />}
+            {erreur !== null && <ErrorBox error={erreurLisible(erreur)} />}
           </div>
         )}
       </Modal>

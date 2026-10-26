@@ -8,7 +8,7 @@ import { COULEUR, TexteRiche, iconeRubrique, taille } from "@/components/portail
 import { Retour, TitreSection, dateSimple, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { Lecture, Signet } from "@/components/portail/cabinet-porteur/pictos";
 import { CarteRessource, FORMATS } from "@/components/portail/cabinet-porteur/ressources";
-import { PageIntrouvable, estIntrouvable } from "@/components/portail/projet/outils";
+import { PageIntrouvable, estIntrouvable, erreurLisible } from "@/components/portail/projet/outils";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { ArticleDetail, ArticleRow, Attachment } from "@/lib/portail-types";
 
@@ -93,7 +93,7 @@ export function LectureRessource({ id }: { id: number }) {
             retour={{ href: "/portail/ressources", label: "Voir tous les conseils" }}
           />
         ) : (
-          <ErrorBox error={error} onRetry={() => void mutate()} />
+          <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />
         )}
       </div>
     );
@@ -184,7 +184,7 @@ export function LectureRessource({ id }: { id: number }) {
 
       {erreurLecture !== null && (
         <div className="mb-4">
-          <ErrorBox error={erreurLecture} titre="Votre lecture n'a pas pu être enregistrée." onRetry={() => void enregistrerLecture()} />
+          <ErrorBox error={erreurLisible(erreurLecture)} titre="Votre lecture n'a pas pu être enregistrée." onRetry={() => void enregistrerLecture()} />
         </div>
       )}
 
@@ -288,7 +288,7 @@ export function LectureRessource({ id }: { id: number }) {
 
               {erreur !== null && (
                 <div className="mt-6">
-                  <ErrorBox error={erreur} />
+                  <ErrorBox error={erreurLisible(erreur)} />
                 </div>
               )}
             </div>

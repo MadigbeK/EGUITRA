@@ -5,6 +5,7 @@ import { ArrowRight, ArrowUpRight, Calculator, Clock, FileUp, HandCoins, Mail, S
 import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, type Tone } from "@/components/ui";
 import { KIND_ICON, dateLongue, formatConakry, instant, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
 import { INSECABLE, fmtPct, fmtShort } from "@/lib/format";
 import type { NextStep, Tableau } from "@/lib/portail-types";
@@ -37,7 +38,7 @@ export default function AccueilPortail() {
       </Card>
     );
   }
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Préparation de votre espace…" />;
   const d = data.dossier;
   const p = data.preparation;

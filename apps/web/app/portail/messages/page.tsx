@@ -5,7 +5,7 @@ import { ChevronUp, Clock, Download, FileText, Loader2, Lock, Mail, Paperclip, S
 import { Button, ErrorBox, FEUILLE, Loading, Notice, Textarea, cx } from "@/components/ui";
 import { EnTete, FORMATS, FORMATS_TEXTE, heure, taille } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
-import { Avatar, LienBouton, PasDeDossier, cleJour, libelleJour, messageErreur, telechargerPiece, useRetour, verifierFichier } from "@/components/portail/projet/outils";
+import { Avatar, LienBouton, PasDeDossier, cleJour, libelleJour, messageErreur, telechargerPiece, useRetour, verifierFichier, erreurLisible } from "@/components/portail/projet/outils";
 import { apiGet, apiSend, apiUpload } from "@/lib/api-client";
 import type { Attachment, DossierRef, Fil, MessageRow } from "@/lib/portail-types";
 
@@ -280,7 +280,7 @@ function FilDuDossier({ dossier }: { dossier: DossierRef }) {
     premier.current = false;
   }, [nombre, dernierId]);
 
-  if (error && !data) return <ErrorBox error={error} onRetry={() => void charger()} />;
+  if (error && !data) return <ErrorBox error={erreurLisible(error)} onRetry={() => void charger()} />;
   if (!data) return <Loading label="Chargement de vos échanges…" />;
 
   const consultant = data.consultant;
@@ -334,7 +334,7 @@ function FilDuDossier({ dossier }: { dossier: DossierRef }) {
 
       {erreurRelecture !== null && (
         <div className="mb-3">
-          <ErrorBox error={erreurRelecture} titre="Les nouveaux messages ne peuvent pas être relus pour l'instant." onRetry={() => void relire()} />
+          <ErrorBox error={erreurLisible(erreurRelecture)} titre="Les nouveaux messages ne peuvent pas être relus pour l'instant." onRetry={() => void relire()} />
         </div>
       )}
 
@@ -382,7 +382,7 @@ function FilDuDossier({ dossier }: { dossier: DossierRef }) {
                 {!anciens && <ChevronUp className="h-4 w-4" />}
                 Afficher les messages précédents
               </Button>
-              {erreurAnciens !== null && <ErrorBox error={erreurAnciens} titre="Les messages précédents n'ont pas pu être chargés." onRetry={precedents} />}
+              {erreurAnciens !== null && <ErrorBox error={erreurLisible(erreurAnciens)} titre="Les messages précédents n'ont pas pu être chargés." onRetry={precedents} />}
             </div>
           )}
           {nombre === 0 ? (

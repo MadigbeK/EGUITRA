@@ -7,6 +7,7 @@ import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx, demande
 import { EnTete, KIND_ICON, aujourdhui, decalerJour, depuisCle, formatConakry, heure, jourConakry, lienNotification } from "@/components/portail/commun";
 import { texteToutLire, usePortail } from "@/components/portail/PortailShell";
 import { majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { apiGet, apiSend, useApi } from "@/lib/api-client";
 import type { NotificationRow, Notifications } from "@/lib/portail-types";
 
@@ -101,7 +102,7 @@ export default function NotificationsPage() {
     if (lien) router.push(lien);
   }
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de vos notifications…" />;
 
   // Compte du noyau, sur toutes les notifications, et non sur la seule page affichée.
@@ -130,7 +131,7 @@ export default function NotificationsPage() {
         ]}
       />
 
-      {erreur !== null && <ErrorBox error={erreur} />}
+      {erreur !== null && <ErrorBox error={erreurLisible(erreur)} />}
 
       {groupes.length === 0 ? (
         <Card>
@@ -183,7 +184,7 @@ export default function NotificationsPage() {
               <Button onClick={() => void chargerSuite()} loading={chargementSuite}>
                 Afficher les suivantes ({pluriel(reste, "notification plus ancienne", "notifications plus anciennes")})
               </Button>
-              {erreurSuite !== null && <ErrorBox error={erreurSuite} titre="Les notifications suivantes n'ont pas pu être chargées." onRetry={() => void chargerSuite()} />}
+              {erreurSuite !== null && <ErrorBox error={erreurLisible(erreurSuite)} titre="Les notifications suivantes n'ont pas pu être chargées." onRetry={() => void chargerSuite()} />}
             </div>
           )}
           <p className="px-1 text-[12px] text-muted">

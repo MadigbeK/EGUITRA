@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Clock, HandCoins, ListChecks, Users, type Ic
 import { Button, Card, ErrorBox, Loading, cx } from "@/components/ui";
 import { EnTete, aujourdhui as aujourdhuiConakry, cleDate, decalerJour, depuisCle, formatConakry, heure, jourConakry } from "@/components/portail/commun";
 import { majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
 import type { AgendaItem } from "@/lib/portail-types";
 
@@ -156,7 +157,7 @@ export default function Agenda() {
     }
   }
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de votre agenda…" />;
 
   const titreMois = majuscule(formatConakry(new Date(Date.UTC(curseur.annee, curseur.mois, 1, 12)), { month: "long", year: "numeric" }));

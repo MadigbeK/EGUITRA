@@ -14,6 +14,7 @@ import { pluriel } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
 import type { Me } from "@/lib/types";
 import { KIND_ICON, dateHeure, lienNotification } from "./commun";
+import { erreurLisible } from "./projet/outils";
 
 /* ─── Contexte du portail : l'espace du porteur et le dossier choisi ─────── */
 
@@ -328,14 +329,14 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
           </div>
           {erreurLecture !== null && (
             <div className="border-b border-line p-1.5">
-              <ErrorBox error={erreurLecture} titre="Les notifications n'ont pas pu être marquées comme lues." onRetry={() => void toutLire()} />
+              <ErrorBox error={erreurLisible(erreurLecture)} titre="Les notifications n'ont pas pu être marquées comme lues." onRetry={() => void toutLire()} />
             </div>
           )}
           <ul className="max-h-[420px] overflow-y-auto p-1.5">
             {!data &&
               (error ? (
                 <li className="p-1.5">
-                  <ErrorBox error={error} onRetry={() => mutate()} />
+                  <ErrorBox error={erreurLisible(error)} onRetry={() => mutate()} />
                 </li>
               ) : (
                 <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>
@@ -543,7 +544,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
             </div>
           )}
           <main key={pathname} className="n-page mx-auto min-w-0 max-w-[1240px] px-4 pb-28 pt-6 sm:px-6 md:pt-8 lg:px-10 lg:pb-12">
-            {erreurEspace && !espace ? <ErrorBox error={erreurEspace} onRetry={rafraichir} /> : children}
+            {erreurEspace && !espace ? <ErrorBox error={erreurLisible(erreurEspace)} onRetry={rafraichir} /> : children}
           </main>
         </div>
 

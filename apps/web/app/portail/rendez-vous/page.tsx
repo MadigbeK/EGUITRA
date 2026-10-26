@@ -5,7 +5,7 @@ import { Building2, Calendar, ChevronDown, Clock, MapPin, Plus, Smartphone, Tras
 import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Field, Input, Loading, Modal, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
 import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, formatConakry, heure, instant, quand, versIso, versLocal } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
-import { LienBouton, PasDeDossier, majuscule, messageErreur, useRetour } from "@/components/portail/projet/outils";
+import { LienBouton, PasDeDossier, majuscule, messageErreur, useRetour, erreurLisible } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { MeetingMode, MeetingRow, MeetingState } from "@/lib/portail-types";
 
@@ -444,7 +444,7 @@ export default function RendezVous() {
   const [annulation, setAnnulation] = useState<MeetingRow | null>(null);
 
   if (espace && !espace.dossiers.length) return <PasDeDossier />;
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data || !dossier || !chemin) return <Loading label="Chargement de vos rendez-vous…" />;
 
   const ferme = dossier.state === "closed";

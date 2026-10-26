@@ -7,7 +7,7 @@ import { Badge, Button, Card, ErrorBox, FEUILLE, Loading, cx } from "@/component
 import { TexteRiche, dateLongue, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { LienAction, NATURE, Retour, dateSimple, natureLien } from "@/components/portail/cabinet-porteur/briques";
-import { PageIntrouvable, estIntrouvable } from "@/components/portail/projet/outils";
+import { PageIntrouvable, estIntrouvable, erreurLisible } from "@/components/portail/projet/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import type { AnnouncementRow } from "@/lib/portail-types";
 
@@ -73,7 +73,7 @@ export function LectureActualite({ id }: { id: number }) {
             retour={{ href: "/portail/actualites", label: "Voir toutes les actualités" }}
           />
         ) : (
-          <ErrorBox error={error} onRetry={() => void mutate()} />
+          <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />
         )}
       </div>
     );
@@ -91,7 +91,7 @@ export function LectureActualite({ id }: { id: number }) {
 
       {erreurLecture !== null && (
         <div className="mb-4">
-          <ErrorBox error={erreurLecture} titre="Votre lecture n'a pas pu être enregistrée." onRetry={() => void enregistrerLecture(data.id)} />
+          <ErrorBox error={erreurLisible(erreurLecture)} titre="Votre lecture n'a pas pu être enregistrée." onRetry={() => void enregistrerLecture(data.id)} />
         </div>
       )}
 
@@ -164,7 +164,7 @@ export function LectureActualite({ id }: { id: number }) {
                     </Button>
                     {erreur !== null && (
                       <div className="w-full">
-                        <ErrorBox error={erreur} />
+                        <ErrorBox error={erreurLisible(erreur)} />
                       </div>
                     )}
                   </div>
@@ -183,7 +183,7 @@ export function LectureActualite({ id }: { id: number }) {
           </Card>
           {!liste && erreurListe && (
             <Card title="À lire aussi">
-              <ErrorBox error={erreurListe} titre="Les autres communications n'ont pas pu être chargées." onRetry={() => void mutateListe()} />
+              <ErrorBox error={erreurLisible(erreurListe)} titre="Les autres communications n'ont pas pu être chargées." onRetry={() => void mutateListe()} />
             </Card>
           )}
           {autres.length > 0 && (
