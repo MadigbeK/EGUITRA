@@ -229,9 +229,12 @@ class TestMethodeDansLaPlateforme(ApiCase):
                                                           extended_grid())
         cls.policy.action_activate()
         cls.promoter = cls.env["res.partner"].create({"name": "SPV Soleil"})
-        cls._create_user("analyste", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
-        # Second consultant : verrouille, force ou rouvre à la place de l'auteur (quatre yeux).
-        cls._create_user("relecteur", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        # Deux associés du cabinet (sceau, passage forcé et réouverture leur sont réservés, avec la
+        # direction) : l'un évalue, l'autre verrouille, force ou rouvre à sa place (quatre yeux).
+        cls._create_user("analyste", "cabinet", "associe", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        cls._create_user("relecteur", "cabinet", "associe", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        # Consultant simple : évalue, rédige les revues et passe les gates selon la règle, sans sceller.
+        cls._create_user("consultant.simple", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
 
     def setUp(self):
         super().setUp()
@@ -758,10 +761,10 @@ class TestMethodeDansLaPlateforme(ApiCase):
         status, body = self.call("POST", lock, token=self.token)
         self.assertEqual((status, body["state"]), (200, "locked"), body)
 
-    def test_revue_corrigee_et_verrouillee_par_le_seul_cabinet(self):
-        """Rôles par profil : la direction et l'administration consultent les comités ; seul le cabinet
-        corrige ou verrouille une revue et fait passer un gate (403 pour les autres profils, rien ne
-        change)."""
+    def test_revue_corrigee_par_le_seul_cabinet(self):
+        """Rôles par profil : seul le cabinet corrige une revue en brouillon et fait passer un gate selon
+        la règle ; la direction et l'administration ne le font pas ; la finance et le porteur ne scellent
+        rien (403 pour tous, rien ne change). Le sceau : test suivant."""
         status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews", {"decision": "go"},
                                    token=self.token)
         self.assertEqual(status, 200, review)
@@ -774,8 +777,9 @@ class TestMethodeDansLaPlateforme(ApiCase):
                 status, body = self.call("PATCH", f"/axispro/reviews/{review['id']}",
                                          {"decision": "no_go", "motive": "Refus du comité"}, token=token)
                 self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
-                status, body = self.call("POST", f"/axispro/reviews/{review['id']}/lock", token=token)
-                self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+                if profile in ("finance", "porteur"):
+                    status, body = self.call("POST", f"/axispro/reviews/{review['id']}/lock", token=token)
+                    self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
                 status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/advance-gate",
                                          {"from_gate": "G0"}, token=token)
                 self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
@@ -783,6 +787,76 @@ class TestMethodeDansLaPlateforme(ApiCase):
         record = self.env["axispro.review"].browse(review["id"])
         self.assertEqual((record.decision, record.state), ("go", "draft"))
         self.assertEqual(self.dossier.current_gate_id.code, "G0")
+
+    def test_sceau_passage_force_et_reouverture_reserves_aux_associes_et_a_la_direction(self):
+        """Décision du gérant (22 octobre 2026) : sceller la décision du comité, forcer le passage d'un
+        gate et ouvrir une nouvelle révision sont réservés aux associés du cabinet et à la direction
+        ouverte à la société du cabinet ; le consultant simple est refusé (403) mais garde le reste
+        (brouillon, passage selon la règle) ; les quatre yeux restent exigés."""
+        groupe = self.env.ref("base.main_company")
+        self._create_user("dg.cabinet.sceau", "direction", company_id=self.cabinet.id, company_ids=[(6, 0, self.cabinet.ids)])
+        self._create_user("dg.groupe.sceau", "direction", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
+        consultant = self.open_session("consultant.simple", app="axispro")["access_token"]
+        dg = self.open_session("dg.cabinet.sceau", app="axispro")["access_token"]
+        relecteur = self._relecteur()
+        # Le relecteur (associé) contribue à la révision ; le consultant rédige le brouillon.
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
+                                 token=relecteur)
+        self.assertEqual(status, 200, body)
+        reviews = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        status, body = self.call("POST", reviews, {"decision": "go", "lock": True}, token=consultant)
+        self.assertEqual(status, 403, "Consultant simple : pas de sceau, même à la création")
+        self.assertIn("associé", body["message"])
+        status, review = self.call("POST", reviews, {"decision": "go"}, token=consultant)
+        self.assertEqual((status, review["state"]), (200, "draft"), "Le consultant rédige le brouillon")
+        lock = f"/axispro/reviews/{review['id']}/lock"
+        status, body = self.call("POST", lock, token=consultant)
+        self.assertEqual(status, 403, "Consultant simple : pas de sceau")
+        groupe_seul = self.open_session("dg.groupe.sceau", app="finance")["access_token"]
+        status, body = self.call("POST", lock, token=groupe_seul, headers={"X-Eguitra-App": "axispro"})
+        self.assertEqual((status, body.get("error")), (403, "app_forbidden"), "Direction sans accès au cabinet")
+        status, body = self.call("POST", lock, token=groupe_seul)
+        self.assertEqual(status, 422, "Direction sans accès au cabinet : module du cabinet refusé")
+        status, locked = self.call("POST", lock, token=dg)
+        self.assertEqual((status, locked["state"], locked["locked_by"]), (200, "locked", "Dg.Cabinet.Sceau"), locked)
+        # Réouverture : réservée elle aussi, et jamais par celui qui a verrouillé (quatre yeux).
+        revision = f"/axispro/dossiers/{self.dossier.id}/new-revision"
+        status, body = self.call("POST", revision, token=consultant)
+        self.assertEqual(status, 403, "Consultant simple : pas de réouverture")
+        status, body = self.call("POST", revision, token=dg)
+        self.assertEqual(status, 403, "La direction a verrouillé : elle ne rouvre pas")
+        self.assertIn("nouvelle révision", body["message"])
+        status, body = self.call("POST", revision, token=relecteur)
+        self.assertEqual((status, body["revision"], body["locked"]), (200, 2, False), body)
+        # Passage forcé : réservé ; le passage selon la règle reste au consultant.
+        gate = f"/axispro/dossiers/{self.dossier.id}/advance-gate"
+        status, body = self.call("POST", gate, {"from_gate": "G0"}, token=consultant)
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G1"), "Passage selon la règle : consultant")
+        status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C002'].id}", {"status": "not_met"},
+                                 token=relecteur)
+        self.assertEqual(status, 200, body)
+        motif = {"force_reason": "Titre foncier attendu du ministère, décision du comité du 12/10", "from_gate": "G1"}
+        status, body = self.call("POST", gate, motif, token=consultant)
+        self.assertEqual(status, 403, "Consultant simple : pas de passage forcé")
+        self.assertIn("associé", body["message"])
+        status, body = self.call("POST", gate, motif, token=dg)
+        self.assertEqual((status, body["current_gate"]["code"]), (200, "G2"), "Direction du cabinet : passage forcé")
+        self.env.invalidate_all()
+        self.assertEqual(len(self.dossier.journal_ids.filtered(lambda j: j.kind == "gate" and "forcé" in (j.note or ""))), 1)
+
+    def test_associe_seul_auteur_ne_scelle_pas(self):
+        """Les quatre yeux s'appliquent aussi à l'associé : seul auteur de la révision, il ne scelle pas
+        sa propre décision ; un second associé le fait."""
+        for code in ("C001", "C003"):
+            status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals[code].id}", {"status": "met"},
+                                     token=self.token)
+            self.assertEqual(status, 200, body)
+        reviews = f"/axispro/dossiers/{self.dossier.id}/reviews"
+        status, body = self.call("POST", reviews, {"decision": "go", "lock": True}, token=self.token)
+        self.assertEqual(status, 403, "Associé seul auteur : pas de sceau")
+        self.assertIn("au moins deux personnes", body["message"])
+        status, review = self.call("POST", reviews, {"decision": "go", "lock": True}, token=self._relecteur())
+        self.assertEqual((status, review["state"]), (200, "locked"), review)
 
     def test_knock_out_d_un_gate_non_atteint_pas_encore_actif(self):
         """Audit du noyau (I-X1) : un knock-out encore à évaluer d'un gate que le dossier n'a pas atteint

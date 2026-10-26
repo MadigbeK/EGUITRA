@@ -95,9 +95,9 @@ class TestAxisproExpert(ApiCase):
         cls.policy.action_activate()
         cls.promoter = cls.env["res.partner"].create({"name": "Briqueterie du Fouta"})
         cls.bank = cls.env["res.partner"].create({"name": "Banque de démonstration", "is_company": True})
-        cls._create_user("expert", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        cls._create_user("expert", "cabinet", "associe", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
         # Second consultant : verrouille la décision sur le modèle financier saisi par l'expert (quatre yeux).
-        cls._create_user("expert.relecteur", "cabinet", company_id=cls.cabinet.id,
+        cls._create_user("expert.relecteur", "cabinet", "associe", company_id=cls.cabinet.id,
                          company_ids=[(6, 0, cls.cabinet.ids)])
 
     def setUp(self):

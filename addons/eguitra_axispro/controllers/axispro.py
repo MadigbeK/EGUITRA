@@ -26,6 +26,11 @@ from .common import (
 
 READ = ("admin", "direction", "cabinet")
 WRITE = ("cabinet",)
+# Sceller la décision du comité, forcer un gate, ouvrir une nouvelle révision : associé du cabinet ou
+# direction (décision du gérant du 22 octobre 2026), en plus des quatre yeux ; le modèle le vérifie aussi
+# (dossier._check_decision_right). Le passage d'un gate selon la règle reste au consultant.
+SEAL = ("associe", "direction")
+GATE = ("cabinet", "direction")
 THRESHOLDS = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable")
 POLICY_FLAGS = ("ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check")
 MIN_FORCE_REASON = 10
@@ -631,10 +636,11 @@ class EguitraAxispro(http.Controller):
         evaluation.write({"document_ids": [(4, doc.id)]})
         return {"document": document_row(doc), "scoring": dossier.scoring()}
 
-    @api_route("/axispro/dossiers/<int:dossier_id>/advance-gate", methods=("POST",), profiles=WRITE)
+    @api_route("/axispro/dossiers/<int:dossier_id>/advance-gate", methods=("POST",), profiles=GATE)
     def advance(self, dossier_id, **_kw):
-        """Passage au gate suivant ; un passage contre la règle exige un motif, inscrit au journal, et
-        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403). `from_gate` : code du
+        """Passage au gate suivant : selon la règle, par le cabinet ; contre la règle, par un associé ou
+        la direction, avec un motif inscrit au journal et à condition qu'un autre compte ait contribué
+        à la révision (quatre yeux, refus 403). `from_gate` : code du
         gate de départ que l'écran affiche ; s'il n'est plus le gate courant (double clic, réseau lent,
         autre onglet), refus 409 sans rien franchir : un clic ne fait jamais passer deux gates."""
         dossier = _dossier(dossier_id)
@@ -665,10 +671,10 @@ class EguitraAxispro(http.Controller):
                  "criterion": j.criterion_id.code or None, "before": j.before or None, "after": j.after or None,
                  "note": j.note or None} for j in entries]
 
-    @api_route("/axispro/dossiers/<int:dossier_id>/new-revision", methods=("POST",), profiles=WRITE)
+    @api_route("/axispro/dossiers/<int:dossier_id>/new-revision", methods=("POST",), profiles=SEAL)
     def new_revision(self, dossier_id, **_kw):
-        """Nouvelle révision : défait le verrou, donc ouverte par un autre compte que celui qui a
-        verrouillé la décision (quatre yeux, refus 403)."""
+        """Nouvelle révision : défait le verrou, donc ouverte par un associé ou la direction, autre que
+        celui qui a verrouillé la décision (quatre yeux, refus 403)."""
         dossier = _dossier(dossier_id)
         dossier.action_new_revision()
         return dossier_detail(dossier)
@@ -721,8 +727,8 @@ class EguitraAxispro(http.Controller):
     def create_review(self, dossier_id, **_kw):
         """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier.
         Un HOLD ou un NO-GO exige un motif, brouillon compris (422, rien n'est créé). La création d'une
-        revue non verrouillée est libre ; le verrou (lock) exige qu'un autre compte ait contribué à la
-        révision (quatre yeux, refus 403, rien n'est créé)."""
+        revue non verrouillée est libre (cabinet) ; le verrou (lock) est réservé à un associé et exige
+        qu'un autre compte ait contribué à la révision (quatre yeux, refus 403, rien n'est créé)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (decision,) = require(data, "decision")
@@ -779,11 +785,11 @@ class EguitraAxispro(http.Controller):
         review.write(values)
         return review_row(review)
 
-    @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=WRITE)
+    @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=SEAL)
     def lock_review(self, review_id, **_kw):
         """Verrouillage d'une revue : un HOLD ou un NO-GO sans motif (brouillon antérieur à la règle) se
-        complète d'abord (422) ; refusé si aucun autre compte n'a contribué à la révision (quatre
-        yeux, 403)."""
+        complète d'abord (422) ; réservé à un associé ou à la direction ouverte à la société du cabinet,
+        et refusé si aucun autre compte n'a contribué à la révision (quatre yeux, 403)."""
         review = _record("axispro.review", review_id, "Revue")
         if motive_missing(review.decision, review.motive):
             raise ApiError(422, "business_rule", "Motivez une décision HOLD ou NO-GO avant de la verrouiller : "

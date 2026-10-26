@@ -12,7 +12,10 @@ Quatre yeux (décision du gérant) : une décision du comité engage au moins de
 de la décision et le passage forcé d'un gate sont refusés quand aucun autre compte que celui qui
 agit n'a contribué à la révision en cours (évaluation des critères, fiche et hypothèses, modèle
 financier, pièces de la data room) ; celui qui a verrouillé la décision n'ouvre pas la révision qui
-la défait. Un consultant n'écrit l'évaluation que des
+la défait. Décision du gérant (22 octobre 2026, appliquée le 26) : sceller la décision du comité,
+forcer le passage d'un gate et ouvrir une nouvelle révision sont réservés aux associés du cabinet et
+à la direction ouverte à la société du cabinet, en plus des quatre yeux ; le consultant garde le reste.
+Un consultant n'écrit l'évaluation que des
 compartiments qui lui sont confiés ; un compartiment sans consultant reste ouvert à tout le cabinet
 et le responsable du dossier évalue tous les compartiments. La lecture reste ouverte à toute
 l'équipe.
@@ -64,6 +67,10 @@ def _system(env):
     personne (quatre yeux, compartiments), qui portent sur les comptes du cabinet. Un appel de
     l'API s'exécute toujours sous l'identité de l'utilisateur, même en sudo()."""
     return env.uid == SUPERUSER_ID
+
+
+# Profils qui scellent une décision, forcent un gate et rouvrent une révision (décision du gérant).
+DECISION_GROUPS = ("eguitra_base.group_profile_associe", "eguitra_base.group_profile_direction")
 
 
 def _input_author(env):
@@ -244,6 +251,28 @@ class AxisproDossier(models.Model):
                 "(évaluation des critères, fiche et hypothèses, modèle financier, pièces) : vous ne pouvez donc "
                 f"pas {action} seul. Un autre consultant du cabinet doit contribuer à cette révision ou s'en charger."
             )
+
+    def _check_decision_right(self, action):
+        """Sceller la décision du comité, forcer le passage d'un gate, ouvrir une nouvelle révision :
+        réservé à un associé du cabinet ou à la direction ouverte à la société du dossier (refus 403),
+        avant les quatre yeux, qui s'appliquent toujours. Compte système hors contrôle."""
+        for dossier in self:
+            if _system(dossier.env):
+                continue
+            user = dossier.env.user
+            associe = user.has_group(DECISION_GROUPS[0])
+            direction = user.has_group(DECISION_GROUPS[1]) and dossier.company_id in user.sudo().company_ids
+            if not (associe or direction):
+                raise AccessError(
+                    f"Réservé à un associé du cabinet ou à la direction : vous ne pouvez pas {action} "
+                    f"(dossier {dossier.reference}). Demandez-le à un associé de MB AxisPro Consulting."
+                )
+
+    def _check_consultant(self, action):
+        """Ce qui reste au consultant (passage d'un gate selon la règle) : profil cabinet (refus 403)."""
+        for dossier in self:
+            if not _system(dossier.env) and not dossier.env.user.has_group("eguitra_base.group_profile_cabinet"):
+                raise AccessError(f"Réservé au cabinet : vous ne pouvez pas {action} (dossier {dossier.reference}).")
 
     def _evaluation_refusal(self, compartment, user=None):
         """Motif du refus d'écrire l'évaluation d'un critère de `compartment` pour `user` (par défaut
@@ -517,9 +546,10 @@ class AxisproDossier(models.Model):
         return True
 
     def action_advance_gate(self, force_reason=None):
-        """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant ; sinon refus motivé,
-        sauf passage forcé par le cabinet avec un motif inscrit au journal, jamais par une seule
-        personne : un autre compte doit avoir contribué à la révision (quatre yeux)."""
+        """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant (consultant du
+        cabinet) ; sinon refus motivé, sauf passage forcé avec un motif inscrit au journal, par un
+        associé ou la direction, jamais par une seule personne : un autre compte doit avoir contribué
+        à la révision (quatre yeux)."""
         self.ensure_one()
         self._check_unlocked()
         gates = self.policy_id.gate_ids.sorted("sequence")
@@ -531,30 +561,36 @@ class AxisproDossier(models.Model):
         if decision and decision["decision"] not in ("go", "conditional"):
             if not force_reason:
                 raise UserError(f"Gate {gate.code} : {method.DECISIONS[decision['decision']]}. " + " ".join(decision["motifs"]))
+            self._check_decision_right(f"forcer le passage du gate {gate.code}")
             self._check_four_eyes(f"forcer le passage du gate {gate.code}")
             self.log("gate", note=f"Passage forcé de {gate.code} à {following.code} ({method.DECISIONS[decision['decision']]}) : "
                                   f"{force_reason}")
         else:
+            self._check_consultant(f"faire passer le dossier au gate {following.code}")
             self.log("gate", note=f"Passage de {gate.code} à {following.code}.")
-        self.current_gate_id = following
+        # Contrôles faits : écriture du noyau (la direction n'écrit pas les dossiers du cabinet).
+        self.sudo().current_gate_id = following
         return True
 
     def action_new_revision(self):
         """Nouvelle révision après une décision verrouillée : le dossier redevient modifiable. Elle
-        défait le verrou : un autre compte que celui qui a verrouillé l'ouvre (quatre yeux)."""
+        défait le verrou : un associé ou la direction l'ouvre, autre que celui qui a verrouillé
+        (quatre yeux)."""
         self.ensure_one()
         if not self.locked_review_id:
             raise UserError("Aucune décision verrouillée : le dossier est déjà modifiable.")
+        self._check_decision_right("ouvrir une nouvelle révision")
         previous = self.locked_review_id
         if not _system(self.env) and previous.locked_by == self.env.user:
             raise AccessError(
                 f"Principe des quatre yeux : vous avez verrouillé la décision en vigueur du dossier {self.reference} "
                 f"(révision {self.revision}), vous ne pouvez donc pas ouvrir la nouvelle révision qui la défait. "
-                "Un autre consultant du cabinet doit l'ouvrir."
+                "Un autre associé du cabinet, ou la direction, doit l'ouvrir."
             )
-        # Les auteurs se comptent par révision : la nouvelle repart à vide.
-        self.with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False,
-                                                        "decision_inputs_by": [Command.clear()]})
+        # Les auteurs se comptent par révision : la nouvelle repart à vide. Contrôles faits : écriture
+        # du noyau (la direction n'écrit pas les dossiers du cabinet).
+        self.sudo().with_context(axispro_unlocked=True).write({"revision": self.revision + 1, "locked_review_id": False,
+                                                               "decision_inputs_by": [Command.clear()]})
         # Les pièces reçues après la décision défaite entrent dans la nouvelle révision : la prochaine
         # décision verrouillée les fige comme les autres (sinon une pièce reçue après un verrou
         # précédent resterait modifiable sous une décision scellée qui s'appuie sur elle).
