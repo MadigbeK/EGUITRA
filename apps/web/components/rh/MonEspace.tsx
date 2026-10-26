@@ -176,7 +176,7 @@ export function MonEspace() {
       {demande && (
         <DemandeAbsence
           types={data.leave_types}
-          solde={data.balance?.balance ?? null}
+          solde={data.balance ? data.balance.balance - data.balance.pending : null}
           onClose={() => setDemande(false)}
           onDone={() => {
             setDemande(false);
@@ -188,6 +188,7 @@ export function MonEspace() {
   );
 }
 
+/** solde : jours disponibles, demandes en attente déduites, comme le contrôle du noyau (POST /rh/me/leaves). */
 function DemandeAbsence({ types, solde, onClose, onDone }: { types: LeaveType[]; solde: number | null; onClose: () => void; onDone: () => void }) {
   const actifs = types.filter((t) => t.active);
   const [typeId, setTypeId] = useState(String(actifs[0]?.id ?? ""));
@@ -247,7 +248,7 @@ function DemandeAbsence({ types, solde, onClose, onDone }: { types: LeaveType[];
         )}
         <div className="text-sm sm:col-span-2">
           {erreurJours ? <span className="text-danger">{erreurJours}</span> : days !== null ? <span className="text-ink-2">Durée : <b>{jours(days)} ouvrable(s)</b></span> : null}
-          {depasse && <span className="mt-1 block text-warn">Votre solde ({jours(solde)}) ne couvre pas cette demande : le service RH devra l&apos;accepter.</span>}
+          {depasse && <span className="mt-1 block text-warn">Votre solde disponible ({jours(solde)}, demandes en attente déduites) ne couvre pas cette demande : elle sera refusée, sauf si les jours acquis d&apos;ici au début de l&apos;absence suffisent. Au-delà du solde, voyez le service RH.</span>}
           {type && !type.paid && <span className="mt-1 block text-warn">Absence non rémunérée : retenue sur votre salaire du mois.</span>}
           {type?.needs_document && <span className="mt-1 block text-muted">Un justificatif sera demandé : remettez-le au service RH.</span>}
         </div>
