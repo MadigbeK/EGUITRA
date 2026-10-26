@@ -202,11 +202,11 @@ function frNombre(valeur, decimales = 2, sansZeros = false) {
   if (sansZeros && decimales) texte = texte.replace(/0+$/, "").replace(/,$/, "");
   return texte;
 }
-/** Mois d'un corps (parse_month du noyau) : « AAAA-MM » rendu « AAAA-MM-01 » ; 400 sinon, sur le champ month comme le noyau. */
-function moisDuCorps(H, valeur) {
+/** Mois d'un corps (parse_month du noyau) : « AAAA-MM » rendu « AAAA-MM-01 » ; 400 sinon, sur le champ nommé (start_month pour un modèle). */
+function moisDuCorps(H, valeur, champ = "month") {
   const parts = String(valeur).split("-").slice(0, 2).map((x) => (/^\s*\d+\s*$/.test(x) ? Number(x) : Number.NaN));
   if (parts.length < 2 || !parts.every(Number.isInteger) || parts[0] < 1 || parts[0] > 9999 || parts[1] < 1 || parts[1] > 12) {
-    throw H.hsBad("Mois attendu au format AAAA-MM.", ["month"]);
+    throw H.hsBad("Mois attendu au format AAAA-MM.", [champ]);
   }
   return `${String(parts[0]).padStart(4, "0")}-${pad(parts[1])}-01`;
 }
@@ -933,7 +933,7 @@ function valeursModele(H, ctx, data) {
     v.vehicle_kind = data.vehicle_kind || null;
   }
   // Premier mois du rapport ; vide : le mois en cours.
-  if ("start_month" in data) v.start_month = data.start_month ? moisDuCorps(H, data.start_month) : `${H.TODAY.slice(0, 7)}-01`;
+  if ("start_month" in data) v.start_month = data.start_month ? moisDuCorps(H, data.start_month, "start_month") : `${H.TODAY.slice(0, 7)}-01`;
   return v;
 }
 
