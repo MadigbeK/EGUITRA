@@ -108,6 +108,26 @@ class TestOutilsCabinet(ApiCase):
                                                      "Rappel : rendez-vous aujourd'hui à 15 h 00"],
                               "Nouvelle date rappelée, rendez-vous non annoncé rattrapé ; l'action déjà rappelée ne l'est plus")
 
+    # ─── I-P3 : ciblage par secteur ──────────────────────────────────────
+
+    def test_ciblage_par_secteur_sans_accents(self):
+        """« energie » vise « Énergie solaire » et « Énergie » vise « energie renouvelable », comme
+        l'aperçu de l'écran : le porteur est prévenu et voit la publication."""
+        Announcement = self.env["portail.announcement"]
+        energie = Announcement.create({"name": "Fonds vert", "audience": "sectors", "sector_keywords": "Énergie",
+                                       "company_id": self.cabinet.id})
+        self.assertEqual(energie._audience_users(), self.pa | self.pd)
+        large = Announcement.create({"name": "Appel régional", "audience": "sectors", "sector_keywords": "energie, AGRO",
+                                     "company_id": self.cabinet.id})
+        self.assertEqual(large._audience_users(), self.pa | self.pb | self.pd)
+        large.action_publish()
+        self.assertTrue(self.notes(self.pa, "Appel régional"))
+        self.assertFalse(self.notes(self.pc, "Appel régional"))
+        porteur = self.open_session("porteur.outils1", app="portail")["access_token"]
+        status, liste = self.call("GET", "/portail/actualites", token=porteur)
+        self.assertEqual(status, 200, liste)
+        self.assertIn(large.id, [a["id"] for a in liste])
+
     # ─── I-P4 : liste d'attente ──────────────────────────────────────────
 
     def test_liste_d_attente_dans_l_ordre_d_attente(self):
