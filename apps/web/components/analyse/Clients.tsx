@@ -10,10 +10,10 @@ import type { ClientSegment, GroupeClients } from "@/lib/analyse-types";
 import { fmtGNF, fmtInt } from "@/lib/format";
 
 const SEGMENT: Record<ClientSegment, { label: string; couleur: string; tone: Tone; lecture: string }> = {
-  strategiques: { label: "Stratégiques", couleur: ETATS.bon, tone: "ok", lecture: "Rentables et ponctuels : à fidéliser." },
-  a_securiser: { label: "À sécuriser", couleur: ETATS.attention, tone: "warn", lecture: "Rentables mais payent tard : encadrer l'encours." },
-  a_developper: { label: "À développer", couleur: ETATS.information, tone: "accent", lecture: "Ponctuels mais petits : faire grandir." },
-  a_surveiller: { label: "À surveiller", couleur: ETATS.risque, tone: "danger", lecture: "Peu rentables et en retard : limiter l'exposition." },
+  strategiques: { label: "Stratégiques", couleur: ETATS.bon, tone: "ok", lecture: "Font la valeur et paient bien : à fidéliser." },
+  a_securiser: { label: "À sécuriser", couleur: ETATS.attention, tone: "warn", lecture: "Font la valeur mais paient mal : encadrer l'encours." },
+  a_developper: { label: "À développer", couleur: ETATS.information, tone: "accent", lecture: "Paient bien mais pèsent peu : faire grandir." },
+  a_surveiller: { label: "À surveiller", couleur: ETATS.risque, tone: "danger", lecture: "Pèsent peu et paient mal : limiter l'exposition." },
 };
 const segmentDe = (s: ClientSegment | string) => SEGMENT[s as ClientSegment] ?? { label: s, couleur: ETATS.neutre, tone: "neutral" as Tone, lecture: "" };
 
@@ -39,8 +39,16 @@ function Corps() {
   const surveiller = clients.filter((s) => s.segment === "a_surveiller");
   const echu = clients.reduce((s, x) => s + x.overdue, 0);
   const ecl = clients.reduce((s, x) => s + x.ecl, 0);
-  const margeMediane = clients.length ? ([...clients].map((s) => s.margin).sort((a, b) => a - b)[Math.floor(clients.length / 2)] ?? 0) : 0;
-  const seuilPaiement = d?.segments?.good_payer_score ?? 70;
+  const seuilPaiement = d?.segments?.good_payer_score ?? 60;
+  // Quadrants posés sur les règles de la segmentation du noyau : valeur = clients qui font 80 % du
+  // chiffre d'affaires (frontière entre le plus petit d'entre eux et le plus grand des autres),
+  // comportement = note de paiement. Sans note (ni historique ni encours), un client est réputé bon
+  // payeur : il ne se place pas sur l'axe et figure dans la liste.
+  const seuilValeur = d?.segments?.value_threshold ?? null;
+  const dessous = clients.filter((s) => (s.segment === "a_developper" || s.segment === "a_surveiller") && (seuilValeur === null || s.revenue < seuilValeur)).map((s) => s.revenue);
+  const frontiere = seuilValeur === null ? null : dessous.length ? (seuilValeur + Math.max(...dessous)) / 2 : seuilValeur * 0.9;
+  const notes = clients.filter((s) => s.payment_score !== null);
+  const sansNote = clients.length - notes.length;
   // Client visé par un constat (?client=) : sa ligne, sa bulle et son comportement de paiement.
   const client = useCible("client");
   const clientVise = client ? (clients.find((x) => String(x.id) === client) ?? null) : null;
@@ -97,24 +105,26 @@ function Corps() {
                 <Vide titre="Aucune vente par client" hint="Les factures clients validées de la période alimentent cette courbe." />
               )}
             </Card>
-            <Card title="Valeur contre comportement de paiement" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Aire : chiffre d&apos;affaires · bon payeur à partir de {seuilPaiement}</span>}>
-              {clients.length ? (
+            <Card title="Valeur contre comportement de paiement" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Hauteur : chiffre d&apos;affaires · aire : encours · bon payeur à partir de {seuilPaiement}</span>}>
+              {notes.length ? (
                 <>
                   <Bulles
-                    label="Clients : score de paiement contre marge, aire selon le chiffre d'affaires"
-                    points={clients.map((s) => ({ id: String(s.id), label: s.name, x: s.payment_score, y: s.margin, size: Math.max(1, s.revenue), group: segmentDe(s.segment).label, detail: `${s.avg_days_late === null ? "retard inconnu" : `${s.avg_days_late >= 0 ? "+" : ""}${fmtInt(s.avg_days_late)} j de retard moyen`} · ${fmtGNF(s.overdue)} échus · ${s.trend}` }))}
-                    xLabel="Score de paiement (0-100)"
-                    yLabel="Marge dégagée"
+                    label="Clients : note de paiement contre chiffre d'affaires, aire selon l'encours"
+                    points={notes.map((s) => ({ id: String(s.id), label: s.name, x: s.payment_score ?? 0, y: Math.max(0, s.revenue), size: Math.max(1, s.open), group: segmentDe(s.segment).label, detail: `${s.avg_days_late === null ? "retard inconnu" : `${s.avg_days_late >= 0 ? "+" : ""}${fmtInt(s.avg_days_late)} j de retard moyen`} · ${fmtGNF(s.overdue)} échus · ${s.trend}` }))}
+                    xLabel="Note de paiement (0-100)"
+                    yLabel="Chiffre d'affaires de la période"
                     xDomain={[0, 100]}
-                    quadrants={{ x: seuilPaiement, y: margeMediane, labels: ["Stratégiques", "À sécuriser", "À développer", "À surveiller"], teintes: ["var(--g-jade)", "var(--g-ambre)", "var(--g-azur)", "var(--g-corail)"] }}
+                    yRacine
+                    quadrants={frontiere === null ? undefined : { x: seuilPaiement, y: frontiere, labels: ["Stratégiques", "À sécuriser", "À développer", "À surveiller"], teintes: ["var(--g-jade)", "var(--g-ambre)", "var(--g-azur)", "var(--g-corail)"] }}
                     formatX={(v) => String(Math.round(v))}
                     formatY={(v) => fmtShort(v)}
                     formatSize={(v) => `${fmtShort(v)} GNF`}
-                    sizeLabel="Chiffre d'affaires"
+                    sizeLabel="Encours"
                     couleurs={Object.fromEntries(Object.values(SEGMENT).map((s) => [s.label, s.couleur]))}
                     hauteur={380}
                     surligne={clientVise ? String(clientVise.id) : null}
                   />
+                  {sansNote > 0 && <p className="mt-2 text-[12px] leading-snug text-muted">{sansNote > 1 ? `${sansNote} clients, sans historique de paiement ni encours, sont réputés bons payeurs et ne figurent pas sur le graphique.` : "Un client, sans historique de paiement ni encours, est réputé bon payeur et ne figure pas sur le graphique."}</p>}
                   <ul className="mt-3 grid gap-2 text-[12px] text-muted sm:grid-cols-2">
                     {(quadrants.length ? quadrants : (Object.keys(SEGMENT) as ClientSegment[]).map((k) => ({ key: k, label: SEGMENT[k].label, count: clients.filter((s) => s.segment === k).length, revenue: 0, open: 0 }))).map((q) => (
                       <li key={q.key} className="flex items-start gap-2">
@@ -128,7 +138,7 @@ function Corps() {
                   </ul>
                 </>
               ) : (
-                <Vide titre="Aucun client sur la période" />
+                <Vide titre={clients.length ? "Aucun client n'a encore de note de paiement" : "Aucun client sur la période"} hint={clients.length ? "Sans historique de règlement ni encours, un client est réputé bon payeur." : undefined} />
               )}
             </Card>
           </div>
@@ -194,10 +204,10 @@ function Corps() {
                   { key: "name", label: "Client", render: (r) => <Ciblable id={`client-${r.id}`} actif={r.id === clientVise?.id}><span className="font-medium text-ink">{r.name}</span></Ciblable> },
                   { key: "segment", label: "Segment", sortValue: (r) => segmentDe(r.segment).label, render: (r) => <Badge tone={segmentDe(r.segment).tone}>{r.segment_label || segmentDe(r.segment).label}</Badge> },
                   { key: "revenue", label: "CA", align: "right", render: (r) => fmtShort(r.revenue) },
-                  { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : undefined}>{fmtShort(r.margin)}</span> },
+                  { key: "margin", label: "Marge transport", align: "right", render: (r) => (r.margin === null ? <span className="text-muted" title="Aucune rotation pour ce client">–</span> : <span className={r.margin < 0 ? "text-danger" : undefined}>{fmtShort(r.margin)}</span>) },
                   { key: "growth_pct", label: "Croissance", align: "right", render: (r) => (r.growth_pct === null ? <span className="text-muted">–</span> : <span className={cx("font-semibold", r.growth_pct < 0 ? "text-danger" : "text-ok-texte")}>{r.growth_pct >= 0 ? "+" : ""}{fmtPct(r.growth_pct, 0)}</span>) },
                   { key: "avg_days_late", label: "Retard", align: "right", render: (r) => (r.avg_days_late === null ? <span className="text-muted">–</span> : `${r.avg_days_late > 0 ? "+" : ""}${joursOu(r.avg_days_late)}`) },
-                  { key: "payment_score", label: "Score", align: "right", render: (r) => <span className={cx("inline-block min-w-9 rounded-full px-1.5 text-center text-[11.5px] font-semibold", r.payment_score >= seuilPaiement ? "bg-ok-doux text-ok-texte" : r.payment_score >= 45 ? "bg-warn-doux text-warn" : "bg-danger-doux text-danger")}>{Math.round(r.payment_score)}</span> },
+                  { key: "payment_score", label: "Note", align: "right", render: (r) => (r.payment_score === null ? <span className="text-muted" title="Sans historique de paiement ni encours : réputé bon payeur">–</span> : <span className={cx("inline-block min-w-9 rounded-full px-1.5 text-center text-[11.5px] font-semibold", r.payment_score >= seuilPaiement ? "bg-ok-doux text-ok-texte" : r.payment_score >= 45 ? "bg-warn-doux text-warn" : "bg-danger-doux text-danger")}>{fmtInt(r.payment_score)}</span>) },
                   { key: "overdue", label: "Échu", align: "right", render: (r) => <span className={r.overdue > 0 ? "text-danger" : undefined}>{fmtShort(r.overdue)}</span> },
                   { key: "ecl", label: "Perte attendue", align: "right", render: (r) => fmtShort(r.ecl) },
                 ]}

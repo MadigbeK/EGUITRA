@@ -34,12 +34,14 @@ const M = { haut: 18, droite: 18, bas: 44, gauche: 54 };
  * Chaque bulle se survole et se parcourt au clavier (Tab) ; la légende masque un groupe. La bulle
  * visée par un lien (`surligne`) est cerclée de l'accent et porte toujours son nom.
  */
-export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30, surligne }: {
+export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, yRacine, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30, surligne }: {
   points: PointBulle[];
   xLabel: string;
   yLabel: string;
   xDomain?: [number, number];
   yDomain?: [number, number];
+  /** Ordonnée en racine carrée (montants très concentrés : les petits restent lisibles) ; valeurs positives. */
+  yRacine?: boolean;
   quadrants?: Quadrants;
   hauteur?: number;
   label: string;
@@ -75,7 +77,9 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
         onPointerLeave={() => setFocus(null)}
         enfants={(W) => {
           const x = scaleLinear().domain(xd).range([M.gauche, W - M.droite]).nice();
-          const y = scaleLinear().domain(yd).range([hauteur - M.bas, M.haut]).nice();
+          const y = yRacine
+            ? scaleSqrt().domain([0, Math.max(1, yd[1])]).range([hauteur - M.bas, M.haut]).nice().clamp(true)
+            : scaleLinear().domain(yd).range([hauteur - M.bas, M.haut]).nice();
           const r = scaleSqrt().domain([0, Math.max(1, ...points.map((p) => p.size))]).range([4, rayonMax ?? Math.min(34, W / 14)]);
           const choisi = focus ? visibles.find((p) => p.id === focus) : undefined;
           const x0 = M.gauche;

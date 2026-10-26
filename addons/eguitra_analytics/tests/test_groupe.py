@@ -297,6 +297,14 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertEqual(b["payment_score"], 88, "À l'échéance, la moitié de l'encours échue")
         self.assertEqual(c["segment"], "a_surveiller")
         self.assertAlmostEqual(c["overdue"], 118_000_000)
+        # Frontière de valeur des quadrants : le plus petit des deux clients qui font 80 % (B, 300 M) ;
+        # chaque client tombe dans le quadrant de son segment.
+        threshold, good = body["segments"]["value_threshold"], body["segments"]["good_payer_score"]
+        self.assertAlmostEqual(threshold, 300_000_000)
+        for row in (a, b, c):
+            high, payer = row["revenue"] >= threshold, row["payment_score"] is None or row["payment_score"] >= good
+            expected = ("strategiques" if payer else "a_securiser") if high else ("a_developper" if payer else "a_surveiller")
+            self.assertEqual(row["segment"], expected, row["name"])
         self.assertGreater(c["ecl"], 0)
         behaviour = {r["id"]: r for r in body["behaviour"]}
         self.assertEqual(sum(bin_["count"] for bin_ in behaviour[self.client_a.id]["histogram"]), 15)

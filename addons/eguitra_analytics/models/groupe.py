@@ -1842,9 +1842,13 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         quadrants = [{"key": key, "label": label, "count": sum(1 for r in rows if r["segment"] == key),
                       "revenue": sum(r["revenue"] for r in rows if r["segment"] == key),
                       "open": sum(r["open"] for r in rows if r["segment"] == key)} for key, label in SEGMENTS.items()]
-        return {"clients": rows, "quadrants": quadrants, "good_payer_score": GOOD_PAYER,
+        # Seuil de valeur : chiffre d'affaires du plus petit des clients qui font 80 % du total ; l'écran y
+        # trace la frontière des quadrants, qui rejoint ainsi la segmentation.
+        value_threshold = ranked[pareto - 1][1] if 0 < pareto <= len(ranked) else None
+        return {"clients": rows, "quadrants": quadrants, "good_payer_score": GOOD_PAYER, "value_threshold": value_threshold,
                 "method": "Valeur : clients qui font 80 % du chiffre d'affaires ; comportement : note de paiement "
-                          "(retard moyen pondéré par les montants, part échue, tendance)."}
+                          "(retard moyen pondéré par les montants, part échue, tendance) ; sans historique ni "
+                          "encours, réputé bon payeur."}
 
     def _client_behaviour(self, ctx, ranked, history, names):
         """Distribution des retards de paiement (factures réglées sur 24 mois) et tendance, pour les quinze

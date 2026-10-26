@@ -79,7 +79,7 @@ COLONNES = {
     "segment": "Segment", "segment_label": "Segment", "avg_days_late": "Retard moyen (jours)",
     "sd_days_late": "Dispersion du retard (jours)", "avg_days_to_pay": "Délai moyen de paiement (jours)",
     "days_late": "Retard (jours)", "days_overdue": "Jours de retard", "payment_score": "Note de paiement",
-    "good_payer_score": "Note de bon payeur", "slope_days_per_month": "Tendance du retard (jours/mois)",
+    "good_payer_score": "Note de bon payeur", "value_threshold": "Seuil de valeur (CA)","slope_days_per_month": "Tendance du retard (jours/mois)",
     "history_n": "Factures réglées", "ecl": "Perte attendue", "doubtful": "Douteux", "non_echu": "Non échu",
     "1_30": "1 à 30 jours", "31_60": "31 à 60 jours", "61_90": "61 à 90 jours", "plus_90": "Plus de 90 jours",
     "aging": "Ancienneté", "receivables": "Créances", "payables": "Dettes", "payables_overdue": "Dettes échues",

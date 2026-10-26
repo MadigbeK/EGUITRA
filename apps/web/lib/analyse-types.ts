@@ -370,11 +370,13 @@ export interface ClientRow {
   share_pct: number;
   revenue_previous: number | null;
   growth_pct: number | null;
-  margin: number;
+  /** Marge directe des rotations du client ; null sans rotation. */
+  margin: number | null;
   margin_rate: number | null;
   avg_days_late: number | null;
   avg_days_to_pay: number | null;
-  payment_score: number;
+  /** Note de paiement 0-100 ; null sans historique ni encours (réputé bon payeur). */
+  payment_score: number | null;
   open: number;
   overdue: number;
   ecl: number;
@@ -412,6 +414,8 @@ export interface GroupeClients extends Envelope {
     clients: ClientRow[];
     quadrants: Array<{ key: ClientSegment; label: string; count: number; revenue: number; open: number }>;
     good_payer_score: number;
+    /** Chiffre d'affaires du plus petit des clients qui font 80 % du total (frontière de valeur). */
+    value_threshold?: number | null;
     method?: string;
   };
   behaviour: ClientBehaviour[];
