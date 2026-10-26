@@ -14,3 +14,4 @@ from . import test_documents
 from . import test_telematics
 from . import test_cockpit_lot3
 from . import test_reviews
+from . import test_corrections

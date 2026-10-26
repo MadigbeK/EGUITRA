@@ -1,5 +1,5 @@
-"""Référentiels d'HSSEQ (sites, véhicules, conducteurs, salariés, responsables possibles d'une action, seuils
-de criticité), rotations d'un véhicule à une date, sites et paramètres, échéances à 30 jours, espace du
+"""Référentiels d'HSSEQ (sites, véhicules, conducteurs, salariés, responsables possibles d'une action,
+clients, seuils de criticité), rotations d'un véhicule à une date, sites et paramètres, échéances à 30 jours, espace du
 conducteur, notifications et journal."""
 
 from datetime import timedelta
@@ -50,6 +50,9 @@ from .common import (
 EVENT_PEOPLE = ("admin", "direction", "hsseq", "exploitation")
 # Profils qui déclarent un événement (contrat §2).
 DECLARE = ("admin", "direction", "hsseq", "exploitation", "conducteur")
+# Profils à qui la liste des clients est servie (client ou donneur d'ordre d'un audit, d'une exigence, d'un
+# modèle de rapport) : /finance/partners leur reste fermé.
+CLIENTS = ("admin", "direction", "hsseq")
 FITNESS = {"apte": "fit", "apte_reserve": "review", "inapte": "unfit", "echue": "unfit", "inconnu": "review"}
 DOCUMENT_REASON = {"insurance": "V05", "inspection": "V05", "calibration": "V06", "tightness": "V06"}
 SETTINGS_FIELDS = {
@@ -145,6 +148,19 @@ def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
     return sorted(items, key=lambda i: (i["expires_on"], i["subject"]["name"] or ""))
 
 
+def client_rows(comps):
+    """Clients des sociétés (fiches tiers clients, communes ou de la société) et tiers déjà cités par un
+    audit, une exigence ou un modèle de rapport : identifiant et nom seulement."""
+    env = request.env
+    Partner = env["res.partner"].sudo()
+    used = (env["eguitra.hsseq.audit"].sudo().search([("company_id", "in", comps.ids)]).partner_id
+            | env["eguitra.hsseq.requirement"].sudo().search([("company_id", "in", comps.ids)]).partner_id
+            | env["eguitra.hsseq.report.template"].sudo().with_context(active_test=False).search([]).partner_id)
+    clients = Partner.search([("customer_rank", ">", 0), ("company_id", "in", comps.ids + [False])], order="name",
+                             limit=1000) | used
+    return [{"id": p.id, "name": p.name} for p in clients.sorted(lambda p: (p.name or "").lower())]
+
+
 def auditor_row(user):
     user = user.sudo()
     return {"id": user.id, "name": user.name, "login": user.login, "access_until": user.hsseq_audit_until or None,
@@ -208,6 +224,7 @@ class EguitraHsseqReferentials(http.Controller):
             "owners": [user_ref(u) for u in owners],
             # Salariés (personnes en cause d'un événement) : profils qui gèrent les événements seulement.
             "employees": employee_rows(comps, vehicles) if people else [],
+            "clients": client_rows(comps) if user_profiles & set(CLIENTS) else [],
             "criticality_thresholds": settings._thresholds(),
             "costly_action_threshold": settings.costly_action_threshold,
             "check_window_hours": settings.check_window_hours,
