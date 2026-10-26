@@ -1,7 +1,7 @@
 {
     "name": "EGUITRA - API métier",
     "summary": "API sécurisée des applications EGUITRA Finance, AxisPro Suite, portail, mobile et NIMOVA Terrain",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.3.0",
     "category": "Hidden",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

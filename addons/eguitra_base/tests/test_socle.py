@@ -74,6 +74,15 @@ class TestSocle(TransactionCase):
         self.assertFalse(conducteur.share, "Le conducteur est un compte interne (salarié), pas un compte du portail")
         self.assertFalse(conducteur.has_group("account.group_account_readonly"))
 
+        auditeur = Users.create({
+            "name": "Auditeur Test",
+            "login": "auditeur.socle",
+            "group_ids": [(4, self.env.ref("eguitra_base.group_profile_auditeur").id)],
+        })
+        self.assertEqual(auditeur._eguitra_profiles(), ["auditeur"])
+        self.assertFalse(auditeur.share, "L'auditeur est un compte interne, borné par le module HSSEQ")
+        self.assertFalse(auditeur.has_group("account.group_account_readonly"), "Aucun droit comptable")
+
         admin = Users.create({
             "name": "Admin Test",
             "login": "admin.test",

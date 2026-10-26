@@ -13,6 +13,7 @@ PROFILE_GROUPS = {
     "rh": "eguitra_base.group_profile_rh",
     "hsseq": "eguitra_base.group_profile_hsseq",
     "conducteur": "eguitra_base.group_profile_conducteur",
+    "auditeur": "eguitra_base.group_profile_auditeur",
     "porteur": "eguitra_base.group_profile_porteur",
 }
 

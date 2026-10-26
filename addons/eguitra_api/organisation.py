@@ -42,8 +42,9 @@ APPS = {
     # model : l'application n'existe que là où son module est installé (la production peut recevoir le
     # code sans l'installer).
     "rh": {"profiles": {"admin", "direction", "rh"}, "entity": None, "model": "eguitra.rh.employee"},
-    # HSSEQ (NIMOVA · HSSEQ) : santé, sécurité, sûreté, environnement et qualité, pour les deux sociétés.
-    "hsseq": {"profiles": {"admin", "direction", "hsseq", "exploitation"}, "entity": None,
+    # HSSEQ (NIMOVA · HSSEQ) : santé, sécurité, sûreté, environnement et qualité, pour les deux sociétés ;
+    # l'auditeur l'ouvre en lecture seule, borné à ses sites et à sa date de fin d'accès (module HSSEQ).
+    "hsseq": {"profiles": {"admin", "direction", "hsseq", "exploitation", "auditeur"}, "entity": None,
               "model": "eguitra.hsseq.event"},
     # NIMOVA Terrain : application native des formulaires de terrain d'HSSEQ (contrôle pré-départ,
     # alcootest, déclaration), sans écran web ; seule application du profil conducteur.
