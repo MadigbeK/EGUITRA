@@ -395,11 +395,36 @@ class EguitraTransportRotation(models.Model):
         rotations._apply_tax_rules()
         return rotations
 
+    def _lock_reason(self):
+        """Pourquoi une rotation validée ne bouge plus (audit du 25 octobre, I-T6) : son mois est clôturé
+        (comptes arrêtés, factures à établir passées), ou elle figure à un relevé de propriétaire dont les
+        pièces sont préparées. None si rien ne la fige."""
+        self.ensure_one()
+        company = self.company_id
+        lock = max([d for d in (company.fiscalyear_lock_date, company.hard_lock_date) if d], default=None)
+        if lock and self.date_loading and self.date_loading <= lock:
+            return f"le mois du {self.date_loading:%d/%m/%Y} est clôturé"
+        statement = self.env["eguitra.transport.owner.statement"].sudo().search(
+            [("rotation_ids", "in", self.id), ("state", "=", "posted")], limit=1)
+        if statement:
+            return f"elle figure au relevé {statement.name}, dont les pièces sont préparées"
+        return None
+
+    def _check_unlocked(self, action):
+        if self.env.context.get("eguitra_transport_reprise"):
+            return
+        for rot in self.filtered(lambda r: r.state in ("done", "invoiced")):
+            reason = rot._lock_reason()
+            if reason:
+                raise UserError(f"Rotation {rot._label()} : {action} impossible, {reason}.")
+
     def write(self, vals):
         vals = self._legacy_vals(vals)
         locked = self.filtered(lambda r: r.state == "invoiced")
         if locked and set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
             raise UserError("Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire.")
+        if set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
+            self._check_unlocked("modification")
         result = super().write(vals)
         if TAX_TRIGGERS & set(vals):
             self._apply_tax_rules()
@@ -435,10 +460,12 @@ class EguitraTransportRotation(models.Model):
     def action_cancel(self):
         if self.filtered(lambda r: r.state == "invoiced"):
             raise UserError("Une rotation facturée ne peut pas être annulée.")
+        self._check_unlocked("annulation")
         self.write({"state": "cancelled"})
         return True
 
     def action_reset(self):
+        self._check_unlocked("remise en saisie")
         self.filtered(lambda r: r.state in ("done", "cancelled")).write({"state": "draft"})
         return True
 

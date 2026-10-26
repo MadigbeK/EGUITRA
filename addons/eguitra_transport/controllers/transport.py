@@ -1053,7 +1053,12 @@ class EguitraTransport(http.Controller):
         rot = _get("eguitra.transport.rotation", rotation_id, "Rotation")
         if rot.state not in ("draft", "en_route", "done"):
             raise ApiError(422, "business_rule", "Seule une rotation saisie ou validée se modifie.")
-        rot.write(_rotation_values(read_json()))
+        values = _rotation_values(read_json())
+        # Règle des quatre yeux (audit du 25 octobre, I-T5) : corriger une rotation validée la remet en
+        # saisie ; un autre compte que celui qui l'a saisie la revalide. Une note seule ne la change pas.
+        if rot.state == "done" and set(values) - {"note"}:
+            rot.action_reset()
+        rot.write(values)
         return _rotation_row(rot)
 
     @api_route("/transport/rotations/<int:rotation_id>/<string:action>", methods=("POST",), profiles=WRITE)
