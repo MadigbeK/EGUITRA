@@ -7,7 +7,7 @@
                "(déversements, déchets, émissions, poussières, écarts de livraison, réclamations), procédures et "
                "alertes avec accusé de lecture, plans d'urgence et exercices, annuaire de crise, revue de direction, "
                "import des violations de la télématique",
-    "version": "19.0.1.2.1",
+    "version": "19.0.1.2.2",
     "category": "Human Resources",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",
