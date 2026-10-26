@@ -51,7 +51,7 @@ class TestRights(HsseqCase):
             ("PATCH", f"/hsseq/checks/templates/{template.id}", {"name": "Grille"}, ["ibrahima", "dg.hsseq"]),
             ("POST", "/hsseq/checks", {"template_id": template.id, "rotation_id": rot.id, "answers": []},
              ["dg.hsseq", "admin.hsseq", "fatou"]),
-            ("POST", f"/hsseq/checks/{check.id}/lift", {"nonconformity_id": nc.id}, ["dg.hsseq", "admin.hsseq", "sekou.parc"]),
+            ("POST", f"/hsseq/checks/{check.id}/lift", {"nonconformity_id": nc.id}, ["dg.hsseq", "sekou.parc"]),
             ("POST", "/hsseq/breath-tests", {"rotation_id": rot.id, "performed": True, "result": "negative"},
              ["dg.hsseq", "admin.hsseq", "fatou"]),
             ("POST", "/hsseq/waivers", {"rotation_id": rot.id, "reason_code": "V02", "justification": "x"},

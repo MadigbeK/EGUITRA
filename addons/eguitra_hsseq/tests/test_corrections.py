@@ -332,3 +332,21 @@ class TestCorrections(HsseqCase):
         self.assertFalse(detail["rights"]["can_close"], "Direction seule : pas de levée")
         status, _b = self.upload("dg.hsseq", model="nonconformity", id=other.nonconformity_ids[:1].id, role="lift")
         self.assertEqual(status, 403, "Ni la photo de correction")
+        # Ensemble d'un autre site : le chef de parc mixte ne lève pas, même avec la direction.
+        boffa = self.env["eguitra.transport.vehicle"].create({"name": "BN-21", "site_id": self.site2.id,
+                                                              "driver_id": self.driver.id})
+        far = self.check(self._rotation(vehicle_id=boffa.id), failing=("Freins et ralentisseur, essai statique",))
+        far_nc = far.nonconformity_ids[:1]
+        status, detail = self.api("mixte.parc", "GET", f"/hsseq/checks/{far.id}")
+        self.assertEqual((status, detail["rights"]["can_close"], "lift" in detail["transitions"]), (200, False, False),
+                         "Autre site : ni levée ni photo de correction")
+        status, _b = self.upload("mixte.parc", model="nonconformity", id=far_nc.id, role="lift")
+        self.assertEqual(status, 403)
+        status, _b = self.api("mixte.parc", "POST", f"/hsseq/checks/{far.id}/lift", {"nonconformity_id": far_nc.id})
+        self.assertEqual(status, 403)
+        # L'administration lève partout, comme hsseq.
+        status, photo = self.upload("admin.hsseq", model="nonconformity", id=far_nc.id, role="lift")
+        self.assertEqual((status, photo["role"]), (200, "lift"), photo)
+        status, lifted = self.api("admin.hsseq", "POST", f"/hsseq/checks/{far.id}/lift",
+                                  {"nonconformity_id": far_nc.id, "attachment_ids": [photo["id"]]})
+        self.assertEqual((status, [n["status"] for n in lifted["nonconformities"]]), (200, ["lifted"]), lifted)

@@ -33,7 +33,6 @@ from .common import (
     hsseq_route,
     ids_list,
     int_or_none,
-    is_hsseq,
     is_self_only,
     is_yard,
     my_driver,
@@ -58,7 +57,7 @@ from .common import (
 TEMPLATE_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
 CHECK_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
 NC_READ = ("admin", "direction", "hsseq", "exploitation", "auditeur")
-LIFT = ("hsseq", "exploitation")
+LIFT = ("admin", "hsseq", "exploitation")
 SORTS = {"reported_at": "reported_at", "result": "result", "reference": "reference"}
 MAX_SIGNATURE = 512 * 1024
 
@@ -134,7 +133,17 @@ def read_domain(kw):
 
 
 def can_lift(nc):
-    return nc.status == "open" and (is_hsseq() or ("exploitation" in profiles() and site_allowed(nc.site_id)))
+    """Levée d'une non-conformité ouverte (et dépôt de sa photo de correction, rights.can_close) : hsseq et
+    l'administration partout ; un chef de parc (exploitation), même avec un profil de lecture complète, sur
+    ses seuls sites ; tout autre compte, jamais."""
+    if nc.status != "open":
+        return False
+    user_profiles = profiles()
+    if user_profiles & {"hsseq", "admin"}:
+        return True
+    if "exploitation" in user_profiles:
+        return bool(nc.site_id) and nc.site_id in request.env.user._hsseq_site_ids()
+    return False
 
 
 def nc_row(nc):
@@ -477,7 +486,7 @@ class EguitraHsseqChecks(http.Controller):
         if not nc:
             raise ApiError(404, "not_found", "Non-conformité introuvable sur ce contrôle.")
         if not can_lift(nc) and nc.status == "open":
-            raise forbidden("Levée réservée au chef de parc du site et au Responsable HSSEQ.")
+            raise forbidden("Levée réservée au chef de parc du site, au Responsable HSSEQ et à l'administration.")
         attachments = claim_attachments(ids_list(data, "attachment_ids"), "nonconformity", nc, role="lift")
         nc.action_lift(text(data, "comment", 2000), attachments)
         return check_detail(check)
