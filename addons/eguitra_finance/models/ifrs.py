@@ -179,7 +179,10 @@ class EguitraIfrsPolicy(models.Model):
                 accrual_notes.append(f"{company.name} : factures à établir passées au {day:%d/%m/%Y}")
             else:
                 ifrs15 += sum(t["amount"] for t in Close._close_accrual_targets(company, day).values())
+            # Écart latent en résultat en IFRS ; la provision pour perte de change (PDC) du SYSCOHADA, qui en
+            # porte déjà la perte, est retirée pour ne pas la compter deux fois.
             ias21 += sum(Close._fx_open_items(company, day).values())
+            ias21 += Close._fx_provision_charge(company, metrics.fiscal_year_bounds(company, day)[0], day)
         rate = max(self._get(main).deferred_tax_rate, 0.0)
         quantified = ifrs9 + ifrs15 + ias21
         ias12 = -quantified * rate / 100 if rate else None
@@ -191,7 +194,8 @@ class EguitraIfrsPolicy(models.Model):
              "quantified": True,
              "note": "; ".join(accrual_notes) or "Chiffre d'affaires des prestations livrées, faute de factures à établir passées à cette date."},
             {"standard": "IAS 21", "label": "Écarts de change latents sur créances et dettes en devises", "amount": ias21,
-             "quantified": True, "note": "En résultat en IFRS ; au bilan (478, 479) en SYSCOHADA."},
+             "quantified": True, "note": "En résultat en IFRS ; au bilan (478, 479) en SYSCOHADA, la perte provisionnée en fin d'exercice "
+                     "(PDC) étant retirée."},
             {"standard": "IAS 12", "label": "Impôt différé sur les retraitements", "amount": ias12 or 0.0,
              "quantified": ias12 is not None,
              "note": f"Taux de {rate:g} % appliqué aux retraitements." if rate else "Taux d'impôt différé à paramétrer."},

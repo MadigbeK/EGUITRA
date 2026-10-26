@@ -27,6 +27,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
+from .finance_metrics import ACC_CODE
 from .period_close import SECURED_JOURNAL_TYPES, pluriel
 
 CLOSE_KINDS = [
@@ -430,6 +431,22 @@ class EguitraPeriodClose(models.Model):
         """Pertes latentes des créances et dettes en devises à la date (écart de conversion actif, 478)."""
         rounding = self.company_id.currency_id.round
         return rounding(-sum(v for v in self._fx_open_items(self.company_id, end).values() if v < 0))
+
+    @api.model
+    def _fx_provision_charge(self, company, date_from, date_to):
+        """Charge nette de la provision pour perte de change sur la période (dotations moins reprises des
+        pièces PDC) : la passerelle IFRS la retire, IAS 21 portant directement l'écart latent en résultat."""
+        self.env.flush_all()
+        self.env.cr.execute(
+            f"""SELECT COALESCE(SUM(aml.balance), 0)
+                  FROM account_move_line aml
+                  JOIN account_move am ON am.id = aml.move_id
+                  JOIN account_account aa ON aa.id = aml.account_id
+                 WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date BETWEEN %s AND %s
+                   AND am.eguitra_close_kind IN ('fx_provision', 'fx_provision_reversal') AND {ACC_CODE} ~ '^[67]'""",
+            (company.id, date_from, date_to),
+        )
+        return float(self.env.cr.fetchone()[0])
 
     def _close_fx_provision(self):
         """Fin d'exercice : provision pour perte de change à hauteur des pertes latentes (478), dotation
