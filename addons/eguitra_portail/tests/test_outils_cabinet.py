@@ -157,3 +157,36 @@ class TestOutilsCabinet(ApiCase):
         for porteur in (self.pb, self.pc, self.pd):
             self.assertTrue(self.notes(porteur, event.name), "Public élargi : l'annonce de l'événement")
         self.assertFalse(self.notes(self.pa, event.name), "L'inscrit n'est pas réinvité")
+
+    # ─── M9 : rendez-vous ────────────────────────────────────────────────
+
+    def test_rendez_vous_jamais_confirme_dans_le_passe_et_compte_rendu_notifie(self):
+        meeting = self.env["portail.meeting"].create({"dossier_id": self.dossier_a.id, "subject": "Point bancaire",
+                                                      "requested_by": self.pa.id, "slot_1": FUTURE})
+        path = f"/axispro/portail/rendez-vous/{meeting.id}"
+        passe = (fields.Datetime.now() - timedelta(hours=2)).replace(microsecond=0).isoformat()
+        status, body = self.call("PATCH", path, {"action": "confirm", "start": passe}, token=self.cabinet_token)
+        self.assertEqual(status, 422, body)
+        status, body = self.call("POST", "/axispro/portail/rendez-vous", {
+            "dossier_id": self.dossier_a.id, "subject": "Rattrapage", "start": passe}, token=self.cabinet_token)
+        self.assertEqual(status, 422, body)
+        self.assertFalse(self.env["portail.meeting"].search([("subject", "=", "Rattrapage")]), "Rien n'est créé")
+
+        status, body = self.call("PATCH", path, {"action": "confirm", "start": FUTURE.isoformat()}, token=self.cabinet_token)
+        self.assertEqual((status, body["state"]), (200, "confirmed"), body)
+        status, body = self.call("PATCH", path, {"action": "minutes", "minutes": "Trop tôt"}, token=self.cabinet_token)
+        self.assertEqual(status, 422, "Le compte rendu suit le rendez-vous tenu")
+        status, body = self.call("PATCH", path, {"action": "done"}, token=self.cabinet_token)
+        self.assertEqual((status, body["state"]), (200, "done"), body)
+        self.assertFalse(self.notes(self.pa, "Compte rendu"))
+
+        status, body = self.call("PATCH", path, {"action": "minutes", "minutes": "Décision : dossier à la banque."},
+                                 token=self.cabinet_token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(len(self.notes(self.pa, "Compte rendu disponible : Point bancaire")), 1)
+        self.call("PATCH", path, {"action": "minutes", "minutes": "Décision : dossier à la banque."},
+                  token=self.cabinet_token)
+        self.assertEqual(len(self.notes(self.pa, "Compte rendu")), 1, "Même texte : pas de nouvelle notification")
+        self.call("PATCH", path, {"action": "minutes", "minutes": "Décision : dossier à la banque le 12."},
+                  token=self.cabinet_token)
+        self.assertEqual(len(self.notes(self.pa, "Compte rendu mis à jour : Point bancaire")), 1)

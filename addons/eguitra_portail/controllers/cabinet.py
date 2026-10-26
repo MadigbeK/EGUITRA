@@ -609,7 +609,7 @@ class EguitraPortailCabinet(http.Controller):
         elif action == "done":
             meeting.mark_done(_text(data.get("minutes"), 20_000))
         elif action == "minutes":
-            meeting.minutes = _text(data.get("minutes"), 20_000)
+            meeting.share_minutes(_text(data.get("minutes"), 20_000))
         else:
             raise ApiError(400, "invalid_parameter", "Action inconnue.")
         return vues.meeting_row(meeting, request.env.user)

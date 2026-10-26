@@ -306,13 +306,17 @@ class PortailMeeting(models.Model):
                 "/portail/rendez-vous", dossier=meeting.dossier_id)
 
     def confirm(self, start, **values):
+        """Confirmation (ou nouvelle date) : jamais à une date passée."""
         self.ensure_one()
         if self.state not in ("requested", "confirmed"):
             raise UserError("Ce rendez-vous ne peut plus être confirmé.")
         if not start:
             raise UserError("Indiquez la date du rendez-vous.")
+        start = fields.Datetime.to_datetime(start)
+        if start < fields.Datetime.now().replace(second=0, microsecond=0):
+            raise UserError("Cette date est passée : choisissez une date à venir.")
         self.write(dict(values, start=start, state="confirmed"))
-        when = fields.Datetime.context_timestamp(self, self.start)
+        when = local_time(self, self.start)
         self._notify_porteur(f"Rendez-vous confirmé : {self.subject}", f"Le {when:%d/%m/%Y à %H h %M}.")
 
     def decline(self, note):
@@ -343,3 +347,20 @@ class PortailMeeting(models.Model):
         self.write({"state": "done", "minutes": minutes or self.minutes})
         if minutes:
             self._notify_porteur(f"Compte rendu disponible : {self.subject}", "Votre consultant a partagé le compte rendu.")
+
+    def share_minutes(self, minutes):
+        """Compte rendu rédigé ou repris après coup : le porteur est prévenu de ce qui change."""
+        self.ensure_one()
+        if self.state != "done":
+            raise UserError("Le compte rendu se rédige une fois le rendez-vous tenu.")
+        minutes = minutes or False
+        if minutes == (self.minutes or False):
+            return
+        first = not self.minutes
+        self.minutes = minutes
+        if not minutes:
+            return
+        if first:
+            self._notify_porteur(f"Compte rendu disponible : {self.subject}", "Votre consultant a partagé le compte rendu.")
+        else:
+            self._notify_porteur(f"Compte rendu mis à jour : {self.subject}", "Votre consultant a complété le compte rendu.")
