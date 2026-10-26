@@ -3,18 +3,20 @@
 /**
  * Briques communes des écrans de NIMOVA · Analyse : contexte de la société de travail, période et
  * date d'arrêté, en-tête de section (question, réponse, période, impression, mode nuit), cartes de
- * constats, chiffres clés du contrat, qualité des données, états vides, squelettes et garde de
- * société. Tout ce qui vient du noyau peut manquer ou valoir null : chaque brique s'en accommode.
+ * constats et leurs liens, cibles des liens (ligne, filtre ou bloc visé, mis en évidence),
+ * chiffres clés du contrat, qualité des données, états vides, squelettes et garde de société. Tout
+ * ce qui vient du noyau peut manquer ou valoir null : chaque brique s'en accommode.
  */
 
 import Link from "next/link";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, TriangleAlert, type Icon } from "@/components/icons";
-import { Badge, Button, Delta, Empty, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, type Teinte, type Tone } from "@/components/ui";
-import { apiDownload, useApi } from "@/lib/api-client";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, Target, TriangleAlert, type Icon } from "@/components/icons";
+import { Badge, Button, Empty, ErrorBox, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, useMouvementReduit, type Teinte, type Tone } from "@/components/ui";
+import { ApiError, apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
-import type { EntiteSociete } from "@/lib/config";
-import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { APPS, appFromPath, type AppCode, type EntiteSociete } from "@/lib/config";
+import { INSECABLE, fmtDate, fmtDec, fmtFixe, fmtGNF, fmtInt, fmtJours, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { COULEUR, fmtValeur, moisCourt } from "@/components/analyse/charts/commun";
 
 /* ─── Valeurs tolérantes ───────────────────────────────────────────────── */
@@ -43,14 +45,27 @@ export function pctOu(v: number | null | undefined, digits = 1): string {
   return v === null || v === undefined || !Number.isFinite(v) ? "–" : fmtPct(v, digits);
 }
 
-/** « 1,2 Mds GNF » ou « – ». */
+/** « 1,2 Md GNF » ou « – », espace insécable avant l'unité. */
 export function gnfOu(v: number | null | undefined): string {
-  return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${fmtShort(v)} GNF`;
+  return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${fmtShort(v)}${INSECABLE}GNF`;
 }
 
-/** « 38 j » ou « – ». */
-export function joursOu(v: number | null | undefined, digits = 0): string {
-  return v === null || v === undefined || !Number.isFinite(v) ? "–" : `${v.toLocaleString("fr-FR", { maximumFractionDigits: digits })} j`;
+/** « 38,5 j » ou « – » : toujours une décimale, comme fmtJours partout ailleurs. */
+export function joursOu(v: number | null | undefined): string {
+  return v === null || v === undefined || !Number.isFinite(v) ? "–" : fmtJours(v);
+}
+
+/**
+ * Nombre à plus de deux décimales (MAD de Nigrini, ratio sous 1), là où lib/format s'arrête à deux :
+ * « 0,0123 ». Séparateurs français, jamais « 0.0123 ».
+ */
+export function fmtPrecis(v: number | null | undefined, max: number, min = 0): string {
+  return v === null || v === undefined || !Number.isFinite(v) ? "–" : new Intl.NumberFormat("fr-FR", { minimumFractionDigits: min, maximumFractionDigits: max }).format(v);
+}
+
+/** Méthode de prévision du noyau, en clair (holt_winters, holt, naive). */
+export function methodePrevision(code: string | null | undefined): string {
+  return code === "holt_winters" ? "Holt-Winters additif" : code === "holt" ? "Holt amorti" : code === "naive" ? "Naïf (dernière valeur)" : "Lissage exponentiel";
 }
 
 /* ─── Contexte ─────────────────────────────────────────────────────────── */
@@ -153,12 +168,17 @@ export function useTheme() {
 export function EnTeteSection({ question, reponse, periode, onPeriode, label, quality, sousTitre, exporter }: { question: string; reponse?: ReactNode; periode: Periode; onPeriode: (p: Partial<Periode>) => void; label?: string; quality?: Quality; sousTitre?: ReactNode; exporter?: string }) {
   const { sombre, basculer } = useTheme();
   const [exportEnCours, setExportEnCours] = useState(false);
+  const [erreurExport, setErreurExport] = useState<unknown>(null);
   async function exporterClasseur() {
     if (!exporter) return;
     setExportEnCours(true);
+    setErreurExport(null);
     try {
       const nom = (exporter.split("?")[0] ?? exporter).replace(/^\/analyse\//, "analyse_").replaceAll("/", "_");
       await apiDownload(exporter, nom);
+    } catch (e) {
+      // Un export refusé ou interrompu se dit, au lieu de laisser croire que le fichier arrive.
+      setErreurExport(e);
     } finally {
       setExportEnCours(false);
     }
@@ -204,6 +224,11 @@ export function EnTeteSection({ question, reponse, periode, onPeriode, label, qu
           </Button>
         </div>
       </div>
+      {erreurExport !== null && (
+        <div className="no-print mt-4">
+          <ErreurLecture error={erreurExport} onRetry={() => void exporterClasseur()} titre="Le classeur Excel n'a pas pu être préparé." />
+        </div>
+      )}
     </div>
   );
 }
@@ -235,42 +260,55 @@ export function QualiteDonnees({ quality }: { quality: Quality }) {
 
 /* ─── Garde de société ─────────────────────────────────────────────────── */
 
+/** Donne à une application sa société de travail (cookie de société propre à chaque application). */
+function choisirSociete(companyId: number, app: AppCode): Promise<boolean> {
+  return fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: companyId, app }), keepalive: true })
+    .then((res) => res.ok)
+    .catch(() => false);
+}
+
+/** Bascules de l'Analyse en cours dans la page, par société : une seule requête, même si la garde est remontée. */
+const bascules = new Map<number, Promise<boolean>>();
+
 /**
  * Les sections d'une société ne s'ouvrent que dans ses livres. Un compte ouvert à cette société y
- * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique.
+ * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique. Le
+ * contexte illisible (réseau, noyau arrêté) se dit, avec « Réessayer », au lieu d'un squelette sans fin.
  */
-export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteSociete; contexte: Contexte | undefined; children: ReactNode }) {
+export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; children: ReactNode }) {
+  const { data: contexte, error, mutate } = useContexte();
   const cible = contexte && contexte.entity !== attendu ? contexte.companies?.find((c) => c.entity === attendu) : undefined;
   const [echec, setEchec] = useState(false);
   useEffect(() => {
     if (!cible) return;
-    // Un seul essai par société en quelques secondes : jamais de rechargements en boucle.
-    const essai = `garde-societe-${cible.id}`;
-    try {
-      if (Date.now() - Number(sessionStorage.getItem(essai) ?? 0) < 10_000) return setEchec(true);
-      sessionStorage.setItem(essai, String(Date.now()));
-    } catch {
-      return setEchec(true);
-    }
-    let abandon = false;
-    fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: cible.id, app: "analyse" }) })
-      .then((res) => {
-        if (abandon) return;
-        // Rechargement complet, comme au changement de société : rien de l'autre société ne reste affiché.
-        if (res.ok) window.location.reload();
-        else setEchec(true);
-      })
-      .catch(() => !abandon && setEchec(true));
-    return () => {
-      abandon = true;
+    let bascule = bascules.get(cible.id);
+    if (!bascule) {
+      // Un seul essai par société en quelques secondes : jamais de rechargements en boucle.
+      const essai = `garde-societe-${cible.id}`;
       try {
-        sessionStorage.removeItem(essai);
+        if (Date.now() - Number(sessionStorage.getItem(essai) ?? 0) < 10_000) return setEchec(true);
+        sessionStorage.setItem(essai, String(Date.now()));
       } catch {
-        // stockage indisponible : rien à effacer
+        return setEchec(true);
       }
+      bascule = choisirSociete(cible.id, "analyse");
+      bascules.set(cible.id, bascule);
+    }
+    let monte = true;
+    void bascule.then((ok) => {
+      // Le cookie a changé dès la réponse : rechargement complet, comme au changement de société, même
+      // si l'on a quitté la section entre-temps (l'écran ouvert garderait sinon l'autre société).
+      if (ok) window.location.reload();
+      else {
+        bascules.delete(cible.id);
+        if (monte) setEchec(true);
+      }
+    });
+    return () => {
+      monte = false;
     };
   }, [cible]);
-  if (!contexte) return <AttenteSection />;
+  if (!contexte) return error ? <ErreurLecture error={error} onRetry={() => void mutate()} titre="L'analyse n'a pas pu lire la société de travail." /> : <AttenteSection />;
   if (contexte.entity === attendu) return <>{children}</>;
   if (cible && !echec) {
     return (
@@ -297,7 +335,204 @@ export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteS
   );
 }
 
+/* ─── Cibles des liens ─────────────────────────────────────────────────── */
+
+/*
+ * Un constat ou un contrôle mène à son objet : un paramètre de l'adresse désigne une ligne, un gate
+ * ou un onglet (?route=12, ?gate=G2, ?onglet=structure), une ancre désigne un bloc (#benford). La
+ * section relit l'un et l'autre dès ses données reçues, met l'objet en évidence et défile jusqu'à lui.
+ */
+
+/** Lien suivi dans la page même : l'adresse change sans navigation et les sections relisent leur cible. */
+const EVENEMENT_CIBLE = "nimova:analyse-cible";
+let tourCible = 0;
+
+function abonnerCible(rappel: () => void) {
+  window.addEventListener(EVENEMENT_CIBLE, rappel);
+  window.addEventListener("hashchange", rappel);
+  window.addEventListener("popstate", rappel);
+  return () => {
+    window.removeEventListener(EVENEMENT_CIBLE, rappel);
+    window.removeEventListener("hashchange", rappel);
+    window.removeEventListener("popstate", rappel);
+  };
+}
+
+/** Valeur d'un paramètre de l'adresse posé par un lien (?route=12), null sans lui. */
+export function useCible(nom: string): string | null {
+  return useSearchParams()?.get(nom) || null;
+}
+
+/** Ancre de l'adresse (#benford, sans le dièse) et rang du dernier lien suivi dans la page. */
+export function useAncre(): { ancre: string | null; tour: number } {
+  const brut = useSyncExternalStore(abonnerCible, () => `${tourCible}#${window.location.hash.slice(1)}`, () => "0#");
+  const coupure = brut.indexOf("#");
+  const hash = brut.slice(coupure + 1);
+  let ancre: string | null = null;
+  if (hash) {
+    try {
+      ancre = decodeURIComponent(hash);
+    } catch {
+      ancre = hash;
+    }
+  }
+  return { ancre, tour: Number(brut.slice(0, coupure)) || 0 };
+}
+
+/**
+ * Défile jusqu'à l'élément `id` dès qu'il paraît (les blocs n'existent qu'avec les données), une fois
+ * par cible et par lien suivi : un rechargement des données ne ramène pas l'écran en arrière.
+ */
+export function useDefiler(id: string | null, pret: boolean, tour = 0, bloc: ScrollLogicalPosition = "start") {
+  const reduit = useMouvementReduit();
+  const fait = useRef<string | null>(null);
+  useEffect(() => {
+    if (!id) {
+      fait.current = null;
+      return;
+    }
+    const cle = `${id}#${tour}`;
+    if (!pret || fait.current === cle) return;
+    let essais = 0;
+    let minuterie = 0;
+    const chercher = () => {
+      const el = document.getElementById(id);
+      if (el) {
+        fait.current = cle;
+        el.scrollIntoView({ behavior: reduit ? "auto" : "smooth", block: bloc });
+      } else if (++essais < 20) {
+        minuterie = window.setTimeout(chercher, 50);
+      }
+    };
+    minuterie = window.setTimeout(chercher, 40);
+    return () => window.clearTimeout(minuterie);
+  }, [id, pret, tour, bloc, reduit]);
+}
+
+/**
+ * Bloc visé par l'ancre de l'adresse : défilement jusqu'à lui, puis mise en évidence le temps de le
+ * repérer (`eclat`, l'ancre pendant 2,6 secondes).
+ */
+export function useAncreVisee(pret: boolean, defilement = true): { ancre: string | null; eclat: string | null; tour: number } {
+  const { ancre, tour } = useAncre();
+  useDefiler(defilement ? ancre : null, pret, tour, "start");
+  const [eclat, setEclat] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ancre || !pret) return;
+    setEclat(ancre);
+    const minuterie = window.setTimeout(() => setEclat(null), 2600);
+    return () => window.clearTimeout(minuterie);
+  }, [ancre, pret, tour]);
+  return { ancre, eclat, tour };
+}
+
+/** Élément visé par un lien, posé sur une carte : liseré de l'accent détaché de la carte. */
+export const CIBLE = "ring-2 ring-accent-vif ring-offset-2 ring-offset-panel";
+
+/** Bloc (carte) visé par un lien, posé sur le fond de la page. */
+export const CIBLE_BLOC = "ring-2 ring-accent-vif ring-offset-2 ring-offset-bg";
+
+/**
+ * Classes d'un bloc qui contient un tableau : la ligne qui porte un repère `Ciblable` prend le fond
+ * de l'accent et un liseré à gauche (le tableau commun n'a pas à le savoir).
+ */
+export const LIGNES_CIBLES = "[&_tr:has([data-cible])]:bg-accent-doux/70 [&_tr:has([data-cible])>td:first-child]:shadow-[inset_3px_0_0_var(--accent-vif)]";
+
+/**
+ * Contenu de la ligne visée par un lien (dans un bloc qui porte LIGNES_CIBLES) : repère de
+ * défilement et mention pour les lecteurs d'écran ; sans cible, le contenu seul.
+ */
+export function Ciblable({ id, actif, children, className }: { id: string; actif: boolean; children: ReactNode; className?: string }) {
+  if (!actif) return <>{children}</>;
+  return (
+    <span id={id} data-cible="" className={cx("scroll-mt-28", className)}>
+      {children}
+      <span className="sr-only"> (objet du constat)</span>
+    </span>
+  );
+}
+
+/**
+ * Bandeau d'une cible venue d'un lien : ce qui est mis en évidence, ou ce qui n'apparaît pas sur la
+ * période affichée, et le retour à l'écran sans cible.
+ */
+export function BandeauCible({ children, absent }: { children: ReactNode; absent?: boolean }) {
+  const router = useRouter();
+  const chemin = usePathname();
+  return (
+    <div role="status" className={cx("no-print n-apparaitre mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-xl border px-4 py-2.5 text-[13px] leading-snug text-ink", absent ? "border-warn/20 bg-warn-doux/70" : "border-accent/20 bg-accent-doux/70")}>
+      <span className="flex min-w-0 items-start gap-2">
+        <Target className={cx("mt-px h-4 w-4 flex-none", absent ? "text-warn" : "text-accent")} />
+        <span className="min-w-0">{children}</span>
+      </span>
+      <button type="button" onClick={() => router.replace(chemin, { scroll: false })} className="font-semibold text-accent underline underline-offset-2 transition-colors hover:text-ink">
+        Retirer la mise en évidence
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Lien d'un constat ou d'un contrôle vers son objet.
+ * - Vers la page même (constat d'une section qui vise l'un de ses blocs) : l'adresse change sans
+ *   navigation, la section relit sa cible, y défile et la met en évidence, même suivi deux fois.
+ * - Vers une application qui sert les deux sociétés et garde chacune la sienne (Finance, RH) : elle
+ *   reçoit d'abord la société affichée par l'Analyse, puis la page se charge en entier ; on n'ouvre
+ *   jamais les livres de l'autre société sans le voir. Transport et MB AxisPro Consulting imposent la
+ *   leur.
+ */
+export function LienSuivi({ href, className, children, title }: { href: string; className?: string; children: ReactNode; title?: string }) {
+  const { data: contexte } = useContexte();
+  const societe = contexte?.company.id ?? null;
+  function aAligner(url: URL): AppCode | null {
+    const app = appFromPath(url.pathname);
+    return societe !== null && app !== null && app !== "analyse" && APPS[app].entity === null ? app : null;
+  }
+  function suivre(e: MouseEvent<HTMLAnchorElement>) {
+    if (e.defaultPrevented) return;
+    const url = new URL(href, window.location.href);
+    if (url.origin !== window.location.origin) return;
+    const app = aAligner(url);
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+      // Nouvel onglet ou fenêtre : le navigateur l'ouvre seul, la société suit au mieux.
+      if (app && societe !== null) void choisirSociete(societe, app);
+      return;
+    }
+    if (url.pathname === window.location.pathname) {
+      e.preventDefault();
+      window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      tourCible += 1;
+      window.dispatchEvent(new Event(EVENEMENT_CIBLE));
+      return;
+    }
+    if (app && societe !== null) {
+      e.preventDefault();
+      void choisirSociete(societe, app).then(() => window.location.assign(url.href));
+    }
+  }
+  function suivreAilleurs(e: MouseEvent<HTMLAnchorElement>) {
+    // Clic du milieu : nouvel onglet, la société suit au mieux.
+    const app = e.button === 1 ? aAligner(new URL(href, window.location.href)) : null;
+    if (app && societe !== null) void choisirSociete(societe, app);
+  }
+  return (
+    <Link href={href} onClick={suivre} onAuxClick={suivreAilleurs} className={className} title={title}>
+      {children}
+    </Link>
+  );
+}
+
 /* ─── Attente, erreurs, vides ──────────────────────────────────────────── */
+
+/**
+ * Erreur d'une lecture (section, contexte, export), toujours avec « Réessayer » : le message du noyau
+ * quand il a répondu, sinon une phrase en français, jamais le texte technique du navigateur (« Failed
+ * to fetch », « Unexpected token »).
+ */
+export function ErreurLecture({ error, onRetry, titre }: { error: unknown; onRetry: () => void; titre?: ReactNode }) {
+  const lisible = error instanceof ApiError ? error : new Error("Le serveur ne répond pas, ou sa réponse est illisible : vérifiez la connexion, puis réessayez.");
+  return <ErrorBox error={lisible} onRetry={onRetry} titre={titre} />;
+}
 
 export function AttenteSection() {
   return (
@@ -340,7 +575,9 @@ export const GRAVITE: Record<Severity, { label: string; tone: Tone; teinte: Tein
   positive: { label: "Point fort", tone: "ok", teinte: "jade", icon: CheckCircle2, couleur: "var(--g-jade)" },
 };
 
+/** Domaine d'un constat ; un domaine inconnu ne s'affiche pas (jamais de code brut à l'écran). */
 const DOMAINES: Record<string, string> = {
+  synthese: "Santé financière",
   rentabilite: "Rentabilité",
   tresorerie: "Trésorerie",
   clients: "Clients",
@@ -361,13 +598,13 @@ function Confiance({ value }: { value: number }) {
   const v = Math.max(0, Math.min(1, nombre(value) ?? 0));
   const n = Math.round(v * 5);
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-muted" title={`Confiance ${Math.round(v * 100)} %`}>
+    <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-muted" title={`Confiance ${fmtPct(v * 100, 0)}`}>
       <span aria-hidden className="inline-flex gap-[2px]">
         {[0, 1, 2, 3, 4].map((i) => (
           <span key={i} className={cx("h-2 w-[7px] rounded-[2px]", i < n ? "bg-accent-vif" : "bg-line-strong/50")} />
         ))}
       </span>
-      Confiance {Math.round(v * 100)} %
+      Confiance {fmtPct(v * 100, 0)}
     </span>
   );
 }
@@ -446,16 +683,17 @@ export function normaliserEvidence(e: Evidence | null | undefined): EvidenceNorm
       }
       if (estDict(d.route)) {
         const r = d.route;
-        return { type: "table", columns: ["Tarif", "GNF/m³"], rows: [["Tarif moyen", fmtInt(nombre(r.avg_rate))], ["Point mort", fmtInt(nombre(r.breakeven_rate))], ["Tarif cible", fmtInt(nombre(r.target_rate))]] };
+        const tarif = (v: unknown) => (nombre(v) === null ? "–" : `${fmtInt(nombre(v))}${INSECABLE}GNF/m³`);
+        return { type: "table", columns: ["Tarif", "GNF/m³"], rows: [["Tarif moyen", tarif(r.avg_rate)], ["Point mort", tarif(r.breakeven_rate)], ["Tarif cible", tarif(r.target_rate)]] };
       }
       if (Array.isArray(d.rotations)) {
-        return { type: "table", columns: ["Rotation", "L/100 km", "Attendu"], rows: liste(d.rotations).filter(estDict).slice(0, 4).map((r) => [texte(r.rotation), (nombre(r.value) ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 }), (nombre(r.expected) ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 })]) };
+        return { type: "table", columns: ["Rotation", "L/100 km", "Attendu"], rows: liste(d.rotations).filter(estDict).slice(0, 4).map((r) => [texte(r.rotation), nombre(r.value) === null ? "–" : `${fmtFixe(nombre(r.value), 1)}${INSECABLE}L/100${INSECABLE}km`, `attendu ${fmtFixe(nombre(r.expected), 1)}`]) };
       }
       if (Array.isArray(d.pairs)) {
-        return { type: "table", columns: ["Fournisseur", "Pièces", "Montant"], rows: liste(d.pairs).filter(estDict).slice(0, 4).map((p) => [texte(p.partner), `${texte(estDict(p.a) ? p.a.name : "")} / ${texte(estDict(p.b) ? p.b.name : "")}`, fmtShort(nombre(p.amount_at_risk))]) };
+        return { type: "table", columns: ["Fournisseur", "Pièces", "Montant"], rows: liste(d.pairs).filter(estDict).slice(0, 4).map((p) => [texte(p.partner), `${texte(estDict(p.a) ? p.a.name : "")} / ${texte(estDict(p.b) ? p.b.name : "")}`, gnfOu(nombre(p.amount_at_risk))]) };
       }
       if (Array.isArray(d.lines)) {
-        return { type: "table", columns: ["Pièce", "Tiers", "Montant"], rows: liste(d.lines).filter(estDict).slice(0, 4).map((l) => [texte(l.move), texte(l.partner, "–"), fmtShort(nombre(l.amount))]) };
+        return { type: "table", columns: ["Pièce", "Tiers", "Montant"], rows: liste(d.lines).filter(estDict).slice(0, 4).map((l) => [texte(l.move), texte(l.partner, "–"), gnfOu(nombre(l.amount))]) };
       }
     }
   } catch {
@@ -532,7 +770,7 @@ export function MiniEvidence({ evidence, severity }: { evidence: Evidence | null
           <tr key={i} className="border-b border-line/60 last:border-0">
             {r.slice(0, 4).map((c, j) => (
               <td key={j} className={cx("max-w-[120px] truncate py-0.5", j > 0 && "text-right text-ink-2")}>
-                {typeof c === "number" ? c.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) : c}
+                {typeof c === "number" ? fmtDec(Math.round(c * 10) / 10) : c}
               </td>
             ))}
           </tr>
@@ -545,7 +783,7 @@ export function MiniEvidence({ evidence, severity }: { evidence: Evidence | null
 /** Valeur d'une métrique de constat, dans son unité. */
 export function valeurMetrique(value: number | null, unit: Unit): string {
   if (value === null || !Number.isFinite(value)) return "–";
-  return unit === "gnf" ? `${fmtShort(value)} GNF` : unit === "ratio" && Math.abs(value) < 1 ? value.toLocaleString("fr-FR", { maximumFractionDigits: 4 }) : fmtValeur(value, unit);
+  return unit === "gnf" ? gnfOu(value) : unit === "ratio" && Math.abs(value) < 1 ? fmtPrecis(value, 4) : fmtValeur(value, unit);
 }
 
 /**
@@ -563,12 +801,12 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={g.tone}>{g.label}</Badge>
-          <span className="truncate rounded-md bg-panel-3 px-1.5 py-px text-[11.5px] font-medium text-ink-2">{DOMAINES[insight.domain] ?? insight.domain}</span>
+          {DOMAINES[insight.domain] && <span className="truncate rounded-md bg-panel-3 px-1.5 py-px text-[11.5px] font-medium text-ink-2">{DOMAINES[insight.domain]}</span>}
         </div>
         {impact !== null && impact > 0 && (
           <span className="flex-none text-right">
             <span className="block text-[11.5px] font-medium text-muted">Impact</span>
-            <span className="block font-display text-[15px] font-bold leading-tight tabular text-ink">{fmtShort(impact)} GNF</span>
+            <span className="block font-display text-[15px] font-bold leading-tight tabular text-ink">{gnfOu(impact)}</span>
           </span>
         )}
       </div>
@@ -608,9 +846,9 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
             <ChevronDown className={cx("h-3.5 w-3.5 transition-transform duration-200", ouvert && "rotate-180")} />
           </button>
           {insight.link && (
-            <Link href={insight.link} className="no-print inline-flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline">
+            <LienSuivi href={insight.link} className="no-print inline-flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline">
               Voir <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
+            </LienSuivi>
           )}
         </div>
       </div>
@@ -618,10 +856,7 @@ export function CarteConstat({ insight, compact, rang }: { insight: Insight; com
         <div className="n-apparaitre mt-2 rounded-xl border border-line bg-panel-2/60 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-2">
           <span className="font-semibold text-ink">Méthode : </span>
           {insight.method || "Règle métier documentée dans la spécification."}
-          <span className="mt-1 block text-[11.5px] text-muted">
-            Identifiant {insight.id}
-            {typeof insight.score === "number" ? ` · score ${insight.score.toLocaleString("fr-FR")}` : ""}
-          </span>
+          <span className="mt-1 block text-[11.5px] text-muted">Constats classés par gravité, impact en GNF et confiance.</span>
         </div>
       )}
     </article>
@@ -666,35 +901,19 @@ export function KpiContrat({ kpi }: { kpi: Kpi }) {
   const ref = kpi.previous !== null && (kpi.previous !== 0 || kpi.delta_pct !== null) ? `N-1 ${fmtValeur(kpi.previous, kpi.unit)}` : null;
   const tendance = nombres(kpi.trend);
   const statut = STATUT[kpi.status] ?? "neutral";
+  // Un taux (marge, réalisation) ou un score varie en points : de 34,7 % à 32,1 %, « 2,6 pts », et non
+  // les 7,4 % relatifs du noyau, qui se liraient comme un écart de taux.
+  const enPoints = kpi.unit === "pct" || kpi.unit === "score";
+  const variation = enPoints ? (kpi.value !== null && kpi.previous !== null ? kpi.value - kpi.previous : null) : kpi.delta_pct;
   return (
     <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
-      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={kpi.delta_pct} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
+      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={variation} deltaUnite={enPoints ? "pts" : "pct"} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
         <div className="px-5 pb-3">
           <Sparkline values={tendance} color={statut === "danger" ? COULEUR.mauvais : statut === "warn" ? COULEUR.alerte : COULEUR.accent} height={32} />
         </div>
       )}
     </div>
-  );
-}
-
-/** Bande de chiffres clés compacte (une ligne par indicateur), pour les sections. */
-export function LigneKpi({ kpis }: { kpis: Kpi[] }) {
-  return (
-    <ul className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-      {kpis.map((k) => (
-        <li key={k.key} title={k.definition} className="an-carte flex items-center justify-between gap-3 rounded-xl border border-line bg-panel px-3.5 py-2.5">
-          <span className="min-w-0">
-            <span className="block truncate text-[12px] font-medium text-muted">{k.label}</span>
-            <span className={cx("block font-display text-[19px] font-bold leading-tight tabular", k.status === "bad" ? "text-danger" : "text-ink")}>{k.value === null ? "–" : fmtValeur(k.value, k.unit)}</span>
-          </span>
-          <span className="flex flex-col items-end gap-1">
-            <Delta value={k.delta_pct} inverse={k.inverse} />
-            {k.target !== null && <span className="text-[11px] text-muted">cible {fmtValeur(k.target, k.unit)}</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -711,21 +930,12 @@ export function Chiffre({ label, value, hint, tone, grand }: { label: string; va
   );
 }
 
-/** Lien discret vers un autre écran. */
-export function LienEcran({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link href={href} className="no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
-      {children} <ArrowUpRight className="h-3.5 w-3.5" />
-    </Link>
-  );
-}
-
-/** Lien vers une fiche (dossier AxisPro, écran de la finance) quand le noyau en donne un. */
+/** Lien vers une fiche (dossier MB AxisPro Consulting, écran de la finance) quand le noyau en donne un. */
 export function LienFiche({ href, children, className }: { href?: string | null; children: ReactNode; className?: string }) {
   return href ? (
-    <Link href={href} className={cx("font-medium text-ink hover:text-accent", className)}>
+    <LienSuivi href={href} className={cx("font-medium text-ink hover:text-accent", className)}>
       {children}
-    </Link>
+    </LienSuivi>
   ) : (
     <span className={cx("font-medium text-ink", className)}>{children}</span>
   );

@@ -99,25 +99,38 @@ def km_median(observations):
     return None
 
 
+def agreement_kind(recommendation, decision):
+    """Lecture d'une case de la matrice méthode × comité : « agree » (le comité suit la méthode),
+    « lenient » (décision plus favorable), « strict » (plus sévère), None hors calcul (recommandation à
+    compléter, décision ajournée). La recommandation est d'abord ramenée à l'échelle des décisions
+    (BANKABLE CANDIDATE et APD READY valent GO) : les lignes et les colonnes de la matrice ne se
+    correspondent pas une à une, sa diagonale ne dit rien."""
+    method = RECOMMENDATION_DECISION.get(recommendation)
+    if method is None or decision not in DECISION_ORDER:
+        return None
+    gap = DECISION_ORDER[decision] - DECISION_ORDER[method]
+    return "agree" if gap == 0 else "lenient" if gap > 0 else "strict"
+
+
 def agreement(pairs):
     """Accord méthode / comité. pairs : [(recommandation de la méthode, décision du comité)].
 
     Les recommandations « à compléter » et les décisions ajournées sont écartées du calcul. Renvoie n,
     le taux d'accord (%), le kappa de Cohen sur l'échelle GO / CONDITIONAL GO / HOLD / NO-GO, le nombre
-    de décisions plus favorables (lenient) et plus sévères (strict) que la méthode."""
-    kept = [(RECOMMENDATION_DECISION[r], d) for r, d in pairs if r in RECOMMENDATION_DECISION and d in DECISION_ORDER]
+    de décisions plus favorables (lenient) et plus sévères (strict) que la méthode (agreement_kind)."""
+    kept = [(RECOMMENDATION_DECISION[r], d, agreement_kind(r, d)) for r, d in pairs if agreement_kind(r, d)]
     n = len(kept)
     if not n:
         return {"n": 0, "agreed": 0, "agreement_pct": None, "kappa": None, "lenient": 0, "strict": 0}
-    agreed = sum(1 for m, d in kept if m == d)
+    agreed = sum(1 for _m, _d, kind in kept if kind == "agree")
     observed = agreed / n
-    expected = sum((sum(1 for m, _d in kept if m == c) / n) * (sum(1 for _m, d in kept if d == c) / n)
+    expected = sum((sum(1 for m, _d, _k in kept if m == c) / n) * (sum(1 for _m, d, _k in kept if d == c) / n)
                    for c in DECISION_ORDER)
     kappa = (observed - expected) / (1 - expected) if expected < 1 else None
     return {
         "n": n, "agreed": agreed, "agreement_pct": observed * 100, "kappa": kappa,
-        "lenient": sum(1 for m, d in kept if DECISION_ORDER[d] > DECISION_ORDER[m]),
-        "strict": sum(1 for m, d in kept if DECISION_ORDER[d] < DECISION_ORDER[m]),
+        "lenient": sum(1 for _m, _d, kind in kept if kind == "lenient"),
+        "strict": sum(1 for _m, _d, kind in kept if kind == "strict"),
     }
 
 

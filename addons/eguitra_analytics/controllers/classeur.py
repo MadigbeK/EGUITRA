@@ -38,7 +38,7 @@ def _flatten(value):
     if isinstance(value, (list, tuple)):
         if all(_scalar(v) for v in value):
             return ", ".join("" if v is None else str(v) for v in value)
-        return f"{len(value)} élément(s)"
+        return f"{len(value)} élément{'s' if len(value) > 1 else ''}"
     if isinstance(value, dict):
         return " ; ".join(f"{_label(k)} : {_flatten(v)}" for k, v in value.items() if _scalar(v))
     return value
@@ -134,7 +134,12 @@ class _Writer:
                 if k not in keys and (_scalar(v) or (isinstance(v, list) and all(_scalar(x) for x in v))
                                       or isinstance(v, dict)):
                     keys.append(k)
-        self.header(sheet, row, keys)
+        # Un code suivi de son libellé (state et state_label, kind et kind_label) : seul le libellé
+        # s'exporte, sous l'intitulé du code. Jamais de code brut dans le classeur ; un nombre suivi de sa
+        # description (reference et reference_label) garde ses deux colonnes.
+        codes = {k for k in keys if f"{k}_label" in keys and all(isinstance(r.get(k), (str, type(None))) for r in rows)}
+        keys = [k for k in keys if k not in codes]
+        self.header(sheet, row, keys, {f"{k}_label": _label(k) for k in codes})
         first = row
         for r in rows:
             row += 1
