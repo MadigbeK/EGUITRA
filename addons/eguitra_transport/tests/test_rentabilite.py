@@ -176,7 +176,9 @@ class TestRentabilite(TransportCase):
 
     def test_api_rentabilite_et_flotte(self):
         self._rotation(fuel_liters=1_000).action_validate()
-        agent = self.open_session("ibrahima", app="mobile")["access_token"]
+        # Profil exploitation au bureau (application Transport) : une session de Rotations n'ouvre que la
+        # saisie des rotations (eguitra_api, organisation.SESSION_ROUTES).
+        agent = self.open_session("ibrahima", app="transport")["access_token"]
         status, body = self.call("GET", "/transport/profitability?group=driver", token=agent)
         self.assertEqual(status, 200, body)
         self.assertTrue({"rows", "indicators", "structure", "controls"} <= set(body), body)

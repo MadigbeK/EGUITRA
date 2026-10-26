@@ -260,3 +260,22 @@ class TestAuth(ApiCase):
         self.assertTrue(Token._find(nouvelle["refresh_token"], "refresh").mfa_passed)
         status, _b = self.call("GET", "/auth/me", token=nouvelle["access_token"])
         self.assertEqual(status, 200)
+
+    def test_session_de_rotations_limitee_a_la_saisie(self):
+        """Audit du noyau, I-A5 : la session de Rotations (jusqu'à 90 jours) n'ouvre que Rotations."""
+        self._create_user("mariam.admin", "admin")
+        session = self.open_session("mariam.admin", app="mobile")
+        mobile = session["access_token"]
+        status, me = self.call("GET", "/auth/me", token=mobile)
+        self.assertEqual((status, me["session_app"]), (200, "mobile"), me)
+        status, body = self.call("GET", "/admin/users", token=mobile)
+        self.assertEqual((status, body["error"]), (403, "session_restricted"), "Pas d'administration depuis Rotations")
+        status, body = self.call("POST", "/auth/password", {"old_password": "faux", "new_password": "Nouveau-2026-Mot"},
+                                 token=mobile)
+        self.assertEqual((status, body["error"]), (401, "invalid_credentials"), "Le mot de passe se change depuis Rotations")
+
+        bureau = self.open_session("mariam.admin", app="finance", secret=session["_secret"])["access_token"]
+        status, _users = self.call("GET", "/admin/users", token=bureau)
+        self.assertEqual(status, 200, "Connecté au bureau, le même compte garde tous ses droits")
+        status, me = self.call("GET", "/auth/me", token=bureau)
+        self.assertEqual(me["session_app"], "finance")

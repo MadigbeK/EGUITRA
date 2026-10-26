@@ -64,6 +64,24 @@ PROFILE_ENTITY = {
 }
 
 
+# Application dont la session n'ouvre que certaines routes (méthode, route déclarée) : la session de
+# Rotations, jusqu'à 90 jours sur un téléphone du parc, ne sert qu'à la saisie des rotations et au
+# compte (profil, mot de passe). Elle n'ouvre ni Transport (rentabilité, tarifs) ni Finance dans le même
+# navigateur : il faut s'y connecter.
+SESSION_ROUTES = {
+    "mobile": {
+        "name": "Rotations",
+        "routes": frozenset({
+            ("GET", "/auth/me"),
+            ("POST", "/auth/password"),
+            ("GET", "/transport/referentials"),
+            ("GET", "/transport/rotations"),
+            ("POST", "/transport/sync"),
+        }),
+    },
+}
+
+
 def module_entity(route):
     return next((entity for prefix, entity in MODULE_ENTITY.items() if route.startswith(prefix)), None)
 

@@ -225,6 +225,9 @@ class EguitraAuthController(http.Controller):
     def me(self, **_kw):
         data = request.env.user._eguitra_public()
         data["company_id"] = request.env.company.id  # société de travail (en-tête X-Eguitra-Company)
+        # Application où la session a été ouverte : une session de Rotations n'ouvre que Rotations
+        # (organisation.SESSION_ROUTES) ; le serveur web envoie alors vers la connexion de l'application.
+        data["session_app"] = request.env.context.get("eguitra_session_app") or None
         return data
 
     @api_route("/auth/password", methods=("POST",))

@@ -56,6 +56,9 @@ export async function serverApi<T>(path: string, app: AppCode): Promise<T> {
  */
 export async function requireUser(app: AppCode, opts: { allowTemporaryPassword?: boolean } = {}): Promise<Me> {
   const { data: me, retiree } = await appelServeur<Me>("/auth/me", app);
+  // Session de Rotations (jusqu'à 90 jours sur un téléphone du parc) : le noyau ne lui ouvre que la
+  // saisie des rotations ; une autre application demande sa propre connexion.
+  if (me.session_app === "mobile" && app !== "mobile") redirect(`/login?app=${app}&message=session_rotations`);
   if (!me.apps.includes(app)) redirect(`/acces-refuse?app=${app}`);
   if (me.password_change_required && !opts.allowTemporaryPassword) redirect("/compte/mot-de-passe");
   return retiree ? { ...me, societe_retiree: true } : me;
