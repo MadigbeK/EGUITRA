@@ -123,7 +123,7 @@ le profil direction qu'il implique.
 | `POST /hsseq/breath-tests/{id}/cancel` | non | non | E | non | non | non |
 | `POST /hsseq/lock/evaluate` | L | L | L | L (site) | L (ses rotations) | non |
 | `GET /hsseq/me/rotations` | L | non | L | L (site) | L (propres) | non |
-| `POST /transport/rotations/{id}/depart` (Transport) | E hors verrou | non | non | E (site) | non | non |
+| `POST /transport/rotations/{id}/depart` (Transport) | E | non | non | E (site) | non | non |
 | `GET /hsseq/lock/departures` | L | L | L | L (site) | non | non |
 | `/hsseq/lock/reasons` | L, E | L | L, E | L | non | non |
 | `POST /hsseq/sites`, `PATCH /hsseq/sites/{id}` | E | non | E | non | non | non |
@@ -135,11 +135,10 @@ le profil direction qu'il implique.
 | `GET /hsseq/log` | L | L | L | non | non | non |
 | Rapport PDF, exports Excel | L | L | L | L (site) | non | non |
 
-Le départ (`POST /transport/rotations/{id}/depart`) appartient à Transport : il est ouvert aux
-profils qui écrivent les rotations (`admin`, `finance`, `exploitation`, constante WRITE du noyau) ;
-le conducteur en est exclu. Verrou en service pour la rotation (`lock_active`), le noyau HSSEQ le
-réserve au chef de parc (profil Exploitation transport, sites de la rotation) : `admin` et `finance`
-reçoivent alors 403 `forbidden`.
+Le départ (`POST /transport/rotations/{id}/depart`) appartient à Transport. Règle retenue par le
+noyau le 26/10, verrou en service ou non : le chef de parc (profil `exploitation`, sites de la
+rotation) et l'administration (`admin`) font partir une rotation ; jamais la finance ni la direction,
+jamais le conducteur (403 `forbidden`). La session TRANSPORT aligne sa route sur cette règle.
 
 ### Sens des droits par fiche
 
@@ -854,10 +853,10 @@ dans les sections, les types, la maquette et les écrans.
    V03 couvre aussi la rotation sans conducteur. V04 suit le statut RH (dates de mise en service), V05
    l'absence d'un document. Les écrans affichent « Verrou pas encore en service », les avertissements à
    part, sans bloquer, et plusieurs dérogations actives (§9).
-2. Départ (session Transport) : `POST /transport/rotations/{id}/depart` est ouvert aux profils qui
-   écrivent les rotations (`admin`, `finance`, `exploitation`), pas au conducteur. Verrou en service, le
-   noyau HSSEQ (`action_depart`) le réserve au groupe Exploitation transport et aux sites du chef de
-   parc : `admin` et `finance` y reçoivent 403 ; les écrans ne leur montrent alors pas « Faire partir ».
+2. Départ (session Transport) : `POST /transport/rotations/{id}/depart`, verrou en service ou non,
+   revient au chef de parc (`exploitation`, sites de la rotation) et à `admin`, jamais à `finance`, à
+   `direction` ni au conducteur (règle du noyau du 26/10, route Transport alignée) ; les écrans ne
+   montrent « Faire partir » qu'à ces deux profils.
    Une rotation qui n'est pas saisie répond `business_rule`. `departure_blockers` est lu dans la fiche et
    dans la réponse des actions, nul dans la liste ; la trace est dans `departed_at` et `departed_by`.
    Validation avant départ refusée par `validation_blocked` (H01) (§9).
@@ -904,7 +903,10 @@ Déjà servis, écrans branchés dessus : `photos_missing` sur la ligne d'un con
 sur la ligne d'une action (l'« approval_pending » des écrans) ; comptes des alcootests
 (`counts.by_status`) ; tri des contrôles (`sort` : `reported_at`, `result`, `reference`).
 
-Manquants, proposés à la session OTHER :
+Manquants, proposés à la session OTHER. Réponse du noyau (26/10) : tous retenus et en cours avec le
+lot 2, sauf la correction d'un contrôle (refusée : pas de `PATCH /hsseq/checks/{id}`, `can_edit`
+d'un contrôle toujours faux). `GET /hsseq/rotations` sera borné aux sites du lecteur. Les écrans
+seront branchés quand ces clés seront servies.
 
 | Proposition | Route ou clé | Profil | Pourquoi |
 |---|---|---|---|
@@ -916,7 +918,7 @@ Manquants, proposés à la session OTHER :
 | Notes du déclarant | `actual_severity`, `potential_severity`, `probability` à `POST /hsseq/events`, gardées à part du classement | déclarants | L'écran fait estimer la criticité au déclarant ; le noyau les ignore aujourd'hui. |
 | Liste des salariés | `employees: [{ id, name, site_id }]` dans `GET /hsseq/referentials` | déclarants hors conducteur | Une personne `employee` exige l'identifiant du salarié RH ; l'écran ne peut que la nommer librement. |
 | Lecture de `person_id` d'abord | `people[]` en entrée : `person_id` avant `id` | déclarants | Une fiche relue puis renvoyée avec `id` (la ligne) désignerait une autre personne. |
-| Correction d'un contrôle | `PATCH /hsseq/checks/{id}` (réponse, commentaire) | `hsseq` | `can_edit` est vrai pour `hsseq` mais aucune route ne corrige un point. |
+| ~~Correction d'un contrôle~~ (refusée) | ~~`PATCH /hsseq/checks/{id}`~~ | `hsseq` | Refusée par le noyau : un contrôle ne se corrige pas, `can_edit` vaut toujours faux. |
 | Filtre de profil | `vehicle_kind` sur `GET /hsseq/checks/nonconformities` et `GET /hsseq/breath-tests` | lecteurs de ces listes | Les vues Non-conformités et Alcootests ne se filtrent pas par citerne ou benne, contrairement aux contrôles. |
 | Non-conformités bloquantes ouvertes | `open_blocking` sur `CheckLine` | lecteurs des contrôles | Marquer V02 dans la liste ; `open_nonconformities` ne dit pas si elles sont bloquantes. |
 | Résultat de la vérification | `effective` sur `ActionLine` | lecteurs des actions | Marquer « Non efficace » dans le plan et dans la fiche d'un événement sans ouvrir chaque action. |

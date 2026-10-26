@@ -8,9 +8,9 @@
  * (POST /transport/rotations/{id}/depart), dont le refus 422 departure_blocked s'affiche ici.
  *
  * Le verrou se décide toujours côté serveur (§4) : l'écran demande, le serveur autorise ou refuse.
- * Le départ est ouvert aux profils qui écrivent les rotations (admin, finance, exploitation : WRITE de
- * Transport) ; verrou en service pour la rotation (lock_active), le noyau HSSEQ le réserve au chef de
- * parc (profil exploitation, sites de la rotation). La demande de dérogation reste au seul chef de parc.
+ * Règle du départ retenue par le noyau (26/10), verrou en service ou non : le chef de parc (profil
+ * exploitation, sites de la rotation) et l'administration font partir une rotation ; jamais la finance
+ * ni la direction. La demande de dérogation reste au seul chef de parc.
  * Verrou pas encore en service : le départ est permis, motifs et avertissements s'affichent pour
  * information. Les avertissements (warnings) ne bloquent jamais ; une dérogation couvre un seul motif,
  * plusieurs peuvent être actives sur la rotation (active_waivers).
@@ -42,17 +42,17 @@ import {
   tonMotif,
 } from "./departs/motifs";
 
-/** Profils qui écrivent les rotations de Transport (WRITE) : ils font partir une rotation hors verrou. */
-const PROFILS_DEPART: Profile[] = ["admin", "finance", "exploitation"];
+/** Profils qui font partir une rotation, verrou en service ou non : chef de parc et administration. */
+const PROFILS_DEPART: Profile[] = ["admin", "exploitation"];
 
-/** Chef de parc : seul à faire partir une rotation soumise au verrou et à demander une dérogation. */
+/** Chef de parc : seul à demander une dérogation. */
 const CHEF_DE_PARC: Profile[] = ["exploitation"];
 
 /** Fenêtres du rattachement automatique (référentiels HSSEQ), à défaut celles du paramétrage initial. */
 const FENETRES = { check_window_hours: 12, breath_test_window_hours: 4 };
 
 const ERREURS_DEPART: Partial<Record<string, string>> = {
-  forbidden: "Départ refusé à votre profil : verrou en service, il revient au chef de parc du site de la rotation (profil Exploitation transport).",
+  forbidden: "Départ refusé à votre profil : il revient au chef de parc du site de la rotation, ou à l'administration.",
   business_rule: "Seule une rotation saisie, pas encore partie, part en route.",
 };
 
@@ -85,7 +85,7 @@ function plusRecente(a: LockEvaluation | undefined, b: LockEvaluation | undefine
 
 export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onParti }: VerrouDepartProps) {
   const chefDeParc = useAutorise(CHEF_DE_PARC);
-  const ecritRotations = useAutorise(PROFILS_DEPART);
+  const peutPartir = useAutorise(PROFILS_DEPART);
   // Sans départ déjà lu (panneau ouvert depuis la liste des rotations), le verrou s'évalue à l'ouverture.
   const lu = useSWR<LockEvaluation, ApiError>(
     `verrou:${rotationId}`,
@@ -125,8 +125,6 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
   const lignes = derogations.data?.items ?? [];
   const enService = evaluation.lock_active !== false;
   const avis = avertissements(evaluation);
-  // Verrou en service, le noyau HSSEQ réserve le départ au chef de parc ; hors verrou, à tout profil qui écrit les rotations.
-  const peutPartir = enService ? chefDeParc : ecritRotations;
   const attente = (code: string) => lignes.find((w) => w.reason_code === code && w.status === "pending_hsseq");
   const bloquants = motifsBloquants(evaluation);
   // Une demande porte sur un seul motif ouvert, dérogeable, sans demande déjà en cours.
@@ -305,16 +303,16 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p className="max-w-[52ch] text-[12.5px] leading-snug text-muted">
             {!enService
-              ? ecritRotations
+              ? peutPartir
                 ? "Verrou pas encore en service pour cette rotation : elle part comme avant, sans dérogation à demander."
-                : "Verrou pas encore en service pour cette rotation ; le départ revient aux profils qui écrivent les rotations."
+                : "Verrou pas encore en service pour cette rotation ; le départ revient au chef de parc du site ou à l'administration."
               : chefDeParc
                 ? candidats.length === 0 && bloquants.length > 0 && !demande
                   ? "Aucun motif ouvert ne peut faire l'objet d'une nouvelle demande de dérogation."
                   : "Une dérogation couvre un seul motif, pour cette seule rotation, avec votre validation puis celle du Responsable HSSEQ."
-                : ecritRotations
-                  ? "Verrou en service : seul le chef de parc du site fait partir la rotation ou demande une dérogation."
-                  : "Seul le chef de parc du site fait partir la rotation ou demande une dérogation ; vous lisez l'état du départ."}
+                : peutPartir
+                  ? "Seul le chef de parc du site demande une dérogation ; vous pouvez faire partir la rotation une fois les motifs bloquants levés ou couverts."
+                  : "Le chef de parc du site ou l'administration fait partir la rotation ; vous lisez l'état du départ."}
           </p>
           {(peutPartir || (chefDeParc && enService)) && (
             <div ref={commandes} className="flex flex-wrap gap-2">

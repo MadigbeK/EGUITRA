@@ -4,8 +4,8 @@
  * Transport, « Départs du jour » : rotations à charger ce jour-là, pas encore en route
  * (GET /hsseq/lock/departures), chacune avec l'état de son départ (Autorisé, À contrôler ou Bloqué)
  * et ses motifs ouverts. Un clic ouvre le panneau du verrou (VerrouDepart) : vérification, motifs,
- * dérogation, départ (profils admin, finance et exploitation ; chef de parc seul quand le verrou est
- * en service pour la rotation). Avant la mise en service du verrou (lock_active faux), le départ est
+ * dérogation, départ (chef de parc du site et administration, verrou en service ou non ; jamais la
+ * finance ni la direction). Avant la mise en service du verrou (lock_active faux), le départ est
  * permis et les motifs s'affichent pour information ; les avertissements ne bloquent jamais.
  */
 

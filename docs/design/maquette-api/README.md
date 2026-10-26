@@ -59,6 +59,7 @@ d'un changement).
 | `hsseq` | Fanta Kourouma, Responsable HSSEQ seul : classement, enquêtes, seconde validation des dérogations, détail chiffré des alcootests. |
 | `dg` | Saïdou Barry, Directeur général : lecture intégrale, alcootests en statut, validation des actions coûteuses, journal HSSEQ. |
 | `boffa` | Sékou Condé, chef de parc de la base minière de Boffa (exploitation bornée au site 2) : contrôles, levées, demandes de dérogation. |
+| `finance` | Ousmane Bangoura, profil finance seul : sert à vérifier les refus, par exemple le départ en route qu'il ne donne jamais (403). |
 | `conducteur` | Amadou Oury Diallo, conducteur de ER-01 : application `terrain` (NIMOVA Terrain) seule, refusé sur le web ; alcootest lu en « fait » seulement. |
 
 ## Sociétés et cas particuliers

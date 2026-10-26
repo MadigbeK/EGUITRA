@@ -502,7 +502,7 @@ const USERS = [
   { id: 42, login: "nob.laiterie", name: "Néné Oumou Bah", email: "contact@laiterie-fouta.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-09-02T09:12:00Z" },
   { id: 43, login: "f.camara.peche", name: "Fodé Camara", email: "f.camara@pecheries-kamsar.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-09T18:27:41Z" },
 ];
-const SPECIAL_LOGINS = { porteur: 41, parc: 12, provisoire: 15, cabinet: 21, hsseq: 16, conducteur: 17, boffa: 18, dg: 8 };
+const SPECIAL_LOGINS = { porteur: 41, parc: 12, provisoire: 15, cabinet: 21, hsseq: 16, conducteur: 17, boffa: 18, dg: 8, finance: 5 };
 const DEFAULT_USER_ID = 2;
 const userById = (id) => USERS.find((u) => u.id === id);
 const userName = (id) => userById(id)?.name ?? "Système";
@@ -5623,12 +5623,13 @@ route("POST", "/transport/rotations/:id/depart", TR_WRITE, (ctx) => {
   const rot = hsRotation(ctx.params[0]);
   if (!rot) throw notFound("Rotation introuvable.");
   const v = hsVehicle(rot.vehicle_id);
+  // Règle du noyau (26/10), verrou en service ou non : chef de parc (sites de la rotation) ou administration.
+  if (!hsIs(ctx, "admin") && !hsIs(ctx, "exploitation")) throw hsForbidden("Le départ en route est donné par le chef de parc du site ou par l'administration.");
+  if (!hsIs(ctx, "admin") && !hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden(`Rotation ${rot.name ?? rot.id} : ensemble d'un autre site que les vôtres.`);
   if (rot.state !== "draft") throw businessRule(`Rotation ${rot.name ?? rot.id} : seule une rotation saisie part en route.`);
   const blockers = [];
   if (v && ["maintenance", "off", "sold"].includes(v.state)) blockers.push({ code: "T01", label: `${v.name} n'est pas disponible : il ne part pas en rotation.`, source: "transport", since: null, waivable: false, severity: "block" });
   if (hsLockActive(rot)) {
-    if (!hsIs(ctx, "exploitation")) throw hsForbidden("Le départ en route est donné par un chef de parc (profil Exploitation transport).");
-    if (!hsSiteOk(ctx, hsVehicleSite(v))) throw hsForbidden(`Rotation ${rot.name ?? rot.id} : ensemble d'un autre site que les vôtres.`);
     const { reasons, warnings } = hsReasons(ctx, rot);
     const keys = ({ code, label, source, since, waivable, severity }) => ({ code, label, source, since, waivable, severity });
     blockers.push(...reasons.filter((r) => !r.waiver_id).map(keys), ...warnings.map(keys));
