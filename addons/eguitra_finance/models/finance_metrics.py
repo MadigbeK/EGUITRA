@@ -162,8 +162,10 @@ class EguitraFinanceMetrics(models.AbstractModel):
         return rows
 
     def year_result(self, company, start, end):
-        """Résultat net d'un exercice (rubrique XI du compte de résultat SYSCOHADA)."""
-        return self.env["eguitra.syscohada"].income_statement(company, start, end)["totals"].get("XI", 0.0)
+        """Résultat d'un exercice à affecter : toutes les classes 6 à 8 de la période, sur la même base que le
+        report à nouveau du bilan (result_split). Il égale la rubrique XI quand tous les comptes de gestion
+        figurent au compte de résultat (contrôle « comptes hors états »)."""
+        return self.net_result(company, start, end)
 
     def fiscal_year_bounds(self, company, day):
         """Exercice comptable contenant la date (clôture au 31 décembre par défaut)."""

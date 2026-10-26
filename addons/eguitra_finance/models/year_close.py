@@ -114,6 +114,19 @@ class EguitraYearClose(models.AbstractModel):
         return results - float(self.env.cr.fetchone()[0])
 
     @api.model
+    def _manual_allocations(self, company, end, unaffected):
+        """OD validées passées hors de l'assistant au compte d'affectation du résultat après la fin de
+        l'exercice : elles affectent peut-être déjà son résultat, que l'assistant affecterait une seconde fois."""
+        if not unaffected:
+            return self.env["account.move"]
+        lines = self.env["account.move.line"].sudo().search([
+            ("account_id", "=", unaffected.id), ("company_id", "=", company.id), ("parent_state", "=", "posted"),
+            ("date", ">", end), ("move_id.eguitra_allocation_year", "=", False),
+        ])
+        # Une OD extournée ne compte plus : seul un solde restant affecte le résultat.
+        return self.env["account.move"] if company.currency_id.is_zero(sum(lines.mapped("balance"))) else lines.move_id
+
+    @api.model
     def _allocation_accounts(self, company, loss=False):
         """Comptes proposés pour l'affectation, du plan de la société (réserves, report à nouveau,
         dividendes ; sans dividendes pour une perte)."""
@@ -134,6 +147,13 @@ class EguitraYearClose(models.AbstractModel):
         return self.env["account.journal"].sudo().search(
             [("company_id", "=", company.id), ("type", "=", "general"), ("code", "!=", "AN")],
             order="sequence, id", limit=1)
+
+    @api.model
+    def _manual_message(self, moves, end, year):
+        names = ", ".join(moves[:5].mapped("display_name")) + ("…" if len(moves) > 5 else "")
+        return (f"Le compte d'affectation du résultat porte depuis le {end:%d/%m/%Y} des écritures passées hors de "
+                f"l'assistant ({names}) : extournez-les avant d'affecter le résultat {year} par l'assistant, pour "
+                "ne pas l'affecter deux fois.")
 
     def _allocation_row(self, move, unaffected):
         return {
@@ -196,6 +216,10 @@ class EguitraYearClose(models.AbstractModel):
         elif currency.is_zero(to_allocate):
             allocation_blocking.append(_check("allocated", "Résultat à affecter",
                                               f"Résultat {year} entièrement affecté par les OD ci-dessous."))
+        manual = self._manual_allocations(company, end, unaffected)
+        if manual:
+            allocation_blocking.append(_check("manual_allocations", "Affectation par l'assistant seulement",
+                                              self._manual_message(manual, end, year), len(manual)))
 
         drafts = self.env["account.move"].sudo().search_count(
             [("company_id", "=", company.id), ("state", "=", "draft"), ("date", "<=", end)])
@@ -267,6 +291,9 @@ class EguitraYearClose(models.AbstractModel):
         if currency.is_zero(result):
             raise UserError(f"Résultat {year} nul : rien à affecter.")
         remaining = currency.round(result - self._allocated(self._allocation_moves(company, year), unaffected))
+        manual = self._manual_allocations(company, end, unaffected)
+        if manual:
+            raise UserError(self._manual_message(manual, end, year))
         if currency.is_zero(remaining):
             raise UserError(f"Le résultat {year} est déjà entièrement affecté (OD en brouillon ou validées) : "
                             "supprimez ou annulez l'OD à corriger avant d'en créer une autre.")

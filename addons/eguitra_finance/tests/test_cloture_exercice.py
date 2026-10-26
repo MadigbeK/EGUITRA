@@ -149,6 +149,21 @@ class TestClotureExercice(TwoYearsMixin, ApiCase):
         self.assertFalse(self.env["account.move"].search_count([("eguitra_allocation_year", "=", self.year)]),
                          "Aucune OD créée par un envoi refusé")
 
+    def test_affectation_passee_hors_de_l_assistant(self):
+        """Une OD libre déjà passée au compte d'affectation après la fin de l'exercice bloque l'assistant (le
+        résultat serait affecté deux fois) ; extournée, elle ne bloque plus."""
+        manual = self.post_allocation(self.today)
+        self.env.flush_all()
+        body = self._status()
+        self.assertIn("manual_allocations", [c["code"] for c in body["allocation"]["blocking"]])
+        status, body = self._allocate()
+        self.assertEqual((status, body.get("error")), (422, "business_rule"), body)
+        self.assertIn("hors de l'assistant", body["message"])
+        manual._reverse_moves([{"date": self.today, "ref": "Extourne de l'affectation libre"}], cancel=True)
+        self.env.flush_all()
+        status, body = self._allocate()
+        self.assertEqual(status, 200, body)
+
     def test_verrouillage_definitif(self):
         status, body = self.call("POST", "/finance/closing/year/lock", {"year": self.year},
                                  token=self._token("compta.exercice"))
