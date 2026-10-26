@@ -475,7 +475,10 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
     def activite(self, company, period, ctx=None):
         """Activité et honoraires (6.6). Ouverte aussi au profil finance, qui ne lit pas les dossiers du
         cabinet : ses agrégats sont alors calculés en lecture privilégiée, bornés à la société de travail
-        (déjà contrôlée par la route) ; seuls des totaux et des références de dossiers sont rendus."""
+        (déjà contrôlée par la route). La réponse est celle de la spécification 6.6, la même pour tous les
+        profils de la section : heures par consultant et par semaine (noms des consultants), rentabilité
+        et carnet par dossier (référence, nom et consultant du dossier), honoraires par ligne de service.
+        Aucune pièce, évaluation ni donnée du porteur n'y figure (décision du gérant sur M14)."""
         user = self.env.user
         trusted = self.env.su or user.has_group("eguitra_base.group_profile_cabinet") or \
             user.has_group("eguitra_base.group_profile_direction")
