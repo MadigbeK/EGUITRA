@@ -246,7 +246,8 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
           <X className="h-3.5 w-3.5" /> Refuser
         </Button>
       </span>
-      {erreur && !refus && (
+      {/* L'erreur s'affiche dans la fenêtre ouverte (refus, solde insuffisant), jamais derrière elle. */}
+      {erreur && !refus && soldeInsuffisant === null && (
         <div className="mt-2">
           <Notice tone="danger">{erreur}</Notice>
         </div>
@@ -255,7 +256,11 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
         <Modal
           open
           title="Solde de congés insuffisant"
-          onClose={() => setSoldeInsuffisant(null)}
+          onClose={() => {
+            if (busy) return;
+            setSoldeInsuffisant(null);
+            setErreur(null);
+          }}
           footer={
             peutForcer ? (
               <Button variant="primary" loading={busy} onClick={() => approuver(true)}>
@@ -265,6 +270,7 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
           }
         >
           <div className="space-y-3 text-sm">
+            {erreur && <Notice tone="danger">{erreur}</Notice>}
             <Notice tone="warn">{soldeInsuffisant}</Notice>
             <p className="text-ink-2">
               {peutForcer
@@ -278,7 +284,11 @@ export function DecisionAbsence({ leave, peutForcer, onDone, compact }: { leave:
         <Modal
           open
           title={`Refuser la demande de ${leave.employee.name}`}
-          onClose={() => setRefus(false)}
+          onClose={() => {
+            if (busy) return;
+            setRefus(false);
+            setErreur(null);
+          }}
           footer={
             <Button variant="danger" loading={busy} disabled={!motif.trim()} onClick={refuser}>
               Refuser la demande
