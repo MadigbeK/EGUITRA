@@ -11,3 +11,4 @@ from . import test_bareme
 from . import test_flotte_securite
 from . import test_droits_tarifs
 from . import test_factures_defaites
+from . import test_pilotage_structure
