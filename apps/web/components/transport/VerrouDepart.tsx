@@ -48,6 +48,13 @@ const PROFILS_DEPART: Profile[] = ["admin", "exploitation"];
 /** Chef de parc : seul à demander une dérogation. */
 const CHEF_DE_PARC: Profile[] = ["exploitation"];
 
+/**
+ * Droit de départ servi par Transport sur la fiche de la rotation : il tient compte de l'état de la
+ * rotation et, avec HSSEQ, des sites du chef de parc, ce que la règle par profil ne sait pas. Absent
+ * (noyau plus ancien), la règle par profil s'applique seule.
+ */
+type DroitDepart = { can_depart?: boolean; depart_refusal?: string | null };
+
 /** Fenêtres du rattachement automatique (référentiels HSSEQ), à défaut celles du paramétrage initial. */
 const FENETRES = { check_window_hours: 12, breath_test_window_hours: 4 };
 
@@ -85,7 +92,10 @@ function plusRecente(a: LockEvaluation | undefined, b: LockEvaluation | undefine
 
 export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onParti }: VerrouDepartProps) {
   const chefDeParc = useAutorise(CHEF_DE_PARC);
-  const peutPartir = useAutorise(PROFILS_DEPART);
+  const profilDepart = useAutorise(PROFILS_DEPART);
+  const droit = useApi<DroitDepart>(profilDepart ? `/transport/rotations/${rotationId}` : null);
+  const peutPartir = profilDepart && droit.data?.can_depart !== false;
+  const refusDepart = profilDepart && droit.data?.can_depart === false ? (droit.data.depart_refusal ?? "Cette rotation ne peut pas partir en route.") : null;
   // Sans départ déjà lu (panneau ouvert depuis la liste des rotations), le verrou s'évalue à l'ouverture.
   const lu = useSWR<LockEvaluation, ApiError>(
     `verrou:${rotationId}`,
@@ -302,7 +312,7 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
       {!parti && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p className="max-w-[52ch] text-[12.5px] leading-snug text-muted">
-            {!enService
+            {refusDepart ?? (!enService
               ? peutPartir
                 ? "Verrou pas encore en service pour cette rotation : elle part comme avant, sans dérogation à demander."
                 : "Verrou pas encore en service pour cette rotation ; le départ revient au chef de parc du site ou à l'administration."
@@ -312,9 +322,9 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
                   : "Une dérogation couvre un seul motif, pour cette seule rotation, avec votre validation puis celle du Responsable HSSEQ."
                 : peutPartir
                   ? "Seul le chef de parc du site demande une dérogation ; vous pouvez faire partir la rotation une fois les motifs bloquants levés ou couverts."
-                  : "Le chef de parc du site ou l'administration fait partir la rotation ; vous lisez l'état du départ."}
+                  : "Le chef de parc du site ou l'administration fait partir la rotation ; vous lisez l'état du départ.")}
           </p>
-          {(peutPartir || (chefDeParc && enService)) && (
+          {(peutPartir || refusDepart || (chefDeParc && enService)) && (
             <div ref={commandes} className="flex flex-wrap gap-2">
               {chefDeParc && enService && candidats.length > 0 && !demande && (
                 <Button onClick={() => setDemande(true)}>
@@ -324,6 +334,11 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
               {peutPartir && (
                 <Button variant={evaluation.allowed ? "primary" : "secondary"} loading={envoi} onClick={() => void fairePartir()}>
                   {!envoi && <Truck className="h-4 w-4" />} Faire partir
+                </Button>
+              )}
+              {refusDepart && (
+                <Button variant="secondary" disabled title={refusDepart}>
+                  <Truck className="h-4 w-4" /> Faire partir
                 </Button>
               )}
             </div>

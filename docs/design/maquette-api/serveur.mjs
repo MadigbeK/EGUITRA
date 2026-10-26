@@ -5592,7 +5592,17 @@ route("GET", "/transport/rotations", TR_READ, (ctx) => {
     margin_min: seuilsTableau([ctx.company]).transport_margin_min,
   };
 });
-route("GET", "/transport/rotations/:id", TR_READ, (ctx) => rotationRow(rotationOf(ctx, ctx.params[0])));
+route("GET", "/transport/rotations/:id", TR_READ, (ctx) => {
+  const rot = rotationOf(ctx, ctx.params[0]);
+  return { ...rotationRow(rot), ...droitDepart(ctx, rot) };
+});
+/** can_depart et depart_refusal de la fiche, comme le noyau Transport (règle du 26/10 : admin et exploitation, sites du chef de parc). */
+function droitDepart(ctx, rot) {
+  if (rot.state !== "draft") return { can_depart: false, depart_refusal: "Seule une rotation saisie, pas encore partie, part en route." };
+  if (!hsIs(ctx, "admin") && !hsIs(ctx, "exploitation")) return { can_depart: false, depart_refusal: "Le départ est donné par le chef de parc du site ou par l'administration." };
+  if (!hsIs(ctx, "admin") && !hsSiteOk(ctx, hsVehicleSite(hsVehicle(rot.vehicle_id)))) return { can_depart: false, depart_refusal: "Ensemble d'un autre site que les vôtres : le départ revient à son chef de parc." };
+  return { can_depart: true, depart_refusal: null };
+}
 route("POST", "/transport/rotations", TR_WRITE, (ctx) => {
   requireFields(ctx.body, "vehicle_id", "partner_id", "route_id");
   const rot = newRotation(ctx, ctx.body);
