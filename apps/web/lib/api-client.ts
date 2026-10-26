@@ -22,10 +22,20 @@ function onUnauthenticated() {
   window.location.href = `/login?app=${app}&next=${encodeURIComponent(here)}`;
 }
 
-/** Application de la page courante (premier segment du chemin), transmise à la passerelle. */
+/**
+ * En-têtes de chaque appel : l'application de la page courante (premier segment du chemin) et la
+ * société que la page affiche (me.company_id de la coque, `data-societe-id`, lu au moment de
+ * l'appel). Le cookie de société est commun à tous les onglets : sans cet en-tête, un onglet passé
+ * dans l'autre société détournait les lectures et les écritures de celui-ci (en-tête lu par la
+ * passerelle puis par le noyau, qui refuse une société qui n'est pas ouverte au compte).
+ */
 function appHeader(): Record<string, string> {
+  const enTetes: Record<string, string> = {};
   const app = window.location.pathname.split("/")[1] ?? "";
-  return ["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app) ? { "X-Eguitra-App": app } : {};
+  if (["finance", "transport", "axispro", "portail", "mobile", "analyse", "rh"].includes(app)) enTetes["X-Eguitra-App"] = app;
+  const societe = document.querySelector<HTMLElement>("[data-societe-id]")?.dataset.societeId;
+  if (societe && /^\d{1,9}$/.test(societe)) enTetes["X-Eguitra-Company"] = societe;
+  return enTetes;
 }
 
 /** Corps JSON d'un texte de réponse : null s'il est vide, undefined s'il n'est pas du JSON. */

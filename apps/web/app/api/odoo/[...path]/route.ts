@@ -24,6 +24,8 @@ import {
  */
 
 const ALLOWED_PATH = /^[a-zA-Z0-9_\-/.]+$/;
+/** Société déclarée par la page (X-Eguitra-Company) : un identifiant entier, rien d'autre. */
+const SOCIETE = /^\d{1,9}$/;
 
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   if (!sameOrigin(req)) return forbiddenOrigin();
@@ -46,9 +48,12 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const declared = req.headers.get("x-eguitra-app");
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
   const app = isAppCode(declared) ? declared : isAppCode(fromCookie) ? fromCookie : undefined;
-  // Société : celle que la page déclare, à défaut celle mémorisée pour l'application.
-  const declaree = req.headers.get("x-eguitra-company");
-  const memorisee = declaree === null && app ? req.cookies.get(companyCookie(app))?.value : undefined;
+  // Société : celle que la page affiche (en-tête posé par le client à chaque appel : deux onglets sur
+  // deux sociétés ne se mélangent pas), à défaut celle mémorisée pour l'application (cookie commun
+  // aux onglets : téléchargement direct, écran sans coque).
+  const enTete = req.headers.get("x-eguitra-company");
+  const declaree = enTete && SOCIETE.test(enTete) ? enTete : undefined;
+  const memorisee = !declaree && app ? req.cookies.get(companyCookie(app))?.value : undefined;
   let company = declaree ?? memorisee;
   let retiree = false;
   const clientIp = clientIpFrom(req.headers);
@@ -97,11 +102,15 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
         res = await call(renewed.access_token);
       }
     }
-    // Société mémorisée que l'administrateur a retirée au compte : l'appel est refait dans la société
-    // par défaut et la mémoire périmée est effacée. Une société déclarée par la page reste refusée :
-    // une écriture ne part jamais en silence dans d'autres livres que ceux affichés.
-    if (memorisee && res.status === 403 && (await codeErreur(res)) === "company_forbidden") {
+    // Société que l'administrateur a retirée au compte. Mémorisée : l'appel est refait dans la société
+    // par défaut et la mémoire périmée est effacée. Affichée par la page : elle reste refusée (une
+    // écriture ne part jamais en silence dans d'autres livres que ceux affichés), avec un message qui
+    // dit quoi faire.
+    if (company && res.status === 403 && (await codeErreur(res)) === "company_forbidden") {
       await res.body?.cancel().catch(() => undefined);
+      if (!memorisee) {
+        return finir(NextResponse.json({ error: "company_forbidden", message: MESSAGE_SOCIETE_RETIREE }, { status: 403, headers: { "Cache-Control": "no-store" } }));
+      }
       company = undefined;
       retiree = true;
       res = await call(renewed?.access_token ?? access);
@@ -132,6 +141,9 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   }
   return finir(new NextResponse(res.body, { status: res.status, headers }));
 }
+
+/** Refus d'une société affichée par la page, retirée du compte depuis son ouverture. */
+const MESSAGE_SOCIETE_RETIREE = "Cette société n'est plus ouverte à votre compte : rechargez la page pour travailler dans votre société par défaut.";
 
 /** Code d'erreur d'une réponse JSON du noyau (sans consommer la réponse). */
 async function codeErreur(res: Response): Promise<string | undefined> {
