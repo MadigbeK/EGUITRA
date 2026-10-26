@@ -213,6 +213,16 @@ function repondre(path: string, body: Record<string, unknown>): [number, unknown
       return [200, HSSEQ()];
     case "/hsseq/checks/templates":
       return [200, GRILLES];
+    case "/hsseq/my/crisis-contacts":
+      // Numéros fictifs de la simulation : rien n'appelle un vrai poste.
+      return [200, {
+        sites: [{ id: 1, name: "Parc de simulation" }],
+        items: [
+          { id: 1, site: { id: 1, name: "Parc de simulation" }, function: "Chef de parc", name: "Chef de parc (simulation)", organization: null, phone: "+224 600 00 00 01", phone2: null, call_order: 1 },
+          { id: 2, site: null, function: "Sapeurs-pompiers", name: "Secours (simulation)", organization: "Protection civile", phone: "+224 600 00 00 02", phone2: null, call_order: 2 },
+          { id: 3, site: null, function: "Responsable HSSEQ", name: "Responsable HSSEQ (simulation)", organization: null, phone: "+224 600 00 00 03", phone2: null, call_order: 3 },
+        ],
+      }];
     case "/hsseq/me/rotations":
       return [200, { date: aujourdhui(), items: departsDuJour() }];
     case "/hsseq/lock/evaluate":

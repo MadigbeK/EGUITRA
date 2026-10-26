@@ -22,6 +22,8 @@ export interface TemplateItem {
   blocking: boolean;
   sequence: number;
   linked_to: string | null;
+  /** Point retiré de la grille : le profil hsseq le reçoit encore, personne n'y répond. */
+  active?: boolean;
 }
 
 /** Grille de contrôle (GET /hsseq/checks/templates), versionnée. */
@@ -159,4 +161,23 @@ export interface Nonconformity {
   photos_missing: boolean;
   status: "open" | "lifted";
   rights: { can_close: boolean };
+}
+
+/** Contact de l'annuaire de crise (GET /hsseq/my/crisis-contacts ; noyau : my_contact_row). */
+export interface CrisisContact {
+  id: number;
+  /** Site du contact ; null pour un contact commun à tous les sites (secours, pompiers). */
+  site: { id: number; name: string } | null;
+  function: string;
+  name: string;
+  organization: string | null;
+  phone: string;
+  phone2: string | null;
+  call_order: number;
+}
+
+/** Annuaire de crise des sites du compte, contacts communs compris, dans l'ordre d'appel. */
+export interface MyCrisisContacts {
+  sites: Array<{ id: number; name: string }> | null;
+  items: CrisisContact[];
 }

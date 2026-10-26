@@ -1,19 +1,21 @@
 import { randomUUID } from "expo-crypto";
 import { useKeepAwake } from "expo-keep-awake";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
-import { Image, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { BackHandler, Image, KeyboardAvoidingView, Linking, Pressable, ScrollView, StyleSheet, View, type TextInputInstance } from "react-native";
+import { revenir } from "../accueil/retour";
 import type { Utilisateur } from "../auth/coffre";
 import { duree, heure } from "../format";
 import type { Piece } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
-import { BarreAction, Bouton, Champ, EnTete, Ecran, Feuille, Texte, vibrer } from "../ui/elements";
+import { BarreAction, Bouton, Champ, demanderConfirmation, EnTete, Ecran, Feuille, Texte, vibrer } from "../ui/elements";
 import { espaces, mesures, rayons, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
+import { supprimerPhoto } from "./appareil";
 import { positionDeLaFiche, usePosition } from "./position";
 import { PrisePhoto } from "./PrisePhoto";
-import type { EventReport, EventType } from "./types";
-import { useHsseq } from "./useHsseq";
+import type { CrisisContact, EventReport, EventType } from "./types";
+import { numeroAppel, useContactsCrise, useHsseq } from "./useHsseq";
 
 /** Libellés affichés des types d'événement (contrat HSSEQ, § 5 ; écriture du terrain, § 4). */
 export const TYPE_LIBELLE: Record<EventType, string> = {
@@ -67,13 +69,60 @@ function Contenu({ user }: { user: Utilisateur }) {
   const [camera, setCamera] = useState(false);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [fait, setFait] = useState<string | null>(null);
+  const [echec, setEchec] = useState(false);
+  const [sansPhoto, setSansPhoto] = useState(false);
+  const champPhrase = useRef<TextInputInstance>(null);
+  const contacts = useContactsCrise();
+  const sortie = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const photoRef = useRef(photo);
+  photoRef.current = photo;
+  const enregistree = useRef(false);
 
   const vehicule = refs?.vehicles.find((v) => v.driver_id != null && v.driver_id === refs.me.driver_id);
   const pret = type !== null && (photo !== null || phrase.trim().length > 0);
+  const commencee = photo !== null || phrase.trim().length > 0;
+
+  // Écran quitté sans envoyer : la photo prise quitte l'appareil ; le minuteur de sortie s'arrête.
+  useEffect(() => () => {
+    if (sortie.current) clearTimeout(sortie.current);
+    if (!enregistree.current && photoRef.current) void supprimerPhoto(photoRef.current.uri).catch(() => undefined);
+  }, []);
+
+  /** Photo reprise : la précédente quitte l'appareil. */
+  function joindre(p: Piece) {
+    if (photo && photo.uri !== p.uri) void supprimerPhoto(photo.uri).catch(() => undefined);
+    setSansPhoto(false);
+    setPhoto(p);
+  }
+
+  /** Sortie du formulaire : une déclaration commencée ne se perd pas sans confirmation. */
+  async function quitter() {
+    if (commencee && !fait && !(await demanderConfirmation("Abandonner cette déclaration ? La photo et la phrase seront effacées.", { action: "Abandonner", danger: true }))) return;
+    revenir(router);
+  }
+
+  // Retour Android : du formulaire, retour au choix du type (la saisie reste) ; du choix, sortie.
+  useEffect(() => {
+    const abonnement = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (fait) return false;
+      if (type) {
+        setType(null);
+        setAccident(false);
+        return true;
+      }
+      if (commencee) {
+        void quitter();
+        return true;
+      }
+      return false;
+    });
+    return () => abonnement.remove();
+  });
 
   async function enregistrer() {
     if (!type || !pret || envoiEnCours) return;
     setEnvoiEnCours(true);
+    setEchec(false);
     const maintenant = new Date().toISOString();
     const fiche: EventReport & { offline: boolean } = {
       type,
@@ -92,17 +141,23 @@ function Contenu({ user }: { user: Utilisateur }) {
       );
     } catch {
       setEnvoiEnCours(false);
+      setEchec(true);
       vibrer.erreur();
       return;
     }
+    enregistree.current = true;
     vibrer.succes();
     setFait(`Déclaration enregistrée en ${duree((Date.now() - debut.current) / 1000)}.`);
     void envoi.sync("saisie");
-    setTimeout(() => router.back(), 1500);
+    sortie.current = setTimeout(() => revenir(router), 1500);
   }
 
   const etat = fait
-    ?? (!type ? "Choisissez ce qui s'est passé." : !pret ? "Une photo ou une phrase suffit pour envoyer." : !envoi.online ? "Hors réseau : la déclaration partira seule dès que le réseau passe." : "Prêt à envoyer.");
+    ?? (echec
+      ? "Enregistrement impossible sur cet appareil : réessayez. Si cela recommence, prévenez le bureau."
+      : !type ? "Choisissez ce qui s'est passé."
+        : !pret ? (sansPhoto ? "Sans photo : écrivez une phrase." : "Une photo ou une phrase suffit pour envoyer.")
+          : !envoi.online ? "Hors réseau : la déclaration partira seule dès que le réseau passe." : "Prêt à envoyer.");
 
   return (
     <Ecran>
@@ -110,7 +165,7 @@ function Contenu({ user }: { user: Utilisateur }) {
         titre="Déclarer"
         sousTitre={type ? TYPE_LIBELLE[type] : "Presque-accident, situation dangereuse, accident"}
         gauche={(
-          <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => router.back()} style={styles.retour}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={() => void quitter()} style={styles.retour}>
             <Texte variante="libelle" style={{ color: c.enteteEncre }}>‹</Texte>
           </Pressable>
         )}
@@ -133,6 +188,8 @@ function Contenu({ user }: { user: Utilisateur }) {
                 <Feuille style={{ borderColor: c.danger, borderWidth: traits.fort }}>
                   <Texte variante="libelle" ton="dangerTexte">D'abord la sécurité</Texte>
                   <Texte>Protégez la zone et prévenez les secours et le chef de parc. Déclarez ensuite.</Texte>
+                  <Appels contacts={contacts?.items} />
+                  <Texte variante="libelle">Puis déclarez l'accident</Texte>
                   <View style={styles.deux}>
                     <Bouton style={{ flex: 1 }} titre="Sur la route" onPress={() => setType("road_accident")} />
                     <Bouton style={{ flex: 1 }} titre="Au travail" onPress={() => setType("work_accident")} />
@@ -169,11 +226,21 @@ function Contenu({ user }: { user: Utilisateur }) {
                 ) : (
                   <View style={styles.deux}>
                     <Bouton style={{ flex: 1 }} titre="Prendre la photo" onPress={() => setCamera(true)} />
-                    <Bouton style={{ flex: 1 }} titre="Sans photo" variante="secondaire" onPress={() => vibrer.selection()} />
+                    <Bouton
+                      style={{ flex: 1 }}
+                      titre={sansPhoto ? "Sans photo, choisi" : "Sans photo"}
+                      variante={sansPhoto ? "principal" : "secondaire"}
+                      onPress={() => {
+                        vibrer.selection();
+                        setSansPhoto(true);
+                        champPhrase.current?.focus();
+                      }}
+                    />
                   </View>
                 )}
               </Feuille>
               <Champ
+                ref={champPhrase}
                 libelle="Ce qui s'est passé, en une phrase"
                 aide="Touchez le micro du clavier pour dicter."
                 multiline
@@ -192,7 +259,7 @@ function Contenu({ user }: { user: Utilisateur }) {
           )}
         </ScrollView>
         {type ? (
-          <BarreAction etat={etat} tonEtat={fait ? "ok" : "second"}>
+          <BarreAction etat={etat} tonEtat={fait ? "ok" : echec ? "dangerTexte" : "second"}>
             <Bouton style={{ flex: 1 }} titre={fait ? "Déclaration enregistrée" : "Envoyer la déclaration"} fait={!!fait} desactive={!pret} chargement={envoiEnCours && !fait} onPress={() => void enregistrer()} />
           </BarreAction>
         ) : null}
@@ -201,9 +268,36 @@ function Contenu({ user }: { user: Utilisateur }) {
         visible={camera}
         rattachement={{ parent_uuid: uuid.current, model: "event", item_id: null }}
         onFermer={() => setCamera(false)}
-        onPhoto={setPhoto}
+        onPhoto={joindre}
       />
     </Ecran>
+  );
+}
+
+/**
+ * Appels d'urgence de l'annuaire de crise : le site d'abord, puis les secours communs, dans l'ordre
+ * d'appel du Responsable HSSEQ. Trois au plus, le reste sur demande. Sans annuaire sur l'appareil, le
+ * conducteur appelle le chef de parc par son propre répertoire.
+ */
+function Appels({ contacts }: { contacts: CrisisContact[] | undefined }) {
+  const [tous, setTous] = useState(false);
+  if (!contacts?.length) {
+    return <Texte variante="service" ton="second">Annuaire de crise pas encore sur l'appareil : appelez le chef de parc depuis votre répertoire.</Texte>;
+  }
+  const montres = tous ? contacts : contacts.slice(0, 3);
+  return (
+    <View style={{ gap: espaces[2] }}>
+      {montres.map((k) => (
+        <Bouton
+          key={k.id}
+          titre={`Appeler : ${k.function}`}
+          variante="danger"
+          indice={`Appelle ${k.name}, ${k.phone}`}
+          onPress={() => void Linking.openURL(`tel:${numeroAppel(k.phone)}`).catch(() => undefined)}
+        />
+      ))}
+      {contacts.length > 3 && !tous ? <Bouton titre={`Autres numéros (${contacts.length - 3})`} variante="discret" onPress={() => setTous(true)} /> : null}
+    </View>
   );
 }
 
