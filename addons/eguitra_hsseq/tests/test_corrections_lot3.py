@@ -271,3 +271,26 @@ class TestCorrectionsLot3(HsseqCase):
         self.assertEqual(status, 200, report)
         self.assertEqual((report["template"]["site_ids"], report["template"]["vehicle_kind"],
                           report["template"]["start_month"]), ([self.site.id], "tanker", f"{start:%Y-%m}"))
+
+    def test_plan_a_arrets_sans_lieu_et_mois_de_depart_invalide(self):
+        """Deux arrêts de même nature, l'un avec lieu et l'autre sans : le PUT d'un plan existant se compare
+        sans erreur (500 auparavant). Un mois de départ invalide est signalé sur start_month, pas sur month."""
+        rot = self._rotation(driver_id=self.driver.id)
+        start = datetime.combine(rot.date_loading, time(6, 0))
+        plan = {"itinerary": "RN1", "planned_departure": start.isoformat() + "Z",
+                "planned_arrival": start.replace(hour=16).isoformat() + "Z",
+                "stops": [{"kind": "break", "place": "Kindia", "planned_at": start.replace(hour=9).isoformat() + "Z",
+                           "duration_minutes": 30},
+                          {"kind": "break", "planned_at": start.replace(hour=12).isoformat() + "Z",
+                           "duration_minutes": 45}]}
+        path = f"/hsseq/rotations/{rot.id}/journey"
+        status, body = self.api("ibrahima", "PUT", path, plan)
+        self.assertEqual(status, 200, body)
+        status, validated = self.api("ibrahima", "POST", f"{path}/validate")
+        self.assertEqual((status, validated["journey"]["status"]), (200, "validated"), validated)
+        status, same = self.api("ibrahima", "PUT", path, plan)
+        self.assertEqual((status, same["journey"]["status"]), (200, "validated"), same)
+        status, body = self.api("kadi.hsseq", "POST", "/hsseq/reports/templates", {
+            "name": "Rapport à mois invalide (fictif)", "start_month": "2026-13", "indicators": [
+                {"code": "C-1", "label": "Départs", "nature": "reactive", "mode": "computed", "key": "departures"}]})
+        self.assertEqual((status, body["error"], body["fields"]), (400, "invalid_parameter", ["start_month"]), body)

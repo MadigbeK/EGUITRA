@@ -42,12 +42,12 @@ def today():
     return fields.Date.context_today(request.env.user)
 
 
-def parse_month(value):
+def parse_month(value, field="month"):
     try:
         year, month = (int(x) for x in str(value).split("-")[:2])
         return date(year, month, 1)
     except (TypeError, ValueError) as e:
-        raise ApiError(400, "invalid_parameter", "Mois attendu au format AAAA-MM.", fields=["month"]) from e
+        raise ApiError(400, "invalid_parameter", "Mois attendu au format AAAA-MM.", fields=[field]) from e
 
 
 # ─── Modèles ──────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ def template_values(data):
             raise ApiError(400, "invalid_parameter", "Profil de véhicule : tanker ou tipper.", fields=["vehicle_kind"])
         values["vehicle_kind"] = data["vehicle_kind"] or False
     if "start_month" in data:
-        values["start_month"] = parse_month(data["start_month"]) if data["start_month"] else month_start(today())
+        values["start_month"] = parse_month(data["start_month"], "start_month") if data["start_month"] else month_start(today())
     return values
 
 

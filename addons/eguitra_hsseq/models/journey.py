@@ -70,10 +70,11 @@ class EguitraHsseqJourney(models.Model):
         plan = tuple(v or False for v in plan)
         if "stop_ids" in values:
             stops = [c[2] for c in values["stop_ids"] if c[0] == 0]
-            stops = sorted((s.get("kind") or "break", s.get("place") or False, s["planned_at"], s["duration_minutes"])
+            # Lieu absent noté "" (et non False) : le tri compare des textes, jamais False à un texte.
+            stops = sorted((s.get("kind") or "break", s.get("place") or "", s["planned_at"], s["duration_minutes"])
                            for s in stops)
         else:
-            stops = sorted((s.kind, s.place or False, s.planned_at, s.duration_minutes) for s in self.stop_ids)
+            stops = sorted((s.kind, s.place or "", s.planned_at, s.duration_minutes) for s in self.stop_ids)
         return plan, stops
 
     def _same_plan(self, values):
