@@ -5,16 +5,18 @@ from . import controllers
 # valeurs avant et après), en plus du journal HSSEQ (eguitra.hsseq.journal) que lisent les écrans ; le
 # garde-fou d'eguitra_base (test_audit_coverage) signale tout modèle oublié.
 AUDITED_MODELS = [
+    # Lot 1.
     "eguitra.hsseq.settings", "eguitra.hsseq.site", "eguitra.hsseq.journal", "eguitra.hsseq.notification",
     "eguitra.hsseq.attachment", "eguitra.hsseq.event", "eguitra.hsseq.event.person", "eguitra.hsseq.event.cost",
     "eguitra.hsseq.action", "eguitra.hsseq.action.reminder", "eguitra.hsseq.check.template",
     "eguitra.hsseq.check.template.version", "eguitra.hsseq.check.item", "eguitra.hsseq.check",
-    "eguitra.hsseq.check.answer", "eguitra.hsseq.nonconformity", "eguitra.hsseq.breath.test", "eguitra.hsseq.waiver", "eguitra.hsseq.lock.reason", "eguitra.hsseq.lock.log",
-    "eguitra.hsseq.indicator.snapshot", "eguitra.hsseq.risk", "eguitra.hsseq.risk.measure",
-    "eguitra.hsseq.expiry.alert", "eguitra.hsseq.journey", "eguitra.hsseq.journey.stop",
-    "eguitra.hsseq.immobilization", "eguitra.hsseq.audit", "eguitra.hsseq.finding", "eguitra.hsseq.requirement",
-    "eguitra.hsseq.report.template", "eguitra.hsseq.report.indicator", "eguitra.hsseq.report.month",
-    "eguitra.hsseq.report.value",
+    "eguitra.hsseq.check.answer", "eguitra.hsseq.nonconformity", "eguitra.hsseq.breath.test", "eguitra.hsseq.waiver",
+    "eguitra.hsseq.lock.reason", "eguitra.hsseq.lock.log", "eguitra.hsseq.indicator.snapshot",
+    # Lot 2.
+    "eguitra.hsseq.risk", "eguitra.hsseq.risk.measure", "eguitra.hsseq.expiry.alert", "eguitra.hsseq.journey",
+    "eguitra.hsseq.journey.stop", "eguitra.hsseq.immobilization", "eguitra.hsseq.audit", "eguitra.hsseq.finding",
+    "eguitra.hsseq.requirement", "eguitra.hsseq.report.template", "eguitra.hsseq.report.indicator",
+    "eguitra.hsseq.report.month", "eguitra.hsseq.report.value",
 ]
 
 
