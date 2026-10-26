@@ -128,6 +128,21 @@
         <field name="model_id" ref="model_eguitra_hsseq_requirement"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_report_template_company" model="ir.rule">
+        <field name="name">Modèles de rapport : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_report_template"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_report_month_company" model="ir.rule">
+        <field name="name">Mois des rapports : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_report_month"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_report_value_company" model="ir.rule">
+        <field name="name">Valeurs des rapports : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_report_value"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_indicator_snapshot_company" model="ir.rule">
         <field name="name">Indicateurs figés : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_indicator_snapshot"/>

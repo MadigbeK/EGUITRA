@@ -13,6 +13,8 @@ AUDITED_MODELS = [
     "eguitra.hsseq.indicator.snapshot", "eguitra.hsseq.risk", "eguitra.hsseq.risk.measure",
     "eguitra.hsseq.expiry.alert", "eguitra.hsseq.journey", "eguitra.hsseq.journey.stop",
     "eguitra.hsseq.immobilization", "eguitra.hsseq.audit", "eguitra.hsseq.finding", "eguitra.hsseq.requirement",
+    "eguitra.hsseq.report.template", "eguitra.hsseq.report.indicator", "eguitra.hsseq.report.month",
+    "eguitra.hsseq.report.value",
 ]
 
 
@@ -35,3 +37,4 @@ def post_init_hook(env):
     protect_breath_test_audit(env)
     for company in env["res.company"].sudo().search([]):
         env["eguitra.hsseq.settings"]._get(company)
+    env["eguitra.hsseq.report.template"]._ensure_nimova()

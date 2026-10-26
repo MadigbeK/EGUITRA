@@ -48,6 +48,16 @@
         <!-- Chaque matin à 06 h 45 (heure de Conakry, UTC). -->
         <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 06:45:00')"/>
     </record>
+    <record id="cron_freeze_reports" model="ir.cron">
+        <field name="name">HSSEQ : valeurs calculées des rapports mensuels figées le 5 du mois</field>
+        <field name="model_id" ref="model_eguitra_hsseq_report_month"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_freeze()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 03 h 00 (heure de Conakry, UTC), après les indicateurs du cockpit (02 h 40). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:00:00')"/>
+    </record>
     <record id="cron_purge_orphan_attachments" model="ir.cron">
         <field name="name">HSSEQ : purge des pièces déposées et jamais rattachées à une fiche (7 jours)</field>
         <field name="model_id" ref="model_eguitra_hsseq_attachment"/>

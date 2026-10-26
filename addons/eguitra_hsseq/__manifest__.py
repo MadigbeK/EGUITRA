@@ -17,6 +17,7 @@
         "data/lock_reasons.xml",
         "data/cron.xml",
         "report/investigation_report.xml",
+        "report/monthly_report.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,

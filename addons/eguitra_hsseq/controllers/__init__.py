@@ -10,5 +10,6 @@ from . import risks
 from . import qualifications
 from . import journeys
 from . import audits
+from . import reports
 from . import attachments
 from . import cockpit

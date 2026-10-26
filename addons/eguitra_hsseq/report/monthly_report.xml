@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Rapport mensuel HSSE au format d'un donneur d'ordre (et rapport mensuel HSSEQ NIMOVA). Les valeurs
+         sont calculées et mises en forme par controllers/reports.py (pdf_context) ; le gabarit ne fait que
+         les disposer, en A4 paysage. -->
+
+    <record id="paperformat_hsseq_landscape" model="report.paperformat">
+        <field name="name">HSSEQ, A4 paysage</field>
+        <field name="format">A4</field>
+        <field name="orientation">Landscape</field>
+        <field name="margin_top">28</field>
+        <field name="margin_bottom">16</field>
+        <field name="margin_left">8</field>
+        <field name="margin_right">8</field>
+        <field name="header_spacing">22</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <template id="report_monthly_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="report"/>
+            <div class="page hs">
+                <style>
+                    .hs { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 8.5pt; color: #1d2320; }
+                    .hs h1 { font-size: 15pt; margin: 0 0 1mm 0; }
+                    .hs h2 { font-size: 10.5pt; margin: 5mm 0 2mm 0; border-bottom: 1px solid #c9d3cf; padding-bottom: 1mm; }
+                    .hs .muted { color: #5b6662; }
+                    .hs table { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
+                    .hs th { background: #11221d; color: #fff; text-align: left; padding: 1mm 1.2mm; font-weight: 600; font-size: 7.5pt; }
+                    .hs td { border-bottom: 1px solid #e3e8e6; padding: 0.8mm 1.2mm; vertical-align: top; }
+                    .hs .num { text-align: right; white-space: nowrap; }
+                    .hs .plan { color: #5b6662; }
+                    .hs .met { background: #d7f0dc; }
+                    .hs .watch { background: #fff1c7; }
+                    .hs .missed { background: #f8d3d0; }
+                    .hs .no_data { background: #eeeeee; }
+                    .hs .section td { background: #e3e8e6; font-weight: 600; }
+                    .hs .block { white-space: pre-wrap; }
+                </style>
+                <h1 t-esc="r['title']"/>
+                <p class="muted">
+                    <t t-esc="r['company']"/>, rapport pour <t t-esc="r['client']"/>. Période analysée :
+                    <t t-esc="r['period']"/>. <t t-esc="r['state']"/>, établi le <t t-esc="r['printed_at']"/>.
+                </p>
+
+                <h2>1. Santé globale des indicateurs</h2>
+                <table style="width: 60%;">
+                    <tr t-foreach="r['health']" t-as="row">
+                        <td t-att-class="row[2]" t-esc="row[0]"/><td class="num" t-esc="row[1]"/>
+                    </tr>
+                    <tr><td>Part conforme (indicateurs renseignés)</td><td class="num" t-esc="r['health_rate']"/></tr>
+                </table>
+
+                <h2>2. Points d'attention prioritaires</h2>
+                <t t-if="r['attention']">
+                    <table>
+                        <tr><th>N°</th><th>Indicateur</th><th class="num">Cumul</th><th class="num">Cible cumulée</th>
+                            <th>État</th><th>Commentaire</th></tr>
+                        <tr t-foreach="r['attention']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td class="num" t-esc="row[2]"/>
+                            <td class="num" t-esc="row[3]"/><td t-att-class="row[5]" t-esc="row[4]"/>
+                            <td class="block" t-esc="row[6]"/>
+                        </tr>
+                    </table>
+                </t>
+                <p t-else="" class="muted">Aucun indicateur non conforme ni sous surveillance.</p>
+
+                <h2>3. Plan contre réalisé depuis janvier</h2>
+                <table>
+                    <tr>
+                        <th>N°</th><th>Indicateur</th><th>Unité</th>
+                        <th t-foreach="r['months']" t-as="m" class="num" t-esc="m"/>
+                        <th class="num">Cumul</th><th class="num">Cible</th><th>État</th>
+                    </tr>
+                    <t t-foreach="r['sections']" t-as="section">
+                        <t t-if="section[1]">
+                            <tr class="section"><td t-att-colspan="r['colspan']" t-esc="section[0]"/></tr>
+                            <tr t-foreach="section[1]" t-as="row">
+                                <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/>
+                                <td t-foreach="row[3]" t-as="point" class="num">
+                                    <span t-esc="point[1] or '-'"/><br/><span class="plan" t-esc="point[0]"/>
+                                </td>
+                                <td class="num" t-esc="row[4]"/><td class="num" t-esc="row[5]"/>
+                                <td t-att-class="row[7]" t-esc="row[6]"/>
+                            </tr>
+                        </t>
+                    </t>
+                </table>
+                <p class="muted">Chaque case : réalisé, puis le plan du mois en gris.</p>
+
+                <t t-if="r['comment']">
+                    <h2>4. Commentaire du mois</h2>
+                    <p class="block" t-esc="r['comment']"/>
+                </t>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_monthly">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_hsseq.report_monthly_document"/>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_monthly" model="ir.actions.report">
+        <field name="name">Rapport mensuel HSSE</field>
+        <field name="model">eguitra.hsseq.report.month</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_hsseq.report_monthly</field>
+        <field name="report_file">eguitra_hsseq.report_monthly</field>
+        <field name="paperformat_id" ref="paperformat_hsseq_landscape"/>
+    </record>
+</odoo>
