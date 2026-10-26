@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Building2, KeyRound, Lock, Mail, Send, Smartphone, UserCog } from "@/components/icons";
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Notice, cx, type Tone } from "@/components/ui";
 import { EnTete } from "@/components/portail/commun";
@@ -45,8 +45,12 @@ export default function MonProfil() {
   const [retourContact, setRetourContact] = useState<"enregistre" | "transmis" | null>(null);
   const [demande, setDemande] = useState<{ envoyee: boolean; changements: string[] } | null>(null);
 
+  // Formulaires remplis une seule fois, à la première lecture : un rechargement du profil, ou
+  // l'enregistrement de l'autre formulaire, n'efface plus une saisie en cours.
+  const rempli = useRef(false);
   useEffect(() => {
-    if (!data) return;
+    if (!data || rempli.current) return;
+    rempli.current = true;
     setContact(contactDe(data));
     setFiche(ficheDe(data));
   }, [data]);
@@ -60,6 +64,7 @@ export default function MonProfil() {
     try {
       const p = await apiSend<Profil>("PATCH", "/portail/profil", { user: { phone: nettoie(contact.phone), email: nettoie(contact.email) } });
       await mutate(p, false);
+      setContact(contactDe(p));
       setRetourContact(p.request_sent ? "transmis" : "enregistre");
     } catch (err) {
       setErreur({ ou: "contact", e: err });
@@ -83,6 +88,9 @@ export default function MonProfil() {
         entreprise: { phone: nettoie(fiche.phone), email: nettoie(fiche.email), street: nettoie(fiche.street), city: nettoie(fiche.city), website: nettoie(fiche.website) },
       });
       await mutate(p, false);
+      // La fiche ne change qu'après le contrôle du consultant : le formulaire reprend la fiche en vigueur,
+      // les changements demandés restent listés ci-dessous.
+      setFiche(ficheDe(p));
       setDemande({ envoyee: Boolean(p.request_sent), changements });
     } catch (err) {
       setErreur({ ou: "fiche", e: err });
