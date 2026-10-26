@@ -371,6 +371,14 @@ class TestAxispro(ApiCase):
         self.assertGreaterEqual(summary["hours"], 11.0)
         self.assertEqual({dossier.id, autre.id} - {r["id"] for r in summary["dossiers"]}, set())
 
+    def test_statut_zero_lu_dans_un_classeur(self):
+        """Audit du noyau (M8) : un statut 0 (nombre lu dans un classeur) vaut « non disponible »."""
+        from odoo.addons.eguitra_axispro.controllers.rapports import _status_of
+
+        self.assertEqual((_status_of(0), _status_of(0.0), _status_of(1), _status_of(0.5)),
+                         ("not_met", "not_met", "met", "partial"))
+        self.assertIsNone(_status_of(None))
+
     def test_facture_d_honoraires_refusee_a_l_admin(self):
         """Audit des rôles I6 : seul le cabinet facture les honoraires ; l'admin ne fait que consulter."""
         dossier = self._dossier()

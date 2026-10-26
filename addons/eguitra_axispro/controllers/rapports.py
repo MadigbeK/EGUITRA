@@ -42,7 +42,9 @@ EVALUATION_COLUMNS = ("code", "critere", "domaine", "gate", "statut", "observati
 
 
 def _plain(value):
-    text = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode().lower().strip()
+    # Un nombre 0 lu dans un classeur (statut « non disponible ») n'est pas une cellule vide.
+    text = unicodedata.normalize("NFKD", str("" if value is None else value)).encode("ascii", "ignore").decode()
+    text = text.lower().strip()
     return " ".join(text.replace("_", " ").replace("/", " ").split())
 
 
