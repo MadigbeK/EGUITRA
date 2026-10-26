@@ -2,23 +2,25 @@
 
 /**
  * Briques communes des écrans du cabinet pour le portail des porteurs : droit d'écriture, retour des
- * actions, éditeur de texte mis en forme avec aperçu, choix du public d'une publication, cases à
- * cocher, recherche et export CSV.
+ * actions, envoi unique d'un bouton, fenêtre de saisie protégée, éditeur de texte mis en forme avec
+ * aperçu, choix du public d'une publication, cases à cocher, recherche et export CSV.
  */
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMoi } from "@/components/axispro/moi";
 import { Search, X } from "@/components/icons";
 import { TexteRiche } from "@/components/portail/commun";
-import { Input, Notice, Segmented, Textarea, cx, type Tone } from "@/components/ui";
-import { ApiError } from "@/lib/api-client";
+import { Input, Notice, Segmented, Textarea, cx, demanderConfirmation, type Tone } from "@/components/ui";
+import { ApiError, DelaiDepasse } from "@/lib/api-client";
+import { fmtInt, pluriel as plurielFormat } from "@/lib/format";
 import type { Audience, Cibles, PublicationState } from "@/lib/portail-types";
 
 /* ─── Droits et retours ────────────────────────────────────────────────── */
 
 /**
  * Droit d'écriture sur le portail : profil cabinet. La direction et l'administration lisent ; le
- * noyau refuse leurs écritures (403). Utilisateur inconnu : le noyau tranche.
+ * noyau refuse leurs écritures (403) : leurs écrans ne montrent ni bouton ni formulaire qui écrit.
+ * Utilisateur inconnu : le noyau tranche.
  */
 export function useEcriture(): boolean {
   const moi = useMoi();
@@ -41,9 +43,11 @@ export function LectureSeule({ ecriture, children }: { ecriture: boolean; childr
   );
 }
 
-/** Message d'une erreur à montrer à l'utilisateur : celui de l'API, sinon une phrase générale. */
+/** Message d'une erreur à montrer à l'utilisateur : celui de l'API, sinon une phrase en français (jamais « Failed to fetch »). */
 export function messageErreur(e: unknown): string {
   if (e instanceof ApiError) return e.message;
+  if (e instanceof DelaiDepasse) return e.message;
+  if (e instanceof TypeError) return "Réseau indisponible : vérifiez la connexion, puis réessayez.";
   return "Action impossible. Vérifiez la connexion, puis réessayez.";
 }
 
@@ -52,9 +56,16 @@ type Retour = { tone: Extract<Tone, "ok" | "danger" | "warn">; text: string } | 
 /**
  * Exécute une action de l'API et garde son retour : l'erreur reste affichée, la confirmation
  * s'efface d'elle-même après quelques secondes. Renvoie undefined en cas d'échec.
+ * - `agir` : appel quelconque (rechargement après une action) ;
+ * - `envoyer` : commande d'un bouton qui écrit. Un second clic pendant l'envoi est ignoré (garde
+ *   useRef : jamais deux publications ni deux annulations) ; `enCours` nomme la commande en cours
+ *   (son bouton en chargement), `occupe` dit qu'un envoi est en cours (les autres boutons attendent).
+ *   L'état revient toujours à faux, même en cas d'échec.
  */
 export function useRetour() {
   const [retour, setRetour] = useState<Retour>(null);
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const verrou = useRef(false);
   useEffect(() => {
     if (retour?.tone !== "ok") return;
     const t = window.setTimeout(() => setRetour(null), 6000);
@@ -71,6 +82,17 @@ export function useRetour() {
       return undefined;
     }
   }
+  async function envoyer<T>(fn: () => Promise<T>, ok?: string, cle = "envoi"): Promise<T | undefined> {
+    if (verrou.current) return undefined;
+    verrou.current = true;
+    setEnCours(cle);
+    try {
+      return await agir(fn, ok);
+    } finally {
+      verrou.current = false;
+      setEnCours(null);
+    }
+  }
   const bandeau = retour ? (
     <div className="relative">
       <Notice tone={retour.tone}>
@@ -81,7 +103,69 @@ export function useRetour() {
       </button>
     </div>
   ) : null;
-  return { agir, bandeau, setRetour };
+  return { agir, envoyer, enCours, occupe: enCours !== null, bandeau, setRetour };
+}
+
+/**
+ * Confirmation avant de quitter une saisie modifiée (fenêtre fermée par Échap, la croix ou
+ * « Annuler ») : rend vrai si l'on peut fermer.
+ */
+export async function fermerSiConfirme(modifie: boolean): Promise<boolean> {
+  if (!modifie) return true;
+  return demanderConfirmation("Abandonner la saisie ? Les modifications non enregistrées seront perdues.", { action: "Abandonner", danger: true });
+}
+
+/** La saisie diffère-t-elle de son état d'origine ? */
+export function saisieModifiee(saisie: unknown, origine: unknown): boolean {
+  return JSON.stringify(saisie) !== JSON.stringify(origine);
+}
+
+/**
+ * Envoi d'une fenêtre de saisie :
+ * - un seul envoi à la fois (second clic ignoré, garde useRef), `envoi` nomme la commande en cours ;
+ * - l'erreur reste dans la fenêtre (`erreur`), qui ne se ferme pas pendant l'envoi ;
+ * - `fermer` (Échap, la croix, « Annuler ») demande confirmation si la saisie a changé.
+ * `envoyer` rend undefined en cas d'échec.
+ */
+export function useEnvoiFenetre(modifie: boolean, onClose: () => void) {
+  const [envoi, setEnvoi] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const verrou = useRef(false);
+  async function envoyer<T>(cle: string, fn: () => Promise<T>): Promise<T | undefined> {
+    if (verrou.current) return undefined;
+    verrou.current = true;
+    setEnvoi(cle);
+    setErreur(null);
+    try {
+      return await fn();
+    } catch (e) {
+      setErreur(messageErreur(e));
+      return undefined;
+    } finally {
+      verrou.current = false;
+      setEnvoi(null);
+    }
+  }
+  async function fermer() {
+    if (verrou.current) return;
+    if (await fermerSiConfirme(modifie)) onClose();
+  }
+  return { envoi, occupe: envoi !== null, erreur, setErreur, envoyer, fermer };
+}
+
+/** Heure courante, relue chaque minute : « à venir », « passé » et « en retard » suivent l'horloge. */
+export function useMaintenant(pas = 60_000): number {
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setMaintenant(Date.now()), pas);
+    return () => window.clearInterval(t);
+  }, [pas]);
+  return maintenant;
+}
+
+/** Liste bornée par le noyau : la phrase qui le dit quand elle atteint sa limite, sinon null. */
+export function listeBornee(n: number, limite: number, quoi: string): string | null {
+  return n >= limite ? `Seuls les ${fmtInt(limite)} ${quoi} les plus récents sont affichés.` : null;
 }
 
 /* ─── Libellés ─────────────────────────────────────────────────────────── */
@@ -94,9 +178,9 @@ export function etatPublication(state: PublicationState, feminin = false): { lab
   return { label: "Brouillon", tone: "warn" };
 }
 
-/** « 1 lecture », « 3 lectures ». */
+/** « 1 lecture », « 3 lectures », « 1 250 lectures » : l'écriture des nombres de lib/format.ts. */
 export function pluriel(n: number, singulier: string, plurielForme?: string): string {
-  return `${new Intl.NumberFormat("fr-FR").format(n)} ${n > 1 ? (plurielForme ?? `${singulier}s`) : singulier}`;
+  return plurielFormat(n, singulier, plurielForme ?? `${singulier}s`);
 }
 
 /** Première lettre en capitale (« mardi 4 novembre » -> « Mardi 4 novembre »). */
@@ -192,7 +276,7 @@ export function EditeurTexte({ label, value, onChange, placeholder, disabled, ma
           {label}
         </label>
         <span className={cx("text-[11.5px] tabular", value.length > max ? "font-semibold text-danger" : "text-muted")}>
-          {new Intl.NumberFormat("fr-FR").format(value.length)} / {new Intl.NumberFormat("fr-FR").format(max)} caractères
+          {fmtInt(value.length)} / {fmtInt(max)} caractères
         </span>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
