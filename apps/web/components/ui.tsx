@@ -24,6 +24,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, Eye, Ey
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
 import { tamponPlein, type TonEtat } from "@/lib/couleurs";
+import { ApiError, messageErreur } from "@/lib/erreurs";
 import { fmtAxe, fmtPct, fmtShort } from "@/lib/format";
 
 export { cx };
@@ -694,11 +695,16 @@ export function Squelette({ className }: { className?: string }) {
   return <div aria-hidden className={cx("n-squelette rounded-2xl", className)} />;
 }
 
-/** Erreur d'un appel, avec « Réessayer ». `titre` dit d'abord ce que l'échec laisse à l'écran. */
+/**
+ * Erreur d'un appel, avec « Réessayer ». `titre` dit d'abord ce que l'échec laisse à l'écran. Seul
+ * le message d'une réponse du service (ApiError), du délai dépassé ou de la coupure du réseau est
+ * montré : jamais celui du navigateur (« Failed to fetch », « Unexpected token… »), en anglais.
+ */
 export function ErrorBox({ error, onRetry, titre }: { error: unknown; onRetry?: () => void; titre?: ReactNode }) {
-  const message = error instanceof Error ? error.message : "Une erreur est survenue.";
+  // Une phrase déjà rédigée par l'écran passe telle quelle.
+  const message = typeof error === "string" && error.trim() ? error : messageErreur(error);
   // Refus de droits (403) : le motif du serveur, sous un titre qui le dit ; réessayer n'y changerait rien.
-  const refus = typeof error === "object" && error !== null && (error as { status?: unknown }).status === 403;
+  const refus = error instanceof ApiError && error.status === 403;
   const entete = titre ?? (refus ? "Non ouvert à votre profil" : null);
   return (
     <div role="alert" className="n-surgir flex items-start gap-3 rounded-xl border border-danger/15 bg-danger-doux px-4 py-3 text-sm text-danger">
