@@ -2,7 +2,7 @@
 secteur, liste d'attente, événement modifié, rendez-vous, compteurs de la synthèse, saisies mal
 formées et écritures réservées au profil cabinet."""
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from unittest.mock import patch
 
 from odoo import fields
@@ -62,6 +62,51 @@ class TestOutilsCabinet(ApiCase):
         self.env.invalidate_all()
         return self.env["portail.notification"].search(
             [("user_id", "=", user.id), ("title", "=like", f"{prefix}%")])
+
+    # ─── I-P2 : rappels du matin ─────────────────────────────────────────
+
+    def test_rappels_du_matin_au_calendrier_de_conakry_et_memorises(self):
+        """Le lendemain civil à Conakry, pas la fenêtre de 12 à 36 heures : un webinaire du soir est
+        annoncé la veille (« demain »), jamais le matin même. Chaque rappel est mémorisé : la tâche
+        relancée n'envoie rien deux fois ; en retard, elle rattrape ce qui n'a pas été annoncé, en
+        disant « aujourd'hui »."""
+        day = (fields.Datetime.now() + timedelta(days=10)).date()
+
+        def moment(offset, hour, minute=0):
+            return datetime.combine(day + timedelta(days=offset), time(hour, minute))
+
+        Notification = self.env["portail.notification"]
+        Meeting = self.env["portail.meeting"]
+        rdv = Meeting.create({"dossier_id": self.dossier_a.id, "subject": "Revue du plan", "state": "confirmed",
+                              "start": moment(1, 9)})
+        soir = self.event(name="Webinaire du soir", start=moment(0, 19, 30), end=moment(0, 21))
+        tardif = self.event(name="Atelier tardif", start=moment(1, 20), end=moment(1, 22))
+        soir.register(self.pa)
+        tardif.register(self.pa)
+        self.env["axispro.action"].create({"dossier_id": self.dossier_a.id, "name": "Fournir les statuts",
+                                           "assignee": "porteur", "due_date": day + timedelta(days=2)})
+
+        def rappels():
+            self.env.invalidate_all()
+            return Notification.search([("user_id", "=", self.pa.id), ("reminder_key", "!=", False)]).mapped("title")
+
+        Notification._cron_reminders(now=moment(-1, 7))
+        self.assertCountEqual(rappels(), ["Rappel : Webinaire du soir demain à 19 h 30"])
+
+        Notification._cron_reminders(now=moment(0, 7))
+        attendus = ["Rappel : Webinaire du soir demain à 19 h 30", "Rappel : rendez-vous demain à 09 h 00",
+                    "Rappel : Atelier tardif demain à 20 h 00", "Échéance dans deux jours : Fournir les statuts"]
+        self.assertCountEqual(rappels(), attendus, "Le webinaire de ce soir n'est pas rappelé une seconde fois")
+        Notification._cron_reminders(now=moment(0, 7))
+        self.assertCountEqual(rappels(), attendus, "Tâche relancée le même jour : aucun doublon")
+
+        rdv.start = moment(1, 11)
+        Meeting.create({"dossier_id": self.dossier_a.id, "subject": "Point banque", "state": "confirmed",
+                        "start": moment(1, 15)})
+        Notification._cron_reminders(now=moment(1, 7))
+        self.assertCountEqual(rappels(), attendus + ["Rappel : rendez-vous aujourd'hui à 11 h 00",
+                                                     "Rappel : rendez-vous aujourd'hui à 15 h 00"],
+                              "Nouvelle date rappelée, rendez-vous non annoncé rattrapé ; l'action déjà rappelée ne l'est plus")
 
     # ─── I-P4 : liste d'attente ──────────────────────────────────────────
 
