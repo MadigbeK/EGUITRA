@@ -54,8 +54,9 @@ COMPTES = [
     ("test.chantiers", "Test - Conducteur de travaux", ["chantiers"], ["groupe"]),
     ("test.immobilier", "Test - Gestionnaire immobilier", ["immobilier"], ["groupe"]),
     ("test.consultant", "Test - Consultant du cabinet", ["cabinet"], ["cabinet"]),
-    # Second compte du cabinet : comités, passages forcés et réouvertures exigent deux personnes.
-    ("test.associe", "Test - Associé du cabinet", ["cabinet"], ["cabinet"]),
+    # Associé du cabinet : scelle les décisions du comité, force un gate, rouvre une révision (avec la
+    # direction), toujours à deux personnes au moins ; le consultant garde le reste.
+    ("test.associe", "Test - Associé du cabinet", ["cabinet", "associe"], ["cabinet"]),
     ("test.rh", "Test - Gestionnaire RH", ["rh"], ["groupe", "cabinet"]),
     # Sans profil : le salarié qui n'a que « Mon espace » (lié à un dossier par donnees_demo_rh.py).
     ("test.salarie", "Test - Salarié", [], ["groupe"]),

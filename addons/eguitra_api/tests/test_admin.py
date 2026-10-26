@@ -32,7 +32,10 @@ class TestAdmin(RefusParProfil, ApiCase):
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual(status, 200)
         self.assertEqual([p["code"] for p in profils], ["admin", "direction", "finance", "achats", "exploitation",
-                                                        "chantiers", "immobilier", "cabinet", "rh", "porteur"])
+                                                        "chantiers", "immobilier", "cabinet", "associe", "rh", "porteur"])
+        associe = next(p for p in profils if p["code"] == "associe")
+        self.assertEqual((associe["name"], associe["entity"]), ("Associé du cabinet", "cabinet"),
+                         "Profil propre à MB AxisPro Consulting")
         rh = next(p for p in profils if p["code"] == "rh")
         self.assertEqual((rh["name"], rh["entity"]), ("Ressources humaines", None), "Profil commun aux deux sociétés")
         achats = next(p for p in profils if p["code"] == "achats")

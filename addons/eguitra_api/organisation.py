@@ -30,11 +30,11 @@ APPS = {
     # Achats : pièces d'achat, engagements de dépense et fournisseurs, dans l'une ou l'autre société.
     "finance": {"profiles": {"admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"},
                 "entity": None},
-    "axispro": {"profiles": {"admin", "direction", "cabinet"}, "entity": "cabinet"},
+    "axispro": {"profiles": {"admin", "direction", "cabinet", "associe"}, "entity": "cabinet"},
     "portail": {"profiles": {"porteur"}, "entity": "cabinet"},
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
     "transport": {"profiles": {"admin", "direction", "finance", "exploitation"}, "entity": "groupe"},
-    "analyse": {"profiles": {"admin", "direction", "finance", "cabinet"}, "entity": None},
+    "analyse": {"profiles": {"admin", "direction", "finance", "cabinet", "associe"}, "entity": None},
     # RH (NIMOVA · RH) : personnel, absences et paie, gestion commune aux deux sociétés. Un compte lié
     # à un dossier salarié l'ouvre aussi, réduite à « Mon espace » (eguitra_rh, res.users._eguitra_apps).
     # model : l'application n'existe que là où son module est installé (la production peut recevoir le
@@ -60,6 +60,7 @@ PROFILE_ENTITY = {
     "chantiers": "groupe",
     "immobilier": "groupe",
     "cabinet": "cabinet",
+    "associe": "cabinet",
     "porteur": "cabinet",
 }
 
