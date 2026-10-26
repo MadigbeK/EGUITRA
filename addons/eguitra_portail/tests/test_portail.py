@@ -217,9 +217,24 @@ class TestPortail(ApiCase):
         self.assertTrue(self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rendez-vous confirmé")))
         _s, agenda = self.call("GET", "/portail/agenda", token=self.porteur)
         self.assertIn(f"meeting-{demande['id']}", [i["key"] for i in agenda])
+        porteur_b = self.open_session("porteur.b", app="portail")["access_token"]
+        status, _b = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {"reason": "Essai"}, token=porteur_b)
+        self.assertEqual(status, 404, "Rendez-vous du dossier d'un autre porteur")
+        status, _b = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {}, token=self.cabinet_token)
+        self.assertEqual(status, 403, "Route du seul porteur")
         _s, annule = self.call("POST", f"/portail/rendez-vous/{demande['id']}/annuler", {"reason": "Empêchement"},
                                token=self.porteur)
         self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "porteur", "Empêchement"))
+
+    def test_annulation_sans_motif(self):
+        meeting = self.env["portail.meeting"].sudo().create({
+            "dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": "Visite du site",
+            "slot_1": FUTURE})
+        meeting.confirm(FUTURE, cabinet_note="Apportez les relevés bancaires.")
+        status, annule = self.call("POST", f"/portail/rendez-vous/{meeting.id}/annuler", {}, token=self.porteur)
+        self.assertEqual(status, 200, annule)
+        self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "porteur", None),
+                         "Le message de la confirmation ne passe pas pour le motif de l'annulation")
 
     def test_notifications_du_dossier(self):
         self.env["axispro.action"].create({"dossier_id": self.dossier_a.id, "name": "Fournir le bilan d'ouverture",

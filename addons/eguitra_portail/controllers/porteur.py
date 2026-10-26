@@ -424,7 +424,11 @@ class EguitraPortailPorteur(http.Controller):
         if not meeting:
             raise ApiError(404, "not_found", "Rendez-vous introuvable.")
         _own(meeting.dossier_id.id)
-        meeting.cancel(str(read_json().get("reason") or "")[:1000] or None, by_porteur=True)
+        reason = str(read_json().get("reason") or "").strip()[:1000] or None
+        meeting.cancel(reason, by_porteur=True)
+        if not reason and meeting.cabinet_note:
+            # Sans motif, le message qui accompagnait la confirmation passerait pour celui du porteur.
+            meeting.cabinet_note = False
         return vues.meeting_row(meeting, _me())
 
     # ─── Communications du cabinet ───────────────────────────────────────

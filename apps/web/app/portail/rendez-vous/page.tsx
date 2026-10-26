@@ -218,11 +218,13 @@ function LigneHistorique({ m, ouvertParDefaut }: { m: MeetingRow; ouvertParDefau
           </Button>
         )}
       </div>
+      {m.state === "cancelled" && (
+        <p className="mt-2 text-[12.5px] text-muted">{m.cancelled_by === "porteur" ? "Annulé à votre demande." : m.cancelled_by === "cabinet" ? "Annulé par le cabinet." : "Rendez-vous annulé."}</p>
+      )}
       {m.cabinet_note && (m.state === "declined" || m.state === "cancelled") && (
         <p className="mt-2.5 rounded-lg bg-panel-2 px-3 py-2 text-[13px] leading-relaxed text-ink-2">
-          <span className="font-semibold text-ink">
-            {m.state === "declined" ? "Message du cabinet" : m.cancelled_by === "porteur" ? "Votre motif d'annulation" : "Annulé par le cabinet"} :{" "}
-          </span>
+          {/* Le motif d'une annulation par le porteur est le sien ; dans les autres cas, le texte vient du cabinet. */}
+          <span className="font-semibold text-ink">{m.state === "cancelled" && m.cancelled_by === "porteur" ? "Votre motif" : "Message du cabinet"} : </span>
           {m.cabinet_note}
         </p>
       )}
