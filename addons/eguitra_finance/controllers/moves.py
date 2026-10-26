@@ -25,6 +25,7 @@ from .common import (
     as_float,
     check_mandatory_analytic,
     distribution,
+    editable,
     free_accounts,
     move_detail,
     move_summary,
@@ -303,6 +304,10 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
     return request.env["account.move"].create(values)
 
 
+# Refus de modifier ou de supprimer une écriture produite par le noyau (common.editable).
+PRODUCED_BY_CORE = ("Cette écriture est produite par le noyau (opération de banque ou de caisse, règlement, virement, "
+                    "paie ou dotation) : elle se corrige depuis son propre écran.")
+
 # Refus d'une opération diverse sans le droit de saisie libre : où saisir à la place.
 ENTRY_DETAIL = ("Saisissez une dépense par sa catégorie (Achats et dépenses) et une opération de banque ou de "
                 "caisse par son type (Trésorerie)")
@@ -464,6 +469,8 @@ class EguitraFinanceMoves(http.Controller):
         move = _move(move_id, FIN_WRITE)
         if move.state != "draft":
             raise ApiError(422, "business_rule", "Seule une pièce en brouillon peut être modifiée.")
+        if not editable(move):
+            raise ApiError(422, "business_rule", PRODUCED_BY_CORE)
         data = read_json()
         values = {}
         for key in ("ref", "narration"):
@@ -498,6 +505,8 @@ class EguitraFinanceMoves(http.Controller):
         move = _move(move_id, FIN_WRITE)
         if move.state != "draft" or move.posted_before:
             raise ApiError(422, "business_rule", "Seul un brouillon jamais validé peut être supprimé ; sinon, annulez-le.")
+        if not editable(move):
+            raise ApiError(422, "business_rule", PRODUCED_BY_CORE)
         move.unlink()
         return {"status": "ok"}
 

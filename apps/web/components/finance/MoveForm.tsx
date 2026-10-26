@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
 import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
-import { CHAMP_INVALIDE } from "./communPieces";
+import { CHAMP_INVALIDE, enSaisie, montantDevise } from "./communPieces";
 import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
@@ -27,9 +27,6 @@ interface LineDraft {
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
-
-/** Nombre relu d'un brouillon, écrit à la française (« 2,5 ») : relu tel quel par lireNombre. */
-const enSaisie = (n: number) => String(n).replace(".", ",");
 
 /** Champs d'une ligne dont la saisie n'est pas un nombre lisible (« 2.500.000 », « 2 x 3 »). */
 function nombresIllisibles(l: LineDraft): string[] {
@@ -109,6 +106,8 @@ export function MoveForm({
   const [disputeReason, setDisputeReason] = useState("");
   const { data: currencies } = useApi<Array<{ id: number; name: string; inverse_rate: number; date: string | null }>>(open && !move ? "/finance/currencies" : null);
   const currency = currencies?.find((c) => String(c.id) === currencyId);
+  // Devise des totaux : celle du brouillon relu (fixée à sa création), sinon celle choisie, sinon le GNF.
+  const devise = move ? move.currency : (currency?.name ?? "GNF");
   const [lines, setLines] = useState<LineDraft[]>(() => (move ? linesOf(move) : [emptyLine()]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -262,7 +261,7 @@ export function MoveForm({
   }
 
   const title = move
-    ? `Modifier ${move.move_type === "in_refund" ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
+    ? `Modifier ${move.move_type.endsWith("_refund") ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
     : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
   const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || `${t.amount} %` }))];
   const columns = (sale ? 6 : 7) + (withholdings.length > 0 ? 1 : 0);
@@ -450,17 +449,17 @@ export function MoveForm({
           </Button>
           <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <dt className="text-muted">Total HT</dt>
-            <dd className="text-right font-mono">{fmtGNF(totals.ht, currency?.name ?? "GNF")}</dd>
+            <dd className="text-right font-mono">{montantDevise(totals.ht, devise)}</dd>
             <dt className="text-muted">TVA</dt>
-            <dd className="text-right font-mono">{fmtGNF(totals.tva, currency?.name ?? "GNF")}</dd>
+            <dd className="text-right font-mono">{montantDevise(totals.tva, devise)}</dd>
             {totals.retenues !== 0 && (
               <>
                 <dt className="text-muted">Retenues à la source</dt>
-                <dd className="text-right font-mono">{fmtGNF(totals.retenues, currency?.name ?? "GNF")}</dd>
+                <dd className="text-right font-mono">{montantDevise(totals.retenues, devise)}</dd>
               </>
             )}
             <dt className="font-semibold">{totals.retenues !== 0 ? "Net à payer" : "Total TTC"}</dt>
-            <dd className="text-right font-mono font-semibold">{fmtGNF(totals.ttc, currency?.name ?? "GNF")}</dd>
+            <dd className="text-right font-mono font-semibold">{montantDevise(totals.ttc, devise)}</dd>
           </dl>
         </div>
         <p className="text-xs text-muted">Les axes laissés vides suivent les imputations automatiques de la société (préfixe de compte, tiers).</p>

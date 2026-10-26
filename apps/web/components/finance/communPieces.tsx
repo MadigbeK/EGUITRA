@@ -1,6 +1,6 @@
 "use client";
 
-import { INSECABLE, fmtFixe, fmtGNF, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtDec, fmtFixe, fmtGNF, fmtInt } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 
 /**
@@ -23,6 +23,14 @@ export const MODIFICATION_TIERS: Profile[] = ["admin", "finance", "achats"];
 
 /** Champ dont la saisie est refusée (nombre illisible, montant hors bornes) : bordure et halo rouges. */
 export const CHAMP_INVALIDE = "aria-[invalid=true]:border-danger aria-[invalid=true]:ring-4 aria-[invalid=true]:ring-danger/15";
+
+/** Nombre relu d'une pièce, remis dans un champ à la française (« 2,5 ») : relu tel quel par lireNombre. */
+export const enSaisie = (n: number) => String(n).replace(".", ",");
+
+/** Taux d'une taxe : « 18 % », « -5 % » pour une retenue, espace insécable avant le signe. */
+export function taux(valeur: number): string {
+  return `${fmtDec(valeur)}${INSECABLE}%`;
+}
 
 /** Nombre d'un montant sans son unité : entier en GNF, deux décimales dans une autre devise. */
 export function nombreDevise(valeur: unknown, devise?: string | null): string {

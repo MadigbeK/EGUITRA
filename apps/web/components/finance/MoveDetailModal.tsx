@@ -4,11 +4,11 @@ import { useState } from "react";
 import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Undo2, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
-import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, montantDevise, nombreDevise } from "./communPieces";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, montantDevise, nombreDevise, taux } from "./communPieces";
 import { MoveForm } from "./MoveForm";
 import { ApiError, apiDownload, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
-import { AIDE_NOMBRE, fmtDate, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
 
 /** Message de la fiche ; ouvrir : pièce créée par l'action (avoir, extourne), à ouvrir d'un clic. */
 type Message = { tone: "danger" | "ok" | "accent"; text: string; ouvrir?: { id: number; libelle: string } };
@@ -25,16 +25,37 @@ interface ReglementEnAttente {
   pending_with: string | null;
 }
 
-/** Fiche de la pièce : règlements en attente d'approbation (null pour le profil Achats seul), état du dernier règlement. */
-type Fiche = MoveDetail & { payments_awaiting_approval?: ReglementEnAttente[] | null; payment_status?: "posted" | "submitted" };
+/**
+ * Fiche de la pièce : règlements en attente d'approbation (null pour le profil Achats seul), état du
+ * dernier règlement, brouillon modifiable et supprimable selon le noyau.
+ */
+type Fiche = MoveDetail & {
+  payments_awaiting_approval?: ReglementEnAttente[] | null;
+  payment_status?: "posted" | "submitted";
+  can_edit?: boolean;
+  can_delete?: boolean;
+};
 
 /**
  * Fiche d'une pièce : lignes, statut, règlement, impression, pièces jointes, avoir ; un brouillon d'achat se
  * modifie ou se supprime. Le profil Achats seul y joint ses justificatifs, imprime, modifie, supprime ou
  * soumet ses brouillons ; règlement, avoir, litige et annulation relèvent de la finance. onOpen : ouvre une
- * autre pièce dans la fiche (l'avoir ou l'extourne qui vient d'être créé).
+ * autre pièce dans la fiche (l'avoir ou l'extourne qui vient d'être créé). onEditEntry : formulaire des
+ * opérations diverses de l'écran appelant, seul à modifier un brouillon d'OD.
  */
-export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId: number | null; onClose: () => void; onChanged: () => void; onOpen?: (id: number) => void }) {
+export function MoveDetailModal({
+  moveId,
+  onClose,
+  onChanged,
+  onOpen,
+  onEditEntry,
+}: {
+  moveId: number | null;
+  onClose: () => void;
+  onChanged: () => void;
+  onOpen?: (id: number) => void;
+  onEditEntry?: (move: MoveDetail) => void;
+}) {
   const { data: move, error, mutate } = useApi<Fiche>(moveId ? `/finance/moves/${moveId}` : null);
   const { achats } = useAchatsSeul(moveId !== null);
   // Commandes montrées aux seuls profils que la route du noyau accepte : la direction consulte la pièce.
@@ -165,8 +186,17 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
 
   const title = move ? `${move.name ?? "Brouillon"}, ${move.partner?.name ?? ""}` : "Pièce";
   const achat = move ? move.move_type === "in_invoice" || move.move_type === "in_refund" : false;
+  // Opération diverse : lignes au débit et au crédit (en monnaie de la société), sans quantité ni TVA.
+  const od = move?.move_type === "entry";
+  // Brouillon modifiable et supprimable selon le noyau (facture, pièce d'achat, avoir, OD saisie dans les
+  // applications) ; un noyau antérieur ne le dit pas : le brouillon d'achat seul, comme avant.
+  const modifiable = move ? (move.can_edit ?? (achat && move.state === "draft")) : false;
+  const supprimable = move ? (move.can_delete ?? (achat && move.state === "draft")) : false;
+  // Une dépense convertie en OD (catégorie de dépense sur ses lignes) se ressaisit plutôt qu'elle ne se
+  // réécrit en OD libre, qui perdrait ses catégories.
+  const editionOd = od && move ? Boolean(onEditEntry) && !move.lines.some((l) => l.category) : false;
 
-  if (move && editing && (move.move_type === "in_invoice" || move.move_type === "in_refund")) {
+  if (move && editing && move.move_type !== "entry") {
     return (
       <MoveForm
         open
@@ -226,20 +256,36 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
             </Notice>
           ))}
 
-          <DataTable
-            dense
-            rows={move.lines.filter((l) => !l.display_type || l.display_type === "product")}
-            rowKey={(l) => l.id}
-            columns={[
-              { key: "name", label: "Libellé", render: (l) => <div>{l.name}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div> },
-              { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
-              { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
-              { key: "quantity", label: "Qté", align: "right", render: (l) => String(l.quantity) },
-              { key: "price_unit", label: "PU HT", align: "right", render: (l) => fmtGNF(l.price_unit) },
-              { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => `${t.amount} %`).join(", ") || "–" },
-              { key: "price_subtotal", label: "Total HT", align: "right", render: (l) => fmtGNF(l.price_subtotal) },
-            ]}
-          />
+          {od ? (
+            <DataTable
+              dense
+              rows={move.lines}
+              rowKey={(l) => l.id}
+              columns={[
+                { key: "account", label: "Compte", render: (l) => (l.account ? <span><span className="font-mono text-xs">{l.account.code}</span> {l.account.name}</span> : "–") },
+                { key: "name", label: "Libellé", render: (l) => <div>{l.name || "–"}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div> },
+                { key: "partner", label: "Tiers", render: (l) => l.partner?.name ?? "–" },
+                { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
+                { key: "debit", label: "Débit (GNF)", align: "right", render: (l) => (l.debit ? fmtInt(l.debit) : "–") },
+                { key: "credit", label: "Crédit (GNF)", align: "right", render: (l) => (l.credit ? fmtInt(l.credit) : "–") },
+              ]}
+            />
+          ) : (
+            <DataTable
+              dense
+              rows={move.lines.filter((l) => !l.display_type || l.display_type === "product")}
+              rowKey={(l) => l.id}
+              columns={[
+                { key: "name", label: "Libellé", render: (l) => <div>{l.name}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div> },
+                { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
+                { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
+                { key: "quantity", label: "Qté", align: "right", render: (l) => fmtDec(l.quantity) },
+                { key: "price_unit", label: "PU HT", align: "right", render: (l) => montantDevise(l.price_unit, move.currency) },
+                { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => taux(t.amount)).join(", ") || "–" },
+                { key: "price_subtotal", label: "Total HT", align: "right", render: (l) => montantDevise(l.price_subtotal, move.currency) },
+              ]}
+            />
+          )}
 
           <div className="flex flex-wrap justify-between gap-4">
             <div className="space-y-2">
@@ -269,20 +315,29 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
                 />
               )}
             </div>
-            <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              <dt className="text-muted">Total HT</dt>
-              <dd className="text-right font-mono">{fmtGNF(move.amount_untaxed)}</dd>
-              <dt className="text-muted">TVA</dt>
-              <dd className="text-right font-mono">{fmtGNF(move.amount_tax)}</dd>
-              <dt className="font-semibold">Total TTC</dt>
-              <dd className="text-right font-mono font-semibold">{fmtGNF(move.amount_total)}</dd>
-              {move.state === "posted" && move.amount_residual !== null && (
-                <>
-                  <dt className="text-muted">Reste dû</dt>
-                  <dd className="text-right font-mono text-warn">{fmtGNF(move.amount_residual)}</dd>
-                </>
-              )}
-            </dl>
+            {od ? (
+              <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                <dt className="text-muted">Total débit</dt>
+                <dd className="text-right font-mono">{fmtGNF(move.lines.reduce((s, l) => s + l.debit, 0))}</dd>
+                <dt className="text-muted">Total crédit</dt>
+                <dd className="text-right font-mono">{fmtGNF(move.lines.reduce((s, l) => s + l.credit, 0))}</dd>
+              </dl>
+            ) : (
+              <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                <dt className="text-muted">Total HT</dt>
+                <dd className="text-right font-mono">{montantDevise(move.amount_untaxed, move.currency)}</dd>
+                <dt className="text-muted">TVA</dt>
+                <dd className="text-right font-mono">{montantDevise(move.amount_tax, move.currency)}</dd>
+                <dt className="font-semibold">Total TTC</dt>
+                <dd className="text-right font-mono font-semibold">{montantDevise(move.amount_total, move.currency)}</dd>
+                {move.state === "posted" && move.amount_residual !== null && (
+                  <>
+                    <dt className="text-muted">Reste dû</dt>
+                    <dd className="text-right font-mono text-warn">{montantDevise(move.amount_residual, move.currency)}</dd>
+                  </>
+                )}
+              </dl>
+            )}
           </div>
 
           {paying && (
@@ -317,17 +372,17 @@ export function MoveDetailModal({ moveId, onClose, onChanged, onOpen }: { moveId
                 <Send className="h-4 w-4" /> {achats ? "Soumettre au circuit" : move.move_type.startsWith("in_") ? "Soumettre / valider" : "Valider"}
               </Button>
             )}
-            {saisie && achat && move.state === "draft" && (
-              <Button onClick={() => setEditing(true)}>
+            {saisie && modifiable && (od ? editionOd : true) && (
+              <Button onClick={() => (od ? onEditEntry?.(move) : setEditing(true))}>
                 <Pencil className="h-4 w-4" /> Modifier
               </Button>
             )}
-            {saisie && achat && move.state === "draft" && (
+            {saisie && supprimable && (
               <Button
                 variant="danger"
                 loading={busy === "delete"}
                 onClick={() => {
-                  void demanderConfirmation("Supprimer ce brouillon ?", { action: "Supprimer", danger: true }).then((oui) => {
+                  void demanderConfirmation("Supprimer ce brouillon ? Il disparaît définitivement, sans laisser de trace en comptabilité.", { action: "Supprimer", danger: true }).then((oui) => {
                     if (oui) void remove(move.id);
                   });
                 }}

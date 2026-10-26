@@ -20,6 +20,7 @@ from . import test_budget
 from . import test_categories
 from . import test_partners
 from . import test_pieces_reglement
+from . import test_pieces_brouillons
 from . import test_disputes
 from . import test_chart
 from . import test_audit_coverage

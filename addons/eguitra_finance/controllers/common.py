@@ -276,6 +276,18 @@ def move_summary(move):
     }
 
 
+def editable(move):
+    """Brouillon modifiable et supprimable dans les applications : facture, pièce d'achat, avoir, ou opération
+    diverse saisie dans les applications. Une écriture produite par le noyau (opération de banque ou de
+    caisse, règlement, virement, paie, dotation) se corrige par son propre écran : la réécrire ici la
+    détacherait de son origine."""
+    if move.state != "draft":
+        return False
+    if move.move_type != "entry":
+        return True
+    return bool(move.eguitra_manual_entry and not move.statement_line_id and not move.origin_payment_id)
+
+
 def move_detail(move):
     data = move_summary(move)
     lines = move.invoice_line_ids if move.is_invoice(include_receipts=True) else move.line_ids
@@ -312,6 +324,9 @@ def move_detail(move):
         "payments": move.invoice_payments_widget or None,
         "payments_awaiting_approval": awaiting,
         "can_post": move.state == "draft",
+        "can_edit": editable(move),
+        # Seul un brouillon jamais validé se supprime ; sinon, il s'annule.
+        "can_delete": editable(move) and not move.posted_before,
         "can_pay": (move.state == "posted" and move.payment_state in ("not_paid", "partial") and move.is_invoice()
                     and not awaiting),
     })
