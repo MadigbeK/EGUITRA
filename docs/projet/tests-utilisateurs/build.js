@@ -34,11 +34,11 @@ function controler(fichier, md) {
   const nom = md.replace(/\n[ \t]*/g, ' ').match(/.{0,30}MB AxisPro(?! Consulting).{0,30}/);
   if (nom) echec(fichier, `écrire « MB AxisPro Consulting » en entier : « ${nom[0]} »`);
 
-  // Parties : « ## A. Libellé » ; scénarios : « ### XXX-nn. Titre ».
+  // Parties : « ## A. Libellé » ; scénarios : « ### XXX-nn. Titre », numérotés de 01 en 01 pour chaque
+  // préfixe (un cahier qui couvre deux métiers en a deux, par exemple BTP et IMM).
   const parties = [];
   const ids = new Set();
-  let prefixe = null;
-  let attendu = 1;
+  const suivant = {};
   let courant = null;
   const fermer = () => {
     if (!courant) return;
@@ -61,11 +61,10 @@ function controler(fichier, md) {
     if (scenario) {
       fermer();
       const [, p, num] = scenario;
-      prefixe ??= p;
-      if (p !== prefixe) echec(fichier, `${p}-${num} : préfixe différent de ${prefixe}`);
+      const attendu = suivant[p] ?? 1;
       if (Number(num) !== attendu) echec(fichier, `${p}-${num} : numéro attendu ${String(attendu).padStart(2, '0')}`);
       if (!parties.length) echec(fichier, `${p}-${num} : scénario hors d'une partie « ## A. … »`);
-      attendu += 1;
+      suivant[p] = attendu + 1;
       ids.add(`${p}-${num}`);
       parties[parties.length - 1].n += 1;
       courant = { id: `${p}-${num}`, lignes: [] };
