@@ -658,7 +658,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
         empty="Aucun département."
         columns={[
           { key: "name", label: "Département", render: (d) => d.name, sortValue: (d) => d.name },
-          { key: "company", label: "Société", render: (d) => (d.company ? <PastilleSociete company={d.company} /> : <span className="text-[12.5px] text-muted">Les deux sociétés</span>), sortValue: (d) => d.company?.name ?? "" },
+          { key: "company", label: "Société", render: (d) => (d.company ? <PastilleSociete company={d.company} /> : <span className="text-[12.5px] text-muted" title={meta.companies.length > 1 ? undefined : "Géré par un compte ouvert aux deux sociétés"}>Les deux sociétés</span>), sortValue: (d) => d.company?.name ?? "" },
           { key: "manager", label: "Responsable", render: (d) => d.manager?.name ?? "–" },
           { key: "headcount", label: "Effectif", align: "right", render: (d) => String(d.headcount), sortValue: (d) => d.headcount },
           { key: "active", label: "", render: (d) => (!d.active ? <Badge>Archivé</Badge> : null) },
@@ -667,7 +667,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
             label: "",
             align: "right",
             render: (d) =>
-              ecrit ? (
+              ecrit && (d.company || meta.companies.length > 1) ? (
                 <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(d)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -693,7 +693,9 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
 function EditionDepartement({ meta, departement, onClose, onDone }: { meta: Meta; departement: Department | null; onClose: () => void; onDone: () => void }) {
   const [nom, setNom] = useState(departement?.name ?? "");
   const [responsable, setResponsable] = useState(departement?.manager ? String(departement.manager.id) : "");
-  const [societe, setSociete] = useState(departement?.company ? String(departement.company.id) : "");
+  // Un compte ouvert à une seule société crée les départements de cette société : un département
+  // commun (sans société) ne se gère que par un compte ouvert aux deux (refus 403 du noyau).
+  const [societe, setSociete] = useState(departement?.company ? String(departement.company.id) : meta.companies.length === 1 ? String(meta.companies[0]!.id) : "");
   const [actif, setActif] = useState(departement?.active ?? true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
