@@ -3,10 +3,20 @@ import { NextResponse, type NextRequest } from "next/server";
 import { messageStatut } from "./erreurs";
 import { MESSAGE_INDISPONIBLE } from "./session";
 
-/** Refuse les requêtes de modification venant d'un autre site (protection CSRF). */
+/**
+ * Refuse les requêtes venant d'un autre site (protection CSRF).
+ * - Lecture (GET, HEAD) : refusée quand le navigateur la dit venue d'un autre site (Sec-Fetch-Site
+ *   « cross-site », ou « same-site » : un autre sous-domaine, tel un autre nom en sslip.io). Les cookies
+ *   SameSite=Lax accompagnent une navigation venue d'ailleurs : un lien piégé vers la passerelle
+ *   aurait sinon été relayé sous l'identité de l'utilisateur, et certaines lectures écrivent (une
+ *   actualité marquée vue). Les appels des écrans, téléchargements compris, et ceux de Rotations sont
+ *   « same-origin » ; une adresse saisie par l'utilisateur est « none » ; un navigateur sans cet
+ *   en-tête passe, comme avant.
+ * - Modification : Sec-Fetch-Site « same-origin » exigé, à défaut un Origin du même hôte.
+ */
 export function sameOrigin(req: NextRequest): boolean {
-  if (req.method === "GET" || req.method === "HEAD") return true;
   const site = req.headers.get("sec-fetch-site");
+  if (req.method === "GET" || req.method === "HEAD") return site !== "cross-site" && site !== "same-site";
   if (site && site !== "same-origin") return false;
   const origin = req.headers.get("origin");
   if (!origin) return site === "same-origin";
