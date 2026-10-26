@@ -342,3 +342,59 @@ class TestOutilsCabinet(ApiCase):
                 self.assertEqual((status, body.get("error")), (400, "invalid_parameter"), body)
         self.env.invalidate_all()
         self.assertEqual((event.capacity, meeting.state), (2, "requested"), "Rien n'a changé")
+
+    # ─── Rôles par profil ────────────────────────────────────────────────
+
+    def test_ecritures_reservees_au_profil_cabinet(self):
+        """Écriture : profil cabinet seul. La direction, l'administration, la finance et le porteur
+        sont refusés (403) sur chaque route d'écriture des outils du portail, sans rien changer ; la
+        direction et l'administration lisent."""
+        cabinet_only = {"company_id": self.cabinet.id, "company_ids": [(6, 0, self.cabinet.ids)]}
+        self._create_user("dg.outils", "direction", **cabinet_only)
+        self._create_user("admin.outils", "admin", **cabinet_only)
+        self._create_user("daf.outils", "finance", **cabinet_only)
+        tokens = {
+            "direction": self.open_session("dg.outils", app="axispro")["access_token"],
+            "admin": self.open_session("admin.outils", app="axispro")["access_token"],
+            "finance": self.open_session("daf.outils")["access_token"],
+            "porteur": self.open_session("porteur.outils1", app="portail")["access_token"],
+        }
+        event = self.event(capacity=5)
+        registration = event.register(self.pa)
+        meeting = self.env["portail.meeting"].create({"dossier_id": self.dossier_a.id, "subject": "Point",
+                                                      "slot_1": FUTURE})
+        announcement = self.env["portail.announcement"].create({"name": "Brouillon", "company_id": self.cabinet.id})
+        category = self.env["portail.category"].create({"name": "Financer", "company_id": self.cabinet.id})
+        article = self.env["portail.article"].create({"name": "Guide", "body": "Texte", "company_id": self.cabinet.id})
+        start = FUTURE.isoformat()
+        routes = [
+            ("POST", f"/axispro/portail/conversations/{self.dossier_a.id}", {"body": "Bonjour"}),
+            ("POST", "/axispro/portail/annonces", {"title": "Nouvelle"}),
+            ("PATCH", f"/axispro/portail/annonces/{announcement.id}", {"title": "Modifiée"}),
+            ("POST", f"/axispro/portail/annonces/{announcement.id}/publier", {}),
+            ("POST", "/axispro/portail/rubriques", {"name": "Nouvelle"}),
+            ("PATCH", f"/axispro/portail/rubriques/{category.id}", {"name": "Modifiée"}),
+            ("POST", "/axispro/portail/articles", {"title": "Nouveau"}),
+            ("PATCH", f"/axispro/portail/articles/{article.id}", {"title": "Modifié"}),
+            ("POST", f"/axispro/portail/articles/{article.id}/publier", {}),
+            ("DELETE", f"/axispro/portail/articles/{article.id}/fichiers/1", None),
+            ("POST", "/axispro/portail/evenements", {"name": "Nouveau", "start": start, "end": start}),
+            ("PATCH", f"/axispro/portail/evenements/{event.id}", {"capacity": 1}),
+            ("POST", f"/axispro/portail/evenements/{event.id}/annuler", {}),
+            ("PATCH", f"/axispro/portail/inscriptions/{registration.id}", {"state": "cancelled"}),
+            ("POST", "/axispro/portail/rendez-vous", {"dossier_id": self.dossier_a.id, "subject": "X", "start": start}),
+            ("PATCH", f"/axispro/portail/rendez-vous/{meeting.id}", {"action": "confirm", "start": start}),
+        ]
+        for profile, token in tokens.items():
+            for method, path, payload in routes:
+                with self.subTest(profile=profile, method=method, path=path):
+                    status, body = self.call(method, path, payload, token=token)
+                    self.assertEqual((status, body.get("error")), (403, "forbidden"), body)
+        self.env.invalidate_all()
+        self.assertEqual((event.state, event.capacity, registration.state, meeting.state, announcement.state,
+                          announcement.name, category.name, article.state),
+                         ("published", 5, "registered", "requested", "draft", "Brouillon", "Financer", "draft"))
+        for profile in ("direction", "admin"):
+            with self.subTest(profile=profile, lecture=True):
+                status, body = self.call("GET", "/axispro/portail/evenements", token=tokens[profile])
+                self.assertEqual(status, 200, body)
