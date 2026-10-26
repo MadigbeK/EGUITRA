@@ -1,19 +1,18 @@
 "use client";
 
 import { type CSSProperties } from "react";
-import { Badge, Card, DataTable, ErrorBox, RankBars, cx } from "@/components/ui";
+import { Badge, Card, DataTable, RankBars, cx } from "@/components/ui";
 import { Entonnoir, Puces } from "@/components/analyse/charts";
-import { AttenteSection, BandeauCible, CIBLE, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useAncreVisee, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useAncreVisee, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetPortefeuille } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
 /** Où en sont les projets : entonnoir, temps par gate, goulot, secteurs et lieux, pipeline pondéré, prévision des gates. */
 export function Portefeuille() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -60,7 +59,7 @@ function Corps() {
           )}
         </BandeauCible>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

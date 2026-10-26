@@ -1,18 +1,17 @@
 "use client";
 
-import { AreaChart, Badge, Card, DataTable, ErrorBox, SERIES, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, DataTable, SERIES, cx } from "@/components/ui";
 import { CarteChaleur, Eventail, Puces } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetActivite } from "@/lib/analyse-types";
 import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
 
 /** Activité et honoraires : heures par consultant et semaine, taux de réalisation, rentabilité par dossier, honoraires par ligne, prévision. */
 export function Activite() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -53,7 +52,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/activite.xlsx${query}`} question="Le temps du cabinet se transforme-t-il en honoraires ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && r && (
         <div className="space-y-5">

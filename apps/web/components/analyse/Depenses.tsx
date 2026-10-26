@@ -1,19 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
-import { Badge, Card, DataTable, ErrorBox, cx } from "@/components/ui";
+import { Badge, Card, DataTable, cx } from "@/components/ui";
 import { Benford, Pareto, PetitsMultiples, Treemap } from "@/components/analyse/charts";
-import { AttenteSection, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeDepenses } from "@/lib/analyse-types";
 import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
 
 /** Dépenses, fournisseurs et contrôles : treemap, Pareto, dérive de prix, Benford, doublons, montants inhabituels. */
 export function Depenses() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -71,7 +70,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/depenses.xlsx${query}`} question="Où part l'argent, et quelles factures méritent un second regard ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

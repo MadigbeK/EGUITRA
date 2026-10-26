@@ -1,10 +1,10 @@
 "use client";
 
 import { type CSSProperties } from "react";
-import { AreaChart, Badge, Card, ErrorBox, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, cx } from "@/components/ui";
 import { COULEUR_DECISION, ETATS } from "@/lib/couleurs";
 import { CarteChaleur, Legende, TableRepli } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtDate, fmtPct, joursOu, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtDate, fmtPct, joursOu, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetComites, Decision } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -13,10 +13,9 @@ const LIBELLE_DECISION: Record<string, string> = { go: "GO", conditional: "GO so
 
 /** Qualité des décisions : accord méthode × comité, décisions par mois, délai de décision, scores à la décision, passages forcés. */
 export function Comites() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -50,7 +49,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/comites.xlsx${query}`} question="Le comité décide-t-il comme la méthode le recommande ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

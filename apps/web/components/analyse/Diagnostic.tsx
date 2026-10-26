@@ -1,20 +1,19 @@
 "use client";
 
 import { type CSSProperties } from "react";
-import { Badge, Card, DataTable, ErrorBox, cx } from "@/components/ui";
+import { Badge, Card, DataTable, cx } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { CarteChaleur, PetitsMultiples } from "@/components/analyse/charts";
-import { AttenteSection, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, joursOu, pctOu, pluriel, useAncre, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, joursOu, pctOu, pluriel, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetDiagnostic, CompartmentRow } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
 /** Faiblesses systémiques des projets : carte domaines × dossiers, critères manquants, knock-outs, preuves, progression. */
 export function Diagnostic() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -178,7 +177,7 @@ function Corps() {
           )}
         </BandeauCible>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

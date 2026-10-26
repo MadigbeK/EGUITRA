@@ -2,19 +2,18 @@
 
 import { useState } from "react";
 import { RotateCcw, Sparkles } from "@/components/icons";
-import { Anneau, Button, Card, ErrorBox, FEUILLE, Valeur, cx } from "@/components/ui";
+import { Anneau, Button, Card, FEUILLE, Valeur, cx } from "@/components/ui";
 import { Cascade, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, moisCourt, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtPct, fmtShort, moisCourt, pctOu, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { ForecastBlock, GroupePrevisions, Landing, WaterfallStep } from "@/lib/analyse-types";
 import { fmtGNF } from "@/lib/format";
 
 /** Atterrissage de l'exercice : éventails CA et EBE, probabilité d'atteindre le budget, simulateur. */
 export function Previsions() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -46,7 +45,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/previsions.xlsx${query}`} question="Où atterrit l'exercice, et que peut-on encore changer ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && l && (
         <div className="space-y-5">

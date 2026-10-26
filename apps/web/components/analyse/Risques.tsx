@@ -1,8 +1,8 @@
 "use client";
 
-import { AreaChart, Badge, Card, DataTable, ErrorBox } from "@/components/ui";
+import { AreaChart, Badge, Card, DataTable } from "@/components/ui";
 import { MatriceRisques } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, joursOu, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetRisques, Criticality } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -16,10 +16,9 @@ const NIVEAU: Record<Criticality, { label: string; tone: "ok" | "warn" | "danger
 
 /** Risques et exécution : matrice probabilité × impact, vélocité des actions, réactivité des porteurs. */
 export function Risques() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -57,7 +56,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/risques.xlsx${query}`} question="Quels risques menacent l'exécution des projets ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && rm && act && rep && (
         <div className="space-y-5">

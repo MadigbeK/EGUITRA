@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { type CSSProperties } from "react";
-import { AreaChart, Card, ErrorBox, SERIES, cx } from "@/components/ui";
+import { AreaChart, Card, SERIES, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { Bulles, Cascade, Entonnoir, Radar } from "@/components/analyse/charts";
-import { AttenteSection, Constats, EnTeteSection, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, Constats, EnTeteSection, ErreurLecture, FournisseurTheme, KpiContrat, Vide, combler, fmtPct, fmtShort, gnfOu, moisCourt, nombre, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetSynthese, GroupeSynthese, Kpi, Recommendation } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
 
 /** Cockpit : celui du groupe ou celui du cabinet selon la société de travail. */
 export function Synthese() {
-  const { data: contexte, error } = useContexte();
+  const { data: contexte, error, mutate } = useContexte();
   return (
     <FournisseurTheme>
-      {error && <ErrorBox error={error} />}
+      {error && !contexte && <ErreurLecture error={error} onRetry={() => void mutate()} titre="L'analyse n'a pas pu lire la société de travail." />}
       {!contexte && !error && <AttenteSection />}
       {contexte && !contexte.sections.some((x) => x.key === "synthese") ? (
         // Profil sans le cockpit de cette société (la finance, côté cabinet) : ses écrans ouverts.
@@ -90,7 +90,7 @@ function CockpitGroupe() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/synthese.xlsx${query}`} question="Où en est EGUITRA GROUP aujourd'hui ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
@@ -250,7 +250,7 @@ function CockpitCabinet() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/synthese.xlsx${query}`} question="Où en est le portefeuille de projets du cabinet ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

@@ -1,10 +1,10 @@
 "use client";
 
 import { type CSSProperties } from "react";
-import { Badge, Card, DataTable, ErrorBox, cx, type Tone } from "@/components/ui";
+import { Badge, Card, DataTable, cx, type Tone } from "@/components/ui";
 import { ECHELLE, ETATS } from "@/lib/couleurs";
 import { Bulles, Lorenz, PetitsMultiples } from "@/components/analyse/charts";
-import { AttenteSection, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useAncre, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { ClientSegment, GroupeClients } from "@/lib/analyse-types";
 import { fmtGNF, fmtInt } from "@/lib/format";
@@ -21,10 +21,9 @@ const COULEURS_HISTO = ECHELLE;
 
 /** Valeur et risque du portefeuille clients : concentration, segments, comportement de paiement, tendances. */
 export function Clients() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -78,7 +77,7 @@ function Corps() {
           )}
         </BandeauCible>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && c && (
         <div className="space-y-5">

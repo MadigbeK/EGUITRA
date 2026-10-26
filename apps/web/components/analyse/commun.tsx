@@ -12,8 +12,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, FileSpreadsheet, Info, Moon, Printer, ShieldAlert, Sun, Target, TriangleAlert, type Icon } from "@/components/icons";
-import { Badge, Button, Delta, Empty, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, useMouvementReduit, type Teinte, type Tone } from "@/components/ui";
-import { apiDownload, useApi } from "@/lib/api-client";
+import { Badge, Button, Delta, Empty, ErrorBox, FEUILLE, Input, Kpi as KpiCarte, Notice, Segmented, Sparkline, Squelette, cx, useMouvementReduit, type Teinte, type Tone } from "@/components/ui";
+import { ApiError, apiDownload, useApi } from "@/lib/api-client";
 import type { Contexte, Evidence, Insight, Kpi, PeriodCode, Quality, Severity, Unit } from "@/lib/analyse-types";
 import type { EntiteSociete } from "@/lib/config";
 import { fmtDate, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
@@ -155,12 +155,17 @@ export function useTheme() {
 export function EnTeteSection({ question, reponse, periode, onPeriode, label, quality, sousTitre, exporter }: { question: string; reponse?: ReactNode; periode: Periode; onPeriode: (p: Partial<Periode>) => void; label?: string; quality?: Quality; sousTitre?: ReactNode; exporter?: string }) {
   const { sombre, basculer } = useTheme();
   const [exportEnCours, setExportEnCours] = useState(false);
+  const [erreurExport, setErreurExport] = useState<unknown>(null);
   async function exporterClasseur() {
     if (!exporter) return;
     setExportEnCours(true);
+    setErreurExport(null);
     try {
       const nom = (exporter.split("?")[0] ?? exporter).replace(/^\/analyse\//, "analyse_").replaceAll("/", "_");
       await apiDownload(exporter, nom);
+    } catch (e) {
+      // Un export refusé ou interrompu se dit, au lieu de laisser croire que le fichier arrive.
+      setErreurExport(e);
     } finally {
       setExportEnCours(false);
     }
@@ -206,6 +211,11 @@ export function EnTeteSection({ question, reponse, periode, onPeriode, label, qu
           </Button>
         </div>
       </div>
+      {erreurExport !== null && (
+        <div className="no-print mt-4">
+          <ErreurLecture error={erreurExport} onRetry={() => void exporterClasseur()} titre="Le classeur Excel n'a pas pu être préparé." />
+        </div>
+      )}
     </div>
   );
 }
@@ -239,9 +249,11 @@ export function QualiteDonnees({ quality }: { quality: Quality }) {
 
 /**
  * Les sections d'une société ne s'ouvrent que dans ses livres. Un compte ouvert à cette société y
- * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique.
+ * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique. Le
+ * contexte illisible (réseau, noyau arrêté) se dit, avec « Réessayer », au lieu d'un squelette sans fin.
  */
-export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteSociete; contexte: Contexte | undefined; children: ReactNode }) {
+export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; children: ReactNode }) {
+  const { data: contexte, error, mutate } = useContexte();
   const cible = contexte && contexte.entity !== attendu ? contexte.companies?.find((c) => c.entity === attendu) : undefined;
   const [echec, setEchec] = useState(false);
   useEffect(() => {
@@ -272,7 +284,7 @@ export function GardeSociete({ attendu, contexte, children }: { attendu: EntiteS
       }
     };
   }, [cible]);
-  if (!contexte) return <AttenteSection />;
+  if (!contexte) return error ? <ErreurLecture error={error} onRetry={() => void mutate()} titre="L'analyse n'a pas pu lire la société de travail." /> : <AttenteSection />;
   if (contexte.entity === attendu) return <>{children}</>;
   if (cible && !echec) {
     return (
@@ -459,6 +471,16 @@ export function LienSuivi({ href, className, children, title }: { href: string; 
 }
 
 /* ─── Attente, erreurs, vides ──────────────────────────────────────────── */
+
+/**
+ * Erreur d'une lecture (section, contexte, export), toujours avec « Réessayer » : le message du noyau
+ * quand il a répondu, sinon une phrase en français, jamais le texte technique du navigateur (« Failed
+ * to fetch », « Unexpected token »).
+ */
+export function ErreurLecture({ error, onRetry, titre }: { error: unknown; onRetry: () => void; titre?: ReactNode }) {
+  const lisible = error instanceof ApiError ? error : new Error("Le serveur ne répond pas, ou sa réponse est illisible : vérifiez la connexion, puis réessayez.");
+  return <ErrorBox error={lisible} onRetry={onRetry} titre={titre} />;
+}
 
 export function AttenteSection() {
   return (

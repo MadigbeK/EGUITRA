@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Card, DataTable, ErrorBox, Segmented, cx } from "@/components/ui";
+import { Badge, Card, DataTable, Segmented, cx } from "@/components/ui";
 import { Bulles, CarteChaleur, Pareto } from "@/components/analyse/charts";
-import { AttenteSection, BandeauCible, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTransport, ShortageRow } from "@/lib/analyse-types";
 import { fmtDec, fmtInt } from "@/lib/format";
@@ -12,10 +12,9 @@ type Manquant = "drivers" | "routes" | "products";
 
 /** Rentabilité de la flotte et des routes : carte de chaleur, tarifs, ensembles, carburant, manquants. */
 export function Transport() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -105,7 +104,7 @@ function Corps() {
           )}
         </BandeauCible>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && !d.available && (
         <Card title="Transport">

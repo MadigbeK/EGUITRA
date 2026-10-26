@@ -2,10 +2,10 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { scaleLinear } from "d3-scale";
-import { AreaChart, Badge, Card, DataTable, ErrorBox, SERIES, Tabs, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, DataTable, SERIES, Tabs, cx } from "@/components/ui";
 import { Cascade, Puces, TableRepli } from "@/components/analyse/charts";
 import { COULEUR, Cadre } from "@/components/analyse/charts/commun";
-import { AttenteSection, BandeauCible, CIBLE, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useAncre, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, BandeauCible, CIBLE, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useAncre, useCible, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CostStructure, GroupeRentabilite } from "@/lib/analyse-types";
 import { fmtAxe, fmtGNF, fmtInt } from "@/lib/format";
@@ -26,10 +26,9 @@ const COURT_PONT: Record<string, string> = {
 
 /** D'où vient la marge : pont d'EBE, structure de coûts, écarts budgétaires, chantiers et biens. */
 export function Rentabilite() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -110,7 +109,7 @@ function Corps() {
           )}
         </BandeauCible>
       )}
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

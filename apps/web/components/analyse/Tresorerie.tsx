@@ -2,9 +2,9 @@
 
 import { type CSSProperties } from "react";
 import { Landmark } from "@/components/icons";
-import { AreaChart, Badge, Card, Compteur, DataTable, ErrorBox, SERIES, IconTile, cx } from "@/components/ui";
+import { AreaChart, Badge, Card, Compteur, DataTable, SERIES, IconTile, cx } from "@/components/ui";
 import { CarteChaleur, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, usePeriode } from "@/components/analyse/commun";
 import { moisCourt } from "@/components/analyse/charts/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTresorerie } from "@/lib/analyse-types";
@@ -12,10 +12,9 @@ import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
 
 /** Liquidité et prévision à 13 semaines : position, éventail, cycle de conversion, encaissements attendus. */
 export function Tresorerie() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="groupe" contexte={contexte}>
+      <GardeSociete attendu="groupe">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -63,7 +62,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/tresorerie.xlsx${query}`} question="Où va la trésorerie dans les 13 prochaines semaines ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">

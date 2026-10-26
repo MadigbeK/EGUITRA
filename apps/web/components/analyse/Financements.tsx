@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge, Card, DataTable, ErrorBox, Repartition, cx } from "@/components/ui";
+import { Badge, Card, DataTable, Repartition, cx } from "@/components/ui";
 import { COULEUR_FINANCEMENT, ETATS } from "@/lib/couleurs";
 import { Puces, Sankey } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetFinancements, Recommendation } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -13,10 +13,9 @@ const RECO_LABEL: Record<Recommendation, string> = { bankable: "Bankable", apd_r
 
 /** Financements recherchés : flux secteur → financeur → état, succès par financeur, pipeline par état, couverture du besoin. */
 export function Financements() {
-  const { data: contexte } = useContexte();
   return (
     <FournisseurTheme>
-      <GardeSociete attendu="cabinet" contexte={contexte}>
+      <GardeSociete attendu="cabinet">
         <Corps />
       </GardeSociete>
     </FournisseurTheme>
@@ -49,7 +48,7 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/financements.xlsx${query}`} question="Qui finance quoi, et avec quel succès ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
-      {error && <ErrorBox error={error} onRetry={() => mutate()} />}
+      {error && <ErreurLecture error={error} onRetry={() => void mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
