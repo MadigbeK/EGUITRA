@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
+import { ClotureExercice } from "@/components/finance/ClotureExercice";
 import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { MONTHS_FR, fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
 
@@ -89,6 +90,7 @@ export default function ClosingPage() {
           </div>
         </>
       )}
+      <ClotureExercice year={selectedYear} />
       <Integrity />
       <RepriseValidation />
       {month && <MonthModal month={month} onClose={() => setMonth(null)} onChanged={() => mutate()} />}
