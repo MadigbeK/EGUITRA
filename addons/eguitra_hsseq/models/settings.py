@@ -18,6 +18,9 @@ DEFAULT_TARGETS = {
     "breath_test_positives": 0.0, "waivers": 2.0, "actions_on_time": 90.0, "actions_effectiveness": 80.0,
     "qualifications_valid": 100.0, "fuel_consumption": 44.0, "co2_emissions": 1.18, "tanker_shortage": 1.5,
     "tipper_variance": 5.0, "audits_completion": 100.0, "immobilizations": 0.0,
+    # Lot 3.
+    "spills": 0.0, "dust_exceedances": 0.0, "complaints": 0.0, "complaints_on_time": 100.0,
+    "telematics_violations": 5.0, "drills_completion": 100.0,
 }
 CO2_PER_LITER = 2.68  # kg de CO₂ par litre de gazole, facteur proposé
 

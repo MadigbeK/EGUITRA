@@ -1,7 +1,9 @@
 """Indicateurs du cockpit HSSEQ (spécification §10, contrat §4), calculés depuis les données d'origine :
 événements et contrôles d'HSSEQ, rotations et kilomètres de Transport, heures travaillées et absences pour
 accident du travail de RH (au mois et par société, sans maille site : le taux de fréquence et le taux de
-gravité ne se filtrent pas par site).
+gravité ne se filtrent pas par site). Au lot 3 : carburant et émissions, écarts de livraison des citernes et
+des bennes (Transport), déversements, poussières, réclamations, contaminations et déchets, violations de la
+télématique, exercices d'urgence.
 
 Chaque mois est décomposé en composantes brutes par société (nombres, kilomètres, heures…) ; un indicateur
 est un rapport de sommes sur sa fenêtre (le mois, ou douze mois glissants). Un mois est figé le 5 du mois
@@ -15,11 +17,21 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import api, fields, models
 
-from .common import ACCIDENT_TYPES, EVENT_TYPES, WEAK_SIGNAL_TYPES, indicator_status, vehicle_kind
+from .common import (
+    ACCIDENT_TYPES,
+    EVENT_TYPES,
+    STANDARDS,
+    VIOLATION_TYPES,
+    WASTE_KINDS,
+    WEAK_SIGNAL_TYPES,
+    indicator_status,
+    tipper_tonnages,
+    vehicle_kind,
+)
+from .settings import CO2_PER_LITER
 
 MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
              "novembre", "décembre"]
-CO2_PER_LITER = 2.68  # kg de CO₂ par litre de gazole
 FREEZE_DAY = 5
 
 # code, libellé, unité, sens, source, formule, douze mois glissants, filtrable par site
@@ -51,16 +63,31 @@ INDICATORS = [
     ("fuel_consumption", "Consommation", "l_100km", "down", "Transport",
      "Litres aux 100 km (rotations dont le carburant est saisi)", False, True),
     ("co2_emissions", "Émissions de CO₂", "kg_co2_km", "down", "Transport",
-     "kg de CO₂ par km (2,68 kg par litre de gazole)", False, True),
+     "kg de CO₂ par km (facteur d'émission des paramètres, 2,68 kg par litre de gazole par défaut)", False, True),
     ("tanker_shortage", "Écarts de livraison des citernes", "per_mille", "down", "Transport",
      "Volume manquant ÷ volume livré", False, True),
-    ("tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport",
+    ("tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport (pesées et livraisons)",
      "Écart de tonnage ÷ tonnage chargé", False, True),
     # Lot 2.
     ("audits_completion", "Audits réalisés contre planifiés", "pct", "up", "Audits",
      "Audits réalisés ÷ audits planifiés du mois (audits annulés exclus)", False, True),
     ("immobilizations", "Immobilisations de véhicules (V09)", "count", "down", "Événements, verrou de départ",
      "Immobilisations posées dans le mois par un événement en cours d'enquête", False, True),
+    # Lot 3.
+    ("spills", "Déversements", "count", "down", "Environnement (déversements)",
+     "Déversements survenus dans le mois", False, True),
+    ("dust_exceedances", "Dépassements du seuil de poussières", "count", "down", "Environnement (poussières sur site)",
+     "Mesures de poussières au-dessus de leur seuil", False, True),
+    ("complaints", "Réclamations clients", "count", "down", "Qualité (réclamations clients)",
+     "Réclamations reçues dans le mois", False, True),
+    ("complaints_on_time", "Réclamations traitées dans le délai", "pct", "up", "Qualité (réclamations clients)",
+     "Réclamations répondues dans le délai ÷ réclamations dont le délai de réponse est échu", False, True),
+    ("telematics_violations", "Violations de conduite par 100 voyages", "per_100_trips", "down",
+     "Télématique (import des violations), Transport",
+     "Violations (excès de vitesse, freinage brusque, conduite de nuit, temps de conduite) × 100 ÷ départs",
+     False, True),
+    ("drills_completion", "Exercices d'urgence réalisés contre planifiés", "pct", "up", "Documents et urgences",
+     "Exercices réalisés ÷ exercices planifiés du mois (exercices annulés exclus)", False, True),
 ]
 # Famille d'un indicateur pour le comité des donneurs d'ordre : proactif (moyens et démarches), réactif
 # (résultats constatés).
@@ -69,20 +96,33 @@ FAMILY = {"frequency_rate": "reactive", "severity_rate": "reactive", "road_accid
           "breath_test_completion": "proactive", "breath_test_positives": "reactive", "waivers": "reactive",
           "actions_on_time": "proactive", "actions_effectiveness": "proactive", "qualifications_valid": "proactive",
           "fuel_consumption": "reactive", "co2_emissions": "reactive", "tanker_shortage": "reactive",
-          "tipper_variance": "reactive", "audits_completion": "proactive", "immobilizations": "reactive"}
+          "tipper_variance": "reactive", "audits_completion": "proactive", "immobilizations": "reactive",
+          "spills": "reactive", "dust_exceedances": "reactive", "complaints": "reactive",
+          "complaints_on_time": "proactive", "telematics_violations": "reactive", "drills_completion": "proactive"}
 # Marge « sous surveillance » du cockpit : jusqu'à 85 % de la cible (sens up), ou cible ÷ 0,85 (sens down).
 WATCH_RATIO = 0.85
 NOTES = {
     "frequency_rate": "12 mois glissants ; heures de RH par société, sans filtre de site.",
     "severity_rate": "12 mois glissants ; heures de RH par société, sans filtre de site.",
     "qualifications_valid": "Situation du jour ; les mois passés figés gardent la leur.",
-    "tipper_variance": "Sans objet au lot 1 : une seule pesée par rotation, pas de tonnage livré.",
+    "co2_emissions": "Facteur d'émission par litre des paramètres de chaque société.",
+    "tipper_variance": "Tonnage chargé : poids net du ticket de pesée (à défaut, quantité chargée) ; tonnage livré : "
+                       "quantité livrée de la rotation, base de la facturation à la tonne.",
+    "dust_exceedances": "Mesure de site : le filtre de profil de véhicule ne s'y applique pas.",
+    "telematics_violations": "Violations importées (CSV ou Excel) en attendant l'interface du fournisseur.",
+    "drills_completion": "Exercice de site : le filtre de profil de véhicule ne s'y applique pas.",
 }
 COMPONENTS = ("at_accidents", "lost_days", "hours", "road_accidents", "accidents", "weak_signals", "km", "fuel_liters",
               "fuel_km", "departures", "departures_checked", "departures_tested", "checks", "checks_ok",
               "breath_positives", "waivers", "actions_due", "actions_on_time", "actions_verified", "actions_effective",
-              "tanker_shortage", "tanker_delivered", "audits_planned", "audits_done", "immobilizations") + tuple(
-    f"type_{code}" for code, _label in EVENT_TYPES)
+              "tanker_shortage", "tanker_delivered", "audits_planned", "audits_done", "immobilizations",
+              # Lot 3.
+              "co2_kg", "tipper_loaded", "tipper_variance", "spills", "spill_liters", "spill_recovered_liters",
+              "dust_measurements", "dust_exceedances", "complaints", "complaints_due", "complaints_on_time",
+              "contaminations", "wastes", "wastes_collected", "violations", "drills_planned", "drills_done") + tuple(
+    f"type_{code}" for code, _label in EVENT_TYPES) + tuple(
+    f"violations_{code}" for code, _label in VIOLATION_TYPES) + tuple(
+    f"waste_{code}_{unit}" for code, _label in WASTE_KINDS for unit in ("l", "kg", "t", "unit"))
 
 
 def month_start(day):
@@ -185,6 +225,7 @@ class EguitraHsseqCockpit(models.AbstractModel):
             [("rotation_id", "in", rotations.ids), ("kind", "=", "pre_departure")]).rotation_id.ids)
         tested = set(env["eguitra.hsseq.breath.test"].sudo().search(
             [("rotation_id", "in", rotations.ids), ("status", "!=", "not_done")]).rotation_id.ids)
+        factors = env["eguitra.hsseq.environment"]._factors(companies)
         for rot in rotations:
             row = bucket(rot.company_id.id, rot.date_loading)
             if row is None:
@@ -196,9 +237,15 @@ class EguitraHsseqCockpit(models.AbstractModel):
             if rot.fuel_liters:
                 row["fuel_liters"] += rot.fuel_liters
                 row["fuel_km"] += rot.distance_km or 0.0
+                row["co2_kg"] += rot.fuel_liters * factors.get(rot.company_id.id, CO2_PER_LITER)
             if vehicle_kind(rot.vehicle_id) == "tanker":
                 row["tanker_shortage"] += rot.shortage or 0.0
                 row["tanker_delivered"] += rot.volume_delivered or 0.0
+            else:
+                loaded, delivered = tipper_tonnages(rot)
+                if delivered:
+                    row["tipper_loaded"] += loaded
+                    row["tipper_variance"] += abs(loaded - delivered)
         # Contrôles avant départ (un contrôle complémentaire compte dans son contrôle d'origine).
         domain = [("company_id", "in", cids), ("kind", "=", "pre_departure"), ("complement_of_id", "=", False),
                   ("reported_at", ">=", start_dt), ("reported_at", "<=", end_dt)] + self._vehicle_domain(
@@ -240,6 +287,7 @@ class EguitraHsseqCockpit(models.AbstractModel):
             if row is not None:
                 row["actions_verified"] += 1
                 row["actions_effective"] += action.effective
+        self._live_lot3(res, cids, start, end, day, sites, kind, bucket)
         # RH : heures travaillées et accidents du travail, par société.
         Employee = env["eguitra.rh.employee"].sudo()
         for company in companies:
@@ -259,6 +307,89 @@ class EguitraHsseqCockpit(models.AbstractModel):
                     if a <= b and (company.id, m) in res:
                         res[(company.id, m)]["lost_days"] += (b - a).days + 1
         return res
+
+    @api.model
+    def _live_lot3(self, res, cids, start, end, day, sites, kind, bucket):
+        """Composantes du lot 3 : déversements, poussières, réclamations, contaminations, déchets, violations
+        de la télématique, exercices d'urgence. Une mesure de poussières, un déchet et un exercice relèvent
+        d'un site : le filtre de profil de véhicule ne s'y applique pas."""
+        env = self.env
+        start_dt, end_dt = datetime.combine(start, time.min), datetime.combine(end, time.max)
+        site_domain = [("site_id", "in", sites.ids)] if sites else []
+        kind_domain = self._vehicle_domain("vehicle_id", None, kind)
+        base = [("company_id", "in", cids)]
+        for spill in env["eguitra.hsseq.spill"].sudo().search(
+                base + [("occurred_at", ">=", start_dt), ("occurred_at", "<=", end_dt)] + site_domain + kind_domain):
+            row = bucket(spill.company_id.id, spill.occurred_at)
+            if row is not None:
+                row["spills"] += 1
+                row["spill_liters"] += spill.volume_liters
+                row["spill_recovered_liters"] += spill.recovered_liters
+        for measure in env["eguitra.hsseq.dust"].sudo().search(
+                base + [("measured_on", ">=", start), ("measured_on", "<=", end)] + site_domain):
+            row = bucket(measure.company_id.id, measure.measured_on)
+            if row is not None:
+                row["dust_measurements"] += 1
+                row["dust_exceedances"] += measure.exceeded
+        Complaint = env["eguitra.hsseq.complaint"].sudo()
+        for complaint in Complaint.search(base + [("received_on", ">=", start), ("received_on", "<=", end)]
+                                          + site_domain + kind_domain):
+            row = bucket(complaint.company_id.id, complaint.received_on)
+            if row is not None:
+                row["complaints"] += 1
+        # Réclamations dont le délai de réponse est échu (au plus hier) et celles répondues à temps.
+        for complaint in Complaint.search(base + [("response_due", ">=", start),
+                                                  ("response_due", "<=", min(end, day - timedelta(days=1)))]
+                                          + site_domain + kind_domain):
+            row = bucket(complaint.company_id.id, complaint.response_due)
+            if row is not None:
+                row["complaints_due"] += 1
+                row["complaints_on_time"] += complaint.on_time
+        for contamination in env["eguitra.hsseq.contamination"].sudo().search(
+                base + [("detected_on", ">=", start), ("detected_on", "<=", end)] + site_domain + kind_domain):
+            row = bucket(contamination.company_id.id, contamination.detected_on)
+            if row is not None:
+                row["contaminations"] += 1
+        Waste = env["eguitra.hsseq.waste"].sudo()
+        for waste in Waste.search(base + [("produced_on", ">=", start), ("produced_on", "<=", end)] + site_domain):
+            row = bucket(waste.company_id.id, waste.produced_on)
+            if row is not None:
+                row["wastes"] += 1
+                row[f"waste_{waste.waste_kind}_{waste.unit}"] += waste.quantity
+        for waste in Waste.search(base + [("pickup_date", ">=", start), ("pickup_date", "<=", end),
+                                          ("status", "=", "collected")] + site_domain):
+            row = bucket(waste.company_id.id, waste.pickup_date)
+            if row is not None:
+                row["wastes_collected"] += 1
+        for violation in env["eguitra.hsseq.telematics.violation"].sudo().search(
+                base + [("occurred_at", ">=", start_dt), ("occurred_at", "<=", end_dt)] + site_domain + kind_domain):
+            row = bucket(violation.company_id.id, violation.occurred_at)
+            if row is not None:
+                row["violations"] += 1
+                row[f"violations_{violation.violation_type}"] += 1
+        for drill in env["eguitra.hsseq.drill"].sudo().search(
+                base + [("status", "!=", "cancelled"), ("planned_date", ">=", start), ("planned_date", "<=", end)]
+                + site_domain):
+            row = bucket(drill.company_id.id, drill.planned_date)
+            if row is not None:
+                row["drills_planned"] += 1
+                row["drills_done"] += drill.status == "done"
+        return res
+
+    @api.model
+    def _iso_maturity(self, requirements):
+        """Maturité par norme : exigences évaluées, conformes (1) ou partiellement conformes (0,5) ; None sans
+        exigence rattachée à une norme."""
+        maturity = []
+        for code, label in STANDARDS:
+            subset = requirements.filtered(lambda r, c=code: r.standard == c)
+            if not subset:
+                continue
+            evaluated = subset.filtered(lambda r: r.status != "not_evaluated")
+            score = sum(1 if r.status == "compliant" else 0.5 if r.status == "partial" else 0 for r in evaluated)
+            maturity.append({"standard": code, "label": label, "requirements": len(subset), "evaluated": len(evaluated),
+                             "score": round(score * 100 / len(evaluated), 1) if evaluated else None})
+        return maturity or None
 
     @api.model
     def _qualifications(self, companies, sites=None):
@@ -283,8 +414,13 @@ class EguitraHsseqCockpit(models.AbstractModel):
                 frozen[(snap.company_id.id, snap.month)] = snap
         live_months = [m for m in months if any((c.id, m) not in frozen for c in companies)]
         res = self._live(companies, live_months, sites, kind) if live_months else {}
+        factors = self.env["eguitra.hsseq.environment"]._factors(companies) if frozen else {}
         for key, snap in frozen.items():
-            res[key] = dict(empty(), **(snap.components or {}))
+            stored = snap.components or {}
+            res[key] = dict(empty(), **stored)
+            # Mois figé avant le lot 3 : émissions déduites du carburant, au facteur de la société.
+            if "co2_kg" not in stored:
+                res[key]["co2_kg"] = (stored.get("fuel_liters") or 0.0) * factors.get(key[0], CO2_PER_LITER)
         return res, frozen
 
     # ─── Indicateurs ──────────────────────────────────────────────────────
@@ -342,14 +478,22 @@ class EguitraHsseqCockpit(models.AbstractModel):
         if code == "fuel_consumption":
             return r(t["fuel_liters"], t["fuel_km"], 100, 1)
         if code == "co2_emissions":
-            return r(t["fuel_liters"] * CO2_PER_LITER, t["fuel_km"])
+            return r(t["co2_kg"], t["fuel_km"])
         if code == "tanker_shortage":
             return None if kind == "tipper" else r(t["tanker_shortage"], t["tanker_delivered"], 1000)
+        if code == "tipper_variance":
+            return None if kind == "tanker" else r(t["tipper_variance"], t["tipper_loaded"], 1000)
         if code == "audits_completion":
             return r(t["audits_done"], t["audits_planned"], 100, 1)
-        if code == "immobilizations":
-            return int(t["immobilizations"])
-        return None  # tipper_variance : sans objet au lot 1
+        if code in ("immobilizations", "spills", "dust_exceedances", "complaints"):
+            return int(t[code])
+        if code == "complaints_on_time":
+            return r(t["complaints_on_time"], t["complaints_due"], 100, 1)
+        if code == "telematics_violations":
+            return r(t["violations"], t["departures"], 100)
+        if code == "drills_completion":
+            return r(t["drills_done"], t["drills_planned"], 100, 1)
+        return None
 
     @api.model
     def _compute(self, companies, month, period="month", sites=None, kind=None):

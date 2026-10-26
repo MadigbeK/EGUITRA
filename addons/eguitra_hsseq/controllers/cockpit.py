@@ -1,6 +1,7 @@
 """Cockpit HSSEQ (contrat §4) : indicateurs du mois (ou des douze mois) avec leur source et leur série de
 douze mois, départs bloqués du jour, actions en retard, échéances à 30 jours, événements à suivre et leur
-matrice de criticité sur la période."""
+matrice de criticité sur la période ; situations du lot 2 (risques, audits, constats, exigences,
+immobilisations, maturité ISO) et du lot 3 (environnement et qualité, urgences, documents, télématique)."""
 
 from collections import Counter
 from datetime import datetime, time
@@ -13,7 +14,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 
 from ..models.cockpit import month_end, month_label, parse_month
-from ..models.common import FINDING_CLASSES, LEVELS, REQUIREMENT_STATUSES, STANDARDS, matrix_cells
+from ..models.common import FINDING_CLASSES, LEVELS, REQUIREMENT_STATUSES, VIOLATION_TYPES, matrix_cells
 from .actions import overdue_lines
 from .common import (
     COCKPIT_READ,
@@ -28,6 +29,7 @@ from .common import (
     site_scope,
     vehicle_ref,
 )
+from .documents import overdue_drills
 from .lock import departures
 from .referentials import deadline_items
 
@@ -85,17 +87,53 @@ def lot2_blocks(comps, month, sites):
         blocks["requirements"] = {"by_status": {code: len(requirements.filtered(lambda r, c=code: r.status == c))
                                                 for code, _l in REQUIREMENT_STATUSES},
                                   "non_compliant": len(requirements.filtered(lambda r: r.status == "non_compliant"))}
-        maturity = []
-        for code, label in STANDARDS:
-            subset = requirements.filtered(lambda r, c=code: r.standard == c)
-            evaluated = subset.filtered(lambda r: r.status != "not_evaluated")
-            if not subset:
-                continue
-            score = sum(1 if r.status == "compliant" else 0.5 if r.status == "partial" else 0 for r in evaluated)
-            maturity.append({"standard": code, "label": label, "requirements": len(subset), "evaluated": len(evaluated),
-                             "score": round(score * 100 / len(evaluated), 1) if evaluated else None})
-        blocks["iso_maturity"] = maturity or None
+        blocks["iso_maturity"] = env["eguitra.hsseq.cockpit"]._iso_maturity(requirements)
     return blocks
+
+
+def lot3_blocks(comps, month, sites, vehicle_kind):
+    """Situation du lot 3, bornée aux sites (fermée par défaut) : environnement et qualité (fiches ouvertes,
+    contaminations et réclamations pour les profils qui les lisent), urgences (plans, exercices en retard et à
+    venir), documents (procédures en vigueur et taux de lecture), télématique (violations du mois par type,
+    dernier import)."""
+    env = request.env
+    day = fields.Date.context_today(env.user)
+    base = [("company_id", "in", comps.ids)]
+    site_domain = [("site_id", "in", sites.ids)] if sites else []
+    quality = bool(profiles() & {"admin", "direction", "hsseq", "auditeur"})
+    Complaint = env["eguitra.hsseq.complaint"].sudo()
+    environment = {
+        "spills_open": env["eguitra.hsseq.spill"].sudo().search_count(base + site_domain + [("status", "=", "open")]),
+        "wastes_stored": env["eguitra.hsseq.waste"].sudo().search_count(
+            base + site_domain + [("status", "=", "stored")]),
+        "dust_exceedances_30d": env["eguitra.hsseq.dust"].sudo().search_count(
+            base + site_domain + [("exceeded", "=", True), ("measured_on", ">=", day - relativedelta(days=30))]),
+        "contaminations_open": env["eguitra.hsseq.contamination"].sudo().search_count(
+            base + site_domain + [("status", "=", "open")]) if quality else None,
+        "complaints_open": Complaint.search_count(base + site_domain + [("status", "!=", "closed")]) if quality
+        else None,
+        "complaints_overdue": Complaint.search_count(base + site_domain + [("status", "=", "received"),
+                                                                           ("response_due", "<", day)])
+        if quality else None,
+    }
+    count, targets, read = env["eguitra.hsseq.report.template"]._procedures_read_counts(comps, sites or None)
+    start, end = datetime.combine(month, time.min), datetime.combine(month_end(month), time.max)
+    violation_domain = base + site_domain + [("occurred_at", ">=", start), ("occurred_at", "<=", end)]
+    if vehicle_kind:
+        violation_domain.append(("vehicle_id.vehicle_kind", "=", vehicle_kind))
+    Violation = env["eguitra.hsseq.telematics.violation"].sudo()
+    last_import = env["eguitra.hsseq.telematics.import"].sudo().search(base, order="imported_at desc", limit=1)
+    return {
+        "environment": environment,
+        "emergency": dict(overdue_drills(comps, sites or None), plans_active=env["eguitra.hsseq.emergency.plan"].sudo()
+                          .search_count(base + site_domain)),
+        "documents": {"procedures_published": count, "targets": targets, "read": read,
+                      "read_rate": round(read * 100 / targets, 1) if targets else None},
+        "telematics": {"violations": Violation.search_count(violation_domain),
+                       "by_type": {code: Violation.search_count(violation_domain + [("violation_type", "=", code)])
+                                   for code, _l in VIOLATION_TYPES},
+                       "last_import_at": last_import.imported_at or None},
+    }
 
 
 class EguitraHsseqCockpit(http.Controller):
@@ -133,6 +171,7 @@ class EguitraHsseqCockpit(http.Controller):
         date_to = min(month_end(month), day)
         matrix, unclassified = event_matrix(comps, month, period, sites, vehicle_kind)
         lot2 = lot2_blocks(comps, month, sites)
+        lot3 = lot3_blocks(comps, month, sites, vehicle_kind)
         blocked = departures(comps, day, sites or None, vehicle_kind, blocked_only=True)
         deadlines = deadline_items(comps, 30, site=sites if len(sites) == 1 else None, vehicle_kind=vehicle_kind)
         if personal_data_hidden():
@@ -169,5 +208,10 @@ class EguitraHsseqCockpit(http.Controller):
             "requirements": lot2["requirements"],
             "immobilizations": lot2["immobilizations"],
             "iso_maturity": lot2["iso_maturity"],
+            # Lot 3.
+            "environment": lot3["environment"],
+            "emergency": lot3["emergency"],
+            "documents": lot3["documents"],
+            "telematics": lot3["telematics"],
             "computed_at": now,
         }

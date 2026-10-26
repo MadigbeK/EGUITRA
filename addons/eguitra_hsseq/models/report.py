@@ -31,7 +31,7 @@ from .common import (
 )
 
 UNIT_LABELS = {"rate": "taux", "ratio": "ratio", "pct": "%", "count": "nbre", "per_mille": "‰", "l_100km": "L/100 km",
-               "kg_co2_km": "kg CO₂/km"}
+               "kg_co2_km": "kg CO₂/km", "per_100_trips": "pour 100 voyages"}
 ROLLING = {code for code, *_rest, rolling, _scoped in INDICATORS if rolling} | {"qualifications_valid"}
 COCKPIT_CODES = {row[0] for row in INDICATORS}
 
@@ -73,6 +73,48 @@ REPORT_KEYS.update({
                       "aggregation": "last"},
     "requirements_non_compliant": {"label": "Exigences non conformes (fin de mois)", "state": True,
                                    "source": "Registre des exigences", "aggregation": "last"},
+    # Lot 3 : environnement et qualité, télématique, urgences.
+    "co2_kg": {"label": "Émissions de CO₂ (kg)", "component": "co2_kg", "unit": "kg CO₂", "source": "Transport"},
+    "tanker_shortage_m3": {"label": "Manquants des citernes (m³)", "component": "tanker_shortage", "unit": "m³",
+                           "source": "Transport"},
+    "tipper_variance_t": {"label": "Écarts de tonnage des bennes (t)", "component": "tipper_variance", "unit": "t",
+                          "source": "Transport (pesées et livraisons)"},
+    "spill_liters": {"label": "Volume déversé (litres)", "component": "spill_liters", "unit": "litres",
+                     "source": "Environnement (déversements)"},
+    "spill_recovered_liters": {"label": "Volume récupéré après déversement (litres)",
+                               "component": "spill_recovered_liters", "unit": "litres", "direction": "up",
+                               "source": "Environnement (déversements)"},
+    "dust_measurements": {"label": "Mesures de poussières réalisées", "component": "dust_measurements",
+                          "direction": "up", "source": "Environnement (poussières sur site)", "family": "proactive"},
+    "contaminations": {"label": "Contaminations de produit", "component": "contaminations",
+                       "source": "Qualité (contaminations)"},
+    "wastes_collected": {"label": "Enlèvements de déchets avec bordereau", "component": "wastes_collected",
+                         "direction": "up", "source": "Environnement (registre des déchets)", "family": "proactive"},
+    "waste_used_oil_liters": {"label": "Huiles usagées entreposées (litres)", "component": "waste_used_oil_l",
+                              "unit": "litres", "source": "Environnement (registre des déchets)"},
+    "waste_tyres_units": {"label": "Pneus usagés entreposés (pièces)", "component": "waste_tyres_unit",
+                          "source": "Environnement (registre des déchets)"},
+    "waste_filters_units": {"label": "Filtres usagés entreposés (pièces)", "component": "waste_filters_unit",
+                            "source": "Environnement (registre des déchets)"},
+    "violations": {"label": "Violations de conduite (télématique)", "component": "violations",
+                   "source": "Télématique (import des violations)"},
+    "violations_speeding": {"label": "Violations : excès de vitesse", "component": "violations_speeding",
+                            "source": "Télématique (import des violations)"},
+    "violations_harsh_braking": {"label": "Violations : freinages brusques", "component": "violations_harsh_braking",
+                                 "source": "Télématique (import des violations)"},
+    "violations_night_driving": {"label": "Violations : conduite de nuit", "component": "violations_night_driving",
+                                 "source": "Télématique (import des violations)"},
+    "violations_driving_time": {"label": "Violations : temps de conduite dépassé",
+                                "component": "violations_driving_time", "source": "Télématique (import des violations)"},
+    "drills_done": {"label": "Exercices d'urgence réalisés", "component": "drills_done", "direction": "up",
+                    "source": "Documents et urgences", "family": "proactive"},
+    "procedures_read_rate": {"label": "Taux de lecture des procédures en vigueur (fin de mois)", "state": True,
+                             "unit": "%", "direction": "up", "source": "Documents et urgences", "family": "proactive",
+                             "aggregation": "last"},
+    "complaints_open": {"label": "Réclamations clients ouvertes (fin de mois)", "state": True,
+                        "source": "Qualité (réclamations clients)", "aggregation": "last"},
+    "wastes_stored": {"label": "Déchets en attente d'enlèvement (fin de mois)", "state": True,
+                      "source": "Environnement (registre des déchets)", "aggregation": "last"},
 })
 for _code, _label in EVENT_TYPES:
     REPORT_KEYS[f"events_{_code}"] = {"label": f"Événements déclarés : {_label.lower()}", "component": f"type_{_code}"}
@@ -131,15 +173,25 @@ class EguitraHsseqReportTemplate(models.Model):
             return template
         template = self.sudo().create({"name": "Rapport mensuel HSSEQ NIMOVA", "code": "NIMOVA",
                                        "client_label": "Direction générale"})
+        template._add_cockpit_indicators([code for code, *_rest in INDICATORS])
+        return template
+
+    def _add_cockpit_indicators(self, codes):
+        """Ajoute au modèle les indicateurs du cockpit qu'il n'a pas encore (même retirés) : numéro P- ou R-
+        suivi du rang de l'indicateur au cockpit."""
+        self.ensure_one()
+        known = set(self.with_context(active_test=False).indicator_ids.mapped("key"))
+        ranks = {code: rank for rank, (code, *_rest) in enumerate(INDICATORS, 1)}
         rows = []
-        for rank, (code, *_rest) in enumerate(INDICATORS, 1):
-            spec = REPORT_KEYS[code]
-            rows.append({"template_id": template.id, "code": f"{'P' if spec['family'] == 'proactive' else 'R'}-{rank:02d}",
+        for code in codes:
+            if code in known or code not in ranks:
+                continue
+            spec, rank = REPORT_KEYS[code], ranks[code]
+            rows.append({"template_id": self.id, "code": f"{'P' if spec['family'] == 'proactive' else 'R'}-{rank:02d}",
                          "label": spec["label"], "nature": spec["family"], "mode": "computed", "key": code,
                          "unit": spec["unit"], "direction": spec["direction"], "aggregation": spec["aggregation"],
                          "sequence": rank * 10})
-        self.env["eguitra.hsseq.report.indicator"].sudo().create(rows)
-        return template
+        return self.env["eguitra.hsseq.report.indicator"].sudo().create(rows)
 
 
 class EguitraHsseqReportIndicator(models.Model):
@@ -342,7 +394,31 @@ class EguitraHsseqReportTemplateCompute(models.Model):
             "findings_open": env["eguitra.hsseq.finding"].sudo().search_count(base + [("status", "=", "open")]),
             "requirements_non_compliant": env["eguitra.hsseq.requirement"].sudo().search_count(
                 base + [("status", "=", "non_compliant")]),
+            "procedures_read_rate": self._procedures_read_rate(company),
+            "complaints_open": env["eguitra.hsseq.complaint"].sudo().search_count(base + [("status", "!=", "closed")]),
+            "wastes_stored": env["eguitra.hsseq.waste"].sudo().search_count(base + [("status", "=", "stored")]),
         }
+
+    @api.model
+    def _procedures_read_counts(self, companies, sites=None):
+        """Procédures en vigueur des sociétés (celles qui se rapportent à ces sites, None : toutes), comptes
+        visés et lectures de leur version en vigueur : (procédures, comptes visés, lectures)."""
+        Procedure = self.env["eguitra.hsseq.procedure"].sudo()
+        procedures = Procedure.search([("company_id", "in", companies.ids), ("status", "=", "published")])
+        procedures = procedures.filtered(lambda p: p.current_version_id and p._applies_to_sites(sites))
+        index = Procedure._audience_index(companies) if procedures else []
+        targets = read = 0
+        for procedure in procedures:
+            stats = procedure.current_version_id._read_stats(procedure._audience_users(index))
+            targets += stats["targets"]
+            read += stats["read"]
+        return len(procedures), targets, read
+
+    @api.model
+    def _procedures_read_rate(self, company, sites=None):
+        """Taux de lecture des versions en vigueur : lectures des comptes visés ÷ comptes visés."""
+        _count, targets, read = self._procedures_read_counts(company, sites)
+        return round(read * 100 / targets, 1) if targets else None
 
     # ─── Rapport d'un mois ────────────────────────────────────────────────
 
