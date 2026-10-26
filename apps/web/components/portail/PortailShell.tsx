@@ -8,9 +8,9 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
-import { ErrorBox, FEUILLE, PANNEAU, Select, cx } from "@/components/ui";
+import { Button, ErrorBox, FEUILLE, PANNEAU, Select, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime } from "@/lib/format";
+import { fmtDateTime, pluriel } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
 import type { Me } from "@/lib/types";
 import { KIND_ICON, lienNotification } from "./commun";
@@ -160,8 +160,17 @@ function Navigation({ counts, onNavigate }: { counts: Espace["counts"] | undefin
 
 function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined; dossier: PortailContext["dossier"]; choisir: (id: number) => void }) {
   const [open, setOpen] = useState(false);
-  if (!dossier) return <div className="h-[74px] animate-pulse rounded-2xl bg-panel-2" />;
-  const plusieurs = (espace?.dossiers.length ?? 0) > 1;
+  // Squelette pendant le chargement seulement : un espace sans dossier le dit, au lieu d'attendre sans fin.
+  if (!espace) return <div className="h-[74px] animate-pulse rounded-2xl bg-panel-2" />;
+  if (!dossier) {
+    return (
+      <div className={cx(FEUILLE, "p-3")}>
+        <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">Mon dossier</div>
+        <div className="mt-1 text-[13.5px] leading-snug text-ink-2">Aucun dossier n'est encore ouvert à votre nom.</div>
+      </div>
+    );
+  }
+  const plusieurs = espace.dossiers.length > 1;
   return (
     <div className="relative">
       <button
@@ -244,6 +253,13 @@ function Consultant({ dossier }: { dossier: PortailContext["dossier"] }) {
 
 const CLOCHE = 12;
 
+/** Question de la confirmation « Tout marquer comme lu » (l'action ne se défait pas). */
+export function texteToutLire(n: number): string {
+  return n > 1
+    ? `Les ${pluriel(n, "notification non lue", "notifications non lues")} resteront consultables, mais ne seront plus signalées comme nouvelles.`
+    : "La notification non lue restera consultable, mais ne sera plus signalée comme nouvelle.";
+}
+
 function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -251,10 +267,14 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
   const router = useRouter();
   // La cloche n'affiche que les dernières : la page Notifications donne la suite.
   const { data, error, mutate } = useApi<Notifications>(open ? `/portail/notifications?limit=${CLOCHE}` : null);
+  const [toutEnCours, setToutEnCours] = useState(false);
+  const [erreurLecture, setErreurLecture] = useState<unknown>(null);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    // Une fenêtre de confirmation ouverte par-dessus garde les touches et les clics pour elle.
+    const fenetre = () => Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !fenetre() && setOpen(false);
+    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && !fenetre() && setOpen(false);
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClick);
     return () => {
@@ -263,10 +283,31 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
     };
   }, [open]);
 
-  async function lire(ids?: number[]) {
-    await apiSend("POST", "/portail/notifications/lues", { ids }).catch(() => undefined);
+  /** Une notification ouverte : marquée lue en passant, la page visée s'ouvre quoi qu'il arrive. */
+  async function lire(ids: number[]) {
+    try {
+      await apiSend("POST", "/portail/notifications/lues", { ids });
+    } catch {
+      // Elle reste signalée comme nouvelle : le porteur la retrouvera telle quelle.
+    }
     void mutate();
     onChange();
+  }
+
+  async function toutLire() {
+    const oui = await demanderConfirmation(texteToutLire(count), { titre: "Tout marquer comme lu ?", action: "Tout marquer comme lu" });
+    if (!oui) return;
+    setToutEnCours(true);
+    setErreurLecture(null);
+    try {
+      await apiSend("POST", "/portail/notifications/lues", {});
+      void mutate();
+      onChange();
+    } catch (e) {
+      setErreurLecture(e);
+    } finally {
+      setToutEnCours(false);
+    }
   }
 
   return (
@@ -279,8 +320,17 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
         <div id={id} className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)]")}>
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-sm font-semibold">Notifications</span>
-            {count > 0 && <button type="button" onClick={() => lire()} className="text-[12.5px] font-semibold text-accent hover:underline">Tout marquer comme lu</button>}
+            {count > 0 && (
+              <Button variant="ghost" size="sm" loading={toutEnCours} onClick={() => void toutLire()} className="-mr-2 text-accent">
+                Tout marquer comme lu
+              </Button>
+            )}
           </div>
+          {erreurLecture !== null && (
+            <div className="border-b border-line p-1.5">
+              <ErrorBox error={erreurLecture} titre="Les notifications n'ont pas pu être marquées comme lues." onRetry={() => void toutLire()} />
+            </div>
+          )}
           <ul className="max-h-[420px] overflow-y-auto p-1.5">
             {!data &&
               (error ? (

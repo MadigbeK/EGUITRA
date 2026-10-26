@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Bell, CheckCheck, ChevronRight } from "@/components/icons";
-import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx } from "@/components/ui";
+import { Button, Card, Empty, ErrorBox, FEUILLE, Loading, Segmented, cx, demanderConfirmation } from "@/components/ui";
 import { EnTete, KIND_ICON, heure, lienNotification } from "@/components/portail/commun";
-import { usePortail } from "@/components/portail/PortailShell";
+import { texteToutLire, usePortail } from "@/components/portail/PortailShell";
 import { cleDate, depuisCle, jourLocal, majuscule, pluriel } from "@/components/portail/cabinet-porteur/briques";
 import { apiGet, apiSend, useApi } from "@/lib/api-client";
 import type { NotificationRow, Notifications } from "@/lib/portail-types";
@@ -87,6 +87,9 @@ export default function NotificationsPage() {
   }
 
   async function toutLire() {
+    if (!data) return;
+    const oui = await demanderConfirmation(texteToutLire(data.unread), { titre: "Tout marquer comme lu ?", action: "Tout marquer comme lu" });
+    if (!oui) return;
     setEnvoi(true);
     setErreur(null);
     await marquer();

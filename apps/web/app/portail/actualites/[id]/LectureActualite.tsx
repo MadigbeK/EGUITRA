@@ -15,7 +15,7 @@ import type { AnnouncementRow } from "@/lib/portail-types";
 export function LectureActualite({ id }: { id: number }) {
   const { rafraichir } = usePortail();
   const { data, error, mutate } = useApi<AnnouncementRow>(`/portail/actualites/${id}`);
-  const { data: liste, mutate: mutateListe } = useApi<AnnouncementRow[]>("/portail/actualites");
+  const { data: liste, error: erreurListe, mutate: mutateListe } = useApi<AnnouncementRow[]>("/portail/actualites");
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
   const [confirme, setConfirme] = useState(false);
@@ -178,6 +178,11 @@ export function LectureActualite({ id }: { id: number }) {
               Écrire à mon consultant
             </Link>
           </Card>
+          {!liste && erreurListe && (
+            <Card title="À lire aussi">
+              <ErrorBox error={erreurListe} titre="Les autres communications n'ont pas pu être chargées." onRetry={() => void mutateListe()} />
+            </Card>
+          )}
           {autres.length > 0 && (
             <Card title="À lire aussi">
               <ul className="-mx-2 space-y-1">
