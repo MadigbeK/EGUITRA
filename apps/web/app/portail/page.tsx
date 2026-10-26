@@ -6,7 +6,7 @@ import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, typ
 import { KIND_ICON, dateLongue, formatConakry, instant, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { useApi } from "@/lib/api-client";
-import { INSECABLE, fmtShort } from "@/lib/format";
+import { INSECABLE, fmtPct, fmtShort } from "@/lib/format";
 import type { NextStep, Tableau } from "@/lib/portail-types";
 
 /** Montant abrégé suivi de sa devise, sans coupure de ligne : « 1,74 Md GNF ». */
@@ -80,7 +80,7 @@ export default function AccueilPortail() {
             </div>
           </div>
           <div className="flex items-center gap-5 lg:flex-col lg:gap-3">
-            <Anneau value={p.score} taille={150} epaisseur={12} couleur="#7fd3ff" centre={`${p.score} %`} sous="préparation" clair />
+            <Anneau value={p.score} taille={150} epaisseur={12} couleur="#7fd3ff" centre={fmtPct(p.score, 0)} sous="préparation" clair />
             <div className="space-y-1 text-[12.5px] text-white/75 lg:text-center">
               <div><b className="text-white">{p.pieces.validated + p.pieces.received}</b> pièce{p.pieces.validated + p.pieces.received > 1 ? "s" : ""} sur {p.pieces.due} attendue{p.pieces.due > 1 ? "s" : ""}</div>
               <div><b className="text-white">{p.actions.done}</b> action{p.actions.done > 1 ? "s" : ""} validée{p.actions.done > 1 ? "s" : ""} sur {p.actions.total}</div>

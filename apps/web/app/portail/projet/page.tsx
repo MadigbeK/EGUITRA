@@ -103,11 +103,11 @@ export default function MonProjet() {
 
       {/* Chiffres clés */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
-        <Kpi label="Investissement prévu" value={d.investment ? `${fmtShort(d.investment)} ${devise}` : "À préciser"} hint={d.investment ? fmtGNF(d.investment, devise) : undefined} />
+        <Kpi label="Investissement prévu" value={d.investment ? `${fmtShort(d.investment)}${INSECABLE}${devise}` : "À préciser"} hint={d.investment ? fmtGNF(d.investment, devise) : undefined} />
         <Kpi
           label="Besoin de financement"
-          value={d.financing_need ? `${fmtShort(d.financing_need)} ${devise}` : "À préciser"}
-          hint={part !== null ? `${part} % de l'investissement` : undefined}
+          value={d.financing_need ? `${fmtShort(d.financing_need)}${INSECABLE}${devise}` : "À préciser"}
+          hint={part !== null ? `${fmtPct(part, 0)} de l'investissement` : undefined}
         />
         <Kpi label="Financements sollicités" value={`${fmtShort(sollicite)}${INSECABLE}${deviseFinancements}`} hint={`${resume.count} piste${resume.count > 1 ? "s" : ""} en cours`} />
         <Kpi
@@ -137,7 +137,7 @@ export default function MonProjet() {
             <Ligne icon={Coins} label="Investissement">{d.investment ? fmtGNF(d.investment, devise) : "À préciser"}</Ligne>
             <Ligne icon={HandCoins} label="Besoin de financement">
               {d.financing_need ? fmtGNF(d.financing_need, devise) : "À préciser"}
-              {part !== null && <span className="block text-[12px] font-normal text-muted">soit {part} % de l'investissement</span>}
+              {part !== null && <span className="block text-[12px] font-normal text-muted">soit {fmtPct(part, 0)} de l'investissement</span>}
             </Ligne>
           </dl>
         </Card>
