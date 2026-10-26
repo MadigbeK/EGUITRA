@@ -2671,14 +2671,17 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             fy_actual_keys = [k for k in history_keys if k >= _key(fy_start)]
             actual = sum(monthly[k][code] for k in fy_actual_keys)
             budget = self._budget_amount(ctx, key, fy_start, fy_end)
-            spread = forecast.total_distribution([actual], points, fc["residuals"], nonnegative=nonnegative)
+            # Trajectoires simulées : l'erreur d'un mois se propage aux suivants (fourchette et probabilité).
+            spread = forecast.total_distribution([actual], points, fc["residuals"], nonnegative=nonnegative,
+                                                 coefficients=fc["coefficients"])
             results[key] = {"label": label, "series": rows, "method": fc["method"], "mape": fc["mape"],
                             "params": fc["params"], "history_months": len(values), "cusum": forecast.cusum(values)}
             landing[key] = {
                 "actual_to_date": actual, "forecast_remaining": sum(points), "estimate": actual + sum(points),
                 "low": spread["p10"], "high": spread["p90"], "budget": budget,
                 "probability_pct": (forecast.probability_reach([actual], points, budget, fc["residuals"],
-                                                               nonnegative=nonnegative) * 100
+                                                               nonnegative=nonnegative,
+                                                               coefficients=fc["coefficients"]) * 100
                                     if budget is not None else None),
                 "previous_year": prev_fy[code], "vs_previous_pct": stats.pct_change(actual + sum(points), prev_fy[code]),
             }
