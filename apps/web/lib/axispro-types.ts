@@ -688,3 +688,11 @@ export interface Suggestion {
   threshold: number;
   partial: number | null;
 }
+
+// ─── Modules du cabinet : devises, actions, pièces standard (lot 3 de l'audit) ───
+
+/** Modèle financier d'un dossier : devise de ses montants et verrou de la décision du comité. */
+export type PlanDossier = PlanPayload & {
+  dossier: PlanPayload["dossier"] & { currency?: string | null; locked?: boolean };
+  options: PlanPayload["options"] & { indicators: Record<string, IndicatorInfo & { money?: boolean }> };
+};
