@@ -12,7 +12,7 @@ from odoo.addons.eguitra_finance.controllers.common import as_float, move_summar
 from ..engine import INDICATORS
 from ..models.dossier import COMMITTEE_DECISIONS, HYPOTHESES, STATUSES, YES_NO
 from ..models.policy import SCOPES, WEIGHTINGS, grid_template
-from ..models.review import SNAPSHOT_FINANCIAL
+from ..models.review import MOTIVE_REQUIRED, SNAPSHOT_FINANCIAL, motive_missing
 from ..scoring import REQUIREMENTS, RULES
 from .common import (
     document_row,
@@ -63,6 +63,13 @@ def _record(model, record_id, label):
 def _draft(policy):
     if policy.state != "draft":
         raise ApiError(422, "business_rule", "Seule une version en brouillon se modifie : créez une nouvelle version.")
+
+
+def _check_motive(decision, motive):
+    """Un HOLD ou un NO-GO se motive dès le brouillon : sans motif, la revue ne pourrait jamais être
+    verrouillée (422, champ motif signalé)."""
+    if motive_missing(decision, motive):
+        raise ApiError(422, "business_rule", MOTIVE_REQUIRED, fields=["motive"])
 
 
 def _percent(data, key):
@@ -583,15 +590,15 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/reviews", methods=("POST",), profiles=WRITE)
     def create_review(self, dossier_id, **_kw):
         """Revue de comité : instantané de l'évaluation ; verrouillée, elle est scellée et fige le dossier.
-        La création d'une revue non verrouillée est libre ; le verrou (lock) exige qu'un autre compte
-        ait contribué à la révision (quatre yeux, refus 403, rien n'est créé)."""
+        Un HOLD ou un NO-GO exige un motif, brouillon compris (422, rien n'est créé). La création d'une
+        revue non verrouillée est libre ; le verrou (lock) exige qu'un autre compte ait contribué à la
+        révision (quatre yeux, refus 403, rien n'est créé)."""
         dossier = _dossier(dossier_id)
         data = read_json()
         (decision,) = require(data, "decision")
         if decision not in dict(COMMITTEE_DECISIONS):
             raise ApiError(400, "invalid_parameter", "Décision inconnue.")
-        if decision in ("hold", "no_go") and data.get("lock") and not (data.get("motive") or "").strip():
-            raise ApiError(400, "missing_fields", "Motivez une décision HOLD ou NO-GO.", fields=["motive"])
+        _check_motive(decision, data.get("motive"))
         result = dossier.evaluate()
         scoring = dossier.scoring(result)
         financial = result.get("financial")
@@ -622,7 +629,13 @@ class EguitraAxispro(http.Controller):
 
     @api_route("/axispro/reviews/<int:review_id>", methods=("PATCH",), profiles=WRITE)
     def update_review(self, review_id, **_kw):
+        """Correction d'une revue en brouillon : décision, motif, conditions, membres, instance, compte
+        rendu, date. Une revue verrouillée ne se modifie plus (422) ; un HOLD ou un NO-GO garde un motif
+        (422). Le verrou reste soumis aux quatre yeux (route /lock)."""
         review = _record("axispro.review", review_id, "Revue")
+        if review.state == "locked":
+            raise ApiError(422, "business_rule", "Une décision verrouillée ne se modifie plus : ouvrez une nouvelle "
+                                                 "révision du dossier pour une nouvelle décision.")
         data = read_json()
         values = {k: data[k] or False for k in ("members", "instance", "conditions", "motive", "minutes") if k in data}
         if "decision" in data:
@@ -631,17 +644,19 @@ class EguitraAxispro(http.Controller):
             values["decision"] = data["decision"]
         if "date" in data:
             values["date"] = parse_date(data, "date", today())
+        _check_motive(values.get("decision", review.decision), values["motive"] if "motive" in values else review.motive)
         review.write(values)
         return review_row(review)
 
     @api_route("/axispro/reviews/<int:review_id>/lock", methods=("POST",), profiles=WRITE)
     def lock_review(self, review_id, **_kw):
-        """Verrouillage d'une revue : refusé si aucun autre compte n'a contribué à la révision (quatre
+        """Verrouillage d'une revue : un HOLD ou un NO-GO sans motif (brouillon antérieur à la règle) se
+        complète d'abord (422) ; refusé si aucun autre compte n'a contribué à la révision (quatre
         yeux, 403)."""
         review = _record("axispro.review", review_id, "Revue")
-        if review.decision in ("hold", "no_go") and not (review.motive or "").strip():
-            raise ApiError(400, "missing_fields", "Motivez une décision HOLD ou NO-GO avant de la verrouiller.",
-                           fields=["motive"])
+        if motive_missing(review.decision, review.motive):
+            raise ApiError(422, "business_rule", "Motivez une décision HOLD ou NO-GO avant de la verrouiller : "
+                                                 "complétez le brouillon.", fields=["motive"])
         review.action_lock()
         return review_row(review)
 

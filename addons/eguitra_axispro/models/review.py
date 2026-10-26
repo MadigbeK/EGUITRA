@@ -7,6 +7,8 @@ serveur, d'un contenu canonique : fiche, hypothèses, version de la grille, rég
 (statuts, observations, preuves et leurs sommes de contrôle), pièces de la data room, scores et
 décision. L'empreinte se vérifie à tout moment (contenu scellé intact, dossier modifié depuis ou non).
 Quatre yeux : une décision engage au moins deux personnes (auteurs de la révision et verrouilleur).
+Un HOLD ou un NO-GO se motive dès le brouillon ; une revue en brouillon reste modifiable (décision,
+motif, membres, compte rendu…) jusqu'à son verrouillage.
 """
 
 import hashlib
@@ -14,12 +16,22 @@ import hmac
 import json
 import math
 
-from odoo import fields, models
-from odoo.exceptions import UserError
+from odoo import api, fields, models
+from odoo.exceptions import UserError, ValidationError
 
 from ..scoring import DECISIONS
 from .dossier import COMMITTEE_DECISIONS, HYPOTHESES, RECOMMENDATIONS
 from .plan import LINE_FIELDS, PLAN_PARAMS
+
+# Décisions qui se motivent toujours, dès le brouillon : sans motif, un HOLD ou un NO-GO enregistré
+# en brouillon ne pourrait jamais être verrouillé.
+MOTIVATED_DECISIONS = ("hold", "no_go")
+MOTIVE_REQUIRED = "Motivez une décision HOLD ou NO-GO : le motif est obligatoire, dès le brouillon."
+
+
+def motive_missing(decision, motive):
+    """Vrai si la décision exige un motif et qu'il manque (vide ou fait d'espaces)."""
+    return decision in MOTIVATED_DECISIONS and not (motive or "").strip()
 
 
 class AxisproReview(models.Model):
@@ -47,6 +59,12 @@ class AxisproReview(models.Model):
     sealed_content = fields.Json("Contenu scellé", readonly=True)
     fingerprint = fields.Char("Empreinte", readonly=True, copy=False)
 
+    @api.constrains("decision", "motive")
+    def _check_motive(self):
+        for review in self:
+            if motive_missing(review.decision, review.motive):
+                raise ValidationError(MOTIVE_REQUIRED)
+
     def write(self, vals):
         if self.filtered(lambda r: r.state == "locked"):
             raise UserError("Une décision verrouillée ne se modifie plus.")
@@ -62,6 +80,8 @@ class AxisproReview(models.Model):
             if review.state == "locked":
                 continue
             dossier = review.dossier_id
+            if motive_missing(review.decision, review.motive):
+                raise UserError("Motivez une décision HOLD ou NO-GO avant de la verrouiller : complétez le brouillon.")
             if dossier.locked_review_id:
                 raise UserError(f"Une décision est déjà verrouillée pour la révision {dossier.revision} : ouvrez une "
                                 "nouvelle révision avant d'en verrouiller une autre.")
