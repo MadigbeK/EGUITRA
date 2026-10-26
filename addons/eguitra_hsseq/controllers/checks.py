@@ -1,6 +1,8 @@
 """API des contrôles avant départ (contrat §7) : grilles par type de véhicule (lisibles en entier pour le
-cache de NIMOVA Terrain, avec leur version), saisie idempotente par client_uuid, non-conformités et leur
-levée par le chef de parc (photo de la correction obligatoire). Pas de contre-visa au lot 1."""
+cache de NIMOVA Terrain, avec leur version), saisie idempotente par client_uuid sur la version de la grille en
+vigueur à l'heure de saisie, contrôle complémentaire des points ajoutés à la grille après la saisie,
+non-conformités et leur levée par le chef de parc (photo de la correction obligatoire). Pas de contre-visa
+au lot 1."""
 
 import base64
 import binascii
@@ -12,7 +14,7 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, require
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
-from ..models.common import CHECK_KINDS, CHECK_RESULTS, VEHICLE_KINDS
+from ..models.common import CHECK_KINDS, CHECK_RESULTS, CLIENT_ANSWERS, VEHICLE_KINDS
 from .common import (
     CONFIG,
     FIELD,
@@ -162,6 +164,8 @@ def check_line(check):
         "author": user_ref(check.author_id), "reported_at": check.reported_at, "result": check.result,
         "open_nonconformities": len(check.nonconformity_ids.filtered(lambda n: n.status == "open")),
         "photos_missing": check._photos_missing(),
+        "complement_of": {"id": check.complement_of_id.id, "reference": check.complement_of_id.reference}
+        if check.complement_of_id else None,
     }
 
 
@@ -170,6 +174,8 @@ def check_detail(check):
     by_answer = {nc.answer_id.id: nc for nc in check.nonconformity_ids}
     row = check_line(check)
     signature = request.env["eguitra.hsseq.attachment"]._for("check", check, role="signature")[:1]
+    awaiting = check._awaiting_answers()
+    lift = any(can_lift(nc) for nc in check.nonconformity_ids)
     row.update({
         "client_uuid": check.client_uuid or None, "synced_at": check.synced_at, "offline": check.offline,
         "duration_s": check.duration_s or None, **gps_fields(check),
@@ -180,14 +186,61 @@ def check_detail(check):
                     for a in check.answer_ids],
         "signature": signature._row() if signature else None,
         "nonconformities": [nc_row(nc) for nc in check.nonconformity_ids],
+        # Points ajoutés à la grille après la saisie, à répondre par un contrôle complémentaire (les points
+        # bloquants retiennent V01 jusque-là).
+        "awaiting_items": [{"item_id": a.item_id.id, "label": a.label, "blocking": a.blocking} for a in awaiting],
+        "complements": [check_line(c) for c in check.complement_ids.sorted(lambda c: (c.reported_at, c.id))],
         "attachments": attachments_rows("check", check),
         "history": [] if is_self_only() else history("check", check),
-        "transitions": ["lift"] if any(can_lift(nc) for nc in check.nonconformity_ids) else [],
-        "rights": {"can_edit": is_hsseq(),
-                   "can_close": any(can_lift(nc) for nc in check.nonconformity_ids),
-                   "can_approve": False},
+        "transitions": (["lift"] if lift else []) + (["complement"] if can_complete(check) else []),
+        "rights": {"can_edit": is_hsseq(), "can_close": lift, "can_approve": False},
     })
     return row
+
+
+def can_complete(check):
+    """Contrôle complémentaire possible : contrôle d'origine en attente, compte de terrain qui peut
+    contrôler cet ensemble (conducteur : le sien ; chef de parc : de ses sites)."""
+    if check.complement_of_id or not check._awaiting_answers() or not profiles() & set(FIELD):
+        return False
+    scope = scope_level()
+    if scope == "self":
+        driver = my_driver()
+        return bool(driver) and EguitraHsseqChecks._drives(driver, check.vehicle_id, check.rotation_id)
+    return scope == "all" or site_allowed(check.vehicle_id.site_id)
+
+
+def client_answers(data):
+    """Réponses du client : un point et ok, not_ok ou na ; « non évalué » n'est jamais reçu (422)."""
+    answers, photos = [], {}
+    for answer in data.get("answers") or []:
+        if not isinstance(answer, dict) or not answer.get("item_id"):
+            raise ApiError(400, "invalid_parameter", "Réponse sans point.", fields=["answers"])
+        if answer.get("answer") == "not_evaluated":
+            raise ApiError(422, "invalid_parameter", "Réponse « non évalué » refusée : seule la plateforme la pose.",
+                           fields=["answers"])
+        if answer.get("answer") not in CLIENT_ANSWERS:
+            raise ApiError(400, "invalid_parameter", "Réponse : ok, not_ok ou na.", fields=["answers"])
+        item_id = int_or_none(answer, "item_id")
+        answers.append({"item_id": item_id, "answer": answer["answer"], "comment": text(answer, "comment", 1000)})
+        photos[item_id] = ids_list(answer, "attachment_ids")
+    return answers, photos
+
+
+def field_values(data):
+    """Champs de la saisie de terrain, communs au contrôle et à son contrôle complémentaire."""
+    return {"author_id": request.env.uid, "client_uuid": client_uuid(data), "reported_at": reported_at(data),
+            "offline": bool(data.get("offline")), "duration_s": int(number(data, "duration_s")),
+            "synced_at": fields.Datetime.now(), **gps(data)}
+
+
+def claim_check_files(check, photos, data):
+    """Photos déposées avant la fiche, rattachées à la non-conformité de leur point (au contrôle sinon), et
+    signature du contrôle."""
+    for nc in check.nonconformity_ids:
+        claim_attachments(photos.pop(nc.item_id.id, []), "nonconformity", nc, role="photo")
+    claim_attachments([i for ids in photos.values() for i in ids] + ids_list(data, "attachment_ids"), "check", check)
+    store_signature(check, data.get("signature"))
 
 
 def get_check(check_id):
@@ -374,28 +427,35 @@ class EguitraHsseqChecks(http.Controller):
             driver = mine
         elif scope == "site" and not site_allowed(vehicle.site_id):
             raise forbidden("Ensemble d'un autre site.")
-        answers, photos = [], {}
-        for answer in data.get("answers") or []:
-            if not isinstance(answer, dict) or not answer.get("item_id"):
-                raise ApiError(400, "invalid_parameter", "Réponse sans point.", fields=["answers"])
-            if answer.get("answer") not in ("ok", "not_ok", "na"):
-                raise ApiError(400, "invalid_parameter", "Réponse : ok, not_ok ou na.", fields=["answers"])
-            item_id = int_or_none(answer, "item_id")
-            answers.append({"item_id": item_id, "answer": answer["answer"], "comment": text(answer, "comment", 1000)})
-            photos[item_id] = ids_list(answer, "attachment_ids")
-        values = {"company_id": vehicle.company_id.id, "template_id": template.id, "vehicle_id": vehicle.id,
-                  "template_version": int_or_none(data, "template_version") or template.version,
-                  "rotation_id": rotation.id if rotation else False, "driver_id": driver.id or False,
-                  "author_id": request.env.uid, "client_uuid": uuid, "reported_at": reported_at(data),
-                  "offline": bool(data.get("offline")), "duration_s": int(number(data, "duration_s")),
-                  "synced_at": fields.Datetime.now(), **gps(data)}
+        answers, photos = client_answers(data)
+        # Sans version citée : la version courante ; une version citée doit être celle qui était en vigueur à
+        # l'heure de saisie (contrôlé par le noyau).
+        values = dict(field_values(data), company_id=vehicle.company_id.id, template_id=template.id,
+                      vehicle_id=vehicle.id, template_version=int_or_none(data, "template_version"),
+                      rotation_id=rotation.id if rotation else False, driver_id=driver.id or False, client_uuid=uuid)
         check = request.env["eguitra.hsseq.check"]._hsseq_create(values, answers)
-        # Photos déposées avant la fiche : rattachées à la non-conformité de leur point (au contrôle sinon).
-        for nc in check.nonconformity_ids:
-            claim_attachments(photos.pop(nc.item_id.id, []), "nonconformity", nc, role="photo")
-        claim_attachments([i for ids in photos.values() for i in ids] + ids_list(data, "attachment_ids"), "check", check)
-        store_signature(check, data.get("signature"))
+        claim_check_files(check, photos, data)
         return check_detail(check)
+
+    @hsseq_route("/hsseq/checks/<int:check_id>/complement", methods=("POST",), profiles=FIELD)
+    def complement(self, check_id, **_kw):
+        """Contrôle complémentaire : réponses aux points du contrôle ajoutés à la grille après sa saisie
+        (awaiting_items), au moins à ses points bloquants. Idempotent par client_uuid ; rend le contrôle
+        complémentaire, dont complement_of cite le contrôle d'origine."""
+        check = get_check(check_id)
+        data = read_json()
+        require(data, "answers")
+        existing = existing_by_uuid("eguitra.hsseq.check", client_uuid(data))
+        if existing:
+            return check_detail(existing)
+        if check.complement_of_id or not check._awaiting_answers():
+            raise ApiError(422, "invalid_transition", "Ce contrôle n'attend aucun contrôle complémentaire.")
+        if not can_complete(check):
+            raise forbidden("Contrôle complémentaire réservé à qui peut contrôler cet ensemble.")
+        answers, photos = client_answers(data)
+        complement = check._hsseq_complete(field_values(data), answers)
+        claim_check_files(complement, photos, data)
+        return check_detail(complement)
 
     @staticmethod
     def _drives(driver, vehicle, rotation):

@@ -58,8 +58,11 @@ REMINDER_KINDS = [("d_minus_7", "Échéance dans 7 jours"), ("d0", "Échéance d
 CHECK_KINDS = [("pre_departure", "Contrôle avant départ"), ("unloading", "Dépotage"), ("mine_site", "Site minier")]
 ANSWERS = [("ok", "Conforme"), ("not_ok", "Non conforme"), ("na", "Sans objet"),
            ("not_evaluated", "Non évalué (point ajouté à la grille après la saisie)")]
+# Réponses que le client envoie : « non évalué » n'est posé que par le noyau.
+CLIENT_ANSWERS = ("ok", "not_ok", "na")
 CHECK_RESULTS = [("compliant", "Conforme"), ("non_compliant", "Non conforme (réserves)"),
-                 ("blocking", "Non conforme bloquant")]
+                 ("blocking", "Non conforme bloquant"),
+                 ("incomplete", "Incomplet : points bloquants à évaluer par un contrôle complémentaire")]
 NONCONFORMITY_STATUSES = [("open", "Ouverte"), ("lifted", "Levée")]
 
 BREATH_STATUSES = [("compliant", "Conforme"), ("non_compliant", "Non conforme"), ("not_done", "Non réalisé")]

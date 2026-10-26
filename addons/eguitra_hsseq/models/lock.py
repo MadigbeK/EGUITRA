@@ -4,7 +4,8 @@ bloquant reste ouvert. L'évaluation vit dans le noyau : Transport l'appelle par
 validation), quel que soit le client (écran, téléphone, appel direct).
 
 Motifs du lot 1, activables par type de véhicule et par site (eguitra.hsseq.lock.reason) :
-- V01 aucun contrôle avant départ pour la rotation (et son ensemble) ;
+- V01 aucun contrôle avant départ pour la rotation (et son ensemble), ou seulement un contrôle incomplet
+  (point bloquant ajouté à la grille après la saisie, en attente d'un contrôle complémentaire) ;
 - V02 une non-conformité d'un point bloquant encore ouverte sur l'ensemble, d'une rotation à l'autre ;
 - V03 alcootest du conducteur de la rotation absent, non réalisé ou positif (un positif le retire de la
   rotation ; V03 reste alors ouvert pour lui) ;
@@ -132,16 +133,24 @@ class EguitraTransportRotation(models.Model):
                          detail=info, resolution=conf.resolution or None, pending=pending, waiver_id=None)
             (reasons if severity == "block" else warnings).append(entry)
 
-        # V01 : contrôle avant départ de la rotation, pour son ensemble (ou contrôle récent sans rotation).
+        # V01 : contrôle avant départ de la rotation, pour son ensemble (ou contrôle récent sans rotation). Un
+        # contrôle dont un point bloquant reste non évalué (ajouté à la grille après la saisie) ne le lève pas
+        # tant qu'un contrôle complémentaire n'y a pas répondu : V01 reste « à faire ».
         Check = self.env["eguitra.hsseq.check"].sudo()
-        if not Check.search_count([("rotation_id", "=", rot.id), ("vehicle_id", "=", rot.vehicle_id.id),
-                                   ("kind", "=", "pre_departure")]):
-            recent = rot._hsseq_recent_check(settings)
-            if recent and attach:
-                recent.write({"rotation_id": rot.id, "driver_id": recent.driver_id.id or rot.driver_id.id})
-                recent._journal("attach", note=f"Rattaché à la rotation {rot.name}")
-            if not recent:
-                add("V01", since=rot.create_date, pending=True)
+        checks = Check.search([("rotation_id", "=", rot.id), ("vehicle_id", "=", rot.vehicle_id.id),
+                               ("kind", "=", "pre_departure"), ("complement_of_id", "=", False)],
+                              order="reported_at desc, id desc")
+        if not checks:
+            checks = rot._hsseq_recent_check(settings)
+            if checks and attach:
+                checks._attach_rotation(rot)
+        if not checks:
+            add("V01", since=rot.create_date, pending=True)
+        elif all(c._pending_answers() for c in checks):
+            pending = checks[0]._pending_answers()
+            add("V01", since=checks[0].reported_at, pending=True,
+                info=f"Contrôle {checks[0].reference} incomplet : contrôle complémentaire attendu sur "
+                     f"{', '.join(pending.mapped('label'))} (points bloquants ajoutés à la grille après la saisie).")
         # V02 : non-conformité bloquante ouverte sur l'ensemble, d'une rotation à l'autre.
         open_ncs = self.env["eguitra.hsseq.nonconformity"].sudo().search([
             ("vehicle_id", "=", rot.vehicle_id.id), ("blocking", "=", True), ("status", "=", "open")],
@@ -172,11 +181,13 @@ class EguitraTransportRotation(models.Model):
         return {"reasons": reasons, "warnings": warnings, "waived": waived}
 
     def _hsseq_recent_check(self, settings):
-        """Contrôle avant départ de l'ensemble saisi sans rotation dans la fenêtre des paramètres."""
+        """Contrôle avant départ de l'ensemble saisi sans rotation dans la fenêtre des paramètres : le plus
+        récent qui soit complet, sinon le plus récent."""
         since = fields.Datetime.now() - timedelta(hours=settings.check_window_hours or 0)
-        return self.env["eguitra.hsseq.check"].sudo().search([
+        checks = self.env["eguitra.hsseq.check"].sudo().search([
             ("rotation_id", "=", False), ("vehicle_id", "=", self.vehicle_id.id), ("kind", "=", "pre_departure"),
-            ("reported_at", ">=", since)], order="reported_at desc, id desc", limit=1)
+            ("complement_of_id", "=", False), ("reported_at", ">=", since)], order="reported_at desc, id desc")
+        return checks.filtered(lambda c: not c._pending_answers())[:1] or checks[:1]
 
     def _hsseq_recent_tests(self, driver, settings):
         """Alcootest du conducteur saisi sans rotation dans la fenêtre : le plus récent, ou un positif s'il y

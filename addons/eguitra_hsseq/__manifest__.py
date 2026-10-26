@@ -3,7 +3,7 @@
     "summary": "Santé, sécurité, sûreté, environnement et qualité du transport : événements et enquêtes, plan "
                "d'actions, contrôles avant départ des citernes et des bennes, alcootests, verrou de départ (V01 à V05) et "
                "dérogations, cockpit des indicateurs",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.0.1",
     "category": "Human Resources",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

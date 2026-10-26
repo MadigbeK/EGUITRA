@@ -8,8 +8,8 @@ AUDITED_MODELS = [
     "eguitra.hsseq.settings", "eguitra.hsseq.site", "eguitra.hsseq.journal", "eguitra.hsseq.notification",
     "eguitra.hsseq.attachment", "eguitra.hsseq.event", "eguitra.hsseq.event.person", "eguitra.hsseq.event.cost",
     "eguitra.hsseq.action", "eguitra.hsseq.action.reminder", "eguitra.hsseq.check.template",
-    "eguitra.hsseq.check.item", "eguitra.hsseq.check", "eguitra.hsseq.check.answer", "eguitra.hsseq.nonconformity",
-    "eguitra.hsseq.breath.test", "eguitra.hsseq.waiver", "eguitra.hsseq.lock.reason", "eguitra.hsseq.lock.log",
+    "eguitra.hsseq.check.template.version", "eguitra.hsseq.check.item", "eguitra.hsseq.check",
+    "eguitra.hsseq.check.answer", "eguitra.hsseq.nonconformity", "eguitra.hsseq.breath.test", "eguitra.hsseq.waiver", "eguitra.hsseq.lock.reason", "eguitra.hsseq.lock.log",
     "eguitra.hsseq.indicator.snapshot",
 ]
 

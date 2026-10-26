@@ -12,6 +12,7 @@ from .common import HsseqCase
 
 BRAKES = "Freins et ralentisseur, essai statique"
 LIGHTS = "Éclairage et feux de détresse"
+VEST = "Gilet haute visibilité porté"
 
 
 @tagged("post_install", "-at_install")
@@ -37,32 +38,47 @@ class TestLock(HsseqCase):
         self.assertEqual(status, 200, body)
         self.assertEqual(body["version"], version + 1, "Une modification, une version")
 
-    def test_controle_hors_ligne_sur_une_version_plus_ancienne(self):
-        """Seuls les points de la version utilisée sont exigés ; un point ajouté depuis est « non évalué », un
-        point retiré depuis reste accepté."""
+    def _new_version(self, blocking=True):
+        """Nouvelle version de la grille citerne, en vigueur dès maintenant : un point ajouté (bloquant par
+        défaut), l'éclairage retiré ; la version d'avant était en vigueur depuis deux jours. Rend la version
+        d'avant, ses réponses conformes et le point ajouté."""
         template = self.tanker_template
-        old_version = template.version
-        old_answers = self.answers(template)
+        template.version_ids.write({"effective_from": fields.Datetime.now() - timedelta(days=2)})
+        old_version, old_answers = template.version, self.answers(template)
         status, grids = self.api("kadi.hsseq", "GET", "/hsseq/checks/templates?vehicle_kind=tanker")
         grid = next(g for g in grids if g["id"] == template.id)
         status, body = self.api("kadi.hsseq", "PATCH", f"/hsseq/checks/templates/{template.id}", {
             "items": [i for i in grid["items"] if i["label"] != LIGHTS]
-            + [{"label": "Gilet haute visibilité porté", "blocking": True, "sequence": 200}]})
+            + [{"label": VEST, "blocking": blocking, "sequence": 200}]})
         self.assertEqual((status, body["version"]), (200, old_version + 1), body)
-        added = template._items().filtered(lambda i: i.label == "Gilet haute visibilité porté")
+        return old_version, old_answers, template._items().filtered(lambda i: i.label == VEST)
+
+    @staticmethod
+    def _before():
+        """Heure de saisie d'un contrôle fait hors ligne avant la modification de la grille."""
+        return fields.Datetime.to_string(fields.Datetime.now() - timedelta(hours=1))
+
+    def test_controle_hors_ligne_sur_une_version_plus_ancienne(self):
+        """Saisi avant la modification de la grille : seuls les points de sa version sont exigés ; un point
+        ajouté depuis est « non évalué », un point retiré depuis reste accepté."""
+        template = self.tanker_template
+        old_version, old_answers, added = self._new_version()
         lights = template._items(active_only=False).filtered(lambda i: i.label == LIGHTS)
         self.assertEqual((lights.active, lights.retired_version), (False, old_version + 1), "Retiré : archivé")
         rot = self._rotation()
         payload = {"client_uuid": "ctl-v-old", "template_id": template.id, "template_version": old_version,
-                   "rotation_id": rot.id, "offline": True, "answers": old_answers}
+                   "reported_at": self._before(), "rotation_id": rot.id, "offline": True, "answers": old_answers}
         status, check = self.api("ibrahima", "POST", "/hsseq/checks", payload)
         self.assertEqual(status, 200, check)
         answers = {a["item_id"]: a["answer"] for a in check["answers"]}
         self.assertEqual(answers[added.id], "not_evaluated", "Point ajouté après la saisie : non évalué, sans erreur")
         self.assertEqual(answers[lights.id], "ok", "Point retiré depuis : sa réponse est gardée")
-        self.assertEqual((check["result"], check["template"]["version"]), ("compliant", old_version))
+        self.assertEqual((check["result"], check["template"]["version"]), ("incomplete", old_version),
+                         "Point bloquant non évalué : jamais conforme")
+        self.assertEqual([i["item_id"] for i in check["awaiting_items"]], [added.id])
+        self.assertIn("complement", check["transitions"])
         status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(
-            payload, client_uuid="ctl-v-cur", template_version=old_version + 1))
+            payload, client_uuid="ctl-v-cur", template_version=old_version + 1, reported_at=None))
         self.assertEqual((status, body["error"], body["fields"]), (422, "incomplete_answers", [added.id]),
                          "Version courante : le nouveau point est exigé")
         brakes = template._items().filtered(lambda i: i.label == BRAKES)
@@ -70,6 +86,149 @@ class TestLock(HsseqCase):
             payload, client_uuid="ctl-v-gap", answers=[a for a in old_answers if a["item_id"] != brakes.id]))
         self.assertEqual((status, body["error"], body["fields"]), (422, "incomplete_answers", [brakes.id]),
                          "Un point de sa propre version manque")
+
+    def test_version_en_vigueur_a_l_heure_de_saisie(self):
+        """La version citée est celle qui était en vigueur à l'heure de saisie, sinon 422 ; sans version
+        citée, la version courante. Une ancienne version ne sert plus à esquiver un point ajouté depuis."""
+        template = self.tanker_template
+        old_version, old_answers, added = self._new_version()
+        self.assertEqual([(v.version, v.effective_from <= fields.Datetime.now()) for v in template.version_ids],
+                         [(old_version, True), (old_version + 1, True)], "Historique des versions et de leur entrée en vigueur")
+        rot = self._rotation()
+        base = {"template_id": template.id, "rotation_id": rot.id}
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(
+            base, client_uuid="ver-1", template_version=old_version, answers=old_answers))
+        self.assertEqual((status, body["error"], body["fields"]), (422, "invalid_parameter", ["template_version"]),
+                         "Ancienne version pour une saisie faite après la modification : refusée")
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(
+            base, client_uuid="ver-2", template_version=old_version + 1, reported_at=self._before(),
+            answers=self.answers(template)))
+        self.assertEqual((status, body["error"]), (422, "invalid_parameter"),
+                         "Version pas encore en vigueur à l'heure de saisie : refusée")
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(
+            base, client_uuid="ver-3", template_version=old_version, answers=old_answers,
+            reported_at=fields.Datetime.to_string(fields.Datetime.now() - timedelta(days=5))))
+        self.assertEqual((status, body["error"]), (422, "invalid_parameter"), "Aucune version en vigueur à cette heure")
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", dict(base, client_uuid="ver-4", answers=old_answers))
+        self.assertEqual((status, body["error"], body["fields"]), (422, "incomplete_answers", [added.id]),
+                         "Sans version citée : la version courante, le point ajouté est exigé")
+        status, check = self.api("ibrahima", "POST", "/hsseq/checks", dict(
+            base, client_uuid="ver-5", answers=self.answers(template)))
+        self.assertEqual((status, check["template"]["version"], check["result"]), (200, old_version + 1, "compliant"),
+                         check)
+        self.assertFalse(self.env["eguitra.hsseq.check"].search_count(
+            [("client_uuid", "in", ("ver-1", "ver-2", "ver-3", "ver-4"))]), "Rien n'est enregistré d'un refus")
+
+    def test_point_bloquant_non_evalue_attend_un_controle_complementaire(self):
+        """Un point bloquant ajouté après la saisie n'est jamais conforme : V01 reste « à faire » jusqu'au
+        contrôle complémentaire qui y répond."""
+        old_version, old_answers, added = self._new_version()
+        rot = self._rotation()
+        self.breath(rot)
+        status, check = self.api("ibrahima", "POST", "/hsseq/checks", {
+            "client_uuid": "cmp-0", "template_id": self.tanker_template.id, "template_version": old_version,
+            "reported_at": self._before(), "rotation_id": rot.id, "offline": True, "answers": old_answers})
+        self.assertEqual((status, check["result"]), (200, "incomplete"), check)
+        evaluation = rot._hsseq_evaluate()
+        [v01] = evaluation["reasons"]
+        self.assertEqual((v01["code"], v01["pending"], v01["waivable"]), ("V01", True, False))
+        self.assertIn(VEST, v01["detail"])
+        self.assertTrue(evaluation["pending_checks_only"], "Le verrou le signale « à contrôler »")
+        self.assertFalse(evaluation["allowed"])
+        with self.assertRaises(RotationBlocked):
+            rot.with_user(self.parc).action_depart()
+        path = f"/hsseq/checks/{check['id']}/complement"
+        brakes = self.tanker_template._items().filtered(lambda i: i.label == BRAKES)
+        status, body = self.api("ibrahima", "POST", path, {"client_uuid": "cmp-x",
+                                                           "answers": [{"item_id": brakes.id, "answer": "ok"}]})
+        self.assertEqual((status, body["error"]), (400, "invalid_parameter"), "Point déjà répondu par le contrôle")
+        for login in ("sekou.parc", "dg.hsseq", "admin.hsseq", "rh.hsseq"):
+            status, _b = self.api(login, "POST", path, {"client_uuid": f"cmp-{login}",
+                                                        "answers": [{"item_id": added.id, "answer": "ok"}]})
+            self.assertIn(status, (403, 404), f"{login} ne complète pas ce contrôle")
+        status, complement = self.driver_api("POST", path, {
+            "client_uuid": "cmp-1", "answers": [{"item_id": added.id, "answer": "ok"}]})
+        self.assertEqual(status, 200, complement)
+        self.assertEqual((complement["complement_of"]["id"], complement["result"]), (check["id"], "compliant"))
+        status, again = self.driver_api("POST", path, {"client_uuid": "cmp-1",
+                                                       "answers": [{"item_id": added.id, "answer": "ok"}]})
+        self.assertEqual((status, again["id"]), (200, complement["id"]), "Renvoi idempotent")
+        status, origin = self.api("kadi.hsseq", "GET", f"/hsseq/checks/{check['id']}")
+        self.assertEqual((origin["result"], origin["awaiting_items"], [c["id"] for c in origin["complements"]]),
+                         ("compliant", [], [complement["id"]]))
+        self.assertNotIn("complement", origin["transitions"])
+        self.assertEqual(self.codes(rot), [], "Contrôle complété : V01 levé")
+        status, body = self.api("ibrahima", "POST", path, {"client_uuid": "cmp-2",
+                                                           "answers": [{"item_id": added.id, "answer": "ok"}]})
+        self.assertEqual((status, body["error"]), (422, "invalid_transition"), "Plus rien à compléter")
+        status, cockpit = self.api("kadi.hsseq", "GET", "/hsseq/cockpit")
+        self.assertEqual(status, 200, cockpit)
+
+    def test_controle_complementaire_non_conforme(self):
+        """Le contrôle complémentaire ouvre ses non-conformités (V02) et donne son résultat au contrôle
+        d'origine ; il suit le contrôle d'origine dans le temps et ne se complète pas lui-même."""
+        old_version, old_answers, added = self._new_version()
+        rot = self._rotation()
+        self.breath(rot)
+        Check = self.env["eguitra.hsseq.check"]
+        before = fields.Datetime.now() - timedelta(hours=1)
+        original = Check._hsseq_create({
+            "company_id": self.company.id, "template_id": self.tanker_template.id, "vehicle_id": self.truck.id,
+            "rotation_id": rot.id, "driver_id": rot.driver_id.id, "author_id": self.parc.id, "reported_at": before,
+            "template_version": old_version}, old_answers)
+        self.assertEqual(original.result, "incomplete")
+        with self.assertRaises(HsseqError) as refus:
+            original._hsseq_complete({"author_id": self.parc.id, "reported_at": before - timedelta(minutes=5)},
+                                     [{"item_id": added.id, "answer": "ok"}])
+        self.assertEqual(refus.exception.code, "invalid_parameter", "Saisi avant le contrôle d'origine")
+        with self.assertRaises(HsseqError) as refus:
+            original._hsseq_complete({"author_id": self.parc.id}, [])
+        self.assertEqual((refus.exception.code, refus.exception.fields), ("incomplete_answers", [added.id]))
+        complement = original._hsseq_complete({"author_id": self.parc.id}, [{"item_id": added.id, "answer": "not_ok"}])
+        self.assertEqual((complement.rotation_id, complement.vehicle_id), (rot, self.truck))
+        self.assertEqual((complement.result, original.result), ("blocking", "blocking"))
+        self.assertEqual(self.codes(rot), ["V02"], "Contrôle complété : V01 levé, la non-conformité bloque")
+        with self.assertRaises(HsseqError) as refus:
+            complement._hsseq_complete({"author_id": self.parc.id}, [{"item_id": added.id, "answer": "ok"}])
+        self.assertEqual(refus.exception.code, "invalid_transition")
+
+    def test_point_non_bloquant_non_evalue(self):
+        """Un point non bloquant ajouté après la saisie reste à évaluer sans retenir V01."""
+        old_version, old_answers, added = self._new_version(blocking=False)
+        rot = self._rotation()
+        self.breath(rot)
+        status, check = self.api("ibrahima", "POST", "/hsseq/checks", {
+            "client_uuid": "nb-0", "template_id": self.tanker_template.id, "template_version": old_version,
+            "reported_at": self._before(), "rotation_id": rot.id, "answers": old_answers})
+        self.assertEqual((status, check["result"], len(check["awaiting_items"])), (200, "compliant", 1), check)
+        self.assertEqual(self.codes(rot), [])
+
+    def test_non_evalue_jamais_recu_du_client(self):
+        """« Non évalué » n'est posé que par la plateforme : reçu du client, il est refusé (422)."""
+        template = self.tanker_template
+        rot = self._rotation()
+        answers = self.answers(template)
+        answers[0]["answer"] = "not_evaluated"
+        status, body = self.api("ibrahima", "POST", "/hsseq/checks", {
+            "client_uuid": "ne-1", "template_id": template.id, "rotation_id": rot.id, "answers": answers})
+        self.assertEqual((status, body["error"], body["fields"]), (422, "invalid_parameter", ["answers"]), body)
+        self.assertFalse(self.env["eguitra.hsseq.check"].search_count([("client_uuid", "=", "ne-1")]))
+        with self.assertRaises(HsseqError) as refus:
+            self.env["eguitra.hsseq.check"]._hsseq_create({
+                "company_id": self.company.id, "template_id": template.id, "vehicle_id": self.truck.id,
+                "rotation_id": rot.id, "author_id": self.parc.id}, [{"item_id": a["item_id"], "answer": a["answer"]}
+                                                                    for a in answers])
+        self.assertEqual((refus.exception.code, refus.exception.status), ("invalid_parameter", 422),
+                         "Refusé aussi par le noyau, quel que soit l'appelant")
+        old_version, old_answers, added = self._new_version()
+        status, check = self.api("ibrahima", "POST", "/hsseq/checks", {
+            "client_uuid": "ne-2", "template_id": template.id, "template_version": old_version,
+            "reported_at": self._before(), "rotation_id": rot.id, "answers": old_answers})
+        self.assertEqual((status, check["result"]), (200, "incomplete"), check)
+        status, body = self.api("ibrahima", "POST", f"/hsseq/checks/{check['id']}/complement", {
+            "client_uuid": "ne-3", "answers": [{"item_id": added.id, "answer": "not_evaluated"}]})
+        self.assertEqual((status, body["error"]), (422, "invalid_parameter"), "Ni dans un contrôle complémentaire")
+        self.assertIn("V01", self.codes(rot))
 
     def test_controle_et_v02_d_une_rotation_a_l_autre(self):
         rot = self._rotation()

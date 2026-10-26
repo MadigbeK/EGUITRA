@@ -167,9 +167,10 @@ class EguitraHsseqCockpit(models.AbstractModel):
             if vehicle_kind(rot.vehicle_id) == "tanker":
                 row["tanker_shortage"] += rot.shortage or 0.0
                 row["tanker_delivered"] += rot.volume_delivered or 0.0
-        # Contrôles avant départ.
-        domain = [("company_id", "in", cids), ("kind", "=", "pre_departure"), ("reported_at", ">=", start_dt),
-                  ("reported_at", "<=", end_dt)] + self._vehicle_domain("vehicle_id", sites, kind)
+        # Contrôles avant départ (un contrôle complémentaire compte dans son contrôle d'origine).
+        domain = [("company_id", "in", cids), ("kind", "=", "pre_departure"), ("complement_of_id", "=", False),
+                  ("reported_at", ">=", start_dt), ("reported_at", "<=", end_dt)] + self._vehicle_domain(
+                      "vehicle_id", sites, kind)
         for check in env["eguitra.hsseq.check"].sudo().search(domain):
             row = bucket(check.company_id.id, check.reported_at)
             if row is not None:
