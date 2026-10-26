@@ -519,3 +519,17 @@ class TestPortail(ApiCase):
         self.assertIn(mine.id, ids)
         self.assertNotIn(interne.id, ids, "Les actions du cabinet restent internes")
         self.assertNotIn(autre.id, ids, "Ni celles d'un autre dossier")
+
+    def test_rendez_vous_annule_par_le_cabinet(self):
+        """Annulation par le cabinet sans motif : le message de la confirmation ne passe pas pour le
+        motif ; le porteur est prévenu par un lien qui ouvre les rendez-vous du bon dossier."""
+        meeting = self.env["portail.meeting"].sudo().create({
+            "dossier_id": self.dossier_a.id, "requested_by": self.porteur_a.id, "subject": "Visite du site",
+            "slot_1": FUTURE})
+        meeting.confirm(FUTURE, cabinet_note="Apportez les relevés bancaires.")
+        status, annule = self.call("PATCH", f"/axispro/portail/rendez-vous/{meeting.id}", {"action": "cancel"},
+                                   token=self.cabinet_token)
+        self.assertEqual(status, 200, annule)
+        self.assertEqual((annule["state"], annule["cancelled_by"], annule["cabinet_note"]), ("cancelled", "cabinet", None))
+        avis = self.notifications(self.porteur_a).filtered(lambda n: n.title.startswith("Rendez-vous annulé"))
+        self.assertEqual(avis.link, f"/portail/rendez-vous?dossier={self.dossier_a.id}")

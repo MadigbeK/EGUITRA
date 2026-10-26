@@ -303,7 +303,7 @@ class PortailMeeting(models.Model):
         for meeting in self:
             meeting.env["portail.notification"].sudo().notify(
                 meeting.dossier_id.portal_user_ids, "meeting", title, body,
-                "/portail/rendez-vous", dossier=meeting.dossier_id)
+                f"/portail/rendez-vous?dossier={meeting.dossier_id.id}", dossier=meeting.dossier_id)
 
     def confirm(self, start, **values):
         """Confirmation (ou nouvelle date) : jamais à une date passée."""
@@ -330,7 +330,7 @@ class PortailMeeting(models.Model):
         self.ensure_one()
         if self.state not in ("requested", "confirmed"):
             raise UserError("Ce rendez-vous n'est plus à venir.")
-        self.write({"state": "cancelled", "cabinet_note": note or self.cabinet_note,
+        self.write({"state": "cancelled", "cabinet_note": note or False,
                     "cancelled_by": "porteur" if by_porteur else "cabinet"})
         if by_porteur:
             target = self.consultant_id or self.dossier_id.consultant_id
