@@ -10,7 +10,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { LogoSociete } from "@/components/brand";
 import { Check, X } from "@/components/icons";
 import { Badge, Button, Field, Input, Modal, Notice, Select, Textarea, type Tone } from "@/components/ui";
-import { ApiError, apiGet, apiSend, useApi } from "@/lib/api-client";
+import { ApiError, DelaiDepasse, apiGet, apiSend, useApi } from "@/lib/api-client";
 import { fmtDec, lireNombre } from "@/lib/format";
 import {
   LEAVE_STATE_LABELS,
@@ -77,9 +77,15 @@ export function useSocieteDeTravail(): number | null {
   return data?.work_company_id ?? null;
 }
 
-/** Message d'une erreur d'appel, tel que le noyau l'a rédigé. */
+/**
+ * Message d'une erreur d'appel : celui du noyau ; sans réponse (coupure du réseau, délai dépassé), une
+ * phrase en français au lieu du « Failed to fetch » du navigateur.
+ */
 export function messageErreur(e: unknown): string {
-  return e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Une erreur est survenue.";
+  if (e instanceof ApiError) return e.message;
+  if (e instanceof DelaiDepasse) return "Le serveur ne répond pas à temps : réessayez dans un instant.";
+  if (e instanceof TypeError) return "Réseau indisponible : vérifiez la connexion, puis réessayez.";
+  return "Une erreur est survenue : réessayez.";
 }
 
 /**
